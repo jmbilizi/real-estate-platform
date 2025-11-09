@@ -1,0 +1,66 @@
+{
+  "installation": {
+    "version": "22.0.1"
+  },
+  "plugins": [
+    {
+      "plugin": "@nx/js/typescript",
+      "options": {
+        "typecheck": {
+          "targetName": "typecheck"
+        },
+        "build": {
+          "targetName": "build",
+          "configName": "tsconfig.lib.json",
+          "buildDepsName": "build-deps",
+          "watchDepsName": "watch-deps"
+        }
+      }
+    },
+    {
+      "plugin": "@nx/eslint/plugin",
+      "options": {
+        "targetName": "lint"
+      }
+    },
+    {
+      "plugin": "@nxlv/python",
+      "options": {
+        "lintTargetName": "lint",
+        "formatTargetName": "format",
+        "testTargetName": "test",
+        "buildTargetName": "build",
+        "serveTargetName": "serve",
+        "typecheckTargetName": "type-check"
+      }
+    },
+    {
+      "plugin": "@nx/dotnet",
+      "options": {
+        "lintTargetName": "lint",
+        "formatTargetName": "format",
+        "testTargetName": "test",
+        "buildTargetName": "build",
+        "serveTargetName": "serve",
+        "typecheckTargetName": "type-check"
+      }
+    }
+  ],
+  "projects": {},
+  "namedInputs": {
+    "default": ["{projectRoot}/**/*"],
+    "production": [
+      "!{projectRoot}/**/*.spec.ts",
+      "default",
+      "!{projectRoot}/**/*.Tests/**/*",
+      "!{projectRoot}/**/bin/**/*",
+      "!{projectRoot}/**/obj/**/*"
+    ]
+  },
+  "targetDefaults": {
+    "build": {
+      "inputs": ["production", "^production"]
+    }
+  },
+  "nxIgnore": []
+}

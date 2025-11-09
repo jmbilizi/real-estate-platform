@@ -1,0 +1,101 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Python: Create Virtual Environment",
+      "type": "shell",
+      "command": "py-env.bat create",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "group": "none"
+    },
+    {
+      "label": "Python: Install All Dependencies",
+      "type": "shell",
+      "command": "py-env.bat install",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "group": "none"
+    },
+    {
+      "label": "Python: Install Dev Dependencies",
+      "type": "shell",
+      "command": "py-env.bat install dev",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "group": "none"
+    },
+    {
+      "label": "Python: Set Up Service Dependencies",
+      "type": "shell",
+      "command": "py-env.bat service ${input:pythonService}",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "group": "none"
+    },
+    {
+      "label": "FastAPI: Run Service",
+      "type": "shell",
+      "command": "npx nx run fastapi-service:serve",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "group": "none"
+    },
+    {
+      "label": "Python: Format All Code",
+      "type": "shell",
+      "command": "npm run format-python",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "group": "none"
+    },
+    {
+      "label": "Python: Lint All Code",
+      "type": "shell",
+      "command": "npm run lint-python",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "group": "none"
+    },
+    {
+      "label": "Python: Check All Code",
+      "type": "shell",
+      "command": "npm run check-python",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "group": "none"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "pythonService",
+      "description": "Python Service Name",
+      "default": "fastapi-service",
+      "type": "promptString"
+    }
+  ]
+}

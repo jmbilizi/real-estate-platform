@@ -1,0 +1,297 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - test
+      - dev
+  pull_request:
+    branches:
+      - main
+      - test
+      - dev
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  setup-base:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Enable Nx affected commands
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.19.5"
+          cache: "npm"
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Cache node_modules
+        uses: actions/cache/save@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+  node:
+    needs: setup-base
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.19.5"
+
+      - name: Restore node_modules
+        uses: actions/cache/restore@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      # Cache Nx cache directory for faster builds
+      - name: Cache Nx
+        uses: actions/cache@v4
+        with:
+          path: .nx/cache
+          key: nx-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            nx-${{ runner.os }}-node-
+            nx-${{ runner.os }}-
+
+      - name: Nx repair and reset
+        run: npm run nx:reset
+
+      - name: Check Node.js formatting (PR - affected only)
+        if: github.event_name == 'pull_request'
+        run: npx nx format:check --base=origin/${{ github.base_ref }} --head=HEAD --projects=tag:node || echo "No affected Node.js projects"
+
+      - name: Check Node.js formatting (Push - all projects)
+        if: github.event_name == 'push'
+        run: npx nx format:check --projects=tag:node || echo "No Node.js projects found"
+
+      - name: Lint Node.js projects (PR - affected only)
+        if: github.event_name == 'pull_request'
+        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=lint --projects=tag:node || echo "No affected Node.js projects"
+
+      - name: Lint Node.js projects (Push - all projects)
+        if: github.event_name == 'push'
+        run: npm run nx:node-lint || echo "No Node.js projects found"
+
+      - name: Test Node.js projects (PR - affected only)
+        if: github.event_name == 'pull_request'
+        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:node || echo "No affected Node.js projects"
+
+      - name: Test Node.js projects (Push - all projects)
+        if: github.event_name == 'push'
+        run: npm run nx:node-test || echo "No Node.js projects found"
+
+      - name: Build Node.js projects (PR - affected only)
+        if: github.event_name == 'pull_request'
+        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=build --projects=tag:node || echo "No affected Node.js projects"
+
+      - name: Build Node.js projects (Push - all projects)
+        if: github.event_name == 'push'
+        run: npm run nx:node-build || echo "No Node.js projects found"
+
+      - name: Upload Node.js artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-node
+          path: |
+            dist/
+            coverage/
+            test-results/
+          retention-days: 7
+
+  python:
+    needs: setup-base
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('tools/python/requirements.txt', 'tools/python/python-dev-requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.19.5"
+
+      - name: Restore node_modules
+        uses: actions/cache/restore@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      # Cache Nx cache directory for faster builds
+      - name: Cache Nx
+        uses: actions/cache@v4
+        with:
+          path: .nx/cache
+          key: nx-${{ runner.os }}-python-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            nx-${{ runner.os }}-python-
+            nx-${{ runner.os }}-
+
+      - name: Set up Python environment
+        run: npm run py:setup-dev
+
+      - name: Nx repair and reset for Python
+        run: npm run nx:reset
+
+      - name: Check Python formatting (PR - affected only)
+        if: github.event_name == 'pull_request'
+        run: .venv/bin/black --check . --exclude "(/\\.venv/|/node_modules/|/\\.git/|/\\.nx/|/__pycache__/|/dist/|/build/)" || echo "No affected Python projects"
+
+      - name: Check Python formatting (Push - all projects)
+        if: github.event_name == 'push'
+        run: .venv/bin/black --check . --exclude "(/\\.venv/|/node_modules/|/\\.git/|/\\.nx/|/__pycache__/|/dist/|/build/)" || echo "No Python projects found"
+
+      - name: Lint Python projects (PR - affected only)
+        if: github.event_name == 'pull_request'
+        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=lint --projects=tag:python || echo "No affected Python projects"
+
+      - name: Lint Python projects (Push - all projects)
+        if: github.event_name == 'push'
+        run: npm run nx:python-lint || echo "No Python projects found"
+
+      - name: Test Python projects (PR - affected only)
+        if: github.event_name == 'pull_request'
+        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:python || echo "No affected Python projects"
+
+      - name: Test Python projects (Push - all projects)
+        if: github.event_name == 'push'
+        run: npm run nx:python-test || echo "No Python projects found"
+
+      - name: Build Python projects (PR - affected only)
+        if: github.event_name == 'pull_request'
+        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=build --projects=tag:python || echo "No affected Python projects"
+
+      - name: Build Python projects (Push - all projects)
+        if: github.event_name == 'push'
+        run: npm run nx:python-build || echo "No Python projects found"
+
+      - name: Upload Python artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-python
+          path: |
+            dist/
+            coverage/
+            test-results/
+          retention-days: 7
+
+  dotnet:
+    needs: setup-base
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props', '**/Directory.Build.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.19.5"
+
+      - name: Restore node_modules
+        uses: actions/cache/restore@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      # Cache Nx cache directory for faster builds
+      - name: Cache Nx
+        uses: actions/cache@v4
+        with:
+          path: .nx/cache
+          key: nx-${{ runner.os }}-dotnet-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            nx-${{ runner.os }}-dotnet-
+            nx-${{ runner.os }}-
+
+      - name: Set up .NET environment
+        run: npm run dotnet:setup
+
+      - name: Nx repair and reset for .NET
+        run: npm run nx:reset
+
+      - name: Check .NET formatting (PR - affected only)
+        if: github.event_name == 'pull_request'
+        run: dotnet format --verify-no-changes || echo "No affected .NET projects"
+
+      - name: Check .NET formatting (Push - all projects)
+        if: github.event_name == 'push'
+        run: dotnet format --verify-no-changes || echo "No .NET projects found"
+
+      - name: Lint .NET projects (PR - affected only)
+        if: github.event_name == 'pull_request'
+        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=lint --projects=tag:dotnet || echo "No affected .NET projects"
+
+      - name: Lint .NET projects (Push - all projects)
+        if: github.event_name == 'push'
+        run: npm run nx:dotnet-lint || echo "No .NET projects found"
+
+      - name: Test .NET projects (PR - affected only)
+        if: github.event_name == 'pull_request'
+        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:dotnet || echo "No affected .NET projects"
+
+      - name: Test .NET projects (Push - all projects)
+        if: github.event_name == 'push'
+        run: npm run nx:dotnet-test || echo "No .NET projects found"
+
+      - name: Build .NET projects (PR - affected only)
+        if: github.event_name == 'pull_request'
+        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=build --projects=tag:dotnet || echo "No affected .NET projects"
+
+      - name: Build .NET projects (Push - all projects)
+        if: github.event_name == 'push'
+        run: npm run nx:dotnet-build || echo "No .NET projects found"
+
+      - name: Upload .NET artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-dotnet
+          path: |
+            dist/
+            coverage/
+            test-results/
+          retention-days: 7

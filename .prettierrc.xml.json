@@ -1,0 +1,13 @@
+{
+  "overrides": [
+    {
+      "files": "*.{sqlproj,xml,csproj}",
+      "options": {
+        "parser": "xml",
+        "xmlWhitespaceSensitivity": "ignore",
+        "xmlSelfClosingSpace": true,
+        "bracketSameLine": false
+      }
+    }
+  ]
+}

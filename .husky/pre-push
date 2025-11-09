@@ -1,0 +1,3 @@
+# Run full checks before push (format + lint + type + test + build)
+# This ensures your code will pass CI before pushing to remote
+npm run check

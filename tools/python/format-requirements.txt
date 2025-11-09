@@ -1,0 +1,13 @@
+# This file is maintained for backward compatibility with existing scripts
+# It only contains the minimal set of tools needed for formatting/linting in Git hooks
+
+# For simplicity, we reference the main requirements file
+# but only install a subset of it when used for hooks
+-c requirements.txt
+
+# These are needed for pre-commit hooks regardless of whether you're developing Python apps
+black
+flake8
+mypy
+sqlfluff
+yamllint

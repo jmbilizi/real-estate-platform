@@ -1,0 +1,2 @@
+# Auto-install dependencies when package files change after pull/merge
+node tools/hooks/hooks-runner.js post-merge

@@ -1,0 +1,40 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    // Uncomment is a sample configuration to enable debugging for python FastAPI service
+    // {
+    //   "name": "Python: FastAPI",
+    //   "type": "debugpy",
+    //   "request": "launch",
+    //   "module": "uvicorn",
+    //   "args": [
+    //     "fastapi_service.main:app",
+    //     "--reload",
+    //     "--host",
+    //     "0.0.0.0",
+    //     "--port",
+    //     "8000"
+    //   ],
+    //   "cwd": "${workspaceFolder}/apps/fastapi-service",
+    //   "console": "integratedTerminal",
+    //   "justMyCode": true
+    // },
+    {
+      "name": "Python: Current File",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Python: Debug Tests",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "purpose": ["debug-test"],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}

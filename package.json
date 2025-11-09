@@ -1,0 +1,119 @@
+{
+  "devDependencies": {
+    "@nx/dotnet": "22.0.1",
+    "@nx/eslint": "22.0.1",
+    "@nx/expo": "22.0.1",
+    "@nx/express": "22.0.1",
+    "@nx/jest": "22.0.1",
+    "@nx/js": "22.0.1",
+    "@nx/next": "22.0.1",
+    "@nx/node": "22.0.1",
+    "@nxlv/python": "^21.2.0",
+    "@openapitools/openapi-generator-cli": "^2.13.4",
+    "@swc-node/register": "~1.9.2",
+    "@swc/core": "~1.7.26",
+    "@swc/helpers": "~0.5.11",
+    "@types/jest": "^30.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.41.0",
+    "@typescript-eslint/parser": "^8.41.0",
+    "eslint": "^9.34.0",
+    "eslint-config-prettier": "^10.1.8",
+    "husky": "^9.1.7",
+    "jest": "^30.1.1",
+    "lint-staged": "^16.1.5",
+    "nx": "22.0.1",
+    "prettier": "^3.6.2",
+    "prettify-xml": "^1.2.0",
+    "rimraf": "^6.0.1",
+    "ts-jest": "^29.4.1",
+    "typescript": "5.9.3"
+  },
+  "scripts": {
+    "prepare": "husky",
+    "// Setup and Environment": "",
+    "setup-hooks": "node tools/hooks/setup-hooks.js && node tools/python/scripts/setup-nx-python.js",
+    "setup-nx-python": "node tools/python/scripts/setup-nx-python.js",
+    "clean": "npm run nx:reset && rimraf dist node_modules/.cache",
+    "// Quality Checks": "",
+    "check": "node scripts/check.js",
+    "check:quick": "node scripts/pre-commit-quick.js",
+    "// NX Core Commands": "",
+    "nx:repair": "node tools/nx/repair-nx.js",
+    "nx:reset": "npm run nx:repair && nx reset && node tools/nx/auto-tag-projects.js",
+    "nx:tag-projects": "node tools/nx/auto-tag-projects.js",
+    "nx:graph": "npm run nx:reset && nx graph",
+    "nx:run-many": "npm run nx:reset && node tools/nx/safe-run-many.js",
+    "nx:affected": "npm run nx:reset && nx affected || echo No affected projects found",
+    "nx:list-projects": "nx show projects",
+    "// Node.js Commands": "",
+    "node:help": "node tools/node/scripts/node-help.js",
+    "node:check-version": "node tools/node/scripts/check-node-version.js",
+    "node:apply-configs": "node tools/node/scripts/apply-node-configs.js",
+    "nx:node-dev": "npm run nx:reset && node tools/nx/safe-run-many.js --target=serve --projects=tag:node",
+    "nx:node-build": "npm run nx:reset && node tools/nx/safe-run-many.js --target=build --projects=tag:node",
+    "nx:node-test": "npm run nx:reset && node tools/nx/safe-run-many.js --target=test --projects=tag:node",
+    "nx:node-lint": "npm run nx:reset && node tools/nx/safe-run-many.js --target=lint --projects=tag:node",
+    "nx:node-type-check": "npm run nx:reset && node tools/nx/safe-run-many.js --target=type-check --projects=tag:node",
+    "nx:node-format": "nx format:write --projects=tag:node",
+    "nx:node-format-check": "nx format:check --projects=tag:node",
+    "// Python Commands": "",
+    "py:help": "node tools/python/python-dev-setup.js --help || node tools/python/python-dev-setup.js",
+    "py:setup-dev": "node tools/python/python-dev-setup.js && node tools/python/scripts/setup-nx-python.js",
+    "py:setup-dev-all": "node tools/python/python-dev-setup.js all && node tools/python/scripts/setup-nx-python.js",
+    "py:install-service": "node tools/python/python-dev-setup.js",
+    "py:install-packages": "node tools/python/python-dev-setup.js all",
+    "format-python": ".venv\\Scripts\\black . --exclude \"(/\\.venv/|/node_modules/|/\\.git/|/\\.nx/|/__pycache__/|/dist/|/build/)\"",
+    "lint-python": ".venv\\Scripts\\flake8 . --config=tools/python/.flake8 && .venv\\Scripts\\mypy . --config-file=tools/python/mypy.ini",
+    "check-python": "npm run format-python && npm run lint-python",
+    "nx:python-dev": "npm run nx:reset && node tools/nx/safe-run-many.js --target=serve --projects=tag:python",
+    "nx:python-lint": "npm run nx:reset && node tools/nx/safe-run-many.js --target=lint --projects=tag:python",
+    "nx:python-test": "npm run nx:reset && node tools/nx/safe-run-many.js --target=test --projects=tag:python",
+    "nx:python-build": "npm run nx:reset && node tools/nx/safe-run-many.js --target=build --projects=tag:python",
+    "nx:python-format": "node tools/nx/safe-run-many.js --target=format --projects=tag:python",
+    "nx:python-format-check": "npm run nx:reset && node tools/nx/safe-run-many.js --target=format-check --projects=tag:python",
+    "nx:python-type-check": "npm run nx:reset && node tools/nx/safe-run-many.js --target=type-check --projects=tag:python",
+    "// .NET Commands": "",
+    "dotnet:help": "node tools/dotnet/scripts/dotnet-help.js",
+    "dotnet:setup": "node tools/dotnet/scripts/dotnet-dev-setup.js",
+    "dotnet:install-packages": "node tools/dotnet/scripts/dotnet-packages.js",
+    "dotnet:install-package": "node tools/dotnet/scripts/dotnet-packages.js install",
+    "nx:dotnet-dev": "npm run nx:reset && node tools/nx/safe-run-many.js --target=serve --projects=tag:dotnet",
+    "nx:dotnet-build": "npm run nx:reset && node tools/nx/safe-run-many.js --target=build --projects=tag:dotnet",
+    "nx:dotnet-test": "npm run nx:reset && node tools/nx/safe-run-many.js --target=test --projects=tag:dotnet",
+    "nx:dotnet-lint": "npm run nx:reset && node tools/nx/safe-run-many.js --target=lint --projects=tag:dotnet",
+    "nx:dotnet-format": "node tools/nx/safe-run-many.js --target=format --projects=tag:dotnet",
+    "nx:dotnet-format-check": "npm run nx:reset && node tools/nx/safe-run-many.js --target=format-check --projects=tag:dotnet"
+  },
+  "lint-staged": {
+    "*.{js,ts,tsx,jsx}": [
+      "eslint --fix --config tools/node/configs/eslint.config.js",
+      "prettier --write --config tools/node/configs/prettier-config.js"
+    ],
+    "*.json": [
+      "prettier --write"
+    ],
+    "*.md": [
+      "prettier --write"
+    ],
+    "*.{py,pyx,pxd,pxi,pyi}": [
+      "\"%PYTHON_ENV%\\black\"",
+      "\"%PYTHON_ENV%\\flake8\" --config=tools/python/.flake8",
+      "\"%PYTHON_ENV%\\mypy\" --config-file=tools/python/mypy.ini"
+    ],
+    "*.ipynb": [
+      "\"%PYTHON_ENV%\\black\""
+    ],
+    "*.{cs,vb}": [
+      "dotnet format"
+    ],
+    "*.sql": [
+      "\"%PYTHON_ENV%\\sqlfluff\" fix --dialect ansi --config=tools/python/.sqlfluff"
+    ],
+    "*.{yml,yaml}": [
+      "\"%PYTHON_ENV%\\yamllint\" -c tools/python/.yamllint"
+    ],
+    "*.{xml,csproj,sqlproj}": [
+      "npx prettify-xml"
+    ]
+  }
+}

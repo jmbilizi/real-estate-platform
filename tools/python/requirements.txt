@@ -1,0 +1,18 @@
+# Main requirements file for Python in the monorepo
+
+# Code Quality Tools (needed for hooks and development)
+black==25.1.0
+flake8==7.3.0
+mypy==1.18.1
+pylint==3.3.8
+sqlfluff==3.4.2
+yamllint==1.37.1
+
+# Database
+
+
+# Testing Tools
+pytest==8.4.2
+pytest-cov==7.0.0
+
+# Common Dependencies

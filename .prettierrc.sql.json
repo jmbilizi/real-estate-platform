@@ -1,0 +1,12 @@
+{
+  "overrides": [
+    {
+      "files": "*.sql",
+      "options": {
+        "parser": "sql",
+        "keywordCase": "upper",
+        "language": "sql"
+      }
+    }
+  ]
+}

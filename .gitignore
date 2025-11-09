@@ -1,0 +1,53 @@
+# Nx
+.nx/installation
+.nx/cache
+.nx/workspace-data
+
+# Node
+node_modules/
+dist/
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+env/
+.venv/
+.mypy_cache/
+.pytest_cache/
+.tox/
+Pipfile.lock
+poetry.lock
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+Desktop.ini
+
+# Env
+.env
+.env.*.local
+
+# IDEs
+.idea/
+.history/
+.vs/.husky/_/ 
+# Python venv
+.venv/
+# Python hook setup files
+tools/python/scripts/set-hook-env.bat
+tools/python/scripts/set-hook-env.sh

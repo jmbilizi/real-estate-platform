@@ -1,0 +1,12 @@
+{
+  "overrides": [
+    {
+      "files": "*.{yml,yaml}",
+      "options": {
+        "parser": "yaml",
+        "tabWidth": 2,
+        "bracketSpacing": true
+      }
+    }
+  ]
+}

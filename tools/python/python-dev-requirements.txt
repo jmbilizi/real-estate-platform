@@ -1,0 +1,17 @@
+# This file contains Python development dependencies
+# It is used for setting up the development environment
+
+# Reference the main requirements file to ensure version consistency
+-r ../../requirements.txt
+
+# Development dependencies
+pytest>=8.0.0,<9.0.0
+pytest-cov>=6.5.0,<7.5.0
+pylint>=3.0.0,<4.0.0
+black>=24.0.0,<25.5.0
+flake8>=7.0.0,<8.0.0
+mypy>=1.8.0,<2.0.0
+sqlfluff>=3.0.0,<4.0.0
+yamllint>=1.35.0,<2.0.0
+
+# Any additional Python development dependencies can be added here

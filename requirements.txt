@@ -1,0 +1,12 @@
+
+# Python Requirements
+# This file is a redirect to the new location in tools/python
+
+# This file only exists for backward compatibility with existing scripts
+# Please use the file in tools/python/requirements.txt instead
+
+-r tools/python/requirements.txt
+python-dotenv==1.0.0
+
+# Note: Service-specific requirements should be in their respective directories
+# and reference this file using: -r ../../../requirements.txt

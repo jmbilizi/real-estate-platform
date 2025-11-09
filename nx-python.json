@@ -1,0 +1,24 @@
+{
+  "executors": {
+    "flake8": {
+      "implementation": "./node_modules/@nxlv/python/src/executors/flake8/executor",
+      "schema": "./node_modules/@nxlv/python/src/executors/flake8/schema.json",
+      "description": "Run flake8 linting on Python code"
+    },
+    "run-commands": {
+      "implementation": "./node_modules/@nxlv/python/src/executors/run-commands/executor",
+      "schema": "./node_modules/@nxlv/python/src/executors/run-commands/schema.json",
+      "description": "Run custom Python commands"
+    },
+    "build": {
+      "implementation": "./node_modules/@nxlv/python/src/executors/build/executor",
+      "schema": "./node_modules/@nxlv/python/src/executors/build/schema.json",
+      "description": "Build Python package"
+    },
+    "install": {
+      "implementation": "./node_modules/@nxlv/python/src/executors/install/executor",
+      "schema": "./node_modules/@nxlv/python/src/executors/install/schema.json",
+      "description": "Install Python dependencies"
+    }
+  }
+}

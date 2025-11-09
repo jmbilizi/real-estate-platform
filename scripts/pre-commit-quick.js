@@ -1,0 +1,462 @@
+#!/usr/bin/env node
+
+/**
+ * Pre-Commit Quick Checks Script
+ *
+ * Fast validation before commit (format + lint + type check only).
+ * Runs on affected projects to catch most issues in ~5-15 seconds.
+ *
+ * Intelligently detects:
+ * - On feature branches: runs affected checks only
+ * - On base branches (main/dev/test): runs all checks
+ *
+ * Usage:
+ *   Called automatically by .husky/pre-commit git hook
+ *   Or manually: node scripts/pre-commit-quick.js
+ */
+
+const { execSync } = require("child_process");
+const path = require("path");
+const fs = require("fs");
+
+// ANSI color codes
+const colors = {
+  reset: "\x1b[0m",
+  bright: "\x1b[1m",
+  red: "\x1b[31m",
+  green: "\x1b[32m",
+  yellow: "\x1b[33m",
+  blue: "\x1b[34m",
+  cyan: "\x1b[36m",
+};
+
+function log(message, color = "reset") {
+  console.log(`${colors[color]}${message}${colors.reset}`);
+}
+
+function logStep(step) {
+  log(`\n${"=".repeat(80)}`, "cyan");
+  log(`  ${step}`, "bright");
+  log("=".repeat(80), "cyan");
+}
+
+function logSuccess(message) {
+  log(`✓ ${message}`, "green");
+}
+
+function logError(message) {
+  log(`✗ ${message}`, "red");
+}
+
+function logWarning(message) {
+  log(`⚠ ${message}`, "yellow");
+}
+
+function run(command, options = {}) {
+  try {
+    const result = execSync(command, {
+      cwd: path.resolve(__dirname, ".."),
+      stdio: options.silent ? "pipe" : "inherit",
+      encoding: "utf-8",
+      ...options,
+    });
+    return { success: true, output: result };
+  } catch (error) {
+    return { success: false, error, output: error.stdout || error.stderr };
+  }
+}
+
+// Check if there are affected Python projects
+function hasPythonProjectsAffected(isAffected, base) {
+  try {
+    if (!isAffected || !base) {
+      // On base branch, check if any Python projects exist
+      const result = run("npx nx show projects --projects=tag:python", {
+        silent: true,
+      });
+      return result.success && result.output && result.output.trim().length > 0;
+    }
+
+    // On feature branch, check for affected Python projects
+    const result = run(
+      `npx nx show projects --affected --base=${base} --head=HEAD --projects=tag:python`,
+      { silent: true },
+    );
+    return result.success && result.output && result.output.trim().length > 0;
+  } catch (error) {
+    // If we can't determine, assume there might be Python projects
+    return true;
+  }
+}
+
+// Check if there are affected .NET projects
+function hasDotNetProjectsAffected(isAffected, base) {
+  try {
+    if (!isAffected || !base) {
+      // On base branch, check if any .NET projects exist
+      const result = run("npx nx show projects --projects=tag:dotnet", {
+        silent: true,
+      });
+      return result.success && result.output && result.output.trim().length > 0;
+    }
+
+    // On feature branch, check for affected .NET projects
+    const result = run(
+      `npx nx show projects --affected --base=${base} --head=HEAD --projects=tag:dotnet`,
+      { silent: true },
+    );
+    return result.success && result.output && result.output.trim().length > 0;
+  } catch (error) {
+    // If we can't determine, assume there might be .NET projects
+    return true;
+  }
+}
+
+// Setup Python virtual environment if needed
+function setupPythonEnvironment() {
+  const rootDir = path.resolve(__dirname, "..");
+  const venvPath = path.join(rootDir, ".venv");
+  const isWindows = process.platform === "win32";
+  const pythonBinPath = path.join(venvPath, isWindows ? "Scripts" : "bin");
+  const pythonExecutable = path.join(
+    pythonBinPath,
+    isWindows ? "python.exe" : "python",
+  );
+
+  // Check if virtual environment already exists and is valid
+  if (fs.existsSync(venvPath) && fs.existsSync(pythonExecutable)) {
+    // Already set up - just set the env var
+    process.env.PYTHON_ENV = pythonBinPath;
+    return true;
+  }
+
+  // Virtual environment doesn't exist - create it
+  log("Python virtual environment not found. Creating it now...", "yellow");
+
+  try {
+    // Try to create virtual environment
+    if (isWindows) {
+      run("call py-env.bat create", { silent: false });
+    } else {
+      run("bash py-env.sh create", { silent: false });
+    }
+
+    if (!fs.existsSync(pythonExecutable)) {
+      logError(
+        "Failed to create Python virtual environment. Python checks may fail.",
+      );
+      return false;
+    }
+
+    logSuccess("Python virtual environment created successfully");
+
+    // Set PYTHON_ENV environment variable for the process
+    process.env.PYTHON_ENV = pythonBinPath;
+
+    return true;
+  } catch (error) {
+    logError(`Failed to create Python virtual environment: ${error.message}`);
+    logWarning("Run 'npm run py:setup' manually to set up Python environment");
+    return false;
+  }
+}
+
+// Detect current branch and determine validation mode
+function detectValidationMode() {
+  try {
+    const currentBranch = execSync("git rev-parse --abbrev-ref HEAD", {
+      encoding: "utf8",
+      cwd: path.resolve(__dirname, ".."),
+    }).trim();
+
+    log(`Current branch: ${currentBranch}`, "cyan");
+
+    // If on base branches (main/dev/test), run ALL checks
+    if (["main", "dev", "test"].includes(currentBranch)) {
+      log("On base branch - checking ALL projects", "yellow");
+      return { isAffected: false, base: null, currentBranch };
+    }
+
+    // On feature branch - run AFFECTED checks
+    log("On feature branch - checking AFFECTED projects only", "yellow");
+
+    // Try to find the upstream tracking branch
+    let base = null;
+    try {
+      const upstream = execSync(
+        "git rev-parse --abbrev-ref --symbolic-full-name @{u}",
+        {
+          encoding: "utf8",
+          cwd: path.resolve(__dirname, ".."),
+        },
+      ).trim();
+
+      if (upstream && upstream !== "@{u}") {
+        base = upstream;
+        log(`Comparing against upstream: ${base}`, "cyan");
+        return { isAffected: true, base, currentBranch };
+      }
+    } catch (e) {
+      // No upstream set, fall back to common bases
+    }
+
+    // Fall back to detecting which main branch exists
+    const branches = execSync("git branch -r", {
+      encoding: "utf8",
+      cwd: path.resolve(__dirname, ".."),
+    });
+
+    if (branches.includes("origin/dev")) {
+      base = "origin/dev";
+    } else if (branches.includes("origin/test")) {
+      base = "origin/test";
+    } else if (branches.includes("origin/main")) {
+      base = "origin/main";
+    } else {
+      base = "origin/main";
+    }
+
+    log(`Comparing against: ${base}`, "cyan");
+    return { isAffected: true, base, currentBranch };
+  } catch (error) {
+    logWarning("Could not detect branch, defaulting to full checks");
+    return { isAffected: false, base: null, currentBranch: "unknown" };
+  }
+}
+
+function checkNodeProjects(isAffected, base) {
+  logStep("Quick Check: Node.js/TypeScript");
+
+  const affectedFlag = isAffected && base ? `--base=${base} --head=HEAD` : "";
+  let hasErrors = false;
+
+  // 1. Format check
+  log("\n1. Checking code formatting...", "blue");
+  const formatCmd =
+    isAffected && base
+      ? `npx nx format:check ${affectedFlag}`
+      : `npx nx format:check --projects=tag:node`;
+
+  const formatResult = run(formatCmd);
+  if (formatResult.success) {
+    logSuccess("Formatting passed");
+  } else {
+    logError('Formatting failed - run "npm run nx:node-format" to fix');
+    hasErrors = true;
+  }
+
+  // 2. Lint
+  log("\n2. Linting code...", "blue");
+  const lintCmd =
+    isAffected && base
+      ? `npx nx affected ${affectedFlag} --target=lint`
+      : `npm run nx:node-lint`;
+
+  const lintResult = run(lintCmd);
+  if (lintResult.success) {
+    logSuccess("Linting passed");
+  } else {
+    logError("Linting failed");
+    hasErrors = true;
+  }
+
+  // 3. Type check
+  log("\n3. Type checking...", "blue");
+  const typeCmd =
+    isAffected && base
+      ? `npx nx affected ${affectedFlag} --target=type-check`
+      : `npm run nx:node-type-check`;
+
+  const typeResult = run(typeCmd);
+  if (typeResult.success) {
+    logSuccess("Type checking passed");
+  } else {
+    logError("Type checking failed");
+    hasErrors = true;
+  }
+
+  return !hasErrors;
+}
+
+function checkPythonProjects(isAffected, base) {
+  logStep("Quick Check: Python");
+
+  // Check if Python environment is set up
+  const venvCheck = run("py-env.bat check", { silent: true });
+  if (!venvCheck.success) {
+    logWarning("Python environment not set up - skipping Python checks");
+    logWarning('Run "py-env.bat create" to set up Python environment');
+    return true; // Don't fail if Python isn't set up
+  }
+
+  const affectedFlag = isAffected && base ? `--base=${base} --head=HEAD` : "";
+  let hasErrors = false;
+
+  // 1. Format check
+  log("\n1. Checking code formatting (Black)...", "blue");
+  const formatCmd =
+    isAffected && base
+      ? `npx nx affected ${affectedFlag} --target=format-check`
+      : `npm run nx:python-format-check`;
+
+  const formatResult = run(formatCmd);
+  if (formatResult.success) {
+    logSuccess("Formatting passed");
+  } else {
+    logError('Formatting failed - run "npm run nx:python-format" to fix');
+    hasErrors = true;
+  }
+
+  // 2. Lint (Flake8)
+  log("\n2. Linting code (Flake8)...", "blue");
+  const lintCmd =
+    isAffected && base
+      ? `npx nx affected ${affectedFlag} --target=lint`
+      : `npm run nx:python-lint`;
+
+  const lintResult = run(lintCmd);
+  if (lintResult.success) {
+    logSuccess("Linting passed");
+  } else {
+    logError("Linting failed");
+    hasErrors = true;
+  }
+
+  // 3. Type check (mypy)
+  log("\n3. Type checking (mypy)...", "blue");
+  const typeCmd =
+    isAffected && base
+      ? `npx nx affected ${affectedFlag} --target=type-check`
+      : `npm run nx:python-type-check`;
+
+  const typeResult = run(typeCmd);
+  if (typeResult.success) {
+    logSuccess("Type checking passed");
+  } else {
+    logError("Type checking failed");
+    hasErrors = true;
+  }
+
+  return !hasErrors;
+}
+
+function checkDotNetProjects(isAffected, base) {
+  logStep("Quick Check: .NET");
+
+  // Check if .NET SDK is available
+  const dotnetCheck = run("dotnet --version", { silent: true });
+  if (!dotnetCheck.success) {
+    logWarning(".NET SDK not found - skipping .NET checks");
+    logWarning("Install .NET SDK 8.0 or higher");
+    return true; // Don't fail if .NET isn't installed
+  }
+
+  const affectedFlag = isAffected && base ? `--base=${base} --head=HEAD` : "";
+  let hasErrors = false;
+
+  // 1. Format check
+  log("\n1. Checking code formatting (dotnet format)...", "blue");
+  const formatCmd =
+    isAffected && base
+      ? `npx nx affected ${affectedFlag} --target=format-check`
+      : `npm run nx:dotnet-format-check`;
+
+  const formatResult = run(formatCmd);
+  if (formatResult.success) {
+    logSuccess("Formatting passed");
+  } else {
+    logError('Formatting failed - run "npm run nx:dotnet-format" to fix');
+    hasErrors = true;
+  }
+
+  // 2. Lint (StyleCop via build)
+  log("\n2. Linting code (StyleCop)...", "blue");
+  const lintCmd =
+    isAffected && base
+      ? `npx nx affected ${affectedFlag} --target=lint`
+      : `npm run nx:dotnet-lint`;
+
+  const lintResult = run(lintCmd);
+  if (lintResult.success) {
+    logSuccess("Linting passed");
+  } else {
+    logError("Linting failed");
+    hasErrors = true;
+  }
+
+  return !hasErrors;
+}
+
+function main() {
+  log("\n⚡ Pre-Commit Quick Checks", "bright");
+  log("=".repeat(80), "cyan");
+  log(
+    "Running: Format + Lint + Type Check (fast, no tests/builds)\n",
+    "yellow",
+  );
+
+  const { isAffected, base, currentBranch } = detectValidationMode();
+
+  if (isAffected && base) {
+    log(`Mode: Affected projects only (${currentBranch} → ${base})\n`, "cyan");
+  } else {
+    log(`Mode: All projects (on base branch: ${currentBranch})\n`, "cyan");
+  }
+
+  // Setup Python environment only if Python projects are affected
+  if (hasPythonProjectsAffected(isAffected, base)) {
+    logStep("Environment Setup");
+    log("Python projects affected - setting up Python environment...", "cyan");
+    const pythonEnvReady = setupPythonEnvironment();
+    if (pythonEnvReady) {
+      logSuccess("Python environment ready");
+    } else {
+      logWarning(
+        "Python environment setup incomplete - Python checks may fail",
+      );
+    }
+  }
+
+  let allPassed = true;
+
+  // Run checks only for affected language projects
+  // Note: Node.js checks always run (includes workspace-level configs, nx tooling)
+  const nodeResult = checkNodeProjects(isAffected, base);
+  allPassed = allPassed && nodeResult;
+
+  // Only check Python if Python projects are affected
+  if (hasPythonProjectsAffected(isAffected, base)) {
+    const pythonResult = checkPythonProjects(isAffected, base);
+    allPassed = allPassed && pythonResult;
+  } else {
+    log("\nℹ No Python projects affected - skipping Python checks", "cyan");
+  }
+
+  // Only check .NET if .NET projects are affected
+  if (hasDotNetProjectsAffected(isAffected, base)) {
+    const dotnetResult = checkDotNetProjects(isAffected, base);
+    allPassed = allPassed && dotnetResult;
+  } else {
+    log("\nℹ No .NET projects affected - skipping .NET checks", "cyan");
+  }
+
+  // Final summary
+  logStep("Summary");
+  if (allPassed) {
+    logSuccess("\n✅ Quick checks passed!");
+    logSuccess(
+      "Commit is allowed. Run 'npm run check' before pushing for full validation.\n",
+    );
+    process.exit(0);
+  } else {
+    logError("\n❌ Quick checks failed.");
+    logError("Please fix the issues above before committing.\n");
+    logError("💡 Tip: Run format commands to auto-fix formatting issues:");
+    logError("  - Node: npm run nx:node-format");
+    logError("  - Python: npm run nx:python-format");
+    logError("  - .NET: npm run nx:dotnet-format\n");
+    process.exit(1);
+  }
+}
+
+main();
