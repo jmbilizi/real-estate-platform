@@ -36,7 +36,6 @@ if (args.includes("--help") || args.includes("-h")) {
     "  3. Installs required .NET global tools (unless --skip-tools is used)",
   );
   console.log("  4. Ensures NX .NET plugin is installed");
-  console.log("  5. Sets up template directories if needed");
   process.exit(0);
 }
 
@@ -95,30 +94,6 @@ function executeCommand(command, silent = false) {
       console.error(`Error executing command: ${command}`);
       console.error(error.message);
     }
-    return null;
-  }
-}
-
-function checkDotNetInstalled() {
-  try {
-    // Try to run dotnet --version directly instead of using where/which
-    // This is more reliable across different environments
-    const result = executeCommand("dotnet --version", true);
-    return result !== null;
-  } catch (error) {
-    return false;
-  }
-}
-
-function getDotNetVersion() {
-  try {
-    const versionOutput = executeCommand("dotnet --version", true);
-    if (versionOutput) {
-      return versionOutput.toString().trim();
-    }
-    return null;
-  } catch (error) {
-    console.error("Error getting .NET version:", error.message);
     return null;
   }
 }
@@ -273,24 +248,7 @@ function listInstalledDotNetSdks() {
   }
 }
 
-function createDirectoryIfNotExists(dirPath) {
-  const fullPath = path.resolve(process.cwd(), dirPath);
-  if (!fs.existsSync(fullPath)) {
-    console.log(`Creating directory: ${dirPath}`);
-    fs.mkdirSync(fullPath, { recursive: true });
-    return true;
-  }
-  return false;
-}
-
 // Functions for .NET tools installation
-function isToolInstalled(toolName) {
-  const result = spawnSync("dotnet", ["tool", "list", "--global"], {
-    encoding: "utf8",
-  });
-  return result.stdout.includes(toolName);
-}
-
 function installTool(tool) {
   console.log(`Installing ${tool.name}...`);
   const args = ["tool", "install", "--global", tool.name];
@@ -342,19 +300,6 @@ function installDotNetTools() {
 
   console.log("\n✅ .NET code quality tools setup complete!");
   console.log("You can now use these tools in your .NET projects.");
-}
-
-function copyTemplateFilesIfNeeded() {
-  // Templates are no longer used - Nx generators handle project creation
-  // This function is kept for compatibility but does nothing
-  console.log("✅ .NET project creation now uses Nx generators (@nx/dotnet)");
-
-  let created = false;
-  for (const dir of templateDirs) {
-    created = createDirectoryIfNotExists(dir) || created;
-  }
-
-  return created;
 }
 
 // Main setup steps
@@ -583,18 +528,7 @@ async function setupDotNetEnvironment() {
     console.log("@nx/dotnet NX plugin is already installed.");
   }
 
-  // Step 5: Set up template directories
-  console.log("\nChecking template directories...");
-  const templatesCreated = copyTemplateFilesIfNeeded();
-  if (templatesCreated) {
-    console.log(
-      "Template directories created. Please make sure to add template files.",
-    );
-  } else {
-    console.log("Template directories already exist.");
-  }
-
-  // Step 6: Provide instructions
+  // Step 5: Provide usage instructions
   console.log("\n===== .NET development environment setup completed =====");
   console.log("\nYou can now create .NET projects using Nx generators:");
   console.log("  npx nx generate @nx/dotnet:app my-api --directory=apps");

@@ -16,7 +16,6 @@ This script will:
 2. Verify .NET SDK version
 3. Install required .NET global tools
 4. Ensure NX .NET plugin is installed
-5. Set up template directories if needed
 
 > **Automatic Installation**: If .NET SDK is not installed, the script can automatically download and install the required version (9.0.305). This feature works on Windows and macOS systems. On other systems, the script will provide instructions for manual installation.
 
