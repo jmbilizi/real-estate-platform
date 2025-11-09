@@ -31,10 +31,10 @@ The repository has a two-tier validation system to balance speed with safety:
 
 ```bash
 # Full validation (same as pre-push hook)
-npm run check
+npm run pre-push
 
 # Quick validation (same as pre-commit hook)
-npm run check:quick
+npm run pre-commit
 
 # Formatting commands
 npm run nx:workspace-format       # Format all files (workspace + projects)
@@ -71,17 +71,17 @@ The scripts only run checks for affected languages:
 The validation system is optimized for both speed and accuracy:
 
 - **Git hooks** (`pre-commit`, `pre-push`): Skip `nx:reset` to avoid modifying files during commit/push. Fast and non-invasive.
-- **Manual validation** (`npm run check`, `npm run check:quick`): Runs `nx:reset` once at start for clean state, then all checks without redundant resets.
+- **Manual validation** (`npm run pre-commit`, `npm run pre-push`): Runs `nx:reset` once at start for clean state, then all checks without redundant resets.
 - **Individual commands** (`npm run nx:node-lint`, etc.): Skip reset for instant execution during development.
 
 **When to use each:**
 
 - **Git hooks**: Automatic validation during commit/push (fast, no file modifications)
-- **`npm run check`**: Before creating PRs or when you want full validation with clean workspace state
-- **`npm run check:quick`**: Quick manual validation with clean workspace state
+- **`npm run pre-push`**: Before creating PRs or when you want full validation with clean workspace state
+- **`npm run pre-commit`**: Quick manual validation with clean workspace state
 - **Individual scripts**: During active development for instant feedback
 
-Both hooks and `npm run check` perfectly mirror what CI will verify, so if they pass locally, CI will pass too.
+Both hooks and `npm run pre-push` perfectly mirror what CI will verify, so if they pass locally, CI will pass too.
 
 See the [CI/CD documentation](./docs/ci-cd.md#quality-checks) for more details.
 

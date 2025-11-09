@@ -12,7 +12,7 @@
  *
  * Usage:
  *   Called automatically by .husky/pre-commit git hook
- *   Or manually: node scripts/pre-commit-quick.js
+ *   Or manually: node scripts/pre-commit.js
  */
 
 const { execSync } = require("child_process");

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Full Pre-Push/Pre-Commit Check Script
+ * Pre-Push Validation Script
  *
  * Comprehensive validation before pushing (format + lint + type + test + build).
  * Runs on affected projects or all projects depending on branch.
@@ -11,7 +11,7 @@
  * - On base branches (main/dev/test): runs all checks (like push in CI)
  *
  * Usage:
- *   npm run check                      # Auto-detects and runs appropriate checks
+ *   npm run pre-push                   # Manual full validation
  *   Called automatically by .husky/pre-push git hook
  */
 const { execSync } = require("child_process");

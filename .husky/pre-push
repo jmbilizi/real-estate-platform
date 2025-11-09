@@ -1,4 +1,4 @@
 # Run full checks before push (format + lint + type + test + build)
 # This ensures your code will pass CI before pushing to remote
 # Skip nx:reset to avoid modifying files during push
-node scripts/check.js --skip-reset
+node scripts/pre-push.js --skip-reset

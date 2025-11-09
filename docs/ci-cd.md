@@ -413,10 +413,10 @@ The repository uses a **two-tier validation system** to balance speed with safet
 
 ```bash
 # Full validation (same as pre-push hook)
-npm run check
+npm run pre-push
 
 # Quick validation (same as pre-commit hook)
-npm run check:quick
+npm run pre-commit
 
 # Individual language checks (fast, uses cached nx state)
 npm run nx:node-lint       # Lint Node.js projects
@@ -438,7 +438,7 @@ The validation system is architected for optimal performance and to avoid file m
 - No file modifications means no unstaged changes after commit
 - Runs with `--skip-reset` flag
 
-**Manual Validation (`npm run check` and `npm run check:quick`):**
+**Manual Validation (`npm run pre-commit` and `npm run pre-push`):**
 
 - **Runs `nx:reset` once** at the start to ensure clean, accurate state
 - Then executes all checks without redundant resets
@@ -468,7 +468,7 @@ npm run nx:node-lint              # Fast, uses cache
 git commit                        # Hook runs with --skip-reset, no file changes
 
 # Before PR - thorough validation with clean state
-npm run check                     # Runs reset once, full clean validation
+npm run pre-push                  # Runs reset once, full clean validation
 
 # After structural changes (new project, dependencies, etc.)
 npm run nx:reset                  # Refresh project graph
@@ -516,7 +516,7 @@ This means if you only change Node.js files, you won't waste time setting up Pyt
 - ⏭️ Tests (skipped for speed)
 - ⏭️ Build (skipped for speed)
 
-**Pre-Push Hook + `npm run check` (Full):**
+**Pre-Push Hook + `npm run pre-push` (Full):**
 
 - ✅ Format Check (Prettier, Black, dotnet format)
 - ✅ Lint (ESLint, Flake8, StyleCop)
@@ -540,7 +540,7 @@ git commit -m "Add new feature"
 # ⚡ Pre-commit hook runs automatically (fast checks ~5-15s)
 
 # 3. Before pushing - optionally run full check manually
-npm run check
+npm run pre-push
 # 🔍 Same validation that pre-push hook will run
 
 # 4. Push to remote
@@ -551,13 +551,13 @@ git push origin feature/new-feature
 
 ### When to Use Manual Commands
 
-**Use `npm run check:quick`:**
+**Use `npm run pre-commit`:**
 
 - Before committing if you bypassed the pre-commit hook (`git commit --no-verify`)
 - Quick sanity check during development
 - Faster feedback loop while iterating
 
-**Use `npm run check`:**
+**Use `npm run pre-push`:**
 
 - Before creating a Pull Request
 - To preview what pre-push hook will check
@@ -594,7 +594,7 @@ git commit --no-verify
 git push --no-verify
 ```
 
-**Note:** Bypassing hooks means you skip validation. Use `npm run check:quick` or `npm run check` manually instead.
+**Note:** Bypassing hooks means you skip validation. Use `npm run pre-commit` or `npm run pre-push` manually instead.
 
 **Format check fails**
 
