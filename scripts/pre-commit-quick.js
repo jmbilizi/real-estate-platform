@@ -80,7 +80,7 @@ function hasPythonProjectsAffected(isAffected, base) {
     // On feature branch, check for affected Python projects
     const result = run(
       `npx nx show projects --affected --base=${base} --head=HEAD --projects=tag:python`,
-      { silent: true },
+      { silent: true }
     );
     return result.success && result.output && result.output.trim().length > 0;
   } catch (error) {
@@ -103,7 +103,7 @@ function hasDotNetProjectsAffected(isAffected, base) {
     // On feature branch, check for affected .NET projects
     const result = run(
       `npx nx show projects --affected --base=${base} --head=HEAD --projects=tag:dotnet`,
-      { silent: true },
+      { silent: true }
     );
     return result.success && result.output && result.output.trim().length > 0;
   } catch (error) {
@@ -120,7 +120,7 @@ function setupPythonEnvironment() {
   const pythonBinPath = path.join(venvPath, isWindows ? "Scripts" : "bin");
   const pythonExecutable = path.join(
     pythonBinPath,
-    isWindows ? "python.exe" : "python",
+    isWindows ? "python.exe" : "python"
   );
 
   // Check if virtual environment already exists and is valid
@@ -143,7 +143,7 @@ function setupPythonEnvironment() {
 
     if (!fs.existsSync(pythonExecutable)) {
       logError(
-        "Failed to create Python virtual environment. Python checks may fail.",
+        "Failed to create Python virtual environment. Python checks may fail."
       );
       return false;
     }
@@ -188,7 +188,7 @@ function detectValidationMode() {
         {
           encoding: "utf8",
           cwd: path.resolve(__dirname, ".."),
-        },
+        }
       ).trim();
 
       if (upstream && upstream !== "@{u}") {
@@ -228,54 +228,50 @@ function checkNodeProjects(isAffected, base) {
   logStep("Quick Check: Node.js/TypeScript");
 
   const affectedFlag = isAffected && base ? `--base=${base} --head=HEAD` : "";
-  let hasErrors = false;
 
-  // 1. Format check
+  // 1. Format check (MUST PASS to continue)
   log("\n1. Checking code formatting...", "blue");
   const formatCmd =
     isAffected && base
-      ? `npx nx format:check ${affectedFlag}`
-      : `npx nx format:check --projects=tag:node`;
+      ? `npx nx format:check --base=${base} --head=HEAD`
+      : `npm run nx:node-format-check`;
 
   const formatResult = run(formatCmd);
-  if (formatResult.success) {
-    logSuccess("Formatting passed");
-  } else {
+  if (!formatResult.success) {
     logError('Formatting failed - run "npm run nx:node-format" to fix');
-    hasErrors = true;
+    return false; // Exit early
   }
+  logSuccess("Formatting passed");
 
-  // 2. Lint
+  // 2. Lint (MUST PASS to continue)
   log("\n2. Linting code...", "blue");
   const lintCmd =
     isAffected && base
-      ? `npx nx affected ${affectedFlag} --target=lint`
+      ? `npx nx affected --base=${base} --head=HEAD --target=lint --projects=tag:node`
       : `npm run nx:node-lint`;
 
   const lintResult = run(lintCmd);
-  if (lintResult.success) {
-    logSuccess("Linting passed");
-  } else {
+  if (!lintResult.success) {
     logError("Linting failed");
-    hasErrors = true;
+    return false; // Exit early
   }
+  logSuccess("Linting passed");
 
-  // 3. Type check
+  // 3. Type check (MUST PASS to continue)
   log("\n3. Type checking...", "blue");
   const typeCmd =
     isAffected && base
-      ? `npx nx affected ${affectedFlag} --target=type-check`
+      ? `npx nx affected --base=${base} --head=HEAD --target=type-check --projects=tag:node`
       : `npm run nx:node-type-check`;
 
   const typeResult = run(typeCmd);
-  if (typeResult.success) {
-    logSuccess("Type checking passed");
-  } else {
+  if (!typeResult.success) {
     logError("Type checking failed");
-    hasErrors = true;
+    return false; // Exit early
   }
+  logSuccess("Type checking passed");
 
-  return !hasErrors;
+  return true; // All checks passed
 }
 
 function checkPythonProjects(isAffected, base) {
@@ -290,54 +286,50 @@ function checkPythonProjects(isAffected, base) {
   }
 
   const affectedFlag = isAffected && base ? `--base=${base} --head=HEAD` : "";
-  let hasErrors = false;
 
-  // 1. Format check
+  // 1. Format check (MUST PASS to continue)
   log("\n1. Checking code formatting (Black)...", "blue");
   const formatCmd =
     isAffected && base
-      ? `npx nx affected ${affectedFlag} --target=format-check`
+      ? `npx nx affected --base=${base} --head=HEAD --target=format-check --projects=tag:python`
       : `npm run nx:python-format-check`;
 
   const formatResult = run(formatCmd);
-  if (formatResult.success) {
-    logSuccess("Formatting passed");
-  } else {
+  if (!formatResult.success) {
     logError('Formatting failed - run "npm run nx:python-format" to fix');
-    hasErrors = true;
+    return false; // Exit early
   }
+  logSuccess("Formatting passed");
 
-  // 2. Lint (Flake8)
+  // 2. Lint (Flake8) (MUST PASS to continue)
   log("\n2. Linting code (Flake8)...", "blue");
   const lintCmd =
     isAffected && base
-      ? `npx nx affected ${affectedFlag} --target=lint`
+      ? `npx nx affected --base=${base} --head=HEAD --target=lint --projects=tag:python`
       : `npm run nx:python-lint`;
 
   const lintResult = run(lintCmd);
-  if (lintResult.success) {
-    logSuccess("Linting passed");
-  } else {
+  if (!lintResult.success) {
     logError("Linting failed");
-    hasErrors = true;
+    return false; // Exit early
   }
+  logSuccess("Linting passed");
 
-  // 3. Type check (mypy)
+  // 3. Type check (mypy) (MUST PASS to continue)
   log("\n3. Type checking (mypy)...", "blue");
   const typeCmd =
     isAffected && base
-      ? `npx nx affected ${affectedFlag} --target=type-check`
+      ? `npx nx affected --base=${base} --head=HEAD --target=type-check --projects=tag:python`
       : `npm run nx:python-type-check`;
 
   const typeResult = run(typeCmd);
-  if (typeResult.success) {
-    logSuccess("Type checking passed");
-  } else {
+  if (!typeResult.success) {
     logError("Type checking failed");
-    hasErrors = true;
+    return false; // Exit early
   }
+  logSuccess("Type checking passed");
 
-  return !hasErrors;
+  return true; // All checks passed
 }
 
 function checkDotNetProjects(isAffected, base) {
@@ -352,39 +344,36 @@ function checkDotNetProjects(isAffected, base) {
   }
 
   const affectedFlag = isAffected && base ? `--base=${base} --head=HEAD` : "";
-  let hasErrors = false;
 
-  // 1. Format check
+  // 1. Format check (MUST PASS to continue)
   log("\n1. Checking code formatting (dotnet format)...", "blue");
   const formatCmd =
     isAffected && base
-      ? `npx nx affected ${affectedFlag} --target=format-check`
+      ? `npx nx affected --base=${base} --head=HEAD --target=format-check --projects=tag:dotnet`
       : `npm run nx:dotnet-format-check`;
 
   const formatResult = run(formatCmd);
-  if (formatResult.success) {
-    logSuccess("Formatting passed");
-  } else {
+  if (!formatResult.success) {
     logError('Formatting failed - run "npm run nx:dotnet-format" to fix');
-    hasErrors = true;
+    return false; // Exit early
   }
+  logSuccess("Formatting passed");
 
-  // 2. Lint (StyleCop via build)
+  // 2. Lint (StyleCop) (MUST PASS to continue)
   log("\n2. Linting code (StyleCop)...", "blue");
   const lintCmd =
     isAffected && base
-      ? `npx nx affected ${affectedFlag} --target=lint`
+      ? `npx nx affected --base=${base} --head=HEAD --target=lint --projects=tag:dotnet`
       : `npm run nx:dotnet-lint`;
 
   const lintResult = run(lintCmd);
-  if (lintResult.success) {
-    logSuccess("Linting passed");
-  } else {
+  if (!lintResult.success) {
     logError("Linting failed");
-    hasErrors = true;
+    return false; // Exit early
   }
+  logSuccess("Linting passed");
 
-  return !hasErrors;
+  return true; // All checks passed
 }
 
 function main() {
@@ -392,8 +381,25 @@ function main() {
   log("=".repeat(80), "cyan");
   log(
     "Running: Format + Lint + Type Check (fast, no tests/builds)\n",
-    "yellow",
+    "yellow"
   );
+
+  // Run nx:reset once at the start
+  logStep("Preparing NX Workspace");
+  log("Running nx:reset to ensure clean state...", "cyan");
+  const resetResult = run("npm run nx:reset");
+  if (!resetResult.success) {
+    logWarning("nx:reset had warnings but continuing...");
+  } else {
+    logSuccess("NX workspace ready");
+  }
+
+  // Format any files modified by nx:reset (e.g., .nx/project-graph.json)
+  log("Formatting workspace files...", "cyan");
+  const formatResetResult = run("npx nx format:write");
+  if (!formatResetResult.success) {
+    logWarning("Format after reset had warnings but continuing...");
+  }
 
   const { isAffected, base, currentBranch } = detectValidationMode();
 
@@ -412,7 +418,7 @@ function main() {
       logSuccess("Python environment ready");
     } else {
       logWarning(
-        "Python environment setup incomplete - Python checks may fail",
+        "Python environment setup incomplete - Python checks may fail"
       );
     }
   }
@@ -445,7 +451,7 @@ function main() {
   if (allPassed) {
     logSuccess("\n✅ Quick checks passed!");
     logSuccess(
-      "Commit is allowed. Run 'npm run check' before pushing for full validation.\n",
+      "Commit is allowed. Run 'npm run check' before pushing for full validation.\n"
     );
     process.exit(0);
   } else {

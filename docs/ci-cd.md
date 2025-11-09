@@ -417,7 +417,27 @@ npm run check
 
 # Quick validation (same as pre-commit hook)
 npm run check:quick
+
+# Individual language checks (fast, uses cached nx state)
+npm run nx:node-lint       # Lint Node.js projects
+npm run nx:python-test     # Test Python projects
+npm run nx:dotnet-build    # Build .NET projects
+
+# Reset nx cache (run after structural changes)
+npm run nx:reset
 ```
+
+### Performance Optimization
+
+The validation scripts (`npm run check` and `npm run check:quick`) are optimized to run `nx:reset` **once at the start** to ensure clean state, then execute all checks without redundant resets.
+
+Individual npm scripts (like `npm run nx:node-lint`) **skip reset** for faster iteration during development. If you've made structural changes (added/removed projects, changed dependencies), run `npm run nx:reset` first to refresh the project graph.
+
+**Why this matters:**
+
+- `nx:reset` runs repair, cache clearing, and auto-tagging (~5-10s overhead)
+- Validation scripts: 1 reset at start vs previous 20+ resets = **massive speed improvement**
+- Individual commands: No reset = instant execution for quick checks during development
 
 ### How It Works
 

@@ -36,6 +36,14 @@ npm run check
 
 # Quick validation (same as pre-commit hook)
 npm run check:quick
+
+# Individual language checks (fast, uses cached nx state)
+npm run nx:node-lint       # Lint Node.js projects
+npm run nx:python-test     # Test Python projects
+npm run nx:dotnet-build    # Build .NET projects
+
+# Reset nx cache (run this after structural changes)
+npm run nx:reset
 ```
 
 The scripts automatically detect your branch:
@@ -50,6 +58,10 @@ The scripts only run checks for affected languages:
 - Only Node.js files changed? → Skips Python/NET setup and checks
 - Only Python files changed? → Auto-creates venv if needed, skips .NET
 - Mixed changes? → Runs only the necessary language checks
+
+**Performance Optimization:**
+
+The validation scripts (`npm run check` and `npm run check:quick`) run `nx:reset` once at the start to ensure clean state, then execute all checks without redundant resets. Individual npm scripts (like `npm run nx:node-lint`) skip reset for faster iteration during development.
 
 Both hooks and `npm run check` perfectly mirror what CI will verify, so if they pass locally, CI will pass too.
 
