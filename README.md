@@ -26,7 +26,6 @@ The repository has a two-tier validation system to balance speed with safety:
 
 - **Pre-commit**: Fast checks (format + lint + type) on affected projects (~5-15s)
 - **Pre-push**: Full checks (format + lint + type + test + build) on affected projects (~30s-2min)
-- **Post-merge**: Auto-installs dependencies when package files change after pull/merge
 
 **Manual:**
 
@@ -37,14 +36,22 @@ npm run check
 # Quick validation (same as pre-commit hook)
 npm run check:quick
 
+# Formatting commands
+npm run nx:workspace-format       # Format all files (workspace + projects)
+npm run nx:node-format            # Format Node.js projects only
+npm run nx:python-format          # Format Python projects only
+npm run nx:dotnet-format          # Format .NET projects only
+
 # Individual language checks (fast, uses cached nx state)
-npm run nx:node-lint       # Lint Node.js projects
-npm run nx:python-test     # Test Python projects
-npm run nx:dotnet-build    # Build .NET projects
+npm run nx:node-lint              # Lint Node.js projects
+npm run nx:python-test            # Test Python projects
+npm run nx:dotnet-build           # Build .NET projects
 
 # Reset nx cache (run this after structural changes)
 npm run nx:reset
 ```
+
+> **Tip:** Use `nx:workspace-format` to format all files including repo-level files (scripts/, docs/, package.json, etc.). Use project-specific format commands when working on individual projects.
 
 The scripts automatically detect your branch:
 
@@ -81,7 +88,7 @@ See the [CI/CD documentation](./docs/ci-cd.md#quality-checks) for more details.
 ## Root Tooling & Configuration
 
 - **Nx**: Monorepo orchestration for all supported frameworks
-- **Unified Git Hooks System**: Centralized pre-commit, post-merge, and pre-push hooks for all languages
+- **Unified Git Hooks System**: Centralized pre-commit and pre-push hooks for all languages
 - **Husky & lint-staged**: Pre-commit hooks for linting/formatting staged files
 - **ESLint & Prettier**: Linting and formatting for JS/TS/React/Next/Node
 - **Black, Flake8, mypy**: Formatting, linting, and type checking for Python

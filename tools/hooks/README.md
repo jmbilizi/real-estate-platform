@@ -4,16 +4,14 @@ This directory contains the unified Git hooks system for the Polyglot monorepo.
 
 ## Quick Start
 
-To set up or update the Git hooks, run:
-
-```bash
-npm run setup-hooks
-```
+Git hooks are automatically set up when you run `npm install` (via the `prepare` script).
 
 ## Available Scripts
 
-- **setup-hooks.js**: Main script for setting up Git hooks
-- **hooks-runner.js**: Core script that runs on each Git hook event
+## Current Hooks
+
+- **pre-commit** (`.husky/pre-commit`): Runs quick validation (format + lint + type check)
+- **pre-push** (`.husky/pre-push`): Runs full validation (format + lint + type check + test + build)
 
 ## Documentation
 

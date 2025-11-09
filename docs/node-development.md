@@ -151,11 +151,20 @@ nx serve my-project
 ### Code Quality
 
 ```bash
-# Format all Node.js projects
+# Format all files in workspace (including repo-level files)
+npm run nx:workspace-format
+
+# Format only Node.js project files
 npm run nx:node-format
+
+# Check formatting for all files
+npm run nx:workspace-format-check
 
 # Lint all Node.js projects
 npm run nx:node-lint
+
+# Type check all Node.js projects
+npm run nx:node-type-check
 
 # Format a specific project
 nx format:write --projects=my-project
@@ -163,6 +172,8 @@ nx format:write --projects=my-project
 # Lint a specific project
 nx lint my-project
 ```
+
+> **Note:** Use `nx:workspace-format` to format all files including `scripts/`, `docs/`, `package.json`, etc. Use `nx:node-format` for project-specific formatting only.
 
 ### Testing
 

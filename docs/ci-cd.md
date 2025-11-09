@@ -599,9 +599,12 @@ git push --no-verify
 **Format check fails**
 
 - Run the appropriate format command:
-  - Node: `npm run nx:node-format`
-  - Python: `npm run nx:python-format`
-  - .NET: `npm run nx:dotnet-format`
+  - **All files (workspace + projects):** `npm run nx:workspace-format`
+  - **Node.js projects only:** `npm run nx:node-format`
+  - **Python projects only:** `npm run nx:python-format`
+  - **.NET projects only:** `npm run nx:dotnet-format`
+
+> **Tip:** Use `nx:workspace-format` to format all files including repo-level files (scripts/, docs/, package.json, etc.). Use project-specific format commands when working on individual projects.
 
 **Want to see what will be checked?**
 

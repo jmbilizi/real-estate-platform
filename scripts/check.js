@@ -243,11 +243,13 @@ function checkNodeProjects(isAffected, base) {
   const formatCmd =
     isAffected && base
       ? `npx nx format:check --base=${base} --head=HEAD`
-      : `npm run nx:node-format-check`;
+      : `npm run nx:workspace-format-check`;
 
   const formatResult = run(formatCmd);
   if (!formatResult.success) {
-    logError('Code formatting failed - run "npm run nx:node-format" to fix');
+    logError(
+      'Code formatting failed - run "npm run nx:workspace-format" to fix',
+    );
     return false; // Exit early - don't run remaining checks
   }
   logSuccess("Code formatting passed");
