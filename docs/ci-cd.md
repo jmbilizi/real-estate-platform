@@ -429,15 +429,51 @@ npm run nx:reset
 
 ### Performance Optimization
 
-The validation scripts (`npm run check` and `npm run check:quick`) are optimized to run `nx:reset` **once at the start** to ensure clean state, then execute all checks without redundant resets.
+The validation system is architected for optimal performance and to avoid file modifications during git operations:
 
-Individual npm scripts (like `npm run nx:node-lint`) **skip reset** for faster iteration during development. If you've made structural changes (added/removed projects, changed dependencies), run `npm run nx:reset` first to refresh the project graph.
+**Git Hooks (Automatic - Pre-Commit & Pre-Push):**
+
+- **Skip `nx:reset`** to prevent modifying workspace files during commit/push
+- Validate against current workspace state (fast, ~5-30s)
+- No file modifications means no unstaged changes after commit
+- Runs with `--skip-reset` flag
+
+**Manual Validation (`npm run check` and `npm run check:quick`):**
+
+- **Runs `nx:reset` once** at the start to ensure clean, accurate state
+- Then executes all checks without redundant resets
+- Total: 1 reset per session vs previous 20+ resets = **massive speed improvement**
+- Use these before creating PRs or when you want guaranteed clean validation
+
+**Individual Commands (`npm run nx:node-lint`, etc.):**
+
+- **Skip reset** for instant execution during development
+- Use cached nx state for faster iteration
+- If structural changes made, run `npm run nx:reset` manually first
 
 **Why this matters:**
 
 - `nx:reset` runs repair, cache clearing, and auto-tagging (~5-10s overhead)
-- Validation scripts: 1 reset at start vs previous 20+ resets = **massive speed improvement**
-- Individual commands: No reset = instant execution for quick checks during development
+- Git hooks must not modify files (prevents unstaged changes during commits)
+- Manual validation needs clean state for accurate results
+- Individual commands need speed for tight feedback loops
+
+**Example workflows:**
+
+```bash
+# During development - instant feedback
+npm run nx:node-lint              # Fast, uses cache
+
+# Committing code - automatic validation
+git commit                        # Hook runs with --skip-reset, no file changes
+
+# Before PR - thorough validation with clean state
+npm run check                     # Runs reset once, full clean validation
+
+# After structural changes (new project, dependencies, etc.)
+npm run nx:reset                  # Refresh project graph
+npm run nx:node-lint              # Now has fresh state
+```
 
 ### How It Works
 

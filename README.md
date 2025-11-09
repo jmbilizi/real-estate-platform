@@ -61,7 +61,18 @@ The scripts only run checks for affected languages:
 
 **Performance Optimization:**
 
-The validation scripts (`npm run check` and `npm run check:quick`) run `nx:reset` once at the start to ensure clean state, then execute all checks without redundant resets. Individual npm scripts (like `npm run nx:node-lint`) skip reset for faster iteration during development.
+The validation system is optimized for both speed and accuracy:
+
+- **Git hooks** (`pre-commit`, `pre-push`): Skip `nx:reset` to avoid modifying files during commit/push. Fast and non-invasive.
+- **Manual validation** (`npm run check`, `npm run check:quick`): Runs `nx:reset` once at start for clean state, then all checks without redundant resets.
+- **Individual commands** (`npm run nx:node-lint`, etc.): Skip reset for instant execution during development.
+
+**When to use each:**
+
+- **Git hooks**: Automatic validation during commit/push (fast, no file modifications)
+- **`npm run check`**: Before creating PRs or when you want full validation with clean workspace state
+- **`npm run check:quick`**: Quick manual validation with clean workspace state
+- **Individual scripts**: During active development for instant feedback
 
 Both hooks and `npm run check` perfectly mirror what CI will verify, so if they pass locally, CI will pass too.
 

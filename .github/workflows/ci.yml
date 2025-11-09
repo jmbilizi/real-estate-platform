@@ -68,8 +68,9 @@ jobs:
             nx-${{ runner.os }}-node-
             nx-${{ runner.os }}-
 
-      - name: Nx repair and reset
-        run: npm run nx:reset
+      # Note: We do NOT run nx:reset in CI to ensure we validate code exactly as committed.
+      # If project tags or workspace state is incorrect, CI should fail (not auto-fix).
+      # Developers should run 'npm run check' locally before pushing.
 
       - name: Check Node.js formatting (PR - affected only)
         if: github.event_name == 'pull_request'
@@ -159,8 +160,9 @@ jobs:
       - name: Set up Python environment
         run: npm run py:setup-dev
 
-      - name: Nx repair and reset for Python
-        run: npm run nx:reset
+      # Note: We do NOT run nx:reset in CI to ensure we validate code exactly as committed.
+      # If project tags or workspace state is incorrect, CI should fail (not auto-fix).
+      # Developers should run 'npm run check' locally before pushing.
 
       - name: Check Python formatting (PR - affected only)
         if: github.event_name == 'pull_request'
@@ -250,8 +252,9 @@ jobs:
       - name: Set up .NET environment
         run: npm run dotnet:setup
 
-      - name: Nx repair and reset for .NET
-        run: npm run nx:reset
+      # Note: We do NOT run nx:reset in CI to ensure we validate code exactly as committed.
+      # If project tags or workspace state is incorrect, CI should fail (not auto-fix).
+      # Developers should run 'npm run check' locally before pushing.
 
       - name: Check .NET formatting (PR - affected only)
         if: github.event_name == 'pull_request'

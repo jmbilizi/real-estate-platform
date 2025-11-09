@@ -80,7 +80,7 @@ function hasPythonProjectsAffected(isAffected, base) {
     // On feature branch, check for affected Python projects
     const result = run(
       `npx nx show projects --affected --base=${base} --head=HEAD --projects=tag:python`,
-      { silent: true }
+      { silent: true },
     );
     return result.success && result.output && result.output.trim().length > 0;
   } catch (error) {
@@ -103,7 +103,7 @@ function hasDotNetProjectsAffected(isAffected, base) {
     // On feature branch, check for affected .NET projects
     const result = run(
       `npx nx show projects --affected --base=${base} --head=HEAD --projects=tag:dotnet`,
-      { silent: true }
+      { silent: true },
     );
     return result.success && result.output && result.output.trim().length > 0;
   } catch (error) {
@@ -120,7 +120,7 @@ function setupPythonEnvironment() {
   const pythonBinPath = path.join(venvPath, isWindows ? "Scripts" : "bin");
   const pythonExecutable = path.join(
     pythonBinPath,
-    isWindows ? "python.exe" : "python"
+    isWindows ? "python.exe" : "python",
   );
 
   // Check if virtual environment already exists and is valid
@@ -143,7 +143,7 @@ function setupPythonEnvironment() {
 
     if (!fs.existsSync(pythonExecutable)) {
       logError(
-        "Failed to create Python virtual environment. Python checks may fail."
+        "Failed to create Python virtual environment. Python checks may fail.",
       );
       return false;
     }
@@ -188,7 +188,7 @@ function detectValidationMode() {
         {
           encoding: "utf8",
           cwd: path.resolve(__dirname, ".."),
-        }
+        },
       ).trim();
 
       if (upstream && upstream !== "@{u}") {
@@ -381,24 +381,31 @@ function main() {
   log("=".repeat(80), "cyan");
   log(
     "Running: Format + Lint + Type Check (fast, no tests/builds)\n",
-    "yellow"
+    "yellow",
   );
 
-  // Run nx:reset once at the start
-  logStep("Preparing NX Workspace");
-  log("Running nx:reset to ensure clean state...", "cyan");
-  const resetResult = run("npm run nx:reset");
-  if (!resetResult.success) {
-    logWarning("nx:reset had warnings but continuing...");
-  } else {
-    logSuccess("NX workspace ready");
-  }
+  // Check if --skip-reset flag is present
+  const skipReset = process.argv.includes("--skip-reset");
 
-  // Format any files modified by nx:reset (e.g., .nx/project-graph.json)
-  log("Formatting workspace files...", "cyan");
-  const formatResetResult = run("npx nx format:write");
-  if (!formatResetResult.success) {
-    logWarning("Format after reset had warnings but continuing...");
+  // Run nx:reset once at the start (unless skipped by git hooks)
+  if (!skipReset) {
+    logStep("Preparing NX Workspace");
+    log("Running nx:reset to ensure clean state...", "cyan");
+    const resetResult = run("npm run nx:reset");
+    if (!resetResult.success) {
+      logWarning("nx:reset had warnings but continuing...");
+    } else {
+      logSuccess("NX workspace ready");
+    }
+
+    // Format any files modified by nx:reset (e.g., .nx/project-graph.json)
+    log("Formatting workspace files...", "cyan");
+    const formatResetResult = run("npx nx format:write");
+    if (!formatResetResult.success) {
+      logWarning("Format after reset had warnings but continuing...");
+    }
+  } else {
+    log("Skipping nx:reset (running in git hook mode)\n", "cyan");
   }
 
   const { isAffected, base, currentBranch } = detectValidationMode();
@@ -418,7 +425,7 @@ function main() {
       logSuccess("Python environment ready");
     } else {
       logWarning(
-        "Python environment setup incomplete - Python checks may fail"
+        "Python environment setup incomplete - Python checks may fail",
       );
     }
   }
@@ -451,7 +458,7 @@ function main() {
   if (allPassed) {
     logSuccess("\n✅ Quick checks passed!");
     logSuccess(
-      "Commit is allowed. Run 'npm run check' before pushing for full validation.\n"
+      "Commit is allowed. Run 'npm run check' before pushing for full validation.\n",
     );
     process.exit(0);
   } else {
