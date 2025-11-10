@@ -1,0 +1,304 @@
+name: Hetzner K8s Clusters
+
+on:
+  push:
+    branches:
+      - main
+      - test
+      - dev
+    paths:
+      - "infra/k8s/cluster/hetzner/**/*.yaml"
+  pull_request:
+    branches:
+      - main
+      - test
+      - dev
+    paths:
+      - "infra/k8s/cluster/hetzner/**/*.yaml"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy"
+        required: true
+        type: choice
+        options:
+          - dev
+          - test
+          - prod
+
+concurrency:
+  group: hetzner-k8s-${{ github.ref }}
+  cancel-in-progress: false # Don't cancel infrastructure updates
+
+jobs:
+  validate-pr:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check which files changed
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            dev:
+              - 'infra/k8s/cluster/hetzner/hetzner_dev_cluster_config.yaml'
+            test:
+              - 'infra/k8s/cluster/hetzner/hetzner_test_cluster_config.yaml'
+            prod:
+              - 'infra/k8s/cluster/hetzner/hetzner_prod_cluster_config.yaml'
+
+      - name: Validate dev cluster config
+        if: steps.changes.outputs.dev == 'true'
+        run: |
+          echo "📋 Validating dev cluster configuration..."
+          # Basic YAML validation
+          python3 -c "import yaml; yaml.safe_load(open('infra/k8s/cluster/hetzner/hetzner_dev_cluster_config.yaml'))" || exit 1
+          echo "✅ Dev cluster config is valid YAML"
+
+      - name: Validate test cluster config
+        if: steps.changes.outputs.test == 'true'
+        run: |
+          echo "📋 Validating test cluster configuration..."
+          # Basic YAML validation
+          python3 -c "import yaml; yaml.safe_load(open('infra/k8s/cluster/hetzner/hetzner_test_cluster_config.yaml'))" || exit 1
+          echo "✅ Test cluster config is valid YAML"
+
+      - name: Validate prod cluster config
+        if: steps.changes.outputs.prod == 'true'
+        run: |
+          echo "📋 Validating prod cluster configuration..."
+          # Basic YAML validation
+          python3 -c "import yaml; yaml.safe_load(open('infra/k8s/cluster/hetzner/hetzner_prod_cluster_config.yaml'))" || exit 1
+          echo "✅ Prod cluster config is valid YAML"
+
+  detect-changes:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      dev-changed: ${{ steps.filter.outputs.dev }}
+      test-changed: ${{ steps.filter.outputs.test }}
+      prod-changed: ${{ steps.filter.outputs.prod }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            dev:
+              - 'infra/k8s/cluster/hetzner/hetzner_dev_cluster_config.yaml'
+            test:
+              - 'infra/k8s/cluster/hetzner/hetzner_test_cluster_config.yaml'
+            prod:
+              - 'infra/k8s/cluster/hetzner/hetzner_prod_cluster_config.yaml'
+
+  update-dev-cluster:
+    needs: [detect-changes]
+    if: |
+      always() && (
+        (github.event_name == 'push' && github.ref == 'refs/heads/dev' && needs.detect-changes.outputs.dev-changed == 'true') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev')
+      )
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if cluster is enabled
+        id: check-enabled
+        run: |
+          enabled=$(grep -E '^auto_deploy:' infra/k8s/cluster/hetzner/hetzner_dev_cluster_config.yaml | awk '{print $2}')
+          echo "enabled=$enabled" >> $GITHUB_OUTPUT
+          if [ "$enabled" != "true" ]; then
+            echo "⚠️  Dev cluster auto-deployment is disabled (auto_deploy: $enabled)"
+            echo "Set 'auto_deploy: true' in hetzner_dev_cluster_config.yaml to enable deployment"
+          fi
+
+      - name: Install kubectl
+        if: steps.check-enabled.outputs.enabled == 'true'
+        uses: azure/setup-kubectl@v4
+        with:
+          version: "latest"
+
+      - name: Install Helm
+        if: steps.check-enabled.outputs.enabled == 'true'
+        uses: azure/setup-helm@v4
+        with:
+          version: "latest"
+
+      - name: Install hetzner-k3s CLI
+        if: steps.check-enabled.outputs.enabled == 'true'
+        run: |
+          wget https://github.com/vitobotta/hetzner-k3s/releases/download/v2.4.1/hetzner-k3s-linux-amd64
+          chmod +x hetzner-k3s-linux-amd64
+          sudo mv hetzner-k3s-linux-amd64 /usr/local/bin/hetzner-k3s
+          hetzner-k3s version
+
+      - name: Setup SSH keys
+        if: steps.check-enabled.outputs.enabled == 'true'
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HETZNER_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.HETZNER_SSH_PUBLIC_KEY }}" > ~/.ssh/id_rsa.pub
+          chmod 600 ~/.ssh/id_rsa
+          chmod 644 ~/.ssh/id_rsa.pub
+
+      - name: Substitute secrets in config
+        if: steps.check-enabled.outputs.enabled == 'true'
+        run: |
+          # Remove the 'auto_deploy' flag and substitute secrets
+          grep -v '^auto_deploy:' infra/k8s/cluster/hetzner/hetzner_dev_cluster_config.yaml | \
+          sed "s/HETZNER_TOKEN/${{ secrets.HETZNER_TOKEN }}/g" > \
+          hetzner_dev_cluster_config_processed.yaml
+
+      - name: Validate YAML syntax
+        if: steps.check-enabled.outputs.enabled == 'true'
+        run: |
+          cat hetzner_dev_cluster_config_processed.yaml
+
+      - name: Create/Update cluster
+        if: steps.check-enabled.outputs.enabled == 'true'
+        run: |
+          hetzner-k3s create --config hetzner_dev_cluster_config_processed.yaml
+
+  update-test-cluster:
+    needs: [detect-changes]
+    if: |
+      always() && (
+        (github.event_name == 'push' && github.ref == 'refs/heads/test' && needs.detect-changes.outputs.test-changed == 'true') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'test')
+      )
+    runs-on: ubuntu-latest
+    environment: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if cluster is enabled
+        id: check-enabled
+        run: |
+          enabled=$(grep -E '^auto_deploy:' infra/k8s/cluster/hetzner/hetzner_test_cluster_config.yaml | awk '{print $2}')
+          echo "enabled=$enabled" >> $GITHUB_OUTPUT
+          if [ "$enabled" != "true" ]; then
+            echo "⚠️  Test cluster auto-deployment is disabled (auto_deploy: $enabled)"
+            echo "Set 'auto_deploy: true' in hetzner_test_cluster_config.yaml to enable deployment"
+          fi
+
+      - name: Install kubectl
+        if: steps.check-enabled.outputs.enabled == 'true'
+        uses: azure/setup-kubectl@v4
+        with:
+          version: "latest"
+
+      - name: Install Helm
+        if: steps.check-enabled.outputs.enabled == 'true'
+        uses: azure/setup-helm@v4
+        with:
+          version: "latest"
+
+      - name: Install hetzner-k3s CLI
+        if: steps.check-enabled.outputs.enabled == 'true'
+        run: |
+          wget https://github.com/vitobotta/hetzner-k3s/releases/download/v2.4.1/hetzner-k3s-linux-amd64
+          chmod +x hetzner-k3s-linux-amd64
+          sudo mv hetzner-k3s-linux-amd64 /usr/local/bin/hetzner-k3s
+          hetzner-k3s version
+
+      - name: Setup SSH keys
+        if: steps.check-enabled.outputs.enabled == 'true'
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HETZNER_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.HETZNER_SSH_PUBLIC_KEY }}" > ~/.ssh/id_rsa.pub
+          chmod 600 ~/.ssh/id_rsa
+          chmod 644 ~/.ssh/id_rsa.pub
+
+      - name: Substitute secrets in config
+        if: steps.check-enabled.outputs.enabled == 'true'
+        run: |
+          # Remove the 'auto_deploy' flag and substitute secrets
+          grep -v '^auto_deploy:' infra/k8s/cluster/hetzner/hetzner_test_cluster_config.yaml | \
+          sed "s/HETZNER_TOKEN/${{ secrets.HETZNER_TOKEN }}/g" > \
+          hetzner_test_cluster_config_processed.yaml
+
+      - name: Validate YAML syntax
+        if: steps.check-enabled.outputs.enabled == 'true'
+        run: |
+          cat hetzner_test_cluster_config_processed.yaml
+
+      - name: Create/Update cluster
+        if: steps.check-enabled.outputs.enabled == 'true'
+        run: |
+          hetzner-k3s create --config hetzner_test_cluster_config_processed.yaml
+
+  update-prod-cluster:
+    needs: [detect-changes]
+    if: |
+      always() && (
+        (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.detect-changes.outputs.prod-changed == 'true') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod')
+      )
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if cluster is enabled
+        id: check-enabled
+        run: |
+          enabled=$(grep -E '^auto_deploy:' infra/k8s/cluster/hetzner/hetzner_prod_cluster_config.yaml | awk '{print $2}')
+          echo "enabled=$enabled" >> $GITHUB_OUTPUT
+          if [ "$enabled" != "true" ]; then
+            echo "⚠️  Prod cluster auto-deployment is disabled (auto_deploy: $enabled)"
+            echo "Set 'auto_deploy: true' in hetzner_prod_cluster_config.yaml to enable deployment"
+          fi
+
+      - name: Install kubectl
+        if: steps.check-enabled.outputs.enabled == 'true'
+        uses: azure/setup-kubectl@v4
+        with:
+          version: "latest"
+
+      - name: Install Helm
+        if: steps.check-enabled.outputs.enabled == 'true'
+        uses: azure/setup-helm@v4
+        with:
+          version: "latest"
+
+      - name: Install hetzner-k3s CLI
+        if: steps.check-enabled.outputs.enabled == 'true'
+        run: |
+          wget https://github.com/vitobotta/hetzner-k3s/releases/download/v2.4.1/hetzner-k3s-linux-amd64
+          chmod +x hetzner-k3s-linux-amd64
+          sudo mv hetzner-k3s-linux-amd64 /usr/local/bin/hetzner-k3s
+          hetzner-k3s version
+
+      - name: Setup SSH keys
+        if: steps.check-enabled.outputs.enabled == 'true'
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HETZNER_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.HETZNER_SSH_PUBLIC_KEY }}" > ~/.ssh/id_rsa.pub
+          chmod 600 ~/.ssh/id_rsa
+          chmod 644 ~/.ssh/id_rsa.pub
+
+      - name: Substitute secrets in config
+        if: steps.check-enabled.outputs.enabled == 'true'
+        run: |
+          # Remove the 'auto_deploy' flag and substitute secrets
+          grep -v '^auto_deploy:' infra/k8s/cluster/hetzner/hetzner_prod_cluster_config.yaml | \
+          sed "s/HETZNER_TOKEN/${{ secrets.HETZNER_TOKEN }}/g" > \
+          hetzner_prod_cluster_config_processed.yaml
+
+      - name: Validate YAML syntax
+        if: steps.check-enabled.outputs.enabled == 'true'
+        run: |
+          cat hetzner_prod_cluster_config_processed.yaml
+
+      - name: Create/Update cluster
+        if: steps.check-enabled.outputs.enabled == 'true'
+        run: |
+          hetzner-k3s create --config hetzner_prod_cluster_config_processed.yaml

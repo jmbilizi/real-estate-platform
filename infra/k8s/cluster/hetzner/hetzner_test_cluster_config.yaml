@@ -1,0 +1,50 @@
+---
+auto_deploy: false # Set to false to disable automatic deployment
+hetzner_token: HETZNER_TOKEN # Will be replaced by GitHub Actions from secrets
+cluster_name: hetzner_dev_cluster
+kubeconfig_path: "./kubeconfig"
+k3s_version: v1.32.0+k3s1
+
+networking:
+  ssh:
+    port: 22
+    use_agent: true
+    public_key_path: "~/.ssh/id_rsa.pub"
+    private_key_path: "~/.ssh/id_rsa"
+  allowed_networks:
+    ssh:
+      - 0.0.0.0/0 # TODO: Restrict to your IP after initial setup
+    api:
+      - 0.0.0.0/0 # TODO: Restrict to your IP after initial setup
+  public_network:
+    ipv4: true
+    ipv6: true
+  cni:
+    enabled: true
+    encryption: true
+    mode: flannel
+
+schedule_workloads_on_masters: false
+
+masters_pool:
+  instance_type: CPX11
+  instance_count: 1 # for HA; you can also create a single master cluster for dev and testing (not recommended for production)
+  location: ash-dc1 # ash-dc1 is Ashburn, VA. You can choose a single location for single master clusters or if you prefer to have all masters in the same location. For regional clusters (which are only available in the eu-central network zone), each master needs to be placed in a separate location.
+
+worker_node_pools:
+  - name: small-static
+    instance_type: cpx21
+    instance_count: 1
+    locations:
+      - ash-dc1
+  - name: medium-autoscaled
+    instance_type: cpx21 # Same as static, more cost-effective
+    location: ash-dc1
+    autoscaling:
+      enabled: true
+      min_instances: 0
+      max_instances: 1 # Can scale to 2 CPX21 instances when needed
+
+protect_against_deletion: true
+
+k3s_upgrade_concurrency: 1 # how many nodes to upgrade at the same time
