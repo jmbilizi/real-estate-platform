@@ -1,7 +1,7 @@
 ---
 auto_deploy: true # Set to false to disable automatic deployment
 hetzner_token: HETZNER_TOKEN # Will be replaced by GitHub Actions from secrets
-cluster_name: hetzner_dev_cluster
+cluster_name: hetzner-dev-cluster
 kubeconfig_path: "./kubeconfig"
 k3s_version: v1.32.0+k3s1
 
@@ -27,23 +27,22 @@ networking:
 schedule_workloads_on_masters: false
 
 masters_pool:
-  instance_type: CPX11
-  instance_count: 1 # for HA; you can also create a single master cluster for dev and testing (not recommended for production)
-  location: ash-dc1 # ash-dc1 is Ashburn, VA. You can choose a single location for single master clusters or if you prefer to have all masters in the same location. For regional clusters (which are only available in the eu-central network zone), each master needs to be placed in a separate location.
+  instance_type: cpx11
+  instance_count: 1
+  location: ash
 
 worker_node_pools:
   - name: small-static
     instance_type: cpx21
     instance_count: 1
-    locations:
-      - ash-dc1
+    location: ash
   - name: medium-autoscaled
-    instance_type: cpx21 # Same as static, more cost-effective
-    location: ash-dc1
+    instance_type: cpx21
+    location: ash
     autoscaling:
       enabled: true
       min_instances: 0
-      max_instances: 1 # Can scale to 2 CPX21 instances when needed
+      max_instances: 1
 
 protect_against_deletion: true
 
