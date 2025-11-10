@@ -19,6 +19,9 @@ networking:
   public_network:
     ipv4: true
     ipv6: true
+  private_network:
+    enabled: true
+    subnet: 10.0.0.0/16
   cni:
     enabled: true
     encryption: true
