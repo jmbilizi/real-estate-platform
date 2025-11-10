@@ -29,6 +29,9 @@ networking:
 
 schedule_workloads_on_masters: false
 
+datastore:
+  mode: etcd
+
 masters_pool:
   instance_type: cpx11
   instance_count: 1
