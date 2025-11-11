@@ -13,6 +13,49 @@ const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
 
+/**
+ * Write file preserving original BOM and line endings
+ * @param {string} filePath - Path to file
+ * @param {string} content - Content to write
+ */
+function writeFilePreservingEncoding(filePath, content) {
+  // Check if file exists to detect original encoding
+  let hasBOM = false;
+  let lineEnding = "\n";
+
+  if (fs.existsSync(filePath)) {
+    const originalBuffer = fs.readFileSync(filePath);
+    hasBOM =
+      originalBuffer.length >= 3 &&
+      originalBuffer[0] === 0xef &&
+      originalBuffer[1] === 0xbb &&
+      originalBuffer[2] === 0xbf;
+
+    const originalContent = originalBuffer.toString("utf8");
+    lineEnding = originalContent.includes("\r\n") ? "\r\n" : "\n";
+  } else {
+    // For new files, detect from content being written
+    lineEnding = content.includes("\r\n") ? "\r\n" : "\n";
+  }
+
+  // Normalize line endings
+  if (lineEnding === "\r\n") {
+    content = content.replace(/\r?\n/g, "\r\n");
+  } else {
+    content = content.replace(/\r\n/g, "\n");
+  }
+
+  // Write with appropriate BOM
+  const outputBuffer = hasBOM
+    ? Buffer.concat([
+        Buffer.from([0xef, 0xbb, 0xbf]),
+        Buffer.from(content, "utf8"),
+      ])
+    : Buffer.from(content, "utf8");
+
+  fs.writeFileSync(filePath, outputBuffer);
+}
+
 console.log("🔧 Starting NX repair process...");
 
 // Root path
@@ -110,7 +153,7 @@ for (const requiredPlugin of requiredPlugins) {
 }
 
 // Write updated nx.json
-fs.writeFileSync(nxJsonPath, JSON.stringify(nxJson, null, 2));
+writeFilePreservingEncoding(nxJsonPath, JSON.stringify(nxJson, null, 2) + "\n");
 console.log("✅ Updated nx.json with proper configuration");
 
 // Ensure .nx directory exists
@@ -129,9 +172,9 @@ const minimalProjectGraph = {
 };
 
 // Always write the project-graph.json to ensure it's valid
-fs.writeFileSync(
+writeFilePreservingEncoding(
   projectGraphPath,
-  JSON.stringify(minimalProjectGraph, null, 2),
+  JSON.stringify(minimalProjectGraph, null, 2) + "\n",
 );
 console.log(
   "✅ Created/Updated minimal project-graph.json for Nx to work without projects",
@@ -147,7 +190,10 @@ if (!fs.existsSync(cachePath)) {
 // Ensure nx-cloud.env file exists with basic content
 const nxCloudEnvPath = path.join(nxDir, "nx-cloud.env");
 if (!fs.existsSync(nxCloudEnvPath)) {
-  fs.writeFileSync(nxCloudEnvPath, "# Nx Cloud Environment Variables\n");
+  writeFilePreservingEncoding(
+    nxCloudEnvPath,
+    "# Nx Cloud Environment Variables\n",
+  );
   console.log("✅ Created nx-cloud.env file");
 }
 
@@ -158,7 +204,10 @@ if (!fs.existsSync(workspaceJsonPath)) {
     version: 2,
     projects: {},
   };
-  fs.writeFileSync(workspaceJsonPath, JSON.stringify(workspaceJson, null, 2));
+  writeFilePreservingEncoding(
+    workspaceJsonPath,
+    JSON.stringify(workspaceJson, null, 2) + "\n",
+  );
   console.log("✅ Created workspace.json file");
 }
 
@@ -180,7 +229,7 @@ if (fs.existsSync(nxBatPath)) {
 }
 
 if (updateNxBat) {
-  fs.writeFileSync(nxBatPath, correctNxBatContent);
+  writeFilePreservingEncoding(nxBatPath, correctNxBatContent);
   console.log("✅ Updated nx.bat file");
 }
 
