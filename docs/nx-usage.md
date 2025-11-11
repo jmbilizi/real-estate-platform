@@ -68,10 +68,11 @@ npm run nx:repair
 npm run nx:reset
 ```
 
-**What it does**: Runs `nx:repair` + clears the Nx cache + auto-tags projects
+**What it does**: Runs `nx:repair` + clears the Nx cache + syncs .NET solution files + auto-tags projects
 
 - Everything that `nx:repair` does
 - Clears Nx's computational cache (executes official `nx reset`)
+- **Synchronizes .NET solution files** (runs `dotnet:setup-projects`)
 - **Auto-tags all projects** based on their executors
 - Forces fresh project graph computation
 - Cleans `.nx/cache` directory
@@ -83,6 +84,7 @@ npm run nx:reset
 - Before running affected commands in CI/CD
 - When you suspect stale cache issues
 - **After creating new projects** (ensures they get tagged automatically)
+- **After creating/deleting .NET projects** (keeps solution file synchronized)
 
 ### nx:tag-projects
 

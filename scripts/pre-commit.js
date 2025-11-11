@@ -413,6 +413,13 @@ function main() {
     if (!formatResetResult.success) {
       logWarning("Format after reset had warnings but continuing...");
     }
+
+    // Re-stage any staged files that were modified by nx:reset
+    log("Re-staging modified files...", "cyan");
+    const reStageResult = run("git add --renormalize -u", { silent: true });
+    if (reStageResult.success) {
+      logSuccess("Modified files re-staged (with line ending normalization)");
+    }
   } else {
     log("Skipping nx:reset (running in git hook mode)\n", "cyan");
   }

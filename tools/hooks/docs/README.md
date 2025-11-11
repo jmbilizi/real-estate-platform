@@ -27,9 +27,12 @@ The system provides the following hooks:
 
 Runs whenever you create a commit:
 
+- Runs `nx:reset` to ensure clean state and synchronized solution files
 - Detects which file types are being staged
 - Sets up language-specific environments as needed
 - Runs appropriate linters and formatters for staged files
+- Automatically re-stages files modified during the hook (e.g., cleaned solution files)
+- Normalizes line endings according to `.gitattributes`
 - Prevents commits with failing checks
 
 ### Post-Merge Hook
