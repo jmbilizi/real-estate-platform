@@ -34,6 +34,8 @@ npm run dotnet:setup-projects
 
 This syncs `real-estate-platform.sln` with all .csproj files and creates project.json files.
 
+> **Note**: This also runs automatically as part of `npm run nx:reset` and during pre-commit hooks, ensuring solution files stay synchronized.
+
 ## Configuration
 
 Config files in `tools/dotnet/configs/`:
