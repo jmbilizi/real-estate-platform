@@ -98,7 +98,7 @@ vs. previous matrix: ~150s (with redundant npm ci)
 4. Set up Node.js 20.19.5
 5. Restore cached `node_modules` from `setup-base`
 6. Cache Nx computation cache
-7. Set up Python virtual environment (`py:setup-dev`)
+7. Set up Python virtual environment (`python:env`)
 8. Run Nx repair and reset
 9. Check code formatting (`black --check`)
 10. Lint projects (Flake8, mypy via `nx:python-lint`)
@@ -120,7 +120,7 @@ vs. previous matrix: ~150s (with redundant npm ci)
 4. Set up Node.js 20.19.5
 5. Restore cached `node_modules` from `setup-base`
 6. Cache Nx computation cache
-7. Set up .NET environment (`dotnet:setup`)
+7. Set up .NET environment (`dotnet:env`)
 8. Run Nx repair and reset
 9. Check code formatting (`dotnet format --verify-no-changes`)
 10. Lint projects (`nx:dotnet-lint`)

@@ -52,7 +52,7 @@ Runs before pushing commits to a remote repository:
 To set up or update the Git hooks, run:
 
 ```bash
-npm run setup-hooks
+npm run hooks:setup
 ```
 
 This script will:
@@ -93,14 +93,14 @@ If you need to add custom behavior to the hooks, modify the hooks-runner.js file
 If you encounter issues with the hooks:
 
 1. Make sure you have all the necessary dependencies installed
-2. Try running `npm run setup-hooks` to reconfigure the hooks
+2. Try running `npm run hooks:setup` to reconfigure the hooks
 3. Check that the language-specific tools are properly installed
 4. Examine the output of the failing hook for specific error messages
 
 The hooks system is automatically set up when you run:
 
 ```bash
-npm run setup-hooks
+npm run hooks:setup
 ```
 
 This will:
@@ -118,7 +118,7 @@ If hooks are not running properly, you can manually set them up:
 npm run prepare
 
 # Set up the hooks system
-npm run setup-hooks
+npm run hooks:setup
 ```
 
 ## How It Works
@@ -145,4 +145,4 @@ If hooks are failing or not running:
 1. Ensure Husky is properly installed (`npm run prepare`)
 2. Check that the hook scripts exist in the `.husky` directory
 3. Verify language-specific tools are installed
-4. Run `npm run setup-hooks` to recreate the hook configuration
+4. Run `npm run hooks:setup` to recreate the hook configuration

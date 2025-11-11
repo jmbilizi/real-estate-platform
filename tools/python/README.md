@@ -21,7 +21,7 @@ This directory contains all the Python-related tooling for the Polyglot monorepo
 To set up everything (Python, virtual environment, dependencies, and NX Python integration):
 
 ```bash
-npm run py:setup-dev
+npm run python:env
 ```
 
 This single command will:
@@ -35,7 +35,7 @@ This single command will:
 For a more detailed setup that includes installing packages for all Python services:
 
 ```bash
-npm run py:setup-dev-all
+npm run python:env:full
 ```
 
 ## Available Scripts
@@ -49,16 +49,16 @@ All Python-related scripts have been simplified and consolidated:
 - `npm run py:check` - Verify Python and virtual environment setup
 - `npm run py:activate` - Show activation instructions
 - `npm run py:create-venv` - Create virtual environment only
-- `npm run py:install-packages` - Install all packages
+- `npm run python:deps:all` - Install all packages
 - `npm run py:install-dev` - Install development packages
-- `npm run setup-hooks` - Set up unified Git hooks for all languages
-- `npm run py:help` - Show help for Python setup
+- `npm run hooks:setup` - Set up unified Git hooks for all languages
+- `npm run python:help` - Show help for Python setup
 
 ### Code Quality
 
-- `npm run format-python` - Format Python code using Black
-- `npm run lint-python` - Lint Python code using Flake8 and mypy
-- `npm run check-python` - Run both format and lint
+- `npm run python:format` - Format Python code using Black
+- `npm run python:lint` - Lint Python code using Flake8 and mypy
+- `npm run python:check` - Run both format and lint
 
 ### Nx Integration
 
@@ -88,7 +88,7 @@ This runs the unified hooks setup which handles Python, JavaScript, C#, and othe
 If you need to manually set up the hooks:
 
 ```bash
-npm run setup-hooks
+npm run hooks:setup
 ```
 
 ### How it works:
@@ -125,7 +125,7 @@ If the virtual environment isn't working:
 
 1. Delete the `.venv` directory
 2. Run `npm run py:create-venv` to create a fresh environment
-3. Run `npm run py:install-packages` to reinstall dependencies
+3. Run `npm run python:deps:all` to reinstall dependencies
 
 ### Advanced Troubleshooting
 

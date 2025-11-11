@@ -56,10 +56,10 @@ npm run py:setup     # Phase 2: Create venv and install packages
 # Environment management
 npm run py:check     # Verify Python and environment setup
 npm run py:create-venv  # Create virtual environment only
-npm run py:install-packages  # Install all packages
+npm run python:deps:all  # Install all packages
 npm run py:install-dev  # Install development packages
 npm run py:activate  # Show activation instructions
-npm run setup-hooks  # Set up Git hooks (unified system)
+npm run hooks:setup  # Set up Git hooks (unified system)
 ```
 
 ## Using the Python Environment CLI

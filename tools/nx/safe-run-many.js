@@ -7,7 +7,7 @@
  * It's designed to avoid pipeline failures and provide clear error messages.
  */
 
-const { spawnSync } = require("child_process");
+const { spawnSync, execSync } = require("child_process");
 const args = process.argv.slice(2);
 
 // Extract target and project type for better error messages
@@ -46,6 +46,7 @@ if (args.length === 0 || !hasTargetArg || !hasProjectsArg) {
   // Just pass through to regular nx without special handling
   const result = spawnSync("npx", ["nx", "run-many", ...args], {
     stdio: "inherit",
+    shell: true,
   });
 
   process.exit(result.status || 0);
@@ -58,20 +59,8 @@ console.log(
 // Run the nx command
 const result = spawnSync("npx", ["nx", "run-many", ...args], {
   stdio: "inherit",
+  shell: true,
 });
 
-// If the command fails, check if it's because of no projects
-if (result.status !== 0) {
-  console.log(
-    `\n[NX] No ${projectType} projects found with target "${target}".`,
-  );
-  console.log(
-    `[NX] This is expected if you haven't created any ${projectType} projects yet.`,
-  );
-  console.log(
-    `[NX] You can create projects using the appropriate create commands.`,
-  );
-
-  // Exit with success code so CI pipelines don't fail
-  process.exit(0);
-}
+// Just pass through the result - let failures be failures
+process.exit(result.status || 0);

@@ -4,10 +4,29 @@
     Central Package Management for NuGet
     This file defines package versions used across all projects in the monorepo.
     See: https://learn.microsoft.com/nuget/consume-packages/central-package-management
+    
+    IMPORTANT NOTES:
+    
+    1. VersionOverride: Used to force a specific version even when transitive dependencies
+       try to pull in different versions. Helps avoid security vulnerabilities and conflicts.
+       
+    2. NU1604 Warnings: If you see "does not contain an inclusive lower bound" warnings,
+       you have two options:
+       a) Add explicit Version in the project's .csproj file
+       b) Use version ranges here like Version="[13.0.3,)" for lower bound only
+       
+    3. Shared vs Project-Specific Packages:
+       - Define shared packages here (used by multiple projects)
+       - Keep project-specific packages in individual .csproj files with explicit versions
+       
+    4. Transitive Dependencies: If a package pulls in an old version of a dependency,
+       add that dependency here with VersionOverride to force the correct version.
   -->
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+    <!-- Enables VersionOverride attribute to force specific versions -->
+    <CentralPackageVersionOverrideEnabled>true</CentralPackageVersionOverrideEnabled>
   </PropertyGroup>
 
   <!-- Common packages used across projects -->
@@ -27,9 +46,12 @@
     <PackageVersion Include="Dapper" Version="2.1.28" />
 
     <!-- API packages -->
-    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="8.0.3" />
-    <PackageVersion Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="9.0.10" />
+    <PackageVersion Include="Swashbuckle.AspNetCore" Version="9.0.6" />
     <PackageVersion Include="FluentValidation.AspNetCore" Version="11.3.0" />
+    
+    <!-- Configuration packages -->
+    <PackageVersion Include="DotNetEnv" Version="3.1.1" />
 
     <!-- Testing packages -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
@@ -39,7 +61,9 @@
     <PackageVersion Include="FluentAssertions" Version="6.12.0" />
 
     <!-- Utilities -->
-    <PackageVersion Include="Newtonsoft.Json" Version="13.0.3" />
+    <!-- VersionOverride forces version 13.0.3 even if transitive dependencies try to use older versions (e.g., 3.5.8) -->
+    <PackageVersion Include="Newtonsoft.Json" Version="13.0.3" VersionOverride="13.0.3" />
+    <PackageVersion Include="Newtonsoft.Json.Bson" Version="1.0.2" />
     <PackageVersion Include="AutoMapper" Version="13.0.1" />
     <PackageVersion Include="Serilog" Version="3.1.1" />
     <PackageVersion Include="Serilog.Extensions.Logging" Version="8.0.0" />

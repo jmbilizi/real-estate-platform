@@ -9,7 +9,7 @@ The monorepo uses a consolidated Python environment approach:
 1. **Common Environment** (`.venv`):
    - Used for both development and git pre-commit hooks
    - Contains all required tools and dependencies
-   - Installed via `npm run py:setup-dev` or `tools/python/scripts/create-venv.bat`
+   - Installed via `npm run python:env` or `tools/python/scripts/create-venv.bat`
    - Ensures consistent tooling across all tasks
 
 2. **Project-specific Environments**:
@@ -21,7 +21,7 @@ The monorepo uses a consolidated Python environment approach:
 The NX Python setup is automatically included when you run:
 
 ```bash
-npm run py:setup-dev
+npm run python:env
 ```
 
 This will set up both your Python environment and NX Python integration in one step.
@@ -29,7 +29,7 @@ This will set up both your Python environment and NX Python integration in one s
 If you need to run only the NX Python setup separately, you can use:
 
 ```bash
-npm run setup-nx-python
+npm run nx:add-python
 ```
 
 The setup is intelligent and will only install NX Python if it's not already set up, so you don't need to worry about running it multiple times.

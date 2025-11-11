@@ -1,136 +1,144 @@
 # .NET Development
 
-This document provides information about .NET development in this monorepo.
-
 ## Setup
 
-To set up .NET development environment:
-
 ```bash
-npm run dotnet:setup
+npm run dotnet:env
 ```
 
-This script will:
+Installs .NET SDK (if missing), global tools, and Nx plugin.
 
-1. Check for .NET SDK installation
-2. Verify .NET SDK version
-3. Install required .NET global tools
-4. Ensure NX .NET plugin is installed
+## Creating Projects
 
-> **Automatic Installation**: If .NET SDK is not installed, the script can automatically download and install the required version (9.0.305). This feature works on Windows and macOS systems. On other systems, the script will provide instructions for manual installation.
-
-### Configuring Auto-Installation
-
-By default, automatic installation is enabled. You can disable this feature by setting `AUTO_INSTALL_ENABLED` to `false` in the `tools/dotnet/scripts/dotnet-dev-setup.js` file.
-
-### Troubleshooting
-
-If you encounter issues with automatic installation:
-
-1. Ensure you have administrator privileges
-2. Check your internet connection
-3. Try installing manually from https://dotnet.microsoft.com/download/dotnet/9.0
-
-## Code Quality Tools
-
-.NET code quality tools for formatting and linting are automatically installed as part of the setup process.
+Use standard `dotnet new` commands:
 
 ```bash
-npm run dotnet:setup
+# Web API
+dotnet new webapi -n MyApi -o apps/my-api
+
+# Console App
+dotnet new console -n MyApp -o apps/my-app
+
+# Class Library
+dotnet new classlib -n MyLib -o libs/my-lib
+
+# Tests
+dotnet new xunit -n MyApi.Tests -o apps/my-api/tests
 ```
 
-If you want to skip the tools installation, you can use:
+After creating or deleting projects:
 
 ```bash
-npm run dotnet:setup -- --skip-tools
+npm run dotnet:setup-projects
 ```
 
-The following global .NET tools are installed during setup:
+This syncs `real-estate-platform.sln` with all .csproj files and creates project.json files.
 
-1. `dotnet-format` - Official .NET code formatter
-2. `csharpier` - Opinionated C# code formatter
-3. `roslynator.dotnet.cli` - Roslyn-based analyzers and code fixes
-4. `dotnet-outdated-tool` - Tool to check for outdated NuGet packages
-5. `dotnet-coverage` - Code coverage tools
-6. `dotnet-cleanup` - Project file cleanup
-7. `dotnet-doc` - Documentation generator
+## Configuration
 
-## Project Creation
+Config files in `tools/dotnet/configs/`:
 
-Projects are created using Nx generators which provide complete project templates:
+- `Directory.Build.props` - MSBuild properties for all projects
+- `Directory.Packages.props` - Central package management
+- `.editorconfig` - Code style rules
+- `global.json` - .NET SDK version
 
-- `@nx/dotnet:app`: Creates .NET applications with full structure
-- `@nx/dotnet:lib`: Creates .NET libraries with proper configuration
-
-## Creating New Projects
-
-Use Nx generators directly to create .NET projects:
+## Common Commands
 
 ```bash
-# .NET Web API
-npx nx generate @nx/dotnet:app my-api --directory=apps
+# Build/run
+nx build my-api
+nx serve my-api
+nx test my-api-tests
 
-# .NET Library
-npx nx generate @nx/dotnet:lib my-lib --directory=libs
-
-# .NET Console Application
-npx nx generate @nx/dotnet:app my-console --directory=apps --template=console
-```
-
-Projects are automatically tagged with `dotnet` and additional tags when you run `npm run nx:reset` or any nx command.
-
-Use Nx generators directly:
-
-```bash
-# .NET application
-npx nx generate @nx/dotnet:app my-api
-
-# .NET library
-npx nx generate @nx/dotnet:lib my-lib
-```
-
-## Configuration Files
-
-Important .NET configuration files are located in `tools/dotnet/configs/`:
-
-- `global.json`: Specifies the .NET SDK version
-- `Directory.Build.props`: Common MSBuild properties
-- `Directory.Build.targets`: Common MSBuild targets
-
-When a new project is created, these configuration files are used as a basis for the project setup.
-
-## NX Integration
-
-The monorepo uses the `@nx/dotnet` plugin for NX integration. Common NX commands:
-
-```bash
-# Run all .NET projects
-npm run nx:dotnet-dev
-
-# Format all .NET projects
-npm run nx:dotnet-format
-
-# Lint all .NET projects
-npm run nx:dotnet-lint
-
-# Run tests for all .NET projects
-npm run nx:dotnet-test
-
-# Build all .NET projects
+# All .NET projects
 npm run nx:dotnet-build
+npm run nx:dotnet-test
 ```
 
-## Best Practices
+**Problem**: After creating a .NET project, Nx doesn't recognize it.
 
-1. Always use the provided scripts for creating new projects
-2. Follow the code style defined in MSBuild properties
-3. Tag .NET projects with `dotnet` in `project.json` for NX targeting
-4. Use the NX commands for building and testing to ensure proper dependency resolution
+**Solution**:
 
-## Troubleshooting
+```bash
+# Run the reset command to detect projects
+npm run nx:reset
+
+# Verify project was detected
+nx show projects
+```
+
+#### Build Fails with Dependency Errors
+
+**Problem**: Project builds fail due to missing dependencies.
+
+**Solution**:
+
+```bash
+# Ensure project references are correct
+cd apps/my-api
+dotnet add reference ../../libs/my-library/MyLibrary.csproj
+
+# Rebuild with Nx
+nx build my-api
+```
+
+#### .NET SDK Issues
+
+**Problem**: Wrong .NET SDK version or SDK not found.
+
+**Solution**:
+
+```bash
+# Verify and fix environment
+npm run dotnet:env
+
+# Check installed SDKs
+dotnet --list-sdks
+
+# Check required version
+type tools\dotnet\configs\global.json
+```
+
+#### Targets Not Available
+
+**Problem**: Expected targets like `serve` or `test` don't exist.
+
+**Solution**:
+
+- `serve` target: Only created for executable projects (web apps, console apps)
+- `test` target: Only created for test projects (xunit, nunit, mstest)
+- `pack` target: Only created for class libraries
+
+Verify project type in `.csproj`:
+
+```xml
+<PropertyGroup>
+  <OutputType>Exe</OutputType>  <!-- For executable -->
+  <IsTestProject>true</IsTestProject>  <!-- For tests -->
+</PropertyGroup>
+```
+
+#### Tools Not Installed
+
+**Problem**: Global .NET tools are missing.
+
+**Solution**:
+
+```bash
+# Reinstall all tools
+npm run dotnet:env
+
+# Verify tools are installed
+dotnet tool list --global
+```
+
+### Getting Help
 
 If you encounter issues:
 
-1. Run `npm run dotnet:setup` to verify and fix your environment
-2. Make sure you have the correct .NET SDK version installed (see config files)
-3. Verify that required tools are installed with `dotnet tool list --global`
+1. Run `npm run dotnet:env` to verify and fix your environment
+2. Check that you have the correct .NET SDK version (see `tools/dotnet/configs/global.json`)
+3. Verify that required tools are installed: `dotnet tool list --global`
+4. Check the Nx plugin documentation: https://nx.dev/nx-api/dotnet
+5. Review the official .NET CLI docs: https://docs.microsoft.com/dotnet/core/tools/

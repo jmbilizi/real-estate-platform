@@ -523,9 +523,9 @@ Examples:
                                                   # Install packages for multiple services
 
 Available npm scripts:
-  npm run py:setup-dev         # Setup Python dev environment with common packages
-  npm run py:setup-dev-all     # Setup Python and install packages for all services
-  npm run py:install-service   # Install packages for specific services
+  npm run python:env           # Setup Python dev environment with common packages
+  npm run python:env:full      # Setup Python and install packages for all services
+  npm run python:deps          # Install packages for specific services
   `);
   process.exit(0);
 }
@@ -642,7 +642,7 @@ async function main() {
   log("\nPython development environment setup completed!");
   log("You can now start working on Python services.");
   log("\nTo install packages for specific services later, run:");
-  log("npm run py:install-service apps/my-service1 apps/my-service2");
+  log("npm run python:deps apps/my-service1 apps/my-service2");
 }
 
 // Run the main function
