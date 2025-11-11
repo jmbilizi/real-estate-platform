@@ -11,6 +11,49 @@ const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
 
+/**
+ * Write file preserving original BOM and line endings
+ * @param {string} filePath - Path to file
+ * @param {string} content - Content to write
+ */
+function writeFilePreservingEncoding(filePath, content) {
+  // Check if file exists to detect original encoding
+  let hasBOM = false;
+  let lineEnding = "\n";
+
+  if (fs.existsSync(filePath)) {
+    const originalBuffer = fs.readFileSync(filePath);
+    hasBOM =
+      originalBuffer.length >= 3 &&
+      originalBuffer[0] === 0xef &&
+      originalBuffer[1] === 0xbb &&
+      originalBuffer[2] === 0xbf;
+
+    const originalContent = originalBuffer.toString("utf8");
+    lineEnding = originalContent.includes("\r\n") ? "\r\n" : "\n";
+  } else {
+    // For new files, detect from content being written
+    lineEnding = content.includes("\r\n") ? "\r\n" : "\n";
+  }
+
+  // Normalize line endings
+  if (lineEnding === "\r\n") {
+    content = content.replace(/\r?\n/g, "\r\n");
+  } else {
+    content = content.replace(/\r\n/g, "\n");
+  }
+
+  // Write with appropriate BOM
+  const outputBuffer = hasBOM
+    ? Buffer.concat([
+        Buffer.from([0xef, 0xbb, 0xbf]),
+        Buffer.from(content, "utf8"),
+      ])
+    : Buffer.from(content, "utf8");
+
+  fs.writeFileSync(filePath, outputBuffer);
+}
+
 // Colors for console output
 const colors = {
   green: "\x1b[32m",
@@ -115,7 +158,7 @@ function createProjectJson(projectName, projectConfig) {
       existingContent.tags.push("dotnet");
     }
 
-    fs.writeFileSync(
+    writeFilePreservingEncoding(
       projectJsonPath,
       JSON.stringify(existingContent, null, 2) + "\n",
     );
@@ -156,7 +199,7 @@ function createProjectJson(projectName, projectConfig) {
     tags: ["dotnet"],
   };
 
-  fs.writeFileSync(
+  writeFilePreservingEncoding(
     projectJsonPath,
     JSON.stringify(projectJson, null, 2) + "\n",
   );
@@ -294,18 +337,6 @@ function addProjectsToSolution() {
     }
   }
 
-  // Clean up the solution file - remove leading/trailing blank lines
-  if (fs.existsSync(solutionPath)) {
-    try {
-      let solutionContent = fs.readFileSync(solutionPath, "utf8");
-      // Trim leading and trailing whitespace/newlines
-      solutionContent = solutionContent.trim() + "\n";
-      fs.writeFileSync(solutionPath, solutionContent, "utf8");
-    } catch (error) {
-      // Ignore cleanup errors
-    }
-  }
-
   return { added: addedCount, removed: removedCount };
 }
 
@@ -340,6 +371,70 @@ function main() {
   // Always synchronize solution file, even if no NX projects exist
   log("\n🔗 Synchronizing solution file...\n", "blue");
   const solutionResult = addProjectsToSolution();
+
+  // Clean up the solution file - remove leading/trailing blank lines and fix platforms (always)
+  const solutionPath = path.join(process.cwd(), "real-estate-platform.sln");
+  if (fs.existsSync(solutionPath)) {
+    try {
+      // Read as buffer to preserve exact encoding
+      const buffer = fs.readFileSync(solutionPath);
+      const hasBOM =
+        buffer.length >= 3 &&
+        buffer[0] === 0xef &&
+        buffer[1] === 0xbb &&
+        buffer[2] === 0xbf;
+
+      let solutionContent = buffer.toString("utf8");
+      // Remove BOM character from string if present
+      if (solutionContent.charCodeAt(0) === 0xfeff) {
+        solutionContent = solutionContent.substring(1);
+      }
+
+      // Detect current line ending style to preserve it
+      const hasCRLF = solutionContent.includes("\r\n");
+      const lineEnding = hasCRLF ? "\r\n" : "\n";
+
+      // Remove extra platform configurations that dotnet sln adds
+      // Keep only Debug|Any CPU and Release|Any CPU
+      solutionContent = solutionContent.replace(
+        /^\s*Debug\|x64 = Debug\|x64\r?\n/gm,
+        "",
+      );
+      solutionContent = solutionContent.replace(
+        /^\s*Debug\|x86 = Debug\|x86\r?\n/gm,
+        "",
+      );
+      solutionContent = solutionContent.replace(
+        /^\s*Release\|x64 = Release\|x64\r?\n/gm,
+        "",
+      );
+      solutionContent = solutionContent.replace(
+        /^\s*Release\|x86 = Release\|x86\r?\n/gm,
+        "",
+      );
+
+      // Normalize all line endings to match detected style
+      if (hasCRLF) {
+        solutionContent = solutionContent.replace(/\r?\n/g, "\r\n");
+      } else {
+        solutionContent = solutionContent.replace(/\r\n/g, "\n");
+      }
+
+      // Trim and add single trailing newline
+      solutionContent = solutionContent.trim() + lineEnding;
+
+      // Write with same BOM state as original
+      const outputBuffer = hasBOM
+        ? Buffer.concat([
+            Buffer.from([0xef, 0xbb, 0xbf]),
+            Buffer.from(solutionContent, "utf8"),
+          ])
+        : Buffer.from(solutionContent, "utf8");
+      fs.writeFileSync(solutionPath, outputBuffer);
+    } catch (error) {
+      // Ignore cleanup errors
+    }
+  }
 
   log(`\n✅ Solution synchronization complete!`, "green");
   log(`   Added to solution: ${solutionResult.added}`, "green");

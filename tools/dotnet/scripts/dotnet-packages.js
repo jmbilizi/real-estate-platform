@@ -223,9 +223,36 @@ function updateDirectoryPackagesProps(packageName, version) {
     }
   }
 
-  // Write updated content back to file
+  // Write updated content back to file (preserve encoding and line endings)
   try {
-    fs.writeFileSync(packagePropsPath, content, "utf8");
+    // Read original file to detect BOM and line endings
+    const originalBuffer = fs.readFileSync(packagePropsPath);
+    const hasBOM =
+      originalBuffer.length >= 3 &&
+      originalBuffer[0] === 0xef &&
+      originalBuffer[1] === 0xbb &&
+      originalBuffer[2] === 0xbf;
+
+    // Detect line ending style from content
+    const hasCRLF = content.includes("\r\n");
+    const lineEnding = hasCRLF ? "\r\n" : "\n";
+
+    // Normalize line endings to match original
+    if (hasCRLF) {
+      content = content.replace(/\r?\n/g, "\r\n");
+    } else {
+      content = content.replace(/\r\n/g, "\n");
+    }
+
+    // Write with same BOM state as original
+    const outputBuffer = hasBOM
+      ? Buffer.concat([
+          Buffer.from([0xef, 0xbb, 0xbf]),
+          Buffer.from(content, "utf8"),
+        ])
+      : Buffer.from(content, "utf8");
+
+    fs.writeFileSync(packagePropsPath, outputBuffer);
     console.log(
       `Updated ${packageName} to version ${version} in Directory.Packages.props`,
     );
