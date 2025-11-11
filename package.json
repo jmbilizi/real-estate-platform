@@ -45,7 +45,7 @@
     "pre-push": "node scripts/pre-push.js",
     "// NX Core Commands": "",
     "nx:repair": "node tools/nx/repair-nx.js",
-    "nx:reset": "npm run nx:repair && nx reset && node tools/nx/auto-tag-projects.js",
+    "nx:reset": "npm run nx:repair && nx reset && node tools/dotnet/scripts/setup-dotnet-projects.js && node tools/nx/auto-tag-projects.js",
     "nx:tag-projects": "node tools/nx/auto-tag-projects.js",
     "nx:graph": "npm run nx:reset && nx graph",
     "nx:run-many": "npm run nx:reset && node tools/nx/safe-run-many.js",

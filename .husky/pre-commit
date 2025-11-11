@@ -1,4 +1,7 @@
 # Run quick checks before commit (format + lint + type only, ~5-15s)
+
 # This catches most issues without slowing down commits
-# Skip nx:reset to avoid modifying files during commit
-node scripts/pre-commit.js --skip-reset
+
+# Runs nx:reset to clean solution files and auto-stages modifications
+
+node scripts/pre-commit.js
