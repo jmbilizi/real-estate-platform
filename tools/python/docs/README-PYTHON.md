@@ -12,7 +12,7 @@ This guide provides information on setting up and working with Python in this mo
 To set up Python and NX Python integration in one step:
 
 ```bash
-npm run py:setup-dev
+npm run python:env
 ```
 
 This will:
@@ -87,7 +87,7 @@ npm run py:install-dev
 To install dependencies for a specific Python service:
 
 ```bash
-npm run py:install-service --service=your-service-name
+npm run python:deps --service=your-service-name
 ```
 
 ## Python Commands with Nx
@@ -131,7 +131,7 @@ npm run py:env service your-service-name
 npm run py:env activate
 
 # Set up Git hooks (unified system for all languages)
-npm run setup-hooks
+npm run hooks:setup
 ```
 
 ## Formatting and Linting
@@ -140,13 +140,13 @@ Python code is automatically formatted and linted on commit using the unified Gi
 
 ```bash
 # Format Python code
-npm run format-python
+npm run python:format
 
 # Lint Python code
-npm run lint-python
+npm run python:lint
 
 # Both format and lint
-npm run check-python
+npm run python:check
 ```
 
 ## Troubleshooting

@@ -158,7 +158,7 @@ jobs:
             nx-${{ runner.os }}-
 
       - name: Set up Python environment
-        run: npm run py:setup-dev
+        run: npm run python:env
 
       # Note: We do NOT run nx:reset in CI to ensure we validate code exactly as committed.
       # If project tags or workspace state is incorrect, CI should fail (not auto-fix).
@@ -250,7 +250,11 @@ jobs:
             nx-${{ runner.os }}-
 
       - name: Set up .NET environment
-        run: npm run dotnet:setup
+        run: npm run dotnet:env
+
+      # Restore NuGet packages to catch version conflicts early
+      - name: Restore .NET packages
+        run: dotnet restore || echo "No .NET projects to restore"
 
       # Note: We do NOT run nx:reset in CI to ensure we validate code exactly as committed.
       # If project tags or workspace state is incorrect, CI should fail (not auto-fix).
@@ -258,11 +262,11 @@ jobs:
 
       - name: Check .NET formatting (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: dotnet format --verify-no-changes || echo "No affected .NET projects"
+        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=format-check --projects=tag:dotnet || echo "No affected .NET projects"
 
       - name: Check .NET formatting (Push - all projects)
         if: github.event_name == 'push'
-        run: dotnet format --verify-no-changes || echo "No .NET projects found"
+        run: npm run nx:dotnet-format-check || echo "No .NET projects found"
 
       - name: Lint .NET projects (PR - affected only)
         if: github.event_name == 'pull_request'

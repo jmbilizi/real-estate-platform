@@ -20,12 +20,18 @@ To maintain consistency and simplify project creation, we use a template-based a
 
 ## Project Generation
 
-All projects are created using Nx generators which provide:
+Projects are created using:
 
-- **Built-in Templates**: Nx generators include comprehensive project templates
-- **Automatic Configuration**: Projects are configured with best practices automatically
-- **Integrated Tooling**: Full integration with monorepo tools and workflows
-- **Auto-tagging**: Projects are automatically tagged based on their type
+- **Node.js/TypeScript**: Nx generators (`@nx/node`, `@nx/express`, `@nx/next`) with centralized configurations
+- **Python**: Nx generators (`@nxlv/python`) for apps and libraries
+- **.NET**: Standard `dotnet new` command - the `@nx/dotnet` plugin automatically detects projects
+
+All approaches provide:
+
+- **Consistent Structure**: Organized in `apps/` and `libs/` directories
+- **Nx Integration**: Full integration with monorepo tools and workflows
+- **Auto-tagging**: Projects automatically tagged based on their type for easy filtering
+- **Dependency Management**: Proper dependency graphs and build order
 
 - **Node.js Projects**: For Node.js projects, we use NX generators with centralized configurations:
   - `tools/node/configs/` - Centralized configurations for ESLint, Prettier, TypeScript, and Jest
@@ -39,17 +45,23 @@ Use Nx generators directly for consistent project creation:
 
 #### .NET Projects
 
-Use Nx generators directly:
+The `@nx/dotnet` plugin is inference-based and doesn't provide generators. Use the standard `dotnet new` command:
 
 ```bash
-# .NET application
-npx nx generate @nx/dotnet:app my-api
+# .NET Web API
+dotnet new webapi -n MyApi -o apps/my-api
 
-# .NET library
-npx nx generate @nx/dotnet:lib shared-models
+# .NET Class Library
+dotnet new classlib -n MyLibrary -o libs/my-library
 
-# Projects are automatically tagged when you run any nx command
+# .NET Console Application
+dotnet new console -n MyConsoleApp -o apps/my-console-app
+
+# Detect projects and create Nx targets
+npm run nx:reset
 ```
+
+See all available .NET templates: `dotnet new list`
 
 #### Python Projects
 
@@ -94,12 +106,29 @@ All projects are created using Nx generators which automatically create the appr
 
 ### .NET Projects
 
-.NET projects created with `@nx/dotnet` generators include:
+.NET projects created with `dotnet new` and detected by `@nx/dotnet`:
 
-- Complete project structure with `src/` and `tests/` directories
-- Standard configuration files (Directory.Build.props, etc.)
-- Nx project configuration (`project.json`)
-- Proper C# project templates
+- Standard .NET project structure (`.csproj` based)
+- MSBuild configuration from `tools/dotnet/configs/`
+- Nx targets auto-generated based on project type
+- Automatic dependency detection via `<ProjectReference>`
+
+**Available Templates**:
+
+- `webapi` - ASP.NET Core Web API
+- `mvc` - ASP.NET Core Web App
+- `console` - Console Application
+- `classlib` - Class Library
+- `xunit`/`nunit`/`mstest` - Test Projects
+- See all: `dotnet new list`
+
+**Auto-generated Nx Targets**:
+
+- `build` - All projects
+- `serve` - Executable projects (web apps, console apps)
+- `test` - Test projects
+- `pack` - Libraries
+- `publish` - Applications
 
 ### Python Projects
 

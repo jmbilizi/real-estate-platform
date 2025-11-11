@@ -30,13 +30,13 @@ npm run py:check
 npm run py:create-venv
 
 # Install all packages
-npm run py:install-packages
+npm run python:deps:all
 
 # Install development packages
 npm run py:install-dev
 
 # Set up pre-commit hooks
-npm run py:setup-hooks
+npm run hooks:setup
 
 # Show activation instructions
 npm run py:activate
@@ -53,11 +53,11 @@ npm run py:install-dev
 
 # Install dependencies for a specific service
 
-npm run py:install-service --service=fastapi-service
+npm run python:deps --service=fastapi-service
 
 # Get help on available scripts
 
-npm run py:help
+npm run python:help
 
 ````
 
@@ -107,7 +107,7 @@ The pre-commit hook is optimized to only set up the Python environment when Pyth
 For pre-commit hooks to work correctly when Python files are staged, Python tools like `black`, `flake8`, and `mypy` must be installed:
 
 1. **Option A - Use our scripts**:
-   - Run `npm run setup-hooks` which will install the necessary tools in a dedicated virtual environment
+   - Run `npm run hooks:setup` which will install the necessary tools in a dedicated virtual environment
 
 2. **Option B - Manual installation**:
    - Run `pip install -r tools/python/format-requirements.txt` using your Python environment

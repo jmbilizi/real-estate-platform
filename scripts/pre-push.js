@@ -398,6 +398,18 @@ function checkDotNetProjects(isAffected, base) {
 
   const affectedFlag = isAffected && base ? `--base=${base} --head=HEAD` : "";
 
+  // 0. Restore packages to catch version issues early (NU1604, transitive deps)
+  log("\n0. Restoring NuGet packages...", "blue");
+  const restoreResult = run("dotnet restore", { silent: true });
+  if (!restoreResult.success) {
+    logError("Package restore failed - check for package version conflicts");
+    logWarning("Common issues:");
+    logWarning("  • Missing explicit versions in .csproj PackageReferences");
+    logWarning("  • Transitive dependency conflicts (use VersionOverride)");
+    return false; // Exit early
+  }
+  logSuccess("Package restore completed");
+
   // 1. Format check (MUST PASS to continue)
   log("\n1. Checking code formatting (dotnet format)...", "blue");
   const formatCmd =

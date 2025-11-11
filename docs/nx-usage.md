@@ -141,11 +141,15 @@ For npm scripts, we've added error handling to ensure these commands exit succes
 Create projects using Nx generators directly. Projects will be automatically tagged when you run any nx command:
 
 ```bash
-# Create projects using Nx generators directly
+# Create Node.js/TypeScript projects using Nx generators
 npx nx generate @nx/express:app my-api --directory=apps
 npx nx generate @nx/next:app my-web-app --directory=apps
+
+# Create Python projects using Nx generators
 npx nx generate @nxlv/python:fastapi-app my-service --directory=apps
-npx nx generate @nx/dotnet:app my-dotnet-api --directory=apps
+
+# Create .NET projects using dotnet CLI (auto-detected by @nx/dotnet)
+dotnet new webapi -n MyDotnetApi -o apps/my-dotnet-api
 
 # Projects are automatically tagged when you run:
 npm run nx:reset          # Tags all projects automatically

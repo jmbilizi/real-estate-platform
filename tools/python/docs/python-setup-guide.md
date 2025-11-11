@@ -9,7 +9,7 @@ The monorepo uses a single Python environment for all purposes:
 1. **Common Environment** (`.venv`):
    - Used for both development and git pre-commit hooks
    - Contains all required tools and dependencies
-   - Installed via `npm run setup-hooks` or `tools/python/scripts/create-venv.bat`
+   - Installed via `npm run hooks:setup` or `tools/python/scripts/create-venv.bat`
    - Ensures consistent tooling across all tasks
 
 This consolidated approach simplifies environment management while ensuring that formatting tools work consistently.
@@ -41,7 +41,7 @@ This consolidated approach simplifies environment management while ensuring that
 
 ```bash
 # Run the setup script to create the hooks environment
-npm run setup-hooks
+npm run hooks:setup
 ```
 
 ### 2. For Python Developers
@@ -65,7 +65,7 @@ npm run py:create-venv
 .venv\Scripts\activate  # Run directly in terminal
 
 # Install dependencies for a specific service
-npm run py:install-service --service=fastapi-service
+npm run python:deps --service=fastapi-service
 ```
 
 ## Using Python Tools
@@ -74,13 +74,13 @@ npm run py:install-service --service=fastapi-service
 
 ```bash
 # Format all Python code
-npm run format-python
+npm run python:format
 
 # Lint all Python code
-npm run lint-python
+npm run python:lint
 
 # Format and lint (complete check)
-npm run check-python
+npm run python:check
 
 # Get help on available Python scripts
 npm run py:help
@@ -158,5 +158,5 @@ If hooks aren't running or are failing:
 
 ```bash
 # Reinstall hooks tools
-npm run setup-hooks
+npm run hooks:setup
 ```

@@ -17,26 +17,26 @@ function main() {
 
   printHeader("Environment Setup:");
   console.log(
-    "  npm run dotnet:setup         - Setup .NET development environment (includes tools)",
+    "  npm run dotnet:env           - Setup .NET development environment (includes tools)",
   );
   console.log(
-    "  npm run dotnet:setup -- --skip-tools  - Setup .NET without installing tools",
+    "  npm run dotnet:env -- --skip-tools  - Setup .NET without installing tools",
   );
   console.log("  npm run dotnet:help          - Show this help message");
 
   printHeader("Package Management:");
   console.log(
-    "  npm run dotnet:install-packages   - Install packages for all .NET projects",
+    "  npm run dotnet:restore       - Install packages for all .NET projects",
   );
   console.log(
-    "  npm run dotnet:install-package    - Install a package to a specific project",
+    "  npm run dotnet:restore:project    - Install a package to a specific project",
   );
 
   printHeader("Project Creation:");
-  console.log("  Use Nx generators directly:");
-  console.log("    npx nx generate @nx/dotnet:app my-api --directory=apps");
-  console.log("    npx nx generate @nx/dotnet:lib my-lib --directory=libs");
-  console.log("\n  Projects are auto-tagged when you run any nx: command");
+  console.log("  dotnet new webapi -n MyApi -o apps/my-api");
+  console.log("  dotnet new classlib -n MyLib -o libs/my-lib");
+  console.log("\n  After creating/deleting projects:");
+  console.log("    npm run dotnet:setup-projects");
 
   printHeader("NX Commands:");
   console.log("  npm run nx:dotnet-dev        - Run all .NET projects");

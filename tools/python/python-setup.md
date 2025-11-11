@@ -9,7 +9,7 @@ This comprehensive guide explains how to set up Python development in the real-e
 For a complete one-step setup that handles Python installation, virtual environment creation, and package installation:
 
 ```bash
-npm run py:setup-dev
+npm run python:env
 ```
 
 This command will:
@@ -24,7 +24,7 @@ This command will:
 If you're working with multiple Python services:
 
 ```bash
-npm run py:setup-dev-all
+npm run python:env:full
 ```
 
 ### Option 3: Service-Specific Setup
@@ -32,7 +32,7 @@ npm run py:setup-dev-all
 For specific services only:
 
 ```bash
-npm run py:install-service apps/my-service1 apps/my-service2
+npm run python:deps apps/my-service1 apps/my-service2
 ```
 
 ## Python Environment Structure
@@ -49,9 +49,9 @@ This consolidated approach simplifies environment management while ensuring cons
 
 | Tool         | Purpose              | Usage                   |
 | ------------ | -------------------- | ----------------------- |
-| **Black**    | Code formatter       | `npm run format-python` |
-| **Flake8**   | Linter               | `npm run lint-python`   |
-| **MyPy**     | Static type checker  | `npm run lint-python`   |
+| **Black**    | Code formatter       | `npm run python:format` |
+| **Flake8**   | Linter               | `npm run python:lint`   |
+| **MyPy**     | Static type checker  | `npm run python:lint`   |
 | **Pytest**   | Testing framework    | `nx test <project>`     |
 | **SQLFluff** | SQL formatter/linter | Pre-commit hooks        |
 | **YAMLLint** | YAML linter          | Pre-commit hooks        |
@@ -89,17 +89,17 @@ source .venv/bin/activate
 
 ```bash
 # Python environment management
-npm run py:setup-dev              # Complete setup
-npm run py:setup-dev-all          # Setup for all services
-npm run py:install-service        # Install for specific service
+npm run python:env                # Complete setup
+npm run python:env:full           # Setup for all services
+npm run python:deps               # Install for specific service
 
 # Code quality
-npm run format-python             # Format all Python code
-npm run lint-python               # Lint all Python code
-npm run check-python              # Format + lint
+npm run python:format             # Format all Python code
+npm run python:lint               # Lint all Python code
+npm run python:check              # Format + lint
 
 # Help
-npm run py:help                   # Get help on Python scripts
+npm run python:help               # Get help on Python scripts
 ```
 
 #### Nx Commands (for Nx-managed projects)
@@ -145,7 +145,7 @@ This happens when Python is freshly installed and PATH isn't updated:
 **Solution:**
 
 1. Restart your terminal or VS Code
-2. Run: `npm run py:setup-dev`
+2. Run: `npm run python:env`
 
 #### Virtual Environment Issues
 
@@ -157,7 +157,7 @@ rmdir /s .venv          # Windows
 rm -rf .venv            # macOS/Linux
 
 # Recreate
-npm run py:setup-dev
+npm run python:env
 ```
 
 #### Import Path Issues
@@ -178,7 +178,7 @@ sys.path.append(str(workspace_root))
 If Git hooks aren't working:
 
 ```bash
-npm run setup-hooks     # Reinstall hooks
+npm run hooks:setup     # Reinstall hooks
 ```
 
 #### PATH Environment Issues
@@ -188,7 +188,7 @@ If Python commands aren't recognized after installation:
 1. Verify Python installation: `python --version`
 2. Check if Python is in PATH
 3. Restart terminal/IDE
-4. Re-run setup: `npm run py:setup-dev`
+4. Re-run setup: `npm run python:env`
 
 ### Manual Setup (Fallback)
 
