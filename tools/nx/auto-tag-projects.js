@@ -95,16 +95,21 @@ function getProjectConfig(projectName) {
 function detectLanguage(projectConfig) {
   const targets = projectConfig.targets || {};
   const executors = [];
+  const commands = [];
 
-  // Collect all executors
+  // Collect all executors and commands
   for (const targetName in targets) {
     const target = targets[targetName];
     if (target.executor) {
       executors.push(target.executor);
     }
+    if (target.options && target.options.command) {
+      commands.push(target.options.command);
+    }
   }
 
   const executorString = executors.join(" ");
+  const commandString = commands.join(" ");
 
   // Node.js detection
   if (
@@ -128,6 +133,28 @@ function detectLanguage(projectConfig) {
   // .NET detection
   if (executorString.includes("@nx/dotnet")) {
     return "dotnet";
+  }
+
+  // .NET detection via commands (for nx:run-commands with dotnet)
+  if (commandString.includes("dotnet")) {
+    return "dotnet";
+  }
+
+  // .NET detection via project files
+  const projectRoot = projectConfig.root;
+  const projectPath = path.join(rootDir, projectRoot);
+  if (fs.existsSync(projectPath)) {
+    const files = fs.readdirSync(projectPath);
+    if (
+      files.some(
+        (file) =>
+          file.endsWith(".csproj") ||
+          file.endsWith(".vbproj") ||
+          file.endsWith(".fsproj"),
+      )
+    ) {
+      return "dotnet";
+    }
   }
 
   return null;
