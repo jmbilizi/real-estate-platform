@@ -25,8 +25,6 @@ const fs = require("fs");
 
 // Determine OS
 const isWindows = os.platform() === "win32";
-const isMacOS = os.platform() === "darwin";
-const isLinux = os.platform() === "linux";
 
 // Define paths
 const rootDir = process.cwd();
@@ -36,8 +34,6 @@ const venvPath = path.join(rootDir, ".venv");
 const venvBinDir = isWindows
   ? path.join(venvPath, "Scripts")
   : path.join(venvPath, "bin");
-const pythonCmd = isWindows ? "python" : "python3";
-const pipCmd = isWindows ? "pip" : "pip3";
 
 // Scripts paths
 const installPythonScript = path.join(
@@ -323,6 +319,215 @@ function createVirtualEnv() {
     true,
   );
   return false;
+}
+
+// Add pipx bin directory to system PATH permanently
+function addPipxToPath() {
+  log("Adding pipx bin directory to system PATH...");
+
+  const pipxBinPath = isWindows
+    ? path.join(os.homedir(), ".local", "bin")
+    : path.join(os.homedir(), ".local", "bin");
+
+  if (isWindows) {
+    try {
+      // Get current user PATH
+      const getCurrentPath = execSync(
+        "powershell -command \"[System.Environment]::GetEnvironmentVariable('Path', 'User')\"",
+        { encoding: "utf8" },
+      ).trim();
+
+      // Check if pipx bin path is already in PATH
+      if (getCurrentPath.includes(pipxBinPath)) {
+        log("pipx bin directory is already in PATH.");
+        return true;
+      }
+
+      // Add pipx bin path to user PATH
+      const newPath = `${pipxBinPath};${getCurrentPath}`;
+      execSync(
+        `powershell -command "[System.Environment]::SetEnvironmentVariable('Path', '${newPath}', 'User')"`,
+        { encoding: "utf8" },
+      );
+
+      // Also add to current process PATH
+      process.env.PATH = `${pipxBinPath};${process.env.PATH}`;
+
+      log("pipx bin directory added to PATH successfully.");
+      return true;
+    } catch (error) {
+      log(`Failed to add pipx to PATH: ${error.message}`, true);
+      log(
+        `Please manually add ${pipxBinPath} to your system PATH if needed.`,
+        true,
+      );
+      return false;
+    }
+  } else {
+    // For Unix-like systems, ensurepath should handle it
+    // Add to current process PATH
+    process.env.PATH = `${pipxBinPath}:${process.env.PATH}`;
+    return true;
+  }
+}
+
+// Install UV and Poetry globally via pipx
+function installGlobalTools() {
+  log("Checking and installing global Python tools (UV, Poetry)...");
+
+  // Use venv Python for all pip operations (has SSL certs configured)
+  const venvPython = path.join(venvBinDir, isWindows ? "python.exe" : "python");
+
+  // Check if pipx is installed as a Python module (required for 'python -m pipx')
+  const pipxModuleCheck = spawnSync(venvPython, ["-m", "pipx", "--version"], {
+    shell: true,
+    stdio: "pipe",
+    encoding: "utf8",
+  });
+
+  if (pipxModuleCheck.status !== 0) {
+    log("pipx not found. Installing pipx into venv...");
+    // Install pipx into venv (not --user since venv doesn't support that)
+    const pipxInstall = execute(venvPython, ["-m", "pip", "install", "pipx"]);
+
+    if (!pipxInstall.success) {
+      log("Failed to install pipx. Skipping global tools installation.", true);
+      return false;
+    }
+
+    log("pipx installed successfully.");
+
+    // Ensure pipx path is added with --force to update immediately
+    log("Ensuring pipx is in PATH...");
+    execute(venvPython, ["-m", "pipx", "ensurepath", "--force"]);
+
+    // Add pipx to PATH for current session and permanently
+    addPipxToPath();
+  } else {
+    log("pipx is already installed.");
+    // Even if pipx is installed, ensure pipx bin dir is in the current process PATH
+    const pipxBinPath = isWindows
+      ? path.join(os.homedir(), ".local", "bin")
+      : path.join(os.homedir(), ".local", "bin");
+
+    // Add to current process PATH if not already there
+    if (!process.env.PATH.includes(pipxBinPath)) {
+      process.env.PATH = isWindows
+        ? `${pipxBinPath};${process.env.PATH}`
+        : `${pipxBinPath}:${process.env.PATH}`;
+      log("Added pipx bin directory to current session PATH.");
+    }
+  }
+
+  // Get pipx bin path for checking UV/Poetry with full paths
+  const pipxBinDir = isWindows
+    ? path.join(os.homedir(), ".local", "bin")
+    : path.join(os.homedir(), ".local", "bin");
+
+  const uvPath = path.join(pipxBinDir, isWindows ? "uv.exe" : "uv");
+  const poetryPath = path.join(pipxBinDir, isWindows ? "poetry.exe" : "poetry");
+
+  // Install UV if not already installed
+  const uvCheck = fs.existsSync(uvPath)
+    ? { status: 0 }
+    : spawnSync("uv", ["--version"], {
+        shell: true,
+        stdio: "pipe",
+        encoding: "utf8",
+        env: process.env, // Use updated PATH
+      });
+
+  if (uvCheck.status !== 0) {
+    log("UV not found. Installing UV globally via pipx...");
+    const uvInstall = execute(venvPython, ["-m", "pipx", "install", "uv"]);
+
+    if (!uvInstall.success) {
+      log("Failed to install UV globally.", true);
+    } else {
+      log("UV installed successfully.");
+    }
+  } else {
+    log("UV is already installed.");
+  }
+
+  // Install Poetry if not already installed
+  const poetryCheck = fs.existsSync(poetryPath)
+    ? { status: 0 }
+    : spawnSync("poetry", ["--version"], {
+        shell: true,
+        stdio: "pipe",
+        encoding: "utf8",
+        env: process.env, // Use updated PATH
+      });
+
+  if (poetryCheck.status !== 0) {
+    log("Poetry not found. Installing Poetry globally via pipx...");
+    const poetryInstall = execute(venvPython, [
+      "-m",
+      "pipx",
+      "install",
+      "poetry",
+    ]);
+
+    if (!poetryInstall.success) {
+      log("Failed to install Poetry globally.", true);
+    } else {
+      log("Poetry installed successfully.");
+      // Ensure PATH is updated after installation
+      addPipxToPath();
+    }
+  } else {
+    log("Poetry is already installed.");
+  }
+
+  // Create a .env file with UV and Poetry paths for immediate use
+  const envContent = `# Auto-generated by python-dev-setup.js
+# UV and Poetry paths for immediate use in npm scripts
+UV_PATH=${path.join(pipxBinDir, isWindows ? "uv.exe" : "uv")}
+POETRY_PATH=${path.join(pipxBinDir, isWindows ? "poetry.exe" : "poetry")}
+PIPX_BIN_PATH=${pipxBinDir}
+`;
+
+  const envPath = path.join(rootDir, ".env");
+  try {
+    fs.writeFileSync(envPath, envContent, "utf8");
+    log("Created .env file with UV and Poetry paths.");
+  } catch (error) {
+    log(`Warning: Could not create .env file: ${error.message}`, true);
+  }
+
+  log(
+    "Global tools setup complete. UV and Poetry have been installed globally.",
+  );
+  log("");
+
+  // Refresh PATH in current process by re-reading from registry
+  if (isWindows) {
+    try {
+      const userPath = execSync(
+        "powershell -command \"[System.Environment]::GetEnvironmentVariable('Path', 'User')\"",
+        { encoding: "utf8" },
+      ).trim();
+      const machinePath = execSync(
+        "powershell -command \"[System.Environment]::GetEnvironmentVariable('Path', 'Machine')\"",
+        { encoding: "utf8" },
+      ).trim();
+      process.env.PATH = `${userPath};${machinePath}`;
+      log(
+        "✓ PATH refreshed in current process. UV and Poetry are now available!",
+      );
+    } catch (error) {
+      log(
+        "Note: Could not auto-refresh PATH. You may need to restart your terminal.",
+      );
+    }
+  }
+
+  log("");
+  log("You can now use Nx Python generators:");
+  log("  npx nx g @nxlv/python:uv-project my-service --directory=apps");
+  log("");
+  return true;
 }
 
 // Install common packages in the virtual environment
@@ -625,6 +830,10 @@ async function main() {
       true,
     );
   }
+
+  // Step 3.5: Install global tools (UV, Poetry) via pipx
+  log("Installing global Python tools (UV, Poetry)...");
+  installGlobalTools();
 
   // Step 4: Install service-specific packages if requested
   if (servicePaths.length > 0) {

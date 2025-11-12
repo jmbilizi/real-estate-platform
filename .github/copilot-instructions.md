@@ -23,9 +23,10 @@ npx nx generate @nx/express:app my-api --directory=apps
 npx nx generate @nx/next:app my-web --directory=apps
 npx nx generate @nx/node:lib shared-utils --directory=libs
 
-# Python - Use Nx generators
-npx nx generate @nxlv/python:fastapi-app my-service --directory=apps
-npx nx generate @nxlv/python:lib utils --directory=libs
+# Python - Use Nx generators (requires Poetry or UV installed)
+npx nx generate @nxlv/python:poetry-project my-service --directory=apps
+npx nx generate @nxlv/python:uv-project my-service --directory=apps
+npx nx generate @nxlv/python:poetry-project utils --directory=libs --projectType=library
 
 # .NET - Use standard dotnet CLI (auto-detected by @nx/dotnet)
 dotnet new webapi -n MyApi -o apps/my-api
@@ -117,10 +118,13 @@ if (hasPythonProjectsAffected(isAffected, base)) {
 
 ## Python Environment Management
 
-**Consolidated approach**: Single `.venv` at workspace root for all tools (Black, Flake8, mypy). Project-specific dependencies managed by Nx `@nxlv/python` plugin.
+**Consolidated approach**: Single `.venv` at workspace root for development tools (Black, Flake8, mypy, pytest). Global package managers (UV, Poetry) installed via pipx for Nx generators. Project-specific dependencies managed by Nx `@nxlv/python` plugin.
 
 ```bash
-# Full setup (environment + Nx integration)
+# Full setup (environment + Nx integration + UV + Poetry)
+npm run python:env:full
+
+# Basic setup (environment + common tools)
 npm run python:env
 
 # Just dependencies
@@ -130,6 +134,18 @@ npm run python:deps
 py-env.bat check  # Windows
 bash py-env.sh check  # Unix
 ```
+
+**Automatic global tool installation**: When you run `python:env:full`, the setup automatically:
+
+1. Creates/verifies `.venv` with development tools
+2. Installs `pipx` into the venv (uses venv Python to avoid SSL cert issues)
+3. Uses pipx to install **UV** and **Poetry** globally at `~/.local/bin`
+4. Updates Windows PATH registry permanently
+5. Refreshes `process.env.PATH` so tools are **immediately available** (no restart required)
+
+**Why global installation?** Nx generators (`@nxlv/python:uv-project`, `@nxlv/python:poetry-project`) require UV and Poetry to be globally accessible. Installing via pipx isolates them from the venv while keeping them available system-wide.
+
+**Zero-restart workflow**: Just like .NET setup, UV and Poetry are immediately available after running `python:env:full` - no need to restart VS Code or terminals.
 
 **CRITICAL**: Python venv is auto-created by git hooks if Python projects are affected. Don't force users to set it up manually unless they're actively developing Python code.
 

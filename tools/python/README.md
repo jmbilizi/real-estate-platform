@@ -4,136 +4,190 @@ This directory contains all the Python-related tooling for the Polyglot monorepo
 
 ## Quick Start
 
-📖 **For complete setup instructions, see [Python Setup Guide](./python-setup.md)**
+```bash
+# One-time setup: Install everything (venv + UV + Poetry)
+npm run python:env:full
+
+# Create a Python project immediately (no restart needed!)
+npx nx g @nxlv/python:uv-project my-service --directory=apps
+
+# Sync and auto-tag
+npm run nx:reset
+```
+
+**That's it!** UV and Poetry are immediately available without restarting VS Code or terminals.
 
 ## Directory Structure
 
-- `python-setup.md` - **Main setup guide** (start here!)
-- `python-dev-setup.js` - Unified Python environment management script
+- `python-dev-setup.js` - **Main setup script** - Unified Python environment management
 - `scripts/` - Implementation scripts for Python tasks
 - `docs/` - Detailed documentation for Python tooling
-- `requirements.txt` - Main Python requirements file
-- `format-requirements.txt` - Python formatting tools requirements
-- `python-dev-requirements.txt` - Python development requirements
+- `requirements.txt` - Main Python requirements file (Black, Flake8, mypy, pytest)
+- `format-requirements.txt` - Minimal formatting tools for Git hooks
+- `python-dev-requirements.txt` - Development requirements
+- Configuration files: `.flake8`, `mypy.ini`, `pyproject.toml`, `.sqlfluff`, `.yamllint`
 
-## Quick Setup Guide
+## What Gets Installed?
 
-To set up everything (Python, virtual environment, dependencies, and NX Python integration):
+### Development Tools (in `.venv`)
 
-```bash
-npm run python:env
-```
+- **Black** - Code formatter
+- **Flake8** - Linter
+- **mypy** - Type checker
+- **pytest** - Testing framework
+- **SQLFluff** - SQL linter
+- **YAMLLint** - YAML linter
 
-This single command will:
+### Global Tools (via pipx at `~/.local/bin`)
 
-1. Check if Python is already installed
-2. Install Python automatically if needed
-3. Create a virtual environment (.venv)
-4. Install all required dependencies
-5. Set up NX Python integration
-
-For a more detailed setup that includes installing packages for all Python services:
-
-```bash
-npm run python:env:full
-```
+- **UV** (0.9.8) - Ultra-fast Python package installer
+- **Poetry** (2.2.1) - Dependency management
+- **pipx** - Python application installer
 
 ## Available Scripts
 
-All Python-related scripts have been simplified and consolidated:
+### Environment Setup
 
-### Python Environment Management
+```bash
+# Full setup (venv + UV + Poetry) - Run this once
+npm run python:env:full
 
-- `npm run py:install` - Check and install Python if needed
-- `npm run py:setup` - Create virtual environment and install packages
-- `npm run py:check` - Verify Python and virtual environment setup
-- `npm run py:activate` - Show activation instructions
-- `npm run py:create-venv` - Create virtual environment only
-- `npm run python:deps:all` - Install all packages
-- `npm run py:install-dev` - Install development packages
-- `npm run hooks:setup` - Set up unified Git hooks for all languages
-- `npm run python:help` - Show help for Python setup
+# Basic setup (venv only, no global tools)
+npm run python:env
 
-### Code Quality
+# Just install dependencies
+npm run python:deps
+```
 
-- `npm run python:format` - Format Python code using Black
-- `npm run python:lint` - Lint Python code using Flake8 and mypy
-- `npm run python:check` - Run both format and lint
+### Verify Installation
 
-### Nx Integration
+```bash
+# Check what's installed
+uv --version         # Should show: uv 0.9.8
+poetry --version     # Should show: Poetry (version 2.2.1)
+pipx list           # Shows all global tools
+```
 
-- `npm run nx:python-dev` - Run all Python services
-- `npm run nx:python-lint` - Lint all Python projects with Nx
-- `npm run nx:python-test` - Test all Python projects
-- `npm run nx:python-format` - Format all Python projects
+### Nx Commands
+
+```bash
+# Run all Python services
+npm run nx:python-dev
+
+# Format all Python projects
+npm run nx:python-format
+
+# Lint all Python projects
+npm run nx:python-lint
+
+# Test all Python projects
+npm run nx:python-test
+
+# Build all Python projects
+npm run nx:python-build
+```
+
+## How It Works
+
+### Automatic Setup Process
+
+When you run `npm run python:env:full`, the setup:
+
+1. ✅ **Creates `.venv`** at workspace root with development tools
+2. ✅ **Checks for pipx** - If not found as a Python module, installs it into the venv
+3. ✅ **Runs `pipx ensurepath --force`** - Adds `~/.local/bin` to PATH
+4. ✅ **Updates Windows PATH registry** - Makes change permanent
+5. ✅ **Installs UV globally** - `C:\Users\<username>\.local\bin\uv.exe`
+6. ✅ **Installs Poetry globally** - `C:\Users\<username>\.local\bin\poetry.exe`
+7. ✅ **Refreshes `process.env.PATH`** - Tools immediately available (no restart!)
+
+### Why Use Venv Python for Installation?
+
+The setup uses the **venv Python** (not system Python) to install pipx/UV/Poetry because:
+
+- **SSL Certificates**: Venv Python has certificates properly configured
+- **Corporate Networks**: Avoids `[SSL: CERTIFICATE_VERIFY_FAILED]` errors
+- **Reliability**: Works in environments where system Python might have SSL issues
+
+### Zero-Restart Workflow
+
+Just like the .NET setup in this monorepo, UV and Poetry are **immediately available** after running `python:env:full`:
+
+```bash
+# Run setup
+npm run python:env:full
+
+# Use immediately (no restart!)
+uv --version
+poetry --version
+npx nx g @nxlv/python:uv-project my-service --directory=apps
+```
+
+The PATH registry update ensures tools remain available in new terminals/sessions.
 
 ## Integration with Git Hooks
 
-This project uses a unified Git hooks system located in the `tools/hooks` directory. The hooks system will automatically:
+Git hooks **automatically** set up the Python environment when needed:
 
-1. Detect when Python files are being modified
-2. Set up the Python environment as needed
-3. Run appropriate linters and formatters
+**Pre-commit hook:**
 
-### Setup
+- Detects Python files (`.py`, `.pyx`, `.pxd`, `.pxi`, `.pyi`, `.ipynb`) being committed
+- Auto-creates `.venv` if it doesn't exist
+- Runs Black (formatter), Flake8 (linter), and mypy (type checker)
+- Skips setup entirely if only non-Python files are committed (faster!)
 
-The Python setup process automatically configures the Git hooks:
-
-```bash
-npm run py:setup
-```
-
-This runs the unified hooks setup which handles Python, JavaScript, C#, and other languages in one system.
-
-If you need to manually set up the hooks:
-
-```bash
-npm run hooks:setup
-```
-
-### How it works:
-
-1. When a commit is initiated, the pre-commit hook runs `hooks-runner.js`
-2. The script checks if any Python-related files (`.py`, `.pyx`, `.pxd`, `.pxi`, `.pyi`, `.ipynb`) are staged
-3. If Python files are staged, the script sets up the Python environment
-4. It then runs the appropriate linters and formatters for all staged files
-
-This system prevents unnecessary Python environment setup for JavaScript, C#, and other non-Python developers.
+**Note:** Git hooks only need the `.venv` with formatters/linters. They **don't** need UV or Poetry (those are only for Nx generators).
 
 ## Troubleshooting
 
-### "pip is not recognized"
+### "uv is not recognized" or "poetry is not recognized"
 
-If you see "pip is not recognized" errors:
+After running `python:env:full`, if commands aren't found:
 
-1. Make sure Python is installed: `npm run py:check`
-2. Make sure the virtual environment exists: `npm run py:create-venv`
-3. Use the `npm run py:setup` script to set up everything correctly
+1. **Check if installed**: `pipx list` (should show UV and Poetry)
+2. **Verify PATH**: Ensure `C:\Users\<username>\.local\bin` is in your PATH
+3. **New terminal**: Open a fresh terminal (PATH registry update persists)
+4. **Re-run setup**: `npm run python:env:full` (idempotent - safe to run multiple times)
 
-### Python Path Issues
+### Python Environment Issues
 
-If you're having issues with Python paths:
+If `.venv` isn't working:
 
-1. Run `npm run py:check` to verify your Python installation
-2. Try running `npm run py:install` to reinstall Python
-3. **Important**: Restart your terminal after installing Python
-4. Run `npm run py:setup` to complete the setup
+```bash
+# Delete and recreate
+rmdir /s .venv  # Windows
+rm -rf .venv    # Linux/Mac
 
-### Virtual Environment Issues
+# Run basic setup
+npm run python:env
+```
 
-If the virtual environment isn't working:
+### SSL Certificate Errors
 
-1. Delete the `.venv` directory
-2. Run `npm run py:create-venv` to create a fresh environment
-3. Run `npm run python:deps:all` to reinstall dependencies
+If you see `[SSL: CERTIFICATE_VERIFY_FAILED]` errors:
+
+✅ **Already handled!** The setup uses venv Python which has certificates configured properly. If you still see errors, ensure you're running `npm run python:env:full` (not manual pip commands).
 
 ### Advanced Troubleshooting
 
-If all else fails:
+**Check venv Python works:**
 
-1. Ensure you've restarted your terminal after Python installation
-2. Try manually running `where python` to verify Python is in your PATH
-3. If all automated approaches fail, create the virtual environment manually:
-   - `python -m venv .venv`
-   - `.venv\Scripts\activate`
-   - `pip install -r tools\python\requirements.txt`
+```bash
+.venv\Scripts\python.exe --version  # Windows
+.venv/bin/python --version          # Linux/Mac
+```
+
+**Manually verify pipx:**
+
+```bash
+.venv\Scripts\python.exe -m pipx --version
+```
+
+**Check global tools location:**
+
+```bash
+where uv      # Windows
+which uv      # Linux/Mac
+```
+
+Should show: `C:\Users\<username>\.local\bin\uv.exe`

@@ -2,64 +2,67 @@
 
 This document provides guidelines for working with Python projects in this monorepo.
 
+## Quick Start
+
+```bash
+# One-time setup: Install Python environment + UV + Poetry
+npm run python:env:full
+
+# Create a Python project using UV (recommended)
+npx nx g @nxlv/python:uv-project my-service --directory=apps --projectType=application
+
+# Or using Poetry
+npx nx g @nxlv/python:poetry-project my-service --directory=apps --projectType=application
+
+# After creating any project, sync and auto-tag
+npm run nx:reset
+```
+
+**That's it!** UV and Poetry are immediately available without restarting VS Code or terminals.
+
 ## Python Environment Setup
 
-We've added several tools to make Python environment management easier through a unified setup script:
+### Automatic Setup (Recommended)
 
-### Two-Phase Setup Process
-
-Setting up Python follows a simple two-phase process:
+Run the full setup once to get everything configured:
 
 ```bash
-# Phase 1: Install Python (if needed)
-npm run py:install
-
-# Phase 2: Set up environment (after restarting terminal if Python was newly installed)
-npm run py:setup
+npm run python:env:full
 ```
 
-### Using npm Scripts
+**What this does automatically:**
 
-You can use npm scripts for all Python-related tasks:
+1. ✅ Creates `.venv` at workspace root with development tools (Black, Flake8, mypy, pytest)
+2. ✅ Installs `pipx` into the venv (avoids SSL certificate issues)
+3. ✅ Installs **UV** and **Poetry** globally via pipx at `~/.local/bin`
+4. ✅ Updates Windows PATH registry permanently
+5. ✅ Refreshes PATH in current process - **no restart needed!**
+
+**Why UV and Poetry are installed globally:** Nx generators (`@nxlv/python:uv-project`, `@nxlv/python:poetry-project`) require these tools to be globally accessible. Installing via pipx isolates them while keeping them available system-wide.
+
+### Alternative Setup Commands
 
 ```bash
-# Check Python and environment setup
-npm run py:check
+# Basic setup (environment + common tools, no global UV/Poetry)
+npm run python:env
 
-# Create a Python virtual environment only
-npm run py:create-venv
+# Just install dependencies
+npm run python:deps
 
-# Install all packages
-npm run python:deps:all
-
-# Install development packages
-npm run py:install-dev
-
-# Set up pre-commit hooks
-npm run hooks:setup
-
-# Show activation instructions
-npm run py:activate
-
-# Activate the virtual environment (run directly in terminal)
-.venv\Scripts\activate
+# Check environment status
+py-env.bat check  # Windows
+bash py-env.sh check  # Unix
 ```
 
-These scripts all use the unified setup script at `tools/python/setup.js`.
+### Verify Installation
 
-# Install all development dependencies
+After running `python:env:full`, verify tools are available:
 
-npm run py:install-dev
-
-# Install dependencies for a specific service
-
-npm run python:deps --service=fastapi-service
-
-# Get help on available scripts
-
-npm run python:help
-
-````
+```bash
+uv --version        # Should show: uv 0.9.8
+poetry --version    # Should show: Poetry (version 2.2.1)
+pipx list          # Shows UV and Poetry installed globally
+```
 
 ### Using VS Code Tasks
 
@@ -102,39 +105,52 @@ The service-specific files reference the main requirements using `-r ../../../to
 
 ## Python Environment for Git Hooks
 
-The pre-commit hook is optimized to only set up the Python environment when Python-related files are staged for commit. This improves performance for developers who don't modify Python files.
+Git hooks automatically manage the Python environment:
 
-For pre-commit hooks to work correctly when Python files are staged, Python tools like `black`, `flake8`, and `mypy` must be installed:
+**Pre-commit hook behavior:**
 
-1. **Option A - Use our scripts**:
-   - Run `npm run hooks:setup` which will install the necessary tools in a dedicated virtual environment
+- When you commit Python files (`.py`, `.pyx`, `.pxd`, `.pxi`, `.pyi`, `.ipynb`): Python environment is automatically set up if needed, then linting/formatting is applied
+- When you commit only JavaScript/TypeScript files: No Python environment setup occurs (faster commits)
 
-2. **Option B - Manual installation**:
-   - Run `pip install -r tools/python/format-requirements.txt` using your Python environment
-   - Make sure this environment is accessible when Git hooks run
+**What gets installed automatically:**
 
-### Smart Pre-commit Hook Behavior
+- `.venv` with Black, Flake8, mypy for code quality checks
+- No manual setup required - hooks handle everything
 
-- When you commit JavaScript/TypeScript files only: No Python environment setup occurs
-- When you commit Python files (`.py`, `.pyx`, `.pxd`, `.pxi`, `.pyi`, `.ipynb`): Python environment is set up and linting/formatting is applied
-- This optimization significantly speeds up commits for non-Python developers
+**Note:** UV and Poetry (for Nx generators) are only installed when you run `npm run python:env:full`. Git hooks don't need these tools since they only run formatters/linters.
 
 ## Creating Python Projects
 
-Use Nx generators directly to create Python projects:
+**CRITICAL:** Always use Nx generators to create Python projects. UV and Poetry must be installed globally first.
+
+### Using UV (Recommended - Fastest)
 
 ```bash
-# FastAPI application
-npx nx generate @nxlv/python:fastapi-app my-api --directory=apps
+# Application (FastAPI, Flask, etc.)
+npx nx g @nxlv/python:uv-project my-api --directory=apps --projectType=application --linter=flake8
 
-# Python library
-npx nx generate @nxlv/python:lib my-lib --directory=libs
-
-# Python application
-npx nx generate @nxlv/python:app my-app --directory=apps
+# Library
+npx nx g @nxlv/python:uv-project my-utils --directory=libs --projectType=library --linter=flake8
 ```
 
-Projects are automatically tagged with `python` and additional tags when you run `npm run nx:reset` or any nx command.
+### Using Poetry (Traditional)
+
+```bash
+# Application
+npx nx g @nxlv/python:poetry-project my-api --directory=apps --projectType=application --linter=flake8
+
+# Library
+npx nx g @nxlv/python:poetry-project my-utils --directory=libs --projectType=library --linter=flake8
+```
+
+### After Creating Projects
+
+```bash
+# Sync .NET solution files and auto-tag all projects
+npm run nx:reset
+```
+
+**Auto-tagging:** Projects are automatically tagged with `python` and project type tags, enabling commands like `npm run nx:python-test` to run tests on all Python projects.
 
 ## Nx Commands for Python Projects
 
@@ -155,7 +171,7 @@ npm run nx:python-test
 
 # Build all Python projects
 npm run nx:python-build
-````
+```
 
 Or you can target specific services:
 
