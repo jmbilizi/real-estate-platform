@@ -2,6 +2,8 @@
 .nx/installation
 .nx/cache
 .nx/workspace-data
+.nx/nx-cloud.env
+.nx/project-graph.json
 
 # Node
 node_modules/

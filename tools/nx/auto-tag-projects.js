@@ -176,6 +176,23 @@ function getAdditionalTags(projectConfig, language) {
 
   const executorString = executors.join(" ");
 
+  // Check if this is a test project
+  const isTestProject =
+    projectConfig.name?.toLowerCase().includes("test") ||
+    projectConfig.root?.toLowerCase().includes("test") ||
+    targets.test ||
+    executorString.includes("jest") ||
+    executorString.includes("xunit") ||
+    executorString.includes("nunit") ||
+    executorString.includes("mstest") ||
+    executorString.includes("pytest");
+
+  // Determine the base type (lib vs service) - for test projects, infer from location
+  const isLibraryType =
+    projectConfig.projectType === "library" ||
+    projectConfig.root?.includes("libs/") ||
+    projectConfig.root?.includes("libs\\");
+
   if (language === "node") {
     if (executorString.includes("@nx/express"))
       additionalTags.push("express", "api");
@@ -184,11 +201,13 @@ function getAdditionalTags(projectConfig, language) {
     if (executorString.includes("@nx/react"))
       additionalTags.push("react", "client");
 
-    // Determine if it's a service or library
-    if (projectConfig.projectType === "library") {
+    // Add composite tags: both type (lib/service) AND test if applicable
+    if (isLibraryType) {
       additionalTags.push("lib");
+      if (isTestProject) additionalTags.push("test");
     } else {
       additionalTags.push("service");
+      if (isTestProject) additionalTags.push("test");
     }
   }
 
@@ -197,11 +216,13 @@ function getAdditionalTags(projectConfig, language) {
       additionalTags.push("fastapi", "api");
     if (executorString.includes("django")) additionalTags.push("django", "api");
 
-    // Determine if it's a service or library
-    if (projectConfig.projectType === "library") {
+    // Add composite tags: both type (lib/service) AND test if applicable
+    if (isLibraryType) {
       additionalTags.push("lib");
+      if (isTestProject) additionalTags.push("test");
     } else {
       additionalTags.push("service");
+      if (isTestProject) additionalTags.push("test");
     }
   }
 
@@ -210,11 +231,13 @@ function getAdditionalTags(projectConfig, language) {
     if (executorString.includes("blazor"))
       additionalTags.push("blazor", "client");
 
-    // Determine if it's a service or library
-    if (projectConfig.projectType === "library") {
+    // Add composite tags: both type (lib/service) AND test if applicable
+    if (isLibraryType) {
       additionalTags.push("lib");
+      if (isTestProject) additionalTags.push("test");
     } else {
       additionalTags.push("service");
+      if (isTestProject) additionalTags.push("test");
     }
   }
 
