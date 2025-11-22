@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: StatefulSet # recommended for stateful applications like databases
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres-hl
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      terminationGracePeriodSeconds: 10
+      securityContext:
+        fsGroup: 999 # postgres user group
+      containers:
+        - name: postgres
+          image: postgis/postgis:18-3.4
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "512Mi" # Guaranteed minimum
+              cpu: "500m" # 0.5 CPU guaranteed
+            limits:
+              memory: "1Gi" # Can burst to 1Gi
+              cpu: "1000m" # Can burst to 1 CPU
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: postgres_sa
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_SA_PASSWORD
+            - name: POSTGRES_DB
+              value: appdb
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: ACCOUNT_SERVICE_DB_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: ACCOUNT_SERVICE_DB_USER_PASSWORD
+            - name: MESSAGING_SERVICE_DB_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: MESSAGING_SERVICE_DB_USER_PASSWORD
+            - name: PROPERTY_SERVICE_DB_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: PROPERTY_SERVICE_DB_USER_PASSWORD
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres_sa
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres_sa
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+              subPath: pgdata
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: init-scripts
+          configMap:
+            name: postgres-init-scripts
+            defaultMode: 0755
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: hcloud-postgres-storage
+        resources:
+          requests:
+            storage: 20Gi

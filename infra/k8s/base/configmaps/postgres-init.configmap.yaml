@@ -1,0 +1,148 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-scripts
+data:
+  init-databases.sh: |
+    #!/bin/bash
+    set -e
+
+    # This script runs as the postgres user during container initialization
+    # It creates additional databases beyond the default POSTGRES_DB
+
+    echo "Starting database initialization..."
+
+    # Validate required passwords are set
+    if [ -z "${ACCOUNT_SERVICE_DB_USER_PASSWORD}" ]; then
+        echo "WARNING: ACCOUNT_SERVICE_DB_USER_PASSWORD not set, using placeholder"
+        ACCOUNT_SERVICE_DB_USER_PASSWORD="changeme_account"
+    fi
+    if [ -z "${MESSAGING_SERVICE_DB_USER_PASSWORD}" ]; then
+        echo "WARNING: MESSAGING_SERVICE_DB_USER_PASSWORD not set, using placeholder"
+        MESSAGING_SERVICE_DB_USER_PASSWORD="changeme_messaging"
+    fi
+    if [ -z "${PROPERTY_SERVICE_DB_USER_PASSWORD}" ]; then
+        echo "WARNING: PROPERTY_SERVICE_DB_USER_PASSWORD not set, using placeholder"
+        PROPERTY_SERVICE_DB_USER_PASSWORD="changeme_property"
+    fi
+
+    # Check and create databases only if they don't exist
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+        -- Create additional databases for real estate platform (idempotent)
+        SELECT 'CREATE DATABASE account_db'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'account_db')\gexec
+        
+        SELECT 'CREATE DATABASE messaging_db'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'messaging_db')\gexec
+        
+        SELECT 'CREATE DATABASE property_db'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'property_db')\gexec
+    EOSQL
+
+    # Create users and grant privileges (idempotent)
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+        -- Create dedicated users for each database
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'account_service_db_user') THEN
+                CREATE USER account_service_db_user WITH PASSWORD '${ACCOUNT_SERVICE_DB_USER_PASSWORD}';
+            END IF;
+            IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'messaging_service_db_user') THEN
+                CREATE USER messaging_service_db_user WITH PASSWORD '${MESSAGING_SERVICE_DB_USER_PASSWORD}';
+            END IF;
+            IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'property_service_db_user') THEN
+                CREATE USER property_service_db_user WITH PASSWORD '${PROPERTY_SERVICE_DB_USER_PASSWORD}';
+            END IF;
+        END
+        $$;
+        
+        -- Grant privileges
+        GRANT ALL PRIVILEGES ON DATABASE account_db TO account_service_db_user;
+        GRANT ALL PRIVILEGES ON DATABASE messaging_db TO messaging_service_db_user;
+        GRANT ALL PRIVILEGES ON DATABASE property_db TO property_service_db_user;
+    EOSQL
+
+    # Enable extensions on account_db
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "account_db" <<-EOSQL
+        CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+        CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+        
+        -- Grant schema permissions to account_service_db_user
+        GRANT ALL ON SCHEMA public TO account_service_db_user;
+        GRANT ALL ON ALL TABLES IN SCHEMA public TO account_service_db_user;
+        GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO account_service_db_user;
+        GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO account_service_db_user;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO account_service_db_user;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO account_service_db_user;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO account_service_db_user;
+    EOSQL
+
+    # Enable extensions on messaging_db
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "messaging_db" <<-EOSQL
+        CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+        
+        -- Grant schema permissions to messaging_service_db_user
+        GRANT ALL ON SCHEMA public TO messaging_service_db_user;
+        GRANT ALL ON ALL TABLES IN SCHEMA public TO messaging_service_db_user;
+        GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO messaging_service_db_user;
+        GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO messaging_service_db_user;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO messaging_service_db_user;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO messaging_service_db_user;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO messaging_service_db_user;
+    EOSQL
+
+    # Setup property_db with extensions
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "property_db" <<-EOSQL
+        -- Enable essential extensions
+        CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+        CREATE EXTENSION IF NOT EXISTS "postgis";
+        CREATE EXTENSION IF NOT EXISTS "pg_trgm";        -- Text search & similarity
+        CREATE EXTENSION IF NOT EXISTS "btree_gist";     -- Advanced indexing
+        
+        -- Grant all permissions to property_service_db_user
+        GRANT ALL ON SCHEMA public TO property_service_db_user;
+        GRANT ALL ON ALL TABLES IN SCHEMA public TO property_service_db_user;
+        GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO property_service_db_user;
+        GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO property_service_db_user;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO property_service_db_user;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO property_service_db_user;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO property_service_db_user;
+    EOSQL
+
+    # Setup appdb as shared/reference database
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "appdb" <<-EOSQL
+        -- Enable extensions for shared data
+        CREATE EXTENSION IF NOT EXISTS "uuid-ossp";      -- UUID generation
+        CREATE EXTENSION IF NOT EXISTS "pg_trgm";        -- Text search for lookups
+        CREATE EXTENSION IF NOT EXISTS "hstore";         -- Key-value storage for flexible configs
+        CREATE EXTENSION IF NOT EXISTS "tablefunc";      -- Crosstab/pivot tables
+        
+        -- Create schema for organization
+        CREATE SCHEMA IF NOT EXISTS reference;           -- Lookup tables (countries, currencies, etc.)
+        CREATE SCHEMA IF NOT EXISTS config;              -- System-wide configuration
+        CREATE SCHEMA IF NOT EXISTS audit;               -- Cross-service audit logs
+        
+        -- Grant read-only access to all service users (they can read shared data)
+        GRANT USAGE ON SCHEMA reference TO account_service_db_user, messaging_service_db_user, property_service_db_user;
+        GRANT SELECT ON ALL TABLES IN SCHEMA reference TO account_service_db_user, messaging_service_db_user, property_service_db_user;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA reference GRANT SELECT ON TABLES TO account_service_db_user, messaging_service_db_user, property_service_db_user;
+        
+        GRANT USAGE ON SCHEMA config TO account_service_db_user, messaging_service_db_user, property_service_db_user;
+        GRANT SELECT ON ALL TABLES IN SCHEMA config TO account_service_db_user, messaging_service_db_user, property_service_db_user;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA config GRANT SELECT ON TABLES TO account_service_db_user, messaging_service_db_user, property_service_db_user;
+        
+        -- Grant write access to audit schema (all services can log)
+        GRANT USAGE ON SCHEMA audit TO account_service_db_user, messaging_service_db_user, property_service_db_user;
+        GRANT INSERT ON ALL TABLES IN SCHEMA audit TO account_service_db_user, messaging_service_db_user, property_service_db_user;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA audit GRANT INSERT ON TABLES TO account_service_db_user, messaging_service_db_user, property_service_db_user;
+        
+        -- Grant admin full access to all schemas
+        GRANT ALL ON SCHEMA reference TO postgres;
+        GRANT ALL ON SCHEMA config TO postgres;
+        GRANT ALL ON SCHEMA audit TO postgres;
+        GRANT ALL ON ALL TABLES IN SCHEMA reference TO postgres;
+        GRANT ALL ON ALL TABLES IN SCHEMA config TO postgres;
+        GRANT ALL ON ALL TABLES IN SCHEMA audit TO postgres;
+    EOSQL
+
+    echo "✅ All databases, users, and extensions created successfully!"

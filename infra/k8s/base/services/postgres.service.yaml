@@ -1,0 +1,28 @@
+---
+# Headless service - required for StatefulSet
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-hl
+spec:
+  clusterIP: None # This makes it headless
+  selector:
+    app: postgres
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+---
+# Regular service - for application access
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-serv
+spec:
+  type: ClusterIP # Internal only
+  selector:
+    app: postgres
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432

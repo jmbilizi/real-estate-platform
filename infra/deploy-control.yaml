@@ -1,0 +1,170 @@
+# Deployment Control Configuration
+# Controls which environments are enabled for automated RESOURCE deployment
+# Version: 1.0.0
+#
+# SCOPE: This file controls APPLICATION-LEVEL deployments (PostgreSQL, services, etc.)
+#        running INSIDE Kubernetes clusters.
+#
+# NOTE: For CLUSTER PROVISIONING controls (infrastructure-level), see:
+#   - infra/k8s/hetzner/dev/cluster/cluster-config.yaml
+#   - infra/k8s/hetzner/test/cluster/cluster-config.yaml
+#   - infra/k8s/hetzner/prod/cluster/cluster-config.yaml
+#
+# WORKFLOWS:
+#   - Resource deployment: .github/workflows/deploy-k8s-resources.yml (reads this file)
+#   - Cluster provisioning: .github/workflows/hetzner-k8s.yml (reads cluster-config.yaml)
+
+# =============================================================================
+# GLOBAL SETTINGS
+# =============================================================================
+global:
+  auto_deploy: true # Master kill switch - disable ALL automated deployments
+
+# =============================================================================
+# ENVIRONMENT CONFIGURATIONS
+# =============================================================================
+environments:
+  # ────────────────────────────────────────────────────────────────────────────
+  # DEVELOPMENT ENVIRONMENT
+  # Fast iteration - all safety features disabled for speed
+  # ────────────────────────────────────────────────────────────────────────────
+  dev:
+    enabled: true
+    auto_deploy: true # Auto-deploy on push to dev branch
+    require_manual_approval: false # No approval needed in dev
+
+    # Deployment windows - disabled in dev (deploy anytime for fast iteration)
+    deployment_windows:
+      enabled: false # No time restrictions in dev
+      allowed_days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+      allowed_hours: "00:00-23:59" # 24/7 deployment window
+      emergency_override: true
+
+    # Service-specific overrides
+    services:
+      postgres:
+        enabled: true
+        auto_deploy: true # Auto-deploy in dev
+        require_approval: false # No approval needed
+
+        # Rollback settings - disabled in dev (manual rollback preferred)
+        rollback_on_failure: false # Set to true to enable automatic rollback on failed deployments
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # TEST/STAGING ENVIRONMENT
+  # Moderate controls - test safety features before production
+  # ────────────────────────────────────────────────────────────────────────────
+  test:
+    enabled: true
+    auto_deploy: false # Require manual workflow dispatch
+    require_manual_approval: false # Optional approval in test
+
+    # Deployment windows - disabled for now (enable to test time restrictions)
+    deployment_windows:
+      enabled: false # Set to true to enforce deployment time restrictions
+      allowed_days: ["Mon", "Tue", "Wed", "Thu", "Fri"]
+      allowed_hours: "09:00-17:00" # Business hours
+      emergency_override: true
+
+    # Service-specific overrides
+    services:
+      postgres:
+        enabled: true
+        auto_deploy: false # Manual deployment in test
+        require_approval: false # Optional approval
+
+        # Rollback settings - disabled for manual validation
+        rollback_on_failure: false # Set to true to enable automatic rollback on failed deployments
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # PRODUCTION ENVIRONMENT
+  # Strictest controls - all safety features enabled when workflows support them
+  # ────────────────────────────────────────────────────────────────────────────
+  prod:
+    enabled: true
+    auto_deploy: false # NEVER auto-deploy to production
+    require_manual_approval: true # ALWAYS require manual approval
+
+    # Deployment windows (Google SRE pattern - avoid risky times)
+    deployment_windows:
+      enabled: false # Set to true to enforce business-hours deployment restriction
+      allowed_days: ["Mon", "Tue", "Wed", "Thu"] # No Friday/weekend deploys
+      allowed_hours: "10:00-15:00" # Safe window (avoid EOD/early morning)
+      emergency_override: true # Critical hotfixes can bypass
+
+    # Service-specific overrides
+    services:
+      postgres:
+        enabled: true
+        auto_deploy: false # Manual deployment only
+        require_approval: true # Always require approval
+
+        # Rollback settings - safety-first (manual review recommended for prod)
+        rollback_on_failure: false # Set to true to enable automatic rollback (use with caution)
+
+# =============================================================================
+# DEPLOYMENT STRATEGIES
+# Defines how different resource types should be deployed
+# All StatefulSet settings are actively enforced by deployment workflows:
+#  - timeout: Controls kubectl rollout status timeout (overrides hardcoded values)
+#  - rollback_on_failure: Combined with service-level setting for rollback logic
+# =============================================================================
+deployment_strategies:
+  statefulset:
+    strategy: "RollingUpdate"
+    wait_for_ready: true
+    timeout: "10m" # Used in prod (dev/test default to 5m if not overridden)
+    rollback_on_failure: true # Combined OR logic with service.rollback_on_failure
+    max_unavailable: 0 # Zero-downtime for stateful apps
+
+  deployment:
+    strategy: "RollingUpdate"
+    wait_for_ready: true
+    timeout: "5m"
+    rollback_on_failure: true
+    max_surge: 1
+    max_unavailable: 0 # Zero-downtime deployments
+
+  service:
+    strategy: "Replace"
+    wait_for_ready: false
+
+  secret:
+    strategy: "Replace"
+    wait_for_ready: false
+    restart_pods: false # Manual restart required (safety)
+
+  configmap:
+    strategy: "Replace"
+    wait_for_ready: false
+    restart_pods: false # Manual restart required (safety)
+
+  storageclass:
+    strategy: "Immutable" # Cannot be updated after creation
+    allow_updates: false
+
+# =============================================================================
+# METADATA
+# =============================================================================
+metadata:
+  version: "1.0.0"
+  last_updated: "2025-11-21"
+  managed_by: "GitHub Actions"
+  notes: |
+    This file controls WHEN and HOW deployments occur (deployment gates and policies).
+    It does NOT control WHAT is deployed - resource specifications (replicas, memory, CPU, storage)
+    are defined in Kustomize patches (infra/k8s/hetzner/{env}/patches/).
+
+    Health validation is handled by Kubernetes native probes (livenessProbe, readinessProbe)
+    defined in the StatefulSet specification, not by this deployment control file.
+
+    Currently enforced by workflows:
+    - enabled, auto_deploy (environment and service level)
+    - deployment_windows (time-based deployment restrictions)
+    - rollback_on_failure (automatic rollback on rollout failures)
+
+    NOT yet implemented (flags are read but not enforced):
+    - require_manual_approval (GitHub Environments provide approval, but flags not checked)
+    - service_require_approval (service-level approval not yet implemented)
+
+    All advanced features are disabled by default and can be enabled per environment.

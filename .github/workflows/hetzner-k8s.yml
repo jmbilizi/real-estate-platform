@@ -3,18 +3,18 @@ name: Hetzner K8s Clusters
 on:
   push:
     branches:
-      - main
-      - test
       - dev
+      - test
+      - main
     paths:
-      - "infra/k8s/cluster/hetzner/**/*.yaml"
+      - "infra/k8s/hetzner/*/cluster/*.yaml"
   pull_request:
     branches:
-      - main
-      - test
       - dev
+      - test
+      - main
     paths:
-      - "infra/k8s/cluster/hetzner/**/*.yaml"
+      - "infra/k8s/hetzner/*/cluster/*.yaml"
   workflow_dispatch:
     inputs:
       environment:
@@ -43,18 +43,18 @@ jobs:
         with:
           filters: |
             dev:
-              - 'infra/k8s/cluster/hetzner/hetzner_dev_cluster_config.yaml'
+              - 'infra/k8s/hetzner/dev/cluster/cluster-config.yaml'
             test:
-              - 'infra/k8s/cluster/hetzner/hetzner_test_cluster_config.yaml'
+              - 'infra/k8s/hetzner/test/cluster/cluster-config.yaml'
             prod:
-              - 'infra/k8s/cluster/hetzner/hetzner_prod_cluster_config.yaml'
+              - 'infra/k8s/hetzner/prod/cluster/cluster-config.yaml'
 
       - name: Validate dev cluster config
         if: steps.changes.outputs.dev == 'true'
         run: |
           echo "📋 Validating dev cluster configuration..."
           # Basic YAML validation
-          python3 -c "import yaml; yaml.safe_load(open('infra/k8s/cluster/hetzner/hetzner_dev_cluster_config.yaml'))" || exit 1
+          python3 -c "import yaml; yaml.safe_load(open('infra/k8s/hetzner/dev/cluster/cluster-config.yaml'))" || exit 1
           echo "✅ Dev cluster config is valid YAML"
 
       - name: Validate test cluster config
@@ -62,7 +62,7 @@ jobs:
         run: |
           echo "📋 Validating test cluster configuration..."
           # Basic YAML validation
-          python3 -c "import yaml; yaml.safe_load(open('infra/k8s/cluster/hetzner/hetzner_test_cluster_config.yaml'))" || exit 1
+          python3 -c "import yaml; yaml.safe_load(open('infra/k8s/hetzner/test/cluster/cluster-config.yaml'))" || exit 1
           echo "✅ Test cluster config is valid YAML"
 
       - name: Validate prod cluster config
@@ -70,7 +70,7 @@ jobs:
         run: |
           echo "📋 Validating prod cluster configuration..."
           # Basic YAML validation
-          python3 -c "import yaml; yaml.safe_load(open('infra/k8s/cluster/hetzner/hetzner_prod_cluster_config.yaml'))" || exit 1
+          python3 -c "import yaml; yaml.safe_load(open('infra/k8s/hetzner/prod/cluster/cluster-config.yaml'))" || exit 1
           echo "✅ Prod cluster config is valid YAML"
 
   detect-changes:
@@ -90,11 +90,11 @@ jobs:
         with:
           filters: |
             dev:
-              - 'infra/k8s/cluster/hetzner/hetzner_dev_cluster_config.yaml'
+              - 'infra/k8s/hetzner/dev/cluster/cluster-config.yaml'
             test:
-              - 'infra/k8s/cluster/hetzner/hetzner_test_cluster_config.yaml'
+              - 'infra/k8s/hetzner/test/cluster/cluster-config.yaml'
             prod:
-              - 'infra/k8s/cluster/hetzner/hetzner_prod_cluster_config.yaml'
+              - 'infra/k8s/hetzner/prod/cluster/cluster-config.yaml'
 
   update-dev-cluster:
     needs: [detect-changes]
@@ -111,11 +111,11 @@ jobs:
       - name: Check if cluster is enabled
         id: check-enabled
         run: |
-          enabled=$(grep -E '^auto_deploy:' infra/k8s/cluster/hetzner/hetzner_dev_cluster_config.yaml | awk '{print $2}')
+          enabled=$(grep -E '^auto_deploy:' infra/k8s/hetzner/dev/cluster/cluster-config.yaml | awk '{print $2}')
           echo "enabled=$enabled" >> $GITHUB_OUTPUT
           if [ "$enabled" != "true" ]; then
             echo "⚠️  Dev cluster auto-deployment is disabled (auto_deploy: $enabled)"
-            echo "Set 'auto_deploy: true' in hetzner_dev_cluster_config.yaml to enable deployment"
+            echo "Set 'auto_deploy: true' in cluster-config.yaml to enable deployment"
           fi
 
       - name: Install kubectl
@@ -151,19 +151,80 @@ jobs:
         if: steps.check-enabled.outputs.enabled == 'true'
         run: |
           # Remove the 'auto_deploy' flag and substitute secrets
-          grep -v '^auto_deploy:' infra/k8s/cluster/hetzner/hetzner_dev_cluster_config.yaml | \
+          grep -v '^auto_deploy:' infra/k8s/hetzner/dev/cluster/cluster-config.yaml | \
           sed "s/HETZNER_TOKEN/${{ secrets.HETZNER_TOKEN }}/g" > \
-          hetzner_dev_cluster_config_processed.yaml
+          cluster-config-processed.yaml
 
       - name: Validate YAML syntax
         if: steps.check-enabled.outputs.enabled == 'true'
         run: |
-          cat hetzner_dev_cluster_config_processed.yaml
+          cat cluster-config-processed.yaml
 
       - name: Create/Update cluster
         if: steps.check-enabled.outputs.enabled == 'true'
+        id: cluster-create
         run: |
-          hetzner-k3s create --config hetzner_dev_cluster_config_processed.yaml
+          hetzner-k3s create --config cluster-config-processed.yaml
+          echo "cluster_updated=true" >> $GITHUB_OUTPUT
+
+      - name: Wait for cluster to be ready
+        if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
+        run: |
+          echo "⏳ Waiting for cluster to be fully ready..."
+          sleep 30  # Give cluster time to initialize
+          kubectl get nodes
+          kubectl wait --for=condition=Ready nodes --all --timeout=300s
+          echo "✅ All nodes are ready"
+
+      - name: Upload kubeconfig to GitHub Secrets
+        if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const kubeconfig = fs.readFileSync('./kubeconfig', 'utf8');
+            const kubeconfigBase64 = Buffer.from(kubeconfig).toString('base64');
+
+            console.log('📤 Uploading kubeconfig to dev environment secrets...');
+            await github.rest.actions.createOrUpdateEnvironmentSecret({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              environment_name: 'dev',
+              secret_name: 'KUBECONFIG',
+              encrypted_value: kubeconfigBase64
+            });
+            console.log('✅ KUBECONFIG secret updated in dev environment');
+
+      - name: Verify cluster prerequisites
+        if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
+        run: |
+          echo "🔍 Verifying cluster prerequisites..."
+
+          # Check CSI driver
+          echo "Checking Hetzner CSI driver..."
+          kubectl get pods -n kube-system -l app=hcloud-csi-controller --no-headers | wc -l
+
+          # Check storage class
+          kubectl get storageclass hcloud-postgres-storage || echo "⚠️  Warning: StorageClass not found, may need manual creation"
+
+          echo "✅ Cluster prerequisites verified"
+
+      - name: Trigger resource deployment
+        if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            console.log('🚀 Triggering resource deployment for dev environment...');
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'deploy-k8s-resources.yml',
+              ref: 'dev',
+              inputs: {
+                environment: 'dev'
+              }
+            });
+            console.log('✅ Resource deployment workflow triggered');
 
   update-test-cluster:
     needs: [detect-changes]
@@ -180,11 +241,11 @@ jobs:
       - name: Check if cluster is enabled
         id: check-enabled
         run: |
-          enabled=$(grep -E '^auto_deploy:' infra/k8s/cluster/hetzner/hetzner_test_cluster_config.yaml | awk '{print $2}')
+          enabled=$(grep -E '^auto_deploy:' infra/k8s/hetzner/test/cluster/cluster-config.yaml | awk '{print $2}')
           echo "enabled=$enabled" >> $GITHUB_OUTPUT
           if [ "$enabled" != "true" ]; then
             echo "⚠️  Test cluster auto-deployment is disabled (auto_deploy: $enabled)"
-            echo "Set 'auto_deploy: true' in hetzner_test_cluster_config.yaml to enable deployment"
+            echo "Set 'auto_deploy: true' in cluster-config.yaml to enable deployment"
           fi
 
       - name: Install kubectl
@@ -220,19 +281,74 @@ jobs:
         if: steps.check-enabled.outputs.enabled == 'true'
         run: |
           # Remove the 'auto_deploy' flag and substitute secrets
-          grep -v '^auto_deploy:' infra/k8s/cluster/hetzner/hetzner_test_cluster_config.yaml | \
+          grep -v '^auto_deploy:' infra/k8s/hetzner/test/cluster/cluster-config.yaml | \
           sed "s/HETZNER_TOKEN/${{ secrets.HETZNER_TOKEN }}/g" > \
-          hetzner_test_cluster_config_processed.yaml
+          cluster-config-processed.yaml
 
       - name: Validate YAML syntax
         if: steps.check-enabled.outputs.enabled == 'true'
         run: |
-          cat hetzner_test_cluster_config_processed.yaml
+          cat cluster-config-processed.yaml
 
       - name: Create/Update cluster
         if: steps.check-enabled.outputs.enabled == 'true'
+        id: cluster-create
         run: |
-          hetzner-k3s create --config hetzner_test_cluster_config_processed.yaml
+          hetzner-k3s create --config cluster-config-processed.yaml
+          echo "cluster_updated=true" >> $GITHUB_OUTPUT
+
+      - name: Wait for cluster to be ready
+        if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
+        run: |
+          echo "⏳ Waiting for cluster to be fully ready..."
+          sleep 30
+          kubectl get nodes
+          kubectl wait --for=condition=Ready nodes --all --timeout=300s
+          echo "✅ All nodes are ready"
+
+      - name: Upload kubeconfig to GitHub Secrets
+        if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const kubeconfig = fs.readFileSync('./kubeconfig', 'utf8');
+            const kubeconfigBase64 = Buffer.from(kubeconfig).toString('base64');
+
+            console.log('📤 Uploading kubeconfig to test environment secrets...');
+            await github.rest.actions.createOrUpdateEnvironmentSecret({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              environment_name: 'test',
+              secret_name: 'KUBECONFIG',
+              encrypted_value: kubeconfigBase64
+            });
+            console.log('✅ KUBECONFIG secret updated in test environment');
+
+      - name: Verify cluster prerequisites
+        if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
+        run: |
+          echo "🔍 Verifying cluster prerequisites..."
+          kubectl get pods -n kube-system -l app=hcloud-csi-controller --no-headers | wc -l
+          kubectl get storageclass hcloud-postgres-storage || echo "⚠️  Warning: StorageClass not found"
+          echo "✅ Cluster prerequisites verified"
+
+      - name: Trigger resource deployment
+        if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            console.log('🚀 Triggering resource deployment for test environment...');
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'deploy-k8s-resources.yml',
+              ref: 'test',
+              inputs: {
+                environment: 'test'
+              }
+            });
+            console.log('✅ Resource deployment workflow triggered');
 
   update-prod-cluster:
     needs: [detect-changes]
@@ -242,18 +358,18 @@ jobs:
         (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod')
       )
     runs-on: ubuntu-latest
-    environment: production
+    environment: prod
     steps:
       - uses: actions/checkout@v4
 
       - name: Check if cluster is enabled
         id: check-enabled
         run: |
-          enabled=$(grep -E '^auto_deploy:' infra/k8s/cluster/hetzner/hetzner_prod_cluster_config.yaml | awk '{print $2}')
+          enabled=$(grep -E '^auto_deploy:' infra/k8s/hetzner/prod/cluster/cluster-config.yaml | awk '{print $2}')
           echo "enabled=$enabled" >> $GITHUB_OUTPUT
           if [ "$enabled" != "true" ]; then
             echo "⚠️  Prod cluster auto-deployment is disabled (auto_deploy: $enabled)"
-            echo "Set 'auto_deploy: true' in hetzner_prod_cluster_config.yaml to enable deployment"
+            echo "Set 'auto_deploy: true' in cluster-config.yaml to enable deployment"
           fi
 
       - name: Install kubectl
@@ -289,16 +405,71 @@ jobs:
         if: steps.check-enabled.outputs.enabled == 'true'
         run: |
           # Remove the 'auto_deploy' flag and substitute secrets
-          grep -v '^auto_deploy:' infra/k8s/cluster/hetzner/hetzner_prod_cluster_config.yaml | \
+          grep -v '^auto_deploy:' infra/k8s/hetzner/prod/cluster/cluster-config.yaml | \
           sed "s/HETZNER_TOKEN/${{ secrets.HETZNER_TOKEN }}/g" > \
-          hetzner_prod_cluster_config_processed.yaml
+          cluster-config-processed.yaml
 
       - name: Validate YAML syntax
         if: steps.check-enabled.outputs.enabled == 'true'
         run: |
-          cat hetzner_prod_cluster_config_processed.yaml
+          cat cluster-config-processed.yaml
 
       - name: Create/Update cluster
         if: steps.check-enabled.outputs.enabled == 'true'
+        id: cluster-create
         run: |
-          hetzner-k3s create --config hetzner_prod_cluster_config_processed.yaml
+          hetzner-k3s create --config cluster-config-processed.yaml
+          echo "cluster_updated=true" >> $GITHUB_OUTPUT
+
+      - name: Wait for cluster to be ready
+        if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
+        run: |
+          echo "⏳ Waiting for cluster to be fully ready..."
+          sleep 30
+          kubectl get nodes
+          kubectl wait --for=condition=Ready nodes --all --timeout=600s  # Longer timeout for prod
+          echo "✅ All nodes are ready"
+
+      - name: Upload kubeconfig to GitHub Secrets
+        if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const kubeconfig = fs.readFileSync('./kubeconfig', 'utf8');
+            const kubeconfigBase64 = Buffer.from(kubeconfig).toString('base64');
+
+            console.log('📤 Uploading kubeconfig to prod environment secrets...');
+            await github.rest.actions.createOrUpdateEnvironmentSecret({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              environment_name: 'prod',
+              secret_name: 'KUBECONFIG',
+              encrypted_value: kubeconfigBase64
+            });
+            console.log('✅ KUBECONFIG secret updated in prod environment');
+
+      - name: Verify cluster prerequisites
+        if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
+        run: |
+          echo "🔍 Verifying cluster prerequisites..."
+          kubectl get pods -n kube-system -l app=hcloud-csi-controller --no-headers | wc -l
+          kubectl get storageclass hcloud-postgres-storage || echo "⚠️  Warning: StorageClass not found"
+          echo "✅ Cluster prerequisites verified"
+
+      - name: Trigger resource deployment
+        if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            console.log('🚀 Triggering resource deployment for prod environment...');
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'deploy-k8s-resources.yml',
+              ref: 'main',
+              inputs: {
+                environment: 'prod'
+              }
+            });
+            console.log('✅ Resource deployment workflow triggered');

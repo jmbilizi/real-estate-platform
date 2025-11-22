@@ -343,12 +343,301 @@ npm run nx:workspace-format  # Format all files (fix format check failures)
 npx nx graph                 # Visualize project dependencies
 ```
 
+## Kubernetes & Infrastructure
+
+### Architecture Overview
+
+**Kustomize-based GitOps deployment** with hierarchical control flags and in-memory secret substitution. Infrastructure code in `infra/`:
+
+- `k8s/base/` - Cloud-agnostic resource definitions
+- `k8s/hetzner/{env}/` - Provider-specific overlays (dev/test/prod)
+- `deploy-control.yaml` - Centralized deployment flags (master kill switch, time windows, rollback policies)
+
+**Critical Pattern**: **NO secretGenerator, NO secrets.env files**. Secrets use placeholder values (`StrongBase64Password`) in Git, substituted in-memory during CI/CD using `yq`.
+
+### Secret Management
+
+**Template-based approach** (same pattern as `hetzner-k8s` cluster provisioning):
+
+```yaml
+# infra/k8s/base/secrets/postgres.secret.yaml
+stringData:
+  POSTGRES_SA_PASSWORD: StrongBase64Password # Unquoted placeholder
+  ACCOUNT_SERVICE_DB_USER_PASSWORD: StrongBase64Password
+  # ... more secrets
+```
+
+**Workflow substitution** (`.github/workflows/deploy-k8s-resources.yml`):
+
+```bash
+# In-memory substitution using yq pipeline
+yq eval '.stringData.POSTGRES_SA_PASSWORD = "${{ secrets.POSTGRES_SA_PASSWORD }}"' postgres.secret.yaml | \
+  yq eval '.stringData.ACCOUNT_SERVICE_DB_USER_PASSWORD = "${{ secrets.ACCOUNT_SERVICE_DB_USER_PASSWORD }}"' - | \
+  yq eval '.stringData.MESSAGING_SERVICE_DB_USER_PASSWORD = "${{ secrets.MESSAGING_SERVICE_DB_USER_PASSWORD }}"' - | \
+  yq eval '.stringData.PROPERTY_SERVICE_DB_USER_PASSWORD = "${{ secrets.PROPERTY_SERVICE_DB_USER_PASSWORD }}"' - \
+  > /tmp/postgres.secret.processed.yaml
+
+# Replace original with processed (in runner only, never committed)
+mv /tmp/postgres.secret.processed.yaml infra/k8s/base/secrets/postgres.secret.yaml
+```
+
+**Why this pattern:**
+
+- ✅ Secrets stay in GitHub Secrets, never in Git
+- ✅ Local testing works with placeholder values
+- ✅ No `.gitignore` complexity or accidental commits
+- ✅ Same pattern as Hetzner cluster provisioning (consistency)
+
+**CRITICAL**: All 3 deployment jobs (dev/test/prod) must use **identical secret field names** and **identical temp file naming** (`/tmp/postgres.secret.processed.yaml`). This was a source of bugs - always verify consistency across all environments.
+
+### Deployment Control System
+
+**Hierarchical flag system** in `infra/deploy-control.yaml`:
+
+```yaml
+# Master kill switch (disables ALL automated deployments)
+global:
+  auto_deploy: true
+
+# Environment-level controls
+environments:
+  dev:
+    enabled: true # Environment can deploy
+    auto_deploy: true # Auto-deploy on push
+    deployment_windows:
+      enabled: false # Time-based restrictions
+      allowed_days: ["Mon", "Tue", "Wed", "Thu", "Fri"]
+      allowed_hours: "09:00-17:00"
+
+    services:
+      postgres:
+        enabled: true
+        auto_deploy: true
+        rollback_on_failure: false # Service-level rollback
+
+# Deployment strategies (resource-type level)
+deployment_strategies:
+  statefulset:
+    timeout: "10m" # Configurable rollout timeout
+    rollback_on_failure: true # Strategy-level rollback
+```
+
+**Control flag enforcement** (10+ flags active):
+
+- `enabled` (environment + service level)
+- `auto_deploy` (environment + service level)
+- `deployment_windows` (time restrictions)
+- `rollback_on_failure` (combined OR: service-level OR strategy-level)
+- `statefulset_timeout` (overrides hardcoded timeouts)
+- `require_manual_approval` (parsed but not yet enforced - GitHub Environments handle this)
+
+**Workflow integration**: Each deployment job parses `deploy-control.yaml` and exits early if any check fails (before credentials are loaded).
+
+### Kustomize Structure
+
+**Pattern**: Base resources + environment patches
+
+```
+infra/k8s/
+├── base/
+│   ├── secrets/postgres.secret.yaml       # Template with placeholders
+│   ├── configmaps/postgres-init.configmap.yaml
+│   ├── services/postgres.service.yaml     # Headless + regular service
+│   └── statefulsets/postgres.statefulset.yaml
+└── hetzner/
+    ├── dev/
+    │   ├── kustomization.yaml             # References base + patches
+    │   ├── patches/
+    │   │   ├── postgres-resources.yaml    # Dev: 512Mi-1Gi RAM, 0.5-1 CPU
+    │   │   └── postgres-storage.yaml      # Dev: 14Gi storage
+    │   └── cluster/
+    │       └── cluster-config.yaml        # hetzner-k8s provisioning config
+    ├── test/  # Same structure, different resource limits
+    └── prod/  # Same structure, production-grade resources
+```
+
+**File naming convention**: `{service}.{kind}.yaml` (e.g., `postgres.statefulset.yaml`, `postgres-init.configmap.yaml`)
+
+**Resource ordering** in kustomization.yaml (CRITICAL):
+
+1. Secrets (processed first)
+2. ConfigMaps
+3. Services (must exist before StatefulSet for stable DNS)
+4. StatefulSets
+
+**Kustomize commands**:
+
+```bash
+# Build manifests (local validation)
+kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins
+
+# Preview changes (requires kubectl access)
+kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins | kubectl diff -f -
+```
+
+**CRITICAL**: Always use `--enable-alpha-plugins` flag (required for certain Kustomize features).
+
+### Deployment Workflows
+
+**Three deployment jobs** (dev/test/prod) in `.github/workflows/deploy-k8s-resources.yml`:
+
+**Triggers**:
+
+- `push` to branches (dev/test/main) + path filters
+- `pull_request` (validation only - no deployment)
+- `workflow_dispatch` (manual deployment with environment selection)
+
+**Job structure** (identical for all 3 environments):
+
+1. Load deployment control flags (parse `deploy-control.yaml`)
+2. Check flags in order (global → environment → service → auto-deploy)
+3. Set up kubeconfig (from GitHub Secrets)
+4. **Substitute secrets** in postgres.secret.yaml (in-memory)
+5. Build Kustomize manifests
+6. Apply with `kubectl apply --server-side=true --force-conflicts`
+7. Wait for rollout with configurable timeout
+8. Rollback on failure (if enabled)
+
+**Rollback logic** (combined OR):
+
+```yaml
+if: |
+  always() &&
+  steps.deploy-control.outputs.enabled == 'true' &&
+  (steps.deploy-control.outputs.rollback_on_failure == 'true' || 
+   steps.deploy-control.outputs.statefulset_rollback == 'true') &&
+  steps.rollout.outputs.rollout_success != 'true'
+```
+
+**Why OR logic**: Allows flexible control (disable at service level for manual investigation, or disable at strategy level to prevent all automatic rollbacks).
+
+### Validation Workflows
+
+**PR validation job** (`validate-pr`):
+
+- Runs on pull requests targeting dev/test/main
+- Detects which environments changed (path filter)
+- Validates Kustomize builds WITHOUT secret substitution
+- **Uses placeholder values** - local builds will show `StrongBase64Password`
+- Fast feedback (~30 seconds)
+
+**CRITICAL**: Validation uses templates directly (no secret substitution). This is intentional - validates YAML structure, not secret values.
+
+### Resource References
+
+**StatefulSet → Secret** (via `secretKeyRef`):
+
+```yaml
+env:
+  - name: POSTGRES_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: postgres-secret
+        key: POSTGRES_SA_PASSWORD
+```
+
+**StatefulSet → ConfigMap** (via `volumeMount`):
+
+```yaml
+volumes:
+  - name: init-scripts
+    configMap:
+      name: postgres-init-scripts # Must match ConfigMap metadata.name
+```
+
+**StatefulSet → Service** (via `serviceName`):
+
+```yaml
+spec:
+  serviceName: postgres-hl # Must match headless Service metadata.name
+```
+
+**CRITICAL**: All references must be exact matches. Use grep to verify consistency:
+
+```bash
+# Verify ConfigMap name consistency
+grep -r "postgres-init-scripts" infra/k8s/base/
+
+# Verify secret field names across workflow and StatefulSet
+grep -r "ACCOUNT_SERVICE_DB_USER_PASSWORD" .github/workflows/ infra/k8s/base/
+```
+
+### Common Infrastructure Pitfalls
+
+**"Prod deployment fails with 'field does not exist' error"**
+→ Secret field names mismatch between workflow and secret template. All 3 jobs must use identical field names.
+
+**"Secret shows StrongBase64Password in deployed pods"**
+→ Workflow secret substitution failed. Check GitHub Secrets are configured for the environment. Verify yq pipeline completed successfully.
+
+**"StatefulSet stuck in pending - PVC not binding"**
+→ StorageClass `hcloud-postgres-storage` not created. Run cluster provisioning first (`hetzner-k8s` workflow).
+
+**"Kustomize build fails with 'resource not found'"**
+→ Check resource ordering in kustomization.yaml. Secrets must come before resources that reference them.
+
+**"Deployment control flags not working"**
+→ Workflow reads flags but may not enforce all (see `deploy-control.yaml` metadata section for enforcement status).
+
+**"Rollback not triggering on failure"**
+→ Check BOTH `rollback_on_failure` (service level) AND `statefulset_rollback` (strategy level). Either can trigger rollback (OR logic).
+
+### Infrastructure Documentation
+
+**Primary docs** (in `infra/k8s/`):
+
+- `readme.md` - Quick start, architecture overview, FAQ navigation
+- `operations.md` - Daily operations, deployment commands, troubleshooting
+- `testing.md` - Local testing, validation procedures, dry-run commands
+- `implementation-summary.md` - Architecture decisions, what changed, benefits
+
+**Documentation pattern**: README acts as navigation hub; specialized docs for specific tasks.
+
+### Kubernetes Quick Reference
+
+```bash
+# Local testing
+kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins
+kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins | kubectl diff -f -
+
+# Manual deployment (requires GitHub CLI)
+gh workflow run deploy-k8s-resources.yml -f environment=dev
+
+# Check deployment status
+kubectl get statefulset postgres
+kubectl get pods -l app=postgres
+kubectl get pvc -l app=postgres
+kubectl logs postgres-0
+
+# Rollback (manual)
+kubectl rollout undo statefulset/postgres
+kubectl rollout status statefulset/postgres -w
+```
+
+### Infrastructure File Locations
+
+| What                 | Where                                                    |
+| -------------------- | -------------------------------------------------------- |
+| Deployment flags     | `infra/deploy-control.yaml`                              |
+| Secret template      | `infra/k8s/base/secrets/postgres.secret.yaml`            |
+| StatefulSet base     | `infra/k8s/base/statefulsets/postgres.statefulset.yaml`  |
+| Init scripts         | `infra/k8s/base/configmaps/postgres-init.configmap.yaml` |
+| Dev resources        | `infra/k8s/hetzner/dev/patches/postgres-resources.yaml`  |
+| Prod storage         | `infra/k8s/hetzner/prod/patches/postgres-storage.yaml`   |
+| Cluster config       | `infra/k8s/hetzner/{env}/cluster/cluster-config.yaml`    |
+| Deployment workflow  | `.github/workflows/deploy-k8s-resources.yml`             |
+| Cluster provisioning | `.github/workflows/hetzner-k8s.yml`                      |
+
 ## External Dependencies
 
 - **Nx 22.0.1**: Monorepo orchestration
 - **Node.js 20.19.5**: Runtime (LTS, pinned in `.nvmrc`)
 - **Python 3.8+**: Runtime (auto-installed by `py-env` scripts)
 - **.NET SDK 8.0**: Runtime (pinned in `tools/dotnet/configs/global.json`)
-- **GitHub Actions**: CI/CD platform (`.github/workflows/ci.yml`)
+- **GitHub Actions**: CI/CD platform (`.github/workflows/ci.yml`, `.github/workflows/deploy-k8s-resources.yml`)
+- **Kustomize**: Kubernetes manifest templating (required for local testing and workflows)
+- **kubectl**: Kubernetes CLI (workflows use version from GitHub Actions runner)
+- **yq**: YAML processor for secret substitution and config parsing (installed in workflows)
+- **hetzner-k8s**: K3s cluster provisioning on Hetzner Cloud (`.github/workflows/hetzner-k8s.yml`)
 
 **Version management**: `.nvmrc` (Node), `global.json` (.NET), `pyproject.toml` (Python 3.8+ in tool.poetry.dependencies)

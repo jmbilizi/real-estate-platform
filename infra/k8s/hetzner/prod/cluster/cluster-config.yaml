@@ -1,5 +1,15 @@
 ---
-auto_deploy: false # Set to false to disable automatic deployment
+# SCOPE: This file controls CLUSTER PROVISIONING (infrastructure-level)
+#        K3s cluster creation, node pools, networking, etc.
+#
+# NOTE: For APPLICATION DEPLOYMENT controls (PostgreSQL, services, etc.), see:
+#   infra/deploy-control.yaml
+#
+# WORKFLOWS:
+#   - Cluster provisioning: .github/workflows/hetzner-k8s.yml (reads this file)
+#   - Resource deployment: .github/workflows/deploy-k8s-resources.yml (reads deploy-control.yaml)
+
+auto_deploy: false # Set to true to enable automatic deployment (NOT recommended for prod)
 hetzner_token: HETZNER_TOKEN # Will be replaced by GitHub Actions from secrets
 cluster_name: hetzner-prod-cluster
 kubeconfig_path: "./kubeconfig"
