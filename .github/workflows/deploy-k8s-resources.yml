@@ -8,8 +8,11 @@ on:
       - main
     paths:
       - "infra/k8s/base/**"
-      - "infra/k8s/hetzner/**"
+      - "infra/k8s/hetzner/**/patches/**"
+      - "infra/k8s/hetzner/**/kustomization.yaml"
       - "infra/deploy-control.yaml"
+      # Exclude cluster configs - hetzner-k8s.yml handles those
+      - "!infra/k8s/hetzner/**/cluster/**"
   pull_request:
     branches:
       - dev
@@ -29,9 +32,15 @@ on:
           - dev
           - test
           - prod
+  workflow_call:
+    inputs:
+      environment:
+        description: "Environment to deploy"
+        required: true
+        type: string
 
 concurrency:
-  group: deploy-k8s-${{ github.ref }}
+  group: deploy-k8s-${{ github.ref }}-${{ inputs.environment || 'auto' }}
   cancel-in-progress: false # Don't cancel in-progress deployments
 
 jobs:
@@ -111,13 +120,10 @@ jobs:
               - 'infra/k8s/hetzner/prod/**'
 
   deploy-dev:
-    needs: [detect-changes]
     if: |
-      always() && (
-        (github.event_name == 'push' && github.ref == 'refs/heads/dev' && 
-         (needs.detect-changes.outputs.dev-changed == 'true' || needs.detect-changes.outputs.base-changed == 'true')) ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev')
-      )
+      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev') ||
+      (github.event_name == 'workflow_call' && inputs.environment == 'dev')
     runs-on: ubuntu-latest
     environment: dev
     steps:
@@ -341,13 +347,10 @@ jobs:
           kubectl get pvc -l app=postgres
 
   deploy-test:
-    needs: [detect-changes]
     if: |
-      always() && (
-        (github.event_name == 'push' && github.ref == 'refs/heads/test' && 
-         (needs.detect-changes.outputs.test-changed == 'true' || needs.detect-changes.outputs.base-changed == 'true')) ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'test')
-      )
+      (github.event_name == 'push' && github.ref == 'refs/heads/test') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'test') ||
+      (github.event_name == 'workflow_call' && inputs.environment == 'test')
     runs-on: ubuntu-latest
     environment: test
     steps:
@@ -570,13 +573,10 @@ jobs:
           kubectl get pvc -l app=postgres
 
   deploy-prod:
-    needs: [detect-changes]
     if: |
-      always() && (
-        (github.event_name == 'push' && github.ref == 'refs/heads/main' && 
-         (needs.detect-changes.outputs.prod-changed == 'true' || needs.detect-changes.outputs.base-changed == 'true')) ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod')
-      )
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod') ||
+      (github.event_name == 'workflow_call' && inputs.environment == 'prod')
     runs-on: ubuntu-latest
     environment: prod
     steps:

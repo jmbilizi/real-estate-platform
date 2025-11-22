@@ -393,6 +393,14 @@ function main() {
     "yellow",
   );
 
+  // Early exit if no projects exist (empty workspace)
+  const projectCheck = run("npx nx show projects", { silent: true });
+  if (!projectCheck.output || projectCheck.output.trim().length === 0) {
+    log("\nℹ No projects in workspace - skipping all checks", "cyan");
+    logSuccess("\n✅ Commit allowed (empty workspace)\n");
+    process.exit(0);
+  }
+
   // Check if --skip-reset flag is present
   const skipReset = process.argv.includes("--skip-reset");
 

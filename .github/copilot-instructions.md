@@ -84,21 +84,25 @@ npx nx affected --target=test
 
 ### Two-Tier System
 
-**Pre-Commit (Fast - ~5-15s)**
+**Pre-Commit (Fast - ~5-15s with projects, <1s empty workspace)**
 
 - Format + Lint + Type Check only
 - Runs on affected projects
 - Auto-creates Python venv only if Python projects affected
 - Uses `--skip-reset` flag (no workspace file modifications)
+- **Performance**: Exits immediately if no projects exist (avoids expensive nx operations)
 
-**Pre-Push (Complete - ~30s-2min)**
+**Pre-Push (Complete - ~30s-2min with projects, <1s empty workspace)**
 
 - Format + Lint + Type + Test + Build
 - Mimics CI behavior exactly
 - Feature branches: affected projects | Base branches: all projects
 - Uses `--skip-reset` flag (no workspace file modifications)
+- **Performance**: Exits immediately if no projects exist (avoids expensive nx operations)
 
 **Why `--skip-reset` in hooks**: Git operations must not modify workspace files (prevents unstaged changes after commit). Manual commands (`npm run pre-commit`, `npm run pre-push`) DO run reset for clean state validation.
+
+**Performance Optimization**: Both hooks check if any projects exist before running expensive operations. On empty workspaces (no projects in `apps/` or `libs/`), they exit in <1 second instead of running nx:reset and empty checks.
 
 ### Intelligent Language Detection
 
@@ -483,9 +487,10 @@ kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins | kubectl diff -f -
 
 **Triggers**:
 
-- `push` to branches (dev/test/main) + path filters
+- `push` to branches (dev/test/main) + path filters (excludes cluster configs)
 - `pull_request` (validation only - no deployment)
 - `workflow_dispatch` (manual deployment with environment selection)
+- `workflow_call` (invoked by hetzner-k8s.yml after cluster creation)
 
 **Job structure** (identical for all 3 environments):
 
@@ -510,6 +515,27 @@ if: |
 ```
 
 **Why OR logic**: Allows flexible control (disable at service level for manual investigation, or disable at strategy level to prevent all automatic rollbacks).
+
+### Cluster Provisioning Workflow
+
+**hetzner-k8s.yml** provisions K3s clusters on Hetzner Cloud:
+
+**Workflow sequence**:
+
+1. Detect cluster config changes using dorny/paths-filter
+2. Check `auto_deploy: true` flag in cluster-config.yaml
+3. Create/update cluster using hetzner-k3s CLI
+4. Wait for cluster readiness (nodes, CSI driver, StorageClass)
+5. **Upload KUBECONFIG** to GitHub Secrets (environment-scoped) using GitHub CLI
+6. **Trigger deploy-k8s-resources.yml** via workflow_dispatch (passes environment parameter)
+
+**CRITICAL**: Path filters prevent race conditions:
+
+- `hetzner-k8s.yml` triggers on `infra/k8s/hetzner/*/cluster/*.yaml` changes
+- `deploy-k8s-resources.yml` **excludes** cluster configs via `!infra/k8s/hetzner/**/cluster/**`
+- This ensures cluster creation completes BEFORE resource deployment starts
+
+**KUBECONFIG Upload**: Uses GitHub CLI (`gh secret set KUBECONFIG --env {env}`) which handles libsodium encryption automatically. Previous approach using `github-script` with base64 encoding failed because GitHub API requires proper encryption.
 
 ### Validation Workflows
 

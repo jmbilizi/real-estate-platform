@@ -256,7 +256,7 @@ yq '.environments.dev.auto_deploy' infra/deploy-control.yaml
 
 # Check GitHub Secrets configured
 # Settings → Secrets → Actions
-# Verify: KUBECONFIG, POSTGRES_PASSWORD, ACCOUNT_SERVICE_DB_USER_PASSWORD, etc. exist per environment
+# Verify: KUBECONFIG, POSTGRES_SA_PASSWORD, ACCOUNT_SERVICE_DB_USER_PASSWORD, etc. exist per environment
 ```
 
 ### Pod Not Starting
@@ -278,7 +278,7 @@ kubectl describe pvc postgres-data-postgres-0
 
 # Check secrets
 kubectl get secret postgres-secret
-kubectl get secret postgres-secret -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d
+kubectl get secret postgres-secret -o jsonpath='{.data.POSTGRES_SA_PASSWORD}' | base64 -d
 ```
 
 ### Database Connection Issues

@@ -178,22 +178,13 @@ jobs:
 
       - name: Upload kubeconfig to GitHub Secrets
         if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const kubeconfig = fs.readFileSync('./kubeconfig', 'utf8');
-            const kubeconfigBase64 = Buffer.from(kubeconfig).toString('base64');
-
-            console.log('📤 Uploading kubeconfig to dev environment secrets...');
-            await github.rest.actions.createOrUpdateEnvironmentSecret({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              environment_name: 'dev',
-              secret_name: 'KUBECONFIG',
-              encrypted_value: kubeconfigBase64
-            });
-            console.log('✅ KUBECONFIG secret updated in dev environment');
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "📤 Uploading kubeconfig to dev environment secrets..."
+          # Use GitHub CLI to set the secret (handles encryption automatically)
+          gh secret set KUBECONFIG --env dev < ./kubeconfig
+          echo "✅ KUBECONFIG secret updated in dev environment"
 
       - name: Verify cluster prerequisites
         if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
@@ -308,22 +299,13 @@ jobs:
 
       - name: Upload kubeconfig to GitHub Secrets
         if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const kubeconfig = fs.readFileSync('./kubeconfig', 'utf8');
-            const kubeconfigBase64 = Buffer.from(kubeconfig).toString('base64');
-
-            console.log('📤 Uploading kubeconfig to test environment secrets...');
-            await github.rest.actions.createOrUpdateEnvironmentSecret({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              environment_name: 'test',
-              secret_name: 'KUBECONFIG',
-              encrypted_value: kubeconfigBase64
-            });
-            console.log('✅ KUBECONFIG secret updated in test environment');
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "📤 Uploading kubeconfig to test environment secrets..."
+          # Use GitHub CLI to set the secret (handles encryption automatically)
+          gh secret set KUBECONFIG --env test < ./kubeconfig
+          echo "✅ KUBECONFIG secret updated in test environment"
 
       - name: Verify cluster prerequisites
         if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
@@ -432,22 +414,13 @@ jobs:
 
       - name: Upload kubeconfig to GitHub Secrets
         if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const kubeconfig = fs.readFileSync('./kubeconfig', 'utf8');
-            const kubeconfigBase64 = Buffer.from(kubeconfig).toString('base64');
-
-            console.log('📤 Uploading kubeconfig to prod environment secrets...');
-            await github.rest.actions.createOrUpdateEnvironmentSecret({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              environment_name: 'prod',
-              secret_name: 'KUBECONFIG',
-              encrypted_value: kubeconfigBase64
-            });
-            console.log('✅ KUBECONFIG secret updated in prod environment');
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "📤 Uploading kubeconfig to prod environment secrets..."
+          # Use GitHub CLI to set the secret (handles encryption automatically)
+          gh secret set KUBECONFIG --env prod < ./kubeconfig
+          echo "✅ KUBECONFIG secret updated in prod environment"
 
       - name: Verify cluster prerequisites
         if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'

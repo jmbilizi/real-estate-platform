@@ -185,7 +185,8 @@ environments:
 4. Substitute secrets in config
 5. Create/update cluster with hetzner-k3s
 6. Wait for cluster readiness (nodes, CSI driver, StorageClass)
-7. Trigger deploy-k8s-resources.yml workflow
+7. **Upload KUBECONFIG** to GitHub Secrets (environment-scoped) using GitHub CLI
+8. Trigger deploy-k8s-resources.yml workflow (passes environment parameter)
 
 #### **deploy-k8s-resources.yml**
 
