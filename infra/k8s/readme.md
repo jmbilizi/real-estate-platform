@@ -172,13 +172,22 @@ Configure in: Repository Settings → Secrets and variables → Actions
 - `HETZNER_SSH_PRIVATE_KEY` - SSH key for cluster nodes
 - `HETZNER_SSH_PUBLIC_KEY` - SSH public key
 
-### Kubeconfig Files (Repository Secrets)
+### Infrastructure Deployment
 
-- `DEV_KUBECONFIG` - Dev cluster kubectl config (auto-uploaded by hetzner-k8s workflow)
-- `TEST_KUBECONFIG` - Test cluster kubectl config (auto-uploaded by hetzner-k8s workflow)
-- `PROD_KUBECONFIG` - Prod cluster kubectl config (auto-uploaded by hetzner-k8s workflow)
+- `INFRA_DEPLOY_TOKEN` - Personal Access Token (PAT) with `repo` scope for uploading KUBECONFIG to environment secrets
+  - **Required**: The default `GITHUB_TOKEN` lacks write permission to the secrets API
+  - **Scope**: `repo` (Full control of private repositories)
+  - **Create**: Settings → Developer settings → Personal access tokens → Fine-grained tokens
+  - **Expiration**: Set appropriate expiration and rotation policy
 
-**Note**: Uses repository secrets with environment prefixes because `github.token` can write repository secrets but not environment secrets (requires admin permissions).
+### Kubeconfig Files (Environment Secrets)
+
+- `KUBECONFIG` - kubectl config for each environment (auto-uploaded by hetzner-k8s workflow)
+  - Dev environment: Scoped to `environment: dev`
+  - Test environment: Scoped to `environment: test`
+  - Prod environment: Scoped to `environment: prod`
+
+**Security**: Environment secrets are scoped to specific environments and can have protection rules (approvals, branch restrictions).
 
 ### PostgreSQL Passwords (per environment)
 

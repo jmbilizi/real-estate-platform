@@ -327,17 +327,32 @@ Configure these in GitHub repository settings:
 - `HETZNER_SSH_PRIVATE_KEY` - SSH private key for cluster nodes
 - `HETZNER_SSH_PUBLIC_KEY` - SSH public key for cluster nodes
 
-### Kubeconfig Files (Repository Secrets)
+### Infrastructure Deployment
 
-- `DEV_KUBECONFIG` - Dev cluster kubectl config (automatically uploaded by hetzner-k8s workflow)
-- `TEST_KUBECONFIG` - Test cluster kubectl config (automatically uploaded by hetzner-k8s workflow)
-- `PROD_KUBECONFIG` - Prod cluster kubectl config (automatically uploaded by hetzner-k8s workflow)
+- `INFRA_DEPLOY_TOKEN` - Personal Access Token (PAT) with `repo` scope
+  - **Purpose**: Upload KUBECONFIG to environment secrets (default `GITHUB_TOKEN` lacks write permission)
+  - **Scope**: `repo` (Full control of private repositories)
+  - **Security**: Rotate regularly, monitor usage in audit logs
 
-**Architecture Decision**: Repository secrets with environment prefixes instead of environment-scoped secrets.
+### Kubeconfig Files (Environment Secrets)
 
-**Rationale**: GitHub Actions `GITHUB_TOKEN` has write access to repository secrets but only read access to environment secrets. Attempting to write environment secrets results in `HTTP 403: Resource not accessible by integration`. Using repository secrets with prefixes (`DEV_`, `TEST_`, `PROD_`) allows automated kubeconfig upload without requiring a Personal Access Token (PAT) or admin permissions.
+- `KUBECONFIG` - kubectl config (automatically uploaded by hetzner-k8s workflow after cluster creation/update)
+  - Scoped to each environment (dev, test, prod)
+  - Protected by environment-level access controls
 
-**Implementation**: `hetzner-k8s.yml` uses `gh secret set {ENV}_KUBECONFIG < ./kubeconfig` and `deploy-k8s-resources.yml` reads `secrets.{ENV}_KUBECONFIG`.
+**Architecture Decision**: Environment secrets with PAT instead of repository secrets.
+
+**Rationale**:
+
+1. **Secrets API Permission**: GitHub Actions `GITHUB_TOKEN` has **read-only** access to the secrets API. Writing secrets (both repository and environment) requires a PAT with `repo` scope or GitHub App token.
+2. **Security Benefits**: Environment secrets provide:
+   - Scoped access (secrets only available to jobs declaring the environment)
+   - Protection rules (required approvals, deployment branches)
+   - Better audit trail for sensitive operations
+   - Granular access control per environment
+3. **Trade-off**: Requires PAT management (creation, rotation, monitoring) vs convenience of default token.
+
+**Implementation**: `hetzner-k8s.yml` uses `gh secret set KUBECONFIG --env {env}` with `INFRA_DEPLOY_TOKEN` PAT, and `deploy-k8s-resources.yml` reads `secrets.KUBECONFIG` from environment scope.
 
 ### PostgreSQL Passwords
 

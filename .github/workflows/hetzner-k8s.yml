@@ -181,13 +181,13 @@ jobs:
       - name: Upload kubeconfig to GitHub Secrets
         if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
         run: |
-          echo "📤 Uploading kubeconfig to repository secrets..."
-          # Use GitHub CLI to set the secret as repository secret with DEV_ prefix
-          # Note: github.token has permission for repo secrets but not environment secrets
-          gh secret set DEV_KUBECONFIG < ./kubeconfig
-          echo "✅ DEV_KUBECONFIG secret updated"
+          echo "📤 Uploading kubeconfig to dev environment secrets..."
+          # Use PAT with repo scope (INFRA_DEPLOY_TOKEN) to write environment secrets
+          # Note: github.token lacks write permission to secrets API (HTTP 403)
+          gh secret set KUBECONFIG --env dev < ./kubeconfig
+          echo "✅ KUBECONFIG secret updated in dev environment"
 
       - name: Verify cluster prerequisites
         if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
@@ -307,12 +307,12 @@ jobs:
       - name: Upload kubeconfig to GitHub Secrets
         if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
         run: |
-          echo "📤 Uploading kubeconfig to repository secrets..."
-          # Use GitHub CLI to set the secret as repository secret with TEST_ prefix
-          gh secret set TEST_KUBECONFIG < ./kubeconfig
-          echo "✅ TEST_KUBECONFIG secret updated"
+          echo "📤 Uploading kubeconfig to test environment secrets..."
+          # Use PAT with repo scope (INFRA_DEPLOY_TOKEN) to write environment secrets
+          gh secret set KUBECONFIG --env test < ./kubeconfig
+          echo "✅ KUBECONFIG secret updated in test environment"
 
       - name: Verify cluster prerequisites
         if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
@@ -426,12 +426,12 @@ jobs:
       - name: Upload kubeconfig to GitHub Secrets
         if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
         run: |
-          echo "📤 Uploading kubeconfig to repository secrets..."
-          # Use GitHub CLI to set the secret as repository secret with PROD_ prefix
-          gh secret set PROD_KUBECONFIG < ./kubeconfig
-          echo "✅ PROD_KUBECONFIG secret updated"
+          echo "📤 Uploading kubeconfig to prod environment secrets..."
+          # Use PAT with repo scope (INFRA_DEPLOY_TOKEN) to write environment secrets
+          gh secret set KUBECONFIG --env prod < ./kubeconfig
+          echo "✅ KUBECONFIG secret updated in prod environment"
 
       - name: Verify cluster prerequisites
         if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
