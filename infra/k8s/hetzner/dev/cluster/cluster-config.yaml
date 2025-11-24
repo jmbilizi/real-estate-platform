@@ -12,7 +12,7 @@
 auto_deploy: true # Set to false to disable automatic cluster provisioning
 hetzner_token: HETZNER_TOKEN # Will be replaced by GitHub Actions from secrets
 cluster_name: hetzner-dev-cluster
-kubeconfig_path: "./kubeconfig" # or /cluster/kubeconfig if hetzner-k8s is installed in Docker
+kubeconfig_path: "./kubeconfig" # or /cluster/kubeconfig if hetzner-k8s is installed in Docker instead
 k3s_version: v1.32.0+k3s1
 
 networking:

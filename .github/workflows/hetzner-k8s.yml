@@ -169,6 +169,8 @@ jobs:
 
       - name: Wait for cluster to be ready
         if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
+        env:
+          KUBECONFIG: ./kubeconfig
         run: |
           echo "⏳ Waiting for cluster to be fully ready..."
           sleep 30  # Give cluster time to initialize
@@ -188,6 +190,8 @@ jobs:
 
       - name: Verify cluster prerequisites
         if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
+        env:
+          KUBECONFIG: ./kubeconfig
         run: |
           echo "🔍 Verifying cluster prerequisites..."
 
@@ -290,6 +294,8 @@ jobs:
 
       - name: Wait for cluster to be ready
         if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
+        env:
+          KUBECONFIG: ./kubeconfig
         run: |
           echo "⏳ Waiting for cluster to be fully ready..."
           sleep 30
@@ -309,6 +315,8 @@ jobs:
 
       - name: Verify cluster prerequisites
         if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
+        env:
+          KUBECONFIG: ./kubeconfig
         run: |
           echo "🔍 Verifying cluster prerequisites..."
           kubectl get pods -n kube-system -l app=hcloud-csi-controller --no-headers | wc -l
@@ -405,6 +413,8 @@ jobs:
 
       - name: Wait for cluster to be ready
         if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
+        env:
+          KUBECONFIG: ./kubeconfig
         run: |
           echo "⏳ Waiting for cluster to be fully ready..."
           sleep 30
@@ -424,6 +434,8 @@ jobs:
 
       - name: Verify cluster prerequisites
         if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
+        env:
+          KUBECONFIG: ./kubeconfig
         run: |
           echo "🔍 Verifying cluster prerequisites..."
           kubectl get pods -n kube-system -l app=hcloud-csi-controller --no-headers | wc -l
