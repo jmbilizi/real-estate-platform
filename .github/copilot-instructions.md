@@ -535,7 +535,12 @@ if: |
 - `deploy-k8s-resources.yml` **excludes** cluster configs via `!infra/k8s/hetzner/**/cluster/**`
 - This ensures cluster creation completes BEFORE resource deployment starts
 
-**KUBECONFIG Upload Strategy**: Uses environment-scoped secrets with Personal Access Token (PAT). The default `github.token` has **read-only** access to the secrets API - writing secrets (both repository and environment) returns `HTTP 403: Resource not accessible by integration`. Solution requires `INFRA_DEPLOY_TOKEN` (PAT with `repo` scope) stored as repository secret. Implementation: `gh secret set KUBECONFIG --env {env}` with PAT authentication. Environment secrets provide better security (scoped access, protection rules, audit trail) compared to repository secrets with prefixes. GitHub CLI handles libsodium encryption automatically.
+**KUBECONFIG Upload Strategy**: Uses environment-scoped secrets with Personal Access Token (PAT). The default `github.token` has limited permissions:
+
+- **Read-only** access to the secrets API (cannot write secrets)
+- **No** `actions:write` permission (cannot trigger workflows)
+
+Both operations return `HTTP 403: Resource not accessible by integration`. Solution requires `INFRA_DEPLOY_TOKEN` (PAT with `repo` scope) stored as repository secret. Implementation: `gh secret set KUBECONFIG --env {env}` and `gh workflow run deploy-k8s-resources.yml` both use PAT authentication. Environment secrets provide better security (scoped access, protection rules, audit trail) compared to repository secrets with prefixes. GitHub CLI handles libsodium encryption automatically.
 
 ### Validation Workflows
 

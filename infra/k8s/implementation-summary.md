@@ -330,7 +330,9 @@ Configure these in GitHub repository settings:
 ### Infrastructure Deployment
 
 - `INFRA_DEPLOY_TOKEN` - Personal Access Token (PAT) with `repo` scope
-  - **Purpose**: Upload KUBECONFIG to environment secrets (default `GITHUB_TOKEN` lacks write permission)
+  - **Purpose**:
+    1. Upload KUBECONFIG to environment secrets (default `GITHUB_TOKEN` lacks write permission)
+    2. Trigger deploy-k8s-resources workflow (default `GITHUB_TOKEN` lacks actions:write permission)
   - **Scope**: `repo` (Full control of private repositories)
   - **Security**: Rotate regularly, monitor usage in audit logs
 
@@ -344,7 +346,10 @@ Configure these in GitHub repository settings:
 
 **Rationale**:
 
-1. **Secrets API Permission**: GitHub Actions `GITHUB_TOKEN` has **read-only** access to the secrets API. Writing secrets (both repository and environment) requires a PAT with `repo` scope or GitHub App token.
+1. **API Permissions**: GitHub Actions `GITHUB_TOKEN` has limited permissions:
+   - **Read-only** access to the secrets API (cannot write secrets)
+   - **No** `actions:write` permission (cannot trigger workflows via API)
+   - Writing secrets and triggering workflows requires a PAT with `repo` scope or GitHub App token
 2. **Security Benefits**: Environment secrets provide:
    - Scoped access (secrets only available to jobs declaring the environment)
    - Protection rules (required approvals, deployment branches)
@@ -352,7 +357,11 @@ Configure these in GitHub repository settings:
    - Granular access control per environment
 3. **Trade-off**: Requires PAT management (creation, rotation, monitoring) vs convenience of default token.
 
-**Implementation**: `hetzner-k8s.yml` uses `gh secret set KUBECONFIG --env {env}` with `INFRA_DEPLOY_TOKEN` PAT, and `deploy-k8s-resources.yml` reads `secrets.KUBECONFIG` from environment scope.
+**Implementation**:
+
+- `hetzner-k8s.yml` uses `gh secret set KUBECONFIG --env {env}` with `INFRA_DEPLOY_TOKEN` PAT
+- `hetzner-k8s.yml` uses `gh workflow run` with `INFRA_DEPLOY_TOKEN` PAT to trigger deployments
+- `deploy-k8s-resources.yml` reads `secrets.KUBECONFIG` from environment scope
 
 ### PostgreSQL Passwords
 

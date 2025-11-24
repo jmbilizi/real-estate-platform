@@ -207,20 +207,15 @@ jobs:
 
       - name: Trigger resource deployment
         if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            console.log('🚀 Triggering resource deployment for dev environment...');
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'deploy-k8s-resources.yml',
-              ref: 'dev',
-              inputs: {
-                environment: 'dev'
-              }
-            });
-            console.log('✅ Resource deployment workflow triggered');
+        env:
+          GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
+        run: |
+          echo "🚀 Triggering resource deployment for dev environment..."
+          # Use PAT to trigger workflow (github.token lacks actions:write permission)
+          gh workflow run deploy-k8s-resources.yml \
+            --ref dev \
+            --field environment=dev
+          echo "✅ Resource deployment workflow triggered"
 
   update-test-cluster:
     needs: [detect-changes]
@@ -326,20 +321,15 @@ jobs:
 
       - name: Trigger resource deployment
         if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            console.log('🚀 Triggering resource deployment for test environment...');
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'deploy-k8s-resources.yml',
-              ref: 'test',
-              inputs: {
-                environment: 'test'
-              }
-            });
-            console.log('✅ Resource deployment workflow triggered');
+        env:
+          GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
+        run: |
+          echo "🚀 Triggering resource deployment for test environment..."
+          # Use PAT to trigger workflow (github.token lacks actions:write permission)
+          gh workflow run deploy-k8s-resources.yml \
+            --ref test \
+            --field environment=test
+          echo "✅ Resource deployment workflow triggered"
 
   update-prod-cluster:
     needs: [detect-changes]
@@ -445,17 +435,12 @@ jobs:
 
       - name: Trigger resource deployment
         if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            console.log('🚀 Triggering resource deployment for prod environment...');
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'deploy-k8s-resources.yml',
-              ref: 'main',
-              inputs: {
-                environment: 'prod'
-              }
-            });
-            console.log('✅ Resource deployment workflow triggered');
+        env:
+          GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
+        run: |
+          echo "🚀 Triggering resource deployment for prod environment..."
+          # Use PAT to trigger workflow (github.token lacks actions:write permission)
+          gh workflow run deploy-k8s-resources.yml \
+            --ref main \
+            --field environment=prod
+          echo "✅ Resource deployment workflow triggered"

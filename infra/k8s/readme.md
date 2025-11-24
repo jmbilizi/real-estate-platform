@@ -174,8 +174,8 @@ Configure in: Repository Settings → Secrets and variables → Actions
 
 ### Infrastructure Deployment
 
-- `INFRA_DEPLOY_TOKEN` - Personal Access Token (PAT) with `repo` scope for uploading KUBECONFIG to environment secrets
-  - **Required**: The default `GITHUB_TOKEN` lacks write permission to the secrets API
+- `INFRA_DEPLOY_TOKEN` - Personal Access Token (PAT) with `repo` scope for uploading KUBECONFIG to environment secrets and triggering workflows
+  - **Required**: The default `GITHUB_TOKEN` lacks write permission to the secrets API and cannot trigger workflows
   - **Scope**: `repo` (Full control of private repositories)
   - **Create**: Settings → Developer settings → Personal access tokens → Fine-grained tokens
   - **Expiration**: Set appropriate expiration and rotation policy
