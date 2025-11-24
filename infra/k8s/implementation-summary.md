@@ -327,9 +327,17 @@ Configure these in GitHub repository settings:
 - `HETZNER_SSH_PRIVATE_KEY` - SSH private key for cluster nodes
 - `HETZNER_SSH_PUBLIC_KEY` - SSH public key for cluster nodes
 
-### Kubeconfig Files
+### Kubeconfig Files (Repository Secrets)
 
-- `KUBECONFIG` - kubectl config (automatically uploaded by hetzner-k8s workflow after cluster creation/update)
+- `DEV_KUBECONFIG` - Dev cluster kubectl config (automatically uploaded by hetzner-k8s workflow)
+- `TEST_KUBECONFIG` - Test cluster kubectl config (automatically uploaded by hetzner-k8s workflow)
+- `PROD_KUBECONFIG` - Prod cluster kubectl config (automatically uploaded by hetzner-k8s workflow)
+
+**Architecture Decision**: Repository secrets with environment prefixes instead of environment-scoped secrets.
+
+**Rationale**: GitHub Actions `GITHUB_TOKEN` has write access to repository secrets but only read access to environment secrets. Attempting to write environment secrets results in `HTTP 403: Resource not accessible by integration`. Using repository secrets with prefixes (`DEV_`, `TEST_`, `PROD_`) allows automated kubeconfig upload without requiring a Personal Access Token (PAT) or admin permissions.
+
+**Implementation**: `hetzner-k8s.yml` uses `gh secret set {ENV}_KUBECONFIG < ./kubeconfig` and `deploy-k8s-resources.yml` reads `secrets.{ENV}_KUBECONFIG`.
 
 ### PostgreSQL Passwords
 

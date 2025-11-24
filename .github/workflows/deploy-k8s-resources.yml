@@ -277,7 +277,7 @@ jobs:
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+          echo "${{ secrets.DEV_KUBECONFIG }}" > ~/.kube/config
           chmod 600 ~/.kube/config
           kubectl cluster-info
 
@@ -504,7 +504,7 @@ jobs:
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+          echo "${{ secrets.TEST_KUBECONFIG }}" > ~/.kube/config
           chmod 600 ~/.kube/config
           kubectl cluster-info
 
@@ -753,7 +753,7 @@ jobs:
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+          echo "${{ secrets.PROD_KUBECONFIG }}" > ~/.kube/config
           chmod 600 ~/.kube/config
           kubectl cluster-info
 

@@ -172,9 +172,13 @@ Configure in: Repository Settings → Secrets and variables → Actions
 - `HETZNER_SSH_PRIVATE_KEY` - SSH key for cluster nodes
 - `HETZNER_SSH_PUBLIC_KEY` - SSH public key
 
-### Kubeconfig Files
+### Kubeconfig Files (Repository Secrets)
 
-- `KUBECONFIG` - kubectl config (auto-uploaded by hetzner-k8s workflow for each environment)
+- `DEV_KUBECONFIG` - Dev cluster kubectl config (auto-uploaded by hetzner-k8s workflow)
+- `TEST_KUBECONFIG` - Test cluster kubectl config (auto-uploaded by hetzner-k8s workflow)
+- `PROD_KUBECONFIG` - Prod cluster kubectl config (auto-uploaded by hetzner-k8s workflow)
+
+**Note**: Uses repository secrets with environment prefixes because `github.token` can write repository secrets but not environment secrets (requires admin permissions).
 
 ### PostgreSQL Passwords (per environment)
 

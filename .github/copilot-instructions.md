@@ -526,7 +526,7 @@ if: |
 2. Check `auto_deploy: true` flag in cluster-config.yaml
 3. Create/update cluster using hetzner-k3s CLI
 4. Wait for cluster readiness (nodes, CSI driver, StorageClass)
-5. **Upload KUBECONFIG** to GitHub Secrets (environment-scoped) using GitHub CLI
+5. **Upload KUBECONFIG** to GitHub repository secrets (with environment prefix) using GitHub CLI
 6. **Trigger deploy-k8s-resources.yml** via workflow_dispatch (passes environment parameter)
 
 **CRITICAL**: Path filters prevent race conditions:
@@ -535,7 +535,7 @@ if: |
 - `deploy-k8s-resources.yml` **excludes** cluster configs via `!infra/k8s/hetzner/**/cluster/**`
 - This ensures cluster creation completes BEFORE resource deployment starts
 
-**KUBECONFIG Upload**: Uses GitHub CLI (`gh secret set KUBECONFIG --env {env}`) which handles libsodium encryption automatically. Previous approach using `github-script` with base64 encoding failed because GitHub API requires proper encryption.
+**KUBECONFIG Upload Strategy**: Uses repository secrets with environment prefixes (`DEV_KUBECONFIG`, `TEST_KUBECONFIG`, `PROD_KUBECONFIG`) instead of environment-scoped secrets because `github.token` lacks permission to write environment secrets (returns `HTTP 403: Resource not accessible by integration`). Implementation: `gh secret set {ENV}_KUBECONFIG < ./kubeconfig` (dev/test/prod jobs). GitHub CLI handles libsodium encryption automatically.
 
 ### Validation Workflows
 
