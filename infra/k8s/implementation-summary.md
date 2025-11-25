@@ -55,6 +55,30 @@ Pattern: `{service}.{kind}.yaml`
 - `base/kustomization.yaml` - Defines all shared resources (Secrets, ConfigMaps, Services, StatefulSets)
 - `hetzner/{env}/kustomization.yaml` - References base (`../../base`) and applies environment-specific patches
 
+**Minimal Base Philosophy:**
+
+The base layer contains ONLY configuration that is **identical across all environments**:
+
+- ✅ Container images (postgis/postgis:18-3.4)
+- ✅ Health probes (pg_isready commands)
+- ✅ Environment variables (connection strings, paths)
+- ✅ Volume mounts (/var/lib/postgresql/data)
+- ✅ Security context (fsGroup: 999)
+
+**NEVER in base** (must be defined in patches):
+
+- ❌ Resources (requests/limits) - varies by environment (dev: lower, prod: higher)
+- ❌ Storage size/class - varies by provider (hetzner: hcloud-volumes, aws: gp3, gcp: pd-ssd)
+- ❌ Replicas - single-instance (dev) vs HA (prod: multiple replicas)
+- ❌ Affinity rules - production-specific
+
+**Benefits**:
+
+- Base changes ONLY for features/bugs (PostgreSQL version, new env vars, probe tuning)
+- Every environment explicitly declares its resource budget (self-documenting)
+- No accidental inheritance of stale defaults
+- Clear separation: base = what to run, patches = how much resources
+
 **Modern Kustomize Syntax:**
 
 - `resources: [../../base]` - Reference base directory (not individual files)

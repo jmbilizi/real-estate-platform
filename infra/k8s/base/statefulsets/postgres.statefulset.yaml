@@ -20,13 +20,8 @@ spec:
         - name: postgres
           image: postgis/postgis:18-3.4
           imagePullPolicy: IfNotPresent
-          resources:
-            requests:
-              memory: "512Mi" # Guaranteed minimum
-              cpu: "500m" # 0.5 CPU guaranteed
-            limits:
-              memory: "1Gi" # Can burst to 1Gi
-              cpu: "1000m" # Can burst to 1 CPU
+          # Resources intentionally omitted - MUST be defined in environment patches
+          # This ensures explicit resource decisions per environment (dev vs prod)
           ports:
             - containerPort: 5432
           env:
@@ -87,12 +82,5 @@ spec:
           configMap:
             name: postgres-init-scripts
             defaultMode: 0755
-  volumeClaimTemplates:
-    - metadata:
-        name: postgres-data
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        storageClassName: hcloud-postgres-storage
-        resources:
-          requests:
-            storage: 20Gi
+  # volumeClaimTemplates intentionally omitted - MUST be defined in environment patches
+  # This ensures explicit storage decisions per environment (dev: 14Gi, test: 16Gi, prod: 20Gi+)

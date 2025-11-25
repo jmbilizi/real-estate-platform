@@ -77,7 +77,7 @@ infra/
     │   ├── services/
     │   │   └── postgres.service.yaml
     │   └── statefulsets/
-    │       └── postgres.statefulset.yaml
+    │       └── postgres.statefulset.yaml    # Minimal base (NO resources, NO storage - patches required)
     │
     └── hetzner/                     # Hetzner Cloud provider (auto-detected)
         ├── dev/                     # Development environment

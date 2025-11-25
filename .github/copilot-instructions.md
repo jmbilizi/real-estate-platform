@@ -468,25 +468,36 @@ deployment_strategies:
 
 ### Kustomize Structure
 
-**Pattern**: Base resources + environment patches
+**Minimal Base Architecture**: Base contains ONLY configuration identical across all environments. Environment-specific resources are defined entirely in patches.
+
+**What goes in base:**
+
+- Container images, health probes, env vars, volume mounts, security context
+- Service definitions, ConfigMaps, Secrets (templates with placeholders)
+
+**What goes in patches (NEVER in base):**
+
+- Resources (requests/limits)
+- Storage (size/StorageClass)
+- Replicas, affinity rules
 
 ```
 infra/k8s/
 ├── base/
-│   ├── secrets/postgres.secret.yaml       # Template with placeholders
+│   ├── secrets/postgres.secret.yaml           # Template with placeholders
 │   ├── configmaps/postgres-init.configmap.yaml
-│   ├── services/postgres.service.yaml     # Headless + regular service
-│   └── statefulsets/postgres.statefulset.yaml
+│   ├── services/postgres.service.yaml         # Headless + regular service
+│   └── statefulsets/postgres.statefulset.yaml # NO resources, NO storage
 └── hetzner/
     ├── dev/
-    │   ├── kustomization.yaml             # References base + patches
+    │   ├── kustomization.yaml                 # References base + patches
     │   ├── patches/
-    │   │   ├── postgres-resources.yaml    # Dev: 512Mi-1Gi RAM, 0.5-1 CPU
-    │   │   └── postgres-storage.yaml      # Dev: 14Gi storage
+    │   │   ├── postgres-resources.yaml        # ADD resources (memory, CPU)
+    │   │   └── postgres-storage.yaml          # ADD volumeClaimTemplates
     │   └── cluster/
-    │       └── cluster-config.yaml        # hetzner-k8s provisioning config
-    ├── test/  # Same structure, different resource limits
-    └── prod/  # Same structure, production-grade resources
+    │       └── cluster-config.yaml            # hetzner-k8s provisioning config
+    ├── test/                                  # Higher resources than dev
+    └── prod/                                  # Production-grade resources, replicas, HA
 ```
 
 **File naming convention**: `{service}.{kind}.yaml` (e.g., `postgres.statefulset.yaml`, `postgres-init.configmap.yaml`)
@@ -497,6 +508,15 @@ infra/k8s/
 2. ConfigMaps
 3. Services (must exist before StatefulSet for stable DNS)
 4. StatefulSets
+
+**Strategic merge behavior**: When base omits resources/storage, patches ADD complete sections (not merge/replace fields).
+
+**Benefits of minimal base:**
+
+- Base changes only affect features/bugs, never resource tuning
+- Each environment explicitly declares resource requirements
+- No accidental inheritance or override confusion
+- Easy to add new providers (podman/local, aws, azure)
 
 **Kustomize commands**:
 

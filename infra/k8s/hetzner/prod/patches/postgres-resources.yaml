@@ -3,15 +3,8 @@ kind: StatefulSet
 metadata:
   name: postgres
 spec:
-  serviceName: postgres-hl # Required field for StatefulSet
-  selector:
-    matchLabels:
-      app: postgres
   replicas: 3 # High availability in production
   template:
-    metadata:
-      labels:
-        app: postgres
     spec:
       containers:
         - name: postgres

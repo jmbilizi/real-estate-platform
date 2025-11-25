@@ -164,7 +164,7 @@ kubectl get secret postgres-secret
 - 1 StatefulSet: `postgres`
 - 1 Pod: `postgres-0` (Running)
 - 2 Services: `postgres-hl` (headless), `postgres-serv` (ClusterIP)
-- 1 PVC: `postgres-data-postgres-0` (Bound, 20Gi)
+- 1 PVC: `postgres-data-postgres-0` (Bound)
 - 1 ConfigMap: `postgres-init-script`
 - 1 Secret: `postgres-secret`
 

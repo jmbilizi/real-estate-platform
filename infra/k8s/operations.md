@@ -135,7 +135,7 @@ kubectl exec postgres-0 -- psql -U postgres -c "SELECT version();"
 # 1. Update environment-specific patch
 code infra/k8s/hetzner/dev/patches/postgres-resources.yaml
 
-# Example: Increase dev memory to 2Gi
+# Example: Increase dev memory
 spec:
   template:
     spec:
@@ -143,11 +143,11 @@ spec:
         - name: postgres
           resources:
             requests:
-              memory: "1Gi"     # Was: 512Mi
-              cpu: "1000m"      # Was: 500m
+              memory: "1Gi"
+              cpu: "1000m"
             limits:
-              memory: "2Gi"     # Was: 1Gi
-              cpu: "2000m"      # Was: 1000m
+              memory: "2Gi"
+              cpu: "2000m"
 
 # 2. Test build
 kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins | grep -A 10 "resources:"

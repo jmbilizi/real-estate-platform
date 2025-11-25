@@ -3,18 +3,6 @@ kind: StatefulSet
 metadata:
   name: postgres
 spec:
-  serviceName: postgres-hl # Required field for StatefulSet
-  selector: # Required for schema (ignored by Kustomize strategic merge)
-    matchLabels:
-      app: postgres
-  template: # Required for schema (ignored by Kustomize strategic merge)
-    metadata:
-      labels:
-        app: postgres
-    spec:
-      containers:
-        - name: postgres
-          image: placeholder
   volumeClaimTemplates:
     - metadata:
         name: postgres-data
