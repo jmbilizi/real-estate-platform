@@ -13,6 +13,7 @@ infra/
 ├── deploy-control.yaml                              # Centralized deployment flags
 └── k8s/
     ├── base/                                        # Shared base configs
+    │   ├── kustomization.yaml                       # Base Kustomize configuration
     │   ├── configmaps/
     │   │   └── postgres-init.configmap.yaml
     │   ├── secrets/
@@ -47,7 +48,28 @@ Pattern: `{service}.{kind}.yaml`
 - `postgres-init.configmap.yaml` - Clear purpose + type
 - `cluster-config.yaml` - Simple, in provider/env/cluster/ directory
 
-### 3. Deployment Control System
+### 3. Kustomize Architecture
+
+**Base + Overlay Pattern:**
+
+- `base/kustomization.yaml` - Defines all shared resources (Secrets, ConfigMaps, Services, StatefulSets)
+- `hetzner/{env}/kustomization.yaml` - References base (`../../base`) and applies environment-specific patches
+
+**Modern Kustomize Syntax:**
+
+- `resources: [../../base]` - Reference base directory (not individual files)
+- `patches:` - Modern syntax (replaces deprecated `patchesStrategicMerge`)
+- `labels:` - Modern syntax (replaces deprecated `commonLabels`)
+
+**Why base/kustomization.yaml is required:**
+
+Kustomize overlays must reference a directory containing a `kustomization.yaml`, not individual resource files. This provides:
+
+- Proper resource ordering (Secrets → ConfigMaps → Services → StatefulSets)
+- Centralized base resource management
+- Security validation (prevents referencing files outside base directory)
+
+### 4. Deployment Control System
 
 **File:** `infra/deploy-control.yaml` (v3.0.0)
 

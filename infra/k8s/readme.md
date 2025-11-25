@@ -57,6 +57,8 @@ This directory contains comprehensive documentation for the Kubernetes infrastru
 
 ## 📂 Directory Structure
 
+**Multi-Provider Support**: Any directory under `k8s/` (except `base`) is automatically treated as a cloud provider.
+
 ```
 infra/
 ├── deploy-control.yaml              # Centralized deployment control
@@ -66,7 +68,8 @@ infra/
     ├── OPERATIONS.md                # 🚀 Daily operations guide
     ├── TESTING.md                   # ✅ Testing procedures
     │
-    ├── base/                        # Shared base configurations
+    ├── base/                        # Cloud-agnostic shared configurations
+    │   ├── kustomization.yaml       # Base Kustomize configuration (required)
     │   ├── configmaps/
     │   │   └── postgres-init.configmap.yaml
     │   ├── secrets/
@@ -76,13 +79,13 @@ infra/
     │   └── statefulsets/
     │       └── postgres.statefulset.yaml
     │
-    └── hetzner/                     # Hetzner Cloud provider
+    └── hetzner/                     # Hetzner Cloud provider (auto-detected)
         ├── dev/                     # Development environment
         │   ├── cluster/
         │   │   └── cluster-config.yaml      # hetzner-k3s cluster config
         │   ├── patches/
         │   │   ├── postgres-resources.yaml  # Dev resource limits
-        │   │   └── postgres-storage.yaml    # Dev storage config
+        │   │   └── postgres-storage.yaml    # Dev storage: hcloud-volumes
         │   ├── kustomization.yaml           # Kustomize overlay
         │   └── .gitignore
         │
@@ -91,6 +94,11 @@ infra/
         │
         └── prod/                    # Production environment
             └── ... (same structure as dev)
+
+    # Additional providers (when added, auto-detected):
+    # ├── aws/                       # AWS EKS (StorageClass: gp3)
+    # ├── gcp/                       # Google GKE (StorageClass: pd-ssd)
+    # └── azure/                     # Azure AKS (StorageClass: azure-disk)
 ```
 
 ## 🔄 Workflows

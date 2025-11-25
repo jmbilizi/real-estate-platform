@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Base resources (cloud-agnostic configurations)
+# Overlays (hetzner/dev, hetzner/test, hetzner/prod) reference this base
+
+# Resource ordering (applied in this sequence):
+# 1. Secrets (processed by workflow with actual values)
+# 2. ConfigMaps
+# 3. Services (must exist before StatefulSet for stable DNS)
+# 4. StatefulSets (depends on Secrets, ConfigMaps, Services)
+resources:
+  - secrets/postgres.secret.yaml
+  - configmaps/postgres-init.configmap.yaml
+  - services/postgres.service.yaml
+  - statefulsets/postgres.statefulset.yaml

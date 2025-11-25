@@ -4,15 +4,31 @@ This guide covers testing the new Kustomize-based Kubernetes infrastructure loca
 
 ## Prerequisites
 
-- **Kustomize**: Install from https://kubectl.docs.kubernetes.io/installation/kustomize/
-- **kubectl**: Install from https://kubernetes.io/docs/tasks/tools/
-- **Access to dev cluster**: Kubeconfig file for hetzner-dev-cluster
+- **Kustomize**: Run `npm run infra:setup` (auto-installs and configures PATH)
+- **kubectl**: Optional - for dry-run validation (install from https://kubernetes.io/docs/tasks/tools/)
+- **Access to dev cluster**: Kubeconfig file for hetzner-dev-cluster (for cluster testing only)
 
 ## Local Testing (No Cluster Required)
 
-### 1. Validate Kustomize Build
+### 1. Quick Validation (Recommended)
 
-Test that Kustomize can build manifests for each environment:
+Use the automated validation script:
+
+```bash
+# Validate all environments
+npm run infra:validate
+
+# Validate specific environment
+npm run infra:validate:dev
+npm run infra:validate:test
+npm run infra:validate:prod
+```
+
+**Expected Result**: All environments show `✓ PASSED`
+
+### 2. Manual Kustomize Build (Alternative)
+
+Test Kustomize builds manually if needed:
 
 ```bash
 # Dev environment
@@ -33,7 +49,7 @@ kustomize build infra/k8s/hetzner/prod --enable-alpha-plugins
 - Missing base resources: Ensure all files referenced in `kustomization.yaml` exist
 - StrongBase64Password values in output: Expected - workflows substitute real secrets before deployment
 
-### 2. Inspect Generated Manifests
+### 3. Inspect Generated Manifests
 
 Save and inspect the generated manifests:
 
@@ -310,6 +326,51 @@ gh run view --web
 ## Troubleshooting
 
 ### Kustomize Build Fails
+
+**Error**: `accumulating resources: accumulation err='accumulating resources from '../../base/secrets/postgres.secret.yaml': security; file '...' is not in or below '...'`: must build at directory`
+
+**Root Cause**: Overlay kustomization.yaml referenced individual files (`../../base/secrets/postgres.secret.yaml`) instead of the base directory (`../../base`)
+
+**Solution**:
+
+1. Ensure `base/kustomization.yaml` exists and lists all resources
+2. Change overlay resources to reference base directory: `resources: [../../base]`
+3. This is required by Kustomize security model - overlays must reference directories containing kustomization.yaml
+
+---
+
+**Error**: `Warning: 'commonLabels' is deprecated. Please use 'labels' instead`
+
+**Solution**: Replace deprecated syntax with modern equivalents:
+
+```yaml
+# Old (deprecated)
+commonLabels:
+  environment: dev
+
+# New (modern)
+labels:
+  - pairs:
+      environment: dev
+```
+
+---
+
+**Error**: `Warning: 'patchesStrategicMerge' is deprecated. Please use 'patches' instead`
+
+**Solution**: Replace deprecated syntax with modern equivalents:
+
+```yaml
+# Old (deprecated)
+patchesStrategicMerge:
+  - patches/postgres-resources.yaml
+
+# New (modern)
+patches:
+  - path: patches/postgres-resources.yaml
+```
+
+---
 
 **Error**: `accumulating resources: accumulation err='accumulating resources from '...': evalsymlink failure`
 

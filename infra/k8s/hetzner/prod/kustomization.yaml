@@ -1,22 +1,18 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# Resource ordering (applied in this sequence):
-# 1. Secrets (processed by workflow with actual values)
-# 2. ConfigMaps
-# 3. Services (must exist before StatefulSet for stable DNS)
-# 4. StatefulSets (depends on Secrets, ConfigMaps, Services)
+# Reference base resources (cloud-agnostic configs)
 resources:
-  - ../../base/secrets/postgres.secret.yaml
-  - ../../base/configmaps/postgres-init.configmap.yaml
-  - ../../base/services/postgres.service.yaml
-  - ../../base/statefulsets/postgres.statefulset.yaml
+  - ../../base
 
-patchesStrategicMerge:
-  - patches/postgres-resources.yaml
-  - patches/postgres-storage.yaml
+# Environment-specific patches
+patches:
+  - path: patches/postgres-resources.yaml
+  - path: patches/postgres-storage.yaml
 
-commonLabels:
-  environment: prod
-  provider: hetzner
-  managed-by: gitops
+# Common labels for all resources
+labels:
+  - pairs:
+      environment: prod
+      provider: hetzner
+      managed-by: gitops

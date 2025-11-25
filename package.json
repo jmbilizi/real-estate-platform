@@ -91,7 +91,13 @@
     "nx:python-lint": "node tools/nx/safe-run-many.js --target=lint --projects=tag:python",
     "nx:python-format": "node tools/nx/safe-run-many.js --target=format --projects=tag:python",
     "nx:python-format-check": "node tools/nx/safe-run-many.js --target=format-check --projects=tag:python",
-    "nx:python-type-check": "node tools/nx/safe-run-many.js --target=type-check --projects=tag:python"
+    "nx:python-type-check": "node tools/nx/safe-run-many.js --target=type-check --projects=tag:python",
+    "// Infrastructure": "",
+    "infra:setup": "node tools/infra/setup-infra.js",
+    "infra:validate": "node tools/infra/validate-kustomize.js",
+    "infra:validate:dev": "node tools/infra/validate-kustomize.js dev",
+    "infra:validate:test": "node tools/infra/validate-kustomize.js test",
+    "infra:validate:prod": "node tools/infra/validate-kustomize.js prod"
   },
   "lint-staged": {
     "*.{js,ts,tsx,jsx}": [

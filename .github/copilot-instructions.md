@@ -89,6 +89,7 @@ npx nx affected --target=test
 - Format + Lint + Type Check only
 - Runs on affected projects
 - Auto-creates Python venv only if Python projects affected
+- **Kustomize validation**: Full build validation if `infra/k8s/**/*.yaml` files changed
 - Uses `--skip-reset` flag (no workspace file modifications)
 - **Performance**: Exits immediately if no projects exist (avoids expensive nx operations)
 
@@ -97,12 +98,33 @@ npx nx affected --target=test
 - Format + Lint + Type + Test + Build
 - Mimics CI behavior exactly
 - Feature branches: affected projects | Base branches: all projects
+- **Kustomize validation**: Full build test for all environments (dev, test, prod)
 - Uses `--skip-reset` flag (no workspace file modifications)
 - **Performance**: Exits immediately if no projects exist (avoids expensive nx operations)
 
 **Why `--skip-reset` in hooks**: Git operations must not modify workspace files (prevents unstaged changes after commit). Manual commands (`npm run pre-commit`, `npm run pre-push`) DO run reset for clean state validation.
 
 **Performance Optimization**: Both hooks check if any projects exist before running expensive operations. On empty workspaces (no projects in `apps/` or `libs/`), they exit in <1 second instead of running nx:reset and empty checks.
+
+### Infrastructure Validation
+
+**Kustomize checks run automatically when:**
+
+- Any `infra/k8s/**/*.yaml` files are modified
+- **Pre-commit**: Full build validation for all environments (fast feedback before commit)
+- **Pre-push**: Full build validation for all environments (safety net before push)
+
+**If Kustomize not installed:**
+
+- Pre-commit/pre-push will skip validation with a warning
+- Install: `npm run infra:setup` (one-time setup)
+- Optional tool - won't block commits if not installed
+
+**Why both hooks?**
+
+- Pre-commit catches errors immediately (before commit is created)
+- Pre-push provides safety net if pre-commit was bypassed (`git commit --no-verify`)
+- Same validation logic in both = consistent behavior
 
 ### Intelligent Language Detection
 
@@ -324,6 +346,7 @@ npm install                   # Install Node.js dependencies
 npm run hooks:setup          # Configure Git hooks
 npm run python:env           # Setup Python (if working with Python)
 npm run dotnet:env           # Setup .NET (if working with .NET)
+npm run infra:setup          # Setup infrastructure tools (Kustomize)
 
 # Create projects
 npx nx generate @nx/express:app my-api --directory=apps
@@ -334,6 +357,12 @@ npm run nx:reset             # After creating any project
 npx nx serve my-api          # Run specific project
 npm run nx:node-dev          # Run all Node.js projects
 npm run nx:python-test       # Test all Python projects
+
+# Infrastructure
+npm run infra:validate       # Validate all Kustomize manifests (all providers)
+npm run infra:validate:dev   # Validate dev environment (all providers)
+kustomize build infra/k8s/{provider}/{env} --enable-alpha-plugins  # Build manifests
+kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins       # Example: Hetzner dev
 
 # Validation
 npm run pre-commit           # Quick checks (manual)
@@ -627,7 +656,11 @@ grep -r "ACCOUNT_SERVICE_DB_USER_PASSWORD" .github/workflows/ infra/k8s/base/
 ### Kubernetes Quick Reference
 
 ```bash
-# Local testing
+# Local testing (generic pattern)
+kustomize build infra/k8s/{provider}/{env} --enable-alpha-plugins
+kustomize build infra/k8s/{provider}/{env} --enable-alpha-plugins | kubectl diff -f -
+
+# Examples
 kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins
 kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins | kubectl diff -f -
 

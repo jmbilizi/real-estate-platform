@@ -8,15 +8,28 @@ This monorepo is set up to support .NET, Node/TypeScript, Python, Next.js, React
 - **Nx**: 22.0.1 (automatically installed)
 - **.NET SDK**: 8.0 or higher
 - **Python**: 3.8 or higher
+- **Kustomize**: Auto-installed via `npm run infra:setup` (for infrastructure work)
 
 ## Getting Started
 
-- Install dependencies for each stack as needed
-- Use Nx for orchestration and task running
-- See individual app and lib folders for more details
-- Run `npm install` to set up Node/TypeScript tooling
-- For Python development, see the [Python Documentation](./tools/python/docs/README-PYTHON.md)
-- Run `dotnet restore` to set up .NET tooling
+```bash
+# Install Node.js dependencies
+npm install
+
+# Setup git hooks
+npm run hooks:setup
+
+# Language-specific setup (as needed)
+npm run python:env:full    # Python + UV + Poetry
+npm run dotnet:env         # .NET development
+npm run infra:setup        # Kubernetes/Kustomize (for infrastructure work)
+```
+
+See individual stack documentation for details:
+
+- [Python Documentation](./tools/python/docs/README-PYTHON.md)
+- [.NET Documentation](./docs/dotnet-development.md)
+- [Infrastructure Tools](./tools/infra/README.md)
 
 ### Quality Checks
 
@@ -25,30 +38,45 @@ The repository has a two-tier validation system to balance speed with safety:
 **Automatic (Git Hooks):**
 
 - **Pre-commit**: Fast checks (format + lint + type) on affected projects (~5-15s)
-- **Pre-push**: Full checks (format + lint + type + test + build) on affected projects (~30s-2min)
 
-**Manual:**
+# Formatting commands
 
-```bash
+npm run nx:workspace-format # Format all files (workspace + projects)
+npm run nx:node-format # Format Node.js projects only
+npm run nx:python-format # Format Python projects only
+npm run nx:dotnet-format # Format .NET projects only
+
+# Infrastructure validation
+
+npm run infra:validate # Validate all providers and environments (auto-discovery)
+npm run infra:validate:dev # Validate dev across all providers
+npm run infra:validate:test # Validate test across all providers
+
 # Full validation (same as pre-push hook)
+
 npm run pre-push
 
 # Quick validation (same as pre-commit hook)
+
 npm run pre-commit
 
 # Formatting commands
-npm run nx:workspace-format       # Format all files (workspace + projects)
-npm run nx:node-format            # Format Node.js projects only
-npm run nx:python-format          # Format Python projects only
-npm run nx:dotnet-format          # Format .NET projects only
+
+npm run nx:workspace-format # Format all files (workspace + projects)
+npm run nx:node-format # Format Node.js projects only
+npm run nx:python-format # Format Python projects only
+npm run nx:dotnet-format # Format .NET projects only
 
 # Individual language checks (fast, uses cached nx state)
-npm run nx:node-lint              # Lint Node.js projects
-npm run nx:python-test            # Test Python projects
-npm run nx:dotnet-build           # Build .NET projects
+
+npm run nx:node-lint # Lint Node.js projects
+npm run nx:python-test # Test Python projects
+npm run nx:dotnet-build # Build .NET projects
 
 # Reset nx cache (run this after structural changes)
+
 npm run nx:reset
+
 ```
 
 > **Tip:** Use `nx:workspace-format` to format all files including repo-level files (scripts/, docs/, package.json, etc.). Use project-specific format commands when working on individual projects.
@@ -93,16 +121,25 @@ See the [CI/CD documentation](./docs/ci-cd.md#quality-checks) for more details.
 - **ESLint & Prettier**: Linting and formatting for JS/TS/React/Next/Node
 - **Black, Flake8, mypy**: Formatting, linting, and type checking for Python
 - **.editorconfig**: Consistent editor settings across all languages
-- **.gitignore**: Comprehensive ignore rules for Node, Python, .NET, Nx, OS, and IDEs
-- **GitHub Actions**: Production-ready CI pipeline with Format → Lint → Test → Build workflow for Node.js, Python, and .NET
-- **Auto-Tagging**: Projects are automatically tagged based on their executors for seamless `--projects=tag:*` filtering
-
 ## Documentation
 
-- [CI/CD Pipeline](./docs/ci-cd.md): Continuous Integration workflow architecture and optimizations
-- [Migration Notes](./docs/MIGRATION-NOTES.md): Version updates and migration information
-- [Unified Git Hooks](./tools/hooks/docs/README.md): Documentation for the unified Git hooks system
-- [Python Documentation](./tools/python/docs/README-PYTHON.md): All Python-related documentation
+### Core Workflows
+- [CI/CD Pipeline](./docs/ci-cd.md): Continuous Integration workflow architecture
+- [Unified Git Hooks](./tools/hooks/docs/README.md): Pre-commit/pre-push validation system
+
+### Language-Specific
+- [Python Documentation](./tools/python/docs/README-PYTHON.md): Python development guide
+- [.NET Documentation](./docs/dotnet-development.md): .NET setup and workflows
+- [Node.js Documentation](./docs/node-development.md): Node.js development guide
+- [TypeScript Documentation](./docs/typescript-development.md): TypeScript standards
+
+### Infrastructure
+- [Infrastructure Tools](./tools/infra/README.md): Kustomize setup and validation
+- [Kubernetes Infrastructure](./infra/k8s/readme.md): K8s deployment documentation
+
+### Other
+- [Migration Notes](./docs/MIGRATION-NOTES.md): Version updates and migration
+- [Project Templates](./docs/project-templates.md): Creating new projects
 - [.NET Documentation](./docs/dotnet-development.md): Setting up and working with .NET in this repo
 - [Node.js Documentation](./docs/node-development.md): Node.js development guide
 - [Project Templates](./docs/project-templates.md): Creating new projects using templates
@@ -127,3 +164,4 @@ See the [CI/CD documentation](./docs/ci-cd.md#quality-checks) for more details.
 
 - Please follow code style and commit guidelines enforced by pre-commit hooks
 - Run lint, format, and type-check commands before submitting a PR
+```
