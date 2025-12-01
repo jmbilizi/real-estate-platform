@@ -3,6 +3,14 @@ kind: StatefulSet
 metadata:
   name: postgres
 spec:
+  serviceName: postgres-hl
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
   volumeClaimTemplates:
     - metadata:
         name: postgres-data
