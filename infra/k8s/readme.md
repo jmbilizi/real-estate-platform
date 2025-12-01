@@ -95,7 +95,14 @@ infra/
         └── prod/                    # Production environment
             └── ... (same structure as dev)
 
-    # Additional providers (when added, auto-detected):
+    └── podman/                      # Podman Desktop local development (auto-detected)
+        └── local/                   # Local environment
+            ├── patches/
+            │   ├── postgres-resources.yaml  # Minimal resources (128Mi-256Mi)
+            │   └── postgres-storage.yaml    # Local storage: local-path (2Gi)
+            └── kustomization.yaml           # Kustomize overlay
+
+    # Additional cloud providers (when added, auto-detected):
     # ├── aws/                       # AWS EKS (StorageClass: gp3)
     # ├── gcp/                       # Google GKE (StorageClass: pd-ssd)
     # └── azure/                     # Azure AKS (StorageClass: azure-disk)
@@ -212,6 +219,22 @@ Configure in: Repository Settings → Secrets and variables → Actions
 - **yq**: https://github.com/mikefarah/yq
 - **Git**: Version control
 
+### Local Development with Podman
+
+- **Podman Desktop**: https://podman-desktop.io/
+  - **Automated setup**: `npm run infra:local:cluster:setup` (installs Podman Desktop, creates cluster)
+  - **Manual install**: Download from https://podman-desktop.io/downloads
+  - Includes: Podman CLI, kubectl, local Kubernetes cluster
+  - StorageClass: `local-path` (automatically created)
+- **Cross-platform**: Windows (WSL2), macOS (libkrun/applehv), Linux (QEMU)
+- **Quick start**:
+  ```bash
+  npm run infra:local:cluster:setup         # Setup cluster (one-time)
+  npm run infra:local:cluster:setup -- --apply   # Setup + deploy resources
+  npm run infra:local:k8s-resources:apply         # Deploy resources only
+  npm run infra:local:cluster:delete        # Remove cluster
+  ```
+
 ### Optional (for enhanced workflow)
 
 - **GitHub CLI**: https://cli.github.com/
@@ -220,13 +243,14 @@ Configure in: Repository Settings → Secrets and variables → Actions
 
 ## 📊 Environment Matrix
 
-| Environment | Branch | Auto-Deploy | Purpose             |
-| ----------- | ------ | ----------- | ------------------- |
-| **Dev**     | dev    | ✅ Yes      | Daily development   |
-| **Test**    | test   | ❌ No       | Integration testing |
-| **Prod**    | main   | ❌ No       | Production workload |
+| Environment | Provider | Auto-Deploy | Purpose             |
+| ----------- | -------- | ----------- | ------------------- |
+| **Local**   | podman   | Manual      | Local development   |
+| **Dev**     | hetzner  | ✅ Yes      | Remote development  |
+| **Test**    | hetzner  | ❌ No       | Integration testing |
+| **Prod**    | hetzner  | ❌ No       | Production workload |
 
-**Resource Specifications**: See environment-specific patches in `hetzner/{env}/patches/`:
+**Resource Specifications**: See environment-specific patches in `{provider}/{env}/patches/`:
 
 - `postgres-resources.yaml` - Replicas, memory, CPU limits
 - `postgres-storage.yaml` - Storage size and StorageClass
@@ -241,7 +265,9 @@ Configure in: Repository Settings → Secrets and variables → Actions
 | PostgreSQL image version     | `base/statefulsets/postgres.statefulset.yaml`  |
 | Init script (database setup) | `base/configmaps/postgres-init.configmap.yaml` |
 | Dev resource limits          | `hetzner/dev/patches/postgres-resources.yaml`  |
+| Local resource limits        | `podman/local/patches/postgres-resources.yaml` |
 | Prod storage size            | `hetzner/prod/patches/postgres-storage.yaml`   |
+| Local storage size           | `podman/local/patches/postgres-storage.yaml`   |
 | Cluster config (dev)         | `hetzner/dev/cluster/cluster-config.yaml`      |
 | Service configuration        | `base/services/postgres.service.yaml`          |
 | GitHub Secrets required      | See "Required Secrets" section above           |

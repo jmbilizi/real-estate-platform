@@ -18,7 +18,7 @@ spec:
         fsGroup: 999 # postgres user group
       containers:
         - name: postgres
-          image: postgis/postgis:18-3.4
+          image: postgis/postgis:18-3.6
           imagePullPolicy: IfNotPresent
           # Resources intentionally omitted - MUST be defined in environment patches
           # This ensures explicit resource decisions per environment (dev vs prod)
@@ -73,7 +73,7 @@ spec:
             failureThreshold: 3
           volumeMounts:
             - name: postgres-data
-              mountPath: /var/lib/postgresql/data
+              mountPath: /var/lib/postgresql
               subPath: pgdata
             - name: init-scripts
               mountPath: /docker-entrypoint-initdb.d

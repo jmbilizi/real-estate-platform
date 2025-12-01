@@ -1,0 +1,39 @@
+# LOCAL CLUSTER CONFIGURATION (Minikube + Podman)
+# ------------------------------------------------
+# Edit ONLY the fields below to control your local Kubernetes cluster.
+# All other settings are handled automatically for you.
+#
+# USAGE:
+#   npm run infra:local:cluster:setup   # Create or repair cluster
+#   npm run infra:local:cluster:delete  # Delete cluster
+#
+# For application deployment controls, see: infra/deploy-control.yaml
+
+# Name for your local cluster (rarely changed)
+kubernetes_version: v1.28.3
+
+cluster_name: myapp-podman-local
+
+# Minikube driver: set to 'docker' for Docker Desktop, 'podman' for Podman Desktop
+driver: podman
+
+# Number of nodes (set to 1 for single-node, 2+ for multi-node dev)
+nodes: 1
+
+# Resources PER NODE (adjust if you need more/less power)
+resources:
+  # CPU cores per node
+  cpus: 2
+  # Memory in MB per node (3GB)
+  memory: 3072
+  # Disk size per node
+  disk: 20g
+
+# (Optional) List of insecure registries for dev images (rarely changed)
+# Only add here if you use a custom/local registry without TLS
+registries:
+  insecure:
+    - gcr.io
+    - docker.io
+    - registry.k8s.io
+    - ghcr.io

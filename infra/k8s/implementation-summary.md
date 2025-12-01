@@ -22,19 +22,25 @@ infra/
     │   │   └── postgres.service.yaml
     │   └── statefulsets/
     │       └── postgres.statefulset.yaml
-    └── hetzner/                                     # Provider-specific configs
-        ├── dev/
-        │   ├── cluster/
-        │   │   └── cluster-config.yaml
-        │   ├── patches/
-        │   │   ├── postgres-resources.yaml          # Dev resource limits
-        │   │   └── postgres-storage.yaml            # Dev storage config
-        │   ├── kustomization.yaml                   # Kustomize overlay
-        │   └── .gitignore
-        ├── test/
-        │   └── ... (same structure as dev)
-        └── prod/
-            └── ... (same structure as dev)
+    ├── hetzner/                                     # Hetzner Cloud provider
+    │   ├── dev/
+    │   │   ├── cluster/
+    │   │   │   └── cluster-config.yaml
+    │   │   ├── patches/
+    │   │   │   ├── postgres-resources.yaml          # Dev resource limits
+    │   │   │   └── postgres-storage.yaml            # Dev storage config
+    │   │   ├── kustomization.yaml                   # Kustomize overlay
+    │   │   └── .gitignore
+    │   ├── test/
+    │   │   └── ... (same structure as dev)
+    │   └── prod/
+    │       └── ... (same structure as dev)
+    └── podman/                                      # Podman Desktop local provider
+        └── local/
+            ├── patches/
+            │   ├── postgres-resources.yaml          # Minimal resources (128Mi-256Mi)
+            │   └── postgres-storage.yaml            # Local storage (2Gi local-path)
+            └── kustomization.yaml                   # Kustomize overlay
 ```
 
 ### 2. File Naming Convention
@@ -295,16 +301,17 @@ environments:
 
 ### 6. Environment-Specific Configurations
 
-**Resource specifications are defined in Kustomize patches** (`infra/k8s/hetzner/{env}/patches/`):
+**Resource specifications are defined in Kustomize patches** (`infra/k8s/{provider}/{env}/patches/`):
 
 - **postgres-resources.yaml** - Defines replicas, memory requests/limits, CPU requests/limits, and pod affinity rules
 - **postgres-storage.yaml** - Defines storage size and StorageClass
 
-| Environment | Auto-Deploy | Production Features                                                                               |
-| ----------- | ----------- | ------------------------------------------------------------------------------------------------- |
-| **Dev**     | ✅ True     | Fast iteration, minimal resources                                                                 |
-| **Test**    | ❌ False    | Manual deployment, same as dev resources                                                          |
-| **Prod**    | ❌ False    | Manual approval required, HA setup (3 replicas), pod anti-affinity, longer rollout timeout (600s) |
+| Environment | Provider | Auto-Deploy | Production Features                                                                               |
+| ----------- | -------- | ----------- | ------------------------------------------------------------------------------------------------- |
+| **Local**   | podman   | Manual      | Minimal resources, local-path storage, quick iteration                                            |
+| **Dev**     | hetzner  | ✅ True     | Fast iteration, minimal resources, hcloud-volumes                                                 |
+| **Test**    | hetzner  | ❌ False    | Manual deployment, same as dev resources                                                          |
+| **Prod**    | hetzner  | ❌ False    | Manual approval required, HA setup (multiple replicas), pod anti-affinity, longer rollout timeout |
 
 ## Core Components
 

@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Reference base resources (cloud-agnostic configs)
+resources:
+  - ../../base
+
+# Environment-specific patches
+patches:
+  - path: patches/postgres-resources.yaml
+  - path: patches/postgres-storage.yaml
+
+# Common labels for all resources
+labels:
+  - pairs:
+      environment: local
+      provider: podman
+      managed-by: manual

@@ -182,6 +182,40 @@ Only customize what's different per provider:
 
 Everything else stays in `base/` and is shared.
 
+## Local Kubernetes Resource Operations (Podman+Minikube)
+
+The following scripts ensure all resource operations (apply, delete, build) are always run against your intended local cluster context (e.g., `podman-local`).
+
+**Why?**
+
+- Prevents accidental application of resources to the wrong cluster (especially if you use multiple clusters or cloud contexts).
+- Automatically switches `kubectl` to the correct context before running any resource command.
+
+## Usage
+
+```bash
+# Build manifests for local cluster (prints YAML)
+npm run infra:local:k8s-resources:build
+
+# Apply manifests to local cluster (safe context)
+npm run infra:local:k8s-resources:apply
+
+# Delete manifests from local cluster (safe context)
+npm run infra:local:k8s-resources:delete
+```
+
+These scripts use `tools/infra/kubectl-local-context.js` to:
+
+- Check your current `kubectl` context
+- Switch to `podman-local` if needed
+- Only then run the resource operation
+
+**If the context cannot be switched, the script aborts with a clear error.**
+
+## Customizing the Cluster Name
+
+If you change your local cluster name in `infra/k8s/podman/local/cluster/cluster-config.yaml`, update the `LOCAL_CONTEXT` variable in `tools/infra/kubectl-local-context.js` to match.
+
 ## Troubleshooting
 
 **Kustomize not found after setup**:

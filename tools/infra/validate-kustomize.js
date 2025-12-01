@@ -143,13 +143,43 @@ function main() {
 
   log(`\nDiscovered providers: ${providers.join(", ")}\n`, "blue");
 
-  // Standard environments to check
-  const environments = targetEnv ? [targetEnv] : ["dev", "test", "prod"];
+  // Auto-discover all environments across all providers
+  const environments = new Set();
+  if (targetEnv) {
+    environments.add(targetEnv);
+  } else {
+    // Discover all environments by scanning provider directories
+    for (const provider of providers) {
+      const providerDir = path.resolve(
+        __dirname,
+        "../..",
+        `infra/k8s/${provider}`
+      );
+      if (fs.existsSync(providerDir)) {
+        const entries = fs.readdirSync(providerDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory() && entry.name !== "cluster") {
+            // Check if it has a kustomization.yaml
+            const kustomizationPath = path.join(
+              providerDir,
+              entry.name,
+              "kustomization.yaml"
+            );
+            if (fs.existsSync(kustomizationPath)) {
+              environments.add(entry.name);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const envArray = Array.from(environments).sort();
   const results = {};
 
   // Loop through all providers and environments
   for (const provider of providers) {
-    for (const env of environments) {
+    for (const env of envArray) {
       const result = validateEnvironment(provider, env);
       if (result !== null) {
         // null means environment doesn't exist, skip it
@@ -161,7 +191,7 @@ function main() {
   // Check if we found any environments to validate
   if (Object.keys(results).length === 0) {
     logWarning("No environments found to validate");
-    logWarning(`Checked for: ${environments.join(", ")}`);
+    logWarning(`Providers checked: ${providers.join(", ")}`);
     process.exit(0);
   }
 
