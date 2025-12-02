@@ -302,6 +302,31 @@ jobs:
           kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins > manifests.yaml
           echo "✅ Manifests built successfully"
 
+      - name: Handle StatefulSet storage migration
+        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
+        run: |
+          echo "🔍 Checking if StatefulSet needs recreation for storage changes..."
+          
+          # Check if StatefulSet exists and has old StorageClass
+          if kubectl get statefulset postgres &>/dev/null; then
+            CURRENT_SC=$(kubectl get statefulset postgres -o jsonpath='{.spec.volumeClaimTemplates[0].spec.storageClassName}' 2>/dev/null || echo "")
+            
+            if [ "$CURRENT_SC" = "hcloud-postgres-storage" ]; then
+              echo "⚠️  Found old StorageClass 'hcloud-postgres-storage', migration needed"
+              echo "🗑️  Deleting StatefulSet (preserves PVCs by default)..."
+              kubectl delete statefulset postgres --cascade=orphan
+              
+              echo "🗑️  Deleting old PVCs with incorrect StorageClass..."
+              kubectl delete pvc -l app=postgres
+              
+              echo "✅ Migration complete - StatefulSet will be recreated with new StorageClass"
+            else
+              echo "✅ StorageClass is correct ($CURRENT_SC), no migration needed"
+            fi
+          else
+            echo "✅ StatefulSet doesn't exist yet, no migration needed"
+          fi
+
       - name: Apply manifests
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
@@ -541,8 +566,33 @@ jobs:
       - name: Build Kustomize manifests
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
-          echo "🏗️  Building Kustomize manifests for test environment..."
+          echo "🏭️  Building Kustomize manifests for test environment..."
           kustomize build infra/k8s/hetzner/test --enable-alpha-plugins > manifests.yaml
+
+      - name: Handle StatefulSet storage migration
+        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
+        run: |
+          echo "🔍 Checking if StatefulSet needs recreation for storage changes..."
+          
+          # Check if StatefulSet exists and has old StorageClass
+          if kubectl get statefulset postgres &>/dev/null; then
+            CURRENT_SC=$(kubectl get statefulset postgres -o jsonpath='{.spec.volumeClaimTemplates[0].spec.storageClassName}' 2>/dev/null || echo "")
+            
+            if [ "$CURRENT_SC" = "hcloud-postgres-storage" ]; then
+              echo "⚠️  Found old StorageClass 'hcloud-postgres-storage', migration needed"
+              echo "🗑️  Deleting StatefulSet (preserves PVCs by default)..."
+              kubectl delete statefulset postgres --cascade=orphan
+              
+              echo "🗑️  Deleting old PVCs with incorrect StorageClass..."
+              kubectl delete pvc -l app=postgres
+              
+              echo "✅ Migration complete - StatefulSet will be recreated with new StorageClass"
+            else
+              echo "✅ StorageClass is correct ($CURRENT_SC), no migration needed"
+            fi
+          else
+            echo "✅ StatefulSet doesn't exist yet, no migration needed"
+          fi
 
       - name: Apply manifests
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
@@ -806,8 +856,33 @@ jobs:
       - name: Build Kustomize manifests
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
-          echo "🏗️  Building Kustomize manifests for prod environment..."
+          echo "🏭️  Building Kustomize manifests for prod environment..."
           kustomize build infra/k8s/hetzner/prod --enable-alpha-plugins > manifests.yaml
+
+      - name: Handle StatefulSet storage migration
+        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
+        run: |
+          echo "🔍 Checking if StatefulSet needs recreation for storage changes..."
+          
+          # Check if StatefulSet exists and has old StorageClass
+          if kubectl get statefulset postgres &>/dev/null; then
+            CURRENT_SC=$(kubectl get statefulset postgres -o jsonpath='{.spec.volumeClaimTemplates[0].spec.storageClassName}' 2>/dev/null || echo "")
+            
+            if [ "$CURRENT_SC" = "hcloud-postgres-storage" ]; then
+              echo "⚠️  Found old StorageClass 'hcloud-postgres-storage', migration needed"
+              echo "🗑️  Deleting StatefulSet (preserves PVCs by default)..."
+              kubectl delete statefulset postgres --cascade=orphan
+              
+              echo "🗑️  Deleting old PVCs with incorrect StorageClass..."
+              kubectl delete pvc -l app=postgres
+              
+              echo "✅ Migration complete - StatefulSet will be recreated with new StorageClass"
+            else
+              echo "✅ StorageClass is correct ($CURRENT_SC), no migration needed"
+            fi
+          else
+            echo "✅ StatefulSet doesn't exist yet, no migration needed"
+          fi
 
       - name: Apply manifests
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
