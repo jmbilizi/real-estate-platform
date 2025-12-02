@@ -16,7 +16,7 @@ spec:
         name: postgres-data
       spec:
         accessModes: ["ReadWriteOnce"]
-        storageClassName: hcloud-postgres-storage
+        storageClassName: hcloud-volumes
         resources:
           requests:
             storage: 20Gi # Larger storage for production

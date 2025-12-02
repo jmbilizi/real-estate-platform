@@ -310,6 +310,22 @@ jobs:
           # Order: Namespaces → ConfigMaps/Secrets → Services → StatefulSets/Deployments
           kubectl apply -f manifests.yaml --server-side=true --force-conflicts
 
+      - name: Check pod status immediately after apply
+        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
+        run: |
+          echo "📊 Checking initial pod status..."
+          sleep 10  # Wait for pods to start scheduling
+          kubectl get pods -l app=postgres -o wide || true
+          kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -20 || true
+
+          # Check if pod exists and get detailed status
+          if kubectl get pod postgres-0 &>/dev/null; then
+            echo "🔍 Detailed status for postgres-0:"
+            kubectl describe pod postgres-0 | tail -50
+          else
+            echo "⚠️  Pod postgres-0 not found yet"
+          fi
+
       - name: Wait for PostgreSQL rollout
         id: rollout
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
@@ -535,6 +551,22 @@ jobs:
           # kubectl apply handles resource dependencies automatically
           # Order: Namespaces → ConfigMaps/Secrets → Services → StatefulSets/Deployments
           kubectl apply -f manifests.yaml --server-side=true --force-conflicts
+
+      - name: Check pod status immediately after apply
+        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
+        run: |
+          echo "📊 Checking initial pod status..."
+          sleep 10  # Wait for pods to start scheduling
+          kubectl get pods -l app=postgres -o wide || true
+          kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -20 || true
+
+          # Check if pod exists and get detailed status
+          if kubectl get pod postgres-0 &>/dev/null; then
+            echo "🔍 Detailed status for postgres-0:"
+            kubectl describe pod postgres-0 | tail -50
+          else
+            echo "⚠️  Pod postgres-0 not found yet"
+          fi
 
       - name: Wait for PostgreSQL rollout
         id: rollout
@@ -784,6 +816,22 @@ jobs:
           # kubectl apply handles resource dependencies automatically
           # Order: Namespaces → ConfigMaps/Secrets → Services → StatefulSets/Deployments
           kubectl apply -f manifests.yaml --server-side=true --force-conflicts
+
+      - name: Check pod status immediately after apply
+        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
+        run: |
+          echo "📊 Checking initial pod status..."
+          sleep 10  # Wait for pods to start scheduling
+          kubectl get pods -l app=postgres -o wide || true
+          kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -20 || true
+
+          # Check if pod exists and get detailed status
+          if kubectl get pod postgres-0 &>/dev/null; then
+            echo "🔍 Detailed status for postgres-0:"
+            kubectl describe pod postgres-0 | tail -50
+          else
+            echo "⚠️  Pod postgres-0 not found yet"
+          fi
 
       - name: Wait for PostgreSQL rollout
         id: rollout
