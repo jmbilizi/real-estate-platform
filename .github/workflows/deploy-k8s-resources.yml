@@ -11,6 +11,7 @@ on:
       - "infra/k8s/hetzner/**/patches/**"
       - "infra/k8s/hetzner/**/kustomization.yaml"
       - "infra/deploy-control.yaml"
+      - ".github/workflows/deploy-k8s-resources.yml"
       # Exclude cluster configs - hetzner-k8s.yml handles those
       - "!infra/k8s/hetzner/**/cluster/**"
   pull_request:
@@ -306,7 +307,7 @@ jobs:
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "🔍 Checking if StatefulSet needs recreation for storage changes..."
-          
+
           # Check if StatefulSet exists and has old StorageClass
           if kubectl get statefulset postgres &>/dev/null; then
             CURRENT_SC=$(kubectl get statefulset postgres -o jsonpath='{.spec.volumeClaimTemplates[0].spec.storageClassName}' 2>/dev/null || echo "")
@@ -573,7 +574,7 @@ jobs:
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "🔍 Checking if StatefulSet needs recreation for storage changes..."
-          
+
           # Check if StatefulSet exists and has old StorageClass
           if kubectl get statefulset postgres &>/dev/null; then
             CURRENT_SC=$(kubectl get statefulset postgres -o jsonpath='{.spec.volumeClaimTemplates[0].spec.storageClassName}' 2>/dev/null || echo "")
@@ -863,7 +864,7 @@ jobs:
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "🔍 Checking if StatefulSet needs recreation for storage changes..."
-          
+
           # Check if StatefulSet exists and has old StorageClass
           if kubectl get statefulset postgres &>/dev/null; then
             CURRENT_SC=$(kubectl get statefulset postgres -o jsonpath='{.spec.volumeClaimTemplates[0].spec.storageClassName}' 2>/dev/null || echo "")
