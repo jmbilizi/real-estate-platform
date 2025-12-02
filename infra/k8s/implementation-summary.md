@@ -323,6 +323,46 @@ environments:
 - `hetzner-test-cluster`
 - `hetzner-prod-cluster`
 
+**Network Configuration (CRITICAL for image pulling):**
+
+All Hetzner clusters require explicit outbound firewall rules to pull container images from public registries. When ANY outbound rule is defined in Hetzner Cloud Firewall, it switches to deny-all mode for all unlisted traffic.
+
+**Required Configuration** (`cluster-config.yaml`):
+
+```yaml
+custom_firewall_rules:
+  - direction: out
+    protocol: udp
+    port: 53
+    destination: 0.0.0.0/0 # DNS queries
+  - direction: out
+    protocol: tcp
+    port: 443
+    destination: 0.0.0.0/0 # HTTPS (Docker Hub, GitHub Container Registry)
+  - direction: out
+    protocol: tcp
+    port: 80
+    destination: 0.0.0.0/0 # HTTP (fallback registries)
+
+embedded_registry_mirror:
+  enabled: true # K3s P2P image distribution
+```
+
+**Why This Matters:**
+
+- **Without DNS (port 53)**: Nodes cannot resolve registry.k8s.io, docker.io, ghcr.io
+- **Without HTTPS (port 443)**: Cannot pull images from Docker Hub, GitHub Container Registry
+- **Without HTTP (port 80)**: Some registries redirect to HTTP, fallback fails
+- **Embedded Registry**: Reduces external pulls by sharing images across nodes via P2P
+
+**Consequences of Missing Rules:**
+
+- Pods stuck in `ImagePullBackOff` or `ErrImagePull` state
+- Deployments timeout waiting for pod readiness (default 10 minutes)
+- Manual intervention required to diagnose and fix
+
+**Applied to All Environments:** dev, test, prod cluster configs include these rules to ensure consistent behavior across all deployments.
+
 ### PostgreSQL Configuration
 
 **Image:** `postgis/postgis:18-3.4`

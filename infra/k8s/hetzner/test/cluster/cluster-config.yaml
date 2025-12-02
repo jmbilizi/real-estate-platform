@@ -26,6 +26,28 @@ networking:
       - 0.0.0.0/0 # TODO: Restrict to your IP after initial setup
     api:
       - 0.0.0.0/0 # TODO: Restrict to your IP after initial setup
+    # Custom firewall rules to ensure outbound access for image pulling
+    # IMPORTANT: Defining ANY outbound rule switches to deny-all by default
+    # These rules ensure nodes can pull images from public registries
+    custom_firewall_rules:
+      - description: "Allow DNS (outbound)"
+        direction: out
+        protocol: udp
+        port: "53"
+        destination_ips:
+          - 0.0.0.0/0
+      - description: "Allow HTTPS to public registries (outbound)"
+        direction: out
+        protocol: tcp
+        port: "443"
+        destination_ips:
+          - 0.0.0.0/0
+      - description: "Allow HTTP to public registries (outbound)"
+        direction: out
+        protocol: tcp
+        port: "80"
+        destination_ips:
+          - 0.0.0.0/0
   public_network:
     ipv4: true
     ipv6: true
@@ -62,5 +84,8 @@ worker_node_pools:
       max_instances: 1
 
 protect_against_deletion: true
+
+embedded_registry_mirror:
+  enabled: true # Enables fast p2p distribution of container images between nodes for faster pod startup
 
 k3s_upgrade_concurrency: 1 # how many nodes to upgrade at the same time
