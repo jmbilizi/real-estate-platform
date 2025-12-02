@@ -30,22 +30,16 @@ networking:
     # IMPORTANT: Defining ANY outbound rule switches to deny-all by default
     # These rules ensure nodes can pull images from public registries
     custom_firewall_rules:
-      - description: "Allow DNS (outbound)"
+      - description: "Allow all outbound traffic"
+        direction: out
+        protocol: tcp
+        port: any
+        destination_ips:
+          - 0.0.0.0/0
+      - description: "Allow all outbound UDP"
         direction: out
         protocol: udp
-        port: "53"
-        destination_ips:
-          - 0.0.0.0/0
-      - description: "Allow HTTPS to public registries (outbound)"
-        direction: out
-        protocol: tcp
-        port: "443"
-        destination_ips:
-          - 0.0.0.0/0
-      - description: "Allow HTTP to public registries (outbound)"
-        direction: out
-        protocol: tcp
-        port: "80"
+        port: any
         destination_ips:
           - 0.0.0.0/0
   public_network:

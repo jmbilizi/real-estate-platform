@@ -113,7 +113,7 @@ deployment_strategies:
   statefulset:
     strategy: "RollingUpdate"
     wait_for_ready: true
-    timeout: "10m" # Used in prod (dev/test default to 5m if not overridden)
+    timeout: "5m" # Rollout timeout for all environments
     rollback_on_failure: true # Combined OR logic with service.rollback_on_failure
     max_unavailable: 0 # Zero-downtime for stateful apps
 

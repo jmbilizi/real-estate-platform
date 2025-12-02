@@ -4,18 +4,17 @@
 
 ### Network Configuration for Image Pulling
 
-All Hetzner cluster configs now include custom firewall rules to ensure nodes can pull images from public registries:
+All Hetzner cluster configs allow all outbound traffic to ensure K3s can access required infrastructure:
 
-- **DNS**: Outbound UDP port 53 (required for resolving registry hostnames)
-- **HTTPS**: Outbound TCP port 443 (primary registry access)
-- **HTTP**: Outbound TCP port 80 (fallback registry access)
+- **All TCP outbound** (registries, GitHub releases, package repos)
+- **All UDP outbound** (DNS, other services)
 - **Registry Mirror**: Enabled for P2P image distribution between nodes
 
-**CRITICAL**: These outbound rules are required because Hetzner Cloud firewalls switch to deny-all when ANY outbound rule is defined. Without these rules, nodes cannot pull container images.
+**CRITICAL**: Hetzner Cloud firewalls switch to deny-all when ANY outbound rule is defined. K3s requires access to multiple endpoints (not just registries), so we allow all outbound traffic per K3s recommendations.
 
 If you experience image pull failures:
 
-1. Verify firewall rules in `cluster-config.yaml`
+1. Verify firewall rules in `cluster-config.yaml` show `port: any`
 2. Check node connectivity: `ssh root@<node-ip> curl -I https://registry-1.docker.io`
 3. Check pod events: `kubectl describe pod <pod-name>`
 

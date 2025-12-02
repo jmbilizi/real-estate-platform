@@ -325,40 +325,42 @@ environments:
 
 **Network Configuration (CRITICAL for image pulling):**
 
-All Hetzner clusters require explicit outbound firewall rules to pull container images from public registries. When ANY outbound rule is defined in Hetzner Cloud Firewall, it switches to deny-all mode for all unlisted traffic.
+All Hetzner clusters require explicit outbound firewall rules. When ANY outbound rule is defined in Hetzner Cloud Firewall, it switches to deny-all mode. K3s requires access to multiple endpoints beyond just registries, so we allow all outbound traffic per K3s documentation recommendations.
 
 **Required Configuration** (`cluster-config.yaml`):
 
 ```yaml
 custom_firewall_rules:
-  - direction: out
+  - description: "Allow all outbound traffic"
+    direction: out
+    protocol: tcp
+    port: any
+    destination_ips:
+      - 0.0.0.0/0
+  - description: "Allow all outbound UDP"
+    direction: out
     protocol: udp
-    port: 53
-    destination: 0.0.0.0/0 # DNS queries
-  - direction: out
-    protocol: tcp
-    port: 443
-    destination: 0.0.0.0/0 # HTTPS (Docker Hub, GitHub Container Registry)
-  - direction: out
-    protocol: tcp
-    port: 80
-    destination: 0.0.0.0/0 # HTTP (fallback registries)
+    port: any
+    destination_ips:
+      - 0.0.0.0/0
 
 embedded_registry_mirror:
   enabled: true # K3s P2P image distribution
 ```
 
-**Why This Matters:**
+**Why All Outbound Traffic:**
 
-- **Without DNS (port 53)**: Nodes cannot resolve registry.k8s.io, docker.io, ghcr.io
-- **Without HTTPS (port 443)**: Cannot pull images from Docker Hub, GitHub Container Registry
-- **Without HTTP (port 80)**: Some registries redirect to HTTP, fallback fails
+- **K3s Infrastructure**: GitHub releases, package repositories, system updates
+- **Container Registries**: Docker Hub, GitHub Container Registry, registry.k8s.io, gcr.io
+- **DNS Resolution**: Required for all external hostname lookups
 - **Embedded Registry**: Reduces external pulls by sharing images across nodes via P2P
+- **K3s Documentation**: "Typically, all outbound traffic is allowed"
 
-**Consequences of Missing Rules:**
+**Consequences of Blocking Outbound:**
 
 - Pods stuck in `ImagePullBackOff` or `ErrImagePull` state
-- Deployments timeout waiting for pod readiness (default 10 minutes)
+- Deployments timeout waiting for pod readiness
+- K3s unable to download required components
 - Manual intervention required to diagnose and fix
 
 **Applied to All Environments:** dev, test, prod cluster configs include these rules to ensure consistent behavior across all deployments.
