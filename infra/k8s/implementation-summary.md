@@ -27,8 +27,8 @@ infra/
     │   │   ├── cluster/
     │   │   │   └── cluster-config.yaml
     │   │   ├── patches/
-    │   │   │   ├── postgres-resources.yaml          # Dev resource limits
-    │   │   │   └── postgres-storage.yaml            # Dev storage config
+    │   │   │   └── statefulsets/
+    │   │   │       └── postgres.statefulset.yaml    # Dev resources + storage (combined)
     │   │   ├── kustomization.yaml                   # Kustomize overlay
     │   │   └── .gitignore
     │   ├── test/
@@ -38,8 +38,8 @@ infra/
     └── podman/                                      # Podman Desktop local provider
         └── local/
             ├── patches/
-            │   ├── postgres-resources.yaml          # Minimal resources (128Mi-256Mi)
-            │   └── postgres-storage.yaml            # Local storage (2Gi local-path)
+            │   └── statefulsets/
+            │       └── postgres.statefulset.yaml    # Local resources + storage (combined)
             └── kustomization.yaml                   # Kustomize overlay
 ```
 
@@ -301,10 +301,9 @@ environments:
 
 ### 6. Environment-Specific Configurations
 
-**Resource specifications are defined in Kustomize patches** (`infra/k8s/{provider}/{env}/patches/`):
+**Resource specifications are defined in Kustomize patches** (`infra/k8s/{provider}/{env}/patches/statefulsets/`):
 
-- **postgres-resources.yaml** - Defines replicas, memory requests/limits, CPU requests/limits, and pod affinity rules
-- **postgres-storage.yaml** - Defines storage size and StorageClass
+- **postgres.statefulset.yaml** - Defines replicas, memory requests/limits, CPU requests/limits, pod affinity rules, storage size, and StorageClass (combined patch)
 
 | Environment | Provider | Auto-Deploy | Production Features                                                                               |
 | ----------- | -------- | ----------- | ------------------------------------------------------------------------------------------------- |

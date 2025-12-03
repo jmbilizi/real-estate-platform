@@ -69,8 +69,7 @@ grep -A 5 "kind: Secret" dev-manifests.yaml
 
 **Verify**:
 
-- ✅ Environment-specific resource specs applied (check `hetzner/{env}/patches/postgres-resources.yaml`)
-- ✅ Environment-specific storage specs applied (check `hetzner/{env}/patches/postgres-storage.yaml`)
+- ✅ Environment-specific resource and storage specs applied (check `hetzner/{env}/patches/statefulsets/postgres.statefulset.yaml`)
 - ✅ Labels: `environment: dev/test/prod`, `provider: hetzner`
 - ✅ Secrets: Base64 encoded passwords (not StrongBase64Password)
 
@@ -363,11 +362,11 @@ labels:
 ```yaml
 # Old (deprecated)
 patchesStrategicMerge:
-  - patches/postgres-resources.yaml
+  - patches/statefulsets/postgres.statefulset.yaml
 
 # New (modern)
 patches:
-  - path: patches/postgres-resources.yaml
+  - path: patches/statefulsets/postgres.statefulset.yaml
 ```
 
 ---

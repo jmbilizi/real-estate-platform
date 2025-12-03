@@ -492,8 +492,8 @@ infra/k8s/
     ├── dev/
     │   ├── kustomization.yaml                 # References base + patches
     │   ├── patches/
-    │   │   ├── postgres-resources.yaml        # ADD resources (memory, CPU)
-    │   │   └── postgres-storage.yaml          # ADD volumeClaimTemplates
+    │   │   └── statefulsets/
+    │   │       └── postgres.statefulset.yaml  # ADD resources + volumeClaimTemplates (combined)
     │   └── cluster/
     │       └── cluster-config.yaml            # hetzner-k8s provisioning config
     ├── test/                                  # Higher resources than dev
@@ -651,7 +651,7 @@ grep -r "ACCOUNT_SERVICE_DB_USER_PASSWORD" .github/workflows/ infra/k8s/base/
 → Workflow secret substitution failed. Check GitHub Secrets are configured for the environment. Verify yq pipeline completed successfully.
 
 **"StatefulSet stuck in pending - PVC not binding"**
-→ StorageClass `hcloud-postgres-storage` not created. Run cluster provisioning first (`hetzner-k8s` workflow).
+→ StorageClass `hcloud-volumes` not available. Hetzner CSI driver creates this automatically. Verify CSI driver is running: `kubectl get pods -n kube-system -l app=hcloud-csi-controller`
 
 **"Kustomize build fails with 'resource not found'"**
 → Check resource ordering in kustomization.yaml. Secrets must come before resources that reference them.
@@ -700,17 +700,17 @@ kubectl rollout status statefulset/postgres -w
 
 ### Infrastructure File Locations
 
-| What                 | Where                                                    |
-| -------------------- | -------------------------------------------------------- |
-| Deployment flags     | `infra/deploy-control.yaml`                              |
-| Secret template      | `infra/k8s/base/secrets/postgres.secret.yaml`            |
-| StatefulSet base     | `infra/k8s/base/statefulsets/postgres.statefulset.yaml`  |
-| Init scripts         | `infra/k8s/base/configmaps/postgres-init.configmap.yaml` |
-| Dev resources        | `infra/k8s/hetzner/dev/patches/postgres-resources.yaml`  |
-| Prod storage         | `infra/k8s/hetzner/prod/patches/postgres-storage.yaml`   |
-| Cluster config       | `infra/k8s/hetzner/{env}/cluster/cluster-config.yaml`    |
-| Deployment workflow  | `.github/workflows/deploy-k8s-resources.yml`             |
-| Cluster provisioning | `.github/workflows/hetzner-k8s.yml`                      |
+| What                   | Where                                                                   |
+| ---------------------- | ----------------------------------------------------------------------- |
+| Deployment flags       | `infra/deploy-control.yaml`                                             |
+| Secret template        | `infra/k8s/base/secrets/postgres.secret.yaml`                           |
+| StatefulSet base       | `infra/k8s/base/statefulsets/postgres.statefulset.yaml`                 |
+| Init scripts           | `infra/k8s/base/configmaps/postgres-init.configmap.yaml`                |
+| Dev config (combined)  | `infra/k8s/hetzner/dev/patches/statefulsets/postgres.statefulset.yaml`  |
+| Prod config (combined) | `infra/k8s/hetzner/prod/patches/statefulsets/postgres.statefulset.yaml` |
+| Cluster config         | `infra/k8s/hetzner/{env}/cluster/cluster-config.yaml`                   |
+| Deployment workflow    | `.github/workflows/deploy-k8s-resources.yml`                            |
+| Cluster provisioning   | `.github/workflows/hetzner-k8s.yml`                                     |
 
 ## External Dependencies
 

@@ -7,8 +7,7 @@ resources:
 
 # Environment-specific patches
 patches:
-  - path: patches/postgres-resources.yaml
-  - path: patches/postgres-storage.yaml
+  - path: patches/statefulsets/postgres.statefulset.yaml
 
 # Common labels for all resources
 labels:

@@ -201,7 +201,7 @@ jobs:
           kubectl get pods -n kube-system -l app=hcloud-csi-controller --no-headers | wc -l
 
           # Check storage class
-          kubectl get storageclass hcloud-postgres-storage || echo "⚠️  Warning: StorageClass not found, may need manual creation"
+          kubectl get storageclass hcloud-volumes || echo "⚠️  Warning: Default StorageClass not found (should be auto-created by CSI driver)"
 
           echo "✅ Cluster prerequisites verified"
 
@@ -316,7 +316,7 @@ jobs:
         run: |
           echo "🔍 Verifying cluster prerequisites..."
           kubectl get pods -n kube-system -l app=hcloud-csi-controller --no-headers | wc -l
-          kubectl get storageclass hcloud-postgres-storage || echo "⚠️  Warning: StorageClass not found"
+          kubectl get storageclass hcloud-volumes || echo "⚠️  Warning: StorageClass not found"
           echo "✅ Cluster prerequisites verified"
 
       - name: Trigger resource deployment
@@ -430,7 +430,7 @@ jobs:
         run: |
           echo "🔍 Verifying cluster prerequisites..."
           kubectl get pods -n kube-system -l app=hcloud-csi-controller --no-headers | wc -l
-          kubectl get storageclass hcloud-postgres-storage || echo "⚠️  Warning: StorageClass not found"
+          kubectl get storageclass hcloud-volumes || echo "⚠️  Warning: StorageClass not found"
           echo "✅ Cluster prerequisites verified"
 
       - name: Trigger resource deployment

@@ -137,7 +137,7 @@ npm run infra:validate
 
 ```bash
 # 1. Create directory
-mkdir -p infra/k8s/aws/dev/patches
+mkdir -p infra/k8s/aws/dev/patches/statefulsets
 
 # 2. Create kustomization.yaml
 cat > infra/k8s/aws/dev/kustomization.yaml <<EOF
@@ -146,25 +146,40 @@ kind: Kustomization
 resources:
   - ../../base
 patches:
-  - path: patches/postgres-storage.yaml
+  - path: patches/statefulsets/postgres.statefulset.yaml
 labels:
   - pairs:
       environment: dev
       provider: aws
 EOF
 
-# 3. Create provider-specific patches
-cat > infra/k8s/aws/dev/patches/postgres-storage.yaml <<EOF
+# 3. Create provider-specific patches (combined resources + storage)
+cat > infra/k8s/aws/dev/patches/statefulsets/postgres.statefulset.yaml <<EOF
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: postgres
 spec:
+  template:
+    spec:
+      containers:
+        - name: postgres
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
   volumeClaimTemplates:
     - metadata:
         name: postgres-data
       spec:
+        accessModes: ["ReadWriteOnce"]
         storageClassName: gp3  # AWS-specific
+        resources:
+          requests:
+            storage: 14Gi
 EOF
 
 # 4. Validate (AWS automatically discovered!)

@@ -98,9 +98,8 @@ cp -r infra/k8s/hetzner/dev infra/k8s/hetzner/staging
 code infra/k8s/hetzner/staging/kustomization.yaml
 # Change: commonLabels.environment: staging
 
-# 3. Update patches (resources, storage)
-code infra/k8s/hetzner/staging/patches/postgres-resources.yaml
-code infra/k8s/hetzner/staging/patches/postgres-storage.yaml
+# 3. Update patches (combined statefulset config)
+code infra/k8s/hetzner/staging/patches/statefulsets/postgres.statefulset.yaml
 
 # 4. Add to deploy-control.yaml
 code infra/deploy-control.yaml
@@ -151,7 +150,7 @@ kubectl exec postgres-0 -- psql -U postgres -c "SELECT version();"
 
 ```bash
 # 1. Update environment-specific patch
-code infra/k8s/hetzner/dev/patches/postgres-resources.yaml
+code infra/k8s/hetzner/dev/patches/statefulsets/postgres.statefulset.yaml
 
 # Example: Increase dev memory
 spec:
@@ -171,7 +170,7 @@ spec:
 kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins | grep -A 10 "resources:"
 
 # 3. Commit and push
-git add infra/k8s/hetzner/dev/patches/postgres-resources.yaml
+git add infra/k8s/hetzner/dev/patches/statefulsets/postgres.statefulset.yaml
 git commit -m "chore(dev): increase PostgreSQL resources"
 git push origin dev
 
@@ -326,7 +325,7 @@ kubectl get pvc -l app=postgres
 kubectl get pv
 
 # Check storage class
-kubectl get storageclass hcloud-postgres-storage
+kubectl get storageclass hcloud-volumes
 
 # Check CSI driver (Hetzner)
 kubectl get pods -n kube-system | grep hcloud-csi

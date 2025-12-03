@@ -84,8 +84,8 @@ infra/
         │   ├── cluster/
         │   │   └── cluster-config.yaml      # hetzner-k3s cluster config
         │   ├── patches/
-        │   │   ├── postgres-resources.yaml  # Dev resource limits
-        │   │   └── postgres-storage.yaml    # Dev storage: hcloud-volumes
+        │   │   └── statefulsets/
+        │   │       └── postgres.statefulset.yaml  # Dev resources + storage (combined)
         │   ├── kustomization.yaml           # Kustomize overlay
         │   └── .gitignore
         │
@@ -98,8 +98,8 @@ infra/
     └── podman/                      # Podman Desktop local development (auto-detected)
         └── local/                   # Local environment
             ├── patches/
-            │   ├── postgres-resources.yaml  # Minimal resources (128Mi-256Mi)
-            │   └── postgres-storage.yaml    # Local storage: local-path (2Gi)
+            │   └── statefulsets/
+            │       └── postgres.statefulset.yaml  # Local resources + storage (combined)
             └── kustomization.yaml           # Kustomize overlay
 
     # Additional cloud providers (when added, auto-detected):
@@ -250,27 +250,26 @@ Configure in: Repository Settings → Secrets and variables → Actions
 | **Test**    | hetzner  | ❌ No       | Integration testing |
 | **Prod**    | hetzner  | ❌ No       | Production workload |
 
-**Resource Specifications**: See environment-specific patches in `{provider}/{env}/patches/`:
+**Resource Specifications**: See environment-specific patches in `{provider}/{env}/patches/statefulsets/`:
 
-- `postgres-resources.yaml` - Replicas, memory, CPU limits
-- `postgres-storage.yaml` - Storage size and StorageClass
+- `postgres.statefulset.yaml` - Combined patch with replicas, memory, CPU limits, storage size, and StorageClass
 
 ## 🔍 Quick Lookups
 
 ### Find Configuration
 
-| What                         | Where                                          |
-| ---------------------------- | ---------------------------------------------- |
-| Deployment flags             | `infra/deploy-control.yaml`                    |
-| PostgreSQL image version     | `base/statefulsets/postgres.statefulset.yaml`  |
-| Init script (database setup) | `base/configmaps/postgres-init.configmap.yaml` |
-| Dev resource limits          | `hetzner/dev/patches/postgres-resources.yaml`  |
-| Local resource limits        | `podman/local/patches/postgres-resources.yaml` |
-| Prod storage size            | `hetzner/prod/patches/postgres-storage.yaml`   |
-| Local storage size           | `podman/local/patches/postgres-storage.yaml`   |
-| Cluster config (dev)         | `hetzner/dev/cluster/cluster-config.yaml`      |
-| Service configuration        | `base/services/postgres.service.yaml`          |
-| GitHub Secrets required      | See "Required Secrets" section above           |
+| What                         | Where                                                         |
+| ---------------------------- | ------------------------------------------------------------- |
+| Deployment flags             | `infra/deploy-control.yaml`                                   |
+| PostgreSQL image version     | `base/statefulsets/postgres.statefulset.yaml`                 |
+| Init script (database setup) | `base/configmaps/postgres-init.configmap.yaml`                |
+| Dev config (combined)        | `hetzner/dev/patches/statefulsets/postgres.statefulset.yaml`  |
+| Local config (combined)      | `podman/local/patches/statefulsets/postgres.statefulset.yaml` |
+| Prod config (combined)       | `hetzner/prod/patches/statefulsets/postgres.statefulset.yaml` |
+| Test config (combined)       | `hetzner/test/patches/statefulsets/postgres.statefulset.yaml` |
+| Cluster config (dev)         | `hetzner/dev/cluster/cluster-config.yaml`                     |
+| Service configuration        | `base/services/postgres.service.yaml`                         |
+| GitHub Secrets required      | See "Required Secrets" section above                          |
 
 ### Find Workflows
 

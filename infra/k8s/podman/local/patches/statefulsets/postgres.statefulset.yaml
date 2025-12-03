@@ -11,12 +11,22 @@ spec:
     metadata:
       labels:
         app: postgres
+    spec:
+      containers:
+        - name: postgres
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
   volumeClaimTemplates:
     - metadata:
         name: postgres-data
       spec:
         accessModes: ["ReadWriteOnce"]
-        storageClassName: hcloud-volumes
+        storageClassName: standard
         resources:
           requests:
-            storage: 14Gi
+            storage: 2Gi
