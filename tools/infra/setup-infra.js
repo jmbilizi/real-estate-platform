@@ -82,10 +82,19 @@ function addToPath(binDir) {
       const normalizedBinDir = binDir.toLowerCase().replace(/[\\\/]+$/, "");
 
       // Check if already in PATH
-      const currentPath = execSync(
-        "powershell -command \"[System.Environment]::GetEnvironmentVariable('PATH', 'User')\"",
-        { encoding: "utf8" }
-      ).trim();
+      const { spawnSync } = require('child_process');
+      const currentPathResult = spawnSync('powershell', [
+        '-NoProfile',
+        '-Command',
+        "[System.Environment]::GetEnvironmentVariable('PATH', 'User')"
+      ], { encoding: 'utf8' });
+      
+      if (currentPathResult.status !== 0) {
+        logWarning('Failed to read current PATH');
+        return false;
+      }
+      
+      const currentPath = currentPathResult.stdout.trim();
 
       // Split and normalize existing paths for comparison
       const existingPaths = currentPath
@@ -105,8 +114,15 @@ function addToPath(binDir) {
       }
 
       // Add to User PATH (permanent)
-      const setPathCmd = `powershell -command "[System.Environment]::SetEnvironmentVariable('PATH', '${binDir};' + [System.Environment]::GetEnvironmentVariable('PATH', 'User'), 'User')"`;
-      execSync(setPathCmd, { stdio: "inherit" });
+      const setPathResult = spawnSync('powershell', [
+        '-NoProfile',
+        '-Command',
+        `[System.Environment]::SetEnvironmentVariable('PATH', '${binDir};' + [System.Environment]::GetEnvironmentVariable('PATH', 'User'), 'User')`
+      ], { stdio: 'inherit' });
+      
+      if (setPathResult.status !== 0) {
+        throw new Error('Failed to set PATH variable');
+      }
 
       logSuccess("Added to Windows User PATH (permanent)");
 
@@ -160,18 +176,20 @@ function refreshPath() {
 
   try {
     // Refresh PATH from registry (Windows)
-    const refreshPathCmd = `
-      $envPath = [System.Environment]::GetEnvironmentVariable('PATH', 'Machine') + ';' + [System.Environment]::GetEnvironmentVariable('PATH', 'User')
-      Write-Host $envPath
-    `;
+    const { spawnSync } = require('child_process');
+    const refreshPathCmd = "[System.Environment]::GetEnvironmentVariable('PATH', 'Machine') + ';' + [System.Environment]::GetEnvironmentVariable('PATH', 'User')";
 
-    const result = execSync(`powershell -command "${refreshPathCmd}"`, {
-      encoding: "utf8",
-      stdio: "pipe",
+    const result = spawnSync('powershell', [
+      '-NoProfile',
+      '-Command',
+      refreshPathCmd
+    ], {
+      encoding: 'utf8',
+      stdio: 'pipe',
     });
 
-    if (result) {
-      const newPath = result.trim();
+    if (result.status === 0 && result.stdout) {
+      const newPath = result.stdout.trim();
       process.env.PATH = newPath;
       logSuccess("PATH refreshed - Kustomize is now available in this session");
     }

@@ -545,16 +545,34 @@ function installMinikubeWindows() {
     logSuccess("Minikube installed via winget");
 
     try {
-      const userPath = execSync(
-        "powershell -Command \"[Environment]::GetEnvironmentVariable('Path', 'User')\"",
+      const { spawnSync } = require("child_process");
+
+      const userPathResult = spawnSync(
+        "powershell",
+        [
+          "-NoProfile",
+          "-Command",
+          "[Environment]::GetEnvironmentVariable('Path', 'User')",
+        ],
         { encoding: "utf-8" }
-      ).trim();
-      const systemPath = execSync(
-        "powershell -Command \"[Environment]::GetEnvironmentVariable('Path', 'Machine')\"",
+      );
+
+      const systemPathResult = spawnSync(
+        "powershell",
+        [
+          "-NoProfile",
+          "-Command",
+          "[Environment]::GetEnvironmentVariable('Path', 'Machine')",
+        ],
         { encoding: "utf-8" }
-      ).trim();
-      process.env.PATH = `${userPath};${systemPath}`;
-      logInfo("PATH refreshed - Minikube should now be available");
+      );
+
+      if (userPathResult.status === 0 && systemPathResult.status === 0) {
+        const userPath = userPathResult.stdout.trim();
+        const systemPath = systemPathResult.stdout.trim();
+        process.env.PATH = `${userPath};${systemPath}`;
+        logInfo("PATH refreshed - Minikube should now be available");
+      }
     } catch (error) {
       logWarning("Could not refresh PATH automatically");
     }
@@ -1033,15 +1051,34 @@ async function main() {
   // Step 0: Refresh PATH on Windows
   if (platform.isWindows) {
     try {
-      const userPath = execSync(
-        "powershell -Command \"[Environment]::GetEnvironmentVariable('Path', 'User')\"",
+      // Use child_process.spawn with array args to avoid command injection warnings
+      const { spawnSync } = require("child_process");
+
+      const userPathResult = spawnSync(
+        "powershell",
+        [
+          "-NoProfile",
+          "-Command",
+          "[Environment]::GetEnvironmentVariable('Path', 'User')",
+        ],
         { encoding: "utf-8" }
-      ).trim();
-      const systemPath = execSync(
-        "powershell -Command \"[Environment]::GetEnvironmentVariable('Path', 'Machine')\"",
+      );
+
+      const systemPathResult = spawnSync(
+        "powershell",
+        [
+          "-NoProfile",
+          "-Command",
+          "[Environment]::GetEnvironmentVariable('Path', 'Machine')",
+        ],
         { encoding: "utf-8" }
-      ).trim();
-      process.env.PATH = `${userPath};${systemPath}`;
+      );
+
+      if (userPathResult.status === 0 && systemPathResult.status === 0) {
+        const userPath = userPathResult.stdout.trim();
+        const systemPath = systemPathResult.stdout.trim();
+        process.env.PATH = `${userPath};${systemPath}`;
+      }
     } catch (error) {
       // Ignore
     }
