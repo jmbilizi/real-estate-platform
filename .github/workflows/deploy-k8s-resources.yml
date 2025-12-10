@@ -309,38 +309,89 @@ jobs:
           kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins > manifests.yaml
           echo "✅ Manifests built successfully"
 
-      - name: Handle StatefulSet storage migration
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          echo "🔍 Checking if StatefulSet needs recreation for storage changes..."
-
-          # Check if StatefulSet exists and has old StorageClass
-          if kubectl get statefulset postgres &>/dev/null; then
-            CURRENT_SC=$(kubectl get statefulset postgres -o jsonpath='{.spec.volumeClaimTemplates[0].spec.storageClassName}' 2>/dev/null || echo "")
-            
-            if [ "$CURRENT_SC" = "hcloud-postgres-storage" ]; then
-              echo "⚠️  Found old StorageClass 'hcloud-postgres-storage', migration needed"
-              echo "🗑️  Deleting StatefulSet (preserves PVCs by default)..."
-              kubectl delete statefulset postgres --cascade=orphan
-              
-              echo "🗑️  Deleting old PVCs with incorrect StorageClass..."
-              kubectl delete pvc -l app=postgres
-              
-              echo "✅ Migration complete - StatefulSet will be recreated with new StorageClass"
-            else
-              echo "✅ StorageClass is correct ($CURRENT_SC), no migration needed"
-            fi
-          else
-            echo "✅ StatefulSet doesn't exist yet, no migration needed"
-          fi
-
-      - name: Apply manifests
+      - name: Apply manifests with immutable field handling
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "🚀 Deploying to dev cluster..."
-          # kubectl apply handles resource dependencies automatically
-          # Order: Namespaces → ConfigMaps/Secrets → Services → StatefulSets/Deployments
-          kubectl apply -f manifests.yaml --server-side=true --force-conflicts
+
+          # Try to apply normally first
+          if ! kubectl apply -f manifests.yaml --server-side=true --force-conflicts 2>&1 | tee apply.log; then
+            # Check for immutable field errors across multiple resource types
+            RESOURCE_TYPE=""
+            DISPLAY_NAME=""
+            DELETE_ARGS=""
+            NAME_PATTERN=""
+            
+            if grep -q "Forbidden.*updates to statefulset spec.*are forbidden" apply.log; then
+              RESOURCE_TYPE="statefulset"
+              DISPLAY_NAME="StatefulSet"
+              DELETE_ARGS="--cascade=orphan"
+              NAME_PATTERN='The StatefulSet "\K[^"]+'
+            elif grep -q "Forbidden.*updates to deployment spec.*are forbidden" apply.log; then
+              RESOURCE_TYPE="deployment"
+              DISPLAY_NAME="Deployment"
+              DELETE_ARGS="--cascade=orphan"
+              NAME_PATTERN='The Deployment "\K[^"]+'
+            elif grep -qE "spec\.clusterIP.*immutable|spec\.type.*immutable" apply.log; then
+              RESOURCE_TYPE="service"
+              DISPLAY_NAME="Service"
+              DELETE_ARGS=""
+              NAME_PATTERN='Service "\K[^"]+'
+            elif grep -q "Forbidden.*updates to daemonset spec.*are forbidden" apply.log; then
+              RESOURCE_TYPE="daemonset"
+              DISPLAY_NAME="DaemonSet"
+              DELETE_ARGS="--cascade=orphan"
+              NAME_PATTERN='The DaemonSet "\K[^"]+'
+            elif grep -qE "spec\.selector.*immutable|spec\.completions.*cannot be decreased" apply.log; then
+              RESOURCE_TYPE="job"
+              DISPLAY_NAME="Job"
+              DELETE_ARGS=""
+              NAME_PATTERN='Job "\K[^"]+'
+            fi
+            
+            if [ -n "$RESOURCE_TYPE" ]; then
+              echo ""
+              echo "⚠️  Detected immutable $DISPLAY_NAME field changes"
+              echo "🔍 Identifying affected ${DISPLAY_NAME}s..."
+              
+              # Extract resource names that failed
+              FAILED_RESOURCES=$(grep -oP "$NAME_PATTERN" apply.log || echo "")
+              
+              if [ -z "$FAILED_RESOURCES" ]; then
+                echo "❌ Could not identify failed ${DISPLAY_NAME}s from error message"
+                echo "Error log:"
+                cat apply.log
+                exit 1
+              fi
+              
+              echo "📋 ${DISPLAY_NAME}s requiring recreation:"
+              echo "$FAILED_RESOURCES" | while read res; do
+                echo "  - $res"
+              done
+              
+              # Delete each failed resource
+              CASCADE_INFO=""
+              [ "$DELETE_ARGS" = "--cascade=orphan" ] && CASCADE_INFO=" (preserving dependent resources)"
+              echo ""
+              echo "🗑️  Deleting ${DISPLAY_NAME}s with immutable field conflicts${CASCADE_INFO}..."
+              echo "$FAILED_RESOURCES" | while read res; do
+                if [ -n "$res" ]; then
+                  echo "  Deleting $DISPLAY_NAME: $res"
+                  kubectl delete "$RESOURCE_TYPE" "$res" $DELETE_ARGS || true
+                fi
+              done
+              
+              echo ""
+              echo "🔄 Retrying deployment with recreated ${DISPLAY_NAME}s..."
+              kubectl apply -f manifests.yaml --server-side=true --force-conflicts
+            else
+              echo "❌ Deployment failed with non-immutable-field error:"
+              cat apply.log
+              exit 1
+            fi
+          else
+            echo "✅ Deployment successful (no immutable field conflicts)"
+          fi
 
       - name: Check pod status immediately after apply
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
@@ -582,38 +633,89 @@ jobs:
           echo "🏭️  Building Kustomize manifests for test environment..."
           kustomize build infra/k8s/hetzner/test --enable-alpha-plugins > manifests.yaml
 
-      - name: Handle StatefulSet storage migration
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          echo "🔍 Checking if StatefulSet needs recreation for storage changes..."
-
-          # Check if StatefulSet exists and has old StorageClass
-          if kubectl get statefulset postgres &>/dev/null; then
-            CURRENT_SC=$(kubectl get statefulset postgres -o jsonpath='{.spec.volumeClaimTemplates[0].spec.storageClassName}' 2>/dev/null || echo "")
-            
-            if [ "$CURRENT_SC" = "hcloud-postgres-storage" ]; then
-              echo "⚠️  Found old StorageClass 'hcloud-postgres-storage', migration needed"
-              echo "🗑️  Deleting StatefulSet (preserves PVCs by default)..."
-              kubectl delete statefulset postgres --cascade=orphan
-              
-              echo "🗑️  Deleting old PVCs with incorrect StorageClass..."
-              kubectl delete pvc -l app=postgres
-              
-              echo "✅ Migration complete - StatefulSet will be recreated with new StorageClass"
-            else
-              echo "✅ StorageClass is correct ($CURRENT_SC), no migration needed"
-            fi
-          else
-            echo "✅ StatefulSet doesn't exist yet, no migration needed"
-          fi
-
-      - name: Apply manifests
+      - name: Apply manifests with immutable field handling
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "🚀 Deploying to test cluster..."
-          # kubectl apply handles resource dependencies automatically
-          # Order: Namespaces → ConfigMaps/Secrets → Services → StatefulSets/Deployments
-          kubectl apply -f manifests.yaml --server-side=true --force-conflicts
+
+          # Try to apply normally first
+          if ! kubectl apply -f manifests.yaml --server-side=true --force-conflicts 2>&1 | tee apply.log; then
+            # Check for immutable field errors across multiple resource types
+            RESOURCE_TYPE=""
+            DISPLAY_NAME=""
+            DELETE_ARGS=""
+            NAME_PATTERN=""
+            
+            if grep -q "Forbidden.*updates to statefulset spec.*are forbidden" apply.log; then
+              RESOURCE_TYPE="statefulset"
+              DISPLAY_NAME="StatefulSet"
+              DELETE_ARGS="--cascade=orphan"
+              NAME_PATTERN='The StatefulSet "\K[^"]+'
+            elif grep -q "Forbidden.*updates to deployment spec.*are forbidden" apply.log; then
+              RESOURCE_TYPE="deployment"
+              DISPLAY_NAME="Deployment"
+              DELETE_ARGS="--cascade=orphan"
+              NAME_PATTERN='The Deployment "\K[^"]+'
+            elif grep -qE "spec\.clusterIP.*immutable|spec\.type.*immutable" apply.log; then
+              RESOURCE_TYPE="service"
+              DISPLAY_NAME="Service"
+              DELETE_ARGS=""
+              NAME_PATTERN='Service "\K[^"]+'
+            elif grep -q "Forbidden.*updates to daemonset spec.*are forbidden" apply.log; then
+              RESOURCE_TYPE="daemonset"
+              DISPLAY_NAME="DaemonSet"
+              DELETE_ARGS="--cascade=orphan"
+              NAME_PATTERN='The DaemonSet "\K[^"]+'
+            elif grep -qE "spec\.selector.*immutable|spec\.completions.*cannot be decreased" apply.log; then
+              RESOURCE_TYPE="job"
+              DISPLAY_NAME="Job"
+              DELETE_ARGS=""
+              NAME_PATTERN='Job "\K[^"]+'
+            fi
+            
+            if [ -n "$RESOURCE_TYPE" ]; then
+              echo ""
+              echo "⚠️  Detected immutable $DISPLAY_NAME field changes"
+              echo "🔍 Identifying affected ${DISPLAY_NAME}s..."
+              
+              # Extract resource names that failed
+              FAILED_RESOURCES=$(grep -oP "$NAME_PATTERN" apply.log || echo "")
+              
+              if [ -z "$FAILED_RESOURCES" ]; then
+                echo "❌ Could not identify failed ${DISPLAY_NAME}s from error message"
+                echo "Error log:"
+                cat apply.log
+                exit 1
+              fi
+              
+              echo "📋 ${DISPLAY_NAME}s requiring recreation:"
+              echo "$FAILED_RESOURCES" | while read res; do
+                echo "  - $res"
+              done
+              
+              # Delete each failed resource
+              CASCADE_INFO=""
+              [ "$DELETE_ARGS" = "--cascade=orphan" ] && CASCADE_INFO=" (preserving dependent resources)"
+              echo ""
+              echo "🗑️  Deleting ${DISPLAY_NAME}s with immutable field conflicts${CASCADE_INFO}..."
+              echo "$FAILED_RESOURCES" | while read res; do
+                if [ -n "$res" ]; then
+                  echo "  Deleting $DISPLAY_NAME: $res"
+                  kubectl delete "$RESOURCE_TYPE" "$res" $DELETE_ARGS || true
+                fi
+              done
+              
+              echo ""
+              echo "🔄 Retrying deployment with recreated ${DISPLAY_NAME}s..."
+              kubectl apply -f manifests.yaml --server-side=true --force-conflicts
+            else
+              echo "❌ Deployment failed with non-immutable-field error:"
+              cat apply.log
+              exit 1
+            fi
+          else
+            echo "✅ Deployment successful (no immutable field conflicts)"
+          fi
 
       - name: Check pod status immediately after apply
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
@@ -878,38 +980,89 @@ jobs:
           echo "🏭️  Building Kustomize manifests for prod environment..."
           kustomize build infra/k8s/hetzner/prod --enable-alpha-plugins > manifests.yaml
 
-      - name: Handle StatefulSet storage migration
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          echo "🔍 Checking if StatefulSet needs recreation for storage changes..."
-
-          # Check if StatefulSet exists and has old StorageClass
-          if kubectl get statefulset postgres &>/dev/null; then
-            CURRENT_SC=$(kubectl get statefulset postgres -o jsonpath='{.spec.volumeClaimTemplates[0].spec.storageClassName}' 2>/dev/null || echo "")
-            
-            if [ "$CURRENT_SC" = "hcloud-postgres-storage" ]; then
-              echo "⚠️  Found old StorageClass 'hcloud-postgres-storage', migration needed"
-              echo "🗑️  Deleting StatefulSet (preserves PVCs by default)..."
-              kubectl delete statefulset postgres --cascade=orphan
-              
-              echo "🗑️  Deleting old PVCs with incorrect StorageClass..."
-              kubectl delete pvc -l app=postgres
-              
-              echo "✅ Migration complete - StatefulSet will be recreated with new StorageClass"
-            else
-              echo "✅ StorageClass is correct ($CURRENT_SC), no migration needed"
-            fi
-          else
-            echo "✅ StatefulSet doesn't exist yet, no migration needed"
-          fi
-
-      - name: Apply manifests
+      - name: Apply manifests with immutable field handling
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "🚀 Deploying to prod cluster..."
-          # kubectl apply handles resource dependencies automatically
-          # Order: Namespaces → ConfigMaps/Secrets → Services → StatefulSets/Deployments
-          kubectl apply -f manifests.yaml --server-side=true --force-conflicts
+
+          # Try to apply normally first
+          if ! kubectl apply -f manifests.yaml --server-side=true --force-conflicts 2>&1 | tee apply.log; then
+            # Check for immutable field errors across multiple resource types
+            RESOURCE_TYPE=""
+            DISPLAY_NAME=""
+            DELETE_ARGS=""
+            NAME_PATTERN=""
+            
+            if grep -q "Forbidden.*updates to statefulset spec.*are forbidden" apply.log; then
+              RESOURCE_TYPE="statefulset"
+              DISPLAY_NAME="StatefulSet"
+              DELETE_ARGS="--cascade=orphan"
+              NAME_PATTERN='The StatefulSet "\K[^"]+'
+            elif grep -q "Forbidden.*updates to deployment spec.*are forbidden" apply.log; then
+              RESOURCE_TYPE="deployment"
+              DISPLAY_NAME="Deployment"
+              DELETE_ARGS="--cascade=orphan"
+              NAME_PATTERN='The Deployment "\K[^"]+'
+            elif grep -qE "spec\.clusterIP.*immutable|spec\.type.*immutable" apply.log; then
+              RESOURCE_TYPE="service"
+              DISPLAY_NAME="Service"
+              DELETE_ARGS=""
+              NAME_PATTERN='Service "\K[^"]+'
+            elif grep -q "Forbidden.*updates to daemonset spec.*are forbidden" apply.log; then
+              RESOURCE_TYPE="daemonset"
+              DISPLAY_NAME="DaemonSet"
+              DELETE_ARGS="--cascade=orphan"
+              NAME_PATTERN='The DaemonSet "\K[^"]+'
+            elif grep -qE "spec\.selector.*immutable|spec\.completions.*cannot be decreased" apply.log; then
+              RESOURCE_TYPE="job"
+              DISPLAY_NAME="Job"
+              DELETE_ARGS=""
+              NAME_PATTERN='Job "\K[^"]+'
+            fi
+            
+            if [ -n "$RESOURCE_TYPE" ]; then
+              echo ""
+              echo "⚠️  Detected immutable $DISPLAY_NAME field changes"
+              echo "🔍 Identifying affected ${DISPLAY_NAME}s..."
+              
+              # Extract resource names that failed
+              FAILED_RESOURCES=$(grep -oP "$NAME_PATTERN" apply.log || echo "")
+              
+              if [ -z "$FAILED_RESOURCES" ]; then
+                echo "❌ Could not identify failed ${DISPLAY_NAME}s from error message"
+                echo "Error log:"
+                cat apply.log
+                exit 1
+              fi
+              
+              echo "📋 ${DISPLAY_NAME}s requiring recreation:"
+              echo "$FAILED_RESOURCES" | while read res; do
+                echo "  - $res"
+              done
+              
+              # Delete each failed resource
+              CASCADE_INFO=""
+              [ "$DELETE_ARGS" = "--cascade=orphan" ] && CASCADE_INFO=" (preserving dependent resources)"
+              echo ""
+              echo "🗑️  Deleting ${DISPLAY_NAME}s with immutable field conflicts${CASCADE_INFO}..."
+              echo "$FAILED_RESOURCES" | while read res; do
+                if [ -n "$res" ]; then
+                  echo "  Deleting $DISPLAY_NAME: $res"
+                  kubectl delete "$RESOURCE_TYPE" "$res" $DELETE_ARGS || true
+                fi
+              done
+              
+              echo ""
+              echo "🔄 Retrying deployment with recreated ${DISPLAY_NAME}s..."
+              kubectl apply -f manifests.yaml --server-side=true --force-conflicts
+            else
+              echo "❌ Deployment failed with non-immutable-field error:"
+              cat apply.log
+              exit 1
+            fi
+          else
+            echo "✅ Deployment successful (no immutable field conflicts)"
+          fi
 
       - name: Check pod status immediately after apply
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'

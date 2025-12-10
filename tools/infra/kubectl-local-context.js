@@ -82,185 +82,146 @@ function runKustomizeAndKubectl(op) {
     process.exit(result.status);
   }
   if (op === "apply") {
-    // Pre-check for immutable field changes
-    try {
-      // Only handle postgres StatefulSet auto-delete for volumeClaimTemplates
-      const stsName = "postgres";
-      const ns = "default";
-      const getSts = spawnSync(
-        "kubectl",
-        ["get", "statefulset", stsName, "-n", ns, "-o", "json"],
-        { encoding: "utf-8" }
-      );
-      if (getSts.status === 0 && getSts.stdout) {
-        const current = JSON.parse(getSts.stdout);
-        const kustomizePreview = spawnSync(
-          kustomizeCmd[0],
-          kustomizeCmd.slice(1),
-          { encoding: "utf-8" }
-        );
-        if (kustomizePreview.status === 0 && kustomizePreview.stdout) {
-          const docs = kustomizePreview.stdout
-            .split(/^---$/m)
-            .map((s) => s.trim())
-            .filter(Boolean);
-          const yaml = require("js-yaml");
-          // StatefulSet: auto-delete if volumeClaimTemplates changes
-          const desiredStsDoc = docs.find(
-            (doc) =>
-              doc.includes("kind: StatefulSet") &&
-              doc.includes("name: postgres")
-          );
-          if (desiredStsDoc) {
-            const desired = yaml.load(desiredStsDoc);
-            const deepEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-            const curVct = current.spec.volumeClaimTemplates || [];
-            const desVct =
-              (desired.spec && desired.spec.volumeClaimTemplates) || [];
-            if (!deepEqual(curVct, desVct)) {
-              console.log(
-                "Detected immutable StatefulSet spec change (volumeClaimTemplates). Deleting StatefulSet 'postgres' before apply..."
-              );
-              spawnSync(
-                "kubectl",
-                ["delete", "statefulset", stsName, "-n", ns],
-                { stdio: "inherit" }
-              );
-              // Also check and delete the associated PVC if storageClassName or accessModes differ
-              if (
-                desVct.length > 0 &&
-                desVct[0].metadata &&
-                desVct[0].metadata.name
-              ) {
-                const pvcName = `${desVct[0].metadata.name}-${stsName}-0`;
-                const getPvc = spawnSync(
-                  "kubectl",
-                  ["get", "pvc", pvcName, "-n", ns, "-o", "json"],
-                  { encoding: "utf-8" }
-                );
-                if (getPvc.status === 0 && getPvc.stdout) {
-                  const curPvc = JSON.parse(getPvc.stdout);
-                  const desiredPvcSpec = desVct[0].spec || {};
-                  const pvcNeedsDelete =
-                    curPvc.spec.storageClassName !==
-                      desiredPvcSpec.storageClassName ||
-                    JSON.stringify(curPvc.spec.accessModes) !==
-                      JSON.stringify(desiredPvcSpec.accessModes);
-                  if (pvcNeedsDelete) {
-                    console.log(
-                      `Deleting PVC '${pvcName}' due to storageClassName or accessModes change...`
-                    );
-                    spawnSync("kubectl", ["delete", "pvc", pvcName, "-n", ns], {
-                      stdio: "inherit",
-                    });
-                  }
-                }
-              }
-            }
-          }
-          // Deployment: warn if selector changes
-          const desiredDepDoc = docs.find((doc) =>
-            doc.includes("kind: Deployment")
-          );
-          if (desiredDepDoc) {
-            const depNameMatch = desiredDepDoc.match(/name:\s*(\S+)/);
-            const depName = depNameMatch ? depNameMatch[1] : "<unknown>";
-            const getDep = spawnSync(
-              "kubectl",
-              ["get", "deployment", depName, "-n", ns, "-o", "json"],
-              { encoding: "utf-8" }
-            );
-            if (getDep.status === 0 && getDep.stdout) {
-              const curDep = JSON.parse(getDep.stdout);
-              const desiredDep = yaml.load(desiredDepDoc);
-              if (
-                JSON.stringify(curDep.spec.selector) !==
-                JSON.stringify(desiredDep.spec.selector)
-              ) {
-                console.warn(
-                  `Warning: Deployment '${depName}' spec.selector is immutable and has changed. Manual delete required.`
-                );
-              }
-            }
-          }
-          // Service: warn if clusterIP or type changes
-          const desiredSvcDoc = docs.find((doc) =>
-            doc.includes("kind: Service")
-          );
-          if (desiredSvcDoc) {
-            const svcNameMatch = desiredSvcDoc.match(/name:\s*(\S+)/);
-            const svcName = svcNameMatch ? svcNameMatch[1] : "<unknown>";
-            const getSvc = spawnSync(
-              "kubectl",
-              ["get", "service", svcName, "-n", ns, "-o", "json"],
-              { encoding: "utf-8" }
-            );
-            if (getSvc.status === 0 && getSvc.stdout) {
-              const curSvc = JSON.parse(getSvc.stdout);
-              const desiredSvc = yaml.load(desiredSvcDoc);
-              if (curSvc.spec.clusterIP !== desiredSvc.spec.clusterIP) {
-                console.warn(
-                  `Warning: Service '${svcName}' spec.clusterIP is immutable and has changed. Manual delete required.`
-                );
-              }
-              if (curSvc.spec.type !== desiredSvc.spec.type) {
-                console.warn(
-                  `Warning: Service '${svcName}' spec.type is immutable and has changed. Manual delete required.`
-                );
-              }
-            }
-          }
-          // PVC: warn if storageClassName or accessModes changes
-          const desiredPvcDoc = docs.find((doc) =>
-            doc.includes("kind: PersistentVolumeClaim")
-          );
-          if (desiredPvcDoc) {
-            const pvcNameMatch = desiredPvcDoc.match(/name:\s*(\S+)/);
-            const pvcName = pvcNameMatch ? pvcNameMatch[1] : "<unknown>";
-            const getPvc = spawnSync(
-              "kubectl",
-              ["get", "pvc", pvcName, "-n", ns, "-o", "json"],
-              { encoding: "utf-8" }
-            );
-            if (getPvc.status === 0 && getPvc.stdout) {
-              const curPvc = JSON.parse(getPvc.stdout);
-              const desiredPvc = yaml.load(desiredPvcDoc);
-              if (
-                curPvc.spec.storageClassName !==
-                desiredPvc.spec.storageClassName
-              ) {
-                console.warn(
-                  `Warning: PVC '${pvcName}' storageClassName is immutable and has changed. Manual delete required.`
-                );
-              }
-              if (
-                JSON.stringify(curPvc.spec.accessModes) !==
-                JSON.stringify(desiredPvc.spec.accessModes)
-              ) {
-                console.warn(
-                  `Warning: PVC '${pvcName}' accessModes is immutable and has changed. Manual delete required.`
-                );
-              }
-            }
-          }
-        }
-      }
-    } catch (e) {
-      console.warn(
-        "Warning: Could not auto-detect immutable spec changes:",
-        e.message
-      );
-    }
-    // Now run kustomize build and kubectl apply as before
+    // Error-driven approach: try apply first, handle immutable field errors if they occur
+    console.log("🚀 Deploying to local cluster...");
+
+    // Build manifests
     const kustomize = spawnSync(kustomizeCmd[0], kustomizeCmd.slice(1), {
       stdio: ["ignore", "pipe", "inherit"],
     });
-    if (kustomize.status !== 0) process.exit(kustomize.status);
+    if (kustomize.status !== 0) {
+      console.error("❌ Kustomize build failed");
+      process.exit(kustomize.status);
+    }
+
+    // Try to apply normally first
     const kubectl = spawnSync("kubectl", ["apply", "-f", "-"], {
       input: kustomize.stdout,
-      stdio: ["pipe", "inherit", "inherit"],
+      stdio: ["pipe", "pipe", "pipe"],
     });
-    process.exit(kubectl.status);
+
+    if (kubectl.status === 0) {
+      console.log("✅ Deployment successful (no immutable field conflicts)");
+      process.stdout.write(kubectl.stdout);
+      process.exit(0);
+    }
+
+    // Check for immutable field errors across multiple resource types
+    const errorOutput = kubectl.stderr.toString();
+
+    // Define patterns for all resource types with immutable fields
+    const immutableFieldPatterns = [
+      {
+        pattern: /Forbidden.*updates to statefulset spec.*are forbidden/i,
+        resourceType: "statefulset",
+        namePattern: /The StatefulSet "([^"]+)"/g,
+        deleteArgs: ["--cascade=orphan"], // Preserve PVCs
+        displayName: "StatefulSet",
+      },
+      {
+        pattern: /Forbidden.*updates to deployment spec.*are forbidden/i,
+        resourceType: "deployment",
+        namePattern: /The Deployment "([^"]+)"/g,
+        deleteArgs: ["--cascade=orphan"], // Preserve Pods during recreation
+        displayName: "Deployment",
+      },
+      {
+        pattern: /spec\.clusterIP.*immutable|spec\.type.*immutable/i,
+        resourceType: "service",
+        namePattern: /Service "([^"]+)"/g,
+        deleteArgs: [], // Services are stateless
+        displayName: "Service",
+      },
+      {
+        pattern: /Forbidden.*updates to daemonset spec.*are forbidden/i,
+        resourceType: "daemonset",
+        namePattern: /The DaemonSet "([^"]+)"/g,
+        deleteArgs: ["--cascade=orphan"],
+        displayName: "DaemonSet",
+      },
+      {
+        pattern:
+          /spec\.selector.*immutable|spec\.completions.*cannot be decreased/i,
+        resourceType: "job",
+        namePattern: /Job "([^"]+)"/g,
+        deleteArgs: [], // Jobs should complete before update
+        displayName: "Job",
+      },
+    ];
+
+    // Check which pattern matches
+    const matchedPattern = immutableFieldPatterns.find((p) =>
+      p.pattern.test(errorOutput)
+    );
+
+    if (matchedPattern) {
+      console.log(
+        `\n⚠️  Detected immutable ${matchedPattern.displayName} field changes`
+      );
+      console.log(`🔍 Identifying affected ${matchedPattern.displayName}s...`);
+
+      // Extract resource names from error message
+      const matches = [...errorOutput.matchAll(matchedPattern.namePattern)];
+      const failedResources = matches.map((m) => m[1]);
+
+      if (failedResources.length === 0) {
+        console.error(
+          `❌ Could not identify failed ${matchedPattern.displayName}s from error message`
+        );
+        console.error("\nError output:");
+        process.stderr.write(kubectl.stderr);
+        process.exit(1);
+      }
+
+      console.log(`📋 ${matchedPattern.displayName}s requiring recreation:`);
+      failedResources.forEach((res) => console.log(`  - ${res}`));
+
+      // Delete each failed resource
+      const cascadeInfo = matchedPattern.deleteArgs.includes("--cascade=orphan")
+        ? " (preserving dependent resources)"
+        : "";
+      console.log(
+        `\n🗑️  Deleting ${matchedPattern.displayName}s with immutable field conflicts${cascadeInfo}...`
+      );
+      failedResources.forEach((res) => {
+        console.log(`  Deleting ${matchedPattern.displayName}: ${res}`);
+        spawnSync(
+          "kubectl",
+          [
+            "delete",
+            matchedPattern.resourceType,
+            res,
+            ...matchedPattern.deleteArgs,
+          ],
+          {
+            stdio: "inherit",
+          }
+        );
+      });
+
+      // Retry deployment
+      console.log(
+        `\n🔄 Retrying deployment with recreated ${matchedPattern.displayName}s...`
+      );
+      const kustomizeRetry = spawnSync(kustomizeCmd[0], kustomizeCmd.slice(1), {
+        stdio: ["ignore", "pipe", "inherit"],
+      });
+      if (kustomizeRetry.status !== 0) {
+        console.error("❌ Kustomize build failed on retry");
+        process.exit(kustomizeRetry.status);
+      }
+
+      const kubectlRetry = spawnSync("kubectl", ["apply", "-f", "-"], {
+        input: kustomizeRetry.stdout,
+        stdio: ["pipe", "inherit", "inherit"],
+      });
+      process.exit(kubectlRetry.status);
+    } else {
+      // Non-immutable-field error
+      console.error("❌ Deployment failed with non-immutable-field error:");
+      process.stderr.write(kubectl.stderr);
+      process.exit(kubectl.status);
+    }
   } else {
     // delete or build
     const kubectlCmd =

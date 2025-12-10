@@ -248,9 +248,144 @@ git push origin dev  # Triggers redeploy
 gh workflow run deploy-k8s-resources.yml -f environment=dev -r <old-commit-sha>
 
 # Verify rollback
-kubectl rollout status statefulset/postgres
-kubectl describe statefulset postgres | grep "Image:"
+kubectl get statefulset postgres -o wide
+kubectl describe statefulset postgres | grep Image
 ```
+
+### Understanding Kubernetes Immutable Fields
+
+**Problem**: Multiple Kubernetes resource types have fields that cannot be modified after creation.
+
+#### Resource Types with Immutable Fields
+
+**1. StatefulSet**
+
+- `spec.volumeClaimTemplates` - Storage size, StorageClass
+- `spec.selector` - Label selectors
+- `spec.podManagementPolicy` - Parallel vs OrderedReady
+- **Error:** `Forbidden: updates to statefulset spec...are forbidden`
+
+**2. Deployment**
+
+- `spec.selector` - Label selectors
+- `spec.strategy` - When changing between Recreate/RollingUpdate
+- **Error:** `Forbidden: updates to deployment spec...are forbidden`
+
+**3. Service**
+
+- `spec.clusterIP` - Internal cluster IP
+- `spec.type` - ClusterIP, NodePort, LoadBalancer
+- `spec.ipFamilies` - IPv4/IPv6 configuration
+- **Error:** `spec.clusterIP: immutable` or `spec.type: immutable`
+
+**4. DaemonSet**
+
+- `spec.selector` - Label selectors
+- **Error:** `Forbidden: updates to daemonset spec...are forbidden`
+
+**5. Job**
+
+- `spec.selector` - Label selectors
+- `spec.completions`, `spec.parallelism` - Cannot decrease
+- **Error:** `spec.selector: immutable` or `spec.completions: cannot be decreased`
+
+**Error Example**:
+
+```
+The StatefulSet "postgres" is invalid: spec: Forbidden:
+updates to statefulset spec for fields other than 'replicas',
+'template', 'updateStrategy', 'persistentVolumeClaimRetentionPolicy'
+and 'minReadySeconds' are forbidden
+```
+
+**Workflow Solution (Error-Driven Approach)**:
+
+The GitHub Actions workflow and local kubectl script use an error-driven pattern to handle immutable field changes across **all resource types**:
+
+```bash
+# 1. Try to apply normally first (fail fast)
+if ! kubectl apply -f manifests.yaml 2>&1 | tee apply.log; then
+
+  # 2. Detect which resource type has immutable field error
+  RESOURCE_TYPE=""
+  DELETE_ARGS=""
+
+  if grep -q "Forbidden.*updates to statefulset spec.*are forbidden" apply.log; then
+    RESOURCE_TYPE="statefulset"
+    NAME_PATTERN='The StatefulSet "\K[^"]+'
+    DELETE_ARGS="--cascade=orphan"
+  elif grep -q "Forbidden.*updates to deployment spec.*are forbidden" apply.log; then
+    RESOURCE_TYPE="deployment"
+    NAME_PATTERN='The Deployment "\K[^"]+'
+    DELETE_ARGS="--cascade=orphan"
+  elif grep -qE "spec\.clusterIP.*immutable|spec\.type.*immutable" apply.log; then
+    RESOURCE_TYPE="service"
+    NAME_PATTERN='Service "\K[^"]+'
+    DELETE_ARGS=""
+  elif grep -q "Forbidden.*updates to daemonset spec.*are forbidden" apply.log; then
+    RESOURCE_TYPE="daemonset"
+    NAME_PATTERN='The DaemonSet "\K[^"]+'
+    DELETE_ARGS="--cascade=orphan"
+  elif grep -qE "spec\.selector.*immutable|spec\.completions.*cannot be decreased" apply.log; then
+    RESOURCE_TYPE="job"
+    NAME_PATTERN='Job "\K[^"]+'
+    DELETE_ARGS=""
+  fi
+
+  if [ -n "$RESOURCE_TYPE" ]; then
+    # 3. Extract ONLY the resources that failed
+    FAILED_RESOURCES=$(grep -oP "$NAME_PATTERN" apply.log)
+
+    # 4. Delete ONLY those resources
+    for res in $FAILED_RESOURCES; do
+      kubectl delete "$RESOURCE_TYPE" "$res" $DELETE_ARGS
+    done
+
+    # 5. Retry deployment
+    kubectl apply -f manifests.yaml
+  fi
+fi
+```
+
+**Key Benefits**:
+
+- ✅ **No false positives**: Only acts on actual kubectl errors
+- ✅ **Multi-resource support**: Handles StatefulSet, Deployment, Service, DaemonSet, Job
+- ✅ **Precise**: Only deletes resources that actually failed
+- ✅ **Safe**: `--cascade=orphan` for stateful resources (preserves PVCs/Pods)
+- ✅ **Extensible**: Easy to add new resource types
+- ✅ **Simple**: Let kubectl tell us what's wrong (Kubernetes-native)
+
+**Manual Handling** (if workflow is disabled):
+
+```bash
+# 1. Identify the immutable field change
+kubectl apply -f manifests.yaml
+# Error: The StatefulSet "postgres" is invalid: spec.volumeClaimTemplates...
+
+# 2. Delete resource (use --cascade=orphan for stateful resources)
+kubectl delete statefulset postgres --cascade=orphan
+
+# 3. Recreate with new spec
+kubectl apply -f manifests.yaml
+
+# 4. For StatefulSets: Verify PVCs still exist
+kubectl get pvc -l app=postgres
+
+# 5. Watch pods reconnect to existing resources
+kubectl get pods -l app=postgres -w
+```
+
+**Important Notes**:
+
+- `--cascade=orphan` for StatefulSet/Deployment/DaemonSet preserves Pods and PVCs
+- Services don't need `--cascade=orphan` (stateless)
+- Jobs should complete/fail before modification
+- No data loss - PVCs persist across StatefulSet recreation
+  kubectl rollout status statefulset/postgres
+  kubectl describe statefulset postgres | grep "Image:"
+
+````
 
 ## Troubleshooting
 
@@ -270,7 +405,7 @@ kubectl describe statefulset postgres | grep "Image:"
 # Error: "no 'apiVersion' field in postgres.secret.yaml"
 # Solution: Ensure base/secrets/postgres.secret.yaml has valid YAML structure
 # File must start with: apiVersion: v1, kind: Secret
-```
+````
 
 ### Deployment Fails
 

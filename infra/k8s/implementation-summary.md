@@ -300,19 +300,26 @@ environments:
 
 3. **Configure kubectl** using `{ENV}_KUBECONFIG` from GitHub Secrets
 
-4. **Substitute secrets** in `base/secrets/postgres.secret.yaml` using yq (in-memory only)
+4. **Substitute secrets** in `base/secrets/postgres.secret.yaml` and `base/secrets/redis.secret.yaml` using yq (in-memory only)
 
 5. **Build Kustomize manifests:** `kustomize build infra/k8s/hetzner/{env}`
 
-6. **Apply manifests** with server-side apply: `kubectl apply --server-side=true --force-conflicts`
+6. **Apply manifests with error-driven immutable field handling:**
+   - Try `kubectl apply` first (fail fast)
+   - If immutable field error detected:
+     - Extract failed StatefulSet name(s) from error message
+     - Delete ONLY those StatefulSets (`--cascade=orphan` preserves PVCs)
+     - Retry `kubectl apply`
+   - Pattern eliminates false positives (only acts on actual errors)
+   - Scales to any number of StatefulSets (no hardcoded resource checks)
 
-7. **Wait for rollout:** `kubectl rollout status statefulset/postgres` (300s dev/test, 600s prod)
+7. **Wait for rollout:** `kubectl rollout status statefulset/{name}` (300s dev/test, 600s prod)
    - Waits for pods to pass readinessProbe checks
    - Ensures StatefulSet reaches desired state
 
 8. **Rollback on failure** (if enabled):
    - Automatically reverts if rollout fails
-   - Runs `kubectl rollout undo statefulset/postgres`
+   - Runs `kubectl rollout undo statefulset/{name}`
    - Marks workflow as failed
 
 9. **Verify deployment:** Check StatefulSet, Pods, Services, PVCs
@@ -631,6 +638,108 @@ kubectl rollout status statefulset/postgres
 - **Health probes** - Automated recovery via Kubernetes livenessProbe/readinessProbe
 - **Rollback capability** - `kubectl rollout undo`
 - **Server-side apply** - Better field ownership and conflict resolution
+- **Error-driven immutability handling** - Graceful StatefulSet recreation on immutable field changes
+
+### Error-Driven Kubernetes Resource Management
+
+**Problem**: Multiple Kubernetes resource types have immutable fields that cannot be modified after creation:
+
+- **StatefulSet**: volumeClaimTemplates, selector, podManagementPolicy
+- **Deployment**: selector, strategy (when changing type)
+- **Service**: clusterIP, type, ipFamilies
+- **DaemonSet**: selector
+- **Job**: selector, completions/parallelism (cannot decrease)
+
+**Traditional Approaches** (what we DON'T do):
+
+1. ❌ **Preemptive Deletion**: Delete all resources before every apply
+   - **Problem**: Unnecessary pod recreations, false positives
+   - **Example**: Changing only Redis config triggers PostgreSQL deletion
+   - **Scalability**: Doesn't scale to multiple resource types (5+ patterns to check)
+
+2. ❌ **Dry-Run Detection**: Check for conflicts before applying
+   - **Problem**: Complex logic, race conditions, still causes false positives
+   - **Maintenance**: Separate checks for each resource type
+
+3. ❌ **Manual Intervention**: Let deployment fail, require human action
+   - **Problem**: Not scalable, blocks automation
+
+**Our Solution: Error-Driven Approach**
+
+Let kubectl fail first, then handle the specific error across **all resource types**:
+
+```bash
+# 1. Try apply normally (fail fast)
+if ! kubectl apply -f manifests.yaml 2>&1 | tee apply.log; then
+
+  # 2. Detect which resource type has immutable field error
+  RESOURCE_TYPE=""
+  DELETE_ARGS=""
+
+  if grep -q "Forbidden.*updates to statefulset spec.*are forbidden" apply.log; then
+    RESOURCE_TYPE="statefulset"
+    NAME_PATTERN='The StatefulSet "\K[^"]+'
+    DELETE_ARGS="--cascade=orphan"
+  elif grep -q "Forbidden.*updates to deployment spec.*are forbidden" apply.log; then
+    RESOURCE_TYPE="deployment"
+    NAME_PATTERN='The Deployment "\K[^"]+'
+    DELETE_ARGS="--cascade=orphan"
+  elif grep -qE "spec\.clusterIP.*immutable|spec\.type.*immutable" apply.log; then
+    RESOURCE_TYPE="service"
+    NAME_PATTERN='Service "\K[^"]+'
+    DELETE_ARGS=""
+  elif grep -q "Forbidden.*updates to daemonset spec.*are forbidden" apply.log; then
+    RESOURCE_TYPE="daemonset"
+    NAME_PATTERN='The DaemonSet "\K[^"]+'
+    DELETE_ARGS="--cascade=orphan"
+  elif grep -qE "spec\.selector.*immutable|spec\.completions.*cannot be decreased" apply.log; then
+    RESOURCE_TYPE="job"
+    NAME_PATTERN='Job "\K[^"]+'
+    DELETE_ARGS=""
+  fi
+
+  if [ -n "$RESOURCE_TYPE" ]; then
+    # 3. Extract ONLY the resource(s) that failed
+    FAILED_RESOURCES=$(grep -oP "$NAME_PATTERN" apply.log)
+
+    # 4. Delete ONLY those resources
+    for res in $FAILED_RESOURCES; do
+      kubectl delete "$RESOURCE_TYPE" "$res" $DELETE_ARGS
+    done
+
+    # 5. Retry deployment
+    kubectl apply -f manifests.yaml
+  fi
+fi
+```
+
+**Benefits**:
+
+- ✅ **No False Positives**: Only acts when kubectl actually fails with immutable field error
+- ✅ **Multi-Resource Support**: Handles StatefulSet, Deployment, Service, DaemonSet, Job
+- ✅ **Precise**: Extracts exact resource names from error message
+- ✅ **Safe**: `--cascade=orphan` for stateful resources (preserves PVCs/Pods)
+- ✅ **Extensible**: Easy to add new resource types (just add pattern)
+- ✅ **Simple**: Pattern-based approach scales better than spec comparison
+- ✅ **Kubernetes-Native**: Let kubectl validate, we handle errors
+- ✅ **Future-Proof**: Works for any immutable field on any resource type
+
+**Example Scenario**:
+
+1. Developer changes PostgreSQL storage from 10Gi to 20Gi in `hetzner/dev/patches/`
+2. Workflow builds manifests and tries `kubectl apply`
+3. kubectl returns: `The StatefulSet "postgres" is invalid: spec: Forbidden: updates to statefulset spec for fields other than...`
+4. Workflow detects immutable field error for StatefulSet resource type
+5. Workflow extracts "postgres" from error message
+6. Workflow deletes ONLY postgres StatefulSet with `--cascade=orphan` (redis-0 keeps running)
+7. Workflow retries apply, PostgreSQL recreates with new 20Gi PVC
+8. PostgreSQL pod reconnects to existing data (PVC persisted)
+9. Redis pod never restarted (wasn't affected by the change)
+
+**Applied To**:
+
+- GitHub Actions: dev (L312), test (L636), prod (L983)
+- Local: `tools/infra/kubectl-local-context.js`
 
 ## Next Features (Future Work)
 

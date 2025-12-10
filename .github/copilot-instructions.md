@@ -548,9 +548,11 @@ kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins | kubectl diff -f -
 3. Set up kubeconfig (from GitHub Secrets)
 4. **Substitute secrets** in postgres.secret.yaml (in-memory)
 5. Build Kustomize manifests
-6. Apply with `kubectl apply --server-side=true --force-conflicts`
+6. **Error-driven apply**: Try `kubectl apply` → On immutable field error → Extract failed StatefulSet names → Delete with `--cascade=orphan` → Retry
 7. Wait for rollout with configurable timeout
 8. Rollback on failure (if enabled)
+
+**Kubernetes Immutable Field Handling**: Uses error-driven pattern to handle immutable fields across **5 resource types** (StatefulSet, Deployment, Service, DaemonSet, Job). Instead of preemptive checks, lets kubectl fail first, then parses stderr to identify resource type and extract specific resource names, deletes only those affected resources. Uses `--cascade=orphan` for stateful resources (preserves PVCs/Pods). This eliminates false positives and scales to any number of resources. Applied to all deployment targets: GitHub Actions (dev L312, test L636, prod L983) and local (kubectl-local-context.js).
 
 **Rollback logic** (combined OR):
 
@@ -661,6 +663,9 @@ grep -r "ACCOUNT_SERVICE_DB_USER_PASSWORD" .github/workflows/ infra/k8s/base/
 
 **"Rollback not triggering on failure"**
 → Check BOTH `rollback_on_failure` (service level) AND `statefulset_rollback` (strategy level). Either can trigger rollback (OR logic).
+
+**"Resource updates failing with immutable field errors"**
+→ Immutable fields changed on StatefulSet/Deployment/Service/DaemonSet/Job. Workflow automatically detects error type, extracts resource names, deletes with appropriate flags (`--cascade=orphan` for stateful resources), and retries. Supports 5 resource types. For local testing, use `npm run infra:local:k8s-resources:apply` which has the same error-driven logic.
 
 ### Infrastructure Documentation
 
