@@ -46,9 +46,13 @@ environments:
         enabled: true
         auto_deploy: true # Auto-deploy in dev
         require_approval: false # No approval needed
-
-        # Rollback settings - disabled in dev (manual rollback preferred)
         rollback_on_failure: false # Set to true to enable automatic rollback on failed deployments
+
+      redis:
+        enabled: true
+        auto_deploy: true # Auto-deploy in dev
+        require_approval: false # No approval needed
+        rollback_on_failure: false # Disabled in dev for manual investigation
 
   # ────────────────────────────────────────────────────────────────────────────
   # TEST/STAGING ENVIRONMENT
@@ -72,9 +76,13 @@ environments:
         enabled: true
         auto_deploy: false # Manual deployment in test
         require_approval: false # Optional approval
-
-        # Rollback settings - disabled for manual validation
         rollback_on_failure: false # Set to true to enable automatic rollback on failed deployments
+
+      redis:
+        enabled: true
+        auto_deploy: false # Manual deployment in test
+        require_approval: false # Optional approval
+        rollback_on_failure: false # Disabled for manual validation
 
   # ────────────────────────────────────────────────────────────────────────────
   # PRODUCTION ENVIRONMENT
@@ -98,9 +106,13 @@ environments:
         enabled: true
         auto_deploy: false # Manual deployment only
         require_approval: true # Always require approval
-
-        # Rollback settings - safety-first (manual review recommended for prod)
         rollback_on_failure: false # Set to true to enable automatic rollback (use with caution)
+
+      redis:
+        enabled: true
+        auto_deploy: false # Manual deployment only
+        require_approval: true # Always require approval
+        rollback_on_failure: false # Manual review recommended for production
 
 # =============================================================================
 # DEPLOYMENT STRATEGIES

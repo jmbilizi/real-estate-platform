@@ -1,0 +1,105 @@
+# Redis (Valkey) Configuration ConfigMap
+# This ConfigMap contains production-grade redis.conf settings
+# Uses Valkey (BSD-licensed Redis fork) for true open-source compliance
+# Configuration includes: AOF+RDB persistence, LRU eviction, password auth, monitoring
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+data:
+  users.acl: |
+    user admin on >${REDIS_ADMIN_PASSWORD} ~* +@all
+    user pubsub_user on >${REDIS_PUBSUB_PASSWORD} ~messaging:* ~pubsub:* +@pubsub +@string +@hash +@list +@set +@sortedset +expire +ttl +del
+    user cache_user on >${REDIS_CACHE_PASSWORD} ~cache:* ~session:* +@string +@hash +get +set +del +expire +ttl +exists
+    user ratelimit_user on >${REDIS_RATELIMIT_PASSWORD} ~ratelimit:* +incr +decr +expire +ttl +get +set +del
+    user monitor on >${REDIS_MONITOR_PASSWORD} ~* +@read +ping +info +client +slowlog
+    user default off nopass ~* -@all
+
+  redis.conf: |
+    # Redis Configuration for Valkey
+    # Based on production best practices
+
+    # Network
+    bind 0.0.0.0
+    port 6379
+    tcp-backlog 511
+    timeout 0
+    tcp-keepalive 300
+
+    # General
+    daemonize no
+    supervised no
+    pidfile /var/run/redis.pid
+    loglevel notice
+    logfile ""
+    databases 16
+
+    # Snapshotting (RDB)
+    save 900 1
+    save 300 10
+    save 60 10000
+    stop-writes-on-bgsave-error yes
+    rdbcompression yes
+    rdbchecksum yes
+    dbfilename dump.rdb
+    dir /data
+
+    # Replication
+    repl-diskless-sync no
+    repl-diskless-sync-delay 5
+    repl-disable-tcp-nodelay no
+
+    # Security (ACL-based authentication)
+    aclfile /etc/redis/users.acl
+
+    # Persistence (AOF)
+    appendonly yes
+    appendfilename "appendonly.aof"
+    appendfsync everysec
+    no-appendfsync-on-rewrite no
+    auto-aof-rewrite-percentage 100
+    auto-aof-rewrite-min-size 64mb
+
+    # LUA scripting
+    lua-time-limit 5000
+
+    # Slow log
+    slowlog-log-slower-than 10000
+    slowlog-max-len 128
+
+    # Latency monitoring
+    latency-monitor-threshold 100
+
+    # Event notification (disabled by default, enable as needed)
+    notify-keyspace-events ""
+
+    # Advanced config
+    hash-max-ziplist-entries 512
+    hash-max-ziplist-value 64
+    list-max-ziplist-size -2
+    set-max-intset-entries 512
+    zset-max-ziplist-entries 128
+    zset-max-ziplist-value 64
+    hll-sparse-max-bytes 3000
+    stream-node-max-bytes 4096
+    stream-node-max-entries 100
+    activerehashing yes
+
+    # Client output buffer limits
+    client-output-buffer-limit normal 0 0 0
+    client-output-buffer-limit replica 256mb 64mb 60
+    client-output-buffer-limit pubsub 32mb 8mb 60
+
+    # Frequency
+    hz 10
+    dynamic-hz yes
+
+    # AOF and RDB config
+    aof-rewrite-incremental-fsync yes
+    rdb-save-incremental-fsync yes
+
+    # Memory management (will be overridden by environment variable)
+    maxmemory 256mb
+    maxmemory-policy allkeys-lru
+    maxmemory-samples 5

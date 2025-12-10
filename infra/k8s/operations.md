@@ -71,19 +71,31 @@ gh workflow run deploy-k8s-resources.yml -f environment=dev
 # Set kubeconfig
 export KUBECONFIG=~/.kube/dev-config
 
-# Quick status
+# PostgreSQL Status
 kubectl get statefulset postgres
 kubectl get pods -l app=postgres
 kubectl get services -l app=postgres
 kubectl get pvc -l app=postgres
 
-# Detailed status
+# PostgreSQL Details
 kubectl describe statefulset postgres
 kubectl logs postgres-0
 kubectl exec postgres-0 -- psql -U postgres -c "SELECT version();"
 
-# Watch rollout
+# Redis Status
+kubectl get statefulset redis
+kubectl get pods -l app=redis
+kubectl get services -l app=redis
+kubectl get pvc -l app=redis
+
+# Redis Details
+kubectl describe statefulset redis
+kubectl logs redis-0
+kubectl exec redis-0 -- redis-cli --user admin --pass "$REDIS_ADMIN_PASSWORD" INFO server
+
+# Watch rollouts
 kubectl rollout status statefulset/postgres -w
+kubectl rollout status statefulset/redis -w
 ```
 
 ## Common Workflows
@@ -301,18 +313,58 @@ kubectl get secret postgres-secret -o jsonpath='{.data.POSTGRES_SA_PASSWORD}' | 
 ### Database Connection Issues
 
 ```bash
-# Port-forward to local machine
+# PostgreSQL Port-forward
 kubectl port-forward postgres-0 5432:5432
 
-# Test connection
+# PostgreSQL Connection test
 psql -h localhost -U postgres_sa -d postgres
 
 # Or using kubectl exec
 kubectl exec -it postgres-0 -- psql -U postgres_sa
 
-# Check service DNS
+# Check PostgreSQL service DNS
 kubectl run -it --rm debug --image=postgres:16 --restart=Never -- \
   psql -h postgres-serv -U postgres_sa -c "SELECT version();"
+
+# Redis Port-forward
+kubectl port-forward redis-0 6379:6379
+
+# Redis Connection test (requires password from secret)
+redis-cli -h localhost --user admin --pass <password> PING
+
+# Or using kubectl exec
+kubectl exec -it redis-0 -- redis-cli --user admin --pass "$REDIS_ADMIN_PASSWORD" INFO
+
+# Check Redis ACL users
+kubectl exec -it redis-0 -- redis-cli --user admin --pass "$REDIS_ADMIN_PASSWORD" ACL LIST
+
+# Test specific ACL user
+kubectl exec -it redis-0 -- redis-cli --user cache_user --pass "$REDIS_CACHE_PASSWORD" PING
+```
+
+### Redis ACL Operations
+
+```bash
+# List all Redis users
+kubectl exec redis-0 -- redis-cli --user admin --pass "$REDIS_ADMIN_PASSWORD" ACL LIST
+
+# Check user permissions
+kubectl exec redis-0 -- redis-cli --user admin --pass "$REDIS_ADMIN_PASSWORD" ACL GETUSER pubsub_user
+
+# Monitor Redis activity
+kubectl exec -it redis-0 -- redis-cli --user monitor --pass "$REDIS_MONITOR_PASSWORD" MONITOR
+
+# Check active connections
+kubectl exec redis-0 -- redis-cli --user admin --pass "$REDIS_ADMIN_PASSWORD" CLIENT LIST
+
+# View cache hit rate
+kubectl exec redis-0 -- redis-cli --user admin --pass "$REDIS_ADMIN_PASSWORD" INFO stats
+
+# Check memory usage
+kubectl exec redis-0 -- redis-cli --user admin --pass "$REDIS_ADMIN_PASSWORD" INFO memory
+
+# Test pub/sub
+kubectl exec -it redis-0 -- redis-cli --user pubsub_user --pass "$REDIS_PUBSUB_PASSWORD" PUBLISH test:channel "hello"
 ```
 
 ### Storage Issues

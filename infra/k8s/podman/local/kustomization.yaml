@@ -8,6 +8,7 @@ resources:
 # Environment-specific patches
 patches:
   - path: patches/statefulsets/postgres.statefulset.yaml
+  - path: patches/statefulsets/redis.statefulset.yaml
 
 # Common labels for all resources
 labels:

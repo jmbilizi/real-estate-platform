@@ -38,7 +38,16 @@ This directory contains comprehensive documentation for the Kubernetes infrastru
 
 ### Configuration References
 
-4. **[../deploy-control.yaml](../deploy-control.yaml)** - Deployment control
+4. **[redis-acl-guide.md](./redis-acl-guide.md)** - Redis ACL guide
+   - ACL user permissions and key patterns
+   - Application connection examples (Node.js, Python, .NET)
+   - Key naming conventions
+   - Security best practices
+   - Troubleshooting ACL errors
+   - **Who should read**: Developers (backend, services)
+   - **When to read**: When connecting to Redis, implementing caching/pub-sub
+
+5. **[../deploy-control.yaml](../deploy-control.yaml)** - Deployment control
    - **Most deployment controls are actively enforced by workflows**
    - Environment gates: `enabled`, `auto_deploy` (enforced), `require_manual_approval` (not yet enforced)
    - Deployment windows: Time/day-based restrictions (enforced)
@@ -50,7 +59,7 @@ This directory contains comprehensive documentation for the Kubernetes infrastru
    - **Who should read**: DevOps engineers, release managers
    - **When to read**: When configuring deployment policies or troubleshooting deployments
 
-5. **Directory Structure Reference**
+6. **Directory Structure Reference**
    - `base/` - Shared configurations (see below)
    - `hetzner/` - Provider-specific overlays (see below)
    - `.github/workflows/` - CI/CD pipelines (see below)
@@ -71,21 +80,27 @@ infra/
     ├── base/                        # Cloud-agnostic shared configurations
     │   ├── kustomization.yaml       # Base Kustomize configuration (required)
     │   ├── configmaps/
-    │   │   └── postgres-init.configmap.yaml
+    │   │   ├── postgres-init.configmap.yaml   # PostgreSQL multi-tenant init script
+    │   │   ├── redis.configmap.yaml           # Redis production config + ACL users
+    │   │   └── redis-acl-guide.md            # Redis ACL documentation
     │   ├── secrets/
-    │   │   └── postgres.secret.yaml         # Secret template with StrongBase64Password placeholder
+    │   │   ├── postgres.secret.yaml           # PostgreSQL passwords (substituted by workflow)
+    │   │   └── redis.secret.yaml              # Redis ACL user passwords (5 users)
     │   ├── services/
-    │   │   └── postgres.service.yaml
+    │   │   ├── postgres.service.yaml          # PostgreSQL headless + ClusterIP
+    │   │   └── redis.service.yaml             # Redis headless + ClusterIP
     │   └── statefulsets/
-    │       └── postgres.statefulset.yaml    # Minimal base (NO resources, NO storage - patches required)
+    │       ├── postgres.statefulset.yaml      # Minimal base (NO resources/storage)
+    │       └── redis.statefulset.yaml         # Valkey 9.0-alpine with ACL init
     │
     └── hetzner/                     # Hetzner Cloud provider (auto-detected)
         ├── dev/                     # Development environment
         │   ├── cluster/
-        │   │   └── cluster-config.yaml      # hetzner-k3s cluster config
+        │   │   └── cluster-config.yaml      # hetzner-k8s cluster config
         │   ├── patches/
         │   │   └── statefulsets/
-        │   │       └── postgres.statefulset.yaml  # Dev resources + storage (combined)
+        │   │       ├── postgres.statefulset.yaml  # Dev resources + storage
+        │   │       └── redis.statefulset.yaml     # Dev resources + storage
         │   ├── kustomization.yaml           # Kustomize overlay
         │   └── .gitignore
         │
@@ -208,7 +223,13 @@ Configure in: Repository Settings → Secrets and variables → Actions
 
 **All environments (dev, test, prod):** `POSTGRES_SA_PASSWORD`, `ACCOUNT_SERVICE_DB_USER_PASSWORD`, `MESSAGING_SERVICE_DB_USER_PASSWORD`, `PROPERTY_SERVICE_DB_USER_PASSWORD`
 
+### Redis ACL User Passwords (per environment)
+
+**All environments (dev, test, prod):** `REDIS_ADMIN_PASSWORD`, `REDIS_PUBSUB_PASSWORD`, `REDIS_CACHE_PASSWORD`, `REDIS_RATELIMIT_PASSWORD`, `REDIS_MONITOR_PASSWORD`
+
 **Note:** Each environment has its own set of these secrets (scoped to the environment).
+
+**Redis ACL Info:** See `redis-acl-guide.md` for user permissions and application connection examples.
 
 ## 🛠️ Tools Required
 
@@ -261,14 +282,21 @@ Configure in: Repository Settings → Secrets and variables → Actions
 | What                         | Where                                                         |
 | ---------------------------- | ------------------------------------------------------------- |
 | Deployment flags             | `infra/deploy-control.yaml`                                   |
+| **PostgreSQL**               |                                                               |
 | PostgreSQL image version     | `base/statefulsets/postgres.statefulset.yaml`                 |
 | Init script (database setup) | `base/configmaps/postgres-init.configmap.yaml`                |
 | Dev config (combined)        | `hetzner/dev/patches/statefulsets/postgres.statefulset.yaml`  |
-| Local config (combined)      | `podman/local/patches/statefulsets/postgres.statefulset.yaml` |
 | Prod config (combined)       | `hetzner/prod/patches/statefulsets/postgres.statefulset.yaml` |
-| Test config (combined)       | `hetzner/test/patches/statefulsets/postgres.statefulset.yaml` |
-| Cluster config (dev)         | `hetzner/dev/cluster/cluster-config.yaml`                     |
 | Service configuration        | `base/services/postgres.service.yaml`                         |
+| **Redis (Valkey)**           |                                                               |
+| Redis image version          | `base/statefulsets/redis.statefulset.yaml`                    |
+| Redis config + ACL users     | `base/configmaps/redis.configmap.yaml`                        |
+| Redis ACL documentation      | `redis-acl-guide.md`                                          |
+| Dev config (combined)        | `hetzner/dev/patches/statefulsets/redis.statefulset.yaml`     |
+| Prod config (combined)       | `hetzner/prod/patches/statefulsets/redis.statefulset.yaml`    |
+| Service configuration        | `base/services/redis.service.yaml`                            |
+| **General**                  |                                                               |
+| Cluster config (dev)         | `hetzner/dev/cluster/cluster-config.yaml`                     |
 | GitHub Secrets required      | See "Required Secrets" section above                          |
 
 ### Find Workflows

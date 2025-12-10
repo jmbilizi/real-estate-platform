@@ -1,3 +1,8 @@
+# PostgreSQL Services
+# Two service types for different access patterns:
+# 1. Headless service (postgres-hl): Required by StatefulSet for stable pod DNS
+# 2. Regular ClusterIP (postgres-serv): For application access to PostgreSQL
+
 ---
 # Headless service - required for StatefulSet
 apiVersion: v1

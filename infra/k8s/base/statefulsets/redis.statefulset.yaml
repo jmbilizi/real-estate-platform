@@ -1,0 +1,160 @@
+# Redis (Valkey) StatefulSet (Base Configuration)
+# Cloud-agnostic base - NO resources or storage defined (added via environment patches)
+# Image: valkey/valkey:9.0-alpine (BSD-licensed Redis fork for true open-source)
+# Use cases: Cache (sessions, API responses, rate limiting) + Pub/Sub (WebSocket notifications)
+# Persistence: AOF+RDB hybrid (configured in redis-config ConfigMap)
+# Secrets: Password authentication via redis-secret (substituted by workflow)
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+spec:
+  serviceName: redis-hl
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        fsGroup: 999 # redis group
+        runAsUser: 999 # redis user
+        runAsNonRoot: true
+      initContainers:
+        - name: acl-config
+          image: alpine:3.19
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0 # Run as root to write files
+            runAsNonRoot: false
+          command:
+            - sh
+            - -c
+            - |
+              # Copy redis.conf to /etc/redis
+              cp /tmp/redis-config/redis.conf /etc/redis/redis.conf
+
+              # Manual substitution using sed (no envsubst needed)
+              sed -e "s|\${REDIS_ADMIN_PASSWORD}|${REDIS_ADMIN_PASSWORD}|g" \
+                  -e "s|\${REDIS_PUBSUB_PASSWORD}|${REDIS_PUBSUB_PASSWORD}|g" \
+                  -e "s|\${REDIS_CACHE_PASSWORD}|${REDIS_CACHE_PASSWORD}|g" \
+                  -e "s|\${REDIS_RATELIMIT_PASSWORD}|${REDIS_RATELIMIT_PASSWORD}|g" \
+                  -e "s|\${REDIS_MONITOR_PASSWORD}|${REDIS_MONITOR_PASSWORD}|g" \
+                  /tmp/redis-config/users.acl > /etc/redis/users.acl
+
+              # Set correct ownership and permissions for redis user (999)
+              chown 999:999 /etc/redis/redis.conf /etc/redis/users.acl
+              chmod 644 /etc/redis/redis.conf /etc/redis/users.acl
+              echo "Redis config and ACL file generated successfully"
+          env:
+            - name: REDIS_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: REDIS_ADMIN_PASSWORD
+            - name: REDIS_PUBSUB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: REDIS_PUBSUB_PASSWORD
+            - name: REDIS_CACHE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: REDIS_CACHE_PASSWORD
+            - name: REDIS_RATELIMIT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: REDIS_RATELIMIT_PASSWORD
+            - name: REDIS_MONITOR_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: REDIS_MONITOR_PASSWORD
+          volumeMounts:
+            - name: redis-config
+              mountPath: /tmp/redis-config
+              readOnly: true
+            - name: redis-acl
+              mountPath: /etc/redis
+      containers:
+        - name: redis
+          image: valkey/valkey:9.0-alpine
+          imagePullPolicy: IfNotPresent
+          # Resources intentionally omitted - MUST be defined in environment patches
+          # This ensures explicit resource decisions per environment (dev vs prod)
+          command:
+            - redis-server
+            - /etc/redis/redis.conf
+          ports:
+            - containerPort: 6379
+              name: redis
+          env:
+            # ACL user passwords (substituted in users.acl via sed in init container)
+            - name: REDIS_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: REDIS_ADMIN_PASSWORD
+            - name: REDIS_PUBSUB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: REDIS_PUBSUB_PASSWORD
+            - name: REDIS_CACHE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: REDIS_CACHE_PASSWORD
+            - name: REDIS_RATELIMIT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: REDIS_RATELIMIT_PASSWORD
+            - name: REDIS_MONITOR_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: REDIS_MONITOR_PASSWORD
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - redis-cli --user admin --pass "$REDIS_ADMIN_PASSWORD" ping | grep PONG
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - redis-cli --user admin --pass "$REDIS_ADMIN_PASSWORD" ping | grep PONG
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+            - name: redis-config
+              mountPath: /tmp/redis-config
+              readOnly: true
+            - name: redis-acl
+              mountPath: /etc/redis
+      volumes:
+        - name: redis-config
+          configMap:
+            name: redis-config
+        - name: redis-acl
+          emptyDir: {}
+  # volumeClaimTemplates intentionally omitted - MUST be defined in environment patches
+  # This ensures explicit storage decisions per environment (dev: 2Gi, test: 4Gi, prod: 10Gi)

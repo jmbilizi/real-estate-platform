@@ -10,7 +10,27 @@ kind: Kustomization
 # 3. Services (must exist before StatefulSet for stable DNS)
 # 4. StatefulSets (depends on Secrets, ConfigMaps, Services)
 resources:
+  # Secrets (all first)
   - secrets/postgres.secret.yaml
+  - secrets/redis.secret.yaml
+
+  # ConfigMaps (all second)
   - configmaps/postgres-init.configmap.yaml
+  - configmaps/redis.configmap.yaml
+
+  # Services (before workloads)
   - services/postgres.service.yaml
+  - services/redis.service.yaml
+
+  # Workloads (statefulsets, deployments, etc.)
+  ## StatefulSets (stateful apps)
   - statefulsets/postgres.statefulset.yaml
+  - statefulsets/redis.statefulset.yaml
+
+  ## Deployments (stateless apps)
+
+  ## DaemonSets (node-level services like Logging, monitoring, networking on every node)
+
+  ## Jobs (one-time tasks like database schema migration, initialize cache, initial data load, one-time data import)
+
+  ## CronJobs (scheduled tasks like backups, cleanup, reports )

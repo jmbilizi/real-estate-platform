@@ -15,20 +15,26 @@ infra/
     ├── base/                                        # Shared base configs
     │   ├── kustomization.yaml                       # Base Kustomize configuration
     │   ├── configmaps/
-    │   │   └── postgres-init.configmap.yaml
+    │   │   ├── postgres-init.configmap.yaml         # PostgreSQL multi-tenant init
+    │   │   ├── redis.configmap.yaml                 # Redis production config + ACL users
+    │   │   └── redis-acl-guide.md                   # Redis ACL documentation
     │   ├── secrets/
-    │   │   └── postgres.secret.yaml                 # Template only (StrongBase64Password values)
+    │   │   ├── postgres.secret.yaml                 # PostgreSQL passwords (4 users)
+    │   │   └── redis.secret.yaml                    # Redis ACL passwords (5 users)
     │   ├── services/
-    │   │   └── postgres.service.yaml
+    │   │   ├── postgres.service.yaml                # PostgreSQL headless + ClusterIP
+    │   │   └── redis.service.yaml                   # Redis headless + ClusterIP
     │   └── statefulsets/
-    │       └── postgres.statefulset.yaml
+    │       ├── postgres.statefulset.yaml            # PostgreSQL 18 + PostGIS 3.4
+    │       └── redis.statefulset.yaml               # Valkey 9.0-alpine with ACL
     ├── hetzner/                                     # Hetzner Cloud provider
     │   ├── dev/
     │   │   ├── cluster/
     │   │   │   └── cluster-config.yaml
     │   │   ├── patches/
     │   │   │   └── statefulsets/
-    │   │   │       └── postgres.statefulset.yaml    # Dev resources + storage (combined)
+    │   │   │       ├── postgres.statefulset.yaml    # Dev resources + storage
+    │   │   │       └── redis.statefulset.yaml       # Dev resources + storage
     │   │   ├── kustomization.yaml                   # Kustomize overlay
     │   │   └── .gitignore
     │   ├── test/
@@ -49,10 +55,13 @@ Pattern: `{service}.{kind}.yaml`
 
 **Examples:**
 
-- `postgres.statefulset.yaml` - Clear resource type
-- `postgres.service.yaml` - Clear resource type
-- `postgres-init.configmap.yaml` - Clear purpose + type
-- `cluster-config.yaml` - Simple, in provider/env/cluster/ directory
+- `postgres.statefulset.yaml` - PostgreSQL StatefulSet
+- `redis.statefulset.yaml` - Redis StatefulSet
+- `postgres.service.yaml` - PostgreSQL Service
+- `redis.service.yaml` - Redis Service
+- `postgres-init.configmap.yaml` - PostgreSQL initialization script
+- `redis.configmap.yaml` - Redis production configuration
+- `cluster-config.yaml` - Cluster configuration (in provider/env/cluster/)
 
 ### 3. Kustomize Architecture
 
@@ -61,15 +70,22 @@ Pattern: `{service}.{kind}.yaml`
 - `base/kustomization.yaml` - Defines all shared resources (Secrets, ConfigMaps, Services, StatefulSets)
 - `hetzner/{env}/kustomization.yaml` - References base (`../../base`) and applies environment-specific patches
 
+**Resources in Base:**
+
+- **PostgreSQL**: postgis/postgis:18-3.4, multi-tenant initialization, 4 database users
+- **Redis**: valkey/valkey:9.0-alpine, ACL-based authentication, 5 service users
+- **Services**: Headless (for StatefulSet DNS) + ClusterIP (for load balancing)
+
 **Minimal Base Philosophy:**
 
 The base layer contains ONLY configuration that is **identical across all environments**:
 
-- ✅ Container images (postgis/postgis:18-3.4)
-- ✅ Health probes (pg_isready commands)
-- ✅ Environment variables (connection strings, paths)
-- ✅ Volume mounts (/var/lib/postgresql/data)
-- ✅ Security context (fsGroup: 999)
+- ✅ Container images (postgis/postgis:18-3.4, valkey/valkey:9.0-alpine)
+- ✅ Health probes (pg_isready, redis-cli ping)
+- ✅ Environment variables (connection strings, ACL passwords)
+- ✅ Volume mounts (/var/lib/postgresql/data, /data for Redis)
+- ✅ Security context (fsGroup: 999 for both PostgreSQL and Redis)
+- ✅ Init containers (PostgreSQL multi-database, Redis ACL substitution)
 
 **NEVER in base** (must be defined in patches):
 
@@ -80,10 +96,12 @@ The base layer contains ONLY configuration that is **identical across all enviro
 
 **Benefits**:
 
-- Base changes ONLY for features/bugs (PostgreSQL version, new env vars, probe tuning)
+- Base changes ONLY for features/bugs (version upgrades, new env vars, probe tuning)
 - Every environment explicitly declares its resource budget (self-documenting)
 - No accidental inheritance of stale defaults
 - Clear separation: base = what to run, patches = how much resources
+- **PostgreSQL**: Multi-tenant databases (account_service_db, messaging_service_db, property_service_db)
+- **Redis**: Enterprise ACL mode (admin, pubsub_user, cache_user, ratelimit_user, monitor users)
 
 **Modern Kustomize Syntax:**
 
@@ -380,6 +398,45 @@ embedded_registry_mirror:
 - `uuid-ossp` - UUID generation
 - `postgis` - Geospatial features
 - `pg_trgm` - Text search optimization
+
+### Redis (Valkey) Configuration
+
+**Image:** `valkey/valkey:9.0-alpine` (BSD-licensed Redis fork)
+
+**Authentication:** Enterprise ACL mode (user-based access control)
+
+**ACL Users:**
+
+- `admin` - Full access (operations, monitoring, probes)
+- `pubsub_user` - Pub/Sub and messaging keys (`~messaging:*`, `~pubsub:*`) - Used by messaging-service, notification-service, websocket-gateway
+- `cache_user` - Cache and session keys (`~cache:*`, `~session:*`) - Used by property-service, account-service
+- `ratelimit_user` - Rate limiting counters (`~ratelimit:*`) - Used by api-gateway
+- `monitor` - Read-only monitoring (Prometheus/Grafana)
+
+**Use Cases:**
+
+- **Caching**: Sessions, API responses, computed results
+- **Pub/Sub**: WebSocket notifications, real-time messaging
+- **Rate Limiting**: API throttling, abuse prevention
+- **Counters**: Analytics, metrics, leaderboards
+
+**Persistence:** AOF+RDB hybrid for data durability
+
+**Security Benefits:**
+
+- User-based access control (prevents cross-service data access)
+- Audit trails (WHO accessed data, not just WHAT)
+- Least privilege (each service gets only needed permissions)
+- Compliance ready (SOC2, HIPAA, PCI-DSS)
+- Key namespacing (service-specific key patterns)
+
+**Documentation:** See `infra/k8s/redis-acl-guide.md` for:
+
+- ACL user permissions and command restrictions
+- Application connection examples (Node.js, Python, .NET)
+- Key naming conventions per service
+- Operations (check permissions, monitor activity, add users)
+- Troubleshooting permission errors
 
 **Schemas:**
 

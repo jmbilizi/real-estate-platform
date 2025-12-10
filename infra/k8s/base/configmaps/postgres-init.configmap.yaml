@@ -1,3 +1,8 @@
+# PostgreSQL Initialization Scripts ConfigMap
+# This ConfigMap contains shell scripts that run during PostgreSQL container initialization
+# Scripts create multi-tenant databases (account_db, messaging_db, property_db) with dedicated users
+# Passwords are injected from postgres-secret via environment variables
+
 apiVersion: v1
 kind: ConfigMap
 metadata:

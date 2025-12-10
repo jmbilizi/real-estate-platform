@@ -1,0 +1,39 @@
+# Redis (Valkey) Services
+# Two service types for different access patterns:
+# 1. Headless service (redis-hl): Required by StatefulSet for stable pod DNS
+# 2. Regular ClusterIP (redis-svc): For application access to Redis/Valkey
+
+---
+# Headless service - required for StatefulSet
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-hl
+  labels:
+    app: redis
+spec:
+  clusterIP: None # This makes it headless
+  ports:
+    - port: 6379
+      targetPort: 6379
+      protocol: TCP
+      name: redis
+  selector:
+    app: redis
+---
+# Regular service - for application access
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-svc
+  labels:
+    app: redis
+spec:
+  type: ClusterIP
+  ports:
+    - port: 6379
+      targetPort: 6379
+      protocol: TCP
+      name: redis
+  selector:
+    app: redis

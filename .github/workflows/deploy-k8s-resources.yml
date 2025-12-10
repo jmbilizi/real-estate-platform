@@ -285,16 +285,22 @@ jobs:
       - name: Substitute secrets in secret file
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
-          # Process secret file in-memory (same pattern as hetzner-k8s cluster-config)
-          # Replace StrongBase64Password placeholder with actual secrets using yq pipeline
+          # Process PostgreSQL secrets (same pattern as hetzner-k8s cluster-config)
           yq eval '.stringData.POSTGRES_SA_PASSWORD = "${{ secrets.POSTGRES_SA_PASSWORD }}"' infra/k8s/base/secrets/postgres.secret.yaml | \
           yq eval '.stringData.ACCOUNT_SERVICE_DB_USER_PASSWORD = "${{ secrets.ACCOUNT_SERVICE_DB_USER_PASSWORD }}"' - | \
           yq eval '.stringData.MESSAGING_SERVICE_DB_USER_PASSWORD = "${{ secrets.MESSAGING_SERVICE_DB_USER_PASSWORD }}"' - | \
           yq eval '.stringData.PROPERTY_SERVICE_DB_USER_PASSWORD = "${{ secrets.PROPERTY_SERVICE_DB_USER_PASSWORD }}"' - \
           > /tmp/postgres.secret.processed.yaml
-
-          # Replace the original file with processed version (in runner only, not committed)
           mv /tmp/postgres.secret.processed.yaml infra/k8s/base/secrets/postgres.secret.yaml
+
+          # Process Redis ACL secrets (enterprise mode - 5 users)
+          yq eval '.stringData.REDIS_ADMIN_PASSWORD = "${{ secrets.REDIS_ADMIN_PASSWORD }}"' infra/k8s/base/secrets/redis.secret.yaml | \
+          yq eval '.stringData.REDIS_PUBSUB_PASSWORD = "${{ secrets.REDIS_PUBSUB_PASSWORD }}"' - | \
+          yq eval '.stringData.REDIS_CACHE_PASSWORD = "${{ secrets.REDIS_CACHE_PASSWORD }}"' - | \
+          yq eval '.stringData.REDIS_RATELIMIT_PASSWORD = "${{ secrets.REDIS_RATELIMIT_PASSWORD }}"' - | \
+          yq eval '.stringData.REDIS_MONITOR_PASSWORD = "${{ secrets.REDIS_MONITOR_PASSWORD }}"' - \
+          > /tmp/redis.secret.processed.yaml
+          mv /tmp/redis.secret.processed.yaml infra/k8s/base/secrets/redis.secret.yaml
 
       - name: Build Kustomize manifests
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
@@ -553,16 +559,22 @@ jobs:
       - name: Substitute secrets in secret file
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
-          # Process secret file in-memory (same pattern as hetzner-k8s cluster-config)
-          # Replace StrongBase64Password placeholder with actual secrets using yq pipeline
+          # Process PostgreSQL secrets (same pattern as dev)
           yq eval '.stringData.POSTGRES_SA_PASSWORD = "${{ secrets.POSTGRES_SA_PASSWORD }}"' infra/k8s/base/secrets/postgres.secret.yaml | \
           yq eval '.stringData.ACCOUNT_SERVICE_DB_USER_PASSWORD = "${{ secrets.ACCOUNT_SERVICE_DB_USER_PASSWORD }}"' - | \
           yq eval '.stringData.MESSAGING_SERVICE_DB_USER_PASSWORD = "${{ secrets.MESSAGING_SERVICE_DB_USER_PASSWORD }}"' - | \
           yq eval '.stringData.PROPERTY_SERVICE_DB_USER_PASSWORD = "${{ secrets.PROPERTY_SERVICE_DB_USER_PASSWORD }}"' - \
           > /tmp/postgres.secret.processed.yaml
-
-          # Replace the original file with processed version (in runner only, not committed)
           mv /tmp/postgres.secret.processed.yaml infra/k8s/base/secrets/postgres.secret.yaml
+
+          # Process Redis ACL secrets (enterprise mode - 5 users)
+          yq eval '.stringData.REDIS_ADMIN_PASSWORD = "${{ secrets.REDIS_ADMIN_PASSWORD }}"' infra/k8s/base/secrets/redis.secret.yaml | \
+          yq eval '.stringData.REDIS_PUBSUB_PASSWORD = "${{ secrets.REDIS_PUBSUB_PASSWORD }}"' - | \
+          yq eval '.stringData.REDIS_CACHE_PASSWORD = "${{ secrets.REDIS_CACHE_PASSWORD }}"' - | \
+          yq eval '.stringData.REDIS_RATELIMIT_PASSWORD = "${{ secrets.REDIS_RATELIMIT_PASSWORD }}"' - | \
+          yq eval '.stringData.REDIS_MONITOR_PASSWORD = "${{ secrets.REDIS_MONITOR_PASSWORD }}"' - \
+          > /tmp/redis.secret.processed.yaml
+          mv /tmp/redis.secret.processed.yaml infra/k8s/base/secrets/redis.secret.yaml
 
       - name: Build Kustomize manifests
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
@@ -843,16 +855,22 @@ jobs:
       - name: Substitute secrets in secret file
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
-          # Process secret file in-memory (same pattern as hetzner-k8s cluster-config)
-          # Replace StrongBase64Password placeholder with actual secrets using yq pipeline
+          # Process PostgreSQL secrets (same pattern as dev/test)
           yq eval '.stringData.POSTGRES_SA_PASSWORD = "${{ secrets.POSTGRES_SA_PASSWORD }}"' infra/k8s/base/secrets/postgres.secret.yaml | \
           yq eval '.stringData.ACCOUNT_SERVICE_DB_USER_PASSWORD = "${{ secrets.ACCOUNT_SERVICE_DB_USER_PASSWORD }}"' - | \
           yq eval '.stringData.MESSAGING_SERVICE_DB_USER_PASSWORD = "${{ secrets.MESSAGING_SERVICE_DB_USER_PASSWORD }}"' - | \
           yq eval '.stringData.PROPERTY_SERVICE_DB_USER_PASSWORD = "${{ secrets.PROPERTY_SERVICE_DB_USER_PASSWORD }}"' - \
           > /tmp/postgres.secret.processed.yaml
-
-          # Replace the original file with processed version (in runner only, not committed)
           mv /tmp/postgres.secret.processed.yaml infra/k8s/base/secrets/postgres.secret.yaml
+
+          # Process Redis ACL secrets (enterprise mode - 5 users)
+          yq eval '.stringData.REDIS_ADMIN_PASSWORD = "${{ secrets.REDIS_ADMIN_PASSWORD }}"' infra/k8s/base/secrets/redis.secret.yaml | \
+          yq eval '.stringData.REDIS_PUBSUB_PASSWORD = "${{ secrets.REDIS_PUBSUB_PASSWORD }}"' - | \
+          yq eval '.stringData.REDIS_CACHE_PASSWORD = "${{ secrets.REDIS_CACHE_PASSWORD }}"' - | \
+          yq eval '.stringData.REDIS_RATELIMIT_PASSWORD = "${{ secrets.REDIS_RATELIMIT_PASSWORD }}"' - | \
+          yq eval '.stringData.REDIS_MONITOR_PASSWORD = "${{ secrets.REDIS_MONITOR_PASSWORD }}"' - \
+          > /tmp/redis.secret.processed.yaml
+          mv /tmp/redis.secret.processed.yaml infra/k8s/base/secrets/redis.secret.yaml
 
       - name: Build Kustomize manifests
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'

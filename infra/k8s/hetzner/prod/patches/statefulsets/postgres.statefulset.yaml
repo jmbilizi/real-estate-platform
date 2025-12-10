@@ -17,11 +17,11 @@ spec:
         - name: postgres
           resources:
             requests:
-              memory: "1Gi"
-              cpu: "1000m"
+              memory: "512Mi"
+              cpu: "250m"
             limits:
-              memory: "2Gi"
-              cpu: "2000m"
+              memory: "1Gi"
+              cpu: "500m"
       # Anti-affinity to spread replicas across nodes
       affinity:
         podAntiAffinity:
@@ -41,4 +41,4 @@ spec:
         storageClassName: hcloud-volumes
         resources:
           requests:
-            storage: 20Gi # Larger storage for production
+            storage: 10Gi # Start minimal, expand as needed

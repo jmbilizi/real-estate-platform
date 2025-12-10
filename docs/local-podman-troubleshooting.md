@@ -2,8 +2,9 @@
 
 ## Known Issues
 
-- Podman/Minikube local setup may fail to pull some images (e.g., PostGIS, kindnetd) due to registry or manifest issues.
-- Even with correct registry config, some images must be loaded manually.
+- Podman/Minikube local setup may fail to pull some images (e.g., PostGIS, Valkey, Alpine) due to TLS certificate verification failures.
+- Even with correct registry config, images must be loaded manually using the Podman machine.
+- This is a known limitation of Podman Desktop's Kubernetes cluster and does not affect cloud deployments.
 
 ## Manual Steps Required for Local Development with Podman
 
@@ -21,8 +22,22 @@ minikube image load docker.io/kindest/kindnetd:v20250512-df8de77b --profile=myap
 **B. PostGIS/Postgres:**
 
 ```sh
-podman machine ssh 'podman pull docker.io/postgis/postgis:15-3.4'
-minikube image load docker.io/postgis/postgis:15-3.4 --profile=myapp-podman-local
+podman machine ssh 'podman pull docker.io/postgis/postgis:18-3.6'
+minikube image load docker.io/postgis/postgis:18-3.6 --profile=myapp-podman-local
+```
+
+**C. Alpine (Redis init container):**
+
+```sh
+podman machine ssh 'podman pull docker.io/library/alpine:3.19'
+minikube image load docker.io/library/alpine:3.19 --profile=myapp-podman-local
+```
+
+**D. Valkey/Redis:**
+
+```sh
+podman machine ssh 'podman pull docker.io/valkey/valkey:9.0-alpine'
+minikube image load docker.io/valkey/valkey:9.0-alpine --profile=myapp-podman-local
 ```
 
 Check pod status after loading images:
@@ -32,6 +47,8 @@ kubectl get pods -A
 ```
 
 ### 2. Port Forwarding for Local Access
+
+**Postgres:**
 
 To access Postgres from your host (e.g., Azure Data Studio):
 
@@ -46,6 +63,19 @@ To access Postgres from your host (e.g., Azure Data Studio):
    - **Password:** (from secret)
    - **Database:** appdb
 
+**Redis:**
+
+To access Redis from your host:
+
+1. Forward the port:
+   ```sh
+   kubectl port-forward service/redis-svc 6379:6379
+   ```
+2. Connect using redis-cli:
+   ```sh
+   redis-cli -h localhost -p 6379 --user admin --pass "StrongBase64Password"
+   ```
+
 ## Notes
 
 - Port-forwarding is not persistent; must be re-run if terminal closes.
@@ -53,4 +83,4 @@ To access Postgres from your host (e.g., Azure Data Studio):
 
 ---
 
-_Last updated: 2025-12-01_
+_Last updated: 2025-12-07_

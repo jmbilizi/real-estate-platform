@@ -1,32 +1,36 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: postgres
+  name: redis
 spec:
-  serviceName: postgres-hl
+  serviceName: redis-hl
   selector:
     matchLabels:
-      app: postgres
+      app: redis
+  replicas: 1 # Single instance for MVP, scale to 3 with Sentinel for HA later
   template:
     metadata:
       labels:
-        app: postgres
+        app: redis
     spec:
       containers:
-        - name: postgres
+        - name: redis
           resources:
             requests:
               memory: "256Mi"
               cpu: "100m"
             limits:
               memory: "512Mi"
-              cpu: "250m"
+              cpu: "200m"
+          env:
+            - name: MAXMEMORY
+              value: "256mb"
   volumeClaimTemplates:
     - metadata:
-        name: postgres-data
+        name: redis-data
       spec:
         accessModes: ["ReadWriteOnce"]
         storageClassName: hcloud-volumes
         resources:
           requests:
-            storage: 5Gi
+            storage: 2Gi

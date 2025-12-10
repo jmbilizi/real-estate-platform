@@ -1,5 +1,12 @@
+# PostgreSQL StatefulSet (Base Configuration)
+# Cloud-agnostic base - NO resources or storage defined (added via environment patches)
+# Image: postgis/postgis:18-3.6 (PostgreSQL 18 with PostGIS spatial extensions)
+# Multi-tenant setup: Creates 3 service databases (account_db, messaging_db, property_db)
+# Secrets: Password authentication via postgres-secret (substituted by workflow)
+# Persistence: PVC managed by volumeClaimTemplates (defined in environment patches)
+
 apiVersion: apps/v1
-kind: StatefulSet # recommended for stateful applications like databases
+kind: StatefulSet
 metadata:
   name: postgres
 spec:
