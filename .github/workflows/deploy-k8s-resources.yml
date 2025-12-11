@@ -314,8 +314,8 @@ jobs:
         run: |
           echo "🚀 Deploying to dev cluster..."
 
-          # Try to apply normally first
-          if ! kubectl apply -f manifests.yaml --server-side=true --force-conflicts 2>&1 | tee apply.log; then
+          # Try to apply normally first (with prune to remove renamed/deleted resources)
+          if ! kubectl apply -f manifests.yaml --server-side=true --force-conflicts --prune -l app.kubernetes.io/managed-by=kustomize 2>&1 | tee apply.log; then
             # Check for immutable field errors across multiple resource types
             RESOURCE_TYPE=""
             DISPLAY_NAME=""
@@ -326,27 +326,27 @@ jobs:
               RESOURCE_TYPE="statefulset"
               DISPLAY_NAME="StatefulSet"
               DELETE_ARGS="--cascade=orphan"
-              NAME_PATTERN='The StatefulSet "\K[^"]+'
+              NAME_PATTERN='Resource=statefulsets.*?Name: "\K[^"]+'
             elif grep -q "Forbidden.*updates to deployment spec.*are forbidden" apply.log; then
               RESOURCE_TYPE="deployment"
               DISPLAY_NAME="Deployment"
               DELETE_ARGS="--cascade=orphan"
-              NAME_PATTERN='The Deployment "\K[^"]+'
+              NAME_PATTERN='Resource=deployments.*?Name: "\K[^"]+'
             elif grep -qE "spec\.clusterIP.*immutable|spec\.type.*immutable" apply.log; then
               RESOURCE_TYPE="service"
               DISPLAY_NAME="Service"
               DELETE_ARGS=""
-              NAME_PATTERN='Service "\K[^"]+'
+              NAME_PATTERN='Resource=services.*?Name: "\K[^"]+'
             elif grep -q "Forbidden.*updates to daemonset spec.*are forbidden" apply.log; then
               RESOURCE_TYPE="daemonset"
               DISPLAY_NAME="DaemonSet"
               DELETE_ARGS="--cascade=orphan"
-              NAME_PATTERN='The DaemonSet "\K[^"]+'
+              NAME_PATTERN='Resource=daemonsets.*?Name: "\K[^"]+'
             elif grep -qE "spec\.selector.*immutable|spec\.completions.*cannot be decreased" apply.log; then
               RESOURCE_TYPE="job"
               DISPLAY_NAME="Job"
               DELETE_ARGS=""
-              NAME_PATTERN='Job "\K[^"]+'
+              NAME_PATTERN='Resource=jobs.*?Name: "\K[^"]+'
             fi
             
             if [ -n "$RESOURCE_TYPE" ]; then
@@ -383,7 +383,7 @@ jobs:
               
               echo ""
               echo "🔄 Retrying deployment with recreated ${DISPLAY_NAME}s..."
-              kubectl apply -f manifests.yaml --server-side=true --force-conflicts
+              kubectl apply -f manifests.yaml --server-side=true --force-conflicts --prune -l app.kubernetes.io/managed-by=kustomize
             else
               echo "❌ Deployment failed with non-immutable-field error:"
               cat apply.log
@@ -638,8 +638,8 @@ jobs:
         run: |
           echo "🚀 Deploying to test cluster..."
 
-          # Try to apply normally first
-          if ! kubectl apply -f manifests.yaml --server-side=true --force-conflicts 2>&1 | tee apply.log; then
+          # Try to apply normally first (with prune to remove renamed/deleted resources)
+          if ! kubectl apply -f manifests.yaml --server-side=true --force-conflicts --prune -l app.kubernetes.io/managed-by=kustomize 2>&1 | tee apply.log; then
             # Check for immutable field errors across multiple resource types
             RESOURCE_TYPE=""
             DISPLAY_NAME=""
@@ -650,27 +650,27 @@ jobs:
               RESOURCE_TYPE="statefulset"
               DISPLAY_NAME="StatefulSet"
               DELETE_ARGS="--cascade=orphan"
-              NAME_PATTERN='The StatefulSet "\K[^"]+'
+              NAME_PATTERN='Resource=statefulsets.*?Name: "\K[^"]+'
             elif grep -q "Forbidden.*updates to deployment spec.*are forbidden" apply.log; then
               RESOURCE_TYPE="deployment"
               DISPLAY_NAME="Deployment"
               DELETE_ARGS="--cascade=orphan"
-              NAME_PATTERN='The Deployment "\K[^"]+'
+              NAME_PATTERN='Resource=deployments.*?Name: "\K[^"]+'
             elif grep -qE "spec\.clusterIP.*immutable|spec\.type.*immutable" apply.log; then
               RESOURCE_TYPE="service"
               DISPLAY_NAME="Service"
               DELETE_ARGS=""
-              NAME_PATTERN='Service "\K[^"]+'
+              NAME_PATTERN='Resource=services.*?Name: "\K[^"]+'
             elif grep -q "Forbidden.*updates to daemonset spec.*are forbidden" apply.log; then
               RESOURCE_TYPE="daemonset"
               DISPLAY_NAME="DaemonSet"
               DELETE_ARGS="--cascade=orphan"
-              NAME_PATTERN='The DaemonSet "\K[^"]+'
+              NAME_PATTERN='Resource=daemonsets.*?Name: "\K[^"]+'
             elif grep -qE "spec\.selector.*immutable|spec\.completions.*cannot be decreased" apply.log; then
               RESOURCE_TYPE="job"
               DISPLAY_NAME="Job"
               DELETE_ARGS=""
-              NAME_PATTERN='Job "\K[^"]+'
+              NAME_PATTERN='Resource=jobs.*?Name: "\K[^"]+'
             fi
             
             if [ -n "$RESOURCE_TYPE" ]; then
@@ -707,7 +707,7 @@ jobs:
               
               echo ""
               echo "🔄 Retrying deployment with recreated ${DISPLAY_NAME}s..."
-              kubectl apply -f manifests.yaml --server-side=true --force-conflicts
+              kubectl apply -f manifests.yaml --server-side=true --force-conflicts --prune -l app.kubernetes.io/managed-by=kustomize
             else
               echo "❌ Deployment failed with non-immutable-field error:"
               cat apply.log
@@ -985,8 +985,8 @@ jobs:
         run: |
           echo "🚀 Deploying to prod cluster..."
 
-          # Try to apply normally first
-          if ! kubectl apply -f manifests.yaml --server-side=true --force-conflicts 2>&1 | tee apply.log; then
+          # Try to apply normally first (with prune to remove renamed/deleted resources)
+          if ! kubectl apply -f manifests.yaml --server-side=true --force-conflicts --prune -l app.kubernetes.io/managed-by=kustomize 2>&1 | tee apply.log; then
             # Check for immutable field errors across multiple resource types
             RESOURCE_TYPE=""
             DISPLAY_NAME=""
@@ -997,27 +997,27 @@ jobs:
               RESOURCE_TYPE="statefulset"
               DISPLAY_NAME="StatefulSet"
               DELETE_ARGS="--cascade=orphan"
-              NAME_PATTERN='The StatefulSet "\K[^"]+'
+              NAME_PATTERN='Resource=statefulsets.*?Name: "\K[^"]+'
             elif grep -q "Forbidden.*updates to deployment spec.*are forbidden" apply.log; then
               RESOURCE_TYPE="deployment"
               DISPLAY_NAME="Deployment"
               DELETE_ARGS="--cascade=orphan"
-              NAME_PATTERN='The Deployment "\K[^"]+'
+              NAME_PATTERN='Resource=deployments.*?Name: "\K[^"]+'
             elif grep -qE "spec\.clusterIP.*immutable|spec\.type.*immutable" apply.log; then
               RESOURCE_TYPE="service"
               DISPLAY_NAME="Service"
               DELETE_ARGS=""
-              NAME_PATTERN='Service "\K[^"]+'
+              NAME_PATTERN='Resource=services.*?Name: "\K[^"]+'
             elif grep -q "Forbidden.*updates to daemonset spec.*are forbidden" apply.log; then
               RESOURCE_TYPE="daemonset"
               DISPLAY_NAME="DaemonSet"
               DELETE_ARGS="--cascade=orphan"
-              NAME_PATTERN='The DaemonSet "\K[^"]+'
+              NAME_PATTERN='Resource=daemonsets.*?Name: "\K[^"]+'
             elif grep -qE "spec\.selector.*immutable|spec\.completions.*cannot be decreased" apply.log; then
               RESOURCE_TYPE="job"
               DISPLAY_NAME="Job"
               DELETE_ARGS=""
-              NAME_PATTERN='Job "\K[^"]+'
+              NAME_PATTERN='Resource=jobs.*?Name: "\K[^"]+'
             fi
             
             if [ -n "$RESOURCE_TYPE" ]; then
@@ -1054,7 +1054,7 @@ jobs:
               
               echo ""
               echo "🔄 Retrying deployment with recreated ${DISPLAY_NAME}s..."
-              kubectl apply -f manifests.yaml --server-side=true --force-conflicts
+              kubectl apply -f manifests.yaml --server-side=true --force-conflicts --prune -l app.kubernetes.io/managed-by=kustomize
             else
               echo "❌ Deployment failed with non-immutable-field error:"
               cat apply.log

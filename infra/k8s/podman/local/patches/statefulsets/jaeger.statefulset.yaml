@@ -1,0 +1,41 @@
+# Jaeger StatefulSet Patch for Dev Environment
+# Adds minimal resources and storage for local/development use
+# Retention: 7 days (in-memory + disk)
+# Sampling: 100% (trace all requests for debugging)
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: jaeger
+spec:
+  template:
+    spec:
+      containers:
+        - name: jaeger
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          env:
+            - name: COLLECTOR_OTLP_ENABLED
+              value: "true"
+            - name: SPAN_STORAGE_TYPE
+              value: "badger"
+            - name: BADGER_EPHEMERAL
+              value: "false"
+            - name: BADGER_SPAN_STORE_TTL
+              value: "168h" # 7 days
+            - name: SAMPLING_STRATEGIES_FILE
+              value: /etc/jaeger/sampling.json
+  volumeClaimTemplates:
+    - metadata:
+        name: jaeger-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: standard # Podman Desktop default StorageClass
+        resources:
+          requests:
+            storage: 1Gi

@@ -23,10 +23,12 @@ infra/
     │   │   └── redis.secret.yaml                    # Redis ACL passwords (5 users)
     │   ├── services/
     │   │   ├── postgres.service.yaml                # PostgreSQL headless + ClusterIP
-    │   │   └── redis.service.yaml                   # Redis headless + ClusterIP
+    │   │   ├── redis.service.yaml                   # Redis headless + ClusterIP
+    │   │   └── jaeger.service.yaml                  # Jaeger headless + ClusterIP
     │   └── statefulsets/
     │       ├── postgres.statefulset.yaml            # PostgreSQL 18 + PostGIS 3.4
-    │       └── redis.statefulset.yaml               # Valkey 9.0-alpine with ACL
+    │       ├── redis.statefulset.yaml               # Valkey 9.0-alpine with ACL
+    │       └── jaeger.statefulset.yaml              # Jaeger + OpenTelemetry all-in-one
     ├── hetzner/                                     # Hetzner Cloud provider
     │   ├── dev/
     │   │   ├── cluster/
@@ -34,7 +36,8 @@ infra/
     │   │   ├── patches/
     │   │   │   └── statefulsets/
     │   │   │       ├── postgres.statefulset.yaml    # Dev resources + storage
-    │   │   │       └── redis.statefulset.yaml       # Dev resources + storage
+    │   │   │       ├── redis.statefulset.yaml       # Dev resources + storage
+    │   │   │       └── jaeger.statefulset.yaml      # Dev resources + storage
     │   │   ├── kustomization.yaml                   # Kustomize overlay
     │   │   └── .gitignore
     │   ├── test/
@@ -45,7 +48,9 @@ infra/
         └── local/
             ├── patches/
             │   └── statefulsets/
-            │       └── postgres.statefulset.yaml    # Local resources + storage (combined)
+            │       ├── postgres.statefulset.yaml    # Local resources + storage (combined)
+            │       ├── redis.statefulset.yaml       # Local resources + storage (combined)
+            │       └── jaeger.statefulset.yaml      # Local resources + storage (combined)
             └── kustomization.yaml                   # Kustomize overlay
 ```
 
@@ -74,6 +79,7 @@ Pattern: `{service}.{kind}.yaml`
 
 - **PostgreSQL**: postgis/postgis:18-3.4, multi-tenant initialization, 4 database users
 - **Redis**: valkey/valkey:9.0-alpine, ACL-based authentication, 5 service users
+- **Jaeger**: jaegertracing/opentelemetry-all-in-one:latest, distributed tracing, OTLP endpoints
 - **Services**: Headless (for StatefulSet DNS) + ClusterIP (for load balancing)
 
 **Minimal Base Philosophy:**
@@ -563,7 +569,7 @@ Before deploying to production:
 - [ ] Verify `hetzner-k8s.yml` workflow completes
 - [ ] Verify `deploy-k8s-resources.yml` workflow completes
 - [ ] Check PostgreSQL pod running: `kubectl get pods -l app=postgres`
-- [ ] Verify databases created: `psql -h postgres-serv -U postgres_sa -l`
+- [ ] Verify databases created: `psql -h postgres-svc -U postgres_sa -l`
 - [ ] Test service connectivity from another pod
 - [ ] Update a config and verify in-place update (pod not recreated)
 

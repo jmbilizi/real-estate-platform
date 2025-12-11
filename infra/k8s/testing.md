@@ -162,7 +162,7 @@ kubectl get secret postgres-secret
 
 - 1 StatefulSet: `postgres`
 - 1 Pod: `postgres-0` (Running)
-- 2 Services: `postgres-hl` (headless), `postgres-serv` (ClusterIP)
+- 2 Services: `postgres-hl` (headless), `postgres-svc` (ClusterIP)
 - 1 PVC: `postgres-data-postgres-0` (Bound)
 - 1 ConfigMap: `postgres-init-script`
 - 1 Secret: `postgres-secret`
@@ -211,7 +211,7 @@ Test internal cluster DNS:
 kubectl run -it --rm debug --image=postgres:16 --restart=Never -- bash
 
 # Inside pod:
-psql -h postgres-serv -U postgres -c "SELECT version();"
+psql -h postgres-svc -U postgres -c "SELECT version();"
 psql -h postgres-hl -U postgres -c "SELECT version();"
 exit
 ```
@@ -446,6 +446,8 @@ kubectl logs postgres-0 -c init-postgres
 - PostgreSQL deploys successfully
 - All 4 databases created with correct schemas
 - All extensions installed
+- Redis deploys successfully with ACL users configured
+- Jaeger deploys successfully with OTLP endpoints active
 - Services accessible via DNS
 - PVC bound and storage available
 - In-place updates work (pod not recreated)

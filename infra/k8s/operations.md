@@ -93,9 +93,21 @@ kubectl describe statefulset redis
 kubectl logs redis-0
 kubectl exec redis-0 -- redis-cli --user admin --pass "$REDIS_ADMIN_PASSWORD" INFO server
 
+# Jaeger Status
+kubectl get statefulset jaeger
+kubectl get pods -l app=jaeger
+kubectl get services -l app=jaeger
+kubectl get pvc -l app=jaeger
+
+# Jaeger Details
+kubectl describe statefulset jaeger
+kubectl logs jaeger-0
+kubectl exec jaeger-0 -- wget -qO- http://localhost:14269/
+
 # Watch rollouts
 kubectl rollout status statefulset/postgres -w
 kubectl rollout status statefulset/redis -w
+kubectl rollout status statefulset/jaeger -w
 ```
 
 ## Common Workflows
@@ -459,7 +471,7 @@ kubectl exec -it postgres-0 -- psql -U postgres_sa
 
 # Check PostgreSQL service DNS
 kubectl run -it --rm debug --image=postgres:16 --restart=Never -- \
-  psql -h postgres-serv -U postgres_sa -c "SELECT version();"
+  psql -h postgres-svc -U postgres_sa -c "SELECT version();"
 
 # Redis Port-forward
 kubectl port-forward redis-0 6379:6379
@@ -475,6 +487,15 @@ kubectl exec -it redis-0 -- redis-cli --user admin --pass "$REDIS_ADMIN_PASSWORD
 
 # Test specific ACL user
 kubectl exec -it redis-0 -- redis-cli --user cache_user --pass "$REDIS_CACHE_PASSWORD" PING
+
+# Jaeger UI Port-forward
+kubectl port-forward svc/jaeger-svc 16686:16686
+
+# Access Jaeger UI
+# Open browser: http://localhost:16686
+
+# Jaeger Health Check
+kubectl exec -it jaeger-0 -- wget -qO- http://localhost:14269/
 ```
 
 ### Redis ACL Operations
@@ -590,7 +611,7 @@ kubectl get all -l app=postgres
 
 # Describe everything
 kubectl describe statefulset postgres
-kubectl describe service postgres-serv
+kubectl describe service postgres-svc
 kubectl describe configmap postgres-init-script
 ```
 
@@ -623,7 +644,7 @@ alias pgwatch="watch kubectl get pods -l app=postgres"
 kubectl get pods -l app=postgres -o wide | grep Running
 
 # Are services accessible?
-kubectl get svc postgres-serv postgres-hl
+kubectl get svc postgres-svc postgres-hl
 
 # Is storage bound?
 kubectl get pvc -l app=postgres | grep Bound

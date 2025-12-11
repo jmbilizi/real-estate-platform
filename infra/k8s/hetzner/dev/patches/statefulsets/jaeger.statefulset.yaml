@@ -1,0 +1,39 @@
+# Jaeger StatefulSet Patch for Hetzner Dev Environment
+# Adds minimal resources and storage for development use
+# Retention: 7 days
+# Sampling: 100% (trace all requests for debugging)
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: jaeger
+spec:
+  template:
+    spec:
+      containers:
+        - name: jaeger
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          env:
+            - name: COLLECTOR_OTLP_ENABLED
+              value: "true"
+            - name: SPAN_STORAGE_TYPE
+              value: "badger"
+            - name: BADGER_EPHEMERAL
+              value: "false"
+            - name: BADGER_SPAN_STORE_TTL
+              value: "168h" # 7 days
+  volumeClaimTemplates:
+    - metadata:
+        name: jaeger-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: hcloud-volumes # Hetzner CSI driver
+        resources:
+          requests:
+            storage: 2Gi

@@ -88,10 +88,12 @@ infra/
     │   │   └── redis.secret.yaml              # Redis ACL user passwords (5 users)
     │   ├── services/
     │   │   ├── postgres.service.yaml          # PostgreSQL headless + ClusterIP
-    │   │   └── redis.service.yaml             # Redis headless + ClusterIP
+    │   │   ├── redis.service.yaml             # Redis headless + ClusterIP
+    │   │   └── jaeger.service.yaml            # Jaeger headless + ClusterIP
     │   └── statefulsets/
     │       ├── postgres.statefulset.yaml      # Minimal base (NO resources/storage)
-    │       └── redis.statefulset.yaml         # Valkey 9.0-alpine with ACL init
+    │       ├── redis.statefulset.yaml         # Valkey 9.0-alpine with ACL init
+    │       └── jaeger.statefulset.yaml        # Jaeger + OpenTelemetry all-in-one
     │
     └── hetzner/                     # Hetzner Cloud provider (auto-detected)
         ├── dev/                     # Development environment
@@ -100,7 +102,8 @@ infra/
         │   ├── patches/
         │   │   └── statefulsets/
         │   │       ├── postgres.statefulset.yaml  # Dev resources + storage
-        │   │       └── redis.statefulset.yaml     # Dev resources + storage
+        │   │       ├── redis.statefulset.yaml     # Dev resources + storage
+        │   │       └── jaeger.statefulset.yaml    # Dev resources + storage
         │   ├── kustomization.yaml           # Kustomize overlay
         │   └── .gitignore
         │
@@ -114,7 +117,9 @@ infra/
         └── local/                   # Local environment
             ├── patches/
             │   └── statefulsets/
-            │       └── postgres.statefulset.yaml  # Local resources + storage (combined)
+            │       ├── postgres.statefulset.yaml  # Local resources + storage (combined)
+            │       ├── redis.statefulset.yaml     # Local resources + storage (combined)
+            │       └── jaeger.statefulset.yaml    # Local resources + storage (combined)
             └── kustomization.yaml           # Kustomize overlay
 
     # Additional cloud providers (when added, auto-detected):

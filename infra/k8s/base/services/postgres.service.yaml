@@ -22,7 +22,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: postgres-serv
+  name: postgres-svc
 spec:
   type: ClusterIP # Internal only
   selector:

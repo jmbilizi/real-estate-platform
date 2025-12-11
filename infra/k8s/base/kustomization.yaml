@@ -4,6 +4,10 @@ kind: Kustomization
 # Base resources (cloud-agnostic configurations)
 # Overlays (hetzner/dev, hetzner/test, hetzner/prod) reference this base
 
+# Common labels applied to all resources (enables kubectl apply --prune)
+commonLabels:
+  app.kubernetes.io/managed-by: kustomize
+
 # Resource ordering (applied in this sequence):
 # 1. Secrets (processed by workflow with actual values)
 # 2. ConfigMaps
@@ -21,11 +25,13 @@ resources:
   # Services (before workloads)
   - services/postgres.service.yaml
   - services/redis.service.yaml
+  - services/jaeger.service.yaml
 
   # Workloads (statefulsets, deployments, etc.)
   ## StatefulSets (stateful apps)
   - statefulsets/postgres.statefulset.yaml
   - statefulsets/redis.statefulset.yaml
+  - statefulsets/jaeger.statefulset.yaml
 
   ## Deployments (stateless apps)
 

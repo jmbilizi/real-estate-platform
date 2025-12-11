@@ -1,0 +1,40 @@
+# Jaeger StatefulSet Patch for Hetzner Prod Environment
+# Adds production-grade resources and storage
+# Retention: 30 days
+# Sampling: 5% (performance optimized while maintaining visibility)
+# Note: For high-traffic production, consider Elasticsearch backend
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: jaeger
+spec:
+  template:
+    spec:
+      containers:
+        - name: jaeger
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          env:
+            - name: COLLECTOR_OTLP_ENABLED
+              value: "true"
+            - name: SPAN_STORAGE_TYPE
+              value: "badger"
+            - name: BADGER_EPHEMERAL
+              value: "false"
+            - name: BADGER_SPAN_STORE_TTL
+              value: "720h" # 30 days
+  volumeClaimTemplates:
+    - metadata:
+        name: jaeger-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: hcloud-volumes
+        resources:
+          requests:
+            storage: 5Gi

@@ -94,11 +94,22 @@ function runKustomizeAndKubectl(op) {
       process.exit(kustomize.status);
     }
 
-    // Try to apply normally first
-    const kubectl = spawnSync("kubectl", ["apply", "-f", "-"], {
-      input: kustomize.stdout,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    // Try to apply normally first with --prune to remove renamed/deleted resources
+    const kubectl = spawnSync(
+      "kubectl",
+      [
+        "apply",
+        "-f",
+        "-",
+        "--prune",
+        "-l",
+        "app.kubernetes.io/managed-by=kustomize",
+      ],
+      {
+        input: kustomize.stdout,
+        stdio: ["pipe", "pipe", "pipe"],
+      }
+    );
 
     if (kubectl.status === 0) {
       console.log("✅ Deployment successful (no immutable field conflicts)");
@@ -114,28 +125,28 @@ function runKustomizeAndKubectl(op) {
       {
         pattern: /Forbidden.*updates to statefulset spec.*are forbidden/i,
         resourceType: "statefulset",
-        namePattern: /The StatefulSet "([^"]+)"/g,
+        namePattern: /Resource=statefulsets[\s\S]*?Name: "([^"]+)"/g,
         deleteArgs: ["--cascade=orphan"], // Preserve PVCs
         displayName: "StatefulSet",
       },
       {
         pattern: /Forbidden.*updates to deployment spec.*are forbidden/i,
         resourceType: "deployment",
-        namePattern: /The Deployment "([^"]+)"/g,
+        namePattern: /Resource=deployments[\s\S]*?Name: "([^"]+)"/g,
         deleteArgs: ["--cascade=orphan"], // Preserve Pods during recreation
         displayName: "Deployment",
       },
       {
         pattern: /spec\.clusterIP.*immutable|spec\.type.*immutable/i,
         resourceType: "service",
-        namePattern: /Service "([^"]+)"/g,
+        namePattern: /Resource=services[\s\S]*?Name: "([^"]+)"/g,
         deleteArgs: [], // Services are stateless
         displayName: "Service",
       },
       {
         pattern: /Forbidden.*updates to daemonset spec.*are forbidden/i,
         resourceType: "daemonset",
-        namePattern: /The DaemonSet "([^"]+)"/g,
+        namePattern: /Resource=daemonsets[\s\S]*?Name: "([^"]+)"/g,
         deleteArgs: ["--cascade=orphan"],
         displayName: "DaemonSet",
       },
@@ -143,7 +154,7 @@ function runKustomizeAndKubectl(op) {
         pattern:
           /spec\.selector.*immutable|spec\.completions.*cannot be decreased/i,
         resourceType: "job",
-        namePattern: /Job "([^"]+)"/g,
+        namePattern: /Resource=jobs[\s\S]*?Name: "([^"]+)"/g,
         deleteArgs: [], // Jobs should complete before update
         displayName: "Job",
       },
@@ -211,10 +222,21 @@ function runKustomizeAndKubectl(op) {
         process.exit(kustomizeRetry.status);
       }
 
-      const kubectlRetry = spawnSync("kubectl", ["apply", "-f", "-"], {
-        input: kustomizeRetry.stdout,
-        stdio: ["pipe", "inherit", "inherit"],
-      });
+      const kubectlRetry = spawnSync(
+        "kubectl",
+        [
+          "apply",
+          "-f",
+          "-",
+          "--prune",
+          "-l",
+          "app.kubernetes.io/managed-by=kustomize",
+        ],
+        {
+          input: kustomizeRetry.stdout,
+          stdio: ["pipe", "inherit", "inherit"],
+        }
+      );
       process.exit(kubectlRetry.status);
     } else {
       // Non-immutable-field error

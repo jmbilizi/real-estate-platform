@@ -1,0 +1,68 @@
+# Jaeger Headless Service
+# Used by StatefulSet for stable network identities
+# DNS: jaeger-0.jaeger-hl.default.svc.cluster.local
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-hl
+spec:
+  clusterIP: None
+  selector:
+    app: jaeger
+  ports:
+    - name: jaeger-ui
+      port: 16686
+      targetPort: jaeger-ui
+      protocol: TCP
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+      protocol: TCP
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http
+      protocol: TCP
+    - name: jaeger-grpc
+      port: 14250
+      targetPort: jaeger-grpc
+      protocol: TCP
+    - name: zipkin
+      port: 9411
+      targetPort: zipkin
+      protocol: TCP
+
+---
+# Jaeger Regular Service
+# Used by applications to send traces and access UI
+# DNS: jaeger-svc.default.svc.cluster.local
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-svc
+spec:
+  type: ClusterIP
+  selector:
+    app: jaeger
+  ports:
+    - name: jaeger-ui
+      port: 16686
+      targetPort: jaeger-ui
+      protocol: TCP
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+      protocol: TCP
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http
+      protocol: TCP
+    - name: jaeger-grpc
+      port: 14250
+      targetPort: jaeger-grpc
+      protocol: TCP
+    - name: zipkin
+      port: 9411
+      targetPort: zipkin
+      protocol: TCP

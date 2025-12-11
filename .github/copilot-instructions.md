@@ -382,9 +382,15 @@ npx nx graph                 # Visualize project dependencies
 
 **Kustomize-based GitOps deployment** with hierarchical control flags and in-memory secret substitution. Infrastructure code in `infra/`:
 
-- `k8s/base/` - Cloud-agnostic resource definitions
+- `k8s/base/` - Cloud-agnostic resource definitions (PostgreSQL, Redis/Valkey, Jaeger)
 - `k8s/hetzner/{env}/` - Provider-specific overlays (dev/test/prod)
 - `deploy-control.yaml` - Centralized deployment flags (master kill switch, time windows, rollback policies)
+
+**Deployed Services**:
+
+- **PostgreSQL 18 + PostGIS**: Multi-tenant databases (account_db, messaging_db, property_db)
+- **Redis/Valkey 9.0**: ACL-based authentication, 5 users (admin, pubsub, cache, ratelimit, monitor)
+- **Jaeger + OpenTelemetry**: Distributed tracing for microservices observability (optional sidecar)
 
 **Critical Pattern**: **NO secretGenerator, NO secrets.env files**. Secrets use placeholder values (`StrongBase64Password`) in Git, substituted in-memory during CI/CD using `yq`.
 
@@ -678,6 +684,54 @@ grep -r "ACCOUNT_SERVICE_DB_USER_PASSWORD" .github/workflows/ infra/k8s/base/
 
 **Documentation pattern**: README acts as navigation hub; specialized docs for specific tasks.
 
+### Observability Strategy
+
+**Jaeger + OpenTelemetry** (fully open source, Apache 2.0 license):
+
+**Design Principles:**
+
+- **Optional Sidecar**: Services function normally if Jaeger unavailable (zero hard dependency)
+- **Auto-Instrumentation**: Zero code changes using OpenTelemetry auto-instrumentation libraries
+- **Performance**: <1% overhead with proper sampling (100% dev, 1-5% prod)
+- **Retention**: 7 days dev (in-memory), 30 days prod (persistent storage)
+
+**Deployment Pattern:**
+
+- StatefulSet for persistent trace storage
+- Multi-environment patches (different retention policies per env)
+- Exposed ports: 16686 (UI), 4317 (OTLP gRPC), 4318 (OTLP HTTP), 14250 (Jaeger gRPC)
+
+**Service Integration:**
+
+```typescript
+// Auto-instrumentation (Node.js) - runs before app starts
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
+
+const sdk = new NodeSDK({
+  traceExporter: new OTLPTraceExporter({
+    url: "http://jaeger-svc:4318/v1/traces",
+  }),
+  instrumentations: [getNodeAutoInstrumentations()],
+});
+sdk.start();
+```
+
+**What Gets Traced Automatically:**
+
+- HTTP requests (Express, FastAPI, .NET)
+- Database queries (PostgreSQL, Redis via connection libraries)
+- WebSocket connections
+- Service-to-service calls
+- Error stack traces
+
+**Benefits:**
+
+- Debug cross-service issues (e.g., "Why is property search slow?")
+- Identify slow database queries with real usage patterns
+- Visualize service dependency graph automatically
+- Monitor 95th percentile latency for SLA compliance
+
 ### Kubernetes Quick Reference
 
 ```bash
@@ -693,10 +747,14 @@ kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins | kubectl diff -f -
 gh workflow run deploy-k8s-resources.yml -f environment=dev
 
 # Check deployment status
-kubectl get statefulset postgres
+kubectl get statefulset postgres redis jaeger
 kubectl get pods -l app=postgres
 kubectl get pvc -l app=postgres
 kubectl logs postgres-0
+
+# Jaeger UI (port-forward)
+kubectl port-forward svc/jaeger-svc 16686:16686
+# Open: http://localhost:16686
 
 # Rollback (manual)
 kubectl rollout undo statefulset/postgres
@@ -705,17 +763,20 @@ kubectl rollout status statefulset/postgres -w
 
 ### Infrastructure File Locations
 
-| What                   | Where                                                                   |
-| ---------------------- | ----------------------------------------------------------------------- |
-| Deployment flags       | `infra/deploy-control.yaml`                                             |
-| Secret template        | `infra/k8s/base/secrets/postgres.secret.yaml`                           |
-| StatefulSet base       | `infra/k8s/base/statefulsets/postgres.statefulset.yaml`                 |
-| Init scripts           | `infra/k8s/base/configmaps/postgres-init.configmap.yaml`                |
-| Dev config (combined)  | `infra/k8s/hetzner/dev/patches/statefulsets/postgres.statefulset.yaml`  |
-| Prod config (combined) | `infra/k8s/hetzner/prod/patches/statefulsets/postgres.statefulset.yaml` |
-| Cluster config         | `infra/k8s/hetzner/{env}/cluster/cluster-config.yaml`                   |
-| Deployment workflow    | `.github/workflows/deploy-k8s-resources.yml`                            |
-| Cluster provisioning   | `.github/workflows/hetzner-k8s.yml`                                     |
+| What                   | Where                                                            |
+| ---------------------- | ---------------------------------------------------------------- |
+| Deployment flags       | `infra/deploy-control.yaml`                                      |
+| PostgreSQL secret      | `infra/k8s/base/secrets/postgres.secret.yaml`                    |
+| Redis secret           | `infra/k8s/base/secrets/redis.secret.yaml`                       |
+| PostgreSQL StatefulSet | `infra/k8s/base/statefulsets/postgres.statefulset.yaml`          |
+| Redis StatefulSet      | `infra/k8s/base/statefulsets/redis.statefulset.yaml`             |
+| Jaeger StatefulSet     | `infra/k8s/base/statefulsets/jaeger.statefulset.yaml`            |
+| Init scripts           | `infra/k8s/base/configmaps/*.configmap.yaml`                     |
+| Dev config (combined)  | `infra/k8s/hetzner/dev/patches/statefulsets/*.statefulset.yaml`  |
+| Prod config (combined) | `infra/k8s/hetzner/prod/patches/statefulsets/*.statefulset.yaml` |
+| Cluster config         | `infra/k8s/hetzner/{env}/cluster/cluster-config.yaml`            |
+| Deployment workflow    | `.github/workflows/deploy-k8s-resources.yml`                     |
+| Cluster provisioning   | `.github/workflows/hetzner-k8s.yml`                              |
 
 ## External Dependencies
 
