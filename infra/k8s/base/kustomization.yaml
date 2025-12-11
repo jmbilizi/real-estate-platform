@@ -5,8 +5,9 @@ kind: Kustomization
 # Overlays (hetzner/dev, hetzner/test, hetzner/prod) reference this base
 
 # Common labels applied to all resources (enables kubectl apply --prune)
-commonLabels:
-  app.kubernetes.io/managed-by: kustomize
+labels:
+  - pairs:
+      app.kubernetes.io/managed-by: kustomize
 
 # Resource ordering (applied in this sequence):
 # 1. Secrets (processed by workflow with actual values)

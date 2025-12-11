@@ -315,7 +315,7 @@ jobs:
           echo "🚀 Deploying to dev cluster..."
 
           # Try to apply normally first (with prune to remove renamed/deleted resources)
-          if ! kubectl apply -f manifests.yaml --server-side=true --force-conflicts --prune -l app.kubernetes.io/managed-by=kustomize 2>&1 | tee apply.log; then
+          if ! kubectl apply -f manifests.yaml --prune -l app.kubernetes.io/managed-by=kustomize 2>&1 | tee apply.log; then
             # Check for immutable field errors across multiple resource types
             RESOURCE_TYPE=""
             DISPLAY_NAME=""
@@ -383,7 +383,7 @@ jobs:
               
               echo ""
               echo "🔄 Retrying deployment with recreated ${DISPLAY_NAME}s..."
-              kubectl apply -f manifests.yaml --server-side=true --force-conflicts --prune -l app.kubernetes.io/managed-by=kustomize
+              kubectl apply -f manifests.yaml --prune -l app.kubernetes.io/managed-by=kustomize
             else
               echo "❌ Deployment failed with non-immutable-field error:"
               cat apply.log
@@ -639,7 +639,7 @@ jobs:
           echo "🚀 Deploying to test cluster..."
 
           # Try to apply normally first (with prune to remove renamed/deleted resources)
-          if ! kubectl apply -f manifests.yaml --server-side=true --force-conflicts --prune -l app.kubernetes.io/managed-by=kustomize 2>&1 | tee apply.log; then
+          if ! kubectl apply -f manifests.yaml --prune -l app.kubernetes.io/managed-by=kustomize 2>&1 | tee apply.log; then
             # Check for immutable field errors across multiple resource types
             RESOURCE_TYPE=""
             DISPLAY_NAME=""
@@ -707,7 +707,7 @@ jobs:
               
               echo ""
               echo "🔄 Retrying deployment with recreated ${DISPLAY_NAME}s..."
-              kubectl apply -f manifests.yaml --server-side=true --force-conflicts --prune -l app.kubernetes.io/managed-by=kustomize
+              kubectl apply -f manifests.yaml --prune -l app.kubernetes.io/managed-by=kustomize
             else
               echo "❌ Deployment failed with non-immutable-field error:"
               cat apply.log
@@ -986,7 +986,7 @@ jobs:
           echo "🚀 Deploying to prod cluster..."
 
           # Try to apply normally first (with prune to remove renamed/deleted resources)
-          if ! kubectl apply -f manifests.yaml --server-side=true --force-conflicts --prune -l app.kubernetes.io/managed-by=kustomize 2>&1 | tee apply.log; then
+          if ! kubectl apply -f manifests.yaml --prune -l app.kubernetes.io/managed-by=kustomize 2>&1 | tee apply.log; then
             # Check for immutable field errors across multiple resource types
             RESOURCE_TYPE=""
             DISPLAY_NAME=""
@@ -1054,7 +1054,7 @@ jobs:
               
               echo ""
               echo "🔄 Retrying deployment with recreated ${DISPLAY_NAME}s..."
-              kubectl apply -f manifests.yaml --server-side=true --force-conflicts --prune -l app.kubernetes.io/managed-by=kustomize
+              kubectl apply -f manifests.yaml --prune -l app.kubernetes.io/managed-by=kustomize
             else
               echo "❌ Deployment failed with non-immutable-field error:"
               cat apply.log
