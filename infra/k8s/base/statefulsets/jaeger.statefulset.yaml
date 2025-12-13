@@ -64,7 +64,7 @@ spec:
             httpGet:
               path: /
               port: 16686
-            initialDelaySeconds: 30
+            initialDelaySeconds: 60
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
@@ -72,9 +72,9 @@ spec:
             httpGet:
               path: /
               port: 16686
-            initialDelaySeconds: 10
-            periodSeconds: 5
-            timeoutSeconds: 3
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
             failureThreshold: 3
           volumeMounts:
             - name: jaeger-data

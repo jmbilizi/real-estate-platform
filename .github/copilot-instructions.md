@@ -519,6 +519,12 @@ infra/k8s/
 
 **Strategic merge behavior**: When base omits resources/storage, patches ADD complete sections (not merge/replace fields).
 
+**CRITICAL - Environment Variable Pattern**: Kustomize replaces the entire `env:` array when patches define it. To preserve base variables:
+
+- **Base**: Define all common environment variables (OTLP settings, sampling config, storage type)
+- **Patches**: Define ONLY environment-specific variables (retention periods, resource limits)
+- Example: Jaeger base defines SAMPLING_STRATEGIES_FILE, patches only define BADGER_SPAN_STORE_TTL
+
 **Benefits of minimal base:**
 
 - Base changes only affect features/bugs, never resource tuning

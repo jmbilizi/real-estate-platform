@@ -20,16 +20,8 @@ spec:
               cpu: 200m
               memory: 256Mi
           env:
-            - name: COLLECTOR_OTLP_ENABLED
-              value: "true"
-            - name: SPAN_STORAGE_TYPE
-              value: "badger"
-            - name: BADGER_EPHEMERAL
-              value: "false"
             - name: BADGER_SPAN_STORE_TTL
-              value: "168h" # 7 days
-            - name: SAMPLING_STRATEGIES_FILE
-              value: /etc/jaeger/sampling.json
+              value: "168h" # 7 days retention for local
   volumeClaimTemplates:
     - metadata:
         name: jaeger-data

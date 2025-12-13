@@ -21,14 +21,8 @@ spec:
               cpu: 1000m
               memory: 1Gi
           env:
-            - name: COLLECTOR_OTLP_ENABLED
-              value: "true"
-            - name: SPAN_STORAGE_TYPE
-              value: "badger"
-            - name: BADGER_EPHEMERAL
-              value: "false"
             - name: BADGER_SPAN_STORE_TTL
-              value: "720h" # 30 days
+              value: "720h" # 30 days retention for prod
   volumeClaimTemplates:
     - metadata:
         name: jaeger-data

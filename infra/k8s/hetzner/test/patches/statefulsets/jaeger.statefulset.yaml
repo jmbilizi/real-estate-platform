@@ -20,14 +20,8 @@ spec:
               cpu: 750m
               memory: 768Mi
           env:
-            - name: COLLECTOR_OTLP_ENABLED
-              value: "true"
-            - name: SPAN_STORAGE_TYPE
-              value: "badger"
-            - name: BADGER_EPHEMERAL
-              value: "false"
             - name: BADGER_SPAN_STORE_TTL
-              value: "336h" # 14 days
+              value: "336h" # 14 days retention for test
   volumeClaimTemplates:
     - metadata:
         name: jaeger-data
