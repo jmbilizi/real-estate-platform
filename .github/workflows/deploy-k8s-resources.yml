@@ -393,6 +393,22 @@ jobs:
             echo "✅ Deployment successful (no immutable field conflicts)"
           fi
 
+          # Force rollout restart to apply config changes (probes, env vars)
+          echo "🔄 Forcing rollout restart for configuration changes..."
+          STATEFULSETS=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$STATEFULSETS" ]; then
+            for sts in $STATEFULSETS; do
+              kubectl rollout restart statefulset/$sts
+            done
+          fi
+          DEPLOYMENTS=$(kubectl get deployment -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$DEPLOYMENTS" ]; then
+            for deploy in $DEPLOYMENTS; do
+              kubectl rollout restart deployment/$deploy
+            done
+          fi
+          sleep 15  # Wait for pods to begin terminating
+
       - name: Check pod status immediately after apply
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
@@ -862,6 +878,22 @@ jobs:
           else
             echo "✅ Deployment successful (no immutable field conflicts)"
           fi
+
+          # Force rollout restart to apply config changes (probes, env vars)
+          echo "🔄 Forcing rollout restart for configuration changes..."
+          STATEFULSETS=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$STATEFULSETS" ]; then
+            for sts in $STATEFULSETS; do
+              kubectl rollout restart statefulset/$sts
+            done
+          fi
+          DEPLOYMENTS=$(kubectl get deployment -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$DEPLOYMENTS" ]; then
+            for deploy in $DEPLOYMENTS; do
+              kubectl rollout restart deployment/$deploy
+            done
+          fi
+          sleep 15  # Wait for pods to begin terminating
 
       - name: Check pod status immediately after apply
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
@@ -1355,6 +1387,22 @@ jobs:
           else
             echo "✅ Deployment successful (no immutable field conflicts)"
           fi
+
+          # Force rollout restart to apply config changes (probes, env vars)
+          echo "🔄 Forcing rollout restart for configuration changes..."
+          STATEFULSETS=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$STATEFULSETS" ]; then
+            for sts in $STATEFULSETS; do
+              kubectl rollout restart statefulset/$sts
+            done
+          fi
+          DEPLOYMENTS=$(kubectl get deployment -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$DEPLOYMENTS" ]; then
+            for deploy in $DEPLOYMENTS; do
+              kubectl rollout restart deployment/$deploy
+            done
+          fi
+          sleep 15  # Wait for pods to begin terminating
 
       - name: Check pod status immediately after apply
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
