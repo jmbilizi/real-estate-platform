@@ -40,6 +40,26 @@ podman machine ssh 'podman pull docker.io/valkey/valkey:9.0-alpine'
 minikube image load docker.io/valkey/valkey:9.0-alpine --profile=myapp-podman-local
 ```
 
+**E. Jaeger (OpenTelemetry All-in-One):**
+
+```sh
+podman machine ssh 'podman pull docker.io/jaegertracing/opentelemetry-all-in-one:latest'
+minikube image load docker.io/jaegertracing/opentelemetry-all-in-one:latest --profile=myapp-podman-local
+```
+
+**Check loaded images:**
+
+```sh
+# List all loaded images in the profile
+minikube image ls --profile=myapp-podman-local
+
+# Check for specific images (Windows)
+minikube image ls --profile=myapp-podman-local | findstr "postgis valkey jaeger"
+
+# Check for specific images (Linux/macOS)
+minikube image ls --profile=myapp-podman-local | grep -E "postgis|valkey|jaeger"
+```
+
 Check pod status after loading images:
 
 ```sh
@@ -75,6 +95,23 @@ To access Redis from your host:
    ```sh
    redis-cli -h localhost -p 6379 --user admin --pass "StrongBase64Password"
    ```
+
+**Jaeger:**
+
+To access Jaeger UI from your host:
+
+1. Forward the port:
+   ```sh
+   kubectl port-forward service/jaeger-svc 16686:16686
+   ```
+2. Open in browser:
+   ```
+   http://localhost:16686
+   ```
+3. Available endpoints:
+   - **UI:** `http://localhost:16686` (web interface for viewing traces)
+   - **OTLP gRPC:** Port 4317 (for service instrumentation)
+   - **OTLP HTTP:** Port 4318 (for service instrumentation)
 
 ## Notes
 

@@ -1,0 +1,17 @@
+# Jaeger Sampling Strategies ConfigMap
+# Defines sampling rates for trace collection
+# Default: 100% sampling for dev/test (capture all traces)
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jaeger-config
+data:
+  sampling.json: |
+    {
+      "service_strategies": [],
+      "default_strategy": {
+        "type": "probabilistic",
+        "param": 1.0
+      }
+    }

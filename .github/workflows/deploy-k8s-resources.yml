@@ -302,7 +302,7 @@ jobs:
           > /tmp/redis.secret.processed.yaml
           mv /tmp/redis.secret.processed.yaml infra/k8s/base/secrets/redis.secret.yaml
 
-      - name: Build Kustomize manifests
+      - name: Build Kustomize manifests (dev)
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "🏗️  Building Kustomize manifests for dev environment..."
@@ -398,25 +398,96 @@ jobs:
         run: |
           echo "📊 Checking initial pod status..."
           sleep 10  # Wait for pods to start scheduling
-          kubectl get pods -l app=postgres -o wide || true
+
+          # Get all pods managed by kustomize
+          kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o wide || true
           kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -20 || true
 
-          # Check if pod exists and get detailed status
-          if kubectl get pod postgres-0 &>/dev/null; then
-            echo "🔍 Detailed status for postgres-0:"
-            kubectl describe pod postgres-0 | tail -50
-          else
-            echo "⚠️  Pod postgres-0 not found yet"
+          # Get detailed status for each StatefulSet's first pod
+          STATEFULSETS=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}')
+
+          if [ -n "$STATEFULSETS" ]; then
+            for sts in $STATEFULSETS; do
+              POD_NAME="${sts}-0"
+              if kubectl get pod $POD_NAME &>/dev/null; then
+                echo "\n🔍 Detailed status for $POD_NAME:"
+                kubectl describe pod $POD_NAME | tail -50
+              else
+                echo "\n⚠️  Pod $POD_NAME not found yet"
+              fi
+            done
           fi
 
-      - name: Wait for PostgreSQL rollout
+      - name: Wait for workload rollout
         id: rollout
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
-          echo "⏳ Waiting for PostgreSQL StatefulSet to be ready..."
+          echo "⏳ Waiting for workloads to be ready..."
           echo "Using deployment strategy timeout: ${{ steps.deploy-control.outputs.statefulset_timeout }}"
-          kubectl rollout status statefulset/postgres --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}
-          echo "✅ PostgreSQL deployment completed"
+
+          ROLLOUT_FAILED=false
+
+          # Check StatefulSets
+          STATEFULSETS=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$STATEFULSETS" ]; then
+            echo "📋 Found StatefulSets: $STATEFULSETS"
+            for sts in $STATEFULSETS; do
+              echo "\n🔄 Checking rollout status for StatefulSet/$sts..."
+              if ! kubectl rollout status statefulset/$sts --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
+                echo "❌ StatefulSet $sts rollout failed"
+                ROLLOUT_FAILED=true
+                break
+              fi
+              echo "✅ StatefulSet $sts deployment completed"
+            done
+          else
+            echo "ℹ️  No StatefulSets found"
+          fi
+
+          # Check Deployments (only if no failures so far)
+          if [ "$ROLLOUT_FAILED" = "false" ]; then
+            DEPLOYMENTS=$(kubectl get deployment -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+            if [ -n "$DEPLOYMENTS" ]; then
+              echo "\n📋 Found Deployments: $DEPLOYMENTS"
+              for deploy in $DEPLOYMENTS; do
+                echo "\n🔄 Checking rollout status for Deployment/$deploy..."
+                if ! kubectl rollout status deployment/$deploy --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
+                  echo "❌ Deployment $deploy rollout failed"
+                  ROLLOUT_FAILED=true
+                  break
+                fi
+                echo "✅ Deployment $deploy deployment completed"
+              done
+            else
+              echo "ℹ️  No Deployments found"
+            fi
+          fi
+
+          # Check DaemonSets (only if no failures so far)
+          if [ "$ROLLOUT_FAILED" = "false" ]; then
+            DAEMONSETS=$(kubectl get daemonset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+            if [ -n "$DAEMONSETS" ]; then
+              echo "\n📋 Found DaemonSets: $DAEMONSETS"
+              for ds in $DAEMONSETS; do
+                echo "\n🔄 Checking rollout status for DaemonSet/$ds..."
+                if ! kubectl rollout status daemonset/$ds --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
+                  echo "❌ DaemonSet $ds rollout failed"
+                  ROLLOUT_FAILED=true
+                  break
+                fi
+                echo "✅ DaemonSet $ds deployment completed"
+              done
+            else
+              echo "ℹ️  No DaemonSets found"
+            fi
+          fi
+
+          if [ "$ROLLOUT_FAILED" = "true" ]; then
+            echo "rollout_success=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          echo "\n✅ All workloads deployed successfully"
           echo "rollout_success=true" >> $GITHUB_OUTPUT
 
       - name: Rollback on failure
@@ -426,24 +497,98 @@ jobs:
           (steps.deploy-control.outputs.rollback_on_failure == 'true' || steps.deploy-control.outputs.statefulset_rollback == 'true') &&
           steps.rollout.outputs.rollout_success != 'true'
         run: |
-          echo "🔄 Rolling back PostgreSQL deployment due to failure..."
+          echo "🔄 Rolling back workload deployments due to failure..."
           echo "Rollback triggered by: rollback_on_failure=${{ steps.deploy-control.outputs.rollback_on_failure }} OR statefulset_rollback=${{ steps.deploy-control.outputs.statefulset_rollback }}"
-          kubectl rollout undo statefulset/postgres
-          kubectl rollout status statefulset/postgres --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}
-          echo "✅ Rollback completed"
+
+          ROLLBACK_FAILED=false
+
+          # Rollback StatefulSets
+          STATEFULSETS=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$STATEFULSETS" ]; then
+            echo "📋 Rolling back StatefulSets: $STATEFULSETS"
+            for sts in $STATEFULSETS; do
+              echo "\n🔄 Rolling back StatefulSet/$sts..."
+              if ! kubectl rollout undo statefulset/$sts; then
+                echo "❌ Failed to initiate rollback for StatefulSet/$sts"
+                ROLLBACK_FAILED=true
+                continue
+              fi
+              if ! kubectl rollout status statefulset/$sts --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
+                echo "❌ StatefulSet/$sts rollback did not complete successfully"
+                ROLLBACK_FAILED=true
+              else
+                echo "✅ StatefulSet $sts rollback completed"
+              fi
+            done
+          else
+            echo "ℹ️  No StatefulSets found to rollback"
+          fi
+
+          # Rollback Deployments
+          DEPLOYMENTS=$(kubectl get deployment -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$DEPLOYMENTS" ]; then
+            echo "\n📋 Rolling back Deployments: $DEPLOYMENTS"
+            for deploy in $DEPLOYMENTS; do
+              echo "\n🔄 Rolling back Deployment/$deploy..."
+              if ! kubectl rollout undo deployment/$deploy; then
+                echo "❌ Failed to initiate rollback for Deployment/$deploy"
+                ROLLBACK_FAILED=true
+                continue
+              fi
+              if ! kubectl rollout status deployment/$deploy --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
+                echo "❌ Deployment/$deploy rollback did not complete successfully"
+                ROLLBACK_FAILED=true
+              else
+                echo "✅ Deployment $deploy rollback completed"
+              fi
+            done
+          else
+            echo "ℹ️  No Deployments found to rollback"
+          fi
+
+          # Rollback DaemonSets
+          DAEMONSETS=$(kubectl get daemonset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$DAEMONSETS" ]; then
+            echo "\n📋 Rolling back DaemonSets: $DAEMONSETS"
+            for ds in $DAEMONSETS; do
+              echo "\n🔄 Rolling back DaemonSet/$ds..."
+              if ! kubectl rollout undo daemonset/$ds; then
+                echo "❌ Failed to initiate rollback for DaemonSet/$ds"
+                ROLLBACK_FAILED=true
+                continue
+              fi
+              if ! kubectl rollout status daemonset/$ds --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
+                echo "❌ DaemonSet/$ds rollback did not complete successfully"
+                ROLLBACK_FAILED=true
+              else
+                echo "✅ DaemonSet $ds rollback completed"
+              fi
+            done
+          else
+            echo "ℹ️  No DaemonSets found to rollback"
+          fi
+
+          if [ "$ROLLBACK_FAILED" = "true" ]; then
+            echo "\n⚠️  Some rollbacks failed - manual intervention may be required"
+            exit 1
+          fi
 
           # Exit with error to mark workflow as failed
-          echo "❌ Deployment failed and was rolled back"
+          echo "\n❌ Deployment failed and was rolled back"
           exit 1
 
       - name: Verify deployment
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
-          echo "🔍 Verifying PostgreSQL deployment..."
-          kubectl get statefulset postgres
-          kubectl get pods -l app=postgres
-          kubectl get services -l app=postgres
-          kubectl get pvc -l app=postgres
+          echo "🔍 Verifying deployment..."
+          echo "\n📦 Workloads:"
+          kubectl get statefulset,deployment,daemonset -l app.kubernetes.io/managed-by=kustomize || echo "No workloads found"
+          echo "\n🎯 Pods:"
+          kubectl get pods -l app.kubernetes.io/managed-by=kustomize || echo "No pods found"
+          echo "\n🌐 Services:"
+          kubectl get services -l app.kubernetes.io/managed-by=kustomize || echo "No services found"
+          echo "\n💾 PVCs:"
+          kubectl get pvc -l app.kubernetes.io/managed-by=kustomize || echo "No PVCs found"
 
   deploy-test:
     if: |
@@ -627,13 +772,14 @@ jobs:
           > /tmp/redis.secret.processed.yaml
           mv /tmp/redis.secret.processed.yaml infra/k8s/base/secrets/redis.secret.yaml
 
-      - name: Build Kustomize manifests
+      - name: Build Kustomize manifests (test)
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
-          echo "🏭️  Building Kustomize manifests for test environment..."
+          echo "🏭  Building Kustomize manifests for test environment..."
           kustomize build infra/k8s/hetzner/test --enable-alpha-plugins > manifests.yaml
+          echo "✅ Manifests built successfully"
 
-      - name: Apply manifests with immutable field handling
+      - name: Apply manifests with immutable field handling (test)
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "🚀 Deploying to test cluster..."
@@ -722,25 +868,96 @@ jobs:
         run: |
           echo "📊 Checking initial pod status..."
           sleep 10  # Wait for pods to start scheduling
-          kubectl get pods -l app=postgres -o wide || true
+
+          # Get all pods managed by kustomize
+          kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o wide || true
           kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -20 || true
 
-          # Check if pod exists and get detailed status
-          if kubectl get pod postgres-0 &>/dev/null; then
-            echo "🔍 Detailed status for postgres-0:"
-            kubectl describe pod postgres-0 | tail -50
-          else
-            echo "⚠️  Pod postgres-0 not found yet"
+          # Get detailed status for each StatefulSet's first pod
+          STATEFULSETS=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}')
+
+          if [ -n "$STATEFULSETS" ]; then
+            for sts in $STATEFULSETS; do
+              POD_NAME="${sts}-0"
+              if kubectl get pod $POD_NAME &>/dev/null; then
+                echo "\n🔍 Detailed status for $POD_NAME:"
+                kubectl describe pod $POD_NAME | tail -50
+              else
+                echo "\n⚠️  Pod $POD_NAME not found yet"
+              fi
+            done
           fi
 
-      - name: Wait for PostgreSQL rollout
+      - name: Wait for workload rollout
         id: rollout
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
-          echo "⏳ Waiting for PostgreSQL StatefulSet to be ready..."
+          echo "⏳ Waiting for workloads to be ready..."
           echo "Using deployment strategy timeout: ${{ steps.deploy-control.outputs.statefulset_timeout }}"
-          kubectl rollout status statefulset/postgres --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}
-          echo "✅ PostgreSQL deployment completed"
+
+          ROLLOUT_FAILED=false
+
+          # Check StatefulSets
+          STATEFULSETS=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$STATEFULSETS" ]; then
+            echo "📋 Found StatefulSets: $STATEFULSETS"
+            for sts in $STATEFULSETS; do
+              echo "\n🔄 Checking rollout status for StatefulSet/$sts..."
+              if ! kubectl rollout status statefulset/$sts --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
+                echo "❌ StatefulSet $sts rollout failed"
+                ROLLOUT_FAILED=true
+                break
+              fi
+              echo "✅ StatefulSet $sts deployment completed"
+            done
+          else
+            echo "ℹ️  No StatefulSets found"
+          fi
+
+          # Check Deployments (only if no failures so far)
+          if [ "$ROLLOUT_FAILED" = "false" ]; then
+            DEPLOYMENTS=$(kubectl get deployment -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+            if [ -n "$DEPLOYMENTS" ]; then
+              echo "\n📋 Found Deployments: $DEPLOYMENTS"
+              for deploy in $DEPLOYMENTS; do
+                echo "\n🔄 Checking rollout status for Deployment/$deploy..."
+                if ! kubectl rollout status deployment/$deploy --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
+                  echo "❌ Deployment $deploy rollout failed"
+                  ROLLOUT_FAILED=true
+                  break
+                fi
+                echo "✅ Deployment $deploy deployment completed"
+              done
+            else
+              echo "ℹ️  No Deployments found"
+            fi
+          fi
+
+          # Check DaemonSets (only if no failures so far)
+          if [ "$ROLLOUT_FAILED" = "false" ]; then
+            DAEMONSETS=$(kubectl get daemonset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+            if [ -n "$DAEMONSETS" ]; then
+              echo "\n📋 Found DaemonSets: $DAEMONSETS"
+              for ds in $DAEMONSETS; do
+                echo "\n🔄 Checking rollout status for DaemonSet/$ds..."
+                if ! kubectl rollout status daemonset/$ds --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
+                  echo "❌ DaemonSet $ds rollout failed"
+                  ROLLOUT_FAILED=true
+                  break
+                fi
+                echo "✅ DaemonSet $ds deployment completed"
+              done
+            else
+              echo "ℹ️  No DaemonSets found"
+            fi
+          fi
+
+          if [ "$ROLLOUT_FAILED" = "true" ]; then
+            echo "rollout_success=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          echo "\n✅ All workloads deployed successfully"
           echo "rollout_success=true" >> $GITHUB_OUTPUT
 
       - name: Rollback on failure
@@ -750,24 +967,98 @@ jobs:
           (steps.deploy-control.outputs.rollback_on_failure == 'true' || steps.deploy-control.outputs.statefulset_rollback == 'true') &&
           steps.rollout.outputs.rollout_success != 'true'
         run: |
-          echo "🔄 Rolling back PostgreSQL deployment due to failure..."
+          echo "🔄 Rolling back workload deployments due to failure..."
           echo "Rollback triggered by: rollback_on_failure=${{ steps.deploy-control.outputs.rollback_on_failure }} OR statefulset_rollback=${{ steps.deploy-control.outputs.statefulset_rollback }}"
-          kubectl rollout undo statefulset/postgres
-          kubectl rollout status statefulset/postgres --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}
-          echo "✅ Rollback completed"
+
+          ROLLBACK_FAILED=false
+
+          # Rollback StatefulSets
+          STATEFULSETS=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$STATEFULSETS" ]; then
+            echo "📋 Rolling back StatefulSets: $STATEFULSETS"
+            for sts in $STATEFULSETS; do
+              echo "\n🔄 Rolling back StatefulSet/$sts..."
+              if ! kubectl rollout undo statefulset/$sts; then
+                echo "❌ Failed to initiate rollback for StatefulSet/$sts"
+                ROLLBACK_FAILED=true
+                continue
+              fi
+              if ! kubectl rollout status statefulset/$sts --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
+                echo "❌ StatefulSet/$sts rollback did not complete successfully"
+                ROLLBACK_FAILED=true
+              else
+                echo "✅ StatefulSet $sts rollback completed"
+              fi
+            done
+          else
+            echo "ℹ️  No StatefulSets found to rollback"
+          fi
+
+          # Rollback Deployments
+          DEPLOYMENTS=$(kubectl get deployment -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$DEPLOYMENTS" ]; then
+            echo "\n📋 Rolling back Deployments: $DEPLOYMENTS"
+            for deploy in $DEPLOYMENTS; do
+              echo "\n🔄 Rolling back Deployment/$deploy..."
+              if ! kubectl rollout undo deployment/$deploy; then
+                echo "❌ Failed to initiate rollback for Deployment/$deploy"
+                ROLLBACK_FAILED=true
+                continue
+              fi
+              if ! kubectl rollout status deployment/$deploy --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
+                echo "❌ Deployment/$deploy rollback did not complete successfully"
+                ROLLBACK_FAILED=true
+              else
+                echo "✅ Deployment $deploy rollback completed"
+              fi
+            done
+          else
+            echo "ℹ️  No Deployments found to rollback"
+          fi
+
+          # Rollback DaemonSets
+          DAEMONSETS=$(kubectl get daemonset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$DAEMONSETS" ]; then
+            echo "\n📋 Rolling back DaemonSets: $DAEMONSETS"
+            for ds in $DAEMONSETS; do
+              echo "\n🔄 Rolling back DaemonSet/$ds..."
+              if ! kubectl rollout undo daemonset/$ds; then
+                echo "❌ Failed to initiate rollback for DaemonSet/$ds"
+                ROLLBACK_FAILED=true
+                continue
+              fi
+              if ! kubectl rollout status daemonset/$ds --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
+                echo "❌ DaemonSet/$ds rollback did not complete successfully"
+                ROLLBACK_FAILED=true
+              else
+                echo "✅ DaemonSet $ds rollback completed"
+              fi
+            done
+          else
+            echo "ℹ️  No DaemonSets found to rollback"
+          fi
+
+          if [ "$ROLLBACK_FAILED" = "true" ]; then
+            echo "\n⚠️  Some rollbacks failed - manual intervention may be required"
+            exit 1
+          fi
 
           # Exit with error to mark workflow as failed
-          echo "❌ Deployment failed and was rolled back"
+          echo "\n❌ Deployment failed and was rolled back"
           exit 1
 
       - name: Verify deployment
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
-          echo "🔍 Verifying PostgreSQL deployment..."
-          kubectl get statefulset postgres
-          kubectl get pods -l app=postgres
-          kubectl get services -l app=postgres
-          kubectl get pvc -l app=postgres
+          echo "🔍 Verifying deployment..."
+          echo "\n📦 Workloads:"
+          kubectl get statefulset,deployment,daemonset -l app.kubernetes.io/managed-by=kustomize || echo "No workloads found"
+          echo "\n🎯 Pods:"
+          kubectl get pods -l app.kubernetes.io/managed-by=kustomize || echo "No pods found"
+          echo "\n🌐 Services:"
+          kubectl get services -l app.kubernetes.io/managed-by=kustomize || echo "No services found"
+          echo "\n💾 PVCs:"
+          kubectl get pvc -l app.kubernetes.io/managed-by=kustomize || echo "No PVCs found"
 
   deploy-prod:
     if: |
@@ -974,13 +1265,14 @@ jobs:
           > /tmp/redis.secret.processed.yaml
           mv /tmp/redis.secret.processed.yaml infra/k8s/base/secrets/redis.secret.yaml
 
-      - name: Build Kustomize manifests
+      - name: Build Kustomize manifests (prod)
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "🏭️  Building Kustomize manifests for prod environment..."
           kustomize build infra/k8s/hetzner/prod --enable-alpha-plugins > manifests.yaml
+          echo "✅ Manifests built successfully"
 
-      - name: Apply manifests with immutable field handling
+      - name: Apply manifests with immutable field handling (prod)
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "🚀 Deploying to prod cluster..."
@@ -1069,25 +1361,90 @@ jobs:
         run: |
           echo "📊 Checking initial pod status..."
           sleep 10  # Wait for pods to start scheduling
-          kubectl get pods -l app=postgres -o wide || true
+
+          # Get all pods managed by kustomize
+          kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o wide || true
           kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -20 || true
 
-          # Check if pod exists and get detailed status
-          if kubectl get pod postgres-0 &>/dev/null; then
-            echo "🔍 Detailed status for postgres-0:"
-            kubectl describe pod postgres-0 | tail -50
-          else
-            echo "⚠️  Pod postgres-0 not found yet"
+          # Get detailed status for each StatefulSet's first pod
+          STATEFULSETS=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}')
+
+          if [ -n "$STATEFULSETS" ]; then
+            for sts in $STATEFULSETS; do
+              POD_NAME="${sts}-0"
+              if kubectl get pod $POD_NAME &>/dev/null; then
+                echo "\n🔍 Detailed status for $POD_NAME:"
+                kubectl describe pod $POD_NAME | tail -50
+              else
+                echo "\n⚠️  Pod $POD_NAME not found yet"
+              fi
+            done
           fi
 
-      - name: Wait for PostgreSQL rollout
+      - name: Wait for workload rollout
         id: rollout
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "⏳ Waiting for rollout to complete (timeout: ${{ steps.deploy-control.outputs.statefulset_timeout }})..."
-          if ! kubectl rollout status statefulset/postgres --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
-            echo "❌ Rollout failed or timed out"
-            
+
+          ROLLOUT_FAILED=false
+
+          # Check StatefulSets
+          STATEFULSETS=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$STATEFULSETS" ]; then
+            echo "📋 Found StatefulSets: $STATEFULSETS"
+            for sts in $STATEFULSETS; do
+              echo "\n🔄 Checking rollout status for StatefulSet/$sts..."
+              if ! kubectl rollout status statefulset/$sts --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
+                echo "❌ StatefulSet $sts rollout failed or timed out"
+                ROLLOUT_FAILED=true
+                break
+              fi
+              echo "✅ StatefulSet $sts deployment completed"
+            done
+          else
+            echo "ℹ️  No StatefulSets found"
+          fi
+
+          # Check Deployments (only if no failures so far)
+          if [ "$ROLLOUT_FAILED" = "false" ]; then
+            DEPLOYMENTS=$(kubectl get deployment -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+            if [ -n "$DEPLOYMENTS" ]; then
+              echo "\n📋 Found Deployments: $DEPLOYMENTS"
+              for deploy in $DEPLOYMENTS; do
+                echo "\n🔄 Checking rollout status for Deployment/$deploy..."
+                if ! kubectl rollout status deployment/$deploy --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
+                  echo "❌ Deployment $deploy rollout failed or timed out"
+                  ROLLOUT_FAILED=true
+                  break
+                fi
+                echo "✅ Deployment $deploy deployment completed"
+              done
+            else
+              echo "ℹ️  No Deployments found"
+            fi
+          fi
+
+          # Check DaemonSets (only if no failures so far)
+          if [ "$ROLLOUT_FAILED" = "false" ]; then
+            DAEMONSETS=$(kubectl get daemonset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+            if [ -n "$DAEMONSETS" ]; then
+              echo "\n📋 Found DaemonSets: $DAEMONSETS"
+              for ds in $DAEMONSETS; do
+                echo "\n🔄 Checking rollout status for DaemonSet/$ds..."
+                if ! kubectl rollout status daemonset/$ds --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
+                  echo "❌ DaemonSet $ds rollout failed or timed out"
+                  ROLLOUT_FAILED=true
+                  break
+                fi
+                echo "✅ DaemonSet $ds deployment completed"
+              done
+            else
+              echo "ℹ️  No DaemonSets found"
+            fi
+          fi
+
+          if [ "$ROLLOUT_FAILED" = "true" ]; then
             # Check if rollback is enabled (either service-level OR deployment-strategy level)
             if [ "${{ steps.deploy-control.outputs.rollback_on_failure }}" == "true" ] || [ "${{ steps.deploy-control.outputs.statefulset_rollback }}" == "true" ]; then
               echo "🔄 Rollback enabled - triggering rollback..."
@@ -1098,7 +1455,8 @@ jobs:
             fi
             exit 1
           fi
-          echo "✅ PostgreSQL deployment completed"
+
+          echo "\n✅ All workloads deployed successfully"
           echo "rollout_success=true" >> $GITHUB_OUTPUT
 
       - name: Rollback on failure
@@ -1107,20 +1465,94 @@ jobs:
           steps.deploy-control.outputs.enabled == 'true' &&
           steps.rollout.outputs.rollback_needed == 'true'
         run: |
-          echo "🔄 Rolling back PostgreSQL deployment due to failure..."
-          kubectl rollout undo statefulset/postgres
-          kubectl rollout status statefulset/postgres --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}
-          echo "✅ Rollback completed"
+          echo "🔄 Rolling back workload deployments due to failure..."
+
+          ROLLBACK_FAILED=false
+
+          # Rollback StatefulSets
+          STATEFULSETS=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$STATEFULSETS" ]; then
+            echo "📋 Rolling back StatefulSets: $STATEFULSETS"
+            for sts in $STATEFULSETS; do
+              echo "\n🔄 Rolling back StatefulSet/$sts..."
+              if ! kubectl rollout undo statefulset/$sts; then
+                echo "❌ Failed to initiate rollback for StatefulSet/$sts"
+                ROLLBACK_FAILED=true
+                continue
+              fi
+              if ! kubectl rollout status statefulset/$sts --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
+                echo "❌ StatefulSet/$sts rollback did not complete successfully"
+                ROLLBACK_FAILED=true
+              else
+                echo "✅ StatefulSet $sts rollback completed"
+              fi
+            done
+          else
+            echo "ℹ️  No StatefulSets found to rollback"
+          fi
+
+          # Rollback Deployments
+          DEPLOYMENTS=$(kubectl get deployment -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$DEPLOYMENTS" ]; then
+            echo "\n📋 Rolling back Deployments: $DEPLOYMENTS"
+            for deploy in $DEPLOYMENTS; do
+              echo "\n🔄 Rolling back Deployment/$deploy..."
+              if ! kubectl rollout undo deployment/$deploy; then
+                echo "❌ Failed to initiate rollback for Deployment/$deploy"
+                ROLLBACK_FAILED=true
+                continue
+              fi
+              if ! kubectl rollout status deployment/$deploy --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
+                echo "❌ Deployment/$deploy rollback did not complete successfully"
+                ROLLBACK_FAILED=true
+              else
+                echo "✅ Deployment $deploy rollback completed"
+              fi
+            done
+          else
+            echo "ℹ️  No Deployments found to rollback"
+          fi
+
+          # Rollback DaemonSets
+          DAEMONSETS=$(kubectl get daemonset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$DAEMONSETS" ]; then
+            echo "\n📋 Rolling back DaemonSets: $DAEMONSETS"
+            for ds in $DAEMONSETS; do
+              echo "\n🔄 Rolling back DaemonSet/$ds..."
+              if ! kubectl rollout undo daemonset/$ds; then
+                echo "❌ Failed to initiate rollback for DaemonSet/$ds"
+                ROLLBACK_FAILED=true
+                continue
+              fi
+              if ! kubectl rollout status daemonset/$ds --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
+                echo "❌ DaemonSet/$ds rollback did not complete successfully"
+                ROLLBACK_FAILED=true
+              else
+                echo "✅ DaemonSet $ds rollback completed"
+              fi
+            done
+          else
+            echo "ℹ️  No DaemonSets found to rollback"
+          fi
+
+          if [ "$ROLLBACK_FAILED" = "true" ]; then
+            echo "\n⚠️  Some rollbacks failed - manual intervention may be required"
+            exit 1
+          fi
 
           # Exit with error to mark workflow as failed
-          echo "❌ Deployment failed and was rolled back"
+          echo "\n❌ Deployment failed and was rolled back"
           exit 1
 
       - name: Verify deployment
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
-          echo "🔍 Verifying PostgreSQL deployment..."
-          kubectl get statefulset postgres
-          kubectl get pods -l app=postgres
-          kubectl get services -l app=postgres
-          kubectl get pvc -l app=postgres
+          echo "🔍 Verifying deployment..."
+          echo "\n📦 Workloads:"
+          kubectl get statefulset,deployment,daemonset -l app.kubernetes.io/managed-by=kustomize || echo "No workloads found"
+          echo "\n🎯 Pods:"
+          kubectl get pods -l app.kubernetes.io/managed-by=kustomize || echo "No pods found"
+          echo "\n🌐 Services:"
+          kubectl get services -l app.kubernetes.io/managed-by=kustomize || echo "No services found"
+          echo "\n💾 PVCs:"
+          kubectl get pvc -l app.kubernetes.io/managed-by=kustomize || echo "No PVCs found"

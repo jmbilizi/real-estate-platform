@@ -15,8 +15,9 @@ infra/
     ├── base/                                        # Shared base configs
     │   ├── kustomization.yaml                       # Base Kustomize configuration
     │   ├── configmaps/
-    │   │   ├── postgres-init.configmap.yaml         # PostgreSQL multi-tenant init
+    │   │   ├── postgres.configmap.yaml              # PostgreSQL configuration and init
     │   │   ├── redis.configmap.yaml                 # Redis production config + ACL users
+    │   │   ├── jaeger.configmap.yaml                # Jaeger sampling strategies
     │   │   └── redis-acl-guide.md                   # Redis ACL documentation
     │   ├── secrets/
     │   │   ├── postgres.secret.yaml                 # PostgreSQL passwords (4 users)
@@ -64,8 +65,9 @@ Pattern: `{service}.{kind}.yaml`
 - `redis.statefulset.yaml` - Redis StatefulSet
 - `postgres.service.yaml` - PostgreSQL Service
 - `redis.service.yaml` - Redis Service
-- `postgres-init.configmap.yaml` - PostgreSQL initialization script
+- `postgres.configmap.yaml` - PostgreSQL configuration and initialization scripts
 - `redis.configmap.yaml` - Redis production configuration
+- `jaeger.configmap.yaml` - Jaeger sampling strategies configuration
 - `cluster-config.yaml` - Cluster configuration (in provider/env/cluster/)
 
 ### 3. Kustomize Architecture
@@ -289,7 +291,7 @@ environments:
   - ✅ Automatic rollback (reverts failed rollouts)
 - Secret Substitution - Uses yq to replace StrongBase64Password with actual secrets in-memory
 - Server-Side Apply - Better field ownership and conflict resolution
-- Rollout Verification - Waits for StatefulSet ready status
+- Rollout Verification - Waits for all workload types (StatefulSets, Deployments, DaemonSets) to reach ready status
 - Resource Verification - Checks all resources after deployment
 
 **Deployment Flow (per environment):**
@@ -313,22 +315,31 @@ environments:
 6. **Apply manifests with error-driven immutable field handling:**
    - Try `kubectl apply` first (fail fast)
    - If immutable field error detected:
-     - Extract failed StatefulSet name(s) from error message
-     - Delete ONLY those StatefulSets (`--cascade=orphan` preserves PVCs)
+     - Extract failed resource name(s) from error message (supports StatefulSets, Deployments, DaemonSets, Services, Jobs)
+     - Delete ONLY those resources (`--cascade=orphan` preserves PVCs/Pods for stateful workloads)
      - Retry `kubectl apply`
    - Pattern eliminates false positives (only acts on actual errors)
-   - Scales to any number of StatefulSets (no hardcoded resource checks)
+   - Scales to any number of resources (no hardcoded resource checks)
 
-7. **Wait for rollout:** `kubectl rollout status statefulset/{name}` (300s dev/test, 600s prod)
+7. **Wait for workload rollout:** (300s dev/test, 600s prod)
+   - Dynamically discovers all workloads: `kubectl get {statefulset,deployment,daemonset} -l app.kubernetes.io/managed-by=kustomize`
+   - Checks rollout status for each workload type: `kubectl rollout status {type}/{name}`
+   - Early exit on first failure (remaining workloads not checked)
    - Waits for pods to pass readinessProbe checks
-   - Ensures StatefulSet reaches desired state
+   - Ensures all workloads reach desired state
 
 8. **Rollback on failure** (if enabled):
    - Automatically reverts if rollout fails
-   - Runs `kubectl rollout undo statefulset/{name}`
+   - Attempts rollback for all workload types: `kubectl rollout undo {statefulset,deployment,daemonset}/{name}`
+   - Continues rollback attempts even if individual rollbacks fail
+   - Reports if any rollbacks failed (requires manual intervention)
    - Marks workflow as failed
 
-9. **Verify deployment:** Check StatefulSet, Pods, Services, PVCs
+9. **Verify deployment:** Check all resources using `app.kubernetes.io/managed-by=kustomize` label
+   - Workloads: `kubectl get statefulset,deployment,daemonset`
+   - Pods: `kubectl get pods`
+   - Services: `kubectl get services`
+   - PVCs: `kubectl get pvc`
 
 ### 6. Environment-Specific Configurations
 

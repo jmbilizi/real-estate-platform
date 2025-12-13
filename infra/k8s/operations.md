@@ -213,7 +213,7 @@ kubectl describe statefulset postgres | grep -A 5 "Limits:"
 # Repeat for test and prod environments
 
 # 2. Update init script
-code infra/k8s/base/configmaps/postgres-init.configmap.yaml
+code infra/k8s/base/configmaps/postgres.configmap.yaml
 
 # Add after existing service users:
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$DB_NAME" <<-EOSQL
@@ -248,19 +248,43 @@ yq eval '.stringData.NEW_SERVICE_DB_USER_PASSWORD = "${{ secrets.NEW_SERVICE_DB_
 ### Rollback Deployment
 
 ```bash
-# Method 1: Using kubectl rollout
+# Method 1: Using kubectl rollout (for specific workload type)
 kubectl rollout undo statefulset/postgres
+kubectl rollout undo deployment/api-gateway
+kubectl rollout undo daemonset/logging-agent
 
-# Method 2: Using Git
+# Verify rollback status
+kubectl rollout status statefulset/postgres --watch
+
+# Method 2: Rollback all workloads (manual script)
+# StatefulSets
+for sts in $(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}'); do
+  echo "Rolling back StatefulSet/$sts..."
+  kubectl rollout undo statefulset/$sts
+done
+
+# Deployments
+for deploy in $(kubectl get deployment -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}'); do
+  echo "Rolling back Deployment/$deploy..."
+  kubectl rollout undo deployment/$deploy
+done
+
+# DaemonSets
+for ds in $(kubectl get daemonset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}'); do
+  echo "Rolling back DaemonSet/$ds..."
+  kubectl rollout undo daemonset/$ds
+done
+
+# Method 3: Using Git
 git checkout dev
 git revert HEAD  # Revert last commit
 git push origin dev  # Triggers redeploy
 
-# Method 3: Manual workflow with old commit
+# Method 4: Manual workflow with old commit
 gh workflow run deploy-k8s-resources.yml -f environment=dev -r <old-commit-sha>
 
 # Verify rollback
-kubectl get statefulset postgres -o wide
+kubectl get statefulset,deployment,daemonset -l app.kubernetes.io/managed-by=kustomize -o wide
 kubectl describe statefulset postgres | grep Image
 ```
 
@@ -596,23 +620,29 @@ kubectl get pv | grep postgres
 ## Monitoring Commands
 
 ```bash
-# Watch pod status
+# Watch all pod status (all workloads)
+watch kubectl get pods -l app.kubernetes.io/managed-by=kustomize
+
+# Watch specific workload (e.g., postgres)
 watch kubectl get pods -l app=postgres
 
 # Watch events
 kubectl get events --sort-by='.lastTimestamp' -w
 
-# Check resource usage
-kubectl top pods -l app=postgres
+# Check resource usage (all workloads)
+kubectl top pods -l app.kubernetes.io/managed-by=kustomize
 kubectl top nodes
 
-# Get all resources
+# Get all workloads
+kubectl get statefulset,deployment,daemonset -l app.kubernetes.io/managed-by=kustomize
+
+# Get all resources for specific workload
 kubectl get all -l app=postgres
 
 # Describe everything
 kubectl describe statefulset postgres
 kubectl describe service postgres-svc
-kubectl describe configmap postgres-init-script
+kubectl describe configmap postgres-config
 ```
 
 ## Useful Aliases
@@ -624,10 +654,17 @@ alias k="kubectl"
 alias kgp="kubectl get pods"
 alias kgs="kubectl get services"
 alias kgss="kubectl get statefulsets"
+alias kgd="kubectl get deployments"
+alias kgds="kubectl get daemonsets"
+alias kgw="kubectl get statefulset,deployment,daemonset"  # Get all workloads
 alias kd="kubectl describe"
 alias kl="kubectl logs"
 alias kx="kubectl exec -it"
 alias kpf="kubectl port-forward"
+
+# Kustomize-managed resources
+alias kgpk="kubectl get pods -l app.kubernetes.io/managed-by=kustomize"
+alias kgwk="kubectl get statefulset,deployment,daemonset -l app.kubernetes.io/managed-by=kustomize"
 
 # PostgreSQL specific
 alias pgdev="export KUBECONFIG=~/.kube/dev-config"
@@ -640,14 +677,17 @@ alias pgwatch="watch kubectl get pods -l app=postgres"
 ## Quick Checks
 
 ```bash
-# Is PostgreSQL healthy?
+# Are all workloads healthy?
+kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o wide | grep Running
+
+# Is specific workload healthy (e.g., PostgreSQL)?
 kubectl get pods -l app=postgres -o wide | grep Running
 
 # Are services accessible?
-kubectl get svc postgres-svc postgres-hl
+kubectl get svc -l app.kubernetes.io/managed-by=kustomize
 
 # Is storage bound?
-kubectl get pvc -l app=postgres | grep Bound
+kubectl get pvc -l app.kubernetes.io/managed-by=kustomize | grep Bound
 
 # What version is running?
 kubectl get statefulset postgres -o jsonpath='{.spec.template.spec.containers[0].image}'

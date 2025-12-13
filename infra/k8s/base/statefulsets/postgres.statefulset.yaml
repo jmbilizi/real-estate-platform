@@ -87,7 +87,7 @@ spec:
       volumes:
         - name: init-scripts
           configMap:
-            name: postgres-init-scripts
+            name: postgres-config
             defaultMode: 0755
   # volumeClaimTemplates intentionally omitted - MUST be defined in environment patches
   # This ensures explicit storage decisions per environment (dev: 14Gi, test: 16Gi, prod: 20Gi+)

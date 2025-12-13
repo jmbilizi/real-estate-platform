@@ -20,8 +20,9 @@ resources:
   - secrets/redis.secret.yaml
 
   # ConfigMaps (all second)
-  - configmaps/postgres-init.configmap.yaml
+  - configmaps/postgres.configmap.yaml
   - configmaps/redis.configmap.yaml
+  - configmaps/jaeger.configmap.yaml
 
   # Services (before workloads)
   - services/postgres.service.yaml

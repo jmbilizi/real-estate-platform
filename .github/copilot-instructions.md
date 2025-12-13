@@ -491,7 +491,9 @@ deployment_strategies:
 infra/k8s/
 ├── base/
 │   ├── secrets/postgres.secret.yaml           # Template with placeholders
-│   ├── configmaps/postgres-init.configmap.yaml
+│   ├── configmaps/postgres.configmap.yaml
+│   ├── configmaps/redis.configmap.yaml
+│   ├── configmaps/jaeger.configmap.yaml       # Sampling strategies
 │   ├── services/postgres.service.yaml         # Headless + regular service
 │   └── statefulsets/postgres.statefulset.yaml # NO resources, NO storage
 └── hetzner/
@@ -506,7 +508,7 @@ infra/k8s/
     └── prod/                                  # Production-grade resources, replicas, HA
 ```
 
-**File naming convention**: `{service}.{kind}.yaml` (e.g., `postgres.statefulset.yaml`, `postgres-init.configmap.yaml`)
+**File naming convention**: `{service}.{kind}.yaml` (e.g., `postgres.statefulset.yaml`, `postgres.configmap.yaml`, `redis.configmap.yaml`)
 
 **Resource ordering** in kustomization.yaml (CRITICAL):
 
@@ -552,13 +554,30 @@ kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins | kubectl diff -f -
 1. Load deployment control flags (parse `deploy-control.yaml`)
 2. Check flags in order (global → environment → service → auto-deploy)
 3. Set up kubeconfig (from GitHub Secrets)
-4. **Substitute secrets** in postgres.secret.yaml (in-memory)
+4. **Substitute secrets** in postgres.secret.yaml and redis.secret.yaml (in-memory)
 5. Build Kustomize manifests
-6. **Error-driven apply**: Try `kubectl apply` → On immutable field error → Extract failed StatefulSet names → Delete with `--cascade=orphan` → Retry
-7. Wait for rollout with configurable timeout
-8. Rollback on failure (if enabled)
+6. **Error-driven apply**: Try `kubectl apply` → On immutable field error → Extract failed resource names → Delete with `--cascade=orphan` → Retry
+7. **Wait for workload rollout** with configurable timeout:
+   - Dynamically discovers all workloads: StatefulSets, Deployments, DaemonSets
+   - Uses label selector: `app.kubernetes.io/managed-by=kustomize`
+   - Checks rollout status for each: `kubectl rollout status {type}/{name}`
+   - Early exit on first failure (stops checking remaining workloads)
+8. **Rollback on failure** (if enabled):
+   - Attempts rollback for ALL workload types (StatefulSets, Deployments, DaemonSets)
+   - Continues rollback attempts even if individual rollbacks fail
+   - Reports any failures requiring manual intervention
 
 **Kubernetes Immutable Field Handling**: Uses error-driven pattern to handle immutable fields across **5 resource types** (StatefulSet, Deployment, Service, DaemonSet, Job). Instead of preemptive checks, lets kubectl fail first, then parses stderr to identify resource type and extract specific resource names, deletes only those affected resources. Uses `--cascade=orphan` for stateful resources (preserves PVCs/Pods). This eliminates false positives and scales to any number of resources. Applied to all deployment targets: GitHub Actions (dev L312, test L636, prod L983) and local (kubectl-local-context.js).
+
+**Workload Discovery Pattern**: All workload operations use dynamic discovery:
+
+```bash
+STATEFULSETS=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+DEPLOYMENTS=$(kubectl get deployment -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+DAEMONSETS=$(kubectl get daemonset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+```
+
+This pattern ensures the workflow automatically adapts to any workload type without code changes.
 
 **Rollback logic** (combined OR):
 
@@ -630,7 +649,7 @@ env:
 volumes:
   - name: init-scripts
     configMap:
-      name: postgres-init-scripts # Must match ConfigMap metadata.name
+      name: postgres-config # Must match ConfigMap metadata.name
 ```
 
 **StatefulSet → Service** (via `serviceName`):
@@ -644,7 +663,7 @@ spec:
 
 ```bash
 # Verify ConfigMap name consistency
-grep -r "postgres-init-scripts" infra/k8s/base/
+grep -r "postgres-config" infra/k8s/base/
 
 # Verify secret field names across workflow and StatefulSet
 grep -r "ACCOUNT_SERVICE_DB_USER_PASSWORD" .github/workflows/ infra/k8s/base/

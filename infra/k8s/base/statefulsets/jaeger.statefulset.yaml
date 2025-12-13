@@ -46,6 +46,8 @@ spec:
           env:
             - name: COLLECTOR_OTLP_ENABLED
               value: "true"
+            - name: SAMPLING_STRATEGIES_FILE
+              value: "/etc/jaeger/sampling.json" # Path to mounted sampling config
             - name: SPAN_STORAGE_TYPE
               value: "badger" # Embedded database (dev/test), override to "elasticsearch" for prod
             - name: BADGER_EPHEMERAL
@@ -61,7 +63,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /
-              port: 14269
+              port: 16686
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
@@ -69,7 +71,7 @@ spec:
           readinessProbe:
             httpGet:
               path: /
-              port: 14269
+              port: 16686
             initialDelaySeconds: 10
             periodSeconds: 5
             timeoutSeconds: 3
@@ -78,5 +80,12 @@ spec:
             - name: jaeger-data
               mountPath: /badger
               subPath: badger
+            - name: jaeger-config
+              mountPath: /etc/jaeger
+              readOnly: true
+      volumes:
+        - name: jaeger-config
+          configMap:
+            name: jaeger-config
   # volumeClaimTemplates intentionally omitted - MUST be defined in environment patches
   # This ensures explicit storage decisions per environment (dev: 2Gi, test: 5Gi, prod: 20Gi)

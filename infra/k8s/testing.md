@@ -152,7 +152,7 @@ kubectl get services -l app=postgres
 kubectl get pvc -l app=postgres
 
 # ConfigMaps
-kubectl get configmap postgres-init-script
+kubectl get configmap postgres-config
 
 # Secrets
 kubectl get secret postgres-secret
@@ -164,7 +164,7 @@ kubectl get secret postgres-secret
 - 1 Pod: `postgres-0` (Running)
 - 2 Services: `postgres-hl` (headless), `postgres-svc` (ClusterIP)
 - 1 PVC: `postgres-data-postgres-0` (Bound)
-- 1 ConfigMap: `postgres-init-script`
+- 1 ConfigMap: `postgres-config`
 - 1 Secret: `postgres-secret`
 
 ### 5. Test Database Initialization

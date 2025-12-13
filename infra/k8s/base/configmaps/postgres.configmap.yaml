@@ -6,7 +6,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: postgres-init-scripts
+  name: postgres-config
 data:
   init-databases.sh: |
     #!/bin/bash

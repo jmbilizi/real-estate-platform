@@ -80,8 +80,9 @@ infra/
     ├── base/                        # Cloud-agnostic shared configurations
     │   ├── kustomization.yaml       # Base Kustomize configuration (required)
     │   ├── configmaps/
-    │   │   ├── postgres-init.configmap.yaml   # PostgreSQL multi-tenant init script
+    │   │   ├── postgres.configmap.yaml        # PostgreSQL configuration and init scripts
     │   │   ├── redis.configmap.yaml           # Redis production config + ACL users
+    │   │   ├── jaeger.configmap.yaml          # Jaeger sampling strategies
     │   │   └── redis-acl-guide.md            # Redis ACL documentation
     │   ├── secrets/
     │   │   ├── postgres.secret.yaml           # PostgreSQL passwords (substituted by workflow)
@@ -289,7 +290,7 @@ Configure in: Repository Settings → Secrets and variables → Actions
 | Deployment flags             | `infra/deploy-control.yaml`                                   |
 | **PostgreSQL**               |                                                               |
 | PostgreSQL image version     | `base/statefulsets/postgres.statefulset.yaml`                 |
-| Init script (database setup) | `base/configmaps/postgres-init.configmap.yaml`                |
+| Init script (database setup) | `base/configmaps/postgres.configmap.yaml`                     |
 | Dev config (combined)        | `hetzner/dev/patches/statefulsets/postgres.statefulset.yaml`  |
 | Prod config (combined)       | `hetzner/prod/patches/statefulsets/postgres.statefulset.yaml` |
 | Service configuration        | `base/services/postgres.service.yaml`                         |
@@ -300,6 +301,12 @@ Configure in: Repository Settings → Secrets and variables → Actions
 | Dev config (combined)        | `hetzner/dev/patches/statefulsets/redis.statefulset.yaml`     |
 | Prod config (combined)       | `hetzner/prod/patches/statefulsets/redis.statefulset.yaml`    |
 | Service configuration        | `base/services/redis.service.yaml`                            |
+| **Jaeger**                   |                                                               |
+| Jaeger image version         | `base/statefulsets/jaeger.statefulset.yaml`                   |
+| Sampling configuration       | `base/configmaps/jaeger.configmap.yaml`                       |
+| Dev config (combined)        | `hetzner/dev/patches/statefulsets/jaeger.statefulset.yaml`    |
+| Prod config (combined)       | `hetzner/prod/patches/statefulsets/jaeger.statefulset.yaml`   |
+| Service configuration        | `base/services/jaeger.service.yaml`                           |
 | **General**                  |                                                               |
 | Cluster config (dev)         | `hetzner/dev/cluster/cluster-config.yaml`                     |
 | GitHub Secrets required      | See "Required Secrets" section above                          |
