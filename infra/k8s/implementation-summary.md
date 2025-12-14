@@ -81,19 +81,19 @@ Pattern: `{service}.{kind}.yaml`
 
 - **PostgreSQL**: postgis/postgis:18-3.4, multi-tenant initialization, 4 database users
 - **Redis**: valkey/valkey:9.0-alpine, ACL-based authentication, 5 service users
-- **Jaeger**: jaegertracing/opentelemetry-all-in-one:latest, distributed tracing, OTLP endpoints
+- **Jaeger**: jaegertracing/all-in-one:1.76.0, distributed tracing, OTLP endpoints, pinned for deterministic deployments
 - **Services**: Headless (for StatefulSet DNS) + ClusterIP (for load balancing)
 
 **Minimal Base Philosophy:**
 
 The base layer contains ONLY configuration that is **identical across all environments**:
 
-- ✅ Container images (postgis/postgis:18-3.4, valkey/valkey:9.0-alpine)
-- ✅ Health probes (pg_isready, redis-cli ping)
-- ✅ Environment variables (connection strings, ACL passwords)
-- ✅ Volume mounts (/var/lib/postgresql/data, /data for Redis)
-- ✅ Security context (fsGroup: 999 for both PostgreSQL and Redis)
-- ✅ Init containers (PostgreSQL multi-database, Redis ACL substitution)
+- ✅ Container images (postgis/postgis:18-3.4, valkey/valkey:9.0-alpine, jaegertracing/all-in-one:1.76.0)
+- ✅ Health probes (pg_isready, redis-cli ping, HTTP GET for Jaeger)
+- ✅ Environment variables (connection strings, ACL passwords, OTLP config)
+- ✅ Volume mounts (/var/lib/postgresql/data, /data for Redis, /badger for Jaeger)
+- ✅ Security context (fsGroup: 999 for PostgreSQL/Redis, fsGroup: 10001 for Jaeger)
+- ✅ Init containers (PostgreSQL multi-database, Redis ACL substitution, Jaeger volume permissions)
 
 **NEVER in base** (must be defined in patches):
 
@@ -477,9 +477,23 @@ embedded_registry_mirror:
 
 **Health Probes:**
 
-- Startup probe - Initial readiness check
-- Liveness probe - Detects crashes
-- Readiness probe - Ready for traffic
+All StatefulSets include Kubernetes health probes for automated recovery:
+
+- **Startup probe** - Initial readiness check (not used in current config)
+- **Liveness probe** - Detects crashes and restarts containers
+  - PostgreSQL: 30s initial delay, exec `pg_isready`
+  - Redis: 30s initial delay, exec `redis-cli ping`
+  - Jaeger: 90s initial delay (cloud image pulls), HTTP GET :16686/
+- **Readiness probe** - Controls traffic routing
+  - PostgreSQL: 5s initial delay, exec `pg_isready`
+  - Redis: 5s initial delay, exec `redis-cli ping`
+  - Jaeger: 45s initial delay (slower startup), HTTP GET :16686/
+
+**Probe timing rationale:**
+
+- Jaeger uses longer delays due to larger image size and cold-start latency in cloud environments
+- Pinned image versions (e.g., 1.76.0 instead of `:latest`) reduce startup time by eliminating registry checks
+- After `kubectl rollout restart`, workflows wait 60s before checking status to allow pod termination + image load + probe delays
 
 ## Deployment Safety
 

@@ -407,7 +407,8 @@ jobs:
               kubectl rollout restart deployment/$deploy
             done
           fi
-          sleep 15  # Wait for pods to begin terminating
+          echo "⏳ Waiting 60 seconds for pods to terminate and restart..."
+          sleep 60
 
       - name: Check pod status immediately after apply
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
@@ -893,7 +894,8 @@ jobs:
               kubectl rollout restart deployment/$deploy
             done
           fi
-          sleep 15  # Wait for pods to begin terminating
+          echo "⏳ Waiting 60 seconds for pods to terminate and restart..."
+          sleep 60
 
       - name: Check pod status immediately after apply
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
@@ -1402,7 +1404,8 @@ jobs:
               kubectl rollout restart deployment/$deploy
             done
           fi
-          sleep 15  # Wait for pods to begin terminating
+          echo "⏳ Waiting 60 seconds for pods to terminate and restart..."
+          sleep 60
 
       - name: Check pod status immediately after apply
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'

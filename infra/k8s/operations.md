@@ -520,6 +520,22 @@ kubectl port-forward svc/jaeger-svc 16686:16686
 
 # Jaeger Health Check
 kubectl exec -it jaeger-0 -- wget -qO- http://localhost:14269/
+
+# Troubleshoot Jaeger CrashLoopBackOff
+kubectl logs jaeger-0
+
+# Common issue: BadgerDB version incompatibility
+# Error: "manifest has unsupported version: 4 (we support 8)"
+# This occurs when upgrading Jaeger versions with existing BadgerDB data
+# Solution: Delete PVC to start fresh (trace data will be lost)
+kubectl delete pvc jaeger-data-jaeger-0
+kubectl delete pod jaeger-0  # StatefulSet will recreate with new PVC
+
+# Common issue: Permission denied on /badger/key
+# Solution: Jaeger v1.76.0+ requires proper volume permissions
+# The StatefulSet includes an initContainer that fixes permissions automatically
+# If issue persists, verify securityContext is configured:
+kubectl get statefulset jaeger -o yaml | grep -A 5 securityContext
 ```
 
 ### Redis ACL Operations

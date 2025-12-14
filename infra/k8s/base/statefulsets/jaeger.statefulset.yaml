@@ -1,6 +1,6 @@
 # Jaeger StatefulSet (Base Configuration)
 # Cloud-agnostic base - NO resources or storage defined (added via environment patches)
-# Image: jaegertracing/opentelemetry-all-in-one:latest (Jaeger + OpenTelemetry Collector)
+# Image: jaegertracing/all-in-one:1.76.0 (Jaeger + OpenTelemetry Collector - latest stable Dec 2025)
 # Purpose: Distributed tracing for microservices observability
 # Optional sidecar: Services function independently if Jaeger unavailable
 # License: Apache 2.0 (CNCF graduated project)
@@ -21,9 +21,23 @@ spec:
         app: jaeger
     spec:
       terminationGracePeriodSeconds: 10
+      securityContext:
+        fsGroup: 10001 # Jaeger user ID - ensures volume permissions
+      initContainers:
+        - name: fix-permissions
+          image: jaegertracing/all-in-one:1.76.0
+          imagePullPolicy: IfNotPresent
+          command:
+            ["sh", "-c", "chown -R 10001:10001 /badger && chmod -R 755 /badger"]
+          securityContext:
+            runAsUser: 0 # Run as root to fix permissions
+          volumeMounts:
+            - name: jaeger-data
+              mountPath: /badger
+              subPath: badger
       containers:
         - name: jaeger
-          image: jaegertracing/opentelemetry-all-in-one:latest
+          image: jaegertracing/all-in-one:1.76.0
           imagePullPolicy: IfNotPresent
           # Resources intentionally omitted - MUST be defined in environment patches
           # This ensures explicit resource decisions per environment (dev vs prod)
@@ -64,7 +78,7 @@ spec:
             httpGet:
               path: /
               port: 16686
-            initialDelaySeconds: 60
+            initialDelaySeconds: 90
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
@@ -72,7 +86,7 @@ spec:
             httpGet:
               path: /
               port: 16686
-            initialDelaySeconds: 30
+            initialDelaySeconds: 45
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3

@@ -43,8 +43,8 @@ minikube image load docker.io/valkey/valkey:9.0-alpine --profile=myapp-podman-lo
 **E. Jaeger (OpenTelemetry All-in-One):**
 
 ```sh
-podman machine ssh 'podman pull docker.io/jaegertracing/opentelemetry-all-in-one:latest'
-minikube image load docker.io/jaegertracing/opentelemetry-all-in-one:latest --profile=myapp-podman-local
+podman machine ssh 'podman pull docker.io/jaegertracing/all-in-one:1.76.0'
+minikube image load docker.io/jaegertracing/all-in-one:1.76.0 --profile=myapp-podman-local
 ```
 
 **Check loaded images:**
