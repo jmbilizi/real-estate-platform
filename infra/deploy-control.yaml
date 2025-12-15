@@ -125,7 +125,7 @@ deployment_strategies:
   statefulset:
     strategy: "RollingUpdate"
     wait_for_ready: true
-    timeout: "5m" # Rollout timeout for all environments
+    timeout: "7m" # Rollout timeout for all environments (allows time for Jaeger cold-start + BadgerDB init)
     rollback_on_failure: true # Combined OR logic with service.rollback_on_failure
     max_unavailable: 0 # Zero-downtime for stateful apps
 
