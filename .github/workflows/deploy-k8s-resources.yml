@@ -285,53 +285,6 @@ jobs:
           chmod 600 ~/.kube/config
           kubectl cluster-info
 
-      - name: Clean corrupted PVCs if needed (Dev)
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          echo "🔍 Checking for pods with persistent failures..."
-
-          # Check all pods for CrashLoopBackOff with 10+ restart counts (identifies truly broken pods)
-          PODS=$(kubectl get pods -o json 2>/dev/null | jq -r '.items[] | select(.status.containerStatuses != null) | select(any(.status.containerStatuses[]; .restartCount > 10)) | select(any(.status.containerStatuses[]; .state.waiting.reason == "CrashLoopBackOff")) | .metadata.name' || echo "")
-
-          if [ -n "$PODS" ]; then
-            echo "⚠️  Found pods with 10+ restarts in CrashLoopBackOff:"
-            echo "$PODS"
-            
-            for pod in $PODS; do
-              echo ""
-              echo "🔍 Analyzing $pod..."
-              
-              # Get logs to check for BadgerDB corruption
-              LOGS=$(kubectl logs $pod --tail=50 2>&1 || echo "")
-              if echo "$LOGS" | grep -qi "manifest has unsupported version\|corruption\|badger"; then
-                echo "❌ Detected BadgerDB corruption in $pod"
-                
-                # Extract StatefulSet name (remove -0, -1, etc suffix)
-                STS_NAME=$(echo $pod | sed 's/-[0-9]*$//')
-                
-                # Get associated PVC
-                PVC=$(kubectl get pvc -o json | jq -r ".items[] | select(.metadata.name | contains(\"$STS_NAME\")) | .metadata.name" | head -1)
-                
-                if [ -n "$PVC" ]; then
-                  echo "🗑️  Deleting corrupted PVC: $PVC"
-                  kubectl delete pod $pod --force --grace-period=0 || true
-                  kubectl delete pvc $PVC
-                  echo "✅ Cleaned up $pod and $PVC - will recreate with fresh data"
-                else
-                  echo "ℹ️  No PVC found for $pod"
-                fi
-              else
-                echo "ℹ️  No BadgerDB corruption detected in $pod logs"
-              fi
-            done
-            
-            echo ""
-            echo "⏳ Waiting 30 seconds for PVC deletion and recreation..."
-            sleep 30
-          else
-            echo "✅ No pods with persistent failures found"
-          fi
-
       - name: Substitute secrets in secret file
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
@@ -459,6 +412,46 @@ jobs:
           fi
           echo "⏳ Waiting 60 seconds for pods to terminate and restart..."
           sleep 60
+
+      - name: Clean corrupted PVCs if pods still failing (Dev)
+        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
+        run: |
+          echo "🔍 Checking if pods still failing after restart with new config..."
+
+          PODS=$(kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o json 2>/dev/null | jq -r '.items[] | select(.status.containerStatuses != null) | select(any(.status.containerStatuses[]; .restartCount > 10)) | .metadata.name' || echo "")
+
+          if [ -n "$PODS" ]; then
+            echo "⚠️  Found pods with 10+ restarts even after applying new config:"
+            echo "$PODS"
+            
+            for pod in $PODS; do
+              echo ""
+              echo "🔍 Analyzing $pod..."
+              
+              LOGS=$(kubectl logs $pod --tail=50 2>&1 || echo "")
+              if echo "$LOGS" | grep -qi "manifest has unsupported version\|corruption\|badger"; then
+                echo "❌ Detected BadgerDB corruption in $pod - likely incompatible with new version"
+                
+                STS_NAME=$(echo $pod | sed 's/-[0-9]*$//')
+                PVC=$(kubectl get pvc -o json | jq -r ".items[] | select(.metadata.name | contains(\"$STS_NAME\")) | .metadata.name" | head -1)
+                
+                if [ -n "$PVC" ]; then
+                  echo "🗑️  Deleting corrupted PVC: $PVC"
+                  kubectl delete pod $pod --force --grace-period=0 || true
+                  kubectl delete pvc $PVC
+                  echo "✅ Cleaned up $pod and $PVC - will recreate with fresh data"
+                  echo "⏳ Waiting 30 seconds for recreation..."
+                  sleep 30
+                else
+                  echo "ℹ️  No PVC found for $pod"
+                fi
+              else
+                echo "ℹ️  No BadgerDB corruption detected - pod may recover naturally"
+              fi
+            done
+          else
+            echo "✅ No pods with persistent failures - new config working!"
+          fi
 
       - name: Check pod status immediately after apply
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
@@ -822,53 +815,6 @@ jobs:
           chmod 600 ~/.kube/config
           kubectl cluster-info
 
-      - name: Clean corrupted PVCs if needed (Test)
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          echo "🔍 Checking for pods with persistent failures..."
-
-          # Check all pods for CrashLoopBackOff with 10+ restart counts (identifies truly broken pods)
-          PODS=$(kubectl get pods -o json 2>/dev/null | jq -r '.items[] | select(.status.containerStatuses != null) | select(any(.status.containerStatuses[]; .restartCount > 10)) | select(any(.status.containerStatuses[]; .state.waiting.reason == "CrashLoopBackOff")) | .metadata.name' || echo "")
-
-          if [ -n "$PODS" ]; then
-            echo "⚠️  Found pods with 10+ restarts in CrashLoopBackOff:"
-            echo "$PODS"
-            
-            for pod in $PODS; do
-              echo ""
-              echo "🔍 Analyzing $pod..."
-              
-              # Get logs to check for BadgerDB corruption
-              LOGS=$(kubectl logs $pod --tail=50 2>&1 || echo "")
-              if echo "$LOGS" | grep -qi "manifest has unsupported version\|corruption\|badger"; then
-                echo "❌ Detected BadgerDB corruption in $pod"
-                
-                # Extract StatefulSet name (remove -0, -1, etc suffix)
-                STS_NAME=$(echo $pod | sed 's/-[0-9]*$//')
-                
-                # Get associated PVC
-                PVC=$(kubectl get pvc -o json | jq -r ".items[] | select(.metadata.name | contains(\"$STS_NAME\")) | .metadata.name" | head -1)
-                
-                if [ -n "$PVC" ]; then
-                  echo "🗑️  Deleting corrupted PVC: $PVC"
-                  kubectl delete pod $pod --force --grace-period=0 || true
-                  kubectl delete pvc $PVC
-                  echo "✅ Cleaned up $pod and $PVC - will recreate with fresh data"
-                else
-                  echo "ℹ️  No PVC found for $pod"
-                fi
-              else
-                echo "ℹ️  No BadgerDB corruption detected in $pod logs"
-              fi
-            done
-            
-            echo ""
-            echo "⏳ Waiting 30 seconds for PVC deletion and recreation..."
-            sleep 30
-          else
-            echo "✅ No pods with persistent failures found"
-          fi
-
       - name: Substitute secrets in secret file
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
@@ -996,6 +942,46 @@ jobs:
           fi
           echo "⏳ Waiting 60 seconds for pods to terminate and restart..."
           sleep 60
+
+      - name: Clean corrupted PVCs if pods still failing (Test)
+        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
+        run: |
+          echo "🔍 Checking if pods still failing after restart with new config..."
+
+          PODS=$(kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o json 2>/dev/null | jq -r '.items[] | select(.status.containerStatuses != null) | select(any(.status.containerStatuses[]; .restartCount > 10)) | .metadata.name' || echo "")
+
+          if [ -n "$PODS" ]; then
+            echo "⚠️  Found pods with 10+ restarts even after applying new config:"
+            echo "$PODS"
+            
+            for pod in $PODS; do
+              echo ""
+              echo "🔍 Analyzing $pod..."
+              
+              LOGS=$(kubectl logs $pod --tail=50 2>&1 || echo "")
+              if echo "$LOGS" | grep -qi "manifest has unsupported version\|corruption\|badger"; then
+                echo "❌ Detected BadgerDB corruption in $pod - likely incompatible with new version"
+                
+                STS_NAME=$(echo $pod | sed 's/-[0-9]*$//')
+                PVC=$(kubectl get pvc -o json | jq -r ".items[] | select(.metadata.name | contains(\"$STS_NAME\")) | .metadata.name" | head -1)
+                
+                if [ -n "$PVC" ]; then
+                  echo "🗑️  Deleting corrupted PVC: $PVC"
+                  kubectl delete pod $pod --force --grace-period=0 || true
+                  kubectl delete pvc $PVC
+                  echo "✅ Cleaned up $pod and $PVC - will recreate with fresh data"
+                  echo "⏳ Waiting 30 seconds for recreation..."
+                  sleep 30
+                else
+                  echo "ℹ️  No PVC found for $pod"
+                fi
+              else
+                echo "ℹ️  No BadgerDB corruption detected - pod may recover naturally"
+              fi
+            done
+          else
+            echo "✅ No pods with persistent failures - new config working!"
+          fi
 
       - name: Check pod status immediately after apply
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
@@ -1382,53 +1368,6 @@ jobs:
           chmod 600 ~/.kube/config
           kubectl cluster-info
 
-      - name: Clean corrupted PVCs if needed (Prod)
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          echo "🔍 Checking for pods with persistent failures..."
-
-          # Check all pods for CrashLoopBackOff with 10+ restart counts (identifies truly broken pods)
-          PODS=$(kubectl get pods -o json 2>/dev/null | jq -r '.items[] | select(.status.containerStatuses != null) | select(any(.status.containerStatuses[]; .restartCount > 10)) | select(any(.status.containerStatuses[]; .state.waiting.reason == "CrashLoopBackOff")) | .metadata.name' || echo "")
-
-          if [ -n "$PODS" ]; then
-            echo "⚠️  Found pods with 10+ restarts in CrashLoopBackOff:"
-            echo "$PODS"
-            
-            for pod in $PODS; do
-              echo ""
-              echo "🔍 Analyzing $pod..."
-              
-              # Get logs to check for BadgerDB corruption
-              LOGS=$(kubectl logs $pod --tail=50 2>&1 || echo "")
-              if echo "$LOGS" | grep -qi "manifest has unsupported version\|corruption\|badger"; then
-                echo "❌ Detected BadgerDB corruption in $pod"
-                
-                # Extract StatefulSet name (remove -0, -1, etc suffix)
-                STS_NAME=$(echo $pod | sed 's/-[0-9]*$//')
-                
-                # Get associated PVC
-                PVC=$(kubectl get pvc -o json | jq -r ".items[] | select(.metadata.name | contains(\"$STS_NAME\")) | .metadata.name" | head -1)
-                
-                if [ -n "$PVC" ]; then
-                  echo "🗑️  Deleting corrupted PVC: $PVC"
-                  kubectl delete pod $pod --force --grace-period=0 || true
-                  kubectl delete pvc $PVC
-                  echo "✅ Cleaned up $pod and $PVC - will recreate with fresh data"
-                else
-                  echo "ℹ️  No PVC found for $pod"
-                fi
-              else
-                echo "ℹ️  No BadgerDB corruption detected in $pod logs"
-              fi
-            done
-            
-            echo ""
-            echo "⏳ Waiting 30 seconds for PVC deletion and recreation..."
-            sleep 30
-          else
-            echo "✅ No pods with persistent failures found"
-          fi
-
       - name: Substitute secrets in secret file
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
@@ -1556,6 +1495,46 @@ jobs:
           fi
           echo "⏳ Waiting 60 seconds for pods to terminate and restart..."
           sleep 60
+
+      - name: Clean corrupted PVCs if pods still failing (Prod)
+        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
+        run: |
+          echo "🔍 Checking if pods still failing after restart with new config..."
+
+          PODS=$(kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o json 2>/dev/null | jq -r '.items[] | select(.status.containerStatuses != null) | select(any(.status.containerStatuses[]; .restartCount > 10)) | .metadata.name' || echo "")
+
+          if [ -n "$PODS" ]; then
+            echo "⚠️  Found pods with 10+ restarts even after applying new config:"
+            echo "$PODS"
+            
+            for pod in $PODS; do
+              echo ""
+              echo "🔍 Analyzing $pod..."
+              
+              LOGS=$(kubectl logs $pod --tail=50 2>&1 || echo "")
+              if echo "$LOGS" | grep -qi "manifest has unsupported version\|corruption\|badger"; then
+                echo "❌ Detected BadgerDB corruption in $pod - likely incompatible with new version"
+                
+                STS_NAME=$(echo $pod | sed 's/-[0-9]*$//')
+                PVC=$(kubectl get pvc -o json | jq -r ".items[] | select(.metadata.name | contains(\"$STS_NAME\")) | .metadata.name" | head -1)
+                
+                if [ -n "$PVC" ]; then
+                  echo "🗑️  Deleting corrupted PVC: $PVC"
+                  kubectl delete pod $pod --force --grace-period=0 || true
+                  kubectl delete pvc $PVC
+                  echo "✅ Cleaned up $pod and $PVC - will recreate with fresh data"
+                  echo "⏳ Waiting 30 seconds for recreation..."
+                  sleep 30
+                else
+                  echo "ℹ️  No PVC found for $pod"
+                fi
+              else
+                echo "ℹ️  No BadgerDB corruption detected - pod may recover naturally"
+              fi
+            done
+          else
+            echo "✅ No pods with persistent failures - new config working!"
+          fi
 
       - name: Check pod status immediately after apply
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
