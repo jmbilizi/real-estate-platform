@@ -9,6 +9,8 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: jaeger
+  labels:
+    app.kubernetes.io/managed-by: kustomize
 spec:
   serviceName: jaeger-hl
   replicas: 1
@@ -19,6 +21,7 @@ spec:
     metadata:
       labels:
         app: jaeger
+        app.kubernetes.io/managed-by: kustomize
     spec:
       terminationGracePeriodSeconds: 10
       securityContext:
