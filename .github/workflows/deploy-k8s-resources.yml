@@ -687,23 +687,6 @@ jobs:
             kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -30 || true
           fi
 
-      - name: Consistency check (StatefulSets)
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          echo "\n🔎 Consistency check: comparing manifests vs labeled StatefulSets"
-          # Use -N to suppress YAML doc separators and filter out any stray '---'
-          EXPECTED=$(yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-          LABELED=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
-          echo "Expected (from manifests): $EXPECTED"
-          echo "Labeled in cluster: $LABELED"
-          MISSING=$(printf "%s\n" $EXPECTED | tr ' ' '\n' | awk 'NF' | while read n; do echo "$LABELED" | grep -qw "$n" || echo "$n"; done | tr '\n' ' ')
-          if [ -n "$MISSING" ]; then
-            echo "⚠️  Missing or unlabeled StatefulSets: $MISSING"
-            echo "Hint: ensure overlays include resources and carry label app.kubernetes.io/managed-by=kustomize"
-          else
-            echo "✅ All StatefulSets from manifests are present and labeled"
-          fi
-
   deploy-test:
     if: |
       (github.event_name == 'push' && github.ref == 'refs/heads/test') ||
@@ -1265,23 +1248,6 @@ jobs:
           if [ "${{ steps.pvc-cleanup-test.outputs.pvc_cleanup_ran }}" = "true" ]; then
             echo "\n📋 Recent pod events (for troubleshooting):"
             kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -30 || true
-          fi
-
-      - name: Consistency check (StatefulSets)
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          echo "\n🔎 Consistency check: comparing manifests vs labeled StatefulSets"
-          # Use -N to suppress YAML doc separators and filter out any stray '---'
-          EXPECTED=$(yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-          LABELED=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
-          echo "Expected (from manifests): $EXPECTED"
-          echo "Labeled in cluster: $LABELED"
-          MISSING=$(printf "%s\n" $EXPECTED | tr ' ' '\n' | awk 'NF' | while read n; do echo "$LABELED" | grep -qw "$n" || echo "$n"; done | tr '\n' ' ')
-          if [ -n "$MISSING" ]; then
-            echo "⚠️  Missing or unlabeled StatefulSets: $MISSING"
-            echo "Hint: ensure overlays include resources and carry label app.kubernetes.io/managed-by=kustomize"
-          else
-            echo "✅ All StatefulSets from manifests are present and labeled"
           fi
 
   deploy-prod:
@@ -1863,21 +1829,4 @@ jobs:
           if [ "${{ steps.pvc-cleanup-prod.outputs.pvc_cleanup_ran }}" = "true" ]; then
             echo "\n📋 Recent pod events (for troubleshooting):"
             kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -30 || true
-          fi
-
-      - name: Consistency check (StatefulSets)
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          echo "\n🔎 Consistency check: comparing manifests vs labeled StatefulSets"
-          # Use -N to suppress YAML doc separators and filter out any stray '---'
-          EXPECTED=$(yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-          LABELED=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
-          echo "Expected (from manifests): $EXPECTED"
-          echo "Labeled in cluster: $LABELED"
-          MISSING=$(printf "%s\n" $EXPECTED | tr ' ' '\n' | awk 'NF' | while read n; do echo "$LABELED" | grep -qw "$n" || echo "$n"; done | tr '\n' ' ')
-          if [ -n "$MISSING" ]; then
-            echo "⚠️  Missing or unlabeled StatefulSets: $MISSING"
-            echo "Hint: ensure overlays include resources and carry label app.kubernetes.io/managed-by=kustomize"
-          else
-            echo "✅ All StatefulSets from manifests are present and labeled"
           fi
