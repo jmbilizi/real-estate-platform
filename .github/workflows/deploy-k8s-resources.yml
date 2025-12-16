@@ -420,9 +420,19 @@ jobs:
           echo "⏳ Waiting additional 30s for pods to stabilize..."
           sleep 30
 
-          # Check for pods that are NOT Ready (regardless of restart count)
-          # After rollout restart, pods have restart count = 0, so we check Ready status instead
-          PODS=$(kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o json 2>/dev/null | jq -r '.items[] | select(.status.conditions[]? | select(.type == "Ready" and .status == "False")) | .metadata.name' || echo "")
+          echo "📊 Current pod status:"
+          kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o wide
+          
+          echo ""
+          echo "📋 Pod conditions:"
+          kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o json | jq '.items[] | {name: .metadata.name, ready: (.status.conditions[] | select(.type=="Ready") | .status), phase: .status.phase, restarts: .status.containerStatuses[0].restartCount}'
+          
+          # Check for ANY pod that's not running and ready
+          # Includes: CrashLoopBackOff, ImagePullBackOff, Pending, or Ready!=True
+          PODS=$(kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o json 2>/dev/null | jq -r '.items[] | select(
+            (.status.phase != "Running") or 
+            (.status.conditions[]? | select(.type == "Ready") | .status != "True")
+          ) | .metadata.name' || echo "")
 
           if [ -n "$PODS" ]; then
             echo "⚠️  Found pods that are NOT ready 90s after restart:"
@@ -954,9 +964,19 @@ jobs:
           echo "⏳ Waiting additional 30s for pods to stabilize..."
           sleep 30
 
-          # Check for pods that are NOT Ready (regardless of restart count)
-          # After rollout restart, pods have restart count = 0, so we check Ready status instead
-          PODS=$(kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o json 2>/dev/null | jq -r '.items[] | select(.status.conditions[]? | select(.type == "Ready" and .status == "False")) | .metadata.name' || echo "")
+          echo "📊 Current pod status:"
+          kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o wide
+          
+          echo ""
+          echo "📋 Pod conditions:"
+          kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o json | jq '.items[] | {name: .metadata.name, ready: (.status.conditions[] | select(.type=="Ready") | .status), phase: .status.phase, restarts: .status.containerStatuses[0].restartCount}'
+          
+          # Check for ANY pod that's not running and ready
+          # Includes: CrashLoopBackOff, ImagePullBackOff, Pending, or Ready!=True
+          PODS=$(kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o json 2>/dev/null | jq -r '.items[] | select(
+            (.status.phase != "Running") or 
+            (.status.conditions[]? | select(.type == "Ready") | .status != "True")
+          ) | .metadata.name' || echo "")
 
           if [ -n "$PODS" ]; then
             echo "⚠️  Found pods that are NOT ready 90s after restart:"
@@ -1511,9 +1531,19 @@ jobs:
           echo "⏳ Waiting additional 30s for pods to stabilize..."
           sleep 30
 
-          # Check for pods that are NOT Ready (regardless of restart count)
-          # After rollout restart, pods have restart count = 0, so we check Ready status instead
-          PODS=$(kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o json 2>/dev/null | jq -r '.items[] | select(.status.conditions[]? | select(.type == "Ready" and .status == "False")) | .metadata.name' || echo "")
+          echo "📊 Current pod status:"
+          kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o wide
+          
+          echo ""
+          echo "📋 Pod conditions:"
+          kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o json | jq '.items[] | {name: .metadata.name, ready: (.status.conditions[] | select(.type=="Ready") | .status), phase: .status.phase, restarts: .status.containerStatuses[0].restartCount}'
+          
+          # Check for ANY pod that's not running and ready
+          # Includes: CrashLoopBackOff, ImagePullBackOff, Pending, or Ready!=True
+          PODS=$(kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o json 2>/dev/null | jq -r '.items[] | select(
+            (.status.phase != "Running") or 
+            (.status.conditions[]? | select(.type == "Ready") | .status != "True")
+          ) | .metadata.name' || echo "")
 
           if [ -n "$PODS" ]; then
             echo "⚠️  Found pods that are NOT ready 90s after restart:"
