@@ -305,7 +305,7 @@ jobs:
           > /tmp/redis.secret.processed.yaml
           mv /tmp/redis.secret.processed.yaml infra/k8s/base/secrets/redis.secret.yaml
 
-      - name: Build Kustomize manifests (dev)
+      - name: Build Kustomize manifests
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "🏗️  Building Kustomize manifests for dev environment..."
@@ -413,7 +413,7 @@ jobs:
           echo "⏳ Waiting 60 seconds for pods to terminate and restart..."
           sleep 60
 
-      - name: Clean corrupted PVCs if pods still failing (Dev)
+      - name: Clean corrupted PVCs if pods still failing
         id: pvc-cleanup
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
@@ -497,7 +497,7 @@ jobs:
 
           ROLLOUT_FAILED=false
 
-          # Check StatefulSets
+          # Check StatefulSets (labeled only - enforcement policy)
           STATEFULSETS=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
           if [ -n "$STATEFULSETS" ]; then
             echo "📋 Found StatefulSets: $STATEFULSETS"
@@ -672,6 +672,22 @@ jobs:
           if [ "${{ steps.pvc-cleanup.outputs.pvc_cleanup_ran }}" = "true" ]; then
             echo "\n📋 Recent pod events (for troubleshooting):"
             kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -30 || true
+          fi
+
+      - name: Consistency check (StatefulSets)
+        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
+        run: |
+          echo "\n🔎 Consistency check: comparing manifests vs labeled StatefulSets"
+          EXPECTED=$(yq e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | tr '\n' ' ' || echo "")
+          LABELED=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          echo "Expected (from manifests): $EXPECTED"
+          echo "Labeled in cluster: $LABELED"
+          MISSING=$(printf "%s\n" $EXPECTED | tr ' ' '\n' | awk 'NF' | while read n; do echo "$LABELED" | grep -qw "$n" || echo "$n"; done | tr '\n' ' ')
+          if [ -n "$MISSING" ]; then
+            echo "⚠️  Missing or unlabeled StatefulSets: $MISSING"
+            echo "Hint: ensure overlays include resources and carry label app.kubernetes.io/managed-by=kustomize"
+          else
+            echo "✅ All StatefulSets from manifests are present and labeled"
           fi
 
   deploy-test:
@@ -859,14 +875,14 @@ jobs:
           > /tmp/redis.secret.processed.yaml
           mv /tmp/redis.secret.processed.yaml infra/k8s/base/secrets/redis.secret.yaml
 
-      - name: Build Kustomize manifests (test)
+      - name: Build Kustomize manifests
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "🏭  Building Kustomize manifests for test environment..."
           kustomize build infra/k8s/hetzner/test --enable-alpha-plugins > manifests.yaml
           echo "✅ Manifests built successfully"
 
-      - name: Apply manifests with immutable field handling (test)
+      - name: Apply manifests with immutable field handling
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "🚀 Deploying to test cluster..."
@@ -967,7 +983,7 @@ jobs:
           echo "⏳ Waiting 60 seconds for pods to terminate and restart..."
           sleep 60
 
-      - name: Clean corrupted PVCs if pods still failing (Test)
+      - name: Clean corrupted PVCs if pods still failing
         id: pvc-cleanup-test
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
@@ -1228,6 +1244,22 @@ jobs:
             kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -30 || true
           fi
 
+      - name: Consistency check (StatefulSets)
+        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
+        run: |
+          echo "\n🔎 Consistency check: comparing manifests vs labeled StatefulSets"
+          EXPECTED=$(yq e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | tr '\n' ' ' || echo "")
+          LABELED=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          echo "Expected (from manifests): $EXPECTED"
+          echo "Labeled in cluster: $LABELED"
+          MISSING=$(printf "%s\n" $EXPECTED | tr ' ' '\n' | awk 'NF' | while read n; do echo "$LABELED" | grep -qw "$n" || echo "$n"; done | tr '\n' ' ')
+          if [ -n "$MISSING" ]; then
+            echo "⚠️  Missing or unlabeled StatefulSets: $MISSING"
+            echo "Hint: ensure overlays include resources and carry label app.kubernetes.io/managed-by=kustomize"
+          else
+            echo "✅ All StatefulSets from manifests are present and labeled"
+          fi
+
   deploy-prod:
     if: |
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
@@ -1436,14 +1468,14 @@ jobs:
           > /tmp/redis.secret.processed.yaml
           mv /tmp/redis.secret.processed.yaml infra/k8s/base/secrets/redis.secret.yaml
 
-      - name: Build Kustomize manifests (prod)
+      - name: Build Kustomize manifests
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "🏭️  Building Kustomize manifests for prod environment..."
           kustomize build infra/k8s/hetzner/prod --enable-alpha-plugins > manifests.yaml
           echo "✅ Manifests built successfully"
 
-      - name: Apply manifests with immutable field handling (prod)
+      - name: Apply manifests with immutable field handling
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "🚀 Deploying to prod cluster..."
@@ -1544,7 +1576,7 @@ jobs:
           echo "⏳ Waiting 60 seconds for pods to terminate and restart..."
           sleep 60
 
-      - name: Clean corrupted PVCs if pods still failing (Prod)
+      - name: Clean corrupted PVCs if pods still failing
         id: pvc-cleanup-prod
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
@@ -1807,4 +1839,20 @@ jobs:
           if [ "${{ steps.pvc-cleanup-prod.outputs.pvc_cleanup_ran }}" = "true" ]; then
             echo "\n📋 Recent pod events (for troubleshooting):"
             kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -30 || true
+          fi
+
+      - name: Consistency check (StatefulSets)
+        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
+        run: |
+          echo "\n🔎 Consistency check: comparing manifests vs labeled StatefulSets"
+          EXPECTED=$(yq e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | tr '\n' ' ' || echo "")
+          LABELED=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          echo "Expected (from manifests): $EXPECTED"
+          echo "Labeled in cluster: $LABELED"
+          MISSING=$(printf "%s\n" $EXPECTED | tr ' ' '\n' | awk 'NF' | while read n; do echo "$LABELED" | grep -qw "$n" || echo "$n"; done | tr '\n' ' ')
+          if [ -n "$MISSING" ]; then
+            echo "⚠️  Missing or unlabeled StatefulSets: $MISSING"
+            echo "Hint: ensure overlays include resources and carry label app.kubernetes.io/managed-by=kustomize"
+          else
+            echo "✅ All StatefulSets from manifests are present and labeled"
           fi
