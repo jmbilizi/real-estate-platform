@@ -414,6 +414,7 @@ jobs:
           sleep 60
 
       - name: Clean corrupted PVCs if pods still failing (Dev)
+        id: pvc-cleanup
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "🔍 Checking if pods are ready after restart with new config..."
@@ -427,22 +428,31 @@ jobs:
           echo "📋 Pod conditions:"
           kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o json | jq '.items[] | {name: .metadata.name, ready: (.status.conditions[] | select(.type=="Ready") | .status), phase: .status.phase, restarts: .status.containerStatuses[0].restartCount}'
           
+          echo ""
+          echo "🔎 Detecting non-ready pods..."
           # Check for ANY pod that's not running and ready
           # Includes: CrashLoopBackOff, ImagePullBackOff, Pending, or Ready!=True
           PODS=$(kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o json 2>/dev/null | jq -r '.items[] | select(
             (.status.phase != "Running") or 
             (.status.conditions[]? | select(.type == "Ready") | .status != "True")
           ) | .metadata.name' || echo "")
+          
+          echo "Detection result: [$PODS]"
+          echo "pvc_cleanup_ran=false" >> $GITHUB_OUTPUT
 
           if [ -n "$PODS" ]; then
             echo "⚠️  Found pods that are NOT ready 90s after restart:"
             echo "$PODS"
             
+            PVC_DELETED=false
             for pod in $PODS; do
               echo ""
               echo "🔍 Analyzing $pod..."
               
-              LOGS=$(kubectl logs $pod --tail=50 2>&1 || echo "")
+              LOGS=$(kubectl logs $pod --tail=100 2>&1 || echo "")
+              echo "Last 20 lines of logs:"
+              echo "$LOGS" | tail -20
+              
               if echo "$LOGS" | grep -qi "manifest has unsupported version\|corruption\|badger"; then
                 echo "❌ Detected BadgerDB corruption in $pod - likely incompatible with new version"
                 
@@ -454,15 +464,19 @@ jobs:
                   kubectl delete pod $pod --force --grace-period=0 || true
                   kubectl delete pvc $PVC
                   echo "✅ Cleaned up $pod and $PVC - will recreate with fresh data"
-                  echo "⏳ Waiting 2 minutes for pod to become ready..."
-                  sleep 120
+                  PVC_DELETED=true
                 else
                   echo "ℹ️  No PVC found for $pod"
                 fi
               else
-                echo "ℹ️  No BadgerDB corruption detected - pod may recover naturally"
+                echo "ℹ️  No BadgerDB corruption detected in logs - pod may recover naturally"
               fi
             done
+            
+            if [ "$PVC_DELETED" = "true" ]; then
+              echo "pvc_cleanup_ran=true" >> $GITHUB_OUTPUT
+              echo "⏭️  PVC deleted - pod will recreate in background (skipping 7min rollout wait)"
+            fi
           else
             echo "✅ No pods with persistent failures - new config working!"
           fi
@@ -470,31 +484,12 @@ jobs:
       - name: Check pod status immediately after apply
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
-          echo "📊 Checking initial pod status..."
-          sleep 10  # Wait for pods to start scheduling
-
-          # Get all pods managed by kustomize
-          kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o wide || true
-          kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -20 || true
-
-          # Get detailed status for each StatefulSet's first pod
-          STATEFULSETS=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}')
-
-          if [ -n "$STATEFULSETS" ]; then
-            for sts in $STATEFULSETS; do
-              POD_NAME="${sts}-0"
-              if kubectl get pod $POD_NAME &>/dev/null; then
-                echo "\n🔍 Detailed status for $POD_NAME:"
-                kubectl describe pod $POD_NAME | tail -50
-              else
-                echo "\n⚠️  Pod $POD_NAME not found yet"
-              fi
-            done
-          fi
+          echo "📊 Pod status after apply:"
+          kubectl get pods -l app.kubernetes.io/managed-by=kustomize
 
       - name: Wait for workload rollout
         id: rollout
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
+        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true' && steps.pvc-cleanup.outputs.pvc_cleanup_ran != 'true'
         run: |
           echo "⏳ Waiting for workloads to be ready..."
           echo "Using deployment strategy timeout: ${{ steps.deploy-control.outputs.statefulset_timeout }}"
@@ -655,14 +650,26 @@ jobs:
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "🔍 Verifying deployment..."
+          
+          if [ "${{ steps.pvc-cleanup.outputs.pvc_cleanup_ran }}" = "true" ]; then
+            echo "\n⚠️  Note: PVC cleanup ran - rollout wait was skipped to save time"
+            echo "Pod is recreating in background with fresh data. Check status below:"
+          fi
+          
           echo "\n📦 Workloads:"
           kubectl get statefulset,deployment,daemonset -l app.kubernetes.io/managed-by=kustomize || echo "No workloads found"
           echo "\n🎯 Pods:"
-          kubectl get pods -l app.kubernetes.io/managed-by=kustomize || echo "No pods found"
+          kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o wide || echo "No pods found"
           echo "\n🌐 Services:"
           kubectl get services -l app.kubernetes.io/managed-by=kustomize || echo "No services found"
           echo "\n💾 PVCs:"
           kubectl get pvc -l app.kubernetes.io/managed-by=kustomize || echo "No PVCs found"
+          
+          # Show pod events if PVC cleanup ran
+          if [ "${{ steps.pvc-cleanup.outputs.pvc_cleanup_ran }}" = "true" ]; then
+            echo "\n📋 Recent pod events (for troubleshooting):"
+            kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -30 || true
+          fi
 
   deploy-test:
     if: |
@@ -958,6 +965,7 @@ jobs:
           sleep 60
 
       - name: Clean corrupted PVCs if pods still failing (Test)
+        id: pvc-cleanup-test
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "🔍 Checking if pods are ready after restart with new config..."
@@ -971,22 +979,31 @@ jobs:
           echo "📋 Pod conditions:"
           kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o json | jq '.items[] | {name: .metadata.name, ready: (.status.conditions[] | select(.type=="Ready") | .status), phase: .status.phase, restarts: .status.containerStatuses[0].restartCount}'
           
+          echo ""
+          echo "🔎 Detecting non-ready pods..."
           # Check for ANY pod that's not running and ready
           # Includes: CrashLoopBackOff, ImagePullBackOff, Pending, or Ready!=True
           PODS=$(kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o json 2>/dev/null | jq -r '.items[] | select(
             (.status.phase != "Running") or 
             (.status.conditions[]? | select(.type == "Ready") | .status != "True")
           ) | .metadata.name' || echo "")
+          
+          echo "Detection result: [$PODS]"
+          echo "pvc_cleanup_ran=false" >> $GITHUB_OUTPUT
 
           if [ -n "$PODS" ]; then
             echo "⚠️  Found pods that are NOT ready 90s after restart:"
             echo "$PODS"
             
+            PVC_DELETED=false
             for pod in $PODS; do
               echo ""
               echo "🔍 Analyzing $pod..."
               
-              LOGS=$(kubectl logs $pod --tail=50 2>&1 || echo "")
+              LOGS=$(kubectl logs $pod --tail=100 2>&1 || echo "")
+              echo "Last 20 lines of logs:"
+              echo "$LOGS" | tail -20
+              
               if echo "$LOGS" | grep -qi "manifest has unsupported version\|corruption\|badger"; then
                 echo "❌ Detected BadgerDB corruption in $pod - likely incompatible with new version"
                 
@@ -998,15 +1015,19 @@ jobs:
                   kubectl delete pod $pod --force --grace-period=0 || true
                   kubectl delete pvc $PVC
                   echo "✅ Cleaned up $pod and $PVC - will recreate with fresh data"
-                  echo "⏳ Waiting 2 minutes for pod to become ready..."
-                  sleep 120
+                  PVC_DELETED=true
                 else
                   echo "ℹ️  No PVC found for $pod"
                 fi
               else
-                echo "ℹ️  No BadgerDB corruption detected - pod may recover naturally"
+                echo "ℹ️  No BadgerDB corruption detected in logs - pod may recover naturally"
               fi
             done
+            
+            if [ "$PVC_DELETED" = "true" ]; then
+              echo "pvc_cleanup_ran=true" >> $GITHUB_OUTPUT
+              echo "⏭️  PVC deleted - pod will recreate in background (skipping 7min rollout wait)"
+            fi
           else
             echo "✅ No pods with persistent failures - new config working!"
           fi
@@ -1014,31 +1035,12 @@ jobs:
       - name: Check pod status immediately after apply
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
-          echo "📊 Checking initial pod status..."
-          sleep 10  # Wait for pods to start scheduling
-
-          # Get all pods managed by kustomize
-          kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o wide || true
-          kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -20 || true
-
-          # Get detailed status for each StatefulSet's first pod
-          STATEFULSETS=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}')
-
-          if [ -n "$STATEFULSETS" ]; then
-            for sts in $STATEFULSETS; do
-              POD_NAME="${sts}-0"
-              if kubectl get pod $POD_NAME &>/dev/null; then
-                echo "\n🔍 Detailed status for $POD_NAME:"
-                kubectl describe pod $POD_NAME | tail -50
-              else
-                echo "\n⚠️  Pod $POD_NAME not found yet"
-              fi
-            done
-          fi
+          echo "📊 Pod status after apply:"
+          kubectl get pods -l app.kubernetes.io/managed-by=kustomize
 
       - name: Wait for workload rollout
         id: rollout
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
+        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true' && steps.pvc-cleanup-test.outputs.pvc_cleanup_ran != 'true'
         run: |
           echo "⏳ Waiting for workloads to be ready..."
           echo "Using deployment strategy timeout: ${{ steps.deploy-control.outputs.statefulset_timeout }}"
@@ -1199,14 +1201,26 @@ jobs:
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "🔍 Verifying deployment..."
+          
+          if [ "${{ steps.pvc-cleanup-test.outputs.pvc_cleanup_ran }}" = "true" ]; then
+            echo "\n⚠️  Note: PVC cleanup ran - rollout wait was skipped to save time"
+            echo "Pod is recreating in background with fresh data. Check status below:"
+          fi
+          
           echo "\n📦 Workloads:"
           kubectl get statefulset,deployment,daemonset -l app.kubernetes.io/managed-by=kustomize || echo "No workloads found"
           echo "\n🎯 Pods:"
-          kubectl get pods -l app.kubernetes.io/managed-by=kustomize || echo "No pods found"
+          kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o wide || echo "No pods found"
           echo "\n🌐 Services:"
           kubectl get services -l app.kubernetes.io/managed-by=kustomize || echo "No services found"
           echo "\n💾 PVCs:"
           kubectl get pvc -l app.kubernetes.io/managed-by=kustomize || echo "No PVCs found"
+          
+          # Show pod events if PVC cleanup ran
+          if [ "${{ steps.pvc-cleanup-test.outputs.pvc_cleanup_ran }}" = "true" ]; then
+            echo "\n📋 Recent pod events (for troubleshooting):"
+            kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -30 || true
+          fi
 
   deploy-prod:
     if: |
@@ -1525,6 +1539,7 @@ jobs:
           sleep 60
 
       - name: Clean corrupted PVCs if pods still failing (Prod)
+        id: pvc-cleanup-prod
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "🔍 Checking if pods are ready after restart with new config..."
@@ -1538,22 +1553,31 @@ jobs:
           echo "📋 Pod conditions:"
           kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o json | jq '.items[] | {name: .metadata.name, ready: (.status.conditions[] | select(.type=="Ready") | .status), phase: .status.phase, restarts: .status.containerStatuses[0].restartCount}'
           
+          echo ""
+          echo "🔎 Detecting non-ready pods..."
           # Check for ANY pod that's not running and ready
           # Includes: CrashLoopBackOff, ImagePullBackOff, Pending, or Ready!=True
           PODS=$(kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o json 2>/dev/null | jq -r '.items[] | select(
             (.status.phase != "Running") or 
             (.status.conditions[]? | select(.type == "Ready") | .status != "True")
           ) | .metadata.name' || echo "")
+          
+          echo "Detection result: [$PODS]"
+          echo "pvc_cleanup_ran=false" >> $GITHUB_OUTPUT
 
           if [ -n "$PODS" ]; then
             echo "⚠️  Found pods that are NOT ready 90s after restart:"
             echo "$PODS"
             
+            PVC_DELETED=false
             for pod in $PODS; do
               echo ""
               echo "🔍 Analyzing $pod..."
               
-              LOGS=$(kubectl logs $pod --tail=50 2>&1 || echo "")
+              LOGS=$(kubectl logs $pod --tail=100 2>&1 || echo "")
+              echo "Last 20 lines of logs:"
+              echo "$LOGS" | tail -20
+              
               if echo "$LOGS" | grep -qi "manifest has unsupported version\|corruption\|badger"; then
                 echo "❌ Detected BadgerDB corruption in $pod - likely incompatible with new version"
                 
@@ -1565,15 +1589,19 @@ jobs:
                   kubectl delete pod $pod --force --grace-period=0 || true
                   kubectl delete pvc $PVC
                   echo "✅ Cleaned up $pod and $PVC - will recreate with fresh data"
-                  echo "⏳ Waiting 2 minutes for pod to become ready..."
-                  sleep 120
+                  PVC_DELETED=true
                 else
                   echo "ℹ️  No PVC found for $pod"
                 fi
               else
-                echo "ℹ️  No BadgerDB corruption detected - pod may recover naturally"
+                echo "ℹ️  No BadgerDB corruption detected in logs - pod may recover naturally"
               fi
             done
+            
+            if [ "$PVC_DELETED" = "true" ]; then
+              echo "pvc_cleanup_ran=true" >> $GITHUB_OUTPUT
+              echo "⏭️  PVC deleted - pod will recreate in background (skipping 7min rollout wait)"
+            fi
           else
             echo "✅ No pods with persistent failures - new config working!"
           fi
@@ -1581,20 +1609,13 @@ jobs:
       - name: Check pod status immediately after apply
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
-          echo "📊 Checking initial pod status..."
-          sleep 10  # Wait for pods to start scheduling
+          echo "📊 Pod status after apply:"
+          kubectl get pods -l app.kubernetes.io/managed-by=kustomize
 
-          # Get all pods managed by kustomize
-          kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o wide || true
-          kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -20 || true
-
-          # Get detailed status for each StatefulSet's first pod
-          STATEFULSETS=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}')
-
-          if [ -n "$STATEFULSETS" ]; then
-            for sts in $STATEFULSETS; do
-              POD_NAME="${sts}-0"
-              if kubectl get pod $POD_NAME &>/dev/null; then
+      - name: Wait for workload rollout
+        id: rollout
+        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true' && steps.pvc-cleanup-prod.outputs.pvc_cleanup_ran != 'true'
+        run: |
                 echo "\n🔍 Detailed status for $POD_NAME:"
                 kubectl describe pod $POD_NAME | tail -50
               else
@@ -1770,11 +1791,23 @@ jobs:
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "🔍 Verifying deployment..."
+          
+          if [ "${{ steps.pvc-cleanup-prod.outputs.pvc_cleanup_ran }}" = "true" ]; then
+            echo "\n⚠️  Note: PVC cleanup ran - rollout wait was skipped to save time"
+            echo "Pod is recreating in background with fresh data. Check status below:"
+          fi
+          
           echo "\n📦 Workloads:"
           kubectl get statefulset,deployment,daemonset -l app.kubernetes.io/managed-by=kustomize || echo "No workloads found"
           echo "\n🎯 Pods:"
-          kubectl get pods -l app.kubernetes.io/managed-by=kustomize || echo "No pods found"
+          kubectl get pods -l app.kubernetes.io/managed-by=kustomize -o wide || echo "No pods found"
           echo "\n🌐 Services:"
           kubectl get services -l app.kubernetes.io/managed-by=kustomize || echo "No services found"
           echo "\n💾 PVCs:"
           kubectl get pvc -l app.kubernetes.io/managed-by=kustomize || echo "No PVCs found"
+          
+          # Show pod events if PVC cleanup ran
+          if [ "${{ steps.pvc-cleanup-prod.outputs.pvc_cleanup_ran }}" = "true" ]; then
+            echo "\n📋 Recent pod events (for troubleshooting):"
+            kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -30 || true
+          fi
