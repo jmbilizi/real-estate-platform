@@ -396,22 +396,31 @@ jobs:
             echo "✅ Deployment successful (no immutable field conflicts)"
           fi
 
-          # Force rollout restart to apply config changes (probes, env vars)
-          echo "🔄 Forcing rollout restart for configuration changes..."
-          STATEFULSETS=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
-          if [ -n "$STATEFULSETS" ]; then
-            for sts in $STATEFULSETS; do
-              kubectl rollout restart statefulset/$sts
+          # Optional optimization: restart only when StatefulSet pod template changes
+          echo "🔄 Checking if StatefulSet pod templates changed before restarting..."
+          NEED_RESTART_STS=""
+          EXPECTED_STS=$(yq -N e 'select(.kind=="StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' || echo "")
+          for name in $EXPECTED_STS; do
+            LIVE_TEMPLATE=$(kubectl get statefulset "$name" -o jsonpath='{.spec.template}' 2>/dev/null | jq -c '.' || echo "")
+            DESIRED_TEMPLATE=$(yq -N e "select(.kind==\"StatefulSet\" and .metadata.name==\"$name\") | .spec.template" manifests.yaml 2>/dev/null | jq -c '.' || echo "")
+            if [ -n "$LIVE_TEMPLATE" ] && [ -n "$DESIRED_TEMPLATE" ]; then
+              LIVE_HASH=$(printf "%s" "$LIVE_TEMPLATE" | sha1sum | awk '{print $1}')
+              DESIRED_HASH=$(printf "%s" "$DESIRED_TEMPLATE" | sha1sum | awk '{print $1}')
+              if [ "$LIVE_HASH" != "$DESIRED_HASH" ]; then
+                NEED_RESTART_STS="$NEED_RESTART_STS $name"
+              fi
+            fi
+          done
+          if [ -n "$NEED_RESTART_STS" ]; then
+            echo "🔄 Forcing rollout restart for changed StatefulSets: $NEED_RESTART_STS"
+            for sts in $NEED_RESTART_STS; do
+              kubectl rollout restart statefulset/$sts || true
             done
+            echo "⏳ Waiting 60 seconds for pods to terminate and restart..."
+            sleep 60
+          else
+            echo "✅ No StatefulSet pod template changes detected - skipping restart"
           fi
-          DEPLOYMENTS=$(kubectl get deployment -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
-          if [ -n "$DEPLOYMENTS" ]; then
-            for deploy in $DEPLOYMENTS; do
-              kubectl rollout restart deployment/$deploy
-            done
-          fi
-          echo "⏳ Waiting 60 seconds for pods to terminate and restart..."
-          sleep 60
 
       - name: Clean corrupted PVCs if pods still failing
         id: pvc-cleanup
@@ -967,22 +976,31 @@ jobs:
             echo "✅ Deployment successful (no immutable field conflicts)"
           fi
 
-          # Force rollout restart to apply config changes (probes, env vars)
-          echo "🔄 Forcing rollout restart for configuration changes..."
-          STATEFULSETS=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
-          if [ -n "$STATEFULSETS" ]; then
-            for sts in $STATEFULSETS; do
-              kubectl rollout restart statefulset/$sts
+          # Optional optimization: restart only when StatefulSet pod template changes
+          echo "🔄 Checking if StatefulSet pod templates changed before restarting..."
+          NEED_RESTART_STS=""
+          EXPECTED_STS=$(yq -N e 'select(.kind=="StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' || echo "")
+          for name in $EXPECTED_STS; do
+            LIVE_TEMPLATE=$(kubectl get statefulset "$name" -o jsonpath='{.spec.template}' 2>/dev/null | jq -c '.' || echo "")
+            DESIRED_TEMPLATE=$(yq -N e "select(.kind==\"StatefulSet\" and .metadata.name==\"$name\") | .spec.template" manifests.yaml 2>/dev/null | jq -c '.' || echo "")
+            if [ -n "$LIVE_TEMPLATE" ] && [ -n "$DESIRED_TEMPLATE" ]; then
+              LIVE_HASH=$(printf "%s" "$LIVE_TEMPLATE" | sha1sum | awk '{print $1}')
+              DESIRED_HASH=$(printf "%s" "$DESIRED_TEMPLATE" | sha1sum | awk '{print $1}')
+              if [ "$LIVE_HASH" != "$DESIRED_HASH" ]; then
+                NEED_RESTART_STS="$NEED_RESTART_STS $name"
+              fi
+            fi
+          done
+          if [ -n "$NEED_RESTART_STS" ]; then
+            echo "🔄 Forcing rollout restart for changed StatefulSets: $NEED_RESTART_STS"
+            for sts in $NEED_RESTART_STS; do
+              kubectl rollout restart statefulset/$sts || true
             done
+            echo "⏳ Waiting 60 seconds for pods to terminate and restart..."
+            sleep 60
+          else
+            echo "✅ No StatefulSet pod template changes detected - skipping restart"
           fi
-          DEPLOYMENTS=$(kubectl get deployment -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
-          if [ -n "$DEPLOYMENTS" ]; then
-            for deploy in $DEPLOYMENTS; do
-              kubectl rollout restart deployment/$deploy
-            done
-          fi
-          echo "⏳ Waiting 60 seconds for pods to terminate and restart..."
-          sleep 60
 
       - name: Clean corrupted PVCs if pods still failing
         id: pvc-cleanup-test
