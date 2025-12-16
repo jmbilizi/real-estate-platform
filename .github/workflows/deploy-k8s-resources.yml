@@ -485,7 +485,7 @@ jobs:
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "📊 Pod status after apply:"
-          kubectl get pods -l app.kubernetes.io/managed-by=kustomize
+          kubectl get pods
 
       - name: Wait for workload rollout
         id: rollout
@@ -1036,7 +1036,7 @@ jobs:
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "📊 Pod status after apply:"
-          kubectl get pods -l app.kubernetes.io/managed-by=kustomize
+          kubectl get pods
 
       - name: Wait for workload rollout
         id: rollout
@@ -1610,7 +1610,7 @@ jobs:
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "📊 Pod status after apply:"
-          kubectl get pods -l app.kubernetes.io/managed-by=kustomize
+          kubectl get pods
 
       - name: Wait for workload rollout
         id: rollout

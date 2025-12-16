@@ -14,6 +14,7 @@ patches:
 # Common labels for all resources
 labels:
   - pairs:
+      app.kubernetes.io/managed-by: kustomize
       environment: test
       provider: hetzner
       managed-by: gitops
