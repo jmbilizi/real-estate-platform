@@ -678,7 +678,8 @@ jobs:
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "\n🔎 Consistency check: comparing manifests vs labeled StatefulSets"
-          EXPECTED=$(yq e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | tr '\n' ' ' || echo "")
+          # Use -N to suppress YAML doc separators and filter out any stray '---'
+          EXPECTED=$(yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
           LABELED=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
           echo "Expected (from manifests): $EXPECTED"
           echo "Labeled in cluster: $LABELED"
@@ -1248,7 +1249,8 @@ jobs:
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "\n🔎 Consistency check: comparing manifests vs labeled StatefulSets"
-          EXPECTED=$(yq e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | tr '\n' ' ' || echo "")
+          # Use -N to suppress YAML doc separators and filter out any stray '---'
+          EXPECTED=$(yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
           LABELED=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
           echo "Expected (from manifests): $EXPECTED"
           echo "Labeled in cluster: $LABELED"
@@ -1845,7 +1847,8 @@ jobs:
         if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
         run: |
           echo "\n🔎 Consistency check: comparing manifests vs labeled StatefulSets"
-          EXPECTED=$(yq e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | tr '\n' ' ' || echo "")
+          # Use -N to suppress YAML doc separators and filter out any stray '---'
+          EXPECTED=$(yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
           LABELED=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
           echo "Expected (from manifests): $EXPECTED"
           echo "Labeled in cluster: $LABELED"
