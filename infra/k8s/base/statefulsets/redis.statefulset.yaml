@@ -9,8 +9,6 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: redis
-  labels:
-    app.kubernetes.io/managed-by: kustomize
 spec:
   serviceName: redis-hl
   replicas: 1
@@ -21,7 +19,6 @@ spec:
     metadata:
       labels:
         app: redis
-        app.kubernetes.io/managed-by: kustomize
     spec:
       terminationGracePeriodSeconds: 30
       securityContext:

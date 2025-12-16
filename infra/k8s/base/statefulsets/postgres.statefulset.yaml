@@ -9,8 +9,6 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: postgres
-  labels:
-    app.kubernetes.io/managed-by: kustomize
 spec:
   serviceName: postgres-hl
   replicas: 1
@@ -21,7 +19,6 @@ spec:
     metadata:
       labels:
         app: postgres
-        app.kubernetes.io/managed-by: kustomize
     spec:
       terminationGracePeriodSeconds: 10
       securityContext:
