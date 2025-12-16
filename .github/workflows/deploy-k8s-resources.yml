@@ -462,7 +462,7 @@ jobs:
                 if [ -n "$PVC" ]; then
                   echo "🗑️  Deleting corrupted PVC: $PVC"
                   kubectl delete pod $pod --force --grace-period=0 || true
-                  kubectl delete pvc $PVC
+                  kubectl delete pvc $PVC || true
                   echo "✅ Cleaned up $pod and $PVC - will recreate with fresh data"
                   PVC_DELETED=true
                 else
@@ -1013,7 +1013,7 @@ jobs:
                 if [ -n "$PVC" ]; then
                   echo "🗑️  Deleting corrupted PVC: $PVC"
                   kubectl delete pod $pod --force --grace-period=0 || true
-                  kubectl delete pvc $PVC
+                  kubectl delete pvc $PVC || true
                   echo "✅ Cleaned up $pod and $PVC - will recreate with fresh data"
                   PVC_DELETED=true
                 else
@@ -1587,7 +1587,7 @@ jobs:
                 if [ -n "$PVC" ]; then
                   echo "🗑️  Deleting corrupted PVC: $PVC"
                   kubectl delete pod $pod --force --grace-period=0 || true
-                  kubectl delete pvc $PVC
+                  kubectl delete pvc $PVC || true
                   echo "✅ Cleaned up $pod and $PVC - will recreate with fresh data"
                   PVC_DELETED=true
                 else
@@ -1600,7 +1600,7 @@ jobs:
             
             if [ "$PVC_DELETED" = "true" ]; then
               echo "pvc_cleanup_ran=true" >> $GITHUB_OUTPUT
-              echo "⏭️  PVC deleted - pod will recreate in background (skipping 7min rollout wait)"
+              echo "⏭️  PVC deleted - pod will recreate in background (skipping 2min rollout wait)"
             fi
           else
             echo "✅ No pods with persistent failures - new config working!"
