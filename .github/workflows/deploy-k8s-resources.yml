@@ -13,9 +13,6 @@ on:
       - "infra/deploy-control.yaml"
       - ".github/workflows/deploy-k8s-resources.yml"
       - ".github/actions/deploy-k8s-resources/**"
-    paths-ignore:
-      # Exclude cluster configs - hetzner-k8s.yml handles those
-      - "infra/k8s/hetzner/**/cluster/**"
   pull_request:
     branches:
       - dev
@@ -23,11 +20,11 @@ on:
       - main
     paths:
       - "infra/k8s/base/**"
-      - "infra/k8s/hetzner/**"
+      - "infra/k8s/hetzner/**/patches/**"
+      - "infra/k8s/hetzner/**/kustomization.yaml"
       - "infra/deploy-control.yaml"
       - ".github/workflows/deploy-k8s-resources.yml"
-    paths-ignore:
-      - "infra/k8s/hetzner/**/cluster/**"
+      - ".github/actions/deploy-k8s-resources/**"
   workflow_dispatch:
     inputs:
       environment:
