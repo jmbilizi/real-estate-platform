@@ -1,0 +1,162 @@
+name: Provision Hetzner K8s Cluster
+
+on:
+  push:
+    branches:
+      - dev
+      - test
+      - main
+    paths:
+      - "infra/k8s/hetzner/*/cluster/*.yaml"
+      - ".github/actions/provision-hetzner-k8s-cluster/**"
+  pull_request:
+    branches:
+      - dev
+      - test
+      - main
+    paths:
+      - "infra/k8s/hetzner/*/cluster/*.yaml"
+      - ".github/actions/provision-hetzner-k8s-cluster/**"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy"
+        required: true
+        type: choice
+        options:
+          - dev
+          - test
+          - prod
+
+concurrency:
+  group: provision-hetzner-k8s-cluster-${{ github.ref }}
+  cancel-in-progress: false # Don't cancel infrastructure updates
+
+jobs:
+  validate-pr:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check which files changed
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            dev:
+              - 'infra/k8s/hetzner/dev/cluster/cluster-config.yaml'
+            test:
+              - 'infra/k8s/hetzner/test/cluster/cluster-config.yaml'
+            prod:
+              - 'infra/k8s/hetzner/prod/cluster/cluster-config.yaml'
+
+      - name: Validate dev cluster config
+        if: steps.changes.outputs.dev == 'true'
+        run: |
+          echo "📋 Validating dev cluster configuration..."
+          # Basic YAML validation
+          python3 -c "import yaml; yaml.safe_load(open('infra/k8s/hetzner/dev/cluster/cluster-config.yaml'))" || exit 1
+          echo "✅ Dev cluster config is valid YAML"
+
+      - name: Validate test cluster config
+        if: steps.changes.outputs.test == 'true'
+        run: |
+          echo "📋 Validating test cluster configuration..."
+          # Basic YAML validation
+          python3 -c "import yaml; yaml.safe_load(open('infra/k8s/hetzner/test/cluster/cluster-config.yaml'))" || exit 1
+          echo "✅ Test cluster config is valid YAML"
+
+      - name: Validate prod cluster config
+        if: steps.changes.outputs.prod == 'true'
+        run: |
+          echo "📋 Validating prod cluster configuration..."
+          # Basic YAML validation
+          python3 -c "import yaml; yaml.safe_load(open('infra/k8s/hetzner/prod/cluster/cluster-config.yaml'))" || exit 1
+          echo "✅ Prod cluster config is valid YAML"
+
+  detect-changes:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      dev-changed: ${{ steps.filter.outputs.dev }}
+      test-changed: ${{ steps.filter.outputs.test }}
+      prod-changed: ${{ steps.filter.outputs.prod }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            dev:
+              - 'infra/k8s/hetzner/dev/cluster/cluster-config.yaml'
+            test:
+              - 'infra/k8s/hetzner/test/cluster/cluster-config.yaml'
+            prod:
+              - 'infra/k8s/hetzner/prod/cluster/cluster-config.yaml'
+
+  update-dev-cluster:
+    needs: [detect-changes]
+    if: |
+      always() && (
+        (github.event_name == 'push' && github.ref == 'refs/heads/dev' && needs.detect-changes.outputs.dev-changed == 'true') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev')
+      )
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Provision Hetzner K8s Cluster
+        uses: ./.github/actions/provision-hetzner-k8s-cluster
+        with:
+          environment: dev
+          config-path: infra/k8s/hetzner/dev/cluster
+          wait-timeout: "300"
+          deploy-ref: dev
+          deploy-environment: dev
+
+  update-test-cluster:
+    needs: [detect-changes]
+    if: |
+      always() && (
+        (github.event_name == 'push' && github.ref == 'refs/heads/test' && needs.detect-changes.outputs.test-changed == 'true') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'test')
+      )
+    runs-on: ubuntu-latest
+    environment: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Provision Hetzner K8s Cluster
+        uses: ./.github/actions/provision-hetzner-k8s-cluster
+        with:
+          environment: test
+          config-path: infra/k8s/hetzner/test/cluster
+          wait-timeout: "300"
+          deploy-ref: test
+          deploy-environment: test
+
+  update-prod-cluster:
+    needs: [detect-changes]
+    if: |
+      always() && (
+        (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.detect-changes.outputs.prod-changed == 'true') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod')
+      )
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Provision Hetzner K8s Cluster
+        uses: ./.github/actions/provision-hetzner-k8s-cluster
+        with:
+          environment: prod
+          config-path: infra/k8s/hetzner/prod/cluster
+          wait-timeout: "600"
+          deploy-ref: main
+          deploy-environment: prod

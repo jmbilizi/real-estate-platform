@@ -1,0 +1,135 @@
+name: "Provision Hetzner K8s Cluster"
+description: "Create/update a Hetzner K3s cluster and upload kubeconfig to GitHub Secrets"
+
+inputs:
+  environment:
+    description: "Environment name (dev, test, prod)"
+    required: true
+  config-path:
+    description: "Path to cluster config (e.g., infra/k8s/hetzner/dev/cluster)"
+    required: true
+  wait-timeout:
+    description: "Kubectl wait timeout in seconds (e.g., 300 for dev/test, 600 for prod)"
+    required: true
+  deploy-ref:
+    description: "Git ref to use when triggering deployment workflow (e.g., dev, test, main)"
+    required: true
+  deploy-environment:
+    description: "Environment name for deployment workflow parameter (dev, test, prod)"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Check if cluster is enabled
+      id: check-enabled
+      shell: bash
+      run: |
+        enabled=$(grep -E '^auto_deploy:' "${{ inputs.config-path }}/cluster-config.yaml" | awk '{print $2}')
+        echo "enabled=$enabled" >> $GITHUB_OUTPUT
+        if [ "$enabled" != "true" ]; then
+          echo "⚠️  ${{ inputs.environment }} cluster auto-deployment is disabled (auto_deploy: $enabled)"
+          echo "Set 'auto_deploy: true' in cluster-config.yaml to enable deployment"
+        fi
+
+    - name: Install kubectl
+      if: steps.check-enabled.outputs.enabled == 'true'
+      uses: azure/setup-kubectl@v4
+      with:
+        version: "latest"
+
+    - name: Install Helm
+      if: steps.check-enabled.outputs.enabled == 'true'
+      uses: azure/setup-helm@v4
+      with:
+        version: "latest"
+
+    - name: Install hetzner-k3s CLI
+      if: steps.check-enabled.outputs.enabled == 'true'
+      shell: bash
+      run: |
+        wget https://github.com/vitobotta/hetzner-k3s/releases/download/v2.4.1/hetzner-k3s-linux-amd64
+        chmod +x hetzner-k3s-linux-amd64
+        sudo mv hetzner-k3s-linux-amd64 /usr/local/bin/hetzner-k3s
+        hetzner-k3s version
+
+    - name: Setup SSH keys
+      if: steps.check-enabled.outputs.enabled == 'true'
+      shell: bash
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.HETZNER_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+        echo "${{ secrets.HETZNER_SSH_PUBLIC_KEY }}" > ~/.ssh/id_rsa.pub
+        chmod 600 ~/.ssh/id_rsa
+        chmod 644 ~/.ssh/id_rsa.pub
+
+    - name: Substitute secrets in config
+      if: steps.check-enabled.outputs.enabled == 'true'
+      shell: bash
+      run: |
+        # Remove the 'auto_deploy' flag and substitute secrets
+        grep -v '^auto_deploy:' "${{ inputs.config-path }}/cluster-config.yaml" | \
+        sed "s/HETZNER_TOKEN/${{ secrets.HETZNER_TOKEN }}/g" > \
+        cluster-config-processed.yaml
+
+    - name: Validate YAML syntax
+      if: steps.check-enabled.outputs.enabled == 'true'
+      shell: bash
+      run: |
+        echo "📋 Validating cluster configuration..."
+        cat cluster-config-processed.yaml
+
+    - name: Create/Update cluster
+      if: steps.check-enabled.outputs.enabled == 'true'
+      id: cluster-create
+      shell: bash
+      run: |
+        echo "🔨 Creating/updating ${{ inputs.environment }} cluster..."
+        hetzner-k3s create --config cluster-config-processed.yaml
+        echo "cluster_updated=true" >> $GITHUB_OUTPUT
+
+    - name: Wait for cluster to be ready
+      if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
+      shell: bash
+      env:
+        KUBECONFIG: ./kubeconfig
+      run: |
+        echo "⏳ Waiting for cluster to be fully ready (timeout: ${{ inputs.wait-timeout }}s)..."
+        sleep 30  # Give cluster time to initialize
+        kubectl get nodes
+        kubectl wait --for=condition=Ready nodes --all --timeout=${{ inputs.wait-timeout }}s
+        echo "✅ All nodes are ready"
+
+    - name: Upload kubeconfig to GitHub Secrets
+      if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
+      run: |
+        echo "📤 Uploading kubeconfig to ${{ inputs.environment }} environment secrets..."
+        gh secret set KUBECONFIG --env ${{ inputs.environment }} < ./kubeconfig
+        echo "✅ KUBECONFIG secret updated in ${{ inputs.environment }} environment"
+
+    - name: Verify cluster prerequisites
+      if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
+      shell: bash
+      env:
+        KUBECONFIG: ./kubeconfig
+      run: |
+        echo "🔍 Verifying cluster prerequisites..."
+        echo "Checking Hetzner CSI driver..."
+        kubectl get pods -n kube-system -l app=hcloud-csi-controller --no-headers | wc -l
+        kubectl get storageclass hcloud-volumes || echo "⚠️  Warning: StorageClass not found"
+        echo "✅ Cluster prerequisites verified"
+
+    - name: Trigger resource deployment
+      if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
+      run: |
+        echo "🚀 Triggering resource deployment for ${{ inputs.environment }} environment..."
+        gh workflow run deploy-k8s-resources.yml \
+          --ref ${{ inputs.deploy-ref }} \
+          --field environment=${{ inputs.deploy-environment }}
+        echo "✅ Resource deployment workflow triggered"

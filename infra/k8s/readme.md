@@ -135,7 +135,7 @@ infra/
 
 Located in `.github/workflows/`:
 
-1. **[hetzner-k8s.yml](../../.github/workflows/hetzner-k8s.yml)**
+1. **[provision-hetzner-k8s-cluster.yml](../../.github/workflows/provision-hetzner-k8s-cluster.yml)**
    - Purpose: Create/update Kubernetes clusters
    - Triggers: Push to main/test/dev, cluster config changes
    - Reads: `cluster-config.yaml`, `deploy-control.yaml`
@@ -313,10 +313,10 @@ Configure in: Repository Settings → Secrets and variables → Actions
 
 ### Find Workflows
 
-| Workflow             | Location                                     | Purpose                    |
-| -------------------- | -------------------------------------------- | -------------------------- |
-| Cluster provisioning | `.github/workflows/hetzner-k8s.yml`          | Create/update K8s clusters |
-| Resource deployment  | `.github/workflows/deploy-k8s-resources.yml` | Deploy K8s resources       |
+| Workflow             | Location                                              | Purpose                    |
+| -------------------- | ----------------------------------------------------- | -------------------------- |
+| Cluster provisioning | `.github/workflows/provision-hetzner-k8s-cluster.yml` | Create/update K8s clusters |
+| Resource deployment  | `.github/workflows/deploy-k8s-resources.yml`          | Deploy K8s resources       |
 
 ### Find Documentation
 

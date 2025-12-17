@@ -553,7 +553,7 @@ kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins | kubectl diff -f -
 - `push` to branches (dev/test/main) + path filters (excludes cluster configs)
 - `pull_request` (validation only - no deployment)
 - `workflow_dispatch` (manual deployment with environment selection)
-- `workflow_call` (invoked by hetzner-k8s.yml after cluster creation)
+- `workflow_call` (invoked by provision-hetzner-k8s-cluster.yml after cluster creation)
 
 **Job structure** (identical for all 3 environments):
 
@@ -600,20 +600,27 @@ if: |
 
 ### Cluster Provisioning Workflow
 
-**hetzner-k8s.yml** provisions K3s clusters on Hetzner Cloud:
+**provision-hetzner-k8s-cluster.yml** provisions K3s clusters on Hetzner Cloud using the **provision-hetzner-k8s-cluster** composite action:
+
+**Architecture:** 3 deployment jobs (update-dev-cluster, update-test-cluster, update-prod-cluster) call a shared composite action (`.github/actions/provision-hetzner-k8s-cluster`) with environment-specific parameters. This eliminates ~295 lines of duplication across the 3 jobs.
 
 **Workflow sequence**:
 
 1. Detect cluster config changes using dorny/paths-filter
-2. Check `auto_deploy: true` flag in cluster-config.yaml
-3. Create/update cluster using hetzner-k3s CLI
-4. Wait for cluster readiness (nodes, CSI driver, StorageClass)
-5. **Upload KUBECONFIG** to GitHub environment secrets using GitHub CLI with PAT
-6. **Trigger deploy-k8s-resources.yml** via workflow_dispatch (passes environment parameter)
+2. Route to appropriate job (dev/test/prod) based on branch and changes
+3. **Composite action performs**:
+   - Check `auto_deploy: true` flag in cluster-config.yaml
+   - Install kubectl, Helm, hetzner-k3s CLI
+   - Setup SSH keys from GitHub Secrets
+   - Substitute secrets in config
+   - Create/update cluster using hetzner-k3s CLI
+   - Wait for cluster readiness (nodes, CSI driver, StorageClass) with configurable timeout
+   - **Upload KUBECONFIG** to GitHub environment secrets using GitHub CLI with PAT
+   - **Trigger deploy-k8s-resources.yml** via workflow_dispatch (passes environment parameter)
 
 **CRITICAL**: Path filters prevent race conditions:
 
-- `hetzner-k8s.yml` triggers on `infra/k8s/hetzner/*/cluster/*.yaml` changes
+- `provision-hetzner-k8s-cluster.yml` triggers on `infra/k8s/hetzner/*/cluster/*.yaml` AND `.github/actions/provision-hetzner-k8s-cluster/**` changes
 - `deploy-k8s-resources.yml` **excludes** cluster configs via `!infra/k8s/hetzner/**/cluster/**`
 - This ensures cluster creation completes BEFORE resource deployment starts
 
@@ -801,7 +808,9 @@ kubectl rollout status statefulset/postgres -w
 | Prod config (combined) | `infra/k8s/hetzner/prod/patches/statefulsets/*.statefulset.yaml` |
 | Cluster config         | `infra/k8s/hetzner/{env}/cluster/cluster-config.yaml`            |
 | Deployment workflow    | `.github/workflows/deploy-k8s-resources.yml`                     |
-| Cluster provisioning   | `.github/workflows/hetzner-k8s.yml`                              |
+| Deployment action      | `.github/actions/deploy-k8s-resources/action.yml`                |
+| Cluster provisioning   | `.github/workflows/provision-hetzner-k8s-cluster.yml`            |
+| Provisioning action    | `.github/actions/provision-hetzner-k8s-cluster/action.yml`       |
 
 ## External Dependencies
 
@@ -809,10 +818,10 @@ kubectl rollout status statefulset/postgres -w
 - **Node.js 20.19.5**: Runtime (LTS, pinned in `.nvmrc`)
 - **Python 3.8+**: Runtime (auto-installed by `py-env` scripts)
 - **.NET SDK 8.0**: Runtime (pinned in `tools/dotnet/configs/global.json`)
-- **GitHub Actions**: CI/CD platform (`.github/workflows/ci.yml`, `.github/workflows/deploy-k8s-resources.yml`)
+- **GitHub Actions**: CI/CD platform (`.github/workflows/ci.yml`, `.github/workflows/deploy-k8s-resources.yml`, `.github/workflows/provision-hetzner-k8s-cluster.yml`)
 - **Kustomize**: Kubernetes manifest templating (required for local testing and workflows)
 - **kubectl**: Kubernetes CLI (workflows use version from GitHub Actions runner)
 - **yq**: YAML processor for secret substitution and config parsing (installed in workflows)
-- **hetzner-k8s**: K3s cluster provisioning on Hetzner Cloud (`.github/workflows/hetzner-k8s.yml`)
+- **hetzner-k3s**: K3s cluster provisioning CLI (v2.4.1, installed by provision-hetzner-k8s-cluster action)
 
 **Version management**: `.nvmrc` (Node), `global.json` (.NET), `pyproject.toml` (Python 3.8+ in tool.poetry.dependencies)

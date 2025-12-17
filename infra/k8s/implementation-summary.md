@@ -235,7 +235,7 @@ environments:
 
 ### 5. GitHub Actions Workflows
 
-#### **hetzner-k8s.yml**
+#### **provision-hetzner-k8s-cluster.yml**
 
 **Purpose:** Create/update Kubernetes clusters on Hetzner Cloud
 
@@ -243,28 +243,39 @@ environments:
 
 - Push to `main`/`test`/`dev` branches
 - Changes to `infra/k8s/hetzner/*/cluster/*.yaml`
+- Changes to `.github/actions/provision-hetzner-k8s-cluster/**`
 - Manual workflow dispatch
+
+**Architecture:**
+
+- 3 deployment jobs (update-dev-cluster, update-test-cluster, update-prod-cluster)
+- Each calls `.github/actions/provision-hetzner-k8s-cluster` composite action
+- Environment-specific parameters: config path, timeout (5m dev/test, 10m prod), deploy branch
+- Eliminates ~295 lines of duplication (63% reduction from 447 to 164 lines)
 
 **Key Features:**
 
 - Uses `infra/k8s/hetzner/{env}/cluster/cluster-config.yaml` files
 - Reads `auto_deploy` flag from cluster config
-- Installs hetzner-k3s CLI
+- Installs kubectl, Helm, hetzner-k3s CLI
 - Configures SSH keys from GitHub Secrets
 - Creates/updates cluster (idempotent operation)
 - Cluster readiness validation (waits for nodes, verifies CSI driver)
 - Triggers resource deployment workflow after cluster ready
 
-**Workflow:**
+**Workflow (via composite action):**
 
 1. Detect changes using dorny/paths-filter
-2. Check cluster `auto_deploy: true` flag
-3. Setup SSH keys from GitHub Secrets
-4. Substitute secrets in config
-5. Create/update cluster with hetzner-k3s
-6. Wait for cluster readiness (nodes, CSI driver, StorageClass)
-7. **Upload KUBECONFIG** to GitHub Secrets (environment-scoped) using GitHub CLI
-8. Trigger deploy-k8s-resources.yml workflow (passes environment parameter)
+2. Route to appropriate job (dev/test/prod)
+3. **Composite action steps:**
+   - Check cluster `auto_deploy: true` flag
+   - Install tools (kubectl, Helm, hetzner-k3s)
+   - Setup SSH keys from GitHub Secrets
+   - Substitute secrets in config
+   - Create/update cluster with hetzner-k3s
+   - Wait for cluster readiness (configurable timeout: 5m dev/test, 10m prod)
+   - **Upload KUBECONFIG** to GitHub Secrets (environment-scoped) using GitHub CLI
+   - Trigger deploy-k8s-resources.yml workflow (passes environment parameter)
 
 #### **deploy-k8s-resources.yml**
 
@@ -276,7 +287,7 @@ environments:
 - Changes to `infra/k8s/base/**` or `infra/k8s/hetzner/**`
 - Changes to `infra/deploy-control.yaml`
 - Manual workflow dispatch
-- Called by hetzner-k8s.yml after cluster creation
+- Called by provision-hetzner-k8s-cluster.yml after cluster creation
 
 **Key Features:**
 
@@ -548,8 +559,8 @@ Configure these in GitHub repository settings:
 
 **Implementation**:
 
-- `hetzner-k8s.yml` uses `gh secret set KUBECONFIG --env {env}` with `INFRA_DEPLOY_TOKEN` PAT
-- `hetzner-k8s.yml` uses `gh workflow run` with `INFRA_DEPLOY_TOKEN` PAT to trigger deployments
+- `provision-hetzner-k8s-cluster.yml` uses `gh secret set KUBECONFIG --env {env}` with `INFRA_DEPLOY_TOKEN` PAT
+- `provision-hetzner-k8s-cluster.yml` uses `gh workflow run` with `INFRA_DEPLOY_TOKEN` PAT to trigger deployments
 - `deploy-k8s-resources.yml` reads `secrets.KUBECONFIG` from environment scope
 
 ### PostgreSQL Passwords
@@ -591,7 +602,7 @@ Before deploying to production:
 
 - [ ] Configure GitHub Secrets (dev only)
 - [ ] Push change to `dev` branch
-- [ ] Verify `hetzner-k8s.yml` workflow completes
+- [ ] Verify `provision-hetzner-k8s-cluster.yml` workflow completes
 - [ ] Verify `deploy-k8s-resources.yml` workflow completes
 - [ ] Check PostgreSQL pod running: `kubectl get pods -l app=postgres`
 - [ ] Verify databases created: `psql -h postgres-svc -U postgres_sa -l`
