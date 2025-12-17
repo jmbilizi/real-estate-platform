@@ -78,7 +78,15 @@ runs:
       shell: bash
       run: |
         echo "🧹 Checking pods for persistent failures (CrashLoopBackOff/Init:Error)..."
-        FAILED_PODS=$(kubectl get pods -o json | jq -r '.items[] | select(.status.containerStatuses[]? // [] | any(.state.waiting.reason == "CrashLoopBackOff" or .state.waiting.reason == "CreateContainerConfigError" or .state.waiting.reason == "ErrImagePull")) | .metadata.name' || echo "")
+        # Safely inspect containerStatuses; guard against missing keys/arrays
+        FAILED_PODS=$(kubectl get pods -o json | jq -r '
+          .items[]
+          | select(
+              ( [ .status.containerStatuses[]? | .state.waiting?.reason ]
+                | any(. == "CrashLoopBackOff" or . == "CreateContainerConfigError" or . == "ErrImagePull") )
+            )
+          | .metadata.name
+        ' 2>/dev/null || echo "")
         if [ -n "$FAILED_PODS" ]; then
           echo "❌ Found pods with persistent failures:"
           echo "$FAILED_PODS" | tr ' ' '\n'
@@ -128,7 +136,8 @@ runs:
             RESOURCE_TYPE="statefulset"
             DISPLAY_NAME="StatefulSet"
             DELETE_ARGS="--cascade=orphan"
-            NAME_PATTERN='Resource=statefulsets.*?Name: "\K[^\"]+'
+            # Support multiple kubectl error formats; prefer explicit resource name line
+            NAME_PATTERN='The StatefulSet "\K[^\"]+'
           elif grep -q "Forbidden.*updates to deployment spec.*are forbidden" apply.log; then
             RESOURCE_TYPE="deployment"
             DISPLAY_NAME="Deployment"
@@ -154,9 +163,23 @@ runs:
           if [ -n "$RESOURCE_TYPE" ]; then
             echo "\n⚠️  Detected immutable $DISPLAY_NAME field changes"
             echo "🔍 Identifying affected ${DISPLAY_NAME}s..."
+            # Try to extract resource names from apply log; fallback to manifests list
             FAILED_RESOURCES=$(grep -oP "$NAME_PATTERN" apply.log || echo "")
             if [ -z "$FAILED_RESOURCES" ]; then
-              echo "❌ Could not identify failed ${DISPLAY_NAME}s from error message"
+              if [ "$RESOURCE_TYPE" = "statefulset" ]; then
+                FAILED_RESOURCES=$(yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+              elif [ "$RESOURCE_TYPE" = "deployment" ]; then
+                FAILED_RESOURCES=$(yq -N e 'select(.kind == "Deployment") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+              elif [ "$RESOURCE_TYPE" = "daemonset" ]; then
+                FAILED_RESOURCES=$(yq -N e 'select(.kind == "DaemonSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+              elif [ "$RESOURCE_TYPE" = "service" ]; then
+                FAILED_RESOURCES=$(yq -N e 'select(.kind == "Service") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+              elif [ "$RESOURCE_TYPE" = "job" ]; then
+                FAILED_RESOURCES=$(yq -N e 'select(.kind == "Job") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+              fi
+            fi
+            if [ -z "$FAILED_RESOURCES" ]; then
+              echo "❌ Could not identify failed ${DISPLAY_NAME}s from error message or manifests"
               echo "Error log:"
               cat apply.log
               exit 1
