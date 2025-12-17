@@ -17,6 +17,18 @@ inputs:
   deploy-environment:
     description: "Environment name for deployment workflow parameter (dev, test, prod)"
     required: true
+  hetzner-ssh-private-key:
+    description: "Hetzner SSH private key (from GitHub Secrets)"
+    required: true
+  hetzner-ssh-public-key:
+    description: "Hetzner SSH public key (from GitHub Secrets)"
+    required: true
+  hetzner-token:
+    description: "Hetzner API token (from GitHub Secrets)"
+    required: true
+  infra-deploy-token:
+    description: "GitHub PAT with repo scope used by gh CLI (from GitHub Secrets)"
+    required: true
 
 runs:
   using: "composite"
@@ -58,8 +70,8 @@ runs:
       shell: bash
       run: |
         mkdir -p ~/.ssh
-        echo "${{ secrets.HETZNER_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-        echo "${{ secrets.HETZNER_SSH_PUBLIC_KEY }}" > ~/.ssh/id_rsa.pub
+        echo "${{ inputs.hetzner-ssh-private-key }}" > ~/.ssh/id_rsa
+        echo "${{ inputs.hetzner-ssh-public-key }}" > ~/.ssh/id_rsa.pub
         chmod 600 ~/.ssh/id_rsa
         chmod 644 ~/.ssh/id_rsa.pub
 
@@ -69,7 +81,7 @@ runs:
       run: |
         # Remove the 'auto_deploy' flag and substitute secrets
         grep -v '^auto_deploy:' "${{ inputs.config-path }}/cluster-config.yaml" | \
-        sed "s/HETZNER_TOKEN/${{ secrets.HETZNER_TOKEN }}/g" > \
+        sed "s/HETZNER_TOKEN/${{ inputs.hetzner-token }}/g" > \
         cluster-config-processed.yaml
 
     - name: Validate YAML syntax
@@ -104,7 +116,7 @@ runs:
       if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
       shell: bash
       env:
-        GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
+        GH_TOKEN: ${{ inputs.infra-deploy-token }}
       run: |
         echo "📤 Uploading kubeconfig to ${{ inputs.environment }} environment secrets..."
         gh secret set KUBECONFIG --env ${{ inputs.environment }} < ./kubeconfig
@@ -126,7 +138,7 @@ runs:
       if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
       shell: bash
       env:
-        GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
+        GH_TOKEN: ${{ inputs.infra-deploy-token }}
       run: |
         echo "🚀 Triggering resource deployment for ${{ inputs.environment }} environment..."
         gh workflow run deploy-k8s-resources.yml \

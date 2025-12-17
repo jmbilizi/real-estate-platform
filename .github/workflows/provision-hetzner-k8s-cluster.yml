@@ -118,6 +118,10 @@ jobs:
           wait-timeout: "300"
           deploy-ref: dev
           deploy-environment: dev
+          hetzner-ssh-private-key: ${{ secrets.HETZNER_SSH_PRIVATE_KEY }}
+          hetzner-ssh-public-key: ${{ secrets.HETZNER_SSH_PUBLIC_KEY }}
+          hetzner-token: ${{ secrets.HETZNER_TOKEN }}
+          infra-deploy-token: ${{ secrets.INFRA_DEPLOY_TOKEN }}
 
   update-test-cluster:
     needs: [detect-changes]
@@ -139,6 +143,10 @@ jobs:
           wait-timeout: "300"
           deploy-ref: test
           deploy-environment: test
+          hetzner-ssh-private-key: ${{ secrets.HETZNER_SSH_PRIVATE_KEY }}
+          hetzner-ssh-public-key: ${{ secrets.HETZNER_SSH_PUBLIC_KEY }}
+          hetzner-token: ${{ secrets.HETZNER_TOKEN }}
+          infra-deploy-token: ${{ secrets.INFRA_DEPLOY_TOKEN }}
 
   update-prod-cluster:
     needs: [detect-changes]
@@ -160,3 +168,7 @@ jobs:
           wait-timeout: "600"
           deploy-ref: main
           deploy-environment: prod
+          hetzner-ssh-private-key: ${{ secrets.HETZNER_SSH_PRIVATE_KEY }}
+          hetzner-ssh-public-key: ${{ secrets.HETZNER_SSH_PUBLIC_KEY }}
+          hetzner-token: ${{ secrets.HETZNER_TOKEN }}
+          infra-deploy-token: ${{ secrets.INFRA_DEPLOY_TOKEN }}
