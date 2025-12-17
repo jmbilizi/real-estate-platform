@@ -257,20 +257,23 @@ kubectl rollout undo daemonset/logging-agent
 kubectl rollout status statefulset/postgres --watch
 
 # Method 2: Rollback all workloads (manual script)
+# First, build manifests to discover workloads
+kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins > manifests.yaml
+
 # StatefulSets
-for sts in $(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}'); do
+for sts in $(yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$'); do
   echo "Rolling back StatefulSet/$sts..."
   kubectl rollout undo statefulset/$sts
 done
 
 # Deployments
-for deploy in $(kubectl get deployment -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}'); do
+for deploy in $(yq -N e 'select(.kind == "Deployment") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$'); do
   echo "Rolling back Deployment/$deploy..."
   kubectl rollout undo deployment/$deploy
 done
 
 # DaemonSets
-for ds in $(kubectl get daemonset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}'); do
+for ds in $(yq -N e 'select(.kind == "DaemonSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$'); do
   echo "Rolling back DaemonSet/$ds..."
   kubectl rollout undo daemonset/$ds
 done

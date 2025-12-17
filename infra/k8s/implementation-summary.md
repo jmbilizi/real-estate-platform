@@ -322,9 +322,9 @@ environments:
    - Scales to any number of resources (no hardcoded resource checks)
 
 7. **Wait for workload rollout:** (300s dev/test, 600s prod)
-   - Dynamically discovers all workloads: `kubectl get {statefulset,deployment,daemonset} -l app.kubernetes.io/managed-by=kustomize`
+   - Dynamically discovers all workloads using manifest-based discovery: `yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml`
    - Checks rollout status for each workload type: `kubectl rollout status {type}/{name}`
-   - Early exit on first failure (remaining workloads not checked)
+   - Fail-but-continue pattern: checks ALL workload types even if earlier ones fail (better diagnostics)
    - Waits for pods to pass readinessProbe checks
    - Ensures all workloads reach desired state
 

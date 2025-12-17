@@ -12,8 +12,10 @@ on:
       - "infra/k8s/hetzner/**/kustomization.yaml"
       - "infra/deploy-control.yaml"
       - ".github/workflows/deploy-k8s-resources.yml"
+      - ".github/actions/deploy-k8s-resources/**"
+    paths-ignore:
       # Exclude cluster configs - hetzner-k8s.yml handles those
-      - "!infra/k8s/hetzner/**/cluster/**"
+      - "infra/k8s/hetzner/**/cluster/**"
   pull_request:
     branches:
       - dev
@@ -23,6 +25,9 @@ on:
       - "infra/k8s/base/**"
       - "infra/k8s/hetzner/**"
       - "infra/deploy-control.yaml"
+      - ".github/workflows/deploy-k8s-resources.yml"
+    paths-ignore:
+      - "infra/k8s/hetzner/**/cluster/**"
   workflow_dispatch:
     inputs:
       environment:
@@ -40,86 +45,7 @@ on:
         required: true
         type: string
 
-concurrency:
-  group: deploy-k8s-${{ github.ref }}-${{ inputs.environment || 'auto' }}
-  cancel-in-progress: false # Don't cancel in-progress deployments
-
 jobs:
-  validate-pr:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Kustomize
-        run: |
-          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
-          sudo mv kustomize /usr/local/bin/
-
-      - name: Check which environments changed
-        id: changes
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            base:
-              - 'infra/k8s/base/**'
-            dev:
-              - 'infra/k8s/hetzner/dev/**'
-            test:
-              - 'infra/k8s/hetzner/test/**'
-            prod:
-              - 'infra/k8s/hetzner/prod/**'
-
-      - name: Validate dev environment
-        if: steps.changes.outputs.dev == 'true' || steps.changes.outputs.base == 'true'
-        run: |
-          echo "🔍 Validating dev Kustomize build..."
-          # Secret file contains StrongBase64Password placeholder - no temp file needed
-          kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins
-          echo "✅ Dev environment build successful"
-
-      - name: Validate test environment
-        if: steps.changes.outputs.test == 'true' || steps.changes.outputs.base == 'true'
-        run: |
-          echo "🔍 Validating test Kustomize build..."
-          # Secret file contains StrongBase64Password placeholder - no temp file needed
-          kustomize build infra/k8s/hetzner/test --enable-alpha-plugins
-          echo "✅ Test environment build successful"
-
-      - name: Validate prod environment
-        if: steps.changes.outputs.prod == 'true' || steps.changes.outputs.base == 'true'
-        run: |
-          echo "🔍 Validating prod Kustomize build..."
-          # Secret file contains StrongBase64Password placeholder - no temp file needed
-          kustomize build infra/k8s/hetzner/prod --enable-alpha-plugins
-          echo "✅ Prod environment build successful"
-
-  detect-changes:
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    outputs:
-      base-changed: ${{ steps.filter.outputs.base }}
-      dev-changed: ${{ steps.filter.outputs.dev }}
-      test-changed: ${{ steps.filter.outputs.test }}
-      prod-changed: ${{ steps.filter.outputs.prod }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            base:
-              - 'infra/k8s/base/**'
-            dev:
-              - 'infra/k8s/hetzner/dev/**'
-            test:
-              - 'infra/k8s/hetzner/test/**'
-            prod:
-              - 'infra/k8s/hetzner/prod/**'
-
   deploy-dev:
     if: |
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
@@ -133,559 +59,58 @@ jobs:
       - name: Load deployment control
         id: deploy-control
         run: |
-          # Install yq first (needed for parsing YAML)
           sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
           sudo chmod +x /usr/local/bin/yq
-
-          # Install jq for JSON processing (used by PVC cleanup)
           sudo apt-get update && sudo apt-get install -y jq
 
-          # Parse GLOBAL settings first (master kill switch)
           global_auto_deploy=$(yq '.global.auto_deploy // true' infra/deploy-control.yaml)
-
-          # Parse deploy-control.yaml for dev environment
-          enabled=$(yq '.environments.dev.enabled' infra/deploy-control.yaml)
-          auto_deploy=$(yq '.environments.dev.auto_deploy' infra/deploy-control.yaml)
-          require_manual_approval=$(yq '.environments.dev.require_manual_approval // false' infra/deploy-control.yaml)
-
-          # Deployment windows
-          deployment_windows_enabled=$(yq '.environments.dev.deployment_windows.enabled // false' infra/deploy-control.yaml)
-          allowed_days=$(yq '.environments.dev.deployment_windows.allowed_days // []' infra/deploy-control.yaml)
-          allowed_hours=$(yq '.environments.dev.deployment_windows.allowed_hours // "00:00-23:59"' infra/deploy-control.yaml)
-          emergency_override=$(yq '.environments.dev.deployment_windows.emergency_override // false' infra/deploy-control.yaml)
-
-          # Service-specific settings (postgres)
+          enabled=$(yq '.environments.dev.enabled // false' infra/deploy-control.yaml)
+          auto_deploy=$(yq '.environments.dev.auto_deploy // false' infra/deploy-control.yaml)
           service_enabled=$(yq '.environments.dev.services.postgres.enabled // true' infra/deploy-control.yaml)
           service_auto_deploy=$(yq '.environments.dev.services.postgres.auto_deploy // true' infra/deploy-control.yaml)
-          service_require_approval=$(yq '.environments.dev.services.postgres.require_approval // false' infra/deploy-control.yaml)
-          rollback_on_failure=$(yq '.environments.dev.services.postgres.rollback_on_failure // false' infra/deploy-control.yaml)
-
-          # Deployment strategies (for StatefulSet rollout)
-          statefulset_strategy=$(yq '.deployment_strategies.statefulset.strategy // "RollingUpdate"' infra/deploy-control.yaml)
-          statefulset_wait=$(yq '.deployment_strategies.statefulset.wait_for_ready // true' infra/deploy-control.yaml)
           statefulset_timeout=$(yq '.deployment_strategies.statefulset.timeout // "10m"' infra/deploy-control.yaml)
+          deployment_timeout=$(yq '.deployment_strategies.deployment.timeout // "10m"' infra/deploy-control.yaml)
+          daemonset_timeout=$(yq '.deployment_strategies.daemonset.timeout // "10m"' infra/deploy-control.yaml)
+          rollback_on_failure_service=$(yq '.environments.dev.services.postgres.rollback_on_failure // false' infra/deploy-control.yaml)
           statefulset_rollback=$(yq '.deployment_strategies.statefulset.rollback_on_failure // true' infra/deploy-control.yaml)
 
-          # Export all values
+          echo "global_auto_deploy=$global_auto_deploy" >> $GITHUB_OUTPUT
           echo "enabled=$enabled" >> $GITHUB_OUTPUT
           echo "auto_deploy=$auto_deploy" >> $GITHUB_OUTPUT
-          echo "require_manual_approval=$require_manual_approval" >> $GITHUB_OUTPUT
-          echo "deployment_windows_enabled=$deployment_windows_enabled" >> $GITHUB_OUTPUT
-          echo "allowed_days=$allowed_days" >> $GITHUB_OUTPUT
-          echo "allowed_hours=$allowed_hours" >> $GITHUB_OUTPUT
-          echo "emergency_override=$emergency_override" >> $GITHUB_OUTPUT
           echo "service_enabled=$service_enabled" >> $GITHUB_OUTPUT
           echo "service_auto_deploy=$service_auto_deploy" >> $GITHUB_OUTPUT
-          echo "service_require_approval=$service_require_approval" >> $GITHUB_OUTPUT
-          echo "rollback_on_failure=$rollback_on_failure" >> $GITHUB_OUTPUT
           echo "statefulset_timeout=$statefulset_timeout" >> $GITHUB_OUTPUT
+          echo "deployment_timeout=$deployment_timeout" >> $GITHUB_OUTPUT
+          echo "daemonset_timeout=$daemonset_timeout" >> $GITHUB_OUTPUT
+          echo "rollback_on_failure_service=$rollback_on_failure_service" >> $GITHUB_OUTPUT
           echo "statefulset_rollback=$statefulset_rollback" >> $GITHUB_OUTPUT
 
-          # ═══════════════════════════════════════════════════════════
-          # DEPLOYMENT CONTROL CHECKS (enforced in order)
-          # ═══════════════════════════════════════════════════════════
-
-          # 1. Check GLOBAL auto_deploy (master kill switch)
-          if [ "$global_auto_deploy" != "true" ]; then
-            echo "🛑 GLOBAL auto-deployment is disabled (global.auto_deploy: $global_auto_deploy)"
-            echo "All automated deployments are blocked. Set global.auto_deploy: true to enable."
-            exit 0
-          fi
-
-          # 2. Check environment enabled
-          if [ "$enabled" != "true" ]; then
-            echo "❌ Dev environment is disabled (enabled: $enabled)"
-            exit 0
-          fi
-
-          # 3. Check service enabled
-          if [ "$service_enabled" != "true" ]; then
-            echo "❌ PostgreSQL service is disabled (services.postgres.enabled: $service_enabled)"
-            exit 0
-          fi
-
-          # 4. Check auto-deploy (environment level)
-          if [ "$auto_deploy" != "true" ]; then
-            echo "⚠️  Dev environment auto-deployment is disabled"
-            echo "Set 'auto_deploy: true' in infra/deploy-control.yaml to enable deployment"
-            exit 0
-          fi
-
-          # 5. Check auto-deploy (service level)
-          if [ "$service_auto_deploy" != "true" ]; then
-            echo "⚠️  PostgreSQL service auto-deployment is disabled"
-            echo "Set 'services.postgres.auto_deploy: true' to enable deployment"
-            exit 0
-          fi
-
-          # 6. Check manual approval requirement (environment level)
-          if [ "$require_manual_approval" == "true" ]; then
-            echo "⚠️  Manual approval required for dev environment"
-            echo "This deployment requires manual approval. Configure reviewers in GitHub Environment settings."
-            echo "Note: GitHub Actions 'environment' keyword provides the approval gate automatically."
-            # Don't exit - GitHub Actions environment protection handles this
-          fi
-
-          # 7. Check manual approval requirement (service level)
-          if [ "$service_require_approval" == "true" ]; then
-            echo "⚠️  Manual approval required for PostgreSQL service"
-            echo "This service deployment requires manual approval."
-            # Don't exit - GitHub Actions environment protection handles this
-          fi
-
-          # 8. Check deployment windows
-          if [ "$deployment_windows_enabled" == "true" ]; then
-            current_day=$(date +%a)
-            current_time=$(date +%H:%M)
-            
-            # Check if current day is allowed
-            if ! echo "$allowed_days" | grep -q "$current_day"; then
-              if [ "$emergency_override" != "true" ]; then
-                echo "❌ Deployment not allowed on $current_day (allowed: $allowed_days)"
-                exit 0
-              else
-                echo "⚠️  Deployment on $current_day normally restricted, but emergency_override is enabled"
-              fi
-            fi
-            
-            # Check if current time is within allowed hours
-            start_hour=$(echo "$allowed_hours" | cut -d'-' -f1)
-            end_hour=$(echo "$allowed_hours" | cut -d'-' -f2)
-            if [[ "$current_time" < "$start_hour" || "$current_time" > "$end_hour" ]]; then
-              if [ "$emergency_override" != "true" ]; then
-                echo "❌ Deployment not allowed at $current_time (allowed: $allowed_hours)"
-                exit 0
-              else
-                echo "⚠️  Deployment at $current_time normally restricted, but emergency_override is enabled"
-              fi
-            fi
-            
-            echo "✅ Deployment window check passed (day: $current_day, time: $current_time)"
-          fi
-
-          echo "✅ All deployment control checks passed"
-
-      - name: Install kubectl
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        uses: azure/setup-kubectl@v4
-        with:
-          version: "latest"
-
-      - name: Install Kustomize
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
-          sudo mv kustomize /usr/local/bin/
-
-      - name: Configure kubectl
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
-          chmod 600 ~/.kube/config
-          kubectl cluster-info
-
-      - name: Substitute secrets in secret file
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          # Process PostgreSQL secrets (same pattern as hetzner-k8s cluster-config)
-          yq eval '.stringData.POSTGRES_SA_PASSWORD = "${{ secrets.POSTGRES_SA_PASSWORD }}"' infra/k8s/base/secrets/postgres.secret.yaml | \
-          yq eval '.stringData.ACCOUNT_SERVICE_DB_USER_PASSWORD = "${{ secrets.ACCOUNT_SERVICE_DB_USER_PASSWORD }}"' - | \
-          yq eval '.stringData.MESSAGING_SERVICE_DB_USER_PASSWORD = "${{ secrets.MESSAGING_SERVICE_DB_USER_PASSWORD }}"' - | \
-          yq eval '.stringData.PROPERTY_SERVICE_DB_USER_PASSWORD = "${{ secrets.PROPERTY_SERVICE_DB_USER_PASSWORD }}"' - \
-          > /tmp/postgres.secret.processed.yaml
-          mv /tmp/postgres.secret.processed.yaml infra/k8s/base/secrets/postgres.secret.yaml
-
-          # Process Redis ACL secrets (enterprise mode - 5 users)
-          yq eval '.stringData.REDIS_ADMIN_PASSWORD = "${{ secrets.REDIS_ADMIN_PASSWORD }}"' infra/k8s/base/secrets/redis.secret.yaml | \
-          yq eval '.stringData.REDIS_PUBSUB_PASSWORD = "${{ secrets.REDIS_PUBSUB_PASSWORD }}"' - | \
-          yq eval '.stringData.REDIS_CACHE_PASSWORD = "${{ secrets.REDIS_CACHE_PASSWORD }}"' - | \
-          yq eval '.stringData.REDIS_RATELIMIT_PASSWORD = "${{ secrets.REDIS_RATELIMIT_PASSWORD }}"' - | \
-          yq eval '.stringData.REDIS_MONITOR_PASSWORD = "${{ secrets.REDIS_MONITOR_PASSWORD }}"' - \
-          > /tmp/redis.secret.processed.yaml
-          mv /tmp/redis.secret.processed.yaml infra/k8s/base/secrets/redis.secret.yaml
-
-      - name: Build Kustomize manifests
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          echo "🏗️  Building Kustomize manifests for dev environment..."
-          kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins > manifests.yaml
-          echo "✅ Manifests built successfully"
-
-      - name: Apply manifests with immutable field handling
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          echo "🚀 Deploying to dev cluster..."
-
-          # Try to apply normally first (with prune to remove renamed/deleted resources)
-          if ! kubectl apply -f manifests.yaml --prune -l app.kubernetes.io/managed-by=kustomize 2>&1 | tee apply.log; then
-            # Check for immutable field errors across multiple resource types
-            RESOURCE_TYPE=""
-            DISPLAY_NAME=""
-            DELETE_ARGS=""
-            NAME_PATTERN=""
-            
-            if grep -q "Forbidden.*updates to statefulset spec.*are forbidden" apply.log; then
-              RESOURCE_TYPE="statefulset"
-              DISPLAY_NAME="StatefulSet"
-              DELETE_ARGS="--cascade=orphan"
-              NAME_PATTERN='Resource=statefulsets.*?Name: "\K[^"]+'
-            elif grep -q "Forbidden.*updates to deployment spec.*are forbidden" apply.log; then
-              RESOURCE_TYPE="deployment"
-              DISPLAY_NAME="Deployment"
-              DELETE_ARGS="--cascade=orphan"
-              NAME_PATTERN='Resource=deployments.*?Name: "\K[^"]+'
-            elif grep -qE "spec\.clusterIP.*immutable|spec\.type.*immutable" apply.log; then
-              RESOURCE_TYPE="service"
-              DISPLAY_NAME="Service"
-              DELETE_ARGS=""
-              NAME_PATTERN='Resource=services.*?Name: "\K[^"]+'
-            elif grep -q "Forbidden.*updates to daemonset spec.*are forbidden" apply.log; then
-              RESOURCE_TYPE="daemonset"
-              DISPLAY_NAME="DaemonSet"
-              DELETE_ARGS="--cascade=orphan"
-              NAME_PATTERN='Resource=daemonsets.*?Name: "\K[^"]+'
-            elif grep -qE "spec\.selector.*immutable|spec\.completions.*cannot be decreased" apply.log; then
-              RESOURCE_TYPE="job"
-              DISPLAY_NAME="Job"
-              DELETE_ARGS=""
-              NAME_PATTERN='Resource=jobs.*?Name: "\K[^"]+'
-            fi
-            
-            if [ -n "$RESOURCE_TYPE" ]; then
-              echo ""
-              echo "⚠️  Detected immutable $DISPLAY_NAME field changes"
-              echo "🔍 Identifying affected ${DISPLAY_NAME}s..."
-              
-              # Extract resource names that failed
-              FAILED_RESOURCES=$(grep -oP "$NAME_PATTERN" apply.log || echo "")
-              
-              if [ -z "$FAILED_RESOURCES" ]; then
-                echo "❌ Could not identify failed ${DISPLAY_NAME}s from error message"
-                echo "Error log:"
-                cat apply.log
-                exit 1
-              fi
-              
-              echo "📋 ${DISPLAY_NAME}s requiring recreation:"
-              echo "$FAILED_RESOURCES" | while read res; do
-                echo "  - $res"
-              done
-              
-              # Delete each failed resource
-              CASCADE_INFO=""
-              [ "$DELETE_ARGS" = "--cascade=orphan" ] && CASCADE_INFO=" (preserving dependent resources)"
-              echo ""
-              echo "🗑️  Deleting ${DISPLAY_NAME}s with immutable field conflicts${CASCADE_INFO}..."
-              echo "$FAILED_RESOURCES" | while read res; do
-                if [ -n "$res" ]; then
-                  echo "  Deleting $DISPLAY_NAME: $res"
-                  kubectl delete "$RESOURCE_TYPE" "$res" $DELETE_ARGS || true
-                fi
-              done
-              
-              echo ""
-              echo "🔄 Retrying deployment with recreated ${DISPLAY_NAME}s..."
-              kubectl apply -f manifests.yaml --prune -l app.kubernetes.io/managed-by=kustomize
-            else
-              echo "❌ Deployment failed with non-immutable-field error:"
-              cat apply.log
-              exit 1
-            fi
-          else
-            echo "✅ Deployment successful (no immutable field conflicts)"
-          fi
-
-          # Optional optimization: restart only when StatefulSet pod template changes
-          echo "🔄 Checking if StatefulSet pod templates changed before restarting..."
-          NEED_RESTART_STS=""
-          EXPECTED_STS=$(yq -N e 'select(.kind=="StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' || echo "")
-          for name in $EXPECTED_STS; do
-            DESIRED_RAW=$(yq -N e "select(.kind==\"StatefulSet\" and .metadata.name==\"$name\") | .spec.template" manifests.yaml 2>/dev/null || echo "")
-            LIVE_RAW=$(kubectl get statefulset "$name" -o json 2>/dev/null | jq -c '.spec.template' 2>/dev/null || echo "")
-            DESIRED_TEMPLATE=$(printf "%s" "$DESIRED_RAW" | jq -c '.' 2>/dev/null || echo "")
-            LIVE_TEMPLATE=$(printf "%s" "$LIVE_RAW" | jq -c '.' 2>/dev/null || echo "")
-            if [ -z "$DESIRED_TEMPLATE" ] || [ -z "$LIVE_TEMPLATE" ]; then
-              echo "ℹ️  Skipping $name: unable to parse desired/live pod template"
-              continue
-            fi
-            LIVE_HASH=$(printf "%s" "$LIVE_TEMPLATE" | sha1sum | awk '{print $1}')
-            DESIRED_HASH=$(printf "%s" "$DESIRED_TEMPLATE" | sha1sum | awk '{print $1}')
-            if [ "$LIVE_HASH" != "$DESIRED_HASH" ]; then
-              NEED_RESTART_STS="$NEED_RESTART_STS $name"
-            fi
-          done
-          if [ -n "$NEED_RESTART_STS" ]; then
-            echo "🔄 Forcing rollout restart for changed StatefulSets: $NEED_RESTART_STS"
-            for sts in $NEED_RESTART_STS; do
-              kubectl rollout restart statefulset/$sts || true
-            done
-            echo "⏳ Waiting 60 seconds for pods to terminate and restart..."
-            sleep 60
-          else
-            echo "✅ No StatefulSet pod template changes detected - skipping restart"
-          fi
-
-      - name: Clean corrupted PVCs if pods still failing
-        id: pvc-cleanup
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          echo "🔍 Checking if pods are ready after restart with new config..."
-          echo "⏳ Waiting additional 30s for pods to stabilize..."
-          sleep 30
-
-          echo "📊 Current pod status:"
-          kubectl get pods -o wide
-
-          echo ""
-          echo "📋 Pod conditions:"
-          kubectl get pods -o json | jq '.items[] | {name: .metadata.name, ready: (.status.conditions[] | select(.type=="Ready") | .status), phase: .status.phase, restarts: .status.containerStatuses[0].restartCount}'
-
-          echo ""
-          echo "🔎 Detecting non-ready pods..."
-          # Check for ANY pod that's not running and ready
-          # Includes: CrashLoopBackOff, ImagePullBackOff, Pending, or Ready!=True
-          PODS=$(kubectl get pods -o json 2>/dev/null | jq -r '.items[] | select(
-            (.status.phase != "Running") or 
-            (.status.conditions[]? | select(.type == "Ready") | .status != "True")
-          ) | .metadata.name' || echo "")
-
-          echo "Detection result: [$PODS]"
-          echo "pvc_cleanup_ran=false" >> $GITHUB_OUTPUT
-
-          if [ -n "$PODS" ]; then
-            echo "⚠️  Found pods that are NOT ready 90s after restart:"
-            echo "$PODS"
-            
-            PVC_DELETED=false
-            for pod in $PODS; do
-              echo ""
-              echo "🔍 Analyzing $pod..."
-              
-              LOGS=$(kubectl logs $pod --tail=100 2>&1 || echo "")
-              echo "Last 20 lines of logs:"
-              echo "$LOGS" | tail -20
-              
-              if echo "$LOGS" | grep -qi "manifest has unsupported version\|corruption\|badger"; then
-                echo "❌ Detected BadgerDB corruption in $pod - likely incompatible with new version"
-                
-                STS_NAME=$(echo $pod | sed 's/-[0-9]*$//')
-                PVC=$(kubectl get pvc -o json | jq -r ".items[] | select(.metadata.name | contains(\"$STS_NAME\")) | .metadata.name" | head -1)
-                
-                if [ -n "$PVC" ]; then
-                  echo "🗑️  Deleting corrupted PVC: $PVC"
-                  kubectl delete pod $pod --force --grace-period=0 || true
-                  kubectl delete pvc $PVC || true
-                  echo "✅ Cleaned up $pod and $PVC - will recreate with fresh data"
-                  PVC_DELETED=true
-                else
-                  echo "ℹ️  No PVC found for $pod"
-                fi
-              else
-                echo "ℹ️  No BadgerDB corruption detected in logs - pod may recover naturally"
-              fi
-            done
-            
-            if [ "$PVC_DELETED" = "true" ]; then
-              echo "pvc_cleanup_ran=true" >> $GITHUB_OUTPUT
-              echo "rollout_success=true" >> $GITHUB_OUTPUT
-              echo "⏭️  PVC deleted - pod will recreate in background (skipping 2min rollout wait)"
-            fi
-          else
-            echo "✅ No pods with persistent failures - new config working!"
-          fi
-
-      - name: Check pod status immediately after apply
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          echo "📊 Pod status after apply:"
-          kubectl get pods
-
-      - name: Wait for workload rollout
-        id: rollout
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true' && steps.pvc-cleanup.outputs.pvc_cleanup_ran != 'true' && steps.pvc-cleanup.outputs.rollout_success != 'true'
-        run: |
-          echo "⏳ Waiting for workloads to be ready..."
-          echo "Using deployment strategy timeout: ${{ steps.deploy-control.outputs.statefulset_timeout }}"
-
-          ROLLOUT_FAILED=false
-
-          # Check StatefulSets from kustomize-built manifests (avoids label-dependency)
-          STATEFULSETS=$(yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-          if [ -n "$STATEFULSETS" ]; then
-            echo "📋 Found StatefulSets: $STATEFULSETS"
-            for sts in $STATEFULSETS; do
-              echo "\n🔄 Checking rollout status for StatefulSet/$sts..."
-              if ! kubectl rollout status statefulset/$sts --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
-                echo "❌ StatefulSet $sts rollout failed"
-                ROLLOUT_FAILED=true
-                break
-              fi
-              echo "✅ StatefulSet $sts deployment completed"
-            done
-          else
-            echo "ℹ️  No StatefulSets found"
-          fi
-
-          # Check Deployments from kustomize-built manifests (only if no failures so far)
-          if [ "$ROLLOUT_FAILED" = "false" ]; then
-            DEPLOYMENTS=$(yq -N e 'select(.kind == "Deployment") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-            if [ -n "$DEPLOYMENTS" ]; then
-              echo "\n📋 Found Deployments: $DEPLOYMENTS"
-              for deploy in $DEPLOYMENTS; do
-                echo "\n🔄 Checking rollout status for Deployment/$deploy..."
-                if ! kubectl rollout status deployment/$deploy --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
-                  echo "❌ Deployment $deploy rollout failed"
-                  ROLLOUT_FAILED=true
-                  break
-                fi
-                echo "✅ Deployment $deploy deployment completed"
-              done
-            else
-              echo "ℹ️  No Deployments found"
-            fi
-          fi
-
-          # Check DaemonSets from kustomize-built manifests (only if no failures so far)
-          if [ "$ROLLOUT_FAILED" = "false" ]; then
-            DAEMONSETS=$(yq -N e 'select(.kind == "DaemonSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-            if [ -n "$DAEMONSETS" ]; then
-              echo "\n📋 Found DaemonSets: $DAEMONSETS"
-              for ds in $DAEMONSETS; do
-                echo "\n🔄 Checking rollout status for DaemonSet/$ds..."
-                if ! kubectl rollout status daemonset/$ds --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
-                  echo "❌ DaemonSet $ds rollout failed"
-                  ROLLOUT_FAILED=true
-                  break
-                fi
-                echo "✅ DaemonSet $ds deployment completed"
-              done
-            else
-              echo "ℹ️  No DaemonSets found"
-            fi
-          fi
-
-          if [ "$ROLLOUT_FAILED" = "true" ]; then
-            echo "rollout_success=false" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-
-          echo "\n✅ All workloads deployed successfully"
-          echo "rollout_success=true" >> $GITHUB_OUTPUT
-
-      - name: Rollback on failure
+      - name: Deploy env (DRY composite)
         if: |
-          always() &&
+          steps.deploy-control.outputs.global_auto_deploy == 'true' &&
           steps.deploy-control.outputs.enabled == 'true' &&
-          (steps.deploy-control.outputs.rollback_on_failure == 'true' || steps.deploy-control.outputs.statefulset_rollback == 'true') &&
-          steps.rollout.outputs.rollout_success != 'true' &&
-          steps.pvc-cleanup.outputs.pvc_cleanup_ran != 'true' &&
-          steps.pvc-cleanup.outputs.rollout_success != 'true'
-        run: |
-          echo "🔄 Rolling back workload deployments due to failure..."
-          echo "Rollback triggered by: rollback_on_failure=${{ steps.deploy-control.outputs.rollback_on_failure }} OR statefulset_rollback=${{ steps.deploy-control.outputs.statefulset_rollback }}"
-
-          ROLLBACK_FAILED=false
-
-          # Rollback StatefulSets from manifests list
-          STATEFULSETS=$(yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-          if [ -n "$STATEFULSETS" ]; then
-            echo "📋 Rolling back StatefulSets: $STATEFULSETS"
-            for sts in $STATEFULSETS; do
-              echo "\n🔄 Rolling back StatefulSet/$sts..."
-              if ! kubectl rollout undo statefulset/$sts; then
-                echo "❌ Failed to initiate rollback for StatefulSet/$sts"
-                ROLLBACK_FAILED=true
-                continue
-              fi
-              if ! kubectl rollout status statefulset/$sts --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
-                echo "❌ StatefulSet/$sts rollback did not complete successfully"
-                ROLLBACK_FAILED=true
-              else
-                echo "✅ StatefulSet $sts rollback completed"
-              fi
-            done
-          else
-            echo "ℹ️  No StatefulSets found to rollback"
-          fi
-
-          # Rollback Deployments from manifests list
-          DEPLOYMENTS=$(yq -N e 'select(.kind == "Deployment") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-          if [ -n "$DEPLOYMENTS" ]; then
-            echo "\n📋 Rolling back Deployments: $DEPLOYMENTS"
-            for deploy in $DEPLOYMENTS; do
-              echo "\n🔄 Rolling back Deployment/$deploy..."
-              if ! kubectl rollout undo deployment/$deploy; then
-                echo "❌ Failed to initiate rollback for Deployment/$deploy"
-                ROLLBACK_FAILED=true
-                continue
-              fi
-              if ! kubectl rollout status deployment/$deploy --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
-                echo "❌ Deployment/$deploy rollback did not complete successfully"
-                ROLLBACK_FAILED=true
-              else
-                echo "✅ Deployment $deploy rollback completed"
-              fi
-            done
-          else
-            echo "ℹ️  No Deployments found to rollback"
-          fi
-
-          # Rollback DaemonSets
-          DAEMONSETS=$(kubectl get daemonset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
-          if [ -n "$DAEMONSETS" ]; then
-            echo "\n📋 Rolling back DaemonSets: $DAEMONSETS"
-            for ds in $DAEMONSETS; do
-              echo "\n🔄 Rolling back DaemonSet/$ds..."
-              if ! kubectl rollout undo daemonset/$ds; then
-                echo "❌ Failed to initiate rollback for DaemonSet/$ds"
-                ROLLBACK_FAILED=true
-                continue
-              fi
-              if ! kubectl rollout status daemonset/$ds --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
-                echo "❌ DaemonSet/$ds rollback did not complete successfully"
-                ROLLBACK_FAILED=true
-              else
-                echo "✅ DaemonSet $ds rollback completed"
-              fi
-            done
-          else
-            echo "ℹ️  No DaemonSets found to rollback"
-          fi
-
-          if [ "$ROLLBACK_FAILED" = "true" ]; then
-            echo "\n⚠️  Some rollbacks failed - manual intervention may be required"
-            exit 1
-          fi
-
-          # Exit with error to mark workflow as failed
-          echo "\n❌ Deployment failed and was rolled back"
-          exit 1
-
-      - name: Verify deployment
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          echo "🔍 Verifying deployment..."
-
-          if [ "${{ steps.pvc-cleanup.outputs.pvc_cleanup_ran }}" = "true" ]; then
-            echo "\n⚠️  Note: PVC cleanup ran - rollout wait was skipped to save time"
-            echo "Pod is recreating in background with fresh data. Check status below:"
-          fi
-
-          echo "\n📦 Workloads:"
-          kubectl get statefulset,deployment,daemonset -l app.kubernetes.io/managed-by=kustomize || echo "No workloads found"
-          echo "\n🎯 Pods:"
-          kubectl get pods -o wide || echo "No pods found"
-          echo "\n🌐 Services:"
-          kubectl get services -l app.kubernetes.io/managed-by=kustomize || echo "No services found"
-          echo "\n💾 PVCs:"
-          kubectl get pvc || echo "No PVCs found"
-
-          # Show pod events if PVC cleanup ran
-          if [ "${{ steps.pvc-cleanup.outputs.pvc_cleanup_ran }}" = "true" ]; then
-            echo "\n📋 Recent pod events (for troubleshooting):"
-            kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -30 || true
-          fi
+          steps.deploy-control.outputs.service_enabled == 'true' &&
+          steps.deploy-control.outputs.auto_deploy == 'true' &&
+          steps.deploy-control.outputs.service_auto_deploy == 'true'
+        uses: ./.github/actions/deploy-k8s-resources
+        with:
+          kustomizePath: infra/k8s/hetzner/dev
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          statefulset_timeout: ${{ steps.deploy-control.outputs.statefulset_timeout }}
+          deployment_timeout: ${{ steps.deploy-control.outputs.deployment_timeout }}
+          daemonset_timeout: ${{ steps.deploy-control.outputs.daemonset_timeout }}
+          rollback_on_failure: ${{ steps.deploy-control.outputs.rollback_on_failure_service }}
+          statefulset_rollback: ${{ steps.deploy-control.outputs.statefulset_rollback }}
+        env:
+          POSTGRES_SA_PASSWORD: ${{ secrets.POSTGRES_SA_PASSWORD }}
+          ACCOUNT_SERVICE_DB_USER_PASSWORD: ${{ secrets.ACCOUNT_SERVICE_DB_USER_PASSWORD }}
+          MESSAGING_SERVICE_DB_USER_PASSWORD: ${{ secrets.MESSAGING_SERVICE_DB_USER_PASSWORD }}
+          PROPERTY_SERVICE_DB_USER_PASSWORD: ${{ secrets.PROPERTY_SERVICE_DB_USER_PASSWORD }}
+          REDIS_ADMIN_PASSWORD: ${{ secrets.REDIS_ADMIN_PASSWORD }}
+          REDIS_PUBSUB_PASSWORD: ${{ secrets.REDIS_PUBSUB_PASSWORD }}
+          REDIS_CACHE_PASSWORD: ${{ secrets.REDIS_CACHE_PASSWORD }}
+          REDIS_RATELIMIT_PASSWORD: ${{ secrets.REDIS_RATELIMIT_PASSWORD }}
+          REDIS_MONITOR_PASSWORD: ${{ secrets.REDIS_MONITOR_PASSWORD }}
 
   deploy-test:
     if: |
@@ -728,12 +153,13 @@ jobs:
           rollback_on_failure=$(yq '.environments.test.services.postgres.rollback_on_failure // false' infra/deploy-control.yaml)
 
           # Deployment strategies (for StatefulSet rollout)
-          statefulset_strategy=$(yq '.deployment_strategies.statefulset.strategy // "RollingUpdate"' infra/deploy-control.yaml)
-          statefulset_wait=$(yq '.deployment_strategies.statefulset.wait_for_ready // true' infra/deploy-control.yaml)
           statefulset_timeout=$(yq '.deployment_strategies.statefulset.timeout // "10m"' infra/deploy-control.yaml)
+          deployment_timeout=$(yq '.deployment_strategies.deployment.timeout // "10m"' infra/deploy-control.yaml)
+          daemonset_timeout=$(yq '.deployment_strategies.daemonset.timeout // "10m"' infra/deploy-control.yaml)
           statefulset_rollback=$(yq '.deployment_strategies.statefulset.rollback_on_failure // true' infra/deploy-control.yaml)
 
           # Export all values
+          echo "global_auto_deploy=$global_auto_deploy" >> $GITHUB_OUTPUT
           echo "enabled=$enabled" >> $GITHUB_OUTPUT
           echo "auto_deploy=$auto_deploy" >> $GITHUB_OUTPUT
           echo "require_manual_approval=$require_manual_approval" >> $GITHUB_OUTPUT
@@ -746,6 +172,8 @@ jobs:
           echo "service_require_approval=$service_require_approval" >> $GITHUB_OUTPUT
           echo "rollback_on_failure=$rollback_on_failure" >> $GITHUB_OUTPUT
           echo "statefulset_timeout=$statefulset_timeout" >> $GITHUB_OUTPUT
+          echo "deployment_timeout=$deployment_timeout" >> $GITHUB_OUTPUT
+          echo "daemonset_timeout=$daemonset_timeout" >> $GITHUB_OUTPUT
           echo "statefulset_rollback=$statefulset_rollback" >> $GITHUB_OUTPUT
 
           # ═══════════════════════════════════════════════════════════
@@ -832,423 +260,32 @@ jobs:
 
           echo "✅ All deployment control checks passed"
 
-      - name: Install kubectl
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        uses: azure/setup-kubectl@v4
-        with:
-          version: "latest"
-
-      - name: Install Kustomize
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
-          sudo mv kustomize /usr/local/bin/
-
-      - name: Configure kubectl
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
-          chmod 600 ~/.kube/config
-          kubectl cluster-info
-
-      - name: Substitute secrets in secret file
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          # Process PostgreSQL secrets (same pattern as dev)
-          yq eval '.stringData.POSTGRES_SA_PASSWORD = "${{ secrets.POSTGRES_SA_PASSWORD }}"' infra/k8s/base/secrets/postgres.secret.yaml | \
-          yq eval '.stringData.ACCOUNT_SERVICE_DB_USER_PASSWORD = "${{ secrets.ACCOUNT_SERVICE_DB_USER_PASSWORD }}"' - | \
-          yq eval '.stringData.MESSAGING_SERVICE_DB_USER_PASSWORD = "${{ secrets.MESSAGING_SERVICE_DB_USER_PASSWORD }}"' - | \
-          yq eval '.stringData.PROPERTY_SERVICE_DB_USER_PASSWORD = "${{ secrets.PROPERTY_SERVICE_DB_USER_PASSWORD }}"' - \
-          > /tmp/postgres.secret.processed.yaml
-          mv /tmp/postgres.secret.processed.yaml infra/k8s/base/secrets/postgres.secret.yaml
-
-          # Process Redis ACL secrets (enterprise mode - 5 users)
-          yq eval '.stringData.REDIS_ADMIN_PASSWORD = "${{ secrets.REDIS_ADMIN_PASSWORD }}"' infra/k8s/base/secrets/redis.secret.yaml | \
-          yq eval '.stringData.REDIS_PUBSUB_PASSWORD = "${{ secrets.REDIS_PUBSUB_PASSWORD }}"' - | \
-          yq eval '.stringData.REDIS_CACHE_PASSWORD = "${{ secrets.REDIS_CACHE_PASSWORD }}"' - | \
-          yq eval '.stringData.REDIS_RATELIMIT_PASSWORD = "${{ secrets.REDIS_RATELIMIT_PASSWORD }}"' - | \
-          yq eval '.stringData.REDIS_MONITOR_PASSWORD = "${{ secrets.REDIS_MONITOR_PASSWORD }}"' - \
-          > /tmp/redis.secret.processed.yaml
-          mv /tmp/redis.secret.processed.yaml infra/k8s/base/secrets/redis.secret.yaml
-
-      - name: Build Kustomize manifests
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          echo "🏭  Building Kustomize manifests for test environment..."
-          kustomize build infra/k8s/hetzner/test --enable-alpha-plugins > manifests.yaml
-          echo "✅ Manifests built successfully"
-
-      - name: Apply manifests with immutable field handling
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          echo "🚀 Deploying to test cluster..."
-
-          # Try to apply normally first (with prune to remove renamed/deleted resources)
-          if ! kubectl apply -f manifests.yaml --prune -l app.kubernetes.io/managed-by=kustomize 2>&1 | tee apply.log; then
-            # Check for immutable field errors across multiple resource types
-            RESOURCE_TYPE=""
-            DISPLAY_NAME=""
-            DELETE_ARGS=""
-            NAME_PATTERN=""
-            
-            if grep -q "Forbidden.*updates to statefulset spec.*are forbidden" apply.log; then
-              RESOURCE_TYPE="statefulset"
-              DISPLAY_NAME="StatefulSet"
-              DELETE_ARGS="--cascade=orphan"
-              NAME_PATTERN='Resource=statefulsets.*?Name: "\K[^"]+'
-            elif grep -q "Forbidden.*updates to deployment spec.*are forbidden" apply.log; then
-              RESOURCE_TYPE="deployment"
-              DISPLAY_NAME="Deployment"
-              DELETE_ARGS="--cascade=orphan"
-              NAME_PATTERN='Resource=deployments.*?Name: "\K[^"]+'
-            elif grep -qE "spec\.clusterIP.*immutable|spec\.type.*immutable" apply.log; then
-              RESOURCE_TYPE="service"
-              DISPLAY_NAME="Service"
-              DELETE_ARGS=""
-              NAME_PATTERN='Resource=services.*?Name: "\K[^"]+'
-            elif grep -q "Forbidden.*updates to daemonset spec.*are forbidden" apply.log; then
-              RESOURCE_TYPE="daemonset"
-              DISPLAY_NAME="DaemonSet"
-              DELETE_ARGS="--cascade=orphan"
-              NAME_PATTERN='Resource=daemonsets.*?Name: "\K[^"]+'
-            elif grep -qE "spec\.selector.*immutable|spec\.completions.*cannot be decreased" apply.log; then
-              RESOURCE_TYPE="job"
-              DISPLAY_NAME="Job"
-              DELETE_ARGS=""
-              NAME_PATTERN='Resource=jobs.*?Name: "\K[^"]+'
-            fi
-            
-            if [ -n "$RESOURCE_TYPE" ]; then
-              echo ""
-              echo "⚠️  Detected immutable $DISPLAY_NAME field changes"
-              echo "🔍 Identifying affected ${DISPLAY_NAME}s..."
-              
-              # Extract resource names that failed
-              FAILED_RESOURCES=$(grep -oP "$NAME_PATTERN" apply.log || echo "")
-              
-              if [ -z "$FAILED_RESOURCES" ]; then
-                echo "❌ Could not identify failed ${DISPLAY_NAME}s from error message"
-                echo "Error log:"
-                cat apply.log
-                exit 1
-              fi
-              
-              echo "📋 ${DISPLAY_NAME}s requiring recreation:"
-              echo "$FAILED_RESOURCES" | while read res; do
-                echo "  - $res"
-              done
-              
-              # Delete each failed resource
-              CASCADE_INFO=""
-              [ "$DELETE_ARGS" = "--cascade=orphan" ] && CASCADE_INFO=" (preserving dependent resources)"
-              echo ""
-              echo "🗑️  Deleting ${DISPLAY_NAME}s with immutable field conflicts${CASCADE_INFO}..."
-              echo "$FAILED_RESOURCES" | while read res; do
-                if [ -n "$res" ]; then
-                  echo "  Deleting $DISPLAY_NAME: $res"
-                  kubectl delete "$RESOURCE_TYPE" "$res" $DELETE_ARGS || true
-                fi
-              done
-              
-              echo ""
-              echo "🔄 Retrying deployment with recreated ${DISPLAY_NAME}s..."
-              kubectl apply -f manifests.yaml --prune -l app.kubernetes.io/managed-by=kustomize
-            else
-              echo "❌ Deployment failed with non-immutable-field error:"
-              cat apply.log
-              exit 1
-            fi
-          else
-            echo "✅ Deployment successful (no immutable field conflicts)"
-          fi
-
-          # Optional optimization: restart only when StatefulSet pod template changes
-          echo "🔄 Checking if StatefulSet pod templates changed before restarting..."
-          NEED_RESTART_STS=""
-          EXPECTED_STS=$(yq -N e 'select(.kind=="StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' || echo "")
-          for name in $EXPECTED_STS; do
-            LIVE_TEMPLATE=$(kubectl get statefulset "$name" -o jsonpath='{.spec.template}' 2>/dev/null | jq -c '.' || echo "")
-            DESIRED_TEMPLATE=$(yq -N e "select(.kind==\"StatefulSet\" and .metadata.name==\"$name\") | .spec.template" manifests.yaml 2>/dev/null | jq -c '.' || echo "")
-            if [ -n "$LIVE_TEMPLATE" ] && [ -n "$DESIRED_TEMPLATE" ]; then
-              LIVE_HASH=$(printf "%s" "$LIVE_TEMPLATE" | sha1sum | awk '{print $1}')
-              DESIRED_HASH=$(printf "%s" "$DESIRED_TEMPLATE" | sha1sum | awk '{print $1}')
-              if [ "$LIVE_HASH" != "$DESIRED_HASH" ]; then
-                NEED_RESTART_STS="$NEED_RESTART_STS $name"
-              fi
-            fi
-          done
-          if [ -n "$NEED_RESTART_STS" ]; then
-            echo "🔄 Forcing rollout restart for changed StatefulSets: $NEED_RESTART_STS"
-            for sts in $NEED_RESTART_STS; do
-              kubectl rollout restart statefulset/$sts || true
-            done
-            echo "⏳ Waiting 60 seconds for pods to terminate and restart..."
-            sleep 60
-          else
-            echo "✅ No StatefulSet pod template changes detected - skipping restart"
-          fi
-
-      - name: Clean corrupted PVCs if pods still failing
-        id: pvc-cleanup-test
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          echo "🔍 Checking if pods are ready after restart with new config..."
-          echo "⏳ Waiting additional 30s for pods to stabilize..."
-          sleep 30
-
-          echo "📊 Current pod status:"
-          kubectl get pods -o wide
-
-          echo ""
-          echo "📋 Pod conditions:"
-          kubectl get pods -o json | jq '.items[] | {name: .metadata.name, ready: (.status.conditions[] | select(.type=="Ready") | .status), phase: .status.phase, restarts: .status.containerStatuses[0].restartCount}'
-
-          echo ""
-          echo "🔎 Detecting non-ready pods..."
-          # Check for ANY pod that's not running and ready
-          # Includes: CrashLoopBackOff, ImagePullBackOff, Pending, or Ready!=True
-          PODS=$(kubectl get pods -o json 2>/dev/null | jq -r '.items[] | select(
-            (.status.phase != "Running") or 
-            (.status.conditions[]? | select(.type == "Ready") | .status != "True")
-          ) | .metadata.name' || echo "")
-
-          echo "Detection result: [$PODS]"
-          echo "pvc_cleanup_ran=false" >> $GITHUB_OUTPUT
-
-          if [ -n "$PODS" ]; then
-            echo "⚠️  Found pods that are NOT ready 90s after restart:"
-            echo "$PODS"
-            
-            PVC_DELETED=false
-            for pod in $PODS; do
-              echo ""
-              echo "🔍 Analyzing $pod..."
-              
-              LOGS=$(kubectl logs $pod --tail=100 2>&1 || echo "")
-              echo "Last 20 lines of logs:"
-              echo "$LOGS" | tail -20
-              
-              if echo "$LOGS" | grep -qi "manifest has unsupported version\|corruption\|badger"; then
-                echo "❌ Detected BadgerDB corruption in $pod - likely incompatible with new version"
-                
-                STS_NAME=$(echo $pod | sed 's/-[0-9]*$//')
-                PVC=$(kubectl get pvc -o json | jq -r ".items[] | select(.metadata.name | contains(\"$STS_NAME\")) | .metadata.name" | head -1)
-                
-                if [ -n "$PVC" ]; then
-                  echo "🗑️  Deleting corrupted PVC: $PVC"
-                  kubectl delete pod $pod --force --grace-period=0 || true
-                  kubectl delete pvc $PVC || true
-                  echo "✅ Cleaned up $pod and $PVC - will recreate with fresh data"
-                  PVC_DELETED=true
-                else
-                  echo "ℹ️  No PVC found for $pod"
-                fi
-              else
-                echo "ℹ️  No BadgerDB corruption detected in logs - pod may recover naturally"
-              fi
-            done
-            
-            if [ "$PVC_DELETED" = "true" ]; then
-              echo "pvc_cleanup_ran=true" >> $GITHUB_OUTPUT
-              echo "rollout_success=true" >> $GITHUB_OUTPUT
-              echo "⏭️  PVC deleted - pod will recreate in background (skipping 2min rollout wait)"
-            fi
-          else
-            echo "✅ No pods with persistent failures - new config working!"
-          fi
-
-      - name: Check pod status immediately after apply
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          echo "📊 Pod status after apply:"
-          kubectl get pods
-
-      - name: Wait for workload rollout
-        id: rollout
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true' && steps.pvc-cleanup-test.outputs.pvc_cleanup_ran != 'true' && steps.pvc-cleanup-test.outputs.rollout_success != 'true'
-        run: |
-          echo "⏳ Waiting for workloads to be ready..."
-          echo "Using deployment strategy timeout: ${{ steps.deploy-control.outputs.statefulset_timeout }}"
-
-          ROLLOUT_FAILED=false
-
-          # Check StatefulSets from kustomize-built manifests (avoids label-dependency)
-          STATEFULSETS=$(yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-          if [ -n "$STATEFULSETS" ]; then
-            echo "📋 Found StatefulSets: $STATEFULSETS"
-            for sts in $STATEFULSETS; do
-              echo "\n🔄 Checking rollout status for StatefulSet/$sts..."
-              if ! kubectl rollout status statefulset/$sts --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
-                echo "❌ StatefulSet $sts rollout failed"
-                ROLLOUT_FAILED=true
-                break
-              fi
-              echo "✅ StatefulSet $sts deployment completed"
-            done
-          else
-            echo "ℹ️  No StatefulSets found"
-          fi
-
-          # Check Deployments (only if no failures so far)
-          if [ "$ROLLOUT_FAILED" = "false" ]; then
-            DEPLOYMENTS=$(yq -N e 'select(.kind == "Deployment") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-            if [ -n "$DEPLOYMENTS" ]; then
-              echo "\n📋 Found Deployments: $DEPLOYMENTS"
-              for deploy in $DEPLOYMENTS; do
-                echo "\n🔄 Checking rollout status for Deployment/$deploy..."
-                if ! kubectl rollout status deployment/$deploy --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
-                  echo "❌ Deployment $deploy rollout failed"
-                  ROLLOUT_FAILED=true
-                  break
-                fi
-                echo "✅ Deployment $deploy deployment completed"
-              done
-            else
-              echo "ℹ️  No Deployments found"
-            fi
-          fi
-
-          # Check DaemonSets (only if no failures so far)
-          if [ "$ROLLOUT_FAILED" = "false" ]; then
-            DAEMONSETS=$(yq -N e 'select(.kind == "DaemonSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-            if [ -n "$DAEMONSETS" ]; then
-              echo "\n📋 Found DaemonSets: $DAEMONSETS"
-              for ds in $DAEMONSETS; do
-                echo "\n🔄 Checking rollout status for DaemonSet/$ds..."
-                if ! kubectl rollout status daemonset/$ds --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
-                  echo "❌ DaemonSet $ds rollout failed"
-                  ROLLOUT_FAILED=true
-                  break
-                fi
-                echo "✅ DaemonSet $ds deployment completed"
-              done
-            else
-              echo "ℹ️  No DaemonSets found"
-            fi
-          fi
-
-          if [ "$ROLLOUT_FAILED" = "true" ]; then
-            echo "rollout_success=false" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-
-          echo "\n✅ All workloads deployed successfully"
-          echo "rollout_success=true" >> $GITHUB_OUTPUT
-
-      - name: Rollback on failure
+      - name: Deploy env (DRY composite)
         if: |
-          always() &&
+          steps.deploy-control.outputs.global_auto_deploy == 'true' &&
           steps.deploy-control.outputs.enabled == 'true' &&
-          (steps.deploy-control.outputs.rollback_on_failure == 'true' || steps.deploy-control.outputs.statefulset_rollback == 'true') &&
-          steps.rollout.outputs.rollout_success != 'true' &&
-          steps.pvc-cleanup-test.outputs.pvc_cleanup_ran != 'true' &&
-          steps.pvc-cleanup-test.outputs.rollout_success != 'true'
-        run: |
-          echo "🔄 Rolling back workload deployments due to failure..."
-          echo "Rollback triggered by: rollback_on_failure=${{ steps.deploy-control.outputs.rollback_on_failure }} OR statefulset_rollback=${{ steps.deploy-control.outputs.statefulset_rollback }}"
-
-          ROLLBACK_FAILED=false
-
-          # Rollback StatefulSets from manifests list
-          STATEFULSETS=$(yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-          if [ -n "$STATEFULSETS" ]; then
-            echo "📋 Rolling back StatefulSets: $STATEFULSETS"
-            for sts in $STATEFULSETS; do
-              echo "\n🔄 Rolling back StatefulSet/$sts..."
-              if ! kubectl rollout undo statefulset/$sts; then
-                echo "❌ Failed to initiate rollback for StatefulSet/$sts"
-                ROLLBACK_FAILED=true
-                continue
-              fi
-              if ! kubectl rollout status statefulset/$sts --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
-                echo "❌ StatefulSet/$sts rollback did not complete successfully"
-                ROLLBACK_FAILED=true
-              else
-                echo "✅ StatefulSet $sts rollback completed"
-              fi
-            done
-          else
-            echo "ℹ️  No StatefulSets found to rollback"
-          fi
-
-          # Rollback Deployments
-          DEPLOYMENTS=$(yq -N e 'select(.kind == "Deployment") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-          if [ -n "$DEPLOYMENTS" ]; then
-            echo "\n📋 Rolling back Deployments: $DEPLOYMENTS"
-            for deploy in $DEPLOYMENTS; do
-              echo "\n🔄 Rolling back Deployment/$deploy..."
-              if ! kubectl rollout undo deployment/$deploy; then
-                echo "❌ Failed to initiate rollback for Deployment/$deploy"
-                ROLLBACK_FAILED=true
-                continue
-              fi
-              if ! kubectl rollout status deployment/$deploy --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
-                echo "❌ Deployment/$deploy rollback did not complete successfully"
-                ROLLBACK_FAILED=true
-              else
-                echo "✅ Deployment $deploy rollback completed"
-              fi
-            done
-          else
-            echo "ℹ️  No Deployments found to rollback"
-          fi
-
-          # Rollback DaemonSets
-          DAEMONSETS=$(kubectl get daemonset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
-          if [ -n "$DAEMONSETS" ]; then
-            echo "\n📋 Rolling back DaemonSets: $DAEMONSETS"
-            for ds in $DAEMONSETS; do
-              echo "\n🔄 Rolling back DaemonSet/$ds..."
-              if ! kubectl rollout undo daemonset/$ds; then
-                echo "❌ Failed to initiate rollback for DaemonSet/$ds"
-                ROLLBACK_FAILED=true
-                continue
-              fi
-              if ! kubectl rollout status daemonset/$ds --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
-                echo "❌ DaemonSet/$ds rollback did not complete successfully"
-                ROLLBACK_FAILED=true
-              else
-                echo "✅ DaemonSet $ds rollback completed"
-              fi
-            done
-          else
-            echo "ℹ️  No DaemonSets found to rollback"
-          fi
-
-          if [ "$ROLLBACK_FAILED" = "true" ]; then
-            echo "\n⚠️  Some rollbacks failed - manual intervention may be required"
-            exit 1
-          fi
-
-          # Exit with error to mark workflow as failed
-          echo "\n❌ Deployment failed and was rolled back"
-          exit 1
-
-      - name: Verify deployment
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          echo "🔍 Verifying deployment..."
-
-          if [ "${{ steps.pvc-cleanup-test.outputs.pvc_cleanup_ran }}" = "true" ]; then
-            echo "\n⚠️  Note: PVC cleanup ran - rollout wait was skipped to save time"
-            echo "Pod is recreating in background with fresh data. Check status below:"
-          fi
-
-          echo "\n📦 Workloads:"
-          kubectl get statefulset,deployment,daemonset -l app.kubernetes.io/managed-by=kustomize || echo "No workloads found"
-          echo "\n🎯 Pods:"
-          kubectl get pods -o wide || echo "No pods found"
-          echo "\n🌐 Services:"
-          kubectl get services -l app.kubernetes.io/managed-by=kustomize || echo "No services found"
-          echo "\n💾 PVCs:"
-          kubectl get pvc || echo "No PVCs found"
-
-          # Show pod events if PVC cleanup ran
-          if [ "${{ steps.pvc-cleanup-test.outputs.pvc_cleanup_ran }}" = "true" ]; then
-            echo "\n📋 Recent pod events (for troubleshooting):"
-            kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -30 || true
-          fi
+          steps.deploy-control.outputs.service_enabled == 'true' &&
+          steps.deploy-control.outputs.auto_deploy == 'true' &&
+          steps.deploy-control.outputs.service_auto_deploy == 'true'
+        uses: ./.github/actions/deploy-k8s-resources
+        with:
+          kustomizePath: infra/k8s/hetzner/test
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          statefulset_timeout: ${{ steps.deploy-control.outputs.statefulset_timeout }}
+          deployment_timeout: ${{ steps.deploy-control.outputs.deployment_timeout }}
+          daemonset_timeout: ${{ steps.deploy-control.outputs.daemonset_timeout }}
+          rollback_on_failure: ${{ steps.deploy-control.outputs.rollback_on_failure }}
+          statefulset_rollback: ${{ steps.deploy-control.outputs.statefulset_rollback }}
+        env:
+          POSTGRES_SA_PASSWORD: ${{ secrets.POSTGRES_SA_PASSWORD }}
+          ACCOUNT_SERVICE_DB_USER_PASSWORD: ${{ secrets.ACCOUNT_SERVICE_DB_USER_PASSWORD }}
+          MESSAGING_SERVICE_DB_USER_PASSWORD: ${{ secrets.MESSAGING_SERVICE_DB_USER_PASSWORD }}
+          PROPERTY_SERVICE_DB_USER_PASSWORD: ${{ secrets.PROPERTY_SERVICE_DB_USER_PASSWORD }}
+          REDIS_ADMIN_PASSWORD: ${{ secrets.REDIS_ADMIN_PASSWORD }}
+          REDIS_PUBSUB_PASSWORD: ${{ secrets.REDIS_PUBSUB_PASSWORD }}
+          REDIS_CACHE_PASSWORD: ${{ secrets.REDIS_CACHE_PASSWORD }}
+          REDIS_RATELIMIT_PASSWORD: ${{ secrets.REDIS_RATELIMIT_PASSWORD }}
+          REDIS_MONITOR_PASSWORD: ${{ secrets.REDIS_MONITOR_PASSWORD }}
 
   deploy-prod:
     if: |
@@ -1291,12 +328,13 @@ jobs:
           rollback_on_failure=$(yq '.environments.prod.services.postgres.rollback_on_failure // false' infra/deploy-control.yaml)
 
           # Deployment strategies (for StatefulSet rollout)
-          statefulset_strategy=$(yq '.deployment_strategies.statefulset.strategy // "RollingUpdate"' infra/deploy-control.yaml)
-          statefulset_wait=$(yq '.deployment_strategies.statefulset.wait_for_ready // true' infra/deploy-control.yaml)
           statefulset_timeout=$(yq '.deployment_strategies.statefulset.timeout // "10m"' infra/deploy-control.yaml)
+          deployment_timeout=$(yq '.deployment_strategies.deployment.timeout // "10m"' infra/deploy-control.yaml)
+          daemonset_timeout=$(yq '.deployment_strategies.daemonset.timeout // "10m"' infra/deploy-control.yaml)
           statefulset_rollback=$(yq '.deployment_strategies.statefulset.rollback_on_failure // true' infra/deploy-control.yaml)
 
           # Export all values
+          echo "global_auto_deploy=$global_auto_deploy" >> $GITHUB_OUTPUT
           echo "enabled=$enabled" >> $GITHUB_OUTPUT
           echo "auto_deploy=$auto_deploy" >> $GITHUB_OUTPUT
           echo "require_manual_approval=$require_manual_approval" >> $GITHUB_OUTPUT
@@ -1309,6 +347,8 @@ jobs:
           echo "service_require_approval=$service_require_approval" >> $GITHUB_OUTPUT
           echo "rollback_on_failure=$rollback_on_failure" >> $GITHUB_OUTPUT
           echo "statefulset_timeout=$statefulset_timeout" >> $GITHUB_OUTPUT
+          echo "deployment_timeout=$deployment_timeout" >> $GITHUB_OUTPUT
+          echo "daemonset_timeout=$daemonset_timeout" >> $GITHUB_OUTPUT
           echo "statefulset_rollback=$statefulset_rollback" >> $GITHUB_OUTPUT
 
           # ═══════════════════════════════════════════════════════════════
@@ -1364,29 +404,6 @@ jobs:
           fi
 
           # 8. Check deployment windows
-          # 5. Check auto-deploy (service level)
-          if [ "$service_auto_deploy" != "true" ]; then
-            echo "⚠️  PostgreSQL service auto-deployment is disabled"
-            echo "Set 'services.postgres.auto_deploy: true' to enable deployment"
-            exit 0
-          fi
-
-          # 6. Check manual approval requirement (environment level)
-          if [ "$require_manual_approval" == "true" ]; then
-            echo "⚠️  Manual approval required for prod environment"
-            echo "This deployment requires manual approval. Configure reviewers in GitHub Environment settings."
-            echo "Note: GitHub Actions 'environment' keyword provides the approval gate automatically."
-            # Don't exit - GitHub Actions environment protection handles this
-          fi
-
-          # 7. Check manual approval requirement (service level)
-          if [ "$service_require_approval" == "true" ]; then
-            echo "⚠️  Manual approval required for PostgreSQL service"
-            echo "This service deployment requires manual approval."
-            # Don't exit - GitHub Actions environment protection handles this
-          fi
-
-          # 8. Check deployment windows
           if [ "$deployment_windows_enabled" == "true" ]; then
             current_day=$(date +%a)
             current_time=$(date +%H:%M)
@@ -1418,415 +435,29 @@ jobs:
 
           echo "✅ All deployment control checks passed"
 
-      - name: Install kubectl
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        uses: azure/setup-kubectl@v4
-        with:
-          version: "latest"
-
-      - name: Install Kustomize
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
-          sudo mv kustomize /usr/local/bin/
-
-      - name: Configure kubectl
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
-          chmod 600 ~/.kube/config
-          kubectl cluster-info
-
-      - name: Substitute secrets in secret file
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          # Process PostgreSQL secrets (same pattern as dev/test)
-          yq eval '.stringData.POSTGRES_SA_PASSWORD = "${{ secrets.POSTGRES_SA_PASSWORD }}"' infra/k8s/base/secrets/postgres.secret.yaml | \
-          yq eval '.stringData.ACCOUNT_SERVICE_DB_USER_PASSWORD = "${{ secrets.ACCOUNT_SERVICE_DB_USER_PASSWORD }}"' - | \
-          yq eval '.stringData.MESSAGING_SERVICE_DB_USER_PASSWORD = "${{ secrets.MESSAGING_SERVICE_DB_USER_PASSWORD }}"' - | \
-          yq eval '.stringData.PROPERTY_SERVICE_DB_USER_PASSWORD = "${{ secrets.PROPERTY_SERVICE_DB_USER_PASSWORD }}"' - \
-          > /tmp/postgres.secret.processed.yaml
-          mv /tmp/postgres.secret.processed.yaml infra/k8s/base/secrets/postgres.secret.yaml
-
-          # Process Redis ACL secrets (enterprise mode - 5 users)
-          yq eval '.stringData.REDIS_ADMIN_PASSWORD = "${{ secrets.REDIS_ADMIN_PASSWORD }}"' infra/k8s/base/secrets/redis.secret.yaml | \
-          yq eval '.stringData.REDIS_PUBSUB_PASSWORD = "${{ secrets.REDIS_PUBSUB_PASSWORD }}"' - | \
-          yq eval '.stringData.REDIS_CACHE_PASSWORD = "${{ secrets.REDIS_CACHE_PASSWORD }}"' - | \
-          yq eval '.stringData.REDIS_RATELIMIT_PASSWORD = "${{ secrets.REDIS_RATELIMIT_PASSWORD }}"' - | \
-          yq eval '.stringData.REDIS_MONITOR_PASSWORD = "${{ secrets.REDIS_MONITOR_PASSWORD }}"' - \
-          > /tmp/redis.secret.processed.yaml
-          mv /tmp/redis.secret.processed.yaml infra/k8s/base/secrets/redis.secret.yaml
-
-      - name: Build Kustomize manifests
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          echo "🏭️  Building Kustomize manifests for prod environment..."
-          kustomize build infra/k8s/hetzner/prod --enable-alpha-plugins > manifests.yaml
-          echo "✅ Manifests built successfully"
-
-      - name: Apply manifests with immutable field handling
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          echo "🚀 Deploying to prod cluster..."
-
-          # Try to apply normally first (with prune to remove renamed/deleted resources)
-          if ! kubectl apply -f manifests.yaml --prune -l app.kubernetes.io/managed-by=kustomize 2>&1 | tee apply.log; then
-            # Check for immutable field errors across multiple resource types
-            RESOURCE_TYPE=""
-            DISPLAY_NAME=""
-            DELETE_ARGS=""
-            NAME_PATTERN=""
-            
-            if grep -q "Forbidden.*updates to statefulset spec.*are forbidden" apply.log; then
-              RESOURCE_TYPE="statefulset"
-              DISPLAY_NAME="StatefulSet"
-              DELETE_ARGS="--cascade=orphan"
-              NAME_PATTERN='Resource=statefulsets.*?Name: "\K[^"]+'
-            elif grep -q "Forbidden.*updates to deployment spec.*are forbidden" apply.log; then
-              RESOURCE_TYPE="deployment"
-              DISPLAY_NAME="Deployment"
-              DELETE_ARGS="--cascade=orphan"
-              NAME_PATTERN='Resource=deployments.*?Name: "\K[^"]+'
-            elif grep -qE "spec\.clusterIP.*immutable|spec\.type.*immutable" apply.log; then
-              RESOURCE_TYPE="service"
-              DISPLAY_NAME="Service"
-              DELETE_ARGS=""
-              NAME_PATTERN='Resource=services.*?Name: "\K[^"]+'
-            elif grep -q "Forbidden.*updates to daemonset spec.*are forbidden" apply.log; then
-              RESOURCE_TYPE="daemonset"
-              DISPLAY_NAME="DaemonSet"
-              DELETE_ARGS="--cascade=orphan"
-              NAME_PATTERN='Resource=daemonsets.*?Name: "\K[^"]+'
-            elif grep -qE "spec\.selector.*immutable|spec\.completions.*cannot be decreased" apply.log; then
-              RESOURCE_TYPE="job"
-              DISPLAY_NAME="Job"
-              DELETE_ARGS=""
-              NAME_PATTERN='Resource=jobs.*?Name: "\K[^"]+'
-            fi
-            
-            if [ -n "$RESOURCE_TYPE" ]; then
-              echo ""
-              echo "⚠️  Detected immutable $DISPLAY_NAME field changes"
-              echo "🔍 Identifying affected ${DISPLAY_NAME}s..."
-              
-              # Extract resource names that failed
-              FAILED_RESOURCES=$(grep -oP "$NAME_PATTERN" apply.log || echo "")
-              
-              if [ -z "$FAILED_RESOURCES" ]; then
-                echo "❌ Could not identify failed ${DISPLAY_NAME}s from error message"
-                echo "Error log:"
-                cat apply.log
-                exit 1
-              fi
-              
-              echo "📋 ${DISPLAY_NAME}s requiring recreation:"
-              echo "$FAILED_RESOURCES" | while read res; do
-                echo "  - $res"
-              done
-              
-              # Delete each failed resource
-              CASCADE_INFO=""
-              [ "$DELETE_ARGS" = "--cascade=orphan" ] && CASCADE_INFO=" (preserving dependent resources)"
-              echo ""
-              echo "🗑️  Deleting ${DISPLAY_NAME}s with immutable field conflicts${CASCADE_INFO}..."
-              echo "$FAILED_RESOURCES" | while read res; do
-                if [ -n "$res" ]; then
-                  echo "  Deleting $DISPLAY_NAME: $res"
-                  kubectl delete "$RESOURCE_TYPE" "$res" $DELETE_ARGS || true
-                fi
-              done
-              
-              echo ""
-              echo "🔄 Retrying deployment with recreated ${DISPLAY_NAME}s..."
-              kubectl apply -f manifests.yaml --prune -l app.kubernetes.io/managed-by=kustomize
-            else
-              echo "❌ Deployment failed with non-immutable-field error:"
-              cat apply.log
-              exit 1
-            fi
-          else
-            echo "✅ Deployment successful (no immutable field conflicts)"
-          fi
-
-          # Force rollout restart to apply config changes (probes, env vars)
-          echo "🔄 Forcing rollout restart for configuration changes..."
-          STATEFULSETS=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
-          if [ -n "$STATEFULSETS" ]; then
-            for sts in $STATEFULSETS; do
-              kubectl rollout restart statefulset/$sts
-            done
-          fi
-          DEPLOYMENTS=$(kubectl get deployment -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
-          if [ -n "$DEPLOYMENTS" ]; then
-            for deploy in $DEPLOYMENTS; do
-              kubectl rollout restart deployment/$deploy
-            done
-          fi
-          echo "⏳ Waiting 60 seconds for pods to terminate and restart..."
-          sleep 60
-
-      - name: Clean corrupted PVCs if pods still failing
-        id: pvc-cleanup-prod
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          echo "🔍 Checking if pods are ready after restart with new config..."
-          echo "⏳ Waiting additional 30s for pods to stabilize..."
-          sleep 30
-
-          echo "📊 Current pod status:"
-          kubectl get pods -o wide
-
-          echo ""
-          echo "📋 Pod conditions:"
-          kubectl get pods -o json | jq '.items[] | {name: .metadata.name, ready: (.status.conditions[] | select(.type=="Ready") | .status), phase: .status.phase, restarts: .status.containerStatuses[0].restartCount}'
-
-          echo ""
-          echo "🔎 Detecting non-ready pods..."
-          # Check for ANY pod that's not running and ready
-          # Includes: CrashLoopBackOff, ImagePullBackOff, Pending, or Ready!=True
-          PODS=$(kubectl get pods -o json 2>/dev/null | jq -r '.items[] | select(
-            (.status.phase != "Running") or 
-            (.status.conditions[]? | select(.type == "Ready") | .status != "True")
-          ) | .metadata.name' || echo "")
-
-          echo "Detection result: [$PODS]"
-          echo "pvc_cleanup_ran=false" >> $GITHUB_OUTPUT
-
-          if [ -n "$PODS" ]; then
-            echo "⚠️  Found pods that are NOT ready 90s after restart:"
-            echo "$PODS"
-            
-            PVC_DELETED=false
-            for pod in $PODS; do
-              echo ""
-              echo "🔍 Analyzing $pod..."
-              
-              LOGS=$(kubectl logs $pod --tail=100 2>&1 || echo "")
-              echo "Last 20 lines of logs:"
-              echo "$LOGS" | tail -20
-              
-              if echo "$LOGS" | grep -qi "manifest has unsupported version\|corruption\|badger"; then
-                echo "❌ Detected BadgerDB corruption in $pod - likely incompatible with new version"
-                
-                STS_NAME=$(echo $pod | sed 's/-[0-9]*$//')
-                PVC=$(kubectl get pvc -o json | jq -r ".items[] | select(.metadata.name | contains(\"$STS_NAME\")) | .metadata.name" | head -1)
-                
-                if [ -n "$PVC" ]; then
-                  echo "🗑️  Deleting corrupted PVC: $PVC"
-                  kubectl delete pod $pod --force --grace-period=0 || true
-                  kubectl delete pvc $PVC || true
-                  echo "✅ Cleaned up $pod and $PVC - will recreate with fresh data"
-                  PVC_DELETED=true
-                else
-                  echo "ℹ️  No PVC found for $pod"
-                fi
-              else
-                echo "ℹ️  No BadgerDB corruption detected in logs - pod may recover naturally"
-              fi
-            done
-            
-            if [ "$PVC_DELETED" = "true" ]; then
-              echo "pvc_cleanup_ran=true" >> $GITHUB_OUTPUT
-              echo "rollout_success=true" >> $GITHUB_OUTPUT
-              echo "⏭️  PVC deleted - pod will recreate in background (skipping 2min rollout wait)"
-            fi
-          else
-            echo "✅ No pods with persistent failures - new config working!"
-          fi
-
-      - name: Check pod status immediately after apply
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          echo "📊 Pod status after apply:"
-          kubectl get pods
-
-      - name: Wait for workload rollout
-        id: rollout
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true' && steps.pvc-cleanup-prod.outputs.pvc_cleanup_ran != 'true' && steps.pvc-cleanup-prod.outputs.rollout_success != 'true'
-        run: |
-          echo "⏳ Waiting for rollout to complete (timeout: ${{ steps.deploy-control.outputs.statefulset_timeout }})..."
-
-          ROLLOUT_FAILED=false
-
-          # Check StatefulSets from kustomize-built manifests (avoids label-dependency)
-          STATEFULSETS=$(yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-          if [ -n "$STATEFULSETS" ]; then
-            echo "📋 Found StatefulSets: $STATEFULSETS"
-            for sts in $STATEFULSETS; do
-              echo "\n🔄 Checking rollout status for StatefulSet/$sts..."
-              if ! kubectl rollout status statefulset/$sts --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
-                echo "❌ StatefulSet $sts rollout failed or timed out"
-                ROLLOUT_FAILED=true
-                break
-              fi
-              echo "✅ StatefulSet $sts deployment completed"
-            done
-          else
-            echo "ℹ️  No StatefulSets found"
-          fi
-
-          # Check Deployments (only if no failures so far)
-          if [ "$ROLLOUT_FAILED" = "false" ]; then
-            DEPLOYMENTS=$(yq -N e 'select(.kind == "Deployment") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-            if [ -n "$DEPLOYMENTS" ]; then
-              echo "\n📋 Found Deployments: $DEPLOYMENTS"
-              for deploy in $DEPLOYMENTS; do
-                echo "\n🔄 Checking rollout status for Deployment/$deploy..."
-                if ! kubectl rollout status deployment/$deploy --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
-                  echo "❌ Deployment $deploy rollout failed or timed out"
-                  ROLLOUT_FAILED=true
-                  break
-                fi
-                echo "✅ Deployment $deploy deployment completed"
-              done
-            else
-              echo "ℹ️  No Deployments found"
-            fi
-          fi
-
-          # Check DaemonSets (only if no failures so far)
-          if [ "$ROLLOUT_FAILED" = "false" ]; then
-            DAEMONSETS=$(yq -N e 'select(.kind == "DaemonSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-            if [ -n "$DAEMONSETS" ]; then
-              echo "\n📋 Found DaemonSets: $DAEMONSETS"
-              for ds in $DAEMONSETS; do
-                echo "\n🔄 Checking rollout status for DaemonSet/$ds..."
-                if ! kubectl rollout status daemonset/$ds --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
-                  echo "❌ DaemonSet $ds rollout failed or timed out"
-                  ROLLOUT_FAILED=true
-                  break
-                fi
-                echo "✅ DaemonSet $ds deployment completed"
-              done
-            else
-              echo "ℹ️  No DaemonSets found"
-            fi
-          fi
-
-          if [ "$ROLLOUT_FAILED" = "true" ]; then
-            # Check if rollback is enabled (either service-level OR deployment-strategy level)
-            if [ "${{ steps.deploy-control.outputs.rollback_on_failure }}" == "true" ] || [ "${{ steps.deploy-control.outputs.statefulset_rollback }}" == "true" ]; then
-              echo "🔄 Rollback enabled - triggering rollback..."
-              echo "Rollback trigger: rollback_on_failure=${{ steps.deploy-control.outputs.rollback_on_failure }}, statefulset_rollback=${{ steps.deploy-control.outputs.statefulset_rollback }}"
-              echo "rollback_needed=true" >> $GITHUB_OUTPUT
-            else
-              echo "⚠️  Rollback disabled - deployment will remain in failed state"
-            fi
-            exit 1
-          fi
-
-          echo "\n✅ All workloads deployed successfully"
-          echo "rollout_success=true" >> $GITHUB_OUTPUT
-
-      - name: Rollback on failure
+      - name: Deploy env (DRY composite)
         if: |
-          always() &&
+          steps.deploy-control.outputs.global_auto_deploy == 'true' &&
           steps.deploy-control.outputs.enabled == 'true' &&
-          steps.rollout.outputs.rollback_needed == 'true' &&
-          steps.pvc-cleanup-prod.outputs.pvc_cleanup_ran != 'true' &&
-          steps.pvc-cleanup-prod.outputs.rollout_success != 'true'
-        run: |
-          echo "🔄 Rolling back workload deployments due to failure..."
-
-          ROLLBACK_FAILED=false
-
-          # Rollback StatefulSets from manifests list
-          STATEFULSETS=$(yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-          if [ -n "$STATEFULSETS" ]; then
-            echo "📋 Rolling back StatefulSets: $STATEFULSETS"
-            for sts in $STATEFULSETS; do
-              echo "\n🔄 Rolling back StatefulSet/$sts..."
-              if ! kubectl rollout undo statefulset/$sts; then
-                echo "❌ Failed to initiate rollback for StatefulSet/$sts"
-                ROLLBACK_FAILED=true
-                continue
-              fi
-              if ! kubectl rollout status statefulset/$sts --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
-                echo "❌ StatefulSet/$sts rollback did not complete successfully"
-                ROLLBACK_FAILED=true
-              else
-                echo "✅ StatefulSet $sts rollback completed"
-              fi
-            done
-          else
-            echo "ℹ️  No StatefulSets found to rollback"
-          fi
-
-          # Rollback Deployments
-          DEPLOYMENTS=$(kubectl get deployment -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
-          if [ -n "$DEPLOYMENTS" ]; then
-            echo "\n📋 Rolling back Deployments: $DEPLOYMENTS"
-            for deploy in $DEPLOYMENTS; do
-              echo "\n🔄 Rolling back Deployment/$deploy..."
-              if ! kubectl rollout undo deployment/$deploy; then
-                echo "❌ Failed to initiate rollback for Deployment/$deploy"
-                ROLLBACK_FAILED=true
-                continue
-              fi
-              if ! kubectl rollout status deployment/$deploy --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
-                echo "❌ Deployment/$deploy rollback did not complete successfully"
-                ROLLBACK_FAILED=true
-              else
-                echo "✅ Deployment $deploy rollback completed"
-              fi
-            done
-          else
-            echo "ℹ️  No Deployments found to rollback"
-          fi
-
-          # Rollback DaemonSets
-          DAEMONSETS=$(kubectl get daemonset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
-          if [ -n "$DAEMONSETS" ]; then
-            echo "\n📋 Rolling back DaemonSets: $DAEMONSETS"
-            for ds in $DAEMONSETS; do
-              echo "\n🔄 Rolling back DaemonSet/$ds..."
-              if ! kubectl rollout undo daemonset/$ds; then
-                echo "❌ Failed to initiate rollback for DaemonSet/$ds"
-                ROLLBACK_FAILED=true
-                continue
-              fi
-              if ! kubectl rollout status daemonset/$ds --timeout=${{ steps.deploy-control.outputs.statefulset_timeout }}; then
-                echo "❌ DaemonSet/$ds rollback did not complete successfully"
-                ROLLBACK_FAILED=true
-              else
-                echo "✅ DaemonSet $ds rollback completed"
-              fi
-            done
-          else
-            echo "ℹ️  No DaemonSets found to rollback"
-          fi
-
-          if [ "$ROLLBACK_FAILED" = "true" ]; then
-            echo "\n⚠️  Some rollbacks failed - manual intervention may be required"
-            exit 1
-          fi
-
-          # Exit with error to mark workflow as failed
-          echo "\n❌ Deployment failed and was rolled back"
-          exit 1
-
-      - name: Verify deployment
-        if: steps.deploy-control.outputs.enabled == 'true' && steps.deploy-control.outputs.auto_deploy == 'true'
-        run: |
-          echo "🔍 Verifying deployment..."
-
-          if [ "${{ steps.pvc-cleanup-prod.outputs.pvc_cleanup_ran }}" = "true" ]; then
-            echo "\n⚠️  Note: PVC cleanup ran - rollout wait was skipped to save time"
-            echo "Pod is recreating in background with fresh data. Check status below:"
-          fi
-
-          echo "\n📦 Workloads:"
-          kubectl get statefulset,deployment,daemonset -l app.kubernetes.io/managed-by=kustomize || echo "No workloads found"
-          echo "\n🎯 Pods:"
-          kubectl get pods -o wide || echo "No pods found"
-          echo "\n🌐 Services:"
-          kubectl get services -l app.kubernetes.io/managed-by=kustomize || echo "No services found"
-          echo "\n💾 PVCs:"
-          kubectl get pvc || echo "No PVCs found"
-
-          # Show pod events if PVC cleanup ran
-          if [ "${{ steps.pvc-cleanup-prod.outputs.pvc_cleanup_ran }}" = "true" ]; then
-            echo "\n📋 Recent pod events (for troubleshooting):"
-            kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -30 || true
-          fi
+          steps.deploy-control.outputs.service_enabled == 'true' &&
+          steps.deploy-control.outputs.auto_deploy == 'true' &&
+          steps.deploy-control.outputs.service_auto_deploy == 'true'
+        uses: ./.github/actions/deploy-k8s-resources
+        with:
+          kustomizePath: infra/k8s/hetzner/prod
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          statefulset_timeout: ${{ steps.deploy-control.outputs.statefulset_timeout }}
+          deployment_timeout: ${{ steps.deploy-control.outputs.deployment_timeout }}
+          daemonset_timeout: ${{ steps.deploy-control.outputs.daemonset_timeout }}
+          rollback_on_failure: ${{ steps.deploy-control.outputs.rollback_on_failure }}
+          statefulset_rollback: ${{ steps.deploy-control.outputs.statefulset_rollback }}
+        env:
+          POSTGRES_SA_PASSWORD: ${{ secrets.POSTGRES_SA_PASSWORD }}
+          ACCOUNT_SERVICE_DB_USER_PASSWORD: ${{ secrets.ACCOUNT_SERVICE_DB_USER_PASSWORD }}
+          MESSAGING_SERVICE_DB_USER_PASSWORD: ${{ secrets.MESSAGING_SERVICE_DB_USER_PASSWORD }}
+          PROPERTY_SERVICE_DB_USER_PASSWORD: ${{ secrets.PROPERTY_SERVICE_DB_USER_PASSWORD }}
+          REDIS_ADMIN_PASSWORD: ${{ secrets.REDIS_ADMIN_PASSWORD }}
+          REDIS_PUBSUB_PASSWORD: ${{ secrets.REDIS_PUBSUB_PASSWORD }}
+          REDIS_CACHE_PASSWORD: ${{ secrets.REDIS_CACHE_PASSWORD }}
+          REDIS_RATELIMIT_PASSWORD: ${{ secrets.REDIS_RATELIMIT_PASSWORD }}
+          REDIS_MONITOR_PASSWORD: ${{ secrets.REDIS_MONITOR_PASSWORD }}

@@ -565,9 +565,9 @@ kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins | kubectl diff -f -
 6. **Error-driven apply**: Try `kubectl apply` → On immutable field error → Extract failed resource names → Delete with `--cascade=orphan` → Retry
 7. **Wait for workload rollout** with configurable timeout:
    - Dynamically discovers all workloads: StatefulSets, Deployments, DaemonSets
-   - Uses label selector: `app.kubernetes.io/managed-by=kustomize`
+   - Uses manifest-based discovery: `yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml`
    - Checks rollout status for each: `kubectl rollout status {type}/{name}`
-   - Early exit on first failure (stops checking remaining workloads)
+   - Fail-but-continue pattern: checks ALL workload types even if earlier ones fail (better diagnostics)
 8. **Rollback on failure** (if enabled):
    - Attempts rollback for ALL workload types (StatefulSets, Deployments, DaemonSets)
    - Continues rollback attempts even if individual rollbacks fail
@@ -575,15 +575,15 @@ kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins | kubectl diff -f -
 
 **Kubernetes Immutable Field Handling**: Uses error-driven pattern to handle immutable fields across **5 resource types** (StatefulSet, Deployment, Service, DaemonSet, Job). Instead of preemptive checks, lets kubectl fail first, then parses stderr to identify resource type and extract specific resource names, deletes only those affected resources. Uses `--cascade=orphan` for stateful resources (preserves PVCs/Pods). This eliminates false positives and scales to any number of resources. Applied to all deployment targets: GitHub Actions (dev L312, test L636, prod L983) and local (kubectl-local-context.js).
 
-**Workload Discovery Pattern**: All workload operations use dynamic discovery:
+**Workload Discovery Pattern**: All workload operations use manifest-based discovery:
 
 ```bash
-STATEFULSETS=$(kubectl get statefulset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
-DEPLOYMENTS=$(kubectl get deployment -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
-DAEMONSETS=$(kubectl get daemonset -l app.kubernetes.io/managed-by=kustomize -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+STATEFULSETS=$(yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+DEPLOYMENTS=$(yq -N e 'select(.kind == "Deployment") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+DAEMONSETS=$(yq -N e 'select(.kind == "DaemonSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
 ```
 
-This pattern ensures the workflow automatically adapts to any workload type without code changes.
+This pattern ensures the workflow uses a single source of truth (manifests.yaml), eliminating kubectl API calls and improving consistency across rollout/rollback operations.
 
 **Rollback logic** (combined OR):
 

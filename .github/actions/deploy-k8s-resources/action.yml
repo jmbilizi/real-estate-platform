@@ -1,0 +1,313 @@
+name: "K8s Deploy"
+description: "Build, apply, validate, and optionally rollback workloads for a Kustomize env"
+inputs:
+  kustomizePath:
+    description: "Path to kustomize overlay (e.g., infra/k8s/hetzner/dev)"
+    required: true
+  kubeconfig:
+    description: "Kubeconfig content to write to ~/.kube/config"
+    required: true
+  statefulset_timeout:
+    description: "Timeout for rollout of StatefulSets"
+    required: true
+  deployment_timeout:
+    description: "Timeout for rollout of Deployments"
+    required: true
+  daemonset_timeout:
+    description: "Timeout for rollout of DaemonSets"
+    required: true
+  rollback_on_failure:
+    description: "Service-level rollback enabled"
+    required: true
+  statefulset_rollback:
+    description: "Strategy-level rollback enabled"
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - name: Install tools (kubectl, yq, jq, kustomize)
+      shell: bash
+      run: |
+        echo "Installing yq and jq"
+        sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+        sudo chmod +x /usr/local/bin/yq
+        sudo apt-get update && sudo apt-get install -y jq
+        echo "Installing kubectl"
+        curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+        sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+        echo "Installing kustomize"
+        curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+        sudo mv kustomize /usr/local/bin/
+
+    - name: Configure kubectl
+      shell: bash
+      run: |
+        mkdir -p ~/.kube
+        echo "${{ inputs.kubeconfig }}" > ~/.kube/config
+        chmod 600 ~/.kube/config
+        kubectl version --client
+        kubectl cluster-info
+
+    - name: Substitute secrets (Postgres, Redis)
+      shell: bash
+      run: |
+        # In-memory substitution pattern; overwrite templates in workspace
+        yq eval '.stringData.POSTGRES_SA_PASSWORD = env(POSTGRES_SA_PASSWORD)' infra/k8s/base/secrets/postgres.secret.yaml | \
+        yq eval '.stringData.ACCOUNT_SERVICE_DB_USER_PASSWORD = env(ACCOUNT_SERVICE_DB_USER_PASSWORD)' - | \
+        yq eval '.stringData.MESSAGING_SERVICE_DB_USER_PASSWORD = env(MESSAGING_SERVICE_DB_USER_PASSWORD)' - | \
+        yq eval '.stringData.PROPERTY_SERVICE_DB_USER_PASSWORD = env(PROPERTY_SERVICE_DB_USER_PASSWORD)' - \
+        > /tmp/postgres.secret.processed.yaml
+        mv /tmp/postgres.secret.processed.yaml infra/k8s/base/secrets/postgres.secret.yaml
+
+        yq eval '.stringData.REDIS_ADMIN_PASSWORD = env(REDIS_ADMIN_PASSWORD)' infra/k8s/base/secrets/redis.secret.yaml | \
+        yq eval '.stringData.REDIS_PUBSUB_PASSWORD = env(REDIS_PUBSUB_PASSWORD)' - | \
+        yq eval '.stringData.REDIS_CACHE_PASSWORD = env(REDIS_CACHE_PASSWORD)' - | \
+        yq eval '.stringData.REDIS_RATELIMIT_PASSWORD = env(REDIS_RATELIMIT_PASSWORD)' - | \
+        yq eval '.stringData.REDIS_MONITOR_PASSWORD = env(REDIS_MONITOR_PASSWORD)' - \
+        > /tmp/redis.secret.processed.yaml
+        mv /tmp/redis.secret.processed.yaml infra/k8s/base/secrets/redis.secret.yaml
+
+    - name: Build manifests
+      shell: bash
+      run: |
+        echo "Building manifests for ${{ inputs.kustomizePath }}"
+        kustomize build "${{ inputs.kustomizePath }}" --enable-alpha-plugins > manifests.yaml
+
+    - name: PVC cleanup (BadgerDB corruption handling)
+      id: pvc_cleanup
+      shell: bash
+      run: |
+        echo "🧹 Checking pods for persistent failures (CrashLoopBackOff/Init:Error)..."
+        FAILED_PODS=$(kubectl get pods -o json | jq -r '.items[] | select(.status.containerStatuses[]? // [] | any(.state.waiting.reason == "CrashLoopBackOff" or .state.waiting.reason == "CreateContainerConfigError" or .state.waiting.reason == "ErrImagePull")) | .metadata.name' || echo "")
+        if [ -n "$FAILED_PODS" ]; then
+          echo "❌ Found pods with persistent failures:"
+          echo "$FAILED_PODS" | tr ' ' '\n'
+          PVC_DELETED=false
+          for pod in $FAILED_PODS; do
+            echo "\n🔎 Inspecting logs for $pod..."
+            LOGS=$(kubectl logs $pod --all-containers --tail=200 2>/dev/null || echo "")
+            if echo "$LOGS" | grep -qi "manifest has unsupported version\|corruption\|badger"; then
+              echo "❌ Detected BadgerDB corruption in $pod - likely incompatible with new version"
+              STS_NAME=$(echo $pod | sed 's/-[0-9]*$//')
+              PVC=$(kubectl get pvc -o json | jq -r ".items[] | select(.metadata.name | contains(\"$STS_NAME\")) | .metadata.name" | head -1)
+              if [ -n "$PVC" ]; then
+                echo "🗑️  Deleting corrupted PVC: $PVC"
+                kubectl delete pod $pod --force --grace-period=0 || true
+                kubectl delete pvc $PVC || true
+                echo "✅ Cleaned up $pod and $PVC - will recreate with fresh data"
+                PVC_DELETED=true
+              else
+                echo "ℹ️  No PVC found for $pod"
+              fi
+            else
+              echo "ℹ️  No BadgerDB corruption detected in logs - pod may recover naturally"
+            fi
+          done
+          if [ "$PVC_DELETED" = "true" ]; then
+            echo "pvc_cleanup_ran=true" >> $GITHUB_OUTPUT
+            echo "rollout_success=true" >> $GITHUB_OUTPUT
+            echo "⏭️  PVC deleted - pods will recreate in background (skip rollout wait)"
+          fi
+        else
+          echo "✅ No pods with persistent failures - new config working!"
+        fi
+
+    - name: Apply manifests with prune + immutable handling
+      shell: bash
+      run: |
+        set -e
+        echo "Applying manifests (with prune)"
+        if ! kubectl apply -f manifests.yaml --prune -l app.kubernetes.io/managed-by=kustomize 2>&1 | tee apply.log; then
+          echo "❌ Apply failed - checking for immutable field conflicts"
+          RESOURCE_TYPE=""
+          DISPLAY_NAME=""
+          DELETE_ARGS=""
+          NAME_PATTERN=""
+
+          if grep -q "Forbidden.*updates to statefulset spec.*are forbidden" apply.log; then
+            RESOURCE_TYPE="statefulset"
+            DISPLAY_NAME="StatefulSet"
+            DELETE_ARGS="--cascade=orphan"
+            NAME_PATTERN='Resource=statefulsets.*?Name: "\K[^\"]+'
+          elif grep -q "Forbidden.*updates to deployment spec.*are forbidden" apply.log; then
+            RESOURCE_TYPE="deployment"
+            DISPLAY_NAME="Deployment"
+            DELETE_ARGS="--cascade=orphan"
+            NAME_PATTERN='Resource=deployments.*?Name: "\K[^\"]+'
+          elif grep -qE "spec\\.clusterIP.*immutable|spec\\.type.*immutable" apply.log; then
+            RESOURCE_TYPE="service"
+            DISPLAY_NAME="Service"
+            DELETE_ARGS=""
+            NAME_PATTERN='Resource=services.*?Name: "\K[^\"]+'
+          elif grep -q "Forbidden.*updates to daemonset spec.*are forbidden" apply.log; then
+            RESOURCE_TYPE="daemonset"
+            DISPLAY_NAME="DaemonSet"
+            DELETE_ARGS="--cascade=orphan"
+            NAME_PATTERN='Resource=daemonsets.*?Name: "\K[^\"]+'
+          elif grep -qE "spec\\.selector.*immutable|spec\\.completions.*cannot be decreased" apply.log; then
+            RESOURCE_TYPE="job"
+            DISPLAY_NAME="Job"
+            DELETE_ARGS=""
+            NAME_PATTERN='Resource=jobs.*?Name: "\K[^\"]+'
+          fi
+
+          if [ -n "$RESOURCE_TYPE" ]; then
+            echo "\n⚠️  Detected immutable $DISPLAY_NAME field changes"
+            echo "🔍 Identifying affected ${DISPLAY_NAME}s..."
+            FAILED_RESOURCES=$(grep -oP "$NAME_PATTERN" apply.log || echo "")
+            if [ -z "$FAILED_RESOURCES" ]; then
+              echo "❌ Could not identify failed ${DISPLAY_NAME}s from error message"
+              echo "Error log:"
+              cat apply.log
+              exit 1
+            fi
+            echo "📋 ${DISPLAY_NAME}s requiring recreation:"
+            echo "$FAILED_RESOURCES" | while read res; do echo "  - $res"; done
+            CASCADE_INFO=""
+            [ "$DELETE_ARGS" = "--cascade=orphan" ] && CASCADE_INFO=" (preserving dependent resources)"
+            echo "\n🗑️  Deleting ${DISPLAY_NAME}s with immutable field conflicts${CASCADE_INFO}..."
+            echo "$FAILED_RESOURCES" | while read res; do
+              if [ -n "$res" ]; then
+                echo "  Deleting $DISPLAY_NAME: $res"
+                kubectl delete "$RESOURCE_TYPE" "$res" $DELETE_ARGS || true
+              fi
+            done
+            echo "\n🔄 Retrying deployment with recreated ${DISPLAY_NAME}s..."
+            kubectl apply -f manifests.yaml --prune -l app.kubernetes.io/managed-by=kustomize
+          else
+            echo "❌ Deployment failed with non-immutable-field error:"
+            cat apply.log
+            exit 1
+          fi
+        else
+          echo "✅ Deployment successful (no immutable field conflicts)"
+        fi
+
+    - name: Restart only on template change (StatefulSets)
+      shell: bash
+      run: |
+        echo "🔄 Checking if StatefulSet pod templates changed before restarting..."
+        NEED_RESTART_STS=""
+        EXPECTED_STS=$(yq -N e 'select(.kind=="StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' || echo "")
+        for name in $EXPECTED_STS; do
+          DESIRED_RAW=$(yq -N e "select(.kind==\"StatefulSet\" and .metadata.name==\"$name\") | .spec.template" manifests.yaml 2>/dev/null || echo "")
+          LIVE_RAW=$(kubectl get statefulset "$name" -o json 2>/dev/null | jq -c '.spec.template' 2>/dev/null || echo "")
+          DESIRED_TEMPLATE=$(printf "%s" "$DESIRED_RAW" | jq -c '.' 2>/dev/null || echo "")
+          LIVE_TEMPLATE=$(printf "%s" "$LIVE_RAW" | jq -c '.' 2>/dev/null || echo "")
+          if [ -z "$DESIRED_TEMPLATE" ] || [ -z "$LIVE_TEMPLATE" ]; then
+            echo "ℹ️  Skipping $name: unable to parse desired/live pod template"
+            continue
+          fi
+          LIVE_HASH=$(printf "%s" "$LIVE_TEMPLATE" | sha1sum | awk '{print $1}')
+          DESIRED_HASH=$(printf "%s" "$DESIRED_TEMPLATE" | sha1sum | awk '{print $1}')
+          if [ "$LIVE_HASH" != "$DESIRED_HASH" ]; then
+            NEED_RESTART_STS="$NEED_RESTART_STS $name"
+          fi
+        done
+        if [ -n "$NEED_RESTART_STS" ]; then
+          echo "🔄 Forcing rollout restart for changed StatefulSets: $NEED_RESTART_STS"
+          for sts in $NEED_RESTART_STS; do
+            kubectl rollout restart statefulset/$sts || true
+          done
+          echo "⏳ Waiting 60 seconds for pods to terminate and restart..."
+          sleep 60
+        else
+          echo "✅ No StatefulSet pod template changes detected - skipping restart"
+        fi
+
+    - name: Wait for workload rollout
+      id: rollout
+      if: ${{ steps.pvc_cleanup.outputs.pvc_cleanup_ran != 'true' && steps.pvc_cleanup.outputs.rollout_success != 'true' }}
+      shell: bash
+      run: |
+        echo "⏳ Waiting for workloads to be ready..."
+        ROLLOUT_FAILED=false
+
+        # StatefulSets
+        STATEFULSETS=$(yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+        if [ -n "$STATEFULSETS" ]; then
+          echo "📋 Found StatefulSets: $STATEFULSETS"
+          for sts in $STATEFULSETS; do
+            echo "\n🔄 Checking rollout status for StatefulSet/$sts..."
+            if ! kubectl rollout status statefulset/$sts --timeout=${{ inputs.statefulset_timeout }}; then
+              echo "❌ StatefulSet $sts rollout failed"
+              ROLLOUT_FAILED=true
+            else
+              echo "✅ StatefulSet $sts deployment completed"
+            fi
+          done
+        else
+          echo "ℹ️  No StatefulSets found"
+        fi
+
+        # Deployments (always check, even if StatefulSets failed)
+        DEPLOYMENTS=$(yq -N e 'select(.kind == "Deployment") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+        if [ -n "$DEPLOYMENTS" ]; then
+          echo "\n📋 Found Deployments: $DEPLOYMENTS"
+          for deploy in $DEPLOYMENTS; do
+            echo "\n🔄 Checking rollout status for Deployment/$deploy..."
+            if ! kubectl rollout status deployment/$deploy --timeout=${{ inputs.deployment_timeout }}; then
+              echo "❌ Deployment $deploy rollout failed"
+              ROLLOUT_FAILED=true
+            else
+              echo "✅ Deployment $deploy deployment completed"
+            fi
+          done
+        else
+          echo "ℹ️  No Deployments found"
+        fi
+
+        # DaemonSets (always check)
+        DAEMONSETS=$(yq -N e 'select(.kind == "DaemonSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+        if [ -n "$DAEMONSETS" ]; then
+          echo "\n📋 Found DaemonSets: $DAEMONSETS"
+          for ds in $DAEMONSETS; do
+            echo "\n🔄 Checking rollout status for DaemonSet/$ds..."
+            if ! kubectl rollout status daemonset/$ds --timeout=${{ inputs.daemonset_timeout }}; then
+              echo "❌ DaemonSet $ds rollout failed"
+              ROLLOUT_FAILED=true
+            else
+              echo "✅ DaemonSet $ds deployment completed"
+            fi
+          done
+        else
+          echo "ℹ️  No DaemonSets found"
+        fi
+
+        if [ "$ROLLOUT_FAILED" = "true" ]; then
+          echo "rollout_success=false" >> $GITHUB_OUTPUT
+        else
+          echo "\n✅ All workloads deployed successfully"
+          echo "rollout_success=true" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Conditional rollback
+      if: ${{ steps.rollout.outputs.rollout_success != 'true' && (inputs.rollback_on_failure == 'true' || inputs.statefulset_rollback == 'true') }}
+      shell: bash
+      run: |
+        echo "🔄 Rollback enabled - discovering workloads from manifests"
+        STATEFULSETS=$(yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+        for sts in $STATEFULSETS; do
+          echo "\n🔄 Rolling back StatefulSet/$sts..."
+          kubectl rollout undo statefulset/$sts || true
+          kubectl rollout status statefulset/$sts --timeout=${{ inputs.statefulset_timeout }} || true
+        done
+        DEPLOYMENTS=$(yq -N e 'select(.kind == "Deployment") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+        for deploy in $DEPLOYMENTS; do
+          echo "\n🔄 Rolling back Deployment/$deploy..."
+          kubectl rollout undo deployment/$deploy || true
+          kubectl rollout status deployment/$deploy --timeout=${{ inputs.deployment_timeout }} || true
+        done
+        DAEMONSETS=$(yq -N e 'select(.kind == "DaemonSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+        for ds in $DAEMONSETS; do
+          echo "\n🔄 Rolling back DaemonSet/$ds..."
+          kubectl rollout undo daemonset/$ds || true
+          kubectl rollout status daemonset/$ds --timeout=${{ inputs.daemonset_timeout }} || true
+        done
+
+    - name: Mark failure if rollout did not succeed
+      if: ${{ steps.rollout.outputs.rollout_success != 'true' }}
+      shell: bash
+      run: |
+        echo "❌ Deployment failed or rollback executed"
+        exit 1
