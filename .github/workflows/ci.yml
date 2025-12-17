@@ -28,7 +28,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20.19.5"
-          cache: "npm"
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            node-modules-${{ runner.os }}-
 
       - name: Install Node.js dependencies
         run: npm ci
@@ -57,9 +64,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .nx/cache
-          key: nx-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          key: nx-${{ runner.os }}-${{ hashFiles('**/package-lock.json', '**/requirements.txt', '**/*.csproj') }}
           restore-keys: |
-            nx-${{ runner.os }}-node-
             nx-${{ runner.os }}-
 
       # Note: We do NOT run nx:reset in CI to ensure we validate code exactly as committed.
@@ -146,9 +152,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .nx/cache
-          key: nx-${{ runner.os }}-python-${{ hashFiles('**/requirements.txt') }}
+          key: nx-${{ runner.os }}-${{ hashFiles('**/package-lock.json', '**/requirements.txt', '**/*.csproj') }}
           restore-keys: |
-            nx-${{ runner.os }}-python-
             nx-${{ runner.os }}-
 
       - name: Set up Python environment
@@ -238,9 +243,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .nx/cache
-          key: nx-${{ runner.os }}-dotnet-${{ hashFiles('**/*.csproj') }}
+          key: nx-${{ runner.os }}-${{ hashFiles('**/package-lock.json', '**/requirements.txt', '**/*.csproj') }}
           restore-keys: |
-            nx-${{ runner.os }}-dotnet-
             nx-${{ runner.os }}-
 
       - name: Set up .NET environment

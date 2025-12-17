@@ -164,7 +164,8 @@ concurrency:
 **Nx:**
 
 - Computation cache stored at `.nx/cache`
-- Language-specific keys prevent cache pollution
+- Unified cache key across all languages (composite hash of package-lock.json, requirements.txt, \*.csproj)
+- Enables cross-language cache sharing (e.g., Python job reuses Node.js affected computations)
 - Restore keys allow fallback to OS-level cache
 
 ### 3. Nx Affected Optimization (PR-Specific)
