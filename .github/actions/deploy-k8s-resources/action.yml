@@ -1,4 +1,4 @@
-name: "K8s Deploy"
+name: "Deploy K8s Resources"
 description: "Build, apply, validate, and optionally rollback workloads for a Kustomize env"
 inputs:
   kustomizePath:
@@ -327,6 +327,24 @@ runs:
           kubectl rollout undo daemonset/$ds || true
           kubectl rollout status daemonset/$ds --timeout=${{ inputs.daemonset_timeout }} || true
         done
+
+    - name: Verify deployment
+      if: ${{ always() }}
+      shell: bash
+      run: |
+        echo "🔍 Verifying deployed resources"
+        echo "\n📦 Workloads (labeled managed-by=kustomize):"
+        kubectl get statefulset,deployment,daemonset -l app.kubernetes.io/managed-by=kustomize -o wide || echo "No workloads found"
+        echo "\n🎯 Pods:"
+        kubectl get pods -o wide || echo "No pods found"
+        echo "\n🌐 Services (labeled managed-by=kustomize):"
+        kubectl get services -l app.kubernetes.io/managed-by=kustomize || echo "No services found"
+        echo "\n💾 PVCs:"
+        kubectl get pvc || echo "No PVCs found"
+        if [ "${{ steps.pvc_cleanup.outputs.pvc_cleanup_ran }}" = "true" ]; then
+          echo "\n📋 Recent pod events (PVC cleanup was executed):"
+          kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -30 || true
+        fi
 
     - name: Mark failure if rollout did not succeed
       if: ${{ steps.rollout.outputs.rollout_success != 'true' }}

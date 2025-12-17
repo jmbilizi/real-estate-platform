@@ -82,7 +82,7 @@ jobs:
           echo "rollback_on_failure_service=$rollback_on_failure_service" >> $GITHUB_OUTPUT
           echo "statefulset_rollback=$statefulset_rollback" >> $GITHUB_OUTPUT
 
-      - name: Deploy env (DRY composite)
+      - name: Deploy K8s Resources (DRY composite)
         if: |
           steps.deploy-control.outputs.global_auto_deploy == 'true' &&
           steps.deploy-control.outputs.enabled == 'true' &&
