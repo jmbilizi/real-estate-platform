@@ -90,7 +90,7 @@ function addToPath(binDir) {
           "-Command",
           "[System.Environment]::GetEnvironmentVariable('PATH', 'User')",
         ],
-        { encoding: "utf8" }
+        { encoding: "utf8" },
       );
 
       if (currentPathResult.status !== 0) {
@@ -107,7 +107,7 @@ function addToPath(binDir) {
           p
             .trim()
             .toLowerCase()
-            .replace(/[\\\/]+$/, "")
+            .replace(/[\\\/]+$/, ""),
         )
         .filter((p) => p.length > 0);
 
@@ -125,7 +125,7 @@ function addToPath(binDir) {
           "-Command",
           `[System.Environment]::SetEnvironmentVariable('PATH', '${binDir};' + [System.Environment]::GetEnvironmentVariable('PATH', 'User'), 'User')`,
         ],
-        { stdio: "inherit" }
+        { stdio: "inherit" },
       );
 
       if (setPathResult.status !== 0) {
@@ -141,7 +141,7 @@ function addToPath(binDir) {
     } catch (error) {
       logWarning(`Failed to add to PATH automatically: ${error.message}`);
       logWarning(
-        `Manually add "${binDir}" to your System Environment Variables`
+        `Manually add "${binDir}" to your System Environment Variables`,
       );
       return false;
     }
@@ -194,7 +194,7 @@ function refreshPath() {
       {
         encoding: "utf8",
         stdio: "pipe",
-      }
+      },
     );
 
     if (result.status === 0 && result.stdout) {
@@ -212,7 +212,7 @@ function getLatestKustomizeVersion() {
     // Try to get latest version from GitHub API
     const result = run(
       'curl -s "https://api.github.com/repos/kubernetes-sigs/kustomize/releases" | findstr /C:"\\"tag_name\\"" | findstr /C:"kustomize/v" | findstr /V /C:"alpha" | findstr /V /C:"beta"',
-      { silent: true }
+      { silent: true },
     );
 
     if (result.success && result.output) {
@@ -371,7 +371,7 @@ function installKustomize() {
     logWarning("Windows: choco install kustomize");
     logWarning("macOS: brew install kustomize");
     logWarning(
-      `Linux/Manual: Download from https://github.com/kubernetes-sigs/kustomize/releases/tag/kustomize%2F${version}`
+      `Linux/Manual: Download from https://github.com/kubernetes-sigs/kustomize/releases/tag/kustomize%2F${version}`,
     );
 
     return false;
@@ -408,12 +408,12 @@ function main() {
 
   log(
     "\nThis script installs tools for Kubernetes infrastructure development:",
-    "blue"
+    "blue",
   );
   log("  • Kustomize - Kubernetes manifest templating", "blue");
   log(
     "  • kubectl (optional) - Kubernetes CLI for dry-run validation\n",
-    "blue"
+    "blue",
   );
 
   const kustomizeInstalled = installKustomize();
@@ -431,7 +431,7 @@ function main() {
     logSuccess("kubectl is ready (optional)");
   } else {
     logWarning(
-      "kubectl not installed (optional - skip if you don't need dry-run validation)"
+      "kubectl not installed (optional - skip if you don't need dry-run validation)",
     );
   }
 
@@ -443,22 +443,22 @@ function main() {
   log("\n2. Build manifests for local testing:", "cyan");
   log(
     "   kustomize build infra/k8s/{provider}/{env} --enable-alpha-plugins",
-    "bright"
+    "bright",
   );
   log(
     "   Example: kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins",
-    "blue"
+    "blue",
   );
 
   log(
     "\n3. Git hooks will automatically validate Kustomize files on commit/push\n",
-    "cyan"
+    "cyan",
   );
 
   if (!kustomizeInstalled && os.platform() === "win32") {
     log(
       "\n⚠ Windows users: Install Kustomize manually and re-run this script\n",
-      "yellow"
+      "yellow",
     );
     process.exit(1);
   }

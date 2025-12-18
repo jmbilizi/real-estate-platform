@@ -80,7 +80,7 @@ function hasPythonProjectsAffected(isAffected, base) {
     // On feature branch, check for affected Python projects
     const result = run(
       `npx nx show projects --affected --base=${base} --head=HEAD --projects=tag:python`,
-      { silent: true }
+      { silent: true },
     );
     return result.success && result.output && result.output.trim().length > 0;
   } catch (error) {
@@ -103,7 +103,7 @@ function hasDotNetProjectsAffected(isAffected, base) {
     // On feature branch, check for affected .NET projects
     const result = run(
       `npx nx show projects --affected --base=${base} --head=HEAD --projects=tag:dotnet`,
-      { silent: true }
+      { silent: true },
     );
     return result.success && result.output && result.output.trim().length > 0;
   } catch (error) {
@@ -120,7 +120,7 @@ function setupPythonEnvironment() {
   const pythonBinPath = path.join(venvPath, isWindows ? "Scripts" : "bin");
   const pythonExecutable = path.join(
     pythonBinPath,
-    isWindows ? "python.exe" : "python"
+    isWindows ? "python.exe" : "python",
   );
 
   // Check if virtual environment already exists and is valid
@@ -143,7 +143,7 @@ function setupPythonEnvironment() {
 
     if (!fs.existsSync(pythonExecutable)) {
       logError(
-        "Failed to create Python virtual environment. Python checks may fail."
+        "Failed to create Python virtual environment. Python checks may fail.",
       );
       return false;
     }
@@ -188,7 +188,7 @@ function detectValidationMode() {
         {
           encoding: "utf8",
           cwd: path.resolve(__dirname, ".."),
-        }
+        },
       ).trim();
 
       if (upstream && upstream !== "@{u}") {
@@ -395,7 +395,7 @@ function hasInfraFilesChanged() {
       return changedFiles.some(
         (file) =>
           file.startsWith("infra/k8s/") &&
-          (file.endsWith(".yaml") || file.endsWith(".yml"))
+          (file.endsWith(".yaml") || file.endsWith(".yml")),
       );
     }
     return false;
@@ -410,7 +410,7 @@ function checkInfrastructure() {
   if (!hasInfraFilesChanged()) {
     log(
       "\nℹ No infrastructure files changed - skipping Kustomize validation",
-      "cyan"
+      "cyan",
     );
     return true;
   }
@@ -423,7 +423,7 @@ function checkInfrastructure() {
     logWarning("Kustomize not installed - skipping validation");
     logWarning("Install: npm run infra:setup");
     logWarning(
-      "Or install manually: https://kubectl.docs.kubernetes.io/installation/kustomize/"
+      "Or install manually: https://kubectl.docs.kubernetes.io/installation/kustomize/",
     );
     return true; // Don't fail if Kustomize not installed (optional tool)
   }
@@ -446,7 +446,7 @@ function main() {
   log("=".repeat(80), "cyan");
   log(
     "Running: Format + Lint + Type Check (fast, no tests/builds)\n",
-    "yellow"
+    "yellow",
   );
 
   // Early exit if no projects exist (empty workspace)
@@ -505,7 +505,7 @@ function main() {
       logSuccess("Python environment ready");
     } else {
       logWarning(
-        "Python environment setup incomplete - Python checks may fail"
+        "Python environment setup incomplete - Python checks may fail",
       );
     }
   }
@@ -542,7 +542,7 @@ function main() {
   if (allPassed) {
     logSuccess("\n✅ Quick checks passed!");
     logSuccess(
-      "Commit is allowed. Run 'npm run check' before pushing for full validation.\n"
+      "Commit is allowed. Run 'npm run check' before pushing for full validation.\n",
     );
     process.exit(0);
   } else {

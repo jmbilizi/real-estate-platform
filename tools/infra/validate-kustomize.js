@@ -94,7 +94,7 @@ function validateEnvironment(provider, env) {
   // Check if kustomization.yaml exists
   if (
     !fs.existsSync(
-      path.resolve(__dirname, "../..", envPath, "kustomization.yaml")
+      path.resolve(__dirname, "../..", envPath, "kustomization.yaml"),
     )
   ) {
     // Environment doesn't exist for this provider - skip silently
@@ -136,7 +136,7 @@ function main() {
   if (providers.length === 0) {
     logWarning("No cloud providers found in infra/k8s/");
     logWarning(
-      "Expected structure: infra/k8s/{provider}/{env}/kustomization.yaml"
+      "Expected structure: infra/k8s/{provider}/{env}/kustomization.yaml",
     );
     process.exit(0);
   }
@@ -153,7 +153,7 @@ function main() {
       const providerDir = path.resolve(
         __dirname,
         "../..",
-        `infra/k8s/${provider}`
+        `infra/k8s/${provider}`,
       );
       if (fs.existsSync(providerDir)) {
         const entries = fs.readdirSync(providerDir, { withFileTypes: true });
@@ -163,7 +163,7 @@ function main() {
             const kustomizationPath = path.join(
               providerDir,
               entry.name,
-              "kustomization.yaml"
+              "kustomization.yaml",
             );
             if (fs.existsSync(kustomizationPath)) {
               environments.add(entry.name);
@@ -214,7 +214,7 @@ function main() {
     log("\n✅ All Kustomize validations passed\n", "green");
     log(
       `Validated ${Object.keys(results).length} environment(s) across ${providers.length} provider(s)\n`,
-      "cyan"
+      "cyan",
     );
     process.exit(0);
   } else {

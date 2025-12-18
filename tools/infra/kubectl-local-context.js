@@ -21,11 +21,11 @@ const fs = require("fs");
 const yaml = require("js-yaml");
 const configPath = path.resolve(
   __dirname,
-  "../../infra/k8s/podman/local/cluster/cluster-config.yaml"
+  "../../infra/k8s/podman/local/cluster/cluster-config.yaml",
 );
 if (!fs.existsSync(configPath)) {
   console.error(
-    `ERROR: cluster-config.yaml not found at ${configPath}. Please ensure your local cluster config exists and is named correctly.`
+    `ERROR: cluster-config.yaml not found at ${configPath}. Please ensure your local cluster config exists and is named correctly.`,
   );
   process.exit(1);
 }
@@ -44,7 +44,7 @@ if (
   !config.cluster_name.trim()
 ) {
   console.error(
-    "ERROR: cluster-config.yaml is missing a valid 'cluster_name' field. Please specify your cluster name, e.g.\ncluster_name: podman-local"
+    "ERROR: cluster-config.yaml is missing a valid 'cluster_name' field. Please specify your cluster name, e.g.\ncluster_name: podman-local",
   );
   process.exit(1);
 }
@@ -108,7 +108,7 @@ function runKustomizeAndKubectl(op) {
       {
         input: kustomize.stdout,
         stdio: ["pipe", "pipe", "pipe"],
-      }
+      },
     );
 
     if (kubectl.status === 0) {
@@ -162,12 +162,12 @@ function runKustomizeAndKubectl(op) {
 
     // Check which pattern matches
     const matchedPattern = immutableFieldPatterns.find((p) =>
-      p.pattern.test(errorOutput)
+      p.pattern.test(errorOutput),
     );
 
     if (matchedPattern) {
       console.log(
-        `\n⚠️  Detected immutable ${matchedPattern.displayName} field changes`
+        `\n⚠️  Detected immutable ${matchedPattern.displayName} field changes`,
       );
       console.log(`🔍 Identifying affected ${matchedPattern.displayName}s...`);
 
@@ -177,7 +177,7 @@ function runKustomizeAndKubectl(op) {
 
       if (failedResources.length === 0) {
         console.error(
-          `❌ Could not identify failed ${matchedPattern.displayName}s from error message`
+          `❌ Could not identify failed ${matchedPattern.displayName}s from error message`,
         );
         console.error("\nError output:");
         process.stderr.write(kubectl.stderr);
@@ -192,7 +192,7 @@ function runKustomizeAndKubectl(op) {
         ? " (preserving dependent resources)"
         : "";
       console.log(
-        `\n🗑️  Deleting ${matchedPattern.displayName}s with immutable field conflicts${cascadeInfo}...`
+        `\n🗑️  Deleting ${matchedPattern.displayName}s with immutable field conflicts${cascadeInfo}...`,
       );
       failedResources.forEach((res) => {
         console.log(`  Deleting ${matchedPattern.displayName}: ${res}`);
@@ -206,13 +206,13 @@ function runKustomizeAndKubectl(op) {
           ],
           {
             stdio: "inherit",
-          }
+          },
         );
       });
 
       // Retry deployment
       console.log(
-        `\n🔄 Retrying deployment with recreated ${matchedPattern.displayName}s...`
+        `\n🔄 Retrying deployment with recreated ${matchedPattern.displayName}s...`,
       );
       const kustomizeRetry = spawnSync(kustomizeCmd[0], kustomizeCmd.slice(1), {
         stdio: ["ignore", "pipe", "inherit"],
@@ -235,7 +235,7 @@ function runKustomizeAndKubectl(op) {
         {
           input: kustomizeRetry.stdout,
           stdio: ["pipe", "inherit", "inherit"],
-        }
+        },
       );
       process.exit(kubectlRetry.status);
     } else {
@@ -267,31 +267,31 @@ function main() {
   // Pre-check: Ensure kubectl and kustomize are available
   if (!checkBinaryAvailable("kubectl")) {
     console.error(
-      "ERROR: 'kubectl' is not available in your PATH. Please install kubectl and ensure it is accessible."
+      "ERROR: 'kubectl' is not available in your PATH. Please install kubectl and ensure it is accessible.",
     );
     process.exit(1);
   }
   if (!checkBinaryAvailable("kustomize")) {
     console.error(
-      "ERROR: 'kustomize' is not available in your PATH. Please install kustomize and ensure it is accessible."
+      "ERROR: 'kustomize' is not available in your PATH. Please install kustomize and ensure it is accessible.",
     );
     process.exit(1);
   }
   const op = process.argv[2];
   if (!["apply", "delete", "build"].includes(op)) {
     console.error(
-      "Usage: node tools/infra/kubectl-local-context.js apply|delete|build"
+      "Usage: node tools/infra/kubectl-local-context.js apply|delete|build",
     );
     process.exit(1);
   }
   const current = getCurrentContext();
   if (current !== LOCAL_CONTEXT) {
     console.log(
-      `Switching kubectl context to '${LOCAL_CONTEXT}' (was '${current}')...`
+      `Switching kubectl context to '${LOCAL_CONTEXT}' (was '${current}')...`,
     );
     if (!switchContext(LOCAL_CONTEXT)) {
       console.error(
-        `Failed to switch kubectl context to '${LOCAL_CONTEXT}'. Aborting.`
+        `Failed to switch kubectl context to '${LOCAL_CONTEXT}'. Aborting.`,
       );
       process.exit(1);
     }

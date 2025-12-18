@@ -41,11 +41,11 @@ const fs = require("fs");
 function getClusterName() {
   const configPath = path.resolve(
     __dirname,
-    "../../infra/k8s/podman/local/cluster/cluster-config.yaml"
+    "../../infra/k8s/podman/local/cluster/cluster-config.yaml",
   );
   if (!fs.existsSync(configPath)) {
     console.error(
-      `ERROR: cluster-config.yaml not found at ${configPath}. Please ensure your local cluster config exists and is named correctly.`
+      `ERROR: cluster-config.yaml not found at ${configPath}. Please ensure your local cluster config exists and is named correctly.`,
     );
     process.exit(1);
   }
@@ -54,14 +54,14 @@ function getClusterName() {
     content = fs.readFileSync(configPath, "utf-8");
   } catch (error) {
     console.error(
-      `ERROR: Failed to read cluster-config.yaml: ${error.message}`
+      `ERROR: Failed to read cluster-config.yaml: ${error.message}`,
     );
     process.exit(1);
   }
   const match = content.match(/cluster_name:\s*(.+)/);
   if (!match || !match[1].trim()) {
     console.error(
-      "ERROR: cluster-config.yaml is missing a valid 'cluster_name' field. Please specify your cluster name, e.g.\ncluster_name: podman-local"
+      "ERROR: cluster-config.yaml is missing a valid 'cluster_name' field. Please specify your cluster name, e.g.\ncluster_name: podman-local",
     );
     process.exit(1);
   }
@@ -121,24 +121,24 @@ async function main() {
   // Check if cluster exists before attempting deletion
   if (!isMinikubeClusterExists()) {
     logInfo(
-      `No Minikube cluster named '${CLUSTER_NAME}' exists. Nothing to delete.`
+      `No Minikube cluster named '${CLUSTER_NAME}' exists. Nothing to delete.`,
     );
     logInfo("Podman machine is preserved.\n");
     return;
   }
   log(
     "\n╔════════════════════════════════════════════════════════════╗",
-    "cyan"
+    "cyan",
   );
   log("║         Delete Local Cluster & All Resources              ║", "cyan");
   log(
     "╚════════════════════════════════════════════════════════════╝\n",
-    "cyan"
+    "cyan",
   );
 
   logWarning("This will completely delete the cluster and all its data!");
   logWarning(
-    "Kubernetes resources, containers, images, and volumes will be removed."
+    "Kubernetes resources, containers, images, and volumes will be removed.",
   );
   log("\nPress Ctrl+C to cancel, or wait 5 seconds to continue...\n", "yellow");
 
@@ -148,7 +148,7 @@ async function main() {
   log("\n📋 Deleting Kubernetes resources...", "bright");
   const deleteResources = run(
     "kustomize build infra/k8s/podman/local --enable-alpha-plugins | kubectl delete -f -",
-    { silent: false }
+    { silent: false },
   );
 
   if (deleteResources.success) {
@@ -173,7 +173,7 @@ async function main() {
   logInfo("Cleaning up orphaned containers...");
   const containers = run(
     `podman ps -a --filter name=${CLUSTER_NAME} --format {{.Names}}`,
-    { silent: true }
+    { silent: true },
   );
   if (containers.success && containers.output.trim()) {
     containers.output
@@ -193,7 +193,7 @@ async function main() {
   logInfo("Removing cluster-specific images...");
   const images = run(
     "podman images --filter reference=gcr.io/k8s-minikube/kicbase --format {{.ID}}",
-    { silent: true }
+    { silent: true },
   );
   if (images.success && images.output.trim()) {
     images.output
