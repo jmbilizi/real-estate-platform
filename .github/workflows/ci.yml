@@ -40,6 +40,9 @@ jobs:
       - name: Install Node.js dependencies
         run: npm ci
 
+      - name: Check workspace formatting
+        run: npm run nx:workspace-format-check
+
   node:
     needs: setup-base
     runs-on: ubuntu-latest
