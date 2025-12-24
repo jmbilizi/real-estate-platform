@@ -85,11 +85,7 @@ function addToPath(binDir) {
       const { spawnSync } = require("child_process");
       const currentPathResult = spawnSync(
         "powershell",
-        [
-          "-NoProfile",
-          "-Command",
-          "[System.Environment]::GetEnvironmentVariable('PATH', 'User')",
-        ],
+        ["-NoProfile", "-Command", "[System.Environment]::GetEnvironmentVariable('PATH', 'User')"],
         { encoding: "utf8" },
       );
 
@@ -140,9 +136,7 @@ function addToPath(binDir) {
       return true;
     } catch (error) {
       logWarning(`Failed to add to PATH automatically: ${error.message}`);
-      logWarning(
-        `Manually add "${binDir}" to your System Environment Variables`,
-      );
+      logWarning(`Manually add "${binDir}" to your System Environment Variables`);
       return false;
     }
   } else {
@@ -188,14 +182,10 @@ function refreshPath() {
     const refreshPathCmd =
       "[System.Environment]::GetEnvironmentVariable('PATH', 'Machine') + ';' + [System.Environment]::GetEnvironmentVariable('PATH', 'User')";
 
-    const result = spawnSync(
-      "powershell",
-      ["-NoProfile", "-Command", refreshPathCmd],
-      {
-        encoding: "utf8",
-        stdio: "pipe",
-      },
-    );
+    const result = spawnSync("powershell", ["-NoProfile", "-Command", refreshPathCmd], {
+      encoding: "utf8",
+      stdio: "pipe",
+    });
 
     if (result.status === 0 && result.stdout) {
       const newPath = result.stdout.trim();
@@ -238,9 +228,7 @@ function installKustomize() {
   const platform = os.platform();
   const arch = os.arch();
   const binDir =
-    platform === "win32"
-      ? path.join(os.homedir(), ".local", "bin")
-      : path.join(os.homedir(), ".local", "bin");
+    platform === "win32" ? path.join(os.homedir(), ".local", "bin") : path.join(os.homedir(), ".local", "bin");
   const binaryName = platform === "win32" ? "kustomize.exe" : "kustomize";
   const binaryPath = path.join(binDir, binaryName);
 
@@ -281,9 +269,7 @@ function installKustomize() {
   }
 
   const tempDir = path.join(binDir, "kustomize-temp");
-  const archiveFile = isZip
-    ? path.join(binDir, "kustomize.zip")
-    : path.join(binDir, "kustomize.tar.gz");
+  const archiveFile = isZip ? path.join(binDir, "kustomize.zip") : path.join(binDir, "kustomize.tar.gz");
 
   try {
     log(`Downloading Kustomize ${version} for ${platform}...`, "blue");
@@ -406,15 +392,9 @@ function installKubectl() {
 function main() {
   logStep("Infrastructure Development Setup");
 
-  log(
-    "\nThis script installs tools for Kubernetes infrastructure development:",
-    "blue",
-  );
+  log("\nThis script installs tools for Kubernetes infrastructure development:", "blue");
   log("  • Kustomize - Kubernetes manifest templating", "blue");
-  log(
-    "  • kubectl (optional) - Kubernetes CLI for dry-run validation\n",
-    "blue",
-  );
+  log("  • kubectl (optional) - Kubernetes CLI for dry-run validation\n", "blue");
 
   const kustomizeInstalled = installKustomize();
   const kubectlInstalled = installKubectl();
@@ -430,9 +410,7 @@ function main() {
   if (kubectlInstalled) {
     logSuccess("kubectl is ready (optional)");
   } else {
-    logWarning(
-      "kubectl not installed (optional - skip if you don't need dry-run validation)",
-    );
+    logWarning("kubectl not installed (optional - skip if you don't need dry-run validation)");
   }
 
   logStep("Next Steps");
@@ -441,25 +419,13 @@ function main() {
   log("   npm run infra:validate", "bright");
 
   log("\n2. Build manifests for local testing:", "cyan");
-  log(
-    "   kustomize build infra/k8s/{provider}/{env} --enable-alpha-plugins",
-    "bright",
-  );
-  log(
-    "   Example: kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins",
-    "blue",
-  );
+  log("   kustomize build infra/k8s/{provider}/{env} --enable-alpha-plugins", "bright");
+  log("   Example: kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins", "blue");
 
-  log(
-    "\n3. Git hooks will automatically validate Kustomize files on commit/push\n",
-    "cyan",
-  );
+  log("\n3. Git hooks will automatically validate Kustomize files on commit/push\n", "cyan");
 
   if (!kustomizeInstalled && os.platform() === "win32") {
-    log(
-      "\n⚠ Windows users: Install Kustomize manually and re-run this script\n",
-      "yellow",
-    );
+    log("\n⚠ Windows users: Install Kustomize manually and re-run this script\n", "yellow");
     process.exit(1);
   }
 

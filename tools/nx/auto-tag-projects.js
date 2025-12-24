@@ -45,10 +45,7 @@ function writeFilePreservingEncoding(filePath, content) {
 
   // Write with appropriate BOM
   const outputBuffer = hasBOM
-    ? Buffer.concat([
-        Buffer.from([0xef, 0xbb, 0xbf]),
-        Buffer.from(content, "utf8"),
-      ])
+    ? Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(content, "utf8")])
     : Buffer.from(content, "utf8");
 
   fs.writeFileSync(filePath, outputBuffer);
@@ -145,14 +142,7 @@ function detectLanguage(projectConfig) {
   const projectPath = path.join(rootDir, projectRoot);
   if (fs.existsSync(projectPath)) {
     const files = fs.readdirSync(projectPath);
-    if (
-      files.some(
-        (file) =>
-          file.endsWith(".csproj") ||
-          file.endsWith(".vbproj") ||
-          file.endsWith(".fsproj"),
-      )
-    ) {
+    if (files.some((file) => file.endsWith(".csproj") || file.endsWith(".vbproj") || file.endsWith(".fsproj"))) {
       return "dotnet";
     }
   }
@@ -194,12 +184,9 @@ function getAdditionalTags(projectConfig, language) {
     projectConfig.root?.includes("libs\\");
 
   if (language === "node") {
-    if (executorString.includes("@nx/express"))
-      additionalTags.push("express", "api");
-    if (executorString.includes("@nx/next"))
-      additionalTags.push("next", "client");
-    if (executorString.includes("@nx/react"))
-      additionalTags.push("react", "client");
+    if (executorString.includes("@nx/express")) additionalTags.push("express", "api");
+    if (executorString.includes("@nx/next")) additionalTags.push("next", "client");
+    if (executorString.includes("@nx/react")) additionalTags.push("react", "client");
 
     // Add composite tags: both type (lib/service) AND test if applicable
     if (isLibraryType) {
@@ -212,8 +199,7 @@ function getAdditionalTags(projectConfig, language) {
   }
 
   if (language === "python") {
-    if (executorString.includes("fastapi"))
-      additionalTags.push("fastapi", "api");
+    if (executorString.includes("fastapi")) additionalTags.push("fastapi", "api");
     if (executorString.includes("django")) additionalTags.push("django", "api");
 
     // Add composite tags: both type (lib/service) AND test if applicable
@@ -228,8 +214,7 @@ function getAdditionalTags(projectConfig, language) {
 
   if (language === "dotnet") {
     if (executorString.includes("webapi")) additionalTags.push("webapi", "api");
-    if (executorString.includes("blazor"))
-      additionalTags.push("blazor", "client");
+    if (executorString.includes("blazor")) additionalTags.push("blazor", "client");
 
     // Add composite tags: both type (lib/service) AND test if applicable
     if (isLibraryType) {
@@ -250,9 +235,7 @@ function updateProjectTags(projectName, projectConfig, newTags) {
   const projectJsonPath = path.join(rootDir, projectRoot, "project.json");
 
   if (!fs.existsSync(projectJsonPath)) {
-    console.warn(
-      `project.json not found for ${projectName} at ${projectJsonPath}`,
-    );
+    console.warn(`project.json not found for ${projectName} at ${projectJsonPath}`);
     return false;
   }
 
@@ -277,10 +260,7 @@ function updateProjectTags(projectName, projectConfig, newTags) {
 
     if (tagsAdded) {
       // Write the updated project.json
-      writeFilePreservingEncoding(
-        projectJsonPath,
-        JSON.stringify(projectJson, null, 2) + "\n",
-      );
+      writeFilePreservingEncoding(projectJsonPath, JSON.stringify(projectJson, null, 2) + "\n");
       console.log(
         `${colors.green}✓${colors.reset} Tagged ${colors.blue}${projectName}${colors.reset}: ${newTags.join(", ")}`,
       );

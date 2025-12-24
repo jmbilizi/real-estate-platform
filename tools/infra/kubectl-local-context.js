@@ -19,10 +19,7 @@ const path = require("path");
 // Dynamically read and validate the local cluster name from cluster-config.yaml
 const fs = require("fs");
 const yaml = require("js-yaml");
-const configPath = path.resolve(
-  __dirname,
-  "../../infra/k8s/podman/local/cluster/cluster-config.yaml",
-);
+const configPath = path.resolve(__dirname, "../../infra/k8s/podman/local/cluster/cluster-config.yaml");
 if (!fs.existsSync(configPath)) {
   console.error(
     `ERROR: cluster-config.yaml not found at ${configPath}. Please ensure your local cluster config exists and is named correctly.`,
@@ -69,12 +66,7 @@ function switchContext(context) {
 }
 
 function runKustomizeAndKubectl(op) {
-  const kustomizeCmd = [
-    "kustomize",
-    "build",
-    "infra/k8s/podman/local",
-    "--enable-alpha-plugins",
-  ];
+  const kustomizeCmd = ["kustomize", "build", "infra/k8s/podman/local", "--enable-alpha-plugins"];
   if (op === "build") {
     const result = spawnSync(kustomizeCmd[0], kustomizeCmd.slice(1), {
       stdio: "inherit",
@@ -97,14 +89,7 @@ function runKustomizeAndKubectl(op) {
     // Try to apply normally first with --prune to remove renamed/deleted resources
     const kubectl = spawnSync(
       "kubectl",
-      [
-        "apply",
-        "-f",
-        "-",
-        "--prune",
-        "-l",
-        "app.kubernetes.io/managed-by=kustomize",
-      ],
+      ["apply", "-f", "-", "--prune", "-l", "app.kubernetes.io/managed-by=kustomize"],
       {
         input: kustomize.stdout,
         stdio: ["pipe", "pipe", "pipe"],
@@ -151,8 +136,7 @@ function runKustomizeAndKubectl(op) {
         displayName: "DaemonSet",
       },
       {
-        pattern:
-          /spec\.selector.*immutable|spec\.completions.*cannot be decreased/i,
+        pattern: /spec\.selector.*immutable|spec\.completions.*cannot be decreased/i,
         resourceType: "job",
         namePattern: /Resource=jobs[\s\S]*?Name: "([^"]+)"/g,
         deleteArgs: [], // Jobs should complete before update
@@ -161,14 +145,10 @@ function runKustomizeAndKubectl(op) {
     ];
 
     // Check which pattern matches
-    const matchedPattern = immutableFieldPatterns.find((p) =>
-      p.pattern.test(errorOutput),
-    );
+    const matchedPattern = immutableFieldPatterns.find((p) => p.pattern.test(errorOutput));
 
     if (matchedPattern) {
-      console.log(
-        `\n⚠️  Detected immutable ${matchedPattern.displayName} field changes`,
-      );
+      console.log(`\n⚠️  Detected immutable ${matchedPattern.displayName} field changes`);
       console.log(`🔍 Identifying affected ${matchedPattern.displayName}s...`);
 
       // Extract resource names from error message
@@ -176,9 +156,7 @@ function runKustomizeAndKubectl(op) {
       const failedResources = matches.map((m) => m[1]);
 
       if (failedResources.length === 0) {
-        console.error(
-          `❌ Could not identify failed ${matchedPattern.displayName}s from error message`,
-        );
+        console.error(`❌ Could not identify failed ${matchedPattern.displayName}s from error message`);
         console.error("\nError output:");
         process.stderr.write(kubectl.stderr);
         process.exit(1);
@@ -191,29 +169,16 @@ function runKustomizeAndKubectl(op) {
       const cascadeInfo = matchedPattern.deleteArgs.includes("--cascade=orphan")
         ? " (preserving dependent resources)"
         : "";
-      console.log(
-        `\n🗑️  Deleting ${matchedPattern.displayName}s with immutable field conflicts${cascadeInfo}...`,
-      );
+      console.log(`\n🗑️  Deleting ${matchedPattern.displayName}s with immutable field conflicts${cascadeInfo}...`);
       failedResources.forEach((res) => {
         console.log(`  Deleting ${matchedPattern.displayName}: ${res}`);
-        spawnSync(
-          "kubectl",
-          [
-            "delete",
-            matchedPattern.resourceType,
-            res,
-            ...matchedPattern.deleteArgs,
-          ],
-          {
-            stdio: "inherit",
-          },
-        );
+        spawnSync("kubectl", ["delete", matchedPattern.resourceType, res, ...matchedPattern.deleteArgs], {
+          stdio: "inherit",
+        });
       });
 
       // Retry deployment
-      console.log(
-        `\n🔄 Retrying deployment with recreated ${matchedPattern.displayName}s...`,
-      );
+      console.log(`\n🔄 Retrying deployment with recreated ${matchedPattern.displayName}s...`);
       const kustomizeRetry = spawnSync(kustomizeCmd[0], kustomizeCmd.slice(1), {
         stdio: ["ignore", "pipe", "inherit"],
       });
@@ -224,14 +189,7 @@ function runKustomizeAndKubectl(op) {
 
       const kubectlRetry = spawnSync(
         "kubectl",
-        [
-          "apply",
-          "-f",
-          "-",
-          "--prune",
-          "-l",
-          "app.kubernetes.io/managed-by=kustomize",
-        ],
+        ["apply", "-f", "-", "--prune", "-l", "app.kubernetes.io/managed-by=kustomize"],
         {
           input: kustomizeRetry.stdout,
           stdio: ["pipe", "inherit", "inherit"],
@@ -246,8 +204,7 @@ function runKustomizeAndKubectl(op) {
     }
   } else {
     // delete or build
-    const kubectlCmd =
-      op === "delete" ? ["kubectl", "delete", "-f", "-"] : null;
+    const kubectlCmd = op === "delete" ? ["kubectl", "delete", "-f", "-"] : null;
     const kustomize = spawnSync(kustomizeCmd[0], kustomizeCmd.slice(1), {
       stdio: ["ignore", "pipe", "inherit"],
     });
@@ -279,20 +236,14 @@ function main() {
   }
   const op = process.argv[2];
   if (!["apply", "delete", "build"].includes(op)) {
-    console.error(
-      "Usage: node tools/infra/kubectl-local-context.js apply|delete|build",
-    );
+    console.error("Usage: node tools/infra/kubectl-local-context.js apply|delete|build");
     process.exit(1);
   }
   const current = getCurrentContext();
   if (current !== LOCAL_CONTEXT) {
-    console.log(
-      `Switching kubectl context to '${LOCAL_CONTEXT}' (was '${current}')...`,
-    );
+    console.log(`Switching kubectl context to '${LOCAL_CONTEXT}' (was '${current}')...`);
     if (!switchContext(LOCAL_CONTEXT)) {
-      console.error(
-        `Failed to switch kubectl context to '${LOCAL_CONTEXT}'. Aborting.`,
-      );
+      console.error(`Failed to switch kubectl context to '${LOCAL_CONTEXT}'. Aborting.`);
       process.exit(1);
     }
   }

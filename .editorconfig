@@ -52,6 +52,54 @@ indent_size = 2
 indent_style = space
 end_of_line = crlf
 
+# TOML (pyproject.toml, Cargo.toml, etc.)
+[*.toml]
+indent_size = 2
+indent_style = space
+
+# INI files (config files like .flake8, mypy.ini)
+[*.ini]
+indent_size = 2
+indent_style = space
+
+# Environment variables
+[*.env]
+insert_final_newline = false
+trim_trailing_whitespace = true
+
+# SQL
+[*.sql]
+indent_size = 2
+indent_style = space
+max_line_length = 120
+
+# Docker
+[Dockerfile]
+indent_size = 2
+indent_style = space
+
+[*.dockerfile]
+indent_size = 2
+indent_style = space
+
+# Makefile (must use tabs!)
+[Makefile]
+indent_style = tab
+
+# Ignore files
+[*.{ignore,gitignore,dockerignore,npmignore}]
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# HTML/CSS (for web frontends)
+[*.{html,htm}]
+indent_size = 2
+indent_style = space
+
+[*.{css,scss,sass,less}]
+indent_size = 2
+indent_style = space
+
 # C#/.NET Code files
 [*.{cs,csx,vb,vbx}]
 indent_size = 4

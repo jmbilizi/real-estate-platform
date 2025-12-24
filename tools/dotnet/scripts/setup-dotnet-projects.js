@@ -45,10 +45,7 @@ function writeFilePreservingEncoding(filePath, content) {
 
   // Write with appropriate BOM
   const outputBuffer = hasBOM
-    ? Buffer.concat([
-        Buffer.from([0xef, 0xbb, 0xbf]),
-        Buffer.from(content, "utf8"),
-      ])
+    ? Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(content, "utf8")])
     : Buffer.from(content, "utf8");
 
   fs.writeFileSync(filePath, outputBuffer);
@@ -81,9 +78,7 @@ function getDotNetProjects() {
       if (!projectConfig) return false;
 
       const projectRoot = projectConfig.root;
-      const csprojFiles = fs
-        .readdirSync(projectRoot)
-        .filter((file) => file.endsWith(".csproj"));
+      const csprojFiles = fs.readdirSync(projectRoot).filter((file) => file.endsWith(".csproj"));
       return csprojFiles.length > 0;
     });
   } catch (error) {
@@ -107,9 +102,7 @@ function getProjectConfig(projectName) {
 // Determine the correct projectType by analyzing .csproj file
 function determineProjectType(projectRoot) {
   // Find the .csproj file
-  const csprojFiles = fs
-    .readdirSync(projectRoot)
-    .filter((file) => file.endsWith(".csproj"));
+  const csprojFiles = fs.readdirSync(projectRoot).filter((file) => file.endsWith(".csproj"));
 
   if (csprojFiles.length === 0) return "application";
 
@@ -156,9 +149,7 @@ function createProjectJson(projectName, projectConfig) {
 
   // Check if project.json already exists
   if (fs.existsSync(projectJsonPath)) {
-    const existingContent = JSON.parse(
-      fs.readFileSync(projectJsonPath, "utf8"),
-    );
+    const existingContent = JSON.parse(fs.readFileSync(projectJsonPath, "utf8"));
 
     // Determine correct projectType
     const correctProjectType = determineProjectType(projectRoot);
@@ -172,9 +163,7 @@ function createProjectJson(projectName, projectConfig) {
 
     // Check if it already has lint and format targets
     const hasAllTargets =
-      existingContent.targets?.lint &&
-      existingContent.targets?.format &&
-      existingContent.targets?.["format-check"];
+      existingContent.targets?.lint && existingContent.targets?.format && existingContent.targets?.["format-check"];
 
     if (!hasAllTargets) {
       needsUpdate = true;
@@ -214,10 +203,7 @@ function createProjectJson(projectName, projectConfig) {
       return false;
     }
 
-    writeFilePreservingEncoding(
-      projectJsonPath,
-      JSON.stringify(existingContent, null, 2) + "\n",
-    );
+    writeFilePreservingEncoding(projectJsonPath, JSON.stringify(existingContent, null, 2) + "\n");
     log(`  ✓ ${projectName}: Updated project.json`, "green");
     return true;
   }
@@ -255,10 +241,7 @@ function createProjectJson(projectName, projectConfig) {
     tags: ["dotnet"],
   };
 
-  writeFilePreservingEncoding(
-    projectJsonPath,
-    JSON.stringify(projectJson, null, 2) + "\n",
-  );
+  writeFilePreservingEncoding(projectJsonPath, JSON.stringify(projectJson, null, 2) + "\n");
   log(`  ✓ ${projectName}: Created project.json`, "green");
   return true;
 }
@@ -298,11 +281,7 @@ function addProjectsToSolution() {
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
-        if (
-          entry.isDirectory() &&
-          !entry.name.startsWith(".") &&
-          entry.name !== "node_modules"
-        ) {
+        if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "node_modules") {
           findCsprojFiles(fullPath);
         } else if (entry.isFile() && entry.name.endsWith(".csproj")) {
           csprojFiles.push(fullPath);
@@ -335,16 +314,10 @@ function addProjectsToSolution() {
         execSync(`dotnet sln "${solutionPath}" remove "${existingPath}"`, {
           stdio: "pipe",
         });
-        log(
-          `  ✓ ${path.basename(existingPath, ".csproj")}: Removed from solution`,
-          "green",
-        );
+        log(`  ✓ ${path.basename(existingPath, ".csproj")}: Removed from solution`, "green");
         removedCount++;
       } catch (error) {
-        log(
-          `  ✗ ${path.basename(existingPath, ".csproj")}: Failed to remove - ${error.message}`,
-          "red",
-        );
+        log(`  ✗ ${path.basename(existingPath, ".csproj")}: Failed to remove - ${error.message}`, "red");
       }
     }
   }
@@ -363,15 +336,10 @@ function addProjectsToSolution() {
     const normalizedPath = relativePath.replace(/\\/g, "/");
 
     // Check if already in solution
-    const alreadyAdded = existingProjects.some(
-      (existingPath) => existingPath === normalizedPath,
-    );
+    const alreadyAdded = existingProjects.some((existingPath) => existingPath === normalizedPath);
 
     if (alreadyAdded) {
-      log(
-        `  ℹ ${path.basename(csprojPath, ".csproj")}: Already in solution`,
-        "yellow",
-      );
+      log(`  ℹ ${path.basename(csprojPath, ".csproj")}: Already in solution`, "yellow");
       continue;
     }
 
@@ -380,16 +348,10 @@ function addProjectsToSolution() {
       execSync(`dotnet sln "${solutionPath}" add "${csprojPath}"`, {
         stdio: "pipe",
       });
-      log(
-        `  ✓ ${path.basename(csprojPath, ".csproj")}: Added to solution`,
-        "green",
-      );
+      log(`  ✓ ${path.basename(csprojPath, ".csproj")}: Added to solution`, "green");
       addedCount++;
     } catch (error) {
-      log(
-        `  ✗ ${path.basename(csprojPath, ".csproj")}: Failed to add - ${error.message}`,
-        "red",
-      );
+      log(`  ✗ ${path.basename(csprojPath, ".csproj")}: Failed to add - ${error.message}`, "red");
     }
   }
 
@@ -434,11 +396,7 @@ function main() {
     try {
       // Read as buffer to preserve exact encoding
       const buffer = fs.readFileSync(solutionPath);
-      const hasBOM =
-        buffer.length >= 3 &&
-        buffer[0] === 0xef &&
-        buffer[1] === 0xbb &&
-        buffer[2] === 0xbf;
+      const hasBOM = buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf;
 
       let solutionContent = buffer.toString("utf8");
       // Remove BOM character from string if present
@@ -452,22 +410,10 @@ function main() {
 
       // Remove extra platform configurations that dotnet sln adds
       // Keep only Debug|Any CPU and Release|Any CPU
-      solutionContent = solutionContent.replace(
-        /^\s*Debug\|x64 = Debug\|x64\r?\n/gm,
-        "",
-      );
-      solutionContent = solutionContent.replace(
-        /^\s*Debug\|x86 = Debug\|x86\r?\n/gm,
-        "",
-      );
-      solutionContent = solutionContent.replace(
-        /^\s*Release\|x64 = Release\|x64\r?\n/gm,
-        "",
-      );
-      solutionContent = solutionContent.replace(
-        /^\s*Release\|x86 = Release\|x86\r?\n/gm,
-        "",
-      );
+      solutionContent = solutionContent.replace(/^\s*Debug\|x64 = Debug\|x64\r?\n/gm, "");
+      solutionContent = solutionContent.replace(/^\s*Debug\|x86 = Debug\|x86\r?\n/gm, "");
+      solutionContent = solutionContent.replace(/^\s*Release\|x64 = Release\|x64\r?\n/gm, "");
+      solutionContent = solutionContent.replace(/^\s*Release\|x86 = Release\|x86\r?\n/gm, "");
 
       // Normalize all line endings to match detected style
       if (hasCRLF) {
@@ -481,10 +427,7 @@ function main() {
 
       // Write with same BOM state as original
       const outputBuffer = hasBOM
-        ? Buffer.concat([
-            Buffer.from([0xef, 0xbb, 0xbf]),
-            Buffer.from(solutionContent, "utf8"),
-          ])
+        ? Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(solutionContent, "utf8")])
         : Buffer.from(solutionContent, "utf8");
       fs.writeFileSync(solutionPath, outputBuffer);
     } catch (error) {
@@ -500,31 +443,16 @@ function main() {
   log("");
 
   if (dotNetProjects.length > 0) {
-    log(
-      "💡 Tip: Run 'npm run nx:dotnet-lint' to lint all .NET projects\n",
-      "blue",
-    );
+    log("💡 Tip: Run 'npm run nx:dotnet-lint' to lint all .NET projects\n", "blue");
   }
 
   // Important reminders based on common issues
   log("⚠️  Important Reminders:", "yellow");
   log("   • ImplicitUsings doesn't include third-party packages", "yellow");
-  log(
-    "   • Add explicit 'using' directives for Newtonsoft.Json, Ocelot, etc.",
-    "yellow",
-  );
-  log(
-    "   • Reload VS Code after adding packages for IntelliSense to work",
-    "yellow",
-  );
-  log(
-    "   • Add explicit versions to PackageReferences to avoid NU1604 warnings",
-    "yellow",
-  );
-  log(
-    "   • Use VersionOverride in Directory.Packages.props for transitive deps\n",
-    "yellow",
-  );
+  log("   • Add explicit 'using' directives for Newtonsoft.Json, Ocelot, etc.", "yellow");
+  log("   • Reload VS Code after adding packages for IntelliSense to work", "yellow");
+  log("   • Add explicit versions to PackageReferences to avoid NU1604 warnings", "yellow");
+  log("   • Use VersionOverride in Directory.Packages.props for transitive deps\n", "yellow");
 }
 
 // Run the script

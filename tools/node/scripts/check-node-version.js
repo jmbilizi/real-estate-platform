@@ -40,9 +40,7 @@ function getRequiredNodeVersion() {
   }
 
   if (!requiredVersion) {
-    console.warn(
-      `${colors.yellow}Warning: No .nvmrc or .node-version file found.${colors.reset}`,
-    );
+    console.warn(`${colors.yellow}Warning: No .nvmrc or .node-version file found.${colors.reset}`);
     return null;
   }
 
@@ -89,23 +87,15 @@ function isVersionCompatible(current, required) {
 function printInstallationInstructions(requiredVersion) {
   console.log(`\n${colors.bold}Installation Instructions:${colors.reset}\n`);
 
-  console.log(
-    `${colors.bold}Using Node Version Manager (recommended):${colors.reset}`,
-  );
+  console.log(`${colors.bold}Using Node Version Manager (recommended):${colors.reset}`);
   console.log(
     `1. Install nvm: https://github.com/nvm-sh/nvm (Unix/macOS) or https://github.com/coreybutler/nvm-windows (Windows)`,
   );
-  console.log(
-    `2. Run: ${colors.blue}nvm install ${requiredVersion}${colors.reset}`,
-  );
-  console.log(
-    `3. Run: ${colors.blue}nvm use ${requiredVersion}${colors.reset}`,
-  );
+  console.log(`2. Run: ${colors.blue}nvm install ${requiredVersion}${colors.reset}`);
+  console.log(`3. Run: ${colors.blue}nvm use ${requiredVersion}${colors.reset}`);
 
   console.log(`\n${colors.bold}Manual Installation:${colors.reset}`);
-  console.log(
-    `1. Download Node.js ${requiredVersion} from: https://nodejs.org/download/release/v${requiredVersion}/`,
-  );
+  console.log(`1. Download Node.js ${requiredVersion} from: https://nodejs.org/download/release/v${requiredVersion}/`);
   console.log(`2. Follow the installation instructions for your platform\n`);
 }
 
@@ -120,17 +110,11 @@ function checkNodeVersion() {
 
   const currentVersion = getCurrentNodeVersion();
 
-  console.log(
-    `Current Node.js version: ${colors.green}${currentVersion}${colors.reset}`,
-  );
-  console.log(
-    `Required Node.js version: ${colors.green}${requiredVersion}${colors.reset}`,
-  );
+  console.log(`Current Node.js version: ${colors.green}${currentVersion}${colors.reset}`);
+  console.log(`Required Node.js version: ${colors.green}${requiredVersion}${colors.reset}`);
 
   if (isVersionCompatible(currentVersion, requiredVersion)) {
-    console.log(
-      `${colors.green}✓ Node.js version is compatible.${colors.reset}`,
-    );
+    console.log(`${colors.green}✓ Node.js version is compatible.${colors.reset}`);
     return true;
   } else {
     console.log(`${colors.red}✗ Node.js version mismatch.${colors.reset}`);
@@ -145,9 +129,7 @@ function checkNodeVersion() {
     );
 
     if (process.env.NODE_FORCE_VERSION_CHECK === "strict") {
-      console.log(
-        `${colors.red}Strict version checking is enabled. Exiting.${colors.reset}`,
-      );
+      console.log(`${colors.red}Strict version checking is enabled. Exiting.${colors.reset}`);
       process.exit(1);
     }
 

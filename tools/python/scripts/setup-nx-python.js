@@ -23,9 +23,7 @@ const isWindows = os.platform() === "win32";
 const scriptDir = path.join(__dirname);
 
 // Determine which script to run
-const scriptPath = isWindows
-  ? path.join(scriptDir, "setup-nx-python.bat")
-  : path.join(scriptDir, "setup-nx-python.sh");
+const scriptPath = isWindows ? path.join(scriptDir, "setup-nx-python.bat") : path.join(scriptDir, "setup-nx-python.sh");
 
 // Make the script executable on Unix
 if (!isWindows) {
@@ -37,14 +35,10 @@ if (!isWindows) {
 }
 
 // Execute the script
-const result = spawnSync(
-  isWindows ? scriptPath : "bash",
-  isWindows ? [] : [scriptPath],
-  {
-    stdio: "inherit",
-    shell: true,
-  },
-);
+const result = spawnSync(isWindows ? scriptPath : "bash", isWindows ? [] : [scriptPath], {
+  stdio: "inherit",
+  shell: true,
+});
 
 // Exit with the same status code
 process.exit(result.status);

@@ -52,9 +52,7 @@ if (args.length === 0 || !hasTargetArg || !hasProjectsArg) {
   process.exit(result.status || 0);
 }
 
-console.log(
-  `[NX] Running nx run-many for ${projectType} projects with target "${target}"`,
-);
+console.log(`[NX] Running nx run-many for ${projectType} projects with target "${target}"`);
 
 // Run the nx command
 const result = spawnSync("npx", ["nx", "run-many", ...args], {

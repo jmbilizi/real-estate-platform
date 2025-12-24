@@ -42,12 +42,7 @@ specified in Directory.Packages.props (Central Package Management).
 
 // Command line argument parsing
 const args = process.argv.slice(2);
-if (
-  args.length === 0 ||
-  args[0] === "help" ||
-  args[0] === "--help" ||
-  args[0] === "-h"
-) {
+if (args.length === 0 || args[0] === "help" || args[0] === "--help" || args[0] === "-h") {
   console.log(USAGE);
   process.exit(0);
 }
@@ -119,9 +114,7 @@ function findDotNetProjects() {
           const projectJsonPath = path.join(projectDir, "project.json");
           if (fs.existsSync(projectJsonPath)) {
             try {
-              const projectJson = JSON.parse(
-                fs.readFileSync(projectJsonPath, "utf8"),
-              );
+              const projectJson = JSON.parse(fs.readFileSync(projectJsonPath, "utf8"));
               if (projectJson.name) {
                 nxProjectName = projectJson.name;
               }
@@ -153,18 +146,11 @@ function findDotNetProjects() {
   return projects;
 }
 
-function runDotNetCommand(
-  command,
-  projectFile,
-  packageName,
-  version,
-  flags = [],
-) {
+function runDotNetCommand(command, projectFile, packageName, version, flags = []) {
   const versionArg = version ? `--version ${version}` : "";
   const flagsArg = flags.join(" ");
 
-  const fullCommand =
-    `dotnet ${command} "${projectFile}" ${packageName} ${versionArg} ${flagsArg}`.trim();
+  const fullCommand = `dotnet ${command} "${projectFile}" ${packageName} ${versionArg} ${flagsArg}`.trim();
   console.log(`Executing: ${fullCommand}`);
 
   try {
@@ -184,26 +170,19 @@ function updateDirectoryPackagesProps(packageName, version) {
   const packagePropsPath = path.join(configsDir, "Directory.Packages.props");
 
   if (!fs.existsSync(packagePropsPath)) {
-    console.error(
-      `Error: Directory.Packages.props not found at ${packagePropsPath}`,
-    );
+    console.error(`Error: Directory.Packages.props not found at ${packagePropsPath}`);
     return false;
   }
 
   let content = fs.readFileSync(packagePropsPath, "utf8");
 
   // Check if package already exists
-  const packageRegex = new RegExp(
-    `<PackageVersion\\s+Include="${packageName}"\\s+Version="[^"]+"`,
-  );
+  const packageRegex = new RegExp(`<PackageVersion\\s+Include="${packageName}"\\s+Version="[^"]+"`);
 
   if (packageRegex.test(content)) {
     // Update existing package
     content = content.replace(
-      new RegExp(
-        `(<PackageVersion\\s+Include="${packageName}"\\s+Version=")[^"]+(")`,
-        "g",
-      ),
+      new RegExp(`(<PackageVersion\\s+Include="${packageName}"\\s+Version=")[^"]+(")`, "g"),
       `$1${version}$2`,
     );
   } else {
@@ -211,14 +190,9 @@ function updateDirectoryPackagesProps(packageName, version) {
     const insertionPoint = content.lastIndexOf("</ItemGroup>");
     if (insertionPoint !== -1) {
       const newPackage = `    <PackageVersion Include="${packageName}" Version="${version}" />\n`;
-      content =
-        content.slice(0, insertionPoint) +
-        newPackage +
-        content.slice(insertionPoint);
+      content = content.slice(0, insertionPoint) + newPackage + content.slice(insertionPoint);
     } else {
-      console.error(
-        `Error: Could not find insertion point in Directory.Packages.props`,
-      );
+      console.error(`Error: Could not find insertion point in Directory.Packages.props`);
       return false;
     }
   }
@@ -246,16 +220,11 @@ function updateDirectoryPackagesProps(packageName, version) {
 
     // Write with same BOM state as original
     const outputBuffer = hasBOM
-      ? Buffer.concat([
-          Buffer.from([0xef, 0xbb, 0xbf]),
-          Buffer.from(content, "utf8"),
-        ])
+      ? Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(content, "utf8")])
       : Buffer.from(content, "utf8");
 
     fs.writeFileSync(packagePropsPath, outputBuffer);
-    console.log(
-      `Updated ${packageName} to version ${version} in Directory.Packages.props`,
-    );
+    console.log(`Updated ${packageName} to version ${version} in Directory.Packages.props`);
     return true;
   } catch (error) {
     console.error(`Error updating Directory.Packages.props:`, error);
@@ -278,17 +247,11 @@ async function main() {
           // When installing to all projects, update Directory.Packages.props
           if (version) {
             if (updateDirectoryPackagesProps(packageName, version)) {
-              console.log(
-                `✅ Added ${packageName} (${version}) to central package management`,
-              );
+              console.log(`✅ Added ${packageName} (${version}) to central package management`);
             }
           } else {
-            console.log(
-              "⚠️ Warning: No version specified for centrally managed package",
-            );
-            console.log(
-              "Using latest version (not recommended for production)",
-            );
+            console.log("⚠️ Warning: No version specified for centrally managed package");
+            console.log("Using latest version (not recommended for production)");
           }
 
           // Find all .NET projects
@@ -298,24 +261,13 @@ async function main() {
           // Install package to each project (without specifying version)
           let successCount = 0;
           for (const project of projects) {
-            console.log(
-              `\nInstalling ${packageName} to ${project.projectName}...`,
-            );
-            if (
-              runDotNetCommand(
-                "add",
-                project.projectFile,
-                "package",
-                packageName,
-              )
-            ) {
+            console.log(`\nInstalling ${packageName} to ${project.projectName}...`);
+            if (runDotNetCommand("add", project.projectFile, "package", packageName)) {
               successCount++;
             }
           }
 
-          console.log(
-            `\n✅ Installed ${packageName} to ${successCount}/${projects.length} projects`,
-          );
+          console.log(`\n✅ Installed ${packageName} to ${successCount}/${projects.length} projects`);
         } else {
           // Installing to a specific project
           const projects = findDotNetProjects();
@@ -331,13 +283,7 @@ async function main() {
           console.log(`Installing ${packageName} to ${projectName}...`);
           const versionFlag = version ? `--version ${version}` : "";
           if (
-            runDotNetCommand(
-              "add",
-              project.projectFile,
-              "package",
-              packageName,
-              version ? ["--version", version] : [],
-            )
+            runDotNetCommand("add", project.projectFile, "package", packageName, version ? ["--version", version] : [])
           ) {
             console.log(`✅ Installed ${packageName} to ${projectName}`);
 
@@ -354,26 +300,16 @@ async function main() {
         const projects = findDotNetProjects();
 
         if (all) {
-          console.log(
-            `Listing packages for all ${projects.length} .NET projects:`,
-          );
+          console.log(`Listing packages for all ${projects.length} .NET projects:`);
           for (const project of projects) {
-            console.log(
-              `\n📦 ${project.projectName} (${path.basename(project.projectFile)}):`,
-            );
+            console.log(`\n📦 ${project.projectName} (${path.basename(project.projectFile)}):`);
             try {
-              const output = execSync(
-                `dotnet list "${project.projectFile}" package`,
-                {
-                  encoding: "utf8",
-                },
-              );
+              const output = execSync(`dotnet list "${project.projectFile}" package`, {
+                encoding: "utf8",
+              });
               console.log(output);
             } catch (error) {
-              console.error(
-                `Error listing packages for ${project.projectName}:`,
-                error.message,
-              );
+              console.error(`Error listing packages for ${project.projectName}:`, error.message);
             }
           }
         } else {
@@ -386,22 +322,14 @@ async function main() {
             process.exit(1);
           }
 
-          console.log(
-            `📦 Packages for ${projectName} (${path.basename(project.projectFile)}):`,
-          );
+          console.log(`📦 Packages for ${projectName} (${path.basename(project.projectFile)}):`);
           try {
-            const output = execSync(
-              `dotnet list "${project.projectFile}" package`,
-              {
-                encoding: "utf8",
-              },
-            );
+            const output = execSync(`dotnet list "${project.projectFile}" package`, {
+              encoding: "utf8",
+            });
             console.log(output);
           } catch (error) {
-            console.error(
-              `Error listing packages for ${projectName}:`,
-              error.message,
-            );
+            console.error(`Error listing packages for ${projectName}:`, error.message);
           }
         }
         break;
@@ -421,12 +349,9 @@ async function main() {
 
           try {
             const previewFlag = preview ? "--prerelease" : "";
-            const output = execSync(
-              `dotnet nuget list package ${packageName} ${previewFlag}`,
-              {
-                encoding: "utf8",
-              },
-            );
+            const output = execSync(`dotnet nuget list package ${packageName} ${previewFlag}`, {
+              encoding: "utf8",
+            });
             const versionMatch = output.match(/Latest Version:\s+([^\s]+)/);
 
             if (versionMatch && versionMatch[1]) {
@@ -435,27 +360,18 @@ async function main() {
 
               // Update Directory.Packages.props with the latest version
               if (updateDirectoryPackagesProps(packageName, latestVersion)) {
-                console.log(
-                  `✅ Updated ${packageName} to version ${latestVersion} in central package management`,
-                );
+                console.log(`✅ Updated ${packageName} to version ${latestVersion} in central package management`);
               }
             } else {
-              console.error(
-                `Error: Could not determine latest version of ${packageName}`,
-              );
+              console.error(`Error: Could not determine latest version of ${packageName}`);
               process.exit(1);
             }
           } catch (error) {
-            console.error(
-              `Error checking for updates to ${packageName}:`,
-              error.message,
-            );
+            console.error(`Error checking for updates to ${packageName}:`, error.message);
             process.exit(1);
           }
 
-          console.log(
-            "\n🔄 Central package version updated. Run the following to update projects:",
-          );
+          console.log("\n🔄 Central package version updated. Run the following to update projects:");
           console.log(`dotnet restore`);
         } else {
           // Update a specific project
@@ -474,15 +390,7 @@ async function main() {
           if (exact) flags.push("--exact");
 
           console.log(`Updating ${packageName} in ${projectName}...`);
-          if (
-            runDotNetCommand(
-              "update",
-              project.projectFile,
-              "package",
-              packageName,
-              flags,
-            )
-          ) {
+          if (runDotNetCommand("update", project.projectFile, "package", packageName, flags)) {
             console.log(`✅ Updated ${packageName} in ${projectName}`);
           }
         }

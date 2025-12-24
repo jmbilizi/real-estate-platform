@@ -31,15 +31,10 @@ const rootDir = process.cwd();
 const toolsDir = path.join(rootDir, "tools", "python");
 const scriptsDir = path.join(toolsDir, "scripts");
 const venvPath = path.join(rootDir, ".venv");
-const venvBinDir = isWindows
-  ? path.join(venvPath, "Scripts")
-  : path.join(venvPath, "bin");
+const venvBinDir = isWindows ? path.join(venvPath, "Scripts") : path.join(venvPath, "bin");
 
 // Scripts paths
-const installPythonScript = path.join(
-  scriptsDir,
-  isWindows ? "install-python-direct.bat" : "install-python-direct.sh",
-);
+const installPythonScript = path.join(scriptsDir, isWindows ? "install-python-direct.bat" : "install-python-direct.sh");
 
 // Requirements files
 const mainRequirements = path.join(toolsDir, "requirements.txt");
@@ -96,17 +91,11 @@ function isPythonInstalled() {
           encoding: "utf8",
         });
 
-        if (
-          versionResult.status === 0 &&
-          versionResult.stdout.trim().length > 0
-        ) {
+        if (versionResult.status === 0 && versionResult.stdout.trim().length > 0) {
           log(`Python is working: ${versionResult.stdout.trim()}`);
           return true;
         } else {
-          log(
-            "Python found in PATH but not working. It might be a Windows App Execution Alias.",
-            true,
-          );
+          log("Python found in PATH but not working. It might be a Windows App Execution Alias.", true);
           return false;
         }
       }
@@ -117,10 +106,7 @@ function isPythonInstalled() {
         stdio: "pipe",
         encoding: "utf8",
       });
-      if (
-        versionResult.status === 0 &&
-        versionResult.stdout.trim().length > 0
-      ) {
+      if (versionResult.status === 0 && versionResult.stdout.trim().length > 0) {
         log(`Python command is working: ${versionResult.stdout.trim()}`);
         return true;
       }
@@ -280,10 +266,7 @@ function createVirtualEnv() {
     log("Virtual environment already exists.");
 
     // Verify the venv is valid
-    const pythonExePath = path.join(
-      venvBinDir,
-      isWindows ? "python.exe" : "python",
-    );
+    const pythonExePath = path.join(venvBinDir, isWindows ? "python.exe" : "python");
     if (fs.existsSync(pythonExePath)) {
       log("Virtual environment appears to be valid.");
       return true;
@@ -300,9 +283,7 @@ function createVirtualEnv() {
 
   // Create the virtual environment
   // Try multiple Python commands in case one works
-  const commands = isWindows
-    ? ["python", "py -3", "py"]
-    : ["python3", "python"];
+  const commands = isWindows ? ["python", "py -3", "py"] : ["python3", "python"];
 
   for (const cmd of commands) {
     log(`Trying to create virtual environment with: ${cmd}`);
@@ -314,10 +295,7 @@ function createVirtualEnv() {
     }
   }
 
-  log(
-    "Failed to create virtual environment with any available Python command.",
-    true,
-  );
+  log("Failed to create virtual environment with any available Python command.", true);
   return false;
 }
 
@@ -325,9 +303,7 @@ function createVirtualEnv() {
 function addPipxToPath() {
   log("Adding pipx bin directory to system PATH...");
 
-  const pipxBinPath = isWindows
-    ? path.join(os.homedir(), ".local", "bin")
-    : path.join(os.homedir(), ".local", "bin");
+  const pipxBinPath = isWindows ? path.join(os.homedir(), ".local", "bin") : path.join(os.homedir(), ".local", "bin");
 
   if (isWindows) {
     try {
@@ -345,10 +321,9 @@ function addPipxToPath() {
 
       // Add pipx bin path to user PATH
       const newPath = `${pipxBinPath};${getCurrentPath}`;
-      execSync(
-        `powershell -command "[System.Environment]::SetEnvironmentVariable('Path', '${newPath}', 'User')"`,
-        { encoding: "utf8" },
-      );
+      execSync(`powershell -command "[System.Environment]::SetEnvironmentVariable('Path', '${newPath}', 'User')"`, {
+        encoding: "utf8",
+      });
 
       // Also add to current process PATH
       process.env.PATH = `${pipxBinPath};${process.env.PATH}`;
@@ -357,10 +332,7 @@ function addPipxToPath() {
       return true;
     } catch (error) {
       log(`Failed to add pipx to PATH: ${error.message}`, true);
-      log(
-        `Please manually add ${pipxBinPath} to your system PATH if needed.`,
-        true,
-      );
+      log(`Please manually add ${pipxBinPath} to your system PATH if needed.`, true);
       return false;
     }
   } else {
@@ -406,23 +378,17 @@ function installGlobalTools() {
   } else {
     log("pipx is already installed.");
     // Even if pipx is installed, ensure pipx bin dir is in the current process PATH
-    const pipxBinPath = isWindows
-      ? path.join(os.homedir(), ".local", "bin")
-      : path.join(os.homedir(), ".local", "bin");
+    const pipxBinPath = isWindows ? path.join(os.homedir(), ".local", "bin") : path.join(os.homedir(), ".local", "bin");
 
     // Add to current process PATH if not already there
     if (!process.env.PATH.includes(pipxBinPath)) {
-      process.env.PATH = isWindows
-        ? `${pipxBinPath};${process.env.PATH}`
-        : `${pipxBinPath}:${process.env.PATH}`;
+      process.env.PATH = isWindows ? `${pipxBinPath};${process.env.PATH}` : `${pipxBinPath}:${process.env.PATH}`;
       log("Added pipx bin directory to current session PATH.");
     }
   }
 
   // Get pipx bin path for checking UV/Poetry with full paths
-  const pipxBinDir = isWindows
-    ? path.join(os.homedir(), ".local", "bin")
-    : path.join(os.homedir(), ".local", "bin");
+  const pipxBinDir = isWindows ? path.join(os.homedir(), ".local", "bin") : path.join(os.homedir(), ".local", "bin");
 
   const uvPath = path.join(pipxBinDir, isWindows ? "uv.exe" : "uv");
   const poetryPath = path.join(pipxBinDir, isWindows ? "poetry.exe" : "poetry");
@@ -462,12 +428,7 @@ function installGlobalTools() {
 
   if (poetryCheck.status !== 0) {
     log("Poetry not found. Installing Poetry globally via pipx...");
-    const poetryInstall = execute(venvPython, [
-      "-m",
-      "pipx",
-      "install",
-      "poetry",
-    ]);
+    const poetryInstall = execute(venvPython, ["-m", "pipx", "install", "poetry"]);
 
     if (!poetryInstall.success) {
       log("Failed to install Poetry globally.", true);
@@ -496,9 +457,7 @@ PIPX_BIN_PATH=${pipxBinDir}
     log(`Warning: Could not create .env file: ${error.message}`, true);
   }
 
-  log(
-    "Global tools setup complete. UV and Poetry have been installed globally.",
-  );
+  log("Global tools setup complete. UV and Poetry have been installed globally.");
   log("");
 
   // Refresh PATH in current process by re-reading from registry
@@ -513,13 +472,9 @@ PIPX_BIN_PATH=${pipxBinDir}
         { encoding: "utf8" },
       ).trim();
       process.env.PATH = `${userPath};${machinePath}`;
-      log(
-        "✓ PATH refreshed in current process. UV and Poetry are now available!",
-      );
+      log("✓ PATH refreshed in current process. UV and Poetry are now available!");
     } catch (error) {
-      log(
-        "Note: Could not auto-refresh PATH. You may need to restart your terminal.",
-      );
+      log("Note: Could not auto-refresh PATH. You may need to restart your terminal.");
     }
   }
 
@@ -548,12 +503,13 @@ function installCommonPackages() {
 
   // First upgrade pip
   log("Upgrading pip...");
-  const pipUpgradeResult = execute(
-    isWindows
-      ? path.join(venvBinDir, "python.exe")
-      : path.join(venvBinDir, "python"),
-    ["-m", "pip", "install", "--upgrade", "pip"],
-  );
+  const pipUpgradeResult = execute(isWindows ? path.join(venvBinDir, "python.exe") : path.join(venvBinDir, "python"), [
+    "-m",
+    "pip",
+    "install",
+    "--upgrade",
+    "pip",
+  ]);
 
   if (!pipUpgradeResult.success) {
     log("Failed to upgrade pip. Continuing anyway...", true);
@@ -566,12 +522,13 @@ function installCommonPackages() {
     if (fs.existsSync(reqFile)) {
       log(`Installing requirements from: ${reqFile}`);
 
-      const result = execute(
-        isWindows
-          ? path.join(venvBinDir, "python.exe")
-          : path.join(venvBinDir, "python"),
-        ["-m", "pip", "install", "-r", reqFile],
-      );
+      const result = execute(isWindows ? path.join(venvBinDir, "python.exe") : path.join(venvBinDir, "python"), [
+        "-m",
+        "pip",
+        "install",
+        "-r",
+        reqFile,
+      ]);
 
       if (!result.success) {
         log(`Failed to install requirements from: ${reqFile}`, true);
@@ -630,10 +587,7 @@ function installServicePackages(servicePaths) {
   // Find requirements.txt files
   let requirementsFiles = [];
 
-  if (
-    servicePaths.length === 1 &&
-    (servicePaths[0] === "all" || !servicePaths[0])
-  ) {
+  if (servicePaths.length === 1 && (servicePaths[0] === "all" || !servicePaths[0])) {
     // Install packages for all services
     requirementsFiles = findAllServiceRequirements();
 
@@ -648,11 +602,7 @@ function installServicePackages(servicePaths) {
     for (const servicePath of servicePaths) {
       if (!servicePath) continue;
 
-      const serviceReqPath = path.join(
-        rootDir,
-        servicePath,
-        "requirements.txt",
-      );
+      const serviceReqPath = path.join(rootDir, servicePath, "requirements.txt");
 
       if (fs.existsSync(serviceReqPath)) {
         requirementsFiles.push(serviceReqPath);
@@ -664,10 +614,7 @@ function installServicePackages(servicePaths) {
     }
 
     if (requirementsFiles.length === 0) {
-      log(
-        "No valid requirements.txt files found for the specified services.",
-        true,
-      );
+      log("No valid requirements.txt files found for the specified services.", true);
       return false;
     }
   }
@@ -678,12 +625,13 @@ function installServicePackages(servicePaths) {
   for (const reqFile of requirementsFiles) {
     log(`Installing requirements from: ${reqFile}`);
 
-    const result = execute(
-      isWindows
-        ? path.join(venvBinDir, "python.exe")
-        : path.join(venvBinDir, "python"),
-      ["-m", "pip", "install", "-r", reqFile],
-    );
+    const result = execute(isWindows ? path.join(venvBinDir, "python.exe") : path.join(venvBinDir, "python"), [
+      "-m",
+      "pip",
+      "install",
+      "-r",
+      reqFile,
+    ]);
 
     if (!result.success) {
       log(`Failed to install requirements from: ${reqFile}`, true);
@@ -757,10 +705,7 @@ async function main() {
     const installed = installPython();
     if (!installed) {
       log("Failed to install Python.", true);
-      log(
-        "Please install Python manually from https://www.python.org/downloads/",
-        true,
-      );
+      log("Please install Python manually from https://www.python.org/downloads/", true);
       process.exit(1);
     }
 
@@ -775,32 +720,17 @@ async function main() {
 
       if (!pythonInPath) {
         log("Failed to detect Python in PATH after installation.", true);
-        log(
-          "Python has been installed but is not available in the current terminal session.",
-          true,
-        );
-        log(
-          "Please restart your terminal or VS Code and run this script again.",
-          true,
-        );
-        log(
-          "If the issue persists, try manually setting the PATH to include Python.",
-          true,
-        );
+        log("Python has been installed but is not available in the current terminal session.", true);
+        log("Please restart your terminal or VS Code and run this script again.", true);
+        log("If the issue persists, try manually setting the PATH to include Python.", true);
 
         // Show manual recovery steps
         if (isWindows) {
           log("\nManual recovery steps:", true);
           log("1. Try running: C:\\Python313\\python.exe -m venv .venv", true);
-          log(
-            "   or: C:\\Program Files\\Python313\\python.exe -m venv .venv",
-            true,
-          );
+          log("   or: C:\\Program Files\\Python313\\python.exe -m venv .venv", true);
           log("2. Activate with: .venv\\Scripts\\activate.bat", true);
-          log(
-            "3. Install packages with: pip install -r tools/python/requirements.txt",
-            true,
-          );
+          log("3. Install packages with: pip install -r tools/python/requirements.txt", true);
         }
 
         process.exit(1);
@@ -825,10 +755,7 @@ async function main() {
   const commonPackagesInstalled = installCommonPackages();
 
   if (!commonPackagesInstalled) {
-    log(
-      "Some common packages failed to install. Setup may be incomplete.",
-      true,
-    );
+    log("Some common packages failed to install. Setup may be incomplete.", true);
   }
 
   // Step 3.5: Install global tools (UV, Poetry) via pipx

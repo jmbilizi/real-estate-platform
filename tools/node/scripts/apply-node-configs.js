@@ -93,39 +93,22 @@ function applyConfigurations(projectPath) {
   }
 
   // ESLint
-  const eslintConfigPath = path.relative(
-    projectPath,
-    path.join(configsDir, "eslint-config.js"),
-  );
+  const eslintConfigPath = path.relative(projectPath, path.join(configsDir, "eslint-config.js"));
   createConfigFile(projectPath, ".eslintrc.js", eslintConfigPath, "ESLint");
 
   // Prettier
-  const prettierConfigPath = path.relative(
-    projectPath,
-    path.join(configsDir, "prettier-config.js"),
-  );
-  createConfigFile(
-    projectPath,
-    ".prettierrc.js",
-    prettierConfigPath,
-    "Prettier",
-  );
+  const prettierConfigPath = path.relative(projectPath, path.join(configsDir, "prettier-config.js"));
+  createConfigFile(projectPath, ".prettierrc.js", prettierConfigPath, "Prettier");
 
   // TypeScript
   const tsConfigPath = path.relative(
     projectPath,
-    path.join(
-      configsDir,
-      isLibrary ? "tsconfig.lib.json" : "tsconfig.app.json",
-    ),
+    path.join(configsDir, isLibrary ? "tsconfig.lib.json" : "tsconfig.app.json"),
   );
   createConfigFile(projectPath, "tsconfig.json", tsConfigPath, "TypeScript");
 
   // Jest
-  const jestConfigPath = path.relative(
-    projectPath,
-    path.join(configsDir, "jest.config.js"),
-  );
+  const jestConfigPath = path.relative(projectPath, path.join(configsDir, "jest.config.js"));
   createConfigFile(projectPath, "jest.config.js", jestConfigPath, "Jest");
 
   console.log(`\nConfiguration complete for: ${projectPath}`);

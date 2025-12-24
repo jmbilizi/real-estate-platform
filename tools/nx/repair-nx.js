@@ -47,10 +47,7 @@ function writeFilePreservingEncoding(filePath, content) {
 
   // Write with appropriate BOM
   const outputBuffer = hasBOM
-    ? Buffer.concat([
-        Buffer.from([0xef, 0xbb, 0xbf]),
-        Buffer.from(content, "utf8"),
-      ])
+    ? Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(content, "utf8")])
     : Buffer.from(content, "utf8");
 
   fs.writeFileSync(filePath, outputBuffer);
@@ -129,9 +126,7 @@ for (const requiredPlugin of requiredPlugins) {
   if (typeof requiredPlugin === "string") {
     // For string plugins, check if they exist
     const exists = nxJson.plugins.some(
-      (p) =>
-        (typeof p === "string" && p === requiredPlugin) ||
-        (typeof p === "object" && p.plugin === requiredPlugin),
+      (p) => (typeof p === "string" && p === requiredPlugin) || (typeof p === "object" && p.plugin === requiredPlugin),
     );
 
     if (!exists) {
@@ -141,9 +136,7 @@ for (const requiredPlugin of requiredPlugins) {
   } else {
     // For object plugins, check by plugin name
     const pluginName = requiredPlugin.plugin;
-    const exists = nxJson.plugins.some(
-      (p) => typeof p === "object" && p.plugin === pluginName,
-    );
+    const exists = nxJson.plugins.some((p) => typeof p === "object" && p.plugin === pluginName);
 
     if (!exists) {
       console.log(`➕ Adding missing plugin: ${pluginName}`);
@@ -172,13 +165,8 @@ const minimalProjectGraph = {
 };
 
 // Always write the project-graph.json to ensure it's valid
-writeFilePreservingEncoding(
-  projectGraphPath,
-  JSON.stringify(minimalProjectGraph, null, 2) + "\n",
-);
-console.log(
-  "✅ Created/Updated minimal project-graph.json for Nx to work without projects",
-);
+writeFilePreservingEncoding(projectGraphPath, JSON.stringify(minimalProjectGraph, null, 2) + "\n");
+console.log("✅ Created/Updated minimal project-graph.json for Nx to work without projects");
 
 // Ensure cache directory exists
 const cachePath = path.join(nxDir, "cache");
@@ -190,10 +178,7 @@ if (!fs.existsSync(cachePath)) {
 // Ensure nx-cloud.env file exists with basic content
 const nxCloudEnvPath = path.join(nxDir, "nx-cloud.env");
 if (!fs.existsSync(nxCloudEnvPath)) {
-  writeFilePreservingEncoding(
-    nxCloudEnvPath,
-    "# Nx Cloud Environment Variables\n",
-  );
+  writeFilePreservingEncoding(nxCloudEnvPath, "# Nx Cloud Environment Variables\n");
   console.log("✅ Created nx-cloud.env file");
 }
 
@@ -204,10 +189,7 @@ if (!fs.existsSync(workspaceJsonPath)) {
     version: 2,
     projects: {},
   };
-  writeFilePreservingEncoding(
-    workspaceJsonPath,
-    JSON.stringify(workspaceJson, null, 2) + "\n",
-  );
+  writeFilePreservingEncoding(workspaceJsonPath, JSON.stringify(workspaceJson, null, 2) + "\n");
   console.log("✅ Created workspace.json file");
 }
 
@@ -236,9 +218,7 @@ if (updateNxBat) {
 // Run npx nx --version to verify installation
 try {
   console.log("⚙️ Verifying NX installation...");
-  const version = execSync("npx nx --version", { stdio: "pipe" })
-    .toString()
-    .trim();
+  const version = execSync("npx nx --version", { stdio: "pipe" }).toString().trim();
   console.log(`✅ NX is installed: ${version}`);
 } catch (error) {
   console.log("⚠️ Error verifying NX. Trying to reinstall NX...");

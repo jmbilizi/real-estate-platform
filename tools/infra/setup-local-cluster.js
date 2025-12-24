@@ -61,11 +61,7 @@ function parseYamlConfig(filePath) {
 
   for (let line of lines) {
     // Skip comments and empty lines
-    if (
-      line.trim().startsWith("#") ||
-      line.trim() === "" ||
-      line.trim().startsWith("---")
-    ) {
+    if (line.trim().startsWith("#") || line.trim() === "" || line.trim().startsWith("---")) {
       continue;
     }
 
@@ -81,10 +77,7 @@ function parseYamlConfig(filePath) {
       // If value is empty, this is a nested section
       if (value === "") {
         // Adjust section stack based on indentation
-        while (
-          sectionStack.length > 0 &&
-          sectionStack[sectionStack.length - 1].indent >= indent
-        ) {
+        while (sectionStack.length > 0 && sectionStack[sectionStack.length - 1].indent >= indent) {
           sectionStack.pop();
         }
 
@@ -162,28 +155,16 @@ function validateClusterConfig(rawConfig) {
   if (!rawConfig.resources || typeof rawConfig.resources !== "object") {
     fail("'resources' section is required and must be an object.");
   }
-  if (
-    typeof rawConfig.resources.cpus !== "number" ||
-    rawConfig.resources.cpus < 1
-  ) {
+  if (typeof rawConfig.resources.cpus !== "number" || rawConfig.resources.cpus < 1) {
     fail("'resources.cpus' is required and must be a positive integer.");
   }
-  if (
-    typeof rawConfig.resources.memory !== "number" ||
-    rawConfig.resources.memory < 256
-  ) {
+  if (typeof rawConfig.resources.memory !== "number" || rawConfig.resources.memory < 256) {
     fail("'resources.memory' is required and must be a number (MB, >=256).");
   }
-  if (
-    !rawConfig.resources.disk ||
-    typeof rawConfig.resources.disk !== "string"
-  ) {
+  if (!rawConfig.resources.disk || typeof rawConfig.resources.disk !== "string") {
     fail("'resources.disk' is required and must be a string (e.g., '20g').");
   }
-  if (
-    !rawConfig.kubernetes_version ||
-    typeof rawConfig.kubernetes_version !== "string"
-  ) {
+  if (!rawConfig.kubernetes_version || typeof rawConfig.kubernetes_version !== "string") {
     fail("'kubernetes_version' is required and must be a string.");
   }
   if (rawConfig.registries && rawConfig.registries.insecure) {
@@ -193,25 +174,18 @@ function validateClusterConfig(rawConfig) {
     // Validate each entry is a non-empty string and a valid hostname (basic check)
     for (const reg of rawConfig.registries.insecure) {
       if (typeof reg !== "string" || !reg.trim()) {
-        fail(
-          `'registries.insecure' contains a non-string or empty value: ${JSON.stringify(reg)}`,
-        );
+        fail(`'registries.insecure' contains a non-string or empty value: ${JSON.stringify(reg)}`);
       }
       // Basic hostname/registry format: must not contain spaces, must have at least one dot
       if (!/^([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(:[0-9]+)?$/.test(reg.trim())) {
-        fail(
-          `'registries.insecure' contains an invalid registry hostname: ${reg}`,
-        );
+        fail(`'registries.insecure' contains an invalid registry hostname: ${reg}`);
       }
     }
   }
 }
 
 function loadClusterConfig() {
-  const configPath = path.resolve(
-    __dirname,
-    "../../infra/k8s/podman/local/cluster/cluster-config.yaml",
-  );
+  const configPath = path.resolve(__dirname, "../../infra/k8s/podman/local/cluster/cluster-config.yaml");
   if (!fs.existsSync(configPath)) {
     logError(
       `ERROR: cluster-config.yaml not found at ${configPath}. Please ensure your local cluster config exists and is named correctly.`,
@@ -223,9 +197,7 @@ function loadClusterConfig() {
     rawConfig = yaml.load(fs.readFileSync(configPath, "utf8"));
     validateClusterConfig(rawConfig);
   } catch (error) {
-    logError(
-      `ERROR: Failed to parse or validate cluster-config.yaml: ${error.message}`,
-    );
+    logError(`ERROR: Failed to parse or validate cluster-config.yaml: ${error.message}`);
     process.exit(1);
   }
   // All fields are validated, so no fallback/defaults
@@ -245,12 +217,7 @@ function loadClusterConfig() {
       totalCpus: 4,
       totalMemory: 8192,
     },
-    insecureRegistries: rawConfig.registries?.insecure || [
-      "gcr.io",
-      "docker.io",
-      "registry.k8s.io",
-      "ghcr.io",
-    ],
+    insecureRegistries: rawConfig.registries?.insecure || ["gcr.io", "docker.io", "registry.k8s.io", "ghcr.io"],
   };
 }
 
@@ -418,10 +385,7 @@ function installPodmanWindows() {
 
   const chocoCheck = run("choco --version", { silent: true });
   if (chocoCheck.success) {
-    const chocoResult = run(
-      "choco install podman-desktop -y --yes --no-progress",
-      { silent: false },
-    );
+    const chocoResult = run("choco install podman-desktop -y --yes --no-progress", { silent: false });
     if (chocoResult.success) {
       logSuccess("Podman Desktop installed via Chocolatey");
       return true;
@@ -429,9 +393,7 @@ function installPodmanWindows() {
   }
 
   logError("Automatic installation failed");
-  logWarning(
-    "Please install Podman Desktop manually from: https://podman-desktop.io/downloads",
-  );
+  logWarning("Please install Podman Desktop manually from: https://podman-desktop.io/downloads");
   return false;
 }
 
@@ -464,10 +426,7 @@ function installPodmanLinux() {
   let distro = "unknown";
 
   if (osRelease.success) {
-    if (
-      osRelease.output.includes("Ubuntu") ||
-      osRelease.output.includes("Debian")
-    ) {
+    if (osRelease.output.includes("Ubuntu") || osRelease.output.includes("Debian")) {
       distro = "debian";
     } else if (osRelease.output.includes("Fedora")) {
       distro = "fedora";
@@ -490,10 +449,7 @@ function installPodmanLinux() {
       run("sudo apt-get update && sudo apt-get install -y flatpak", {
         silent: false,
       });
-      run(
-        "flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo",
-        { silent: false },
-      );
+      run("flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo", { silent: false });
       run("flatpak install -y flathub io.podman_desktop.PodmanDesktop", {
         silent: false,
       });
@@ -549,21 +505,13 @@ function installMinikubeWindows() {
 
       const userPathResult = spawnSync(
         "powershell",
-        [
-          "-NoProfile",
-          "-Command",
-          "[Environment]::GetEnvironmentVariable('Path', 'User')",
-        ],
+        ["-NoProfile", "-Command", "[Environment]::GetEnvironmentVariable('Path', 'User')"],
         { encoding: "utf-8" },
       );
 
       const systemPathResult = spawnSync(
         "powershell",
-        [
-          "-NoProfile",
-          "-Command",
-          "[Environment]::GetEnvironmentVariable('Path', 'Machine')",
-        ],
+        ["-NoProfile", "-Command", "[Environment]::GetEnvironmentVariable('Path', 'Machine')"],
         { encoding: "utf-8" },
       );
 
@@ -594,9 +542,7 @@ function installMinikubeWindows() {
   }
 
   logError("Automatic installation failed");
-  logWarning(
-    "Please install Minikube manually from: https://minikube.sigs.k8s.io/docs/start/",
-  );
+  logWarning("Please install Minikube manually from: https://minikube.sigs.k8s.io/docs/start/");
   return false;
 }
 
@@ -663,8 +609,7 @@ function getMachineStatus() {
   } catch (e) {
     const output = result.output.toLowerCase();
     return {
-      exists:
-        output.includes("currently running") || output.includes("last up"),
+      exists: output.includes("currently running") || output.includes("last up"),
       running: output.includes("currently running"),
     };
   }
@@ -695,13 +640,8 @@ function initializePodmanMachine() {
   run("podman machine rm -f podman-machine-default", { silent: true });
 
   // Initialize with rootful mode and more resources for better compatibility
-  logInfo(
-    "Creating Podman machine with rootful mode (better Kubernetes compatibility)...",
-  );
-  const initResult = run(
-    "podman machine init --rootful --cpus 4 --memory 8192 --disk-size 50",
-    { silent: false },
-  );
+  logInfo("Creating Podman machine with rootful mode (better Kubernetes compatibility)...");
+  const initResult = run("podman machine init --rootful --cpus 4 --memory 8192 --disk-size 50", { silent: false });
 
   if (initResult.success) {
     logSuccess("Podman machine initialized in rootful mode");
@@ -736,15 +676,11 @@ function startPodmanMachine() {
 }
 
 function configurePodmanRegistries() {
-  logInfo(
-    "Configuring registries for development (fixing certificate issues)...",
-  );
+  logInfo("Configuring registries for development (fixing certificate issues)...");
 
   // Always overwrite registries.conf with correct insecure registries (including docker.io)
   const insecureRegs =
-    CLUSTER_CONFIG.registries &&
-    CLUSTER_CONFIG.registries.insecure &&
-    Array.isArray(CLUSTER_CONFIG.registries.insecure)
+    CLUSTER_CONFIG.registries && CLUSTER_CONFIG.registries.insecure && Array.isArray(CLUSTER_CONFIG.registries.insecure)
       ? CLUSTER_CONFIG.registries.insecure
       : ["gcr.io", "docker.io", "registry.k8s.io", "ghcr.io"];
   // Always include docker.io in [registries.search] and all insecure registries in [registries.insecure]
@@ -763,20 +699,16 @@ function configurePodmanRegistries() {
   fs.writeFileSync(tmpFile, toml, "utf-8");
 
   // Copy the file into the VM using podman machine cp (Podman 4.2+)
-  const cpResult = run(
-    `podman machine cp "${tmpFile}" podman-machine-default:/tmp/registries.conf`,
-    { silent: false },
-  );
+  const cpResult = run(`podman machine cp "${tmpFile}" podman-machine-default:/tmp/registries.conf`, { silent: false });
   if (!cpResult.success) {
     logError("Failed to copy registry config into Podman VM.");
     process.exit(1);
   }
 
   // Move it into place with sudo
-  const mvResult = run(
-    `podman machine ssh "sudo mv /tmp/registries.conf /etc/containers/registries.conf"`,
-    { silent: false },
-  );
+  const mvResult = run(`podman machine ssh "sudo mv /tmp/registries.conf /etc/containers/registries.conf"`, {
+    silent: false,
+  });
   if (!mvResult.success) {
     logError("Failed to move registry config into place in Podman VM.");
     process.exit(1);
@@ -785,9 +717,7 @@ function configurePodmanRegistries() {
   try {
     fs.unlinkSync(tmpFile);
   } catch (e) {}
-  logSuccess(
-    "Registry config written with [registries.insecure] including docker.io",
-  );
+  logSuccess("Registry config written with [registries.insecure] including docker.io");
 }
 
 // ============================================================================
@@ -796,12 +726,9 @@ function configurePodmanRegistries() {
 
 function isMinikubeClusterExists() {
   // Check Minikube profile status
-  const result = run(
-    `minikube status --profile=${CLUSTER_CONFIG.clusterName}`,
-    {
-      silent: true,
-    },
-  );
+  const result = run(`minikube status --profile=${CLUSTER_CONFIG.clusterName}`, {
+    silent: true,
+  });
   const output = result.output.toLowerCase();
   const profileExists =
     !output.includes("no such container") &&
@@ -815,24 +742,19 @@ function isMinikubeClusterExists() {
   }
 
   // Check Podman container existence
-  const containerCheck = run(
-    `podman ps -a --filter name=${CLUSTER_CONFIG.clusterName} --format {{.Names}}`,
-    { silent: true },
-  );
-  const containerExists =
-    containerCheck.success && containerCheck.output.trim().length > 0;
+  const containerCheck = run(`podman ps -a --filter name=${CLUSTER_CONFIG.clusterName} --format {{.Names}}`, {
+    silent: true,
+  });
+  const containerExists = containerCheck.success && containerCheck.output.trim().length > 0;
 
   return profileExists && containerExists;
 }
 
 function isClusterFunctional() {
   // First check if container exists
-  const containerCheck = run(
-    `podman container inspect ${CLUSTER_CONFIG.clusterName}`,
-    {
-      silent: true,
-    },
-  );
+  const containerCheck = run(`podman container inspect ${CLUSTER_CONFIG.clusterName}`, {
+    silent: true,
+  });
 
   if (!containerCheck.success) {
     return false; // Container missing = not functional
@@ -848,10 +770,9 @@ async function repairCluster() {
 
   // Repair 1: Check if containers exist but are stopped/corrupted
   logInfo("Checking cluster containers...");
-  const containers = run(
-    `podman ps -a --filter name=${CLUSTER_CONFIG.clusterName} --format {{.Names}}`,
-    { silent: true },
-  );
+  const containers = run(`podman ps -a --filter name=${CLUSTER_CONFIG.clusterName} --format {{.Names}}`, {
+    silent: true,
+  });
 
   if (containers.success && containers.output.trim()) {
     const containerList = containers.output
@@ -862,10 +783,7 @@ async function repairCluster() {
 
     // Check container state
     containerList.forEach((container) => {
-      const inspect = run(
-        `podman container inspect ${container} --format {{.State.Status}}`,
-        { silent: true },
-      );
+      const inspect = run(`podman container inspect ${container} --format {{.State.Status}}`, { silent: true });
       if (inspect.success) {
         const state = inspect.output.trim();
         logInfo(`Container ${container}: ${state}`);
@@ -881,19 +799,14 @@ async function repairCluster() {
     logWarning(
       "No cluster containers found for profile, possible corruption. Deleting Minikube profile to allow clean recreation...",
     );
-    const deleteResult = run(
-      `minikube delete -p ${CLUSTER_CONFIG.clusterName}`,
-      { silent: false },
-    );
+    const deleteResult = run(`minikube delete -p ${CLUSTER_CONFIG.clusterName}`, { silent: false });
     if (deleteResult.success) {
       logSuccess(
         "Deleted Minikube profile due to missing/corrupted Podman container. Please re-run setup to create a fresh cluster.",
       );
       return false;
     } else {
-      logError(
-        "Failed to delete Minikube profile automatically. Please delete it manually and re-run setup.",
-      );
+      logError("Failed to delete Minikube profile automatically. Please delete it manually and re-run setup.");
       return false;
     }
   }
@@ -902,18 +815,13 @@ async function repairCluster() {
   logInfo("Verifying Minikube profile configuration...");
   const profileCheck = run("minikube profile list", { silent: true });
   if (!profileCheck.output.includes(CLUSTER_CONFIG.clusterName)) {
-    logWarning(
-      "Profile configuration missing - will need full cluster recreation",
-    );
+    logWarning("Profile configuration missing - will need full cluster recreation");
     return false;
   }
 
   // Repair 3: Try to update cluster configuration (non-destructive)
   logInfo("Updating cluster configuration...");
-  const updateResult = run(
-    `minikube start --profile=${CLUSTER_CONFIG.clusterName} --wait=none`,
-    { silent: true },
-  );
+  const updateResult = run(`minikube start --profile=${CLUSTER_CONFIG.clusterName} --wait=none`, { silent: true });
 
   // Give it a moment to apply changes
   logInfo("Waiting for configuration to apply...");
@@ -938,17 +846,12 @@ async function repairCluster() {
     return true;
   }
 
-  logWarning(
-    "Repair attempts completed, but cluster still not fully functional",
-  );
+  logWarning("Repair attempts completed, but cluster still not fully functional");
   return false;
 }
 
 function createMinikubeCluster() {
-  log(
-    "\n🏗️  Creating Minikube cluster (Kubernetes using Podman)...\n",
-    "bright",
-  );
+  log("\n🏗️  Creating Minikube cluster (Kubernetes using Podman)...\n", "bright");
 
   const config = [
     `--profile=${CLUSTER_CONFIG.clusterName}`,
@@ -966,11 +869,8 @@ function createMinikubeCluster() {
 
   // Workaround: Pre-pull kicbase image with --tls-verify=false for Podman TLS issues (Windows)
   if (CLUSTER_CONFIG.driver === "podman") {
-    const pullCmd =
-      "podman pull --tls-verify=false gcr.io/k8s-minikube/kicbase:v0.0.48";
-    logInfo(
-      "Pre-pulling kicbase image with --tls-verify=false to avoid Podman TLS errors...",
-    );
+    const pullCmd = "podman pull --tls-verify=false gcr.io/k8s-minikube/kicbase:v0.0.48";
+    logInfo("Pre-pulling kicbase image with --tls-verify=false to avoid Podman TLS errors...");
     run(pullCmd, { silent: false });
   }
 
@@ -981,9 +881,7 @@ function createMinikubeCluster() {
   logInfo(
     `Resources per node: ${CLUSTER_CONFIG.cpus} CPU, ${CLUSTER_CONFIG.memory}MB RAM, ${CLUSTER_CONFIG.diskSize} disk`,
   );
-  logInfo(
-    `Total resources: ${TOTAL_RESOURCES.cpus} CPU, ${TOTAL_RESOURCES.memory}MB RAM`,
-  );
+  logInfo(`Total resources: ${TOTAL_RESOURCES.cpus} CPU, ${TOTAL_RESOURCES.memory}MB RAM`);
   logInfo(`Kubernetes version: ${CLUSTER_CONFIG.kubernetesVersion}`);
   logInfo("This may take 3-5 minutes (Minikube will pull images as needed)...");
 
@@ -1035,15 +933,9 @@ async function main() {
   const args = process.argv.slice(2);
   const shouldApply = args.includes("--apply");
 
-  log(
-    "\n╔════════════════════════════════════════════════════════════╗",
-    "cyan",
-  );
+  log("\n╔════════════════════════════════════════════════════════════╗", "cyan");
   log("║  Podman Desktop & Local Kubernetes Cluster Setup          ║", "cyan");
-  log(
-    "╚════════════════════════════════════════════════════════════╝\n",
-    "cyan",
-  );
+  log("╚════════════════════════════════════════════════════════════╝\n", "cyan");
 
   const platform = getPlatform();
   logInfo(`Platform: ${platform.platform} (${platform.arch})`);
@@ -1056,21 +948,13 @@ async function main() {
 
       const userPathResult = spawnSync(
         "powershell",
-        [
-          "-NoProfile",
-          "-Command",
-          "[Environment]::GetEnvironmentVariable('Path', 'User')",
-        ],
+        ["-NoProfile", "-Command", "[Environment]::GetEnvironmentVariable('Path', 'User')"],
         { encoding: "utf-8" },
       );
 
       const systemPathResult = spawnSync(
         "powershell",
-        [
-          "-NoProfile",
-          "-Command",
-          "[Environment]::GetEnvironmentVariable('Path', 'Machine')",
-        ],
+        ["-NoProfile", "-Command", "[Environment]::GetEnvironmentVariable('Path', 'Machine')"],
         { encoding: "utf-8" },
       );
 
@@ -1147,9 +1031,7 @@ async function main() {
     logError(
       `Cluster requires ${TOTAL_RESOURCES.cpus} CPUs but Podman machine only has ${CLUSTER_CONFIG.podmanMachine.totalCpus}`,
     );
-    logWarning(
-      `Reduce nodes.count or nodes.resources.cpus in infra/k8s/podman/local/cluster/cluster-config.yaml`,
-    );
+    logWarning(`Reduce nodes.count or nodes.resources.cpus in infra/k8s/podman/local/cluster/cluster-config.yaml`);
     process.exit(1);
   }
 
@@ -1157,9 +1039,7 @@ async function main() {
     logError(
       `Cluster requires ${TOTAL_RESOURCES.memory}MB RAM but Podman machine only has ${CLUSTER_CONFIG.podmanMachine.totalMemory}MB`,
     );
-    logWarning(
-      `Reduce nodes.count or nodes.resources.memory in infra/k8s/podman/local/cluster/cluster-config.yaml`,
-    );
+    logWarning(`Reduce nodes.count or nodes.resources.memory in infra/k8s/podman/local/cluster/cluster-config.yaml`);
     process.exit(1);
   }
 
@@ -1182,9 +1062,7 @@ async function main() {
 
     // Check if machine is broken first (before checking config)
     if (isPodmanMachineBroken()) {
-      logWarning(
-        "Podman machine is broken (connection/identity issues) - recreating...",
-      );
+      logWarning("Podman machine is broken (connection/identity issues) - recreating...");
       if (!initializePodmanMachine()) {
         process.exit(1);
       }
@@ -1192,15 +1070,10 @@ async function main() {
       needsRegistryConfig = true;
     } else {
       // Check if machine is in rootful mode
-      const rootfulCheck = run(
-        "podman machine inspect podman-machine-default --format {{.Rootful}}",
-        { silent: true },
-      );
+      const rootfulCheck = run("podman machine inspect podman-machine-default --format {{.Rootful}}", { silent: true });
 
       if (rootfulCheck.success && !rootfulCheck.output.includes("true")) {
-        logWarning(
-          "Machine exists but not in rootful mode - recreating for Kubernetes compatibility...",
-        );
+        logWarning("Machine exists but not in rootful mode - recreating for Kubernetes compatibility...");
         if (!initializePodmanMachine()) {
           process.exit(1);
         }
@@ -1215,9 +1088,7 @@ async function main() {
     }
     machineStatus = getMachineStatus();
     if (!machineStatus.exists) {
-      logError(
-        "Machine initialization succeeded but machine still not detected",
-      );
+      logError("Machine initialization succeeded but machine still not detected");
       process.exit(1);
     }
     needsRegistryConfig = true;
@@ -1256,44 +1127,33 @@ async function main() {
   let needsRegistryRepair = false;
   // 1. Check for TOML error
   const podmanInfo = run("podman system info --format json", { silent: true });
-  if (
-    !podmanInfo.success &&
-    podmanInfo.output &&
-    podmanInfo.output.includes("registries configuration")
-  ) {
+  if (!podmanInfo.success && podmanInfo.output && podmanInfo.output.includes("registries configuration")) {
     needsRegistryRepair = true;
     logWarning(
       "Podman registry config appears broken (TOML error). Attempting to restore default config automatically...",
     );
   } else {
     // 2. Check if /etc/containers/registries.conf is empty or missing
-    const checkFileCmd =
-      'if [ ! -s /etc/containers/registries.conf ]; then echo "EMPTY_OR_MISSING"; fi';
+    const checkFileCmd = 'if [ ! -s /etc/containers/registries.conf ]; then echo "EMPTY_OR_MISSING"; fi';
     const fileCheck = run(`podman machine ssh "${checkFileCmd}"`, {
       silent: true,
     });
     if (fileCheck.success && fileCheck.output.includes("EMPTY_OR_MISSING")) {
       needsRegistryRepair = true;
-      logWarning(
-        "Podman registry config is empty or missing. Attempting to restore default config automatically...",
-      );
+      logWarning("Podman registry config is empty or missing. Attempting to restore default config automatically...");
     }
   }
 
   if (needsRegistryRepair) {
     // Try to restore from default location first
-    const restoreCmd =
-      "sudo cp /usr/share/containers/registries.conf /etc/containers/registries.conf";
+    const restoreCmd = "sudo cp /usr/share/containers/registries.conf /etc/containers/registries.conf";
     let restoreResult = run(`podman machine ssh "${restoreCmd}"`, {
       silent: false,
     });
     if (!restoreResult.success) {
-      logWarning(
-        "Default registry config not found. Creating minimal valid TOML config (temp file + scp)...",
-      );
+      logWarning("Default registry config not found. Creating minimal valid TOML config (temp file + scp)...");
       // Remove all drop-in configs before restoring main config
-      const cleanDropins =
-        "sudo rm -f /etc/containers/registries.conf.d/*.conf";
+      const cleanDropins = "sudo rm -f /etc/containers/registries.conf.d/*.conf";
       run(`podman machine ssh "${cleanDropins}"`, { silent: false });
 
       // Dynamically generate TOML config from YAML (use insecure registries from config if present)
@@ -1318,20 +1178,18 @@ async function main() {
       fs.writeFileSync(tmpFile, toml, "utf-8");
 
       // Copy the file into the VM using podman machine cp (Podman 4.2+)
-      const cpResult = run(
-        `podman machine cp "${tmpFile}" podman-machine-default:/tmp/registries.conf`,
-        { silent: false },
-      );
+      const cpResult = run(`podman machine cp "${tmpFile}" podman-machine-default:/tmp/registries.conf`, {
+        silent: false,
+      });
       if (!cpResult.success) {
         logError("Failed to copy registry config into Podman VM.");
         process.exit(1);
       }
 
       // Move it into place with sudo
-      const mvResult = run(
-        `podman machine ssh "sudo mv /tmp/registries.conf /etc/containers/registries.conf"`,
-        { silent: false },
-      );
+      const mvResult = run(`podman machine ssh "sudo mv /tmp/registries.conf /etc/containers/registries.conf"`, {
+        silent: false,
+      });
       if (!mvResult.success) {
         logError("Failed to move registry config into place in Podman VM.");
         process.exit(1);
@@ -1343,15 +1201,11 @@ async function main() {
       restoreResult = { success: true };
     }
     if (restoreResult.success) {
-      logSuccess(
-        "Registry config restored (default or valid TOML). Restarting Podman machine...",
-      );
+      logSuccess("Registry config restored (default or valid TOML). Restarting Podman machine...");
       run("podman machine stop", { silent: false });
       run("podman machine start", { silent: false });
     } else {
-      logError(
-        "Failed to restore or create registry config automatically. Please restore it manually.",
-      );
+      logError("Failed to restore or create registry config automatically. Please restore it manually.");
       process.exit(1);
     }
   }
@@ -1385,19 +1239,10 @@ async function main() {
         } else {
           // Step 3: Both repair and restart failed
           logError("Unable to repair or restart cluster");
-          log(
-            "\n⚠️  Cluster is corrupted and cannot be automatically repaired.",
-            "yellow",
-          );
+          log("\n⚠️  Cluster is corrupted and cannot be automatically repaired.", "yellow");
           log("\nTo fix this issue:", "cyan");
-          log(
-            "  1. Delete corrupted cluster:  npm run infra:local:cluster:delete",
-            "cyan",
-          );
-          log(
-            "  2. Recreate fresh cluster:    npm run infra:local:cluster:setup\n",
-            "cyan",
-          );
+          log("  1. Delete corrupted cluster:  npm run infra:local:cluster:delete", "cyan");
+          log("  2. Recreate fresh cluster:    npm run infra:local:cluster:setup\n", "cyan");
           logWarning("Note: This will delete all data in the cluster");
           process.exit(1);
         }
@@ -1411,9 +1256,7 @@ async function main() {
 
     if (!created) {
       logError("Failed to create Minikube cluster");
-      logWarning(
-        `Try manually: minikube start --profile=${CLUSTER_CONFIG.clusterName} --driver=podman`,
-      );
+      logWarning(`Try manually: minikube start --profile=${CLUSTER_CONFIG.clusterName} --driver=podman`);
       process.exit(1);
     }
   }
@@ -1422,33 +1265,18 @@ async function main() {
   if (shouldApply) {
     const deploySuccess = applyLocalResources();
     if (!deploySuccess) {
-      logWarning(
-        "Resource deployment failed - cluster is ready but resources not deployed",
-      );
-      logInfo(
-        "You can deploy manually: npm run infra:local:k8s-resources:apply",
-      );
+      logWarning("Resource deployment failed - cluster is ready but resources not deployed");
+      logInfo("You can deploy manually: npm run infra:local:k8s-resources:apply");
     }
   } else {
     logInfo("\nSkipping resource deployment (use --apply to deploy)");
-    logInfo(
-      "To deploy resources manually: npm run infra:local:k8s-resources:apply",
-    );
+    logInfo("To deploy resources manually: npm run infra:local:k8s-resources:apply");
   }
 
   // Success summary
-  log(
-    "\n╔════════════════════════════════════════════════════════════════╗",
-    "green",
-  );
-  log(
-    "║  ✓ Podman + Minikube local environment is ready!              ║",
-    "green",
-  );
-  log(
-    "╚════════════════════════════════════════════════════════════════╝\n",
-    "green",
-  );
+  log("\n╔════════════════════════════════════════════════════════════════╗", "green");
+  log("║  ✓ Podman + Minikube local environment is ready!              ║", "green");
+  log("╚════════════════════════════════════════════════════════════════╝\n", "green");
 
   logInfo("Next steps:");
   logInfo("  • Deploy resources:     npm run infra:local:k8s-resources:apply");

@@ -27,9 +27,7 @@ const pythonToolsDir = path.join(toolsDir, "python");
 const scriptsDir = path.join(pythonToolsDir, "scripts");
 const huskyDir = path.join(rootDir, ".husky");
 const venvPath = path.join(rootDir, ".venv");
-const venvBinDir = isWindows
-  ? path.join(venvPath, "Scripts")
-  : path.join(venvPath, "bin");
+const venvBinDir = isWindows ? path.join(venvPath, "Scripts") : path.join(venvPath, "bin");
 
 // Logging helper
 function log(message, isError = false) {
@@ -65,10 +63,7 @@ function isPythonInstalled() {
   try {
     if (isWindows) {
       const whereResult = spawnSync("where", ["python"], { shell: true });
-      if (
-        whereResult.status === 0 &&
-        whereResult.stdout.toString().trim().length > 0
-      ) {
+      if (whereResult.status === 0 && whereResult.stdout.toString().trim().length > 0) {
         return true;
       }
 
@@ -111,16 +106,10 @@ function setupPythonEnvironment() {
       scriptsDir,
       isWindows ? "check-python-ondemand.bat" : "check-python-ondemand.sh",
     );
-    const result = execute(
-      isWindows ? pythonInstallScript : "bash",
-      isWindows ? [] : [pythonInstallScript],
-    );
+    const result = execute(isWindows ? pythonInstallScript : "bash", isWindows ? [] : [pythonInstallScript]);
 
     if (!result.success) {
-      log(
-        "Failed to verify or install Python. Hooks setup will continue but Python linting may not work.",
-        true,
-      );
+      log("Failed to verify or install Python. Hooks setup will continue but Python linting may not work.", true);
       return false;
     }
   }
@@ -145,18 +134,18 @@ function setupPythonEnvironment() {
   // Install Python formatting tools
   log("Installing Python formatting tools...");
   const pipCmd = path.join(venvBinDir, isWindows ? "pip.exe" : "pip");
-  const formatRequirements = path.join(
-    pythonToolsDir,
-    "format-requirements.txt",
-  );
+  const formatRequirements = path.join(pythonToolsDir, "format-requirements.txt");
 
   if (fs.existsSync(formatRequirements)) {
-    const pipResult = execute(
-      isWindows
-        ? path.join(venvBinDir, "python.exe")
-        : path.join(venvBinDir, "python"),
-      ["-m", "pip", "install", "--upgrade", "pip", "-r", formatRequirements],
-    );
+    const pipResult = execute(isWindows ? path.join(venvBinDir, "python.exe") : path.join(venvBinDir, "python"), [
+      "-m",
+      "pip",
+      "install",
+      "--upgrade",
+      "pip",
+      "-r",
+      formatRequirements,
+    ]);
 
     if (!pipResult.success) {
       log(
@@ -166,10 +155,7 @@ function setupPythonEnvironment() {
       return false;
     }
   } else {
-    log(
-      `Python format requirements file not found: ${formatRequirements}`,
-      true,
-    );
+    log(`Python format requirements file not found: ${formatRequirements}`, true);
     return false;
   }
 
@@ -178,10 +164,7 @@ function setupPythonEnvironment() {
   const envScriptPath = path.join(scriptsDir, "set-hook-env.bat");
 
   try {
-    fs.writeFileSync(
-      envScriptPath,
-      `@echo off\nset PYTHON_ENV=${path.join(venvPath, "Scripts")}\n`,
-    );
+    fs.writeFileSync(envScriptPath, `@echo off\nset PYTHON_ENV=${path.join(venvPath, "Scripts")}\n`);
     log(`Created environment script at ${envScriptPath}`);
   } catch (error) {
     log(`Failed to create environment script: ${error.message}`, true);
@@ -221,10 +204,7 @@ function setupDotNetEnvironment() {
     log(".NET is installed. No additional setup needed for hooks.");
     return true;
   } else {
-    log(
-      ".NET is not installed or not in PATH. .NET formatting in hooks may not work.",
-      true,
-    );
+    log(".NET is not installed or not in PATH. .NET formatting in hooks may not work.", true);
     return false;
   }
 }
@@ -331,9 +311,7 @@ async function main() {
   if (options.all) {
     log("Setting up all language environments (Node.js, Python, .NET)");
   } else {
-    log(
-      `Setting up environments: Node.js${options.python ? ", Python" : ""}${options.dotnet ? ", .NET" : ""}`,
-    );
+    log(`Setting up environments: Node.js${options.python ? ", Python" : ""}${options.dotnet ? ", .NET" : ""}`);
   }
 
   // First setup Husky

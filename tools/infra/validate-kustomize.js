@@ -92,11 +92,7 @@ function validateEnvironment(provider, env) {
   const envPath = `infra/k8s/${provider}/${env}`;
 
   // Check if kustomization.yaml exists
-  if (
-    !fs.existsSync(
-      path.resolve(__dirname, "../..", envPath, "kustomization.yaml"),
-    )
-  ) {
+  if (!fs.existsSync(path.resolve(__dirname, "../..", envPath, "kustomization.yaml"))) {
     // Environment doesn't exist for this provider - skip silently
     return null;
   }
@@ -135,9 +131,7 @@ function main() {
 
   if (providers.length === 0) {
     logWarning("No cloud providers found in infra/k8s/");
-    logWarning(
-      "Expected structure: infra/k8s/{provider}/{env}/kustomization.yaml",
-    );
+    logWarning("Expected structure: infra/k8s/{provider}/{env}/kustomization.yaml");
     process.exit(0);
   }
 
@@ -150,21 +144,13 @@ function main() {
   } else {
     // Discover all environments by scanning provider directories
     for (const provider of providers) {
-      const providerDir = path.resolve(
-        __dirname,
-        "../..",
-        `infra/k8s/${provider}`,
-      );
+      const providerDir = path.resolve(__dirname, "../..", `infra/k8s/${provider}`);
       if (fs.existsSync(providerDir)) {
         const entries = fs.readdirSync(providerDir, { withFileTypes: true });
         for (const entry of entries) {
           if (entry.isDirectory() && entry.name !== "cluster") {
             // Check if it has a kustomization.yaml
-            const kustomizationPath = path.join(
-              providerDir,
-              entry.name,
-              "kustomization.yaml",
-            );
+            const kustomizationPath = path.join(providerDir, entry.name, "kustomization.yaml");
             if (fs.existsSync(kustomizationPath)) {
               environments.add(entry.name);
             }
@@ -212,10 +198,7 @@ function main() {
 
   if (allPassed) {
     log("\n✅ All Kustomize validations passed\n", "green");
-    log(
-      `Validated ${Object.keys(results).length} environment(s) across ${providers.length} provider(s)\n`,
-      "cyan",
-    );
+    log(`Validated ${Object.keys(results).length} environment(s) across ${providers.length} provider(s)\n`, "cyan");
     process.exit(0);
   } else {
     log("\n❌ Some Kustomize validations failed\n", "red");
