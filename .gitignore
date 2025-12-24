@@ -28,6 +28,7 @@ poetry.lock
 # .NET
 bin/
 obj/
+packages/
 *.user
 *.suo
 *.userosscache

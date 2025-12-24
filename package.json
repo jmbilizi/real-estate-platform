@@ -50,6 +50,7 @@
     "nx:reset": "npm run nx:repair && nx reset && node tools/dotnet/scripts/setup-dotnet-projects.js && node tools/nx/auto-tag-projects.js",
     "nx:tag-projects": "node tools/nx/auto-tag-projects.js",
     "nx:graph": "npm run nx:reset && nx graph",
+    "// → Usage: npm run nx:run-many -- --target=build --projects=tag:node / --projects=proj1,proj2": "",
     "nx:run-many": "npm run nx:reset && node tools/nx/safe-run-many.js",
     "nx:affected": "npm run nx:reset && nx affected || echo No affected projects found",
     "nx:list-projects": "nx show projects",

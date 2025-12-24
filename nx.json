@@ -48,7 +48,9 @@
   ],
   "projects": {},
   "namedInputs": {
-    "default": ["{projectRoot}/**/*"],
+    "default": [
+      "{projectRoot}/**/*"
+    ],
     "production": [
       "!{projectRoot}/**/*.spec.ts",
       "default",
@@ -59,7 +61,10 @@
   },
   "targetDefaults": {
     "build": {
-      "inputs": ["production", "^production"]
+      "inputs": [
+        "production",
+        "^production"
+      ]
     }
   },
   "nxIgnore": []

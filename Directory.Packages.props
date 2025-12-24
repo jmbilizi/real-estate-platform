@@ -32,11 +32,11 @@
   <!-- Common packages used across projects -->
   <ItemGroup>
     <!-- Runtime packages -->
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="8.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Options" Version="8.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="9.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="9.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="9.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="9.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="9.0.3" />
 
     <!-- Data access packages -->
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="8.0.3" />
@@ -48,6 +48,8 @@
     <!-- API packages -->
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="9.0.10" />
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="9.0.6" />
+    <PackageVersion Include="MMLib.SwaggerForOcelot" Version="9.0.0" />
+    <PackageVersion Include="Ocelot" Version="24.0.1" />
     <PackageVersion Include="FluentValidation.AspNetCore" Version="11.3.0" />
     
     <!-- Configuration packages -->
@@ -72,6 +74,6 @@
 
     <!-- Code analysis packages -->
     <PackageVersion Include="StyleCop.Analyzers" Version="1.2.0-beta.507" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="9.0.0" />
   </ItemGroup>
 </Project>

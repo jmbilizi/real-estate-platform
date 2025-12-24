@@ -6,8 +6,10 @@
   <PropertyGroup>
     <MSBuildProjectDirRelativePath>$([MSBuild]::MakeRelative($(RepoRoot), $(MSBuildProjectDirectory)))</MSBuildProjectDirRelativePath>
     <NodeModulesRelativePath>$([MSBuild]::MakeRelative($(MSBuildProjectDirectory), $(RepoRoot)))</NodeModulesRelativePath>
+    <!-- Disable Nx module boundary check as the script doesn't exist in @nx/dotnet 22.0.1 -->
+    <SkipNxModuleBoundaryCheck>true</SkipNxModuleBoundaryCheck>
   </PropertyGroup>
-  <Target Name="CheckNxModuleBoundaries" BeforeTargets="Build">
-    <Exec Command="node $(NodeModulesRelativePath)/node_modules/@nx/dotnet/src/tasks/check-module-boundaries.js --project-root &quot;$(MSBuildProjectDirRelativePath)&quot;"/>
+  <Target Name="CheckNxModuleBoundaries" BeforeTargets="Build" Condition="'$(SkipNxModuleBoundaryCheck)' != 'true'">
+    <Exec Command="node &quot;$(RepoRoot)node_modules/@nx/dotnet/src/tasks/check-module-boundaries.js&quot; --project-root &quot;$(MSBuildProjectDirRelativePath)&quot;"/>
   </Target>
 </Project>

@@ -265,12 +265,17 @@ Automatically cancels outdated runs when new commits pushed.
 - `mypy.ini` - Type checking config
 - `.sqlfluff`, `.yamllint` - Additional tools
 
-**.NET** (`tools/dotnet/configs/`):
+**.NET** (workspace root, auto-discovered):
 
-- `Directory.Build.props` - MSBuild properties for all projects
+- `Directory.Build.props` - MSBuild properties and code analysis
+- `Directory.Build.targets` - Post-build targets
 - `Directory.Packages.props` - Central package management (CPM)
 - `global.json` - .NET SDK version pinning
-- `.editorconfig` - Code style (StyleCop)
+- `nuget.config` - NuGet sources and restore settings
+- `.editorconfig` - Multi-language code style (includes C# StyleCop rules)
+  - Root config (`root = true`) applies to all projects automatically
+  - Project-specific configs (`root = false`) are optional overrides
+  - Changes to root config take effect immediately for all projects without local overrides
 
 ### Line Endings & Encoding
 

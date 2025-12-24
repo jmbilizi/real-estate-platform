@@ -1,18 +1,61 @@
-# EditorConfig for .NET projects 
-# This file is automatically applied to all .NET projects in the monorepo via Directory.Build.props
+# EditorConfig for Polyglot Monorepo (Node.js/TypeScript, Python, .NET)
 # See: https://EditorConfig.org
 
-# Note: This is NOT a root EditorConfig file
-# It only applies .NET-specific rules
+# Note: Individual projects can override specific rules by creating their own
+# .editorconfig with root = false
 
-# Code files
-[*.{cs,csx,vb,vbx}]
-indent_size = 4
-indent_style = space
+root = true
+
+# All files
+[*]
 charset = utf-8
 end_of_line = lf
 insert_final_newline = true
 trim_trailing_whitespace = true
+
+# JavaScript/TypeScript
+[*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}]
+indent_size = 2
+indent_style = space
+max_line_length = 120
+
+# JSON
+[*.json]
+indent_size = 2
+indent_style = space
+
+# YAML
+[*.{yml,yaml}]
+indent_size = 2
+indent_style = space
+
+# Markdown
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = off
+
+# Python
+[*.py]
+indent_size = 4
+indent_style = space
+max_line_length = 120
+
+# Shell scripts
+[*.sh]
+indent_size = 2
+indent_style = space
+end_of_line = lf
+
+# Windows scripts
+[*.{bat,cmd,ps1}]
+indent_size = 2
+indent_style = space
+end_of_line = crlf
+
+# C#/.NET Code files
+[*.{cs,csx,vb,vbx}]
+indent_size = 4
+indent_style = space
 
 # C# files
 [*.cs]
@@ -114,7 +157,7 @@ dotnet_diagnostic.IDE0001.severity = warning # Simplify name
 dotnet_diagnostic.IDE0002.severity = warning # Simplify member access
 dotnet_diagnostic.IDE0003.severity = silent  # Remove this/Me qualification
 dotnet_diagnostic.IDE0004.severity = warning # Remove unnecessary cast
-dotnet_diagnostic.IDE0005.severity = warning # Remove unnecessary import
+dotnet_diagnostic.IDE0005.severity = error # Remove unnecessary import
 
 # StyleCop Analyzers
 # Documentation rules - require XML documentation
@@ -125,6 +168,7 @@ dotnet_diagnostic.SA1602.severity = none # Enumeration items should be documente
 # File header - require file headers (handled by our template)
 dotnet_diagnostic.SA1633.severity = warning # File should have header
 dotnet_diagnostic.SA1634.severity = none # File header should show copyright
+dotnet_diagnostic.SA1636.severity = none # File header copyright text should match
 
 # Ordering rules
 dotnet_diagnostic.SA1200.severity = none # Using directives should be placed correctly (we use outside namespace)

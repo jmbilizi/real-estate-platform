@@ -41,10 +41,20 @@ npm run nx:dotnet-dev
 
 ## Configuration Files
 
-Located in `tools/dotnet/configs/`:
+All .NET configuration files are located at **workspace root** (auto-discovered by MSBuild/.NET):
 
-- `Directory.Build.props` - MSBuild properties
-- `Directory.Packages.props` - Package management
-- `global.json` - SDK version
-- `.editorconfig` - Code style
+- `Directory.Build.props` - MSBuild properties and code analysis settings
+- `Directory.Build.targets` - Post-build targets and custom tasks
+- `Directory.Packages.props` - Central Package Management (CPM)
+- `global.json` - .NET SDK version pinning
+- `.editorconfig` - Code style rules (multi-language, includes C# and StyleCop diagnostics)
+- `nuget.config` - NuGet package sources and restore configuration
+
+MSBuild and NuGet automatically discover these files by searching upward from each project directory.
+
+### EditorConfig Behavior
+
+- **Root config applies automatically**: All projects inherit workspace `.editorconfig` rules by default
+- **Project overrides are optional**: Create project-specific `.editorconfig` (with `root = false`) only if you need different rules
+- **Changes take effect immediately**: Modifying root config affects all projects without local overrides
 ````

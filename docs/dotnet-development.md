@@ -38,12 +38,36 @@ This syncs `real-estate-platform.sln` with all .csproj files and creates project
 
 ## Configuration
 
-Config files in `tools/dotnet/configs/`:
+All .NET configuration files are at **workspace root** (auto-discovered by MSBuild/.NET):
 
 - `Directory.Build.props` - MSBuild properties for all projects
-- `Directory.Packages.props` - Central package management
-- `.editorconfig` - Code style rules
-- `global.json` - .NET SDK version
+- `Directory.Build.targets` - Post-build targets
+- `Directory.Packages.props` - Central package management (CPM)
+- `global.json` - .NET SDK version pinning
+- `.editorconfig` - Code style rules (multi-language, includes C# StyleCop rules)
+- `nuget.config` - NuGet package sources and restore settings
+
+### EditorConfig Hierarchy
+
+**Root config** (`.editorconfig` at workspace root with `root = true`):
+
+- Defines default rules for all .NET projects
+- Automatically discovered via upward search from each project
+- Projects inherit all rules unless they have their own `.editorconfig`
+
+**Project-specific overrides** (optional `.editorconfig` in project folder with `root = false`):
+
+- Used only when you need different rules for a specific project
+- Inherits from root config, then applies local overrides
+- Most projects don't need this - root config is sufficient
+
+**Example**: To disable a specific rule for one project, create `apps/my-api/.editorconfig`:
+
+```ini
+root = false  # Inherit from workspace root
+[*.cs]
+dotnet_diagnostic.SA1101.severity = none  # Override: disable "prefix with this"
+```
 
 ## Common Commands
 
