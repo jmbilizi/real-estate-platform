@@ -385,17 +385,42 @@ npx nx graph                 # Visualize project dependencies
 
 ### Architecture Overview
 
+**Centralized k8s management** - ALL Kubernetes manifests (infrastructure + applications) live in `infra/k8s/` for consistent environment management. No scattered k8s folders in `apps/`.
+
 **Kustomize-based GitOps deployment** with hierarchical control flags and in-memory secret substitution. Infrastructure code in `infra/`:
 
-- `k8s/base/` - Cloud-agnostic resource definitions (PostgreSQL, Redis/Valkey, Jaeger)
+- `k8s/base/` - Cloud-agnostic definitions for:
+  - **Infrastructure**: PostgreSQL, Redis/Valkey, Jaeger (StatefulSets)
+  - **Ingress**: Nginx Ingress Controller + routing rules (Ingresses)
+  - **Applications**: API Gateway (future), microservices (future), webapp (future)
 - `k8s/hetzner/{env}/` - Provider-specific overlays (dev/test/prod)
+- `k8s/podman/local/` - Local development overlays
 - `deploy-control.yaml` - Centralized deployment flags (master kill switch, time windows, rollback policies)
 
-**Deployed Services**:
+**Key Principle**: Infrastructure and applications deploy together via single workflow (`deploy-k8s-resources.yml`). No separate app deployment workflows.
 
+**Deployed Infrastructure**:
+
+- **Nginx Ingress Controller**: External routing, TLS termination, WebSocket support
 - **PostgreSQL 18 + PostGIS**: Multi-tenant databases (account_db, messaging_db, property_db)
 - **Redis/Valkey 9.0**: ACL-based authentication, 5 users (admin, pubsub, cache, ratelimit, monitor)
 - **Jaeger + OpenTelemetry**: Distributed tracing for microservices observability (optional sidecar)
+
+**Planned Architecture** (applications not yet deployed):
+
+- **API Gateway** (Ocelot .NET 9.0): Centralized entry point for microservices
+  - Responsibilities: Request routing, authentication (JWT), rate limiting, circuit breaking
+  - Routes external requests to internal microservices
+  - Provides unified API surface with versioning support
+- **Microservices** (Node.js/Python/.NET): Domain-specific services
+  - account-service, messaging-service, listings-service, social-service (future)
+- **Web App** (Next.js): Frontend application (future)
+
+**External Access** (via Ingress):
+
+- api.yoursite.com → API Gateway (future) → Microservices (internal routing)
+- yoursite.com → Web App (future)
+- jaeger.yoursite.com → Jaeger UI (monitoring)
 
 **Critical Pattern**: **NO secretGenerator, NO secrets.env files**. Secrets use placeholder values (`StrongBase64Password`) in Git, substituted in-memory during CI/CD using `yq`.
 
@@ -769,20 +794,63 @@ sdk.start();
 - Visualize service dependency graph automatically
 - Monitor 95th percentile latency for SLA compliance
 
-### Kubernetes Quick Reference
+### Infrastructure Scripts (ALWAYS USE THESE)
+
+**CRITICAL**: Always use npm scripts for infrastructure operations. These scripts handle context validation, error recovery, and follow best practices.
+
+**Local Cluster Management**:
 
 ```bash
-# Local testing (generic pattern)
-kustomize build infra/k8s/{provider}/{env} --enable-alpha-plugins
-kustomize build infra/k8s/{provider}/{env} --enable-alpha-plugins | kubectl diff -f -
+# First-time setup or cluster recreation
+npm run infra:local:cluster:setup   # Creates Kind/Podman cluster with proper context
 
-# Examples
-kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins
-kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins | kubectl diff -f -
+# Delete cluster (cleanup)
+npm run infra:local:cluster:delete   # Removes cluster and context
+```
 
-# Manual deployment (requires GitHub CLI)
-gh workflow run deploy-k8s-resources.yml -f environment=dev
+**Local Kubernetes Resources**:
 
+```bash
+# Build manifests (validation only)
+npm run infra:local:k8s-resources:build
+
+# Apply resources (handles immutable field errors automatically)
+npm run infra:local:k8s-resources:apply
+
+# Delete all resources
+npm run infra:local:k8s-resources:delete
+```
+
+**Validation**:
+
+```bash
+# Validate all environments
+npm run infra:validate
+
+# Validate specific environment
+npm run infra:validate:dev
+npm run infra:validate:test
+npm run infra:validate:prod
+```
+
+**Setup Tools** (one-time):
+
+```bash
+# Install Kustomize, kubectl, yq, etc.
+npm run infra:setup
+```
+
+**Why use scripts instead of kubectl directly?**
+
+- ✅ Automatic context validation (prevents deploying to wrong cluster)
+- ✅ Immutable field error handling (auto-deletes and retries)
+- ✅ Secret substitution for local testing
+- ✅ Consistent behavior with CI/CD workflows
+- ✅ Better error messages and logging
+
+### Kubernetes Quick Reference (Manual Commands - Use Only for Inspection)
+
+```bash
 # Check deployment status
 kubectl get statefulset postgres redis jaeger
 kubectl get pods -l app=postgres
@@ -793,7 +861,14 @@ kubectl logs postgres-0
 kubectl port-forward svc/jaeger-svc 16686:16686
 # Open: http://localhost:16686
 
-# Rollback (manual)
+# Ingress access (if configured)
+kubectl get ingress
+kubectl describe ingress jaeger
+
+# Manual deployment (Hetzner - requires GitHub CLI)
+gh workflow run deploy-k8s-resources.yml -f environment=dev
+
+# Manual rollback (use only if automated rollback fails)
 kubectl rollout undo statefulset/postgres
 kubectl rollout status statefulset/postgres -w
 ```

@@ -1,3 +1,4 @@
+# yaml-language-server: disable
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -7,6 +8,7 @@ spec:
   selector:
     matchLabels:
       app: postgres
+  replicas: 1 # Single instance for dev
   template:
     metadata:
       labels:
@@ -29,4 +31,4 @@ spec:
         storageClassName: hcloud-volumes
         resources:
           requests:
-            storage: 5Gi
+            storage: 10Gi

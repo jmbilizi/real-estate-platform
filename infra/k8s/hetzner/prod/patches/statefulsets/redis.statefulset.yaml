@@ -1,3 +1,4 @@
+# yaml-language-server: disable
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -33,4 +34,4 @@ spec:
         storageClassName: hcloud-volumes
         resources:
           requests:
-            storage: 2Gi
+            storage: 10Gi # RDB snapshots + AOF + sessions/cache - be generous

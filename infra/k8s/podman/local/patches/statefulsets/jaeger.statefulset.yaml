@@ -3,11 +3,17 @@
 # Retention: 7 days (in-memory + disk)
 # Sampling: 100% (trace all requests for debugging)
 
+# yaml-language-server: disable
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: jaeger
 spec:
+  serviceName: jaeger-hl
+  selector:
+    matchLabels:
+      app: jaeger
+  replicas: 1 # Single instance for local
   template:
     spec:
       containers:

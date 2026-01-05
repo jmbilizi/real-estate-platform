@@ -11,6 +11,8 @@ patches:
   - path: patches/statefulsets/redis.statefulset.yaml
   - path: patches/statefulsets/jaeger.statefulset.yaml
 
+  - path: patches/ingresses/jaeger.ingress.yaml
+
 # Common labels for all resources
 labels:
   - pairs:

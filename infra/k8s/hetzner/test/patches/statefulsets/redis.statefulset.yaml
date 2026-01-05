@@ -1,3 +1,4 @@
+# yaml-language-server: disable
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -7,6 +8,7 @@ spec:
   selector:
     matchLabels:
       app: redis
+  replicas: 1 # Single instance for test (consider 3 with Sentinel for realistic testing)
   template:
     metadata:
       labels:
@@ -32,4 +34,4 @@ spec:
         storageClassName: hcloud-volumes
         resources:
           requests:
-            storage: 1Gi
+            storage: 5Gi

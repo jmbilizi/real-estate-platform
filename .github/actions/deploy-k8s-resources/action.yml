@@ -48,7 +48,7 @@ runs:
         kubectl version --client
         kubectl cluster-info
 
-    - name: Substitute secrets (Postgres, Redis)
+    - name: Substitute secrets (Postgres, Redis, Jaeger)
       shell: bash
       run: |
         # In-memory substitution pattern; overwrite templates in workspace
@@ -66,6 +66,23 @@ runs:
         yq eval '.stringData.REDIS_MONITOR_PASSWORD = env(REDIS_MONITOR_PASSWORD)' - \
         > /tmp/redis.secret.processed.yaml
         mv /tmp/redis.secret.processed.yaml infra/k8s/base/secrets/redis.secret.yaml
+
+        yq eval '.stringData.auth = env(JAEGER_BASIC_AUTH)' infra/k8s/base/secrets/jaeger.secret.yaml \
+        > /tmp/jaeger.secret.processed.yaml
+        mv /tmp/jaeger.secret.processed.yaml infra/k8s/base/secrets/jaeger.secret.yaml
+
+    - name: Substitute domain placeholders in ingress manifests
+      shell: bash
+      run: |
+        # Substitute domain placeholders in Hetzner environment ingress patches
+        # Pattern matches hetzner-k8s cluster provisioning (in-memory substitution)
+        ENV_NAME=$(basename "${{ inputs.kustomizePath }}")
+
+        # Jaeger ingress
+        if [ -f "${{ inputs.kustomizePath }}/patches/ingresses/jaeger.ingress.yaml" ]; then
+          sed -i "s/JAEGER_DOMAIN_PLACEHOLDER/${JAEGER_DOMAIN}/g" \
+            "${{ inputs.kustomizePath }}/patches/ingresses/jaeger.ingress.yaml"
+        fi
 
     - name: Build manifests
       shell: bash

@@ -1,3 +1,4 @@
+# yaml-language-server: disable
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -41,4 +42,4 @@ spec:
         storageClassName: hcloud-volumes
         resources:
           requests:
-            storage: 10Gi # Start minimal, expand as needed
+            storage: 20Gi # Storage is cheap (~€2/month), running out is expensive

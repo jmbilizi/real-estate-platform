@@ -11,7 +11,7 @@ metadata:
   name: redis
 spec:
   serviceName: redis-hl
-  replicas: 1
+  # replicas: Defined in environment patches (1 all envs for MVP)
   selector:
     matchLabels:
       app: redis

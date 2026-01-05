@@ -1,3 +1,4 @@
+# yaml-language-server: disable
 # Jaeger StatefulSet Patch for Hetzner Prod Environment
 # Adds production-grade resources and storage
 # Retention: 30 days
@@ -9,6 +10,11 @@ kind: StatefulSet
 metadata:
   name: jaeger
 spec:
+  serviceName: jaeger-hl
+  selector:
+    matchLabels:
+      app: jaeger
+  replicas: 1 # Jaeger all-in-one (single instance, use Elasticsearch backend for HA)
   template:
     spec:
       containers:

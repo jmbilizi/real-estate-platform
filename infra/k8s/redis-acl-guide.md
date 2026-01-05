@@ -46,7 +46,7 @@ This deployment uses **ACL-based authentication** (Access Control Lists) for ent
 ### Rate Limit User (`ratelimit_user`)
 
 - **Purpose**: API rate limiting counters, abuse prevention
-- **Used by**: api-gateway, any service implementing throttling
+- **Used by**: Services implementing throttling/rate limiting
 - **Permissions**: Counter operations on rate limit keys
 - **Key pattern**: `~ratelimit:*`
 - **Commands**: `+incr +decr +expire +ttl +get +set +del`

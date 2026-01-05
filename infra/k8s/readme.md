@@ -22,6 +22,7 @@ This directory contains comprehensive documentation for the Kubernetes infrastru
 
 2. **[OPERATIONS.md](./OPERATIONS.md)** - Quick reference
    - Common commands and workflows
+   - **DNS configuration for ingress domains**
    - Troubleshooting procedures
    - Emergency procedures
    - Useful aliases and shortcuts
@@ -236,6 +237,27 @@ Configure in: Repository Settings → Secrets and variables → Actions
 **Note:** Each environment has its own set of these secrets (scoped to the environment).
 
 **Redis ACL Info:** See `redis-acl-guide.md` for user permissions and application connection examples.
+
+### Jaeger Basic Auth (per environment)
+
+**All environments (dev, test, prod):** `JAEGER_BASIC_AUTH`
+
+**Format:** htpasswd string (e.g., `admin:$apr1$xyz...`)  
+**Generate:** `htpasswd -nb username password`  
+**Purpose:** Protects Jaeger UI with HTTP Basic Authentication
+
+### Ingress Domain Configuration (per environment)
+
+**Current:** `JAEGER_DOMAIN`  
+**Planned:** `API_GATEWAY_DOMAIN`, `WEBAPP_DOMAIN`
+
+**Examples:**
+
+- Dev: `jaeger.dev.yoursite.com`, `api.dev.yoursite.com` (future), `app.dev.yoursite.com` (future)
+- Test: `jaeger.test.yoursite.com`, `api.test.yoursite.com` (future), `app.test.yoursite.com` (future)
+- Prod: `jaeger.yoursite.com`, `api.yoursite.com` (future), `yoursite.com` (future)
+
+**Note:** These are substituted into Ingress manifest files during deployment (not K8s Secrets).
 
 ## 🛠️ Tools Required
 

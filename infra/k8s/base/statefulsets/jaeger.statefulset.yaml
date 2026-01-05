@@ -11,7 +11,7 @@ metadata:
   name: jaeger
 spec:
   serviceName: jaeger-hl
-  replicas: 1
+  # replicas: Defined in environment patches (1 all envs - all-in-one doesn't cluster)
   selector:
     matchLabels:
       app: jaeger

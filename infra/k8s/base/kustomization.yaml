@@ -10,14 +10,21 @@ labels:
       app.kubernetes.io/managed-by: kustomize
 
 # Resource ordering (applied in this sequence):
-# 1. Secrets (processed by workflow with actual values)
-# 2. ConfigMaps
-# 3. Services (must exist before StatefulSet for stable DNS)
-# 4. StatefulSets (depends on Secrets, ConfigMaps, Services)
+# 1. Nginx Ingress Controller (infrastructure)
+# 2. Secrets (processed by workflow with actual values)
+# 3. ConfigMaps
+# 4. Services (must exist before workloads for stable DNS)
+# 5. StatefulSets (stateful infrastructure)
+# 6. Deployments (stateless applications)
+# 7. Ingress rules (external routing)
 resources:
+  # Infrastructure: Nginx Ingress Controller (remote official manifest)
+  - https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.1/deploy/static/provider/cloud/deploy.yaml
+
   # Secrets (all first)
   - secrets/postgres.secret.yaml
   - secrets/redis.secret.yaml
+  - secrets/jaeger.secret.yaml
 
   # ConfigMaps (all second)
   - configmaps/postgres.configmap.yaml
@@ -30,12 +37,15 @@ resources:
   - services/jaeger.service.yaml
 
   # Workloads (statefulsets, deployments, etc.)
-  ## StatefulSets (stateful apps)
+  ## StatefulSets (stateful infrastructure)
   - statefulsets/postgres.statefulset.yaml
   - statefulsets/redis.statefulset.yaml
   - statefulsets/jaeger.statefulset.yaml
 
-  ## Deployments (stateless apps)
+  ## Deployments (stateless applications - future: api-gateway, microservices)
+
+  # Ingress rules (external routing - uses Nginx controller above)
+  - ingresses/jaeger.ingress.yaml
 
   ## DaemonSets (node-level services like Logging, monitoring, networking on every node)
 

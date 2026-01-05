@@ -3,11 +3,17 @@
 # Retention: 14 days
 # Sampling: 10% (balance between visibility and performance)
 
+# yaml-language-server: disable
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: jaeger
 spec:
+  serviceName: jaeger-hl
+  selector:
+    matchLabels:
+      app: jaeger
+  replicas: 1 # Single instance for test
   template:
     spec:
       containers:

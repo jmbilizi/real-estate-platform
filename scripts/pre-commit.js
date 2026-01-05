@@ -411,6 +411,13 @@ function checkInfrastructure() {
 
   log("\n🏗️  Validating Kustomize manifests...", "blue");
 
+  // Validate ingress annotations first (fast check)
+  const annotationCheck = run("node tools/infra/validate-ingress-annotations.js", { silent: false });
+  if (!annotationCheck.success) {
+    logError("Ingress annotation validation failed");
+    return false;
+  }
+
   const result = run("npm run infra:validate");
   if (!result.success) {
     logError("Kustomize validation failed");

@@ -110,6 +110,84 @@ kubectl rollout status statefulset/redis -w
 kubectl rollout status statefulset/jaeger -w
 ```
 
+### Configure DNS for Ingress
+
+After deploying to Hetzner, configure DNS records to make domains accessible:
+
+```bash
+# 1. Get Nginx Ingress external IP (LoadBalancer)
+kubectl get svc -n ingress-nginx ingress-nginx-controller
+
+# Output example:
+# NAME                       TYPE           EXTERNAL-IP      PORT(S)
+# ingress-nginx-controller   LoadBalancer   95.217.XXX.XXX   80:31234/TCP,443:31567/TCP
+
+# 2. Copy the EXTERNAL-IP value (e.g., 95.217.XXX.XXX)
+```
+
+**Configure DNS A Records** at your DNS provider (Cloudflare, Route53, Hetzner DNS, etc.):
+
+| Environment | Domain                   | Type | Value          |
+| ----------- | ------------------------ | ---- | -------------- |
+| Dev         | api.dev.yoursite.com     | A    | 95.217.XXX.XXX |
+| Dev         | jaeger.dev.yoursite.com  | A    | 95.217.XXX.XXX |
+| Test        | api.test.yoursite.com    | A    | 95.217.XXX.XXX |
+| Test        | jaeger.test.yoursite.com | A    | 95.217.XXX.XXX |
+| Prod        | api.yoursite.com         | A    | 95.217.XXX.XXX |
+| Prod        | jaeger.yoursite.com      | A    | 95.217.XXX.XXX |
+
+**DNS Propagation Timeline:**
+
+- Internal DNS: Instant
+- Public DNS: 5-60 minutes (depends on TTL)
+
+**Verify DNS Resolution:**
+
+```bash
+# Check DNS propagation
+nslookup api.dev.yoursite.com
+dig api.dev.yoursite.com
+
+# Test HTTP access (before TLS cert issued)
+curl -I http://api.dev.yoursite.com
+
+# After cert-manager provisions certificates (~2-5 minutes)
+curl -I https://api.dev.yoursite.com
+```
+
+**TLS Certificate Automation** (cert-manager handles this automatically):
+
+1. Detects Ingress with `cert-manager.io/cluster-issuer` annotation
+2. Initiates ACME HTTP-01 challenge with Let's Encrypt
+3. Creates TLS certificate (valid 90 days)
+4. Stores in Kubernetes Secret (e.g., `jaeger-prod-tls`)
+5. Auto-renews 30 days before expiration
+
+**Troubleshooting DNS/TLS:**
+
+```bash
+# Check cert-manager certificate status
+kubectl get certificate
+kubectl describe certificate jaeger-tls
+
+# Check cert-manager challenge
+kubectl get challenge
+kubectl describe challenge <challenge-name>
+
+# Check ingress events
+kubectl describe ingress jaeger
+
+# Verify cert-manager logs
+kubectl logs -n cert-manager deployment/cert-manager
+```
+
+**Common Issues:**
+
+- **DNS not resolving**: Wait longer (up to 60 min), or check DNS provider
+- **Certificate pending**: Ensure DNS points to correct IP, check HTTP-01 challenge accessible
+- **Invalid certificate**: Using staging issuer (test env) - expected, provides valid chain but not trusted
+- **Rate limits**: Let's Encrypt has limits (50 certs/week/domain) - use staging for testing
+
 ## Common Workflows
 
 ### Add New Environment
@@ -250,8 +328,7 @@ yq eval '.stringData.NEW_SERVICE_DB_USER_PASSWORD = "${{ secrets.NEW_SERVICE_DB_
 ```bash
 # Method 1: Using kubectl rollout (for specific workload type)
 kubectl rollout undo statefulset/postgres
-kubectl rollout undo deployment/api-gateway
-kubectl rollout undo daemonset/logging-agent
+kubectl rollout undo statefulset/jaeger
 
 # Verify rollback status
 kubectl rollout status statefulset/postgres --watch

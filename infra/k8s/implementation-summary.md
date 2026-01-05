@@ -445,7 +445,7 @@ embedded_registry_mirror:
 - `admin` - Full access (operations, monitoring, probes)
 - `pubsub_user` - Pub/Sub and messaging keys (`~messaging:*`, `~pubsub:*`) - Used by messaging-service, notification-service, websocket-gateway
 - `cache_user` - Cache and session keys (`~cache:*`, `~session:*`) - Used by property-service, account-service
-- `ratelimit_user` - Rate limiting counters (`~ratelimit:*`) - Used by api-gateway
+- `ratelimit_user` - Rate limiting counters (`~ratelimit:*`) - Used by services implementing rate limiting
 - `monitor` - Read-only monitoring (Prometheus/Grafana)
 
 **Use Cases:**

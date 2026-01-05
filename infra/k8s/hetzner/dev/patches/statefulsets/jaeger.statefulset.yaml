@@ -1,3 +1,4 @@
+# yaml-language-server: disable
 # Jaeger StatefulSet Patch for Hetzner Dev Environment
 # Adds minimal resources and storage for development use
 # Retention: 7 days
@@ -8,6 +9,11 @@ kind: StatefulSet
 metadata:
   name: jaeger
 spec:
+  serviceName: jaeger-hl
+  selector:
+    matchLabels:
+      app: jaeger
+  replicas: 1 # Single instance for dev
   template:
     spec:
       containers:
