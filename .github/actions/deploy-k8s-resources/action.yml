@@ -492,39 +492,137 @@ runs:
               fi
             else
               echo "   ⏳ TLS secret not ready yet (cert-manager provisioning)"
+              echo ""
+              echo "   🔍 Detailed cert-manager diagnostics:"
+              echo "   ════════════════════════════════════════"
               
-              # Check cert-manager Certificate resource
-              echo "   🔍 Checking cert-manager resources..."
-              if kubectl get certificate -n $ns >/dev/null 2>&1; then
-                echo "   📜 Certificate resources:"
-                kubectl get certificate -n $ns -o custom-columns="NAME:.metadata.name,READY:.status.conditions[?(@.type=='Ready')].status,SECRET:.spec.secretName,AGE:.metadata.creationTimestamp"
+              # 1. Check cert-manager installation
+              echo "   📦 cert-manager Installation:"
+              if kubectl get namespace cert-manager >/dev/null 2>&1; then
+                echo "      ✅ cert-manager namespace exists"
+                cert_manager_pods=$(kubectl get pods -n cert-manager --no-headers 2>/dev/null | wc -l)
+                cert_manager_ready=$(kubectl get pods -n cert-manager --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l)
+                echo "      📊 Pods: $cert_manager_ready/$cert_manager_pods running"
                 
-                # Check CertificateRequest status
-                echo "   📋 CertificateRequest status:"
-                kubectl get certificaterequest -n $ns -o custom-columns="NAME:.metadata.name,READY:.status.conditions[?(@.type=='Ready')].status,REASON:.status.conditions[?(@.type=='Ready')].reason,MESSAGE:.status.conditions[?(@.type=='Ready')].message"
-                
-                # Check for certificate errors
-                cert_name=$(kubectl get certificate -n $ns -o jsonpath='{.items[?(@.spec.secretName=="'$tls_secret'")].metadata.name}' 2>/dev/null || echo "")
-                if [ -n "$cert_name" ]; then
-                  echo "   🔍 Certificate '$cert_name' events:"
-                  kubectl describe certificate -n $ns $cert_name | grep -A 10 "Events:" || echo "No events found"
+                if [ "$cert_manager_ready" -lt "$cert_manager_pods" ]; then
+                  echo "      ⚠️  Some cert-manager pods not ready:"
+                  kubectl get pods -n cert-manager
                 fi
               else
-                echo "   ❌ No Certificate resources found - cert-manager may not be installed"
-                echo "   💡 Check if cert-manager is running:"
-                if kubectl get pods -n cert-manager 2>/dev/null; then
-                  echo "   ✅ cert-manager pods found"
-                else
-                  echo "   ❌ cert-manager namespace not found"
-                  echo ""
-                  echo "   ⚠️  ACTION REQUIRED: Install cert-manager to enable TLS"
-                  echo "   📝 Steps:"
-                  echo "      1. kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.3/cert-manager.yaml"
-                  echo "      2. Create ClusterIssuer for Let's Encrypt (letsencrypt-prod)"
-                  echo "      3. Redeploy this environment to trigger certificate provisioning"
-                  echo ""
-                fi
+                echo "      ❌ cert-manager namespace not found"
+                echo "      ⚠️  cert-manager not installed - check cluster provisioning"
               fi
+              
+              # 2. Check ClusterIssuer
+              echo ""
+              echo "   🏢 ClusterIssuer Status:"
+              if kubectl get clusterissuer letsencrypt-prod >/dev/null 2>&1; then
+                echo "      ✅ ClusterIssuer 'letsencrypt-prod' exists"
+                issuer_ready=$(kubectl get clusterissuer letsencrypt-prod -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
+                if [ "$issuer_ready" = "True" ]; then
+                  echo "      ✅ ClusterIssuer is Ready"
+                else
+                  echo "      ❌ ClusterIssuer not ready"
+                  kubectl describe clusterissuer letsencrypt-prod | grep -A 5 "Status:" || echo "      No status available"
+                fi
+              else
+                echo "      ❌ ClusterIssuer 'letsencrypt-prod' not found"
+                echo "      📝 Available ClusterIssuers:"
+                kubectl get clusterissuer 2>/dev/null || echo "      None"
+              fi
+              
+              # 3. Check Ingress annotations
+              echo ""
+              echo "   📝 Ingress Annotations:"
+              kubectl get ingress $name -n $ns -o jsonpath='{.metadata.annotations}' 2>/dev/null | grep -o 'cert-manager[^,}]*' || echo "      ⚠️  No cert-manager annotations found"
+              
+              # 4. Check Certificate resource
+              echo ""
+              echo "   📜 Certificate Resource:"
+              if kubectl get certificate -n $ns >/dev/null 2>&1; then
+                kubectl get certificate -n $ns -o custom-columns="NAME:.metadata.name,READY:.status.conditions[?(@.type=='Ready')].status,SECRET:.spec.secretName,ISSUER:.spec.issuerRef.name,AGE:.metadata.creationTimestamp"
+                
+                # Show detailed status
+                cert_name=$(kubectl get certificate -n $ns -o jsonpath='{.items[?(@.spec.secretName=="'$tls_secret'")].metadata.name}' 2>/dev/null || echo "")
+                if [ -n "$cert_name" ]; then
+                  echo ""
+                  echo "      Certificate: $cert_name"
+                  cert_ready=$(kubectl get certificate $cert_name -n $ns -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
+                  cert_message=$(kubectl get certificate $cert_name -n $ns -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}' 2>/dev/null)
+                  
+                  if [ "$cert_ready" = "True" ]; then
+                    echo "      ✅ Ready"
+                  else
+                    echo "      ⏳ Not ready: $cert_message"
+                  fi
+                fi
+              else
+                echo "      ❌ No Certificate resources found"
+                echo "      💡 cert-manager should auto-create from Ingress annotation"
+              fi
+              
+              # 5. Check CertificateRequest
+              echo ""
+              echo "   📋 CertificateRequest:"
+              if kubectl get certificaterequest -n $ns >/dev/null 2>&1; then
+                kubectl get certificaterequest -n $ns -o custom-columns="NAME:.metadata.name,READY:.status.conditions[?(@.type=='Ready')].status,AGE:.metadata.creationTimestamp" --sort-by=.metadata.creationTimestamp
+                
+                latest_req=$(kubectl get certificaterequest -n $ns --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1:].metadata.name}' 2>/dev/null)
+                if [ -n "$latest_req" ]; then
+                  echo "      Latest: $latest_req"
+                  req_message=$(kubectl get certificaterequest $latest_req -n $ns -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}' 2>/dev/null)
+                  echo "      Status: $req_message"
+                fi
+              else
+                echo "      ℹ️  No requests yet"
+              fi
+              
+              # 6. Check ACME Order
+              echo ""
+              echo "   📦 ACME Order:"
+              if kubectl get order -n $ns >/dev/null 2>&1; then
+                kubectl get order -n $ns --sort-by=.metadata.creationTimestamp
+                
+                latest_order=$(kubectl get order -n $ns --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1:].metadata.name}' 2>/dev/null)
+                if [ -n "$latest_order" ]; then
+                  echo "      Latest: $latest_order"
+                  order_state=$(kubectl get order $latest_order -n $ns -o jsonpath='{.status.state}' 2>/dev/null)
+                  echo "      State: $order_state"
+                fi
+              else
+                echo "      ℹ️  No ACME order initiated"
+              fi
+              
+              # 7. Check ACME Challenge
+              echo ""
+              echo "   🎯 ACME Challenge:"
+              if kubectl get challenge -n $ns >/dev/null 2>&1; then
+                kubectl get challenge -n $ns --sort-by=.metadata.creationTimestamp
+                
+                for challenge in $(kubectl get challenge -n $ns -o jsonpath='{.items[*].metadata.name}'); do
+                  echo "      Challenge: $challenge"
+                  challenge_state=$(kubectl get challenge $challenge -n $ns -o jsonpath='{.status.state}' 2>/dev/null)
+                  challenge_reason=$(kubectl get challenge $challenge -n $ns -o jsonpath='{.status.reason}' 2>/dev/null)
+                  echo "      State: $challenge_state"
+                  [ -n "$challenge_reason" ] && echo "      Reason: $challenge_reason"
+                done
+              else
+                echo "      ℹ️  No challenges yet"
+              fi
+              
+              # 8. Check cert-manager logs
+              echo ""
+              echo "   📋 cert-manager Logs (last 30 lines):"
+              kubectl logs -n cert-manager deployment/cert-manager --tail=30 2>/dev/null | grep -E "error|Error|failed|Failed|$ns|certificate" | tail -10 || echo "      No relevant logs"
+              
+              echo ""
+              echo "   ════════════════════════════════════════"
+              echo "   💡 Troubleshooting:"
+              echo "      • Wait 2-5 min for ACME HTTP-01 challenge"
+              echo "      • Verify DNS: nslookup jaeger.dev.cribstop.com"
+              echo "      • Check port 80 accessible (required for challenge)"
+              echo "      • Monitor: kubectl get certificate -n $ns -w"
+              echo ""
             fi
           fi
         done
