@@ -367,14 +367,35 @@ runs:
           echo "📌 Point your DNS (jaeger.dev.mysite.com, etc.) to: $EXTERNAL_IP"
         else
           echo "⚠️  LoadBalancer EXTERNAL-IP is <pending>"
-          echo "   Option 1: Use NodePort with worker node's public IP"
+          
+          # TEMPORARY DEBUG: Check Cloud Controller Manager status
+          echo "\n🔍 DEBUG: Checking Cloud Controller Manager..."
+          CCM_PODS=$(kubectl get pods -n kube-system -l app.kubernetes.io/name=hcloud-cloud-controller-manager -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$CCM_PODS" ]; then
+            echo "✅ CCM pods found: $CCM_PODS"
+            kubectl get pods -n kube-system -l app.kubernetes.io/name=hcloud-cloud-controller-manager -o wide
+            echo "\n🔍 DEBUG: CCM logs (last 30 lines):"
+            for pod in $CCM_PODS; do
+              kubectl logs -n kube-system $pod --tail=30 2>&1 | grep -i "loadbalancer\|error\|fail" || echo "No relevant errors in $pod"
+            done
+          else
+            echo "❌ CCM not found in kube-system namespace"
+            echo "   This is likely why LoadBalancer is pending"
+          fi
+          
+          echo "\n🔍 DEBUG: Checking hcloud secret..."
+          kubectl get secret -n kube-system hcloud -o jsonpath='{.metadata.name}' 2>/dev/null && echo "✅ hcloud secret exists" || echo "❌ hcloud secret missing"
+          
+          echo "\n🔍 DEBUG: LoadBalancer service events..."
+          kubectl describe svc -n ingress-nginx ingress-nginx-controller | grep -A 10 "Events:" || echo "No events found"
+          
+          echo "\n   Option 1: Use NodePort with worker node's public IP"
           WORKER_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="ExternalIP")].address}' 2>/dev/null || echo "")
           HTTP_PORT=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.spec.ports[?(@.name=="http")].nodePort}' 2>/dev/null || echo "")
           HTTPS_PORT=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.spec.ports[?(@.name=="https")].nodePort}' 2>/dev/null || echo "")
           if [ -n "$WORKER_IP" ]; then
             echo "   📌 Point DNS to: $WORKER_IP (HTTP:$HTTP_PORT, HTTPS:$HTTPS_PORT)"
           fi
-          echo "   Option 2: Install Hetzner Cloud Controller Manager for automatic LoadBalancer provisioning"
         fi
         echo "\n💾 PVCs:"
         kubectl get pvc || echo "No PVCs found"
