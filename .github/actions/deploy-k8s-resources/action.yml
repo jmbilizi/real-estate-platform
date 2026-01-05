@@ -362,9 +362,20 @@ runs:
         kubectl get services -l app.kubernetes.io/managed-by=kustomize || echo "No services found"
         echo "\n💾 PVCs:"
         kubectl get pvc || echo "No PVCs found"
+
+        # Check for stuck pods and show detailed diagnostics
+        STUCK_PODS=$(kubectl get pods --field-selector=status.phase!=Running,status.phase!=Succeeded -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+        if [ -n "$STUCK_PODS" ]; then
+          echo "\n⚠️  Found pods not in Running state - showing diagnostics:"
+          for pod in $STUCK_PODS; do
+            echo "\n🔍 Pod: $pod"
+            kubectl describe pod $pod | grep -A 20 "Events:" || true
+          done
+        fi
+
         if [ "${{ steps.pvc_cleanup.outputs.pvc_cleanup_ran }}" = "true" ]; then
           echo "\n📋 Recent pod events (PVC cleanup was executed):"
-          kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -30 || true
+          kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail-30 || true
         fi
 
     - name: Mark failure if rollout did not succeed
