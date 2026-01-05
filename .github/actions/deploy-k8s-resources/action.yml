@@ -223,19 +223,6 @@ runs:
           echo "✅ Deployment successful (no immutable field conflicts)"
         fi
 
-    # TEMPORARY: Delete postgres-0 to fix ConfigMap reference issue
-    # Remove this step after successful deployment
-    - name: Delete stuck postgres pod (TEMPORARY)
-      shell: bash
-      run: |
-        echo "🔧 TEMPORARY: Deleting postgres-0 pod to fix ConfigMap reference..."
-        if kubectl get pod postgres-0 >/dev/null 2>&1; then
-          kubectl delete pod postgres-0 --grace-period=10
-          echo "✅ postgres-0 deleted - StatefulSet will recreate it with correct ConfigMap reference"
-        else
-          echo "ℹ️  postgres-0 pod not found (may be in different namespace or already deleted)"
-        fi
-
     - name: Restart only on template change (StatefulSets)
       shell: bash
       run: |
