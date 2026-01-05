@@ -122,6 +122,57 @@ runs:
         gh secret set KUBECONFIG --env ${{ inputs.environment }} < ./kubeconfig
         echo "✅ KUBECONFIG secret updated in ${{ inputs.environment }} environment"
 
+    - name: Install cert-manager (if not exists)
+      if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
+      shell: bash
+      env:
+        KUBECONFIG: ./kubeconfig
+      run: |
+        echo "🔒 Checking cert-manager installation..."
+        
+        if kubectl get namespace cert-manager >/dev/null 2>&1; then
+          CURRENT_VERSION=$(kubectl get deployment -n cert-manager cert-manager -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null | cut -d':' -f2 || echo "unknown")
+          echo "✅ cert-manager $CURRENT_VERSION already installed"
+        else
+          echo "📦 Installing cert-manager v1.13.3..."
+          kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.3/cert-manager.yaml
+          
+          echo "⏳ Waiting for cert-manager to be ready..."
+          kubectl wait --for=condition=Available --timeout=180s \
+            deployment/cert-manager \
+            deployment/cert-manager-cainjector \
+            deployment/cert-manager-webhook \
+            -n cert-manager
+          
+          echo "✅ cert-manager v1.13.3 installed successfully"
+        fi
+        
+        # Ensure ClusterIssuer exists
+        echo ""
+        echo "🏢 Checking ClusterIssuer..."
+        if kubectl get clusterissuer letsencrypt-prod >/dev/null 2>&1; then
+          echo "✅ ClusterIssuer 'letsencrypt-prod' already exists"
+        else
+          echo "📝 Creating ClusterIssuer 'letsencrypt-prod'..."
+          cat <<EOF | kubectl apply -f -
+        apiVersion: cert-manager.io/v1
+        kind: ClusterIssuer
+        metadata:
+          name: letsencrypt-prod
+        spec:
+          acme:
+            server: https://acme-v02.api.letsencrypt.org/directory
+            email: admin@cribstop.com
+            privateKeySecretRef:
+              name: letsencrypt-prod-account-key
+            solvers:
+              - http01:
+                  ingress:
+                    class: nginx
+        EOF
+          echo "✅ ClusterIssuer created"
+        fi
+
     - name: Verify cluster prerequisites
       if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
       shell: bash
@@ -133,21 +184,14 @@ runs:
         kubectl get pods -n kube-system -l app=hcloud-csi-controller --no-headers | wc -l
         kubectl get storageclass hcloud-volumes || echo "⚠️  Warning: StorageClass not found"
 
-        # Verify cert-manager was installed by hetzner-k3s post-create commands
-        echo "🔒 Verifying cert-manager installation..."
-        if kubectl get namespace cert-manager >/dev/null 2>&1; then
-          CURRENT_VERSION=$(kubectl get deployment -n cert-manager cert-manager -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null | cut -d':' -f2 || echo "unknown")
-          echo "✅ cert-manager $CURRENT_VERSION installed"
-          kubectl get pods -n cert-manager --no-headers | wc -l | xargs -I {} echo "   {} pods running"
-          
-          # Check ClusterIssuer
-          if kubectl get clusterissuer letsencrypt-prod >/dev/null 2>&1; then
-            echo "✅ ClusterIssuer 'letsencrypt-prod' ready"
-          else
-            echo "⚠️  ClusterIssuer not found (may still be provisioning)"
-          fi
+        echo "🔒 Verifying cert-manager status..."
+        kubectl get pods -n cert-manager --no-headers | wc -l | xargs -I {} echo "   {} cert-manager pods running"
+        
+        # Verify ClusterIssuer is ready
+        if kubectl get clusterissuer letsencrypt-prod -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null | grep -q "True"; then
+          echo "✅ ClusterIssuer 'letsencrypt-prod' ready"
         else
-          echo "⚠️  cert-manager not found - check cluster-config.yaml additional_post_k3s_commands"
+          echo "⏳ ClusterIssuer 'letsencrypt-prod' not ready yet (may take a few seconds)"
         fi
 
         echo "✅ Cluster prerequisites verified"
