@@ -129,7 +129,7 @@ runs:
         KUBECONFIG: ./kubeconfig
       run: |
         echo "🔒 Checking cert-manager installation..."
-        
+
         if kubectl get namespace cert-manager >/dev/null 2>&1; then
           CURRENT_VERSION=$(kubectl get deployment -n cert-manager cert-manager -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null | cut -d':' -f2 || echo "unknown")
           echo "✅ cert-manager $CURRENT_VERSION already installed"
@@ -146,7 +146,7 @@ runs:
           
           echo "✅ cert-manager v1.13.3 installed successfully"
         fi
-        
+
         # Ensure ClusterIssuer exists
         echo ""
         echo "🏢 Checking ClusterIssuer..."
@@ -186,7 +186,7 @@ runs:
 
         echo "🔒 Verifying cert-manager status..."
         kubectl get pods -n cert-manager --no-headers | wc -l | xargs -I {} echo "   {} cert-manager pods running"
-        
+
         # Verify ClusterIssuer is ready
         if kubectl get clusterissuer letsencrypt-prod -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null | grep -q "True"; then
           echo "✅ ClusterIssuer 'letsencrypt-prod' ready"
