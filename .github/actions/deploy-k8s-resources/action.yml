@@ -285,8 +285,10 @@ runs:
         if [ -n "$DEPLOYMENTS" ]; then
           echo "\n📋 Found Deployments: $DEPLOYMENTS"
           for deploy in $DEPLOYMENTS; do
-            echo "\n🔄 Checking rollout status for Deployment/$deploy..."
-            if ! kubectl rollout status deployment/$deploy --timeout=${{ inputs.deployment_timeout }}; then
+            # Extract namespace for this deployment (default to 'default')
+            DEPLOY_NS=$(yq -N e "select(.kind == \"Deployment\" and .metadata.name == \"$deploy\") | .metadata.namespace // \"default\"" manifests.yaml 2>/dev/null | head -1)
+            echo "\n🔄 Checking rollout status for Deployment/$deploy (namespace: $DEPLOY_NS)..."
+            if ! kubectl rollout status deployment/$deploy -n "$DEPLOY_NS" --timeout=${{ inputs.deployment_timeout }}; then
               echo "❌ Deployment $deploy rollout failed"
               ROLLOUT_FAILED=true
             else
@@ -334,9 +336,11 @@ runs:
         done
         DEPLOYMENTS=$(yq -N e 'select(.kind == "Deployment") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
         for deploy in $DEPLOYMENTS; do
-          echo "\n🔄 Rolling back Deployment/$deploy..."
-          kubectl rollout undo deployment/$deploy || true
-          kubectl rollout status deployment/$deploy --timeout=${{ inputs.deployment_timeout }} || true
+          # Extract namespace for this deployment (default to 'default')
+          DEPLOY_NS=$(yq -N e "select(.kind == \"Deployment\" and .metadata.name == \"$deploy\") | .metadata.namespace // \"default\"" manifests.yaml 2>/dev/null | head -1)
+          echo "\n🔄 Rolling back Deployment/$deploy (namespace: $DEPLOY_NS)..."
+          kubectl rollout undo deployment/$deploy -n "$DEPLOY_NS" || true
+          kubectl rollout status deployment/$deploy -n "$DEPLOY_NS" --timeout=${{ inputs.deployment_timeout }} || true
         done
         DAEMONSETS=$(yq -N e 'select(.kind == "DaemonSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
         for ds in $DAEMONSETS; do
