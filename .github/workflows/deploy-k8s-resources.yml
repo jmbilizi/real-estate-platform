@@ -108,6 +108,8 @@ jobs:
           REDIS_CACHE_PASSWORD: ${{ secrets.REDIS_CACHE_PASSWORD }}
           REDIS_RATELIMIT_PASSWORD: ${{ secrets.REDIS_RATELIMIT_PASSWORD }}
           REDIS_MONITOR_PASSWORD: ${{ secrets.REDIS_MONITOR_PASSWORD }}
+          JAEGER_DOMAIN: ${{ secrets.JAEGER_DOMAIN }}
+          JAEGER_BASIC_AUTH: ${{ secrets.JAEGER_BASIC_AUTH }}
 
   deploy-test:
     if: |
@@ -283,6 +285,8 @@ jobs:
           REDIS_CACHE_PASSWORD: ${{ secrets.REDIS_CACHE_PASSWORD }}
           REDIS_RATELIMIT_PASSWORD: ${{ secrets.REDIS_RATELIMIT_PASSWORD }}
           REDIS_MONITOR_PASSWORD: ${{ secrets.REDIS_MONITOR_PASSWORD }}
+          JAEGER_DOMAIN: ${{ secrets.JAEGER_DOMAIN }}
+          JAEGER_BASIC_AUTH: ${{ secrets.JAEGER_BASIC_AUTH }}
 
   deploy-prod:
     if: |
@@ -458,3 +462,5 @@ jobs:
           REDIS_CACHE_PASSWORD: ${{ secrets.REDIS_CACHE_PASSWORD }}
           REDIS_RATELIMIT_PASSWORD: ${{ secrets.REDIS_RATELIMIT_PASSWORD }}
           REDIS_MONITOR_PASSWORD: ${{ secrets.REDIS_MONITOR_PASSWORD }}
+          JAEGER_DOMAIN: ${{ secrets.JAEGER_DOMAIN }}
+          JAEGER_BASIC_AUTH: ${{ secrets.JAEGER_BASIC_AUTH }}
