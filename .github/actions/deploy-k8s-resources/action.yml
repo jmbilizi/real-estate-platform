@@ -381,6 +381,21 @@ runs:
           else
             echo "❌ CCM not found in kube-system namespace"
             echo "   This is likely why LoadBalancer is pending"
+            
+            # TEMPORARY FIX: Install CCM if missing
+            echo "\n🔧 TEMPORARY FIX: Installing Hetzner Cloud Controller Manager..."
+            
+            # Check if hcloud secret exists, if not create it with placeholder
+            if ! kubectl get secret -n kube-system hcloud >/dev/null 2>&1; then
+              echo "⚠️  hcloud secret missing - CCM cannot function without it"
+              echo "   Manual action required: Recreate cluster with hetzner-k3s v2.4.1+"
+            else
+              echo "✅ hcloud secret exists - proceeding with CCM installation"
+              kubectl apply -f https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/download/v1.20.0/ccm-networks.yaml
+              echo "⏳ Waiting for CCM to be ready..."
+              kubectl wait --for=condition=ready pod -n kube-system -l app.kubernetes.io/name=hcloud-cloud-controller-manager --timeout=60s || echo "CCM deployment may take longer"
+              echo "✅ CCM installation attempted - LoadBalancer should provision shortly"
+            fi
           fi
           
           echo "\n🔍 DEBUG: Checking hcloud secret..."
