@@ -202,11 +202,11 @@ runs:
               exit 1
             fi
             echo "📋 ${DISPLAY_NAME}s requiring recreation:"
-            echo "$FAILED_RESOURCES" | while read res; do echo "  - $res"; done
+            for res in $FAILED_RESOURCES; do echo "  - $res"; done
             CASCADE_INFO=""
             [ "$DELETE_ARGS" = "--cascade=orphan" ] && CASCADE_INFO=" (preserving dependent resources)"
             echo "\n🗑️  Deleting ${DISPLAY_NAME}s with immutable field conflicts${CASCADE_INFO}..."
-            echo "$FAILED_RESOURCES" | while read res; do
+            for res in $FAILED_RESOURCES; do
               if [ -n "$res" ]; then
                 echo "  Deleting $DISPLAY_NAME: $res"
                 kubectl delete "$RESOURCE_TYPE" "$res" $DELETE_ARGS || true
