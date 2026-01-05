@@ -115,17 +115,25 @@ jaeger StatefulSet (Jaeger all-in-one)
    curl http://localhost/ -H "Host: jaeger.dev.localhost"
    ```
 
-### **Certificate Management (Test/Prod):**
+### **Certificate Management (Hetzner Clusters):**
 
-3. **Install cert-manager** (if not already installed):
+**Automatic Installation**: cert-manager is installed during cluster provisioning:
 
-   ```bash
-   kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
-   ```
+- **Location**: `infra/k8s/hetzner/{env}/cluster/cluster-config.yaml` → `additional_post_k3s_commands`
+- **Version**: cert-manager v1.13.3
+- **ClusterIssuer**: `letsencrypt-prod` (ACME HTTP-01 challenge)
+- **Timing**: Runs immediately after K3s installation completes
+- **Safety**: First master node only (prevents race conditions in multi-master clusters)
+- **Verification**: Waits for cert-manager deployment to reach Available status (180s timeout)
 
-4. **Create ClusterIssuer** for Let's Encrypt (staging + production)
-   - Already configured in environment patches
-   - Certificates are automatically issued when Ingress resources are created
+**TLS Certificate Issuance** (automatic when Ingress deployed):
+
+1. cert-manager detects Ingress with `cert-manager.io/cluster-issuer: letsencrypt-prod` annotation
+2. Initiates ACME HTTP-01 challenge with Let's Encrypt
+3. Creates TLS certificate (valid 90 days, auto-renews 30 days before expiration)
+4. Stores in Kubernetes Secret (referenced by Ingress `tls.secretName`)
+
+**No manual setup required** - certificates provisioned automatically ~2-5 minutes after Ingress deployment.
 
 ---
 

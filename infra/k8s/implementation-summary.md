@@ -272,10 +272,19 @@ environments:
    - Install tools (kubectl, Helm, hetzner-k3s)
    - Setup SSH keys from GitHub Secrets
    - Substitute secrets in config
-   - Create/update cluster with hetzner-k3s
+   - Create/update cluster with hetzner-k3s (includes **automatic cert-manager installation** via `additional_post_k3s_commands`)
    - Wait for cluster readiness (configurable timeout: 5m dev/test, 10m prod)
+   - **Verify cert-manager installation** (check pods in cert-manager namespace)
    - **Upload KUBECONFIG** to GitHub Secrets (environment-scoped) using GitHub CLI
    - Trigger deploy-k8s-resources.yml workflow (passes environment parameter)
+
+**Cluster Provisioning Features:**
+
+- **Automatic TLS Certificate Management**: cert-manager v1.13.3 installed on all clusters during provisioning
+- **ClusterIssuer Configuration**: `letsencrypt-prod` ClusterIssuer created automatically (ACME HTTP-01 challenge)
+- **Installation Method**: `additional_post_k3s_commands` in cluster-config.yaml (runs on first master node only, avoids race conditions)
+- **Inline Resource Definition**: ClusterIssuer defined inline using heredoc (no separate manifest files)
+- **Verification**: Waits for cert-manager deployment to be available (180s timeout) before proceeding
 
 #### **deploy-k8s-resources.yml**
 

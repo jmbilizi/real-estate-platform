@@ -155,7 +155,11 @@ curl -I http://api.dev.yoursite.com
 curl -I https://api.dev.yoursite.com
 ```
 
-**TLS Certificate Automation** (cert-manager handles this automatically):
+**TLS Certificate Automation** (cert-manager is automatically installed during cluster provisioning):
+
+**Installation**: cert-manager v1.13.3 + `letsencrypt-prod` ClusterIssuer installed via `additional_post_k3s_commands` in cluster-config.yaml (all environments: dev/test/prod). No manual setup required.
+
+**Automatic Certificate Issuance**:
 
 1. Detects Ingress with `cert-manager.io/cluster-issuer` annotation
 2. Initiates ACME HTTP-01 challenge with Let's Encrypt

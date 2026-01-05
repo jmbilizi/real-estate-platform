@@ -643,10 +643,13 @@ if: |
    - Install kubectl, Helm, hetzner-k3s CLI
    - Setup SSH keys from GitHub Secrets
    - Substitute secrets in config
-   - Create/update cluster using hetzner-k3s CLI
+   - Create/update cluster using hetzner-k3s CLI (includes **automatic cert-manager installation**)
    - Wait for cluster readiness (nodes, CSI driver, StorageClass) with configurable timeout
+   - **Verify cert-manager installation** (check pods in cert-manager namespace)
    - **Upload KUBECONFIG** to GitHub environment secrets using GitHub CLI with PAT
    - **Trigger deploy-k8s-resources.yml** via workflow_dispatch (passes environment parameter)
+
+**TLS Certificate Management**: cert-manager v1.13.3 + `letsencrypt-prod` ClusterIssuer installed automatically during cluster provisioning via `additional_post_k3s_commands` in cluster-config.yaml. Installation runs on first master node only (prevents race conditions), waits for deployment readiness (180s timeout), creates ClusterIssuer inline using heredoc (no separate manifest files). Certificates automatically provisioned when Ingress resources deployed (~2-5 min via ACME HTTP-01 challenge).
 
 **CRITICAL**: Path filters prevent race conditions:
 

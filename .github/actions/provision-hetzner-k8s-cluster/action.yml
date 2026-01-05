@@ -132,6 +132,24 @@ runs:
         echo "Checking Hetzner CSI driver..."
         kubectl get pods -n kube-system -l app=hcloud-csi-controller --no-headers | wc -l
         kubectl get storageclass hcloud-volumes || echo "⚠️  Warning: StorageClass not found"
+
+        # Verify cert-manager was installed by hetzner-k3s post-create commands
+        echo "🔒 Verifying cert-manager installation..."
+        if kubectl get namespace cert-manager >/dev/null 2>&1; then
+          CURRENT_VERSION=$(kubectl get deployment -n cert-manager cert-manager -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null | cut -d':' -f2 || echo "unknown")
+          echo "✅ cert-manager $CURRENT_VERSION installed"
+          kubectl get pods -n cert-manager --no-headers | wc -l | xargs -I {} echo "   {} pods running"
+          
+          # Check ClusterIssuer
+          if kubectl get clusterissuer letsencrypt-prod >/dev/null 2>&1; then
+            echo "✅ ClusterIssuer 'letsencrypt-prod' ready"
+          else
+            echo "⚠️  ClusterIssuer not found (may still be provisioning)"
+          fi
+        else
+          echo "⚠️  cert-manager not found - check cluster-config.yaml additional_post_k3s_commands"
+        fi
+
         echo "✅ Cluster prerequisites verified"
 
     - name: Trigger resource deployment
