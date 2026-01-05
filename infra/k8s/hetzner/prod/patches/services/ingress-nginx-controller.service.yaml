@@ -1,0 +1,9 @@
+# Patch Nginx Ingress Controller service to add Hetzner LoadBalancer location annotation
+# This tells the Cloud Controller Manager where to create the load balancer
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingress-nginx-controller
+  namespace: ingress-nginx
+  annotations:
+    load-balancer.hetzner.cloud/location: ash # Ashburn, Virginia (matches cluster location)

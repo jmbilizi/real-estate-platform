@@ -11,6 +11,7 @@ patches:
   - path: patches/statefulsets/redis.statefulset.yaml
   - path: patches/statefulsets/jaeger.statefulset.yaml
 
+  - path: patches/services/ingress-nginx-controller.service.yaml
   - path: patches/ingresses/jaeger.ingress.yaml
 
 # Common labels for all resources

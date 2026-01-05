@@ -329,6 +329,10 @@ Configure in: Repository Settings → Secrets and variables → Actions
 | Dev config (combined)        | `hetzner/dev/patches/statefulsets/jaeger.statefulset.yaml`    |
 | Prod config (combined)       | `hetzner/prod/patches/statefulsets/jaeger.statefulset.yaml`   |
 | Service configuration        | `base/services/jaeger.service.yaml`                           |
+| Ingress (external access)    | `hetzner/{env}/patches/ingresses/jaeger.ingress.yaml`         |
+| **Nginx Ingress Controller** |                                                               |
+| Controller deployment        | `base/nginx-ingress/` (upstream manifest)                     |
+| Service patch (LoadBalancer) | `hetzner/{env}/patches/services/ingress-nginx-controller.service.yaml` |
 | **General**                  |                                                               |
 | Cluster config (dev)         | `hetzner/dev/cluster/cluster-config.yaml`                     |
 | GitHub Secrets required      | See "Required Secrets" section above                          |
