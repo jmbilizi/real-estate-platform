@@ -415,6 +415,12 @@ runs:
         echo "\n💾 PVCs:"
         kubectl get pvc || echo "No PVCs found"
 
+        echo "\n🌐 Ingress Resources:"
+        kubectl get ingress -A || echo "No Ingresses found"
+
+        echo "\n🔍 Ingress Details (with hosts and domains):"
+        kubectl get ingress -A -o custom-columns="NAMESPACE:.metadata.namespace,NAME:.metadata.name,HOSTS:.spec.rules[*].host,ADDRESS:.status.loadBalancer.ingress[*].ip,TLS:.spec.tls[*].secretName" || echo "No detailed ingress info available"
+
         # Check for stuck pods and show detailed diagnostics
         STUCK_PODS=$(kubectl get pods --field-selector=status.phase!=Running,status.phase!=Succeeded -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
         if [ -n "$STUCK_PODS" ]; then
