@@ -457,6 +457,43 @@ runs:
           else
             echo "   ✅ No placeholders detected"
           fi
+          
+          # Check backend service exists
+          backend_svc=$(kubectl get ingress -n $ns $name -o jsonpath='{.spec.rules[0].http.paths[0].backend.service.name}' 2>/dev/null || echo "")
+          backend_port=$(kubectl get ingress -n $ns $name -o jsonpath='{.spec.rules[0].http.paths[0].backend.service.port.number}' 2>/dev/null || echo "")
+          if [ -n "$backend_svc" ]; then
+            echo "   📡 Backend: $backend_svc:$backend_port"
+            if kubectl get svc -n $ns $backend_svc >/dev/null 2>&1; then
+              echo "   ✅ Backend service exists"
+              # Check if pods are backing the service
+              endpoints=$(kubectl get endpoints -n $ns $backend_svc -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null || echo "")
+              if [ -n "$endpoints" ]; then
+                echo "   ✅ Service has endpoints: $(echo $endpoints | wc -w) pod(s)"
+              else
+                echo "   ❌ Service has NO endpoints - no pods backing this service!"
+              fi
+            else
+              echo "   ❌ Backend service NOT found"
+            fi
+          fi
+          
+          # Check TLS certificate status
+          tls_secret=$(kubectl get ingress -n $ns $name -o jsonpath='{.spec.tls[0].secretName}' 2>/dev/null || echo "")
+          if [ -n "$tls_secret" ]; then
+            echo "   🔒 TLS Secret: $tls_secret"
+            if kubectl get secret -n $ns $tls_secret >/dev/null 2>&1; then
+              cert_data=$(kubectl get secret -n $ns $tls_secret -o jsonpath='{.data.tls\.crt}' 2>/dev/null || echo "")
+              if [ -n "$cert_data" ]; then
+                echo "   ✅ TLS certificate exists"
+                # Check certificate expiry
+                kubectl get certificate -n $ns 2>/dev/null | grep "$tls_secret" || echo "   ℹ️  No cert-manager Certificate resource found"
+              else
+                echo "   ❌ TLS secret exists but has no certificate data"
+              fi
+            else
+              echo "   ⏳ TLS secret not ready yet (cert-manager provisioning)"
+            fi
+          fi
         done
 
         # Check for stuck pods and show detailed diagnostics
