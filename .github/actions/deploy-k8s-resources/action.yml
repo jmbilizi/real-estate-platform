@@ -492,6 +492,28 @@ runs:
               fi
             else
               echo "   ⏳ TLS secret not ready yet (cert-manager provisioning)"
+              
+              # Check cert-manager Certificate resource
+              echo "   🔍 Checking cert-manager resources..."
+              if kubectl get certificate -n $ns >/dev/null 2>&1; then
+                echo "   📜 Certificate resources:"
+                kubectl get certificate -n $ns -o custom-columns="NAME:.metadata.name,READY:.status.conditions[?(@.type=='Ready')].status,SECRET:.spec.secretName,AGE:.metadata.creationTimestamp"
+                
+                # Check CertificateRequest status
+                echo "   📋 CertificateRequest status:"
+                kubectl get certificaterequest -n $ns -o custom-columns="NAME:.metadata.name,READY:.status.conditions[?(@.type=='Ready')].status,REASON:.status.conditions[?(@.type=='Ready')].reason,MESSAGE:.status.conditions[?(@.type=='Ready')].message"
+                
+                # Check for certificate errors
+                cert_name=$(kubectl get certificate -n $ns -o jsonpath='{.items[?(@.spec.secretName=="'$tls_secret'")].metadata.name}' 2>/dev/null || echo "")
+                if [ -n "$cert_name" ]; then
+                  echo "   🔍 Certificate '$cert_name' events:"
+                  kubectl describe certificate -n $ns $cert_name | grep -A 10 "Events:" || echo "No events found"
+                fi
+              else
+                echo "   ❌ No Certificate resources found - cert-manager may not be installed"
+                echo "   💡 Check if cert-manager is running:"
+                kubectl get pods -n cert-manager 2>/dev/null || echo "   ❌ cert-manager namespace not found"
+              fi
             fi
           fi
         done
