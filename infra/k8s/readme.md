@@ -307,35 +307,35 @@ Configure in: Repository Settings → Secrets and variables → Actions
 
 ### Find Configuration
 
-| What                         | Where                                                         |
-| ---------------------------- | ------------------------------------------------------------- |
-| Deployment flags             | `infra/deploy-control.yaml`                                   |
-| **PostgreSQL**               |                                                               |
-| PostgreSQL image version     | `base/statefulsets/postgres.statefulset.yaml`                 |
-| Init script (database setup) | `base/configmaps/postgres.configmap.yaml`                     |
-| Dev config (combined)        | `hetzner/dev/patches/statefulsets/postgres.statefulset.yaml`  |
-| Prod config (combined)       | `hetzner/prod/patches/statefulsets/postgres.statefulset.yaml` |
-| Service configuration        | `base/services/postgres.service.yaml`                         |
-| **Redis (Valkey)**           |                                                               |
-| Redis image version          | `base/statefulsets/redis.statefulset.yaml`                    |
-| Redis config + ACL users     | `base/configmaps/redis.configmap.yaml`                        |
-| Redis ACL documentation      | `redis-acl-guide.md`                                          |
-| Dev config (combined)        | `hetzner/dev/patches/statefulsets/redis.statefulset.yaml`     |
-| Prod config (combined)       | `hetzner/prod/patches/statefulsets/redis.statefulset.yaml`    |
-| Service configuration        | `base/services/redis.service.yaml`                            |
-| **Jaeger**                   |                                                               |
-| Jaeger image version         | `base/statefulsets/jaeger.statefulset.yaml`                   |
-| Sampling configuration       | `base/configmaps/jaeger.configmap.yaml`                       |
-| Dev config (combined)        | `hetzner/dev/patches/statefulsets/jaeger.statefulset.yaml`    |
-| Prod config (combined)       | `hetzner/prod/patches/statefulsets/jaeger.statefulset.yaml`   |
-| Service configuration        | `base/services/jaeger.service.yaml`                           |
-| Ingress (external access)    | `hetzner/{env}/patches/ingresses/jaeger.ingress.yaml`         |
-| **Nginx Ingress Controller** |                                                               |
-| Controller deployment        | `base/nginx-ingress/` (upstream manifest)                     |
+| What                         | Where                                                                  |
+| ---------------------------- | ---------------------------------------------------------------------- |
+| Deployment flags             | `infra/deploy-control.yaml`                                            |
+| **PostgreSQL**               |                                                                        |
+| PostgreSQL image version     | `base/statefulsets/postgres.statefulset.yaml`                          |
+| Init script (database setup) | `base/configmaps/postgres.configmap.yaml`                              |
+| Dev config (combined)        | `hetzner/dev/patches/statefulsets/postgres.statefulset.yaml`           |
+| Prod config (combined)       | `hetzner/prod/patches/statefulsets/postgres.statefulset.yaml`          |
+| Service configuration        | `base/services/postgres.service.yaml`                                  |
+| **Redis (Valkey)**           |                                                                        |
+| Redis image version          | `base/statefulsets/redis.statefulset.yaml`                             |
+| Redis config + ACL users     | `base/configmaps/redis.configmap.yaml`                                 |
+| Redis ACL documentation      | `redis-acl-guide.md`                                                   |
+| Dev config (combined)        | `hetzner/dev/patches/statefulsets/redis.statefulset.yaml`              |
+| Prod config (combined)       | `hetzner/prod/patches/statefulsets/redis.statefulset.yaml`             |
+| Service configuration        | `base/services/redis.service.yaml`                                     |
+| **Jaeger**                   |                                                                        |
+| Jaeger image version         | `base/statefulsets/jaeger.statefulset.yaml`                            |
+| Sampling configuration       | `base/configmaps/jaeger.configmap.yaml`                                |
+| Dev config (combined)        | `hetzner/dev/patches/statefulsets/jaeger.statefulset.yaml`             |
+| Prod config (combined)       | `hetzner/prod/patches/statefulsets/jaeger.statefulset.yaml`            |
+| Service configuration        | `base/services/jaeger.service.yaml`                                    |
+| Ingress (external access)    | `hetzner/{env}/patches/ingresses/jaeger.ingress.yaml`                  |
+| **Nginx Ingress Controller** |                                                                        |
+| Controller deployment        | `base/nginx-ingress/` (upstream manifest)                              |
 | Service patch (LoadBalancer) | `hetzner/{env}/patches/services/ingress-nginx-controller.service.yaml` |
-| **General**                  |                                                               |
-| Cluster config (dev)         | `hetzner/dev/cluster/cluster-config.yaml`                     |
-| GitHub Secrets required      | See "Required Secrets" section above                          |
+| **General**                  |                                                                        |
+| Cluster config (dev)         | `hetzner/dev/cluster/cluster-config.yaml`                              |
+| GitHub Secrets required      | See "Required Secrets" section above                                   |
 
 ### Find Workflows
 
