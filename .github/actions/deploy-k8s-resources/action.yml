@@ -365,6 +365,16 @@ runs:
         EXTERNAL_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
         if [ -n "$EXTERNAL_IP" ]; then
           echo "📌 Point your DNS (jaeger.dev.mysite.com, etc.) to: $EXTERNAL_IP"
+        else
+          echo "⚠️  LoadBalancer EXTERNAL-IP is <pending>"
+          echo "   Option 1: Use NodePort with worker node's public IP"
+          WORKER_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="ExternalIP")].address}' 2>/dev/null || echo "")
+          HTTP_PORT=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.spec.ports[?(@.name=="http")].nodePort}' 2>/dev/null || echo "")
+          HTTPS_PORT=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.spec.ports[?(@.name=="https")].nodePort}' 2>/dev/null || echo "")
+          if [ -n "$WORKER_IP" ]; then
+            echo "   📌 Point DNS to: $WORKER_IP (HTTP:$HTTP_PORT, HTTPS:$HTTPS_PORT)"
+          fi
+          echo "   Option 2: Install Hetzner Cloud Controller Manager for automatic LoadBalancer provisioning"
         fi
         echo "\n💾 PVCs:"
         kubectl get pvc || echo "No PVCs found"
