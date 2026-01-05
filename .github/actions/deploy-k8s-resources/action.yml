@@ -78,10 +78,34 @@ runs:
         # Pattern matches hetzner-k8s cluster provisioning (in-memory substitution)
         ENV_NAME=$(basename "${{ inputs.kustomizePath }}")
 
+        echo "🔍 Domain substitution status:"
+        echo "   Environment: $ENV_NAME"
+        if [ -z "$JAEGER_DOMAIN" ]; then
+          echo "   ❌ JAEGER_DOMAIN is not set"
+        else
+          echo "   ✅ JAEGER_DOMAIN is set (value redacted for security)"
+          echo "   📝 Domain length: ${#JAEGER_DOMAIN} characters"
+        fi
+
         # Jaeger ingress
         if [ -f "${{ inputs.kustomizePath }}/patches/ingresses/jaeger.ingress.yaml" ]; then
+          echo "   📄 Before substitution:"
+          grep -E "host:|JAEGER_DOMAIN" "${{ inputs.kustomizePath }}/patches/ingresses/jaeger.ingress.yaml" || true
+          
           sed -i "s/JAEGER_DOMAIN_PLACEHOLDER/${JAEGER_DOMAIN}/g" \
             "${{ inputs.kustomizePath }}/patches/ingresses/jaeger.ingress.yaml"
+          
+          echo "   📄 After substitution:"
+          grep -E "host:" "${{ inputs.kustomizePath }}/patches/ingresses/jaeger.ingress.yaml" || true
+          
+          # Check if placeholder still exists (substitution failed)
+          if grep -q "JAEGER_DOMAIN_PLACEHOLDER" "${{ inputs.kustomizePath }}/patches/ingresses/jaeger.ingress.yaml"; then
+            echo "   ❌ WARNING: JAEGER_DOMAIN_PLACEHOLDER still present after substitution!"
+          else
+            echo "   ✅ Substitution completed"
+          fi
+        else
+          echo "   ⚠️  Jaeger ingress file not found at: ${{ inputs.kustomizePath }}/patches/ingresses/jaeger.ingress.yaml"
         fi
 
     - name: Build manifests
@@ -420,6 +444,20 @@ runs:
 
         echo "\n🔍 Ingress Details (with hosts and domains):"
         kubectl get ingress -A -o custom-columns="NAMESPACE:.metadata.namespace,NAME:.metadata.name,HOSTS:.spec.rules[*].host,ADDRESS:.status.loadBalancer.ingress[*].ip,TLS:.spec.tls[*].secretName" || echo "No detailed ingress info available"
+
+        echo "\n📋 Ingress YAML (checking for placeholder issues):"
+        for ing in $(kubectl get ingress -A -o jsonpath='{range .items[*]}{.metadata.namespace}{","}{.metadata.name}{"\n"}{end}'); do
+          ns=$(echo $ing | cut -d',' -f1)
+          name=$(echo $ing | cut -d',' -f2)
+          echo "   Ingress: $ns/$name"
+          kubectl get ingress -n $ns $name -o jsonpath='{.spec.rules[*].host}' && echo "" || echo "No host found"
+          if kubectl get ingress -n $ns $name -o yaml | grep -q "PLACEHOLDER"; then
+            echo "   ❌ WARNING: Found PLACEHOLDER in ingress configuration!"
+            kubectl get ingress -n $ns $name -o yaml | grep "PLACEHOLDER" || true
+          else
+            echo "   ✅ No placeholders detected"
+          fi
+        done
 
         # Check for stuck pods and show detailed diagnostics
         STUCK_PODS=$(kubectl get pods --field-selector=status.phase!=Running,status.phase!=Succeeded -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
