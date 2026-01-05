@@ -360,6 +360,12 @@ runs:
         kubectl get pods -o wide || echo "No pods found"
         echo "\n🌐 Services (labeled managed-by=kustomize):"
         kubectl get services -l app.kubernetes.io/managed-by=kustomize || echo "No services found"
+        echo "\n🌍 Ingress Controller (External Access):"
+        kubectl get svc -n ingress-nginx ingress-nginx-controller -o wide || echo "Ingress controller not found"
+        EXTERNAL_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+        if [ -n "$EXTERNAL_IP" ]; then
+          echo "📌 Point your DNS (jaeger.dev.mysite.com, etc.) to: $EXTERNAL_IP"
+        fi
         echo "\n💾 PVCs:"
         kubectl get pvc || echo "No PVCs found"
 
