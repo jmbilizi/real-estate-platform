@@ -11,6 +11,7 @@ on:
       - main
       - test
       - dev
+  workflow_call: # Allow other workflows to call CI
 
 concurrency:
   group: ci-${{ github.ref }}

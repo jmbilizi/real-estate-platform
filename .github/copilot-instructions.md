@@ -228,7 +228,80 @@ npm run nx:python-lint    # Runs: nx run-many --target=lint --projects=tag:pytho
 
 ## CI/CD Pipeline
 
-**Architecture**: Shared `setup-base` job installs Node.js dependencies once; three parallel jobs (node, python, dotnet) restore cached `node_modules` and run checks.
+**Architecture**: CI-first workflow with path-based routing to prevent duplicate deployments.
+
+**Workflow Orchestration:**
+
+```yaml
+# Three workflows with clear separation of concerns:
+1. ci.yml                            # Quality checks (lint, test, build)
+2. provision-hetzner-k8s-cluster.yml # Cluster creation
+3. deploy-k8s-resources.yml          # Resource deployment
+```
+
+**deploy-k8s-resources.yml Flow (optimized single CI):**
+
+```yaml
+on:
+  push:
+    paths:
+      - "infra/k8s/base/**"
+      - "infra/k8s/hetzner/**/patches/**"
+      - "!infra/k8s/hetzner/**/cluster/**" # EXCLUDES cluster configs
+  workflow_call: # Called by cluster provisioning
+    inputs:
+      environment: { required: true, type: string }
+      ci_already_passed: { required: false, type: boolean }
+  workflow_dispatch:
+    inputs:
+      environment: { required: true, type: choice, options: [dev, test, prod] }
+      ci_already_passed: { required: false, type: boolean, default: false }
+
+jobs:
+  ci:
+    # Runs unless upstream workflow indicates CI already passed
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.ci_already_passed != 'true')) ||
+      (github.event_name == 'workflow_call' && (inputs.ci_already_passed != 'true'))
+    uses: ./.github/workflows/ci.yml
+
+  deploy-{dev,test,prod}:
+    needs: [ci]
+    if: |
+      always() &&
+      (
+        needs.ci.result == 'success' ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.ci_already_passed == 'true') ||
+        (github.event_name == 'workflow_call' && inputs.ci_already_passed == 'true')
+      ) &&
+      ...branch/environment checks...
+```
+
+**Deployment Scenarios:**
+
+1. **Resource-only changes** (base/ or patches/):
+   - Triggers: push event → deploy-k8s-resources.yml
+   - Flow: CI job runs → passes → deploy job runs
+   - Why: Path filter matches, quality gates enforced
+
+2. **Cluster config changes** (cluster/\*.yaml):
+   - Triggers: push event → provision-hetzner-k8s-cluster.yml
+   - Flow: Provision cluster → calls deploy via workflow_call → CI runs → deploy runs
+   - Why: Path exclusion prevents deploy trigger, cluster workflow calls it explicitly, CI validates manifests
+
+3. **Both cluster + resource changes**:
+   - Triggers: push event → provision-hetzner-k8s-cluster.yml ONLY
+   - Flow: Same as scenario 2 (path exclusion prevents duplicate)
+   - Why: `!infra/k8s/hetzner/**/cluster/**` excludes cluster changes from deploy trigger
+
+**CRITICAL Design Decisions:**
+
+- **Path exclusion prevents race conditions**: Cluster configs excluded from deploy triggers
+- **CI always enforced**: Quality checks run before ALL deployments (adds ~1-2 min to cluster provisioning)
+- **No bypass allowed**: Even fresh clusters must pass CI to prevent broken manifests
+- **Security-first**: Prevents deploying untested code by changing cluster configs frequently
 
 **Affected vs Full Suite:**
 

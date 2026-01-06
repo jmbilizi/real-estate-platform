@@ -33,6 +33,12 @@ concurrency:
   cancel-in-progress: false # Don't cancel infrastructure updates
 
 jobs:
+  ci:
+    # Reuses the shared ci.yml (same checks, centralized)
+    # Purpose: gate cluster provisioning so infra updates never bypass quality checks
+    # Result: provisioning jobs run only after CI succeeds
+    uses: ./.github/workflows/ci.yml
+
   validate-pr:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -98,10 +104,11 @@ jobs:
             prod:
               - 'infra/k8s/hetzner/prod/cluster/cluster-config.yaml'
 
+  # Dev environment provisioning (gated by detect-changes and CI success)
   update-dev-cluster:
-    needs: [detect-changes]
+    needs: [detect-changes, ci]
     if: |
-      always() && (
+      always() && needs.ci.result == 'success' && (
         (github.event_name == 'push' && github.ref == 'refs/heads/dev' && needs.detect-changes.outputs.dev-changed == 'true') ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev')
       )
@@ -123,10 +130,11 @@ jobs:
           hetzner-token: ${{ secrets.HETZNER_TOKEN }}
           infra-deploy-token: ${{ secrets.INFRA_DEPLOY_TOKEN }}
 
+  # Test environment provisioning (gated by detect-changes and CI success)
   update-test-cluster:
-    needs: [detect-changes]
+    needs: [detect-changes, ci]
     if: |
-      always() && (
+      always() && needs.ci.result == 'success' && (
         (github.event_name == 'push' && github.ref == 'refs/heads/test' && needs.detect-changes.outputs.test-changed == 'true') ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'test')
       )
@@ -148,10 +156,11 @@ jobs:
           hetzner-token: ${{ secrets.HETZNER_TOKEN }}
           infra-deploy-token: ${{ secrets.INFRA_DEPLOY_TOKEN }}
 
+  # Prod environment provisioning (gated by detect-changes and CI success)
   update-prod-cluster:
-    needs: [detect-changes]
+    needs: [detect-changes, ci]
     if: |
-      always() && (
+      always() && needs.ci.result == 'success' && (
         (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.detect-changes.outputs.prod-changed == 'true') ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod')
       )

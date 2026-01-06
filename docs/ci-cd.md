@@ -225,6 +225,223 @@ All language jobs run format **checks** rather than automatic formatting:
 
 This enforces code style discipline and prevents masking formatting issues.
 
+## Continuous Deployment
+
+### CD Architecture
+
+**Three-workflow orchestration system** prevents duplicate deployments and ensures quality checks pass before deployment:
+
+```
+ci.yml (quality checks)
+    ↓ (workflow_call)
+deploy-k8s-resources.yml (deploy infrastructure + applications)
+    ↑ (workflow_call)
+provision-hetzner-k8s-cluster.yml (cluster provisioning)
+```
+
+### deploy-k8s-resources.yml (Primary Deployment)
+
+**Triggers:**
+
+1. **Push to dev/test/main** with path filters:
+   - `infra/k8s/base/**` (base manifests)
+   - `infra/k8s/hetzner/**/patches/**` (environment patches)
+   - `!infra/k8s/hetzner/**/cluster/**` (EXCLUDES cluster configs to prevent race conditions)
+
+2. **workflow_call** (called by cluster provisioning after cluster creation)
+
+3. **workflow_dispatch** (manual deployment with environment selection)
+
+**Job Flow:**
+
+```yaml
+jobs:
+  ci:
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.ci_already_passed != 'true')) ||
+      (github.event_name == 'workflow_call' && (inputs.ci_already_passed != 'true'))
+    uses: ./.github/workflows/ci.yml
+
+  deploy-{dev,test,prod}:
+    needs: [ci]
+    if: |
+      always() &&
+      (
+        needs.ci.result == 'success' ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.ci_already_passed == 'true') ||
+        (github.event_name == 'workflow_call' && inputs.ci_already_passed == 'true')
+      ) &&
+      ...branch/environment checks...
+```
+
+**Deployment Scenarios:**
+
+1. **Resource-only changes** (base/ or patches/):
+   - Push → CI runs → Deploy runs
+   - CI validates manifests before deployment
+
+2. **Cluster config changes** (cluster/\*.yaml):
+
+- Push → CI runs → provision-hetzner workflow creates/updates cluster → calls deploy with `ci_already_passed=true` → deploy runs (skips CI)
+- Single CI gate enforced upstream; efficient and secure
+
+3. **Both cluster + resource changes**:
+   - Only provision-hetzner triggers (path exclusion prevents duplicate)
+   - Cluster provisioned first, CI validates, then deploy runs
+
+**Key Design Decisions:**
+
+- **Path exclusion**: `!infra/k8s/hetzner/**/cluster/**` prevents race conditions
+- **CI always enforced**: Quality checks MUST pass before provisioning/deployment. Deploy may skip its own CI only when upstream has already validated (`ci_already_passed=true`).
+- **Security-first**: Prevents deploying untested code while avoiding redundant CI runs
+- **Trade-off**: Single CI pass maintains safety with better efficiency
+
+### provision-hetzner-k8s-cluster.yml (Cluster Lifecycle)
+
+**Triggers:**
+
+1. **Push to dev/test/main** with path filters:
+   - `infra/k8s/hetzner/*/cluster/*.yaml` (cluster configs)
+   - `.github/actions/provision-hetzner-k8s-cluster/**` (provisioning action changes)
+
+2. **workflow_dispatch** (manual cluster provisioning)
+
+**Workflow Sequence:**
+
+1. Detect cluster config changes (dorny/paths-filter)
+2. Route to environment job (dev/test/prod) based on branch and changes
+3. Composite action executes:
+   - Install kubectl, Helm, hetzner-k3s CLI
+   - Setup SSH keys from GitHub Secrets
+   - Substitute secrets in cluster-config.yaml
+   - Create/update cluster (includes cert-manager v1.13.3 installation)
+   - Wait for cluster readiness (nodes, CSI driver, StorageClass)
+   - Verify cert-manager installation
+   - Upload KUBECONFIG to GitHub environment secrets
+   - **Trigger deploy-k8s-resources.yml** via workflow_dispatch
+
+**Automatic cert-manager Installation:**
+
+cert-manager v1.13.3 + `letsencrypt-prod` ClusterIssuer installed during cluster provisioning via `additional_post_k3s_commands` in cluster-config.yaml:
+
+- Runs on first master node only (prevents race conditions)
+- Waits for deployment readiness (180s timeout)
+- Creates ClusterIssuer inline (no separate manifest files)
+- Certificates auto-provisioned when Ingress resources deployed (~2-5 min via ACME HTTP-01)
+
+### Deployment Control System
+
+**Hierarchical flag system** (`infra/deploy-control.yaml`):
+
+```yaml
+global:
+  auto_deploy: true # Master kill switch
+
+environments:
+  dev:
+    enabled: true # Environment can deploy
+    auto_deploy: true # Auto-deploy on push
+    services:
+      postgres:
+        enabled: true
+        auto_deploy: true
+        rollback_on_failure: false
+
+deployment_strategies:
+  statefulset:
+    timeout: "10m"
+    rollback_on_failure: true
+```
+
+**10+ flags enforced:**
+
+- `enabled` (environment + service)
+- `auto_deploy` (environment + service)
+- `deployment_windows` (time restrictions)
+- `rollback_on_failure` (service OR strategy - combined OR logic)
+- `statefulset_timeout`, `deployment_timeout`, `daemonset_timeout`
+
+**Workflow integration:** Each deploy job parses flags and exits early if disabled (before loading credentials).
+
+### Workflow Orchestration Patterns
+
+**Why path exclusion matters:**
+
+Without `!infra/k8s/hetzner/**/cluster/**`:
+
+```
+User changes cluster config + base manifests
+    ↓
+Both workflows trigger simultaneously:
+    ├── provision-hetzner (creates NEW cluster)
+    └── deploy-k8s-resources (deploys to OLD cluster)
+Result: Resources deployed to wrong cluster!
+```
+
+With path exclusion:
+
+```
+User changes cluster config + base manifests
+    ↓
+Only provision-hetzner triggers:
+    ├── Creates new cluster
+    └── Calls deploy-k8s-resources (deploys to NEW cluster)
+Result: Resources deployed to correct cluster ✓
+```
+
+**Why CI dependency matters:**
+
+Before CI dependency:
+
+```
+User pushes broken code
+    ↓
+deploy-k8s-resources triggers
+    ↓
+Broken code deployed to production
+```
+
+After CI dependency:
+
+```
+User pushes broken code
+    ↓
+CI runs → FAILS
+    ↓
+deploy-k8s-resources blocked
+```
+
+**Why conditional skip check matters:**
+
+```yaml
+if: |
+  always() &&
+  (needs.ci.result == 'success' || needs.ci.result == 'skipped') &&
+  ...
+```
+
+- `always()`: Run even if CI skipped (workflow_call scenario)
+- `success`: Normal push event, CI passed
+- `skipped`: workflow_call event, CI intentionally skipped
+- Without `skipped` check: deploy fails when called by cluster workflow
+
+### Manual Deployment
+
+```bash
+# Deploy resources only (requires existing cluster)
+gh workflow run deploy-k8s-resources.yml -f environment=dev
+
+# Provision cluster + deploy resources (recreates cluster)
+gh workflow run provision-hetzner-k8s-cluster.yml -f environment=dev
+
+# Via GitHub UI
+# Actions → Select workflow → Run workflow → Select environment
+```
+
+**CRITICAL:** Manual cluster provisioning is destructive (recreates cluster). Use deploy-k8s-resources.yml for updates.
+
 ## Triggers
 
 ### Supported Branches

@@ -29,7 +29,16 @@ This directory contains comprehensive documentation for the Kubernetes infrastru
    - **Who should read**: Developers, ops engineers
    - **When to read**: Daily operations, troubleshooting
 
-3. **[TESTING.md](./TESTING.md)** - Testing guide
+3. **[WORKFLOW-ORCHESTRATION.md](./WORKFLOW-ORCHESTRATION.md)** - CI/CD integration
+   - How CI and CD workflows interact
+   - Path-based routing and exclusions
+   - Deployment scenarios (resource-only, cluster-only, both)
+   - Conditional logic and workflow_call patterns
+   - Troubleshooting duplicate deployments
+   - **Who should read**: DevOps engineers, workflow maintainers
+   - **When to read**: Workflow errors, understanding deployment triggers
+
+4. **[TESTING.md](./TESTING.md)** - Testing guide
    - Local testing (no cluster required)
    - Cluster testing procedures
    - GitHub Actions testing

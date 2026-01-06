@@ -205,5 +205,6 @@ runs:
         echo "🚀 Triggering resource deployment for ${{ inputs.environment }} environment..."
         gh workflow run deploy-k8s-resources.yml \
           --ref ${{ inputs.deploy-ref }} \
-          --field environment=${{ inputs.deploy-environment }}
+          --field environment=${{ inputs.deploy-environment }} \
+          --field ci_already_passed=true
         echo "✅ Resource deployment workflow triggered"

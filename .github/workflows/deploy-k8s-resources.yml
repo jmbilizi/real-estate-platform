@@ -13,6 +13,9 @@ on:
       - "infra/deploy-control.yaml"
       - ".github/workflows/deploy-k8s-resources.yml"
       - ".github/actions/deploy-k8s-resources/**"
+      # CRITICAL: Exclude cluster configs to prevent duplicate deployments
+      # When cluster configs change, provision-hetzner-k8s-cluster.yml handles deployment via workflow_call
+      - "!infra/k8s/hetzner/**/cluster/**"
   pull_request:
     branches:
       - dev
@@ -35,19 +38,48 @@ on:
           - dev
           - test
           - prod
+      ci_already_passed:
+        description: "Set to true to skip CI when already validated upstream"
+        required: false
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       environment:
         description: "Environment to deploy"
         required: true
         type: string
+      ci_already_passed:
+        description: "Set to true to skip CI when already validated upstream"
+        required: false
+        type: boolean
 
 jobs:
-  deploy-dev:
+  # Wait for CI to pass before deploying (ALWAYS runs, even when called by cluster provisioning)
+  ci:
+    # Reuses the shared ci.yml (same checks, not a separate CI)
+    # Purpose: enforce quality gates for ALL triggers (push/dispatch/workflow_call)
+    # Optimization: skips when 'ci_already_passed=true' to avoid double CI
+    # Run CI unless explicitly told it already passed upstream
     if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      github.event_name == 'push' ||
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.ci_already_passed != 'true')) ||
+      (github.event_name == 'workflow_call' && (inputs.ci_already_passed != 'true'))
+    uses: ./.github/workflows/ci.yml
+
+  deploy-dev:
+    needs: [ci]
+    if: |
+      always() &&
+      (
+        needs.ci.result == 'success' ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.ci_already_passed == 'true') ||
+        (github.event_name == 'workflow_call' && inputs.ci_already_passed == 'true')
+      ) &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev') ||
-      (github.event_name == 'workflow_call' && inputs.environment == 'dev')
+      (github.event_name == 'workflow_call' && inputs.environment == 'dev'))
     runs-on: ubuntu-latest
     environment: dev
     steps:
@@ -112,10 +144,17 @@ jobs:
           JAEGER_BASIC_AUTH: ${{ secrets.JAEGER_BASIC_AUTH }}
 
   deploy-test:
+    needs: [ci]
     if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/test') ||
+      always() &&
+      (
+        needs.ci.result == 'success' ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.ci_already_passed == 'true') ||
+        (github.event_name == 'workflow_call' && inputs.ci_already_passed == 'true')
+      ) &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/test') ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'test') ||
-      (github.event_name == 'workflow_call' && inputs.environment == 'test')
+      (github.event_name == 'workflow_call' && inputs.environment == 'test'))
     runs-on: ubuntu-latest
     environment: test
     steps:
@@ -289,10 +328,17 @@ jobs:
           JAEGER_BASIC_AUTH: ${{ secrets.JAEGER_BASIC_AUTH }}
 
   deploy-prod:
+    needs: [ci]
     if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      always() &&
+      (
+        needs.ci.result == 'success' ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.ci_already_passed == 'true') ||
+        (github.event_name == 'workflow_call' && inputs.ci_already_passed == 'true')
+      ) &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod') ||
-      (github.event_name == 'workflow_call' && inputs.environment == 'prod')
+      (github.event_name == 'workflow_call' && inputs.environment == 'prod'))
     runs-on: ubuntu-latest
     environment: prod
     steps:
