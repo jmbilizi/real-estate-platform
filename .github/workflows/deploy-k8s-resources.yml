@@ -48,11 +48,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
 
       - uses: dorny/paths-filter@v3
         id: filter
         with:
+          base: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.event.before }}
           filters: |
             base:
               - 'infra/k8s/base/**'
