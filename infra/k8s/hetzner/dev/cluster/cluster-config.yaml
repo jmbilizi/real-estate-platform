@@ -27,9 +27,9 @@ networking:
     private_key_path: "~/.ssh/id_rsa"
   allowed_networks:
     ssh:
-      - 0.0.0.0/0 # TODO: Restrict to your IP after initial setup
+      - 0.0.0.0/0 # Dev environment: Allow access from anywhere (restrict in prod)
     api:
-      - 0.0.0.0/0 # TODO: Restrict to your IP after initial setup
+      - 0.0.0.0/0 # Dev environment: Allow access from anywhere (restrict in prod)
     # Custom firewall rules to ensure outbound access for image pulling
     # IMPORTANT: Defining ANY outbound rule switches to deny-all by default
     # These rules ensure nodes can pull images from public registries
