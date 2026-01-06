@@ -1,14 +1,14 @@
 name: Provision Hetzner K8s Cluster
 
 on:
-  push:
+  # Trigger provisioning only AFTER CI completes successfully on push
+  workflow_run:
+    workflows: ["CI"]
+    types: ["completed"]
     branches:
       - dev
       - test
       - main
-    paths:
-      - "infra/k8s/hetzner/*/cluster/*.yaml"
-      - ".github/actions/provision-hetzner-k8s-cluster/**"
   pull_request:
     branches:
       - dev
@@ -33,12 +33,6 @@ concurrency:
   cancel-in-progress: false # Don't cancel infrastructure updates
 
 jobs:
-  ci:
-    # Reuses the shared ci.yml (same checks, centralized)
-    # Purpose: gate cluster provisioning so infra updates never bypass quality checks
-    # Result: provisioning jobs run only after CI succeeds
-    uses: ./.github/workflows/ci.yml
-
   validate-pr:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -82,7 +76,8 @@ jobs:
           echo "✅ Prod cluster config is valid YAML"
 
   detect-changes:
-    if: github.event_name == 'push'
+    # Runs for workflow_run (post-CI) and manual dispatch to detect env-specific changes
+    if: github.event_name == 'workflow_run' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
       dev-changed: ${{ steps.filter.outputs.dev }}
@@ -106,10 +101,10 @@ jobs:
 
   # Dev environment provisioning (gated by detect-changes and CI success)
   update-dev-cluster:
-    needs: [detect-changes, ci]
+    needs: [detect-changes]
     if: |
-      always() && needs.ci.result == 'success' && (
-        (github.event_name == 'push' && github.ref == 'refs/heads/dev' && needs.detect-changes.outputs.dev-changed == 'true') ||
+      always() && (
+        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'dev' && needs.detect-changes.outputs.dev-changed == 'true') ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev')
       )
     runs-on: ubuntu-latest
@@ -132,10 +127,10 @@ jobs:
 
   # Test environment provisioning (gated by detect-changes and CI success)
   update-test-cluster:
-    needs: [detect-changes, ci]
+    needs: [detect-changes]
     if: |
-      always() && needs.ci.result == 'success' && (
-        (github.event_name == 'push' && github.ref == 'refs/heads/test' && needs.detect-changes.outputs.test-changed == 'true') ||
+      always() && (
+        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'test' && needs.detect-changes.outputs.test-changed == 'true') ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'test')
       )
     runs-on: ubuntu-latest
@@ -158,10 +153,10 @@ jobs:
 
   # Prod environment provisioning (gated by detect-changes and CI success)
   update-prod-cluster:
-    needs: [detect-changes, ci]
+    needs: [detect-changes]
     if: |
-      always() && needs.ci.result == 'success' && (
-        (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.detect-changes.outputs.prod-changed == 'true') ||
+      always() && (
+        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && needs.detect-changes.outputs.prod-changed == 'true') ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod')
       )
     runs-on: ubuntu-latest

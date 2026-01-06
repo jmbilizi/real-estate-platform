@@ -1,3 +1,7 @@
+# CI Workflow
+# Primary push/PR trigger for quality checks.
+# Provisioning is chained via workflow_run in provision-hetzner-k8s-cluster.yml
+# after this CI completes successfully, ensuring CI always runs first.
 name: CI
 
 on:

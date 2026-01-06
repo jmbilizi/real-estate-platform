@@ -239,44 +239,43 @@ npm run nx:python-lint    # Runs: nx run-many --target=lint --projects=tag:pytho
 3. deploy-k8s-resources.yml          # Resource deployment
 ```
 
-**deploy-k8s-resources.yml Flow (optimized single CI):**
+**deploy-k8s-resources.yml Flow (workflow_run chaining):**
 
 ```yaml
 on:
-  push:
-    paths:
-      - "infra/k8s/base/**"
-      - "infra/k8s/hetzner/**/patches/**"
-      - "!infra/k8s/hetzner/**/cluster/**" # EXCLUDES cluster configs
-  workflow_call: # Called by cluster provisioning
-    inputs:
-      environment: { required: true, type: string }
-      ci_already_passed: { required: false, type: boolean }
+  # Trigger deployment only AFTER CI completes successfully on push
+  workflow_run:
+    workflows: ["CI"]
+    types: ["completed"]
+    branches:
+      - dev
+      - test
+      - main
   workflow_dispatch:
     inputs:
       environment: { required: true, type: choice, options: [dev, test, prod] }
-      ci_already_passed: { required: false, type: boolean, default: false }
+  workflow_call:
+    inputs:
+      environment: { required: true, type: string }
 
 jobs:
-  ci:
-    # Runs unless upstream workflow indicates CI already passed
-    if: |
-      github.event_name == 'push' ||
-      github.event_name == 'pull_request' ||
-      (github.event_name == 'workflow_dispatch' && (github.event.inputs.ci_already_passed != 'true')) ||
-      (github.event_name == 'workflow_call' && (inputs.ci_already_passed != 'true'))
-    uses: ./.github/workflows/ci.yml
+  detect-changes:
+    # Path-based filtering for env-specific resource changes
+    if: github.event_name == 'workflow_run' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      base-changed: ${{ steps.filter.outputs.base }}
+      dev-changed: ${{ steps.filter.outputs.dev }}
+      test-changed: ${{ steps.filter.outputs.test }}
+      prod-changed: ${{ steps.filter.outputs.prod }}
 
   deploy-{dev,test,prod}:
-    needs: [ci]
+    needs: [detect-changes]
     if: |
       always() &&
-      (
-        needs.ci.result == 'success' ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.ci_already_passed == 'true') ||
-        (github.event_name == 'workflow_call' && inputs.ci_already_passed == 'true')
-      ) &&
-      ...branch/environment checks...
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && ...) ||
+      (github.event_name == 'workflow_dispatch' && ...) ||
+      (github.event_name == 'workflow_call' && ...)
 ```
 
 **Deployment Scenarios:**
@@ -287,21 +286,22 @@ jobs:
    - Why: Path filter matches, quality gates enforced
 
 2. **Cluster config changes** (cluster/\*.yaml):
-   - Triggers: push event → provision-hetzner-k8s-cluster.yml
-   - Flow: Provision cluster → calls deploy via workflow_call → CI runs → deploy runs
-   - Why: Path exclusion prevents deploy trigger, cluster workflow calls it explicitly, CI validates manifests
+
+- Triggers: push event → CI runs → provision-hetzner-k8s-cluster.yml (via workflow_run after CI success)
+- Flow: CI passes → Provision cluster → calls deploy via workflow_dispatch → deploy runs
+- Why: Path exclusion in deploy's change detection prevents duplicate triggers; single CI gate enforced via workflow_run
 
 3. **Both cluster + resource changes**:
    - Triggers: push event → provision-hetzner-k8s-cluster.yml ONLY
    - Flow: Same as scenario 2 (path exclusion prevents duplicate)
-   - Why: `!infra/k8s/hetzner/**/cluster/**` excludes cluster changes from deploy trigger
+   - Why: `!infra/k8s/hetzner/**/cluster/**` excludes cluster changes from deploy's change detection
 
 **CRITICAL Design Decisions:**
 
-- **Path exclusion prevents race conditions**: Cluster configs excluded from deploy triggers
-- **CI always enforced**: Quality checks run before ALL deployments (adds ~1-2 min to cluster provisioning)
+- **Path exclusion prevents race conditions**: Cluster configs excluded from deploy's change detection
+- **CI always enforced**: Quality checks MUST pass before provisioning/deployment. Both workflows run via workflow_run only after CI succeeds.
 - **No bypass allowed**: Even fresh clusters must pass CI to prevent broken manifests
-- **Security-first**: Prevents deploying untested code by changing cluster configs frequently
+- **Security-first**: Prevents deploying untested code; workflow_run chaining ensures clean sequencing
 
 **Affected vs Full Suite:**
 
@@ -655,8 +655,8 @@ kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins | kubectl diff -f -
 
 - `push` to branches (dev/test/main) + path filters (excludes cluster configs)
 - `pull_request` (validation only - no deployment)
-- `workflow_dispatch` (manual deployment with environment selection)
-- `workflow_call` (invoked by provision-hetzner-k8s-cluster.yml after cluster creation)
+- `workflow_dispatch` (manual deployment with environment selection; also invoked by provisioning after CI completes)
+- `workflow_call` (available for reuse by other workflows if needed)
 
 **Job structure** (identical for all 3 environments):
 

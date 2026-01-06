@@ -24,58 +24,86 @@ Additionally, there was no CI validation before deployment - broken code could b
 
 ## Solution Architecture
 
-### 1. Path-Based Routing with Exclusions
+### 1. workflow_run Chaining
 
-**deploy-k8s-resources.yml** now excludes cluster configs:
-
-```yaml
-on:
-  push:
-    paths:
-      - "infra/k8s/base/**"
-      - "infra/k8s/hetzner/**/patches/**"
-      - "!infra/k8s/hetzner/**/cluster/**" # CRITICAL: Excludes cluster configs
-```
-
-**Why:** Prevents deploy workflow from triggering on cluster config changes, eliminating race conditions.
-
-### 2. CI Always Enforced
-
-**deploy-k8s-resources.yml** calls CI workflow for ALL deployments:
+**CI is the primary trigger for all push/PR events:**
 
 ```yaml
-jobs:
-  ci:
-    uses: ./.github/workflows/ci.yml # ALWAYS runs, no conditions
-
-  deploy-dev:
-    needs: [ci]
-    if: |
-      always() &&
-      needs.ci.result == 'success' &&
-      ...environment checks...
-```
-
-**Why:**
-
-- Ensures quality checks pass before ALL deployments (no bypass)
-- Prevents deploying broken manifests even during cluster provisioning
-- Security-first approach: ~1-2 min additional time for guaranteed quality
-
-### 3. workflow_call Integration
-
-**ci.yml** now supports workflow_call:
-
-```yaml
+# ci.yml runs first
 on:
   push:
     branches: [main, test, dev]
   pull_request:
     branches: [main, test, dev]
-  workflow_call: # Allow other workflows to call CI
 ```
 
-**Why:** Enables deploy-k8s-resources.yml to reuse CI workflow instead of duplicating checks.
+**Provisioning and deployment chain after CI success:**
+
+```yaml
+# provision-hetzner-k8s-cluster.yml
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: ["completed"]
+    branches: [dev, test, main]
+
+# deploy-k8s-resources.yml
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: ["completed"]
+    branches: [dev, test, main]
+```
+
+**Why:** Single CI entry point, clean workflow sequencing, no embedded CI complexity.
+
+### 2. Path-Based Change Detection
+
+**Both workflows use detect-changes jobs to filter paths:**
+
+```yaml
+detect-changes:
+  if: github.event_name == 'workflow_run' || github.event_name == 'workflow_dispatch'
+  runs-on: ubuntu-latest
+  uses: dorny/paths-filter@v3
+```
+
+**deploy-k8s-resources.yml** filters for resources:
+
+```yaml
+filters: |
+  base:
+    - 'infra/k8s/base/**'
+  dev:
+    - 'infra/k8s/hetzner/dev/patches/**'
+```
+
+**provision-hetzner-k8s-cluster.yml** filters for cluster configs:
+
+```yaml
+filters: |
+  dev-cluster:
+    - 'infra/k8s/hetzner/dev/cluster/**'
+```
+
+**Why:** Prevents duplicate triggers, enables environment-specific routing.
+
+### 3. Workflow Gating
+
+**All deployment jobs gate on workflow_run success:**
+
+```yaml
+deploy-dev:
+  needs: [detect-changes]
+  if: |
+    always() &&
+    github.event_name == 'workflow_run' &&
+    github.event.workflow_run.conclusion == 'success' &&
+    github.event.workflow_run.head_branch == 'dev' &&
+    needs.detect-changes.outputs.dev-changed == 'true'
+```
+
+**Why:** Ensures quality checks pass before deployment, no bypass mechanism.
 
 ## Deployment Scenarios
 
@@ -88,11 +116,11 @@ on:
 ```
 Push to dev branch
     ↓
-deploy-k8s-resources.yml triggers (path matches base/**)
+CI workflow runs (primary trigger)
     ↓
-ci job runs → CI workflow executes (lint, test, build)
+CI passes → deploy-k8s-resources.yml triggers via workflow_run
     ↓
-CI passes → needs.ci.result == 'success'
+detect-changes job filters resource changes (base/dev-changed)
     ↓
 deploy-dev job runs → resources deployed to dev cluster
 ```
@@ -107,25 +135,23 @@ deploy-dev job runs → resources deployed to dev cluster
 
 ```
 Push to dev branch
-  ↓
-provision-hetzner-k8s-cluster.yml triggers (path matches cluster/**)
-  ↓
-STEP 1: ci job RUNS → CI workflow executes (lint, test, build - ~1-2 min)
-  ↓
-STEP 2: CI passes → needs.ci.result == 'success'
-  ↓
-STEP 3: provision workflow creates/updates cluster (~3-5 min)
-  ↓
-STEP 4: cluster ready → calls deploy-k8s-resources.yml via workflow_dispatch (environment=dev, ci_already_passed=true)
-  ↓
-STEP 5: deploy workflow SKIPS its CI (flag indicates CI already passed)
-  ↓
-STEP 6: deploy-dev job runs → resources deployed to NEW cluster
+    ↓
+CI workflow runs (primary trigger - ~1-2 min)
+    ↓
+CI passes → provision-hetzner-k8s-cluster.yml triggers via workflow_run
+    ↓
+detect-changes job filters cluster changes (dev-cluster-changed)
+    ↓
+update-dev-cluster job runs → creates/updates cluster (~3-5 min)
+    ↓
+cluster ready → calls deploy-k8s-resources.yml via workflow_dispatch (environment=dev)
+    ↓
+deploy-dev job runs → resources deployed to NEW cluster
 ```
 
 **Result:** ✅ CI runs ONCE, then provisioning and deployment execute in order  
 **Trade-off:** Total time ~4-7 min (CI + provision + deploy). Efficient and secure  
-**Security:** CI validation is mandatory and cannot be bypassed; deploy only skips CI when explicitly flagged by the provisioning workflow
+**Security:** CI validation enforced via workflow_run chaining; no bypass mechanism
 
 ### Scenario 3: Both Cluster + Resource Changes
 
@@ -139,8 +165,9 @@ STEP 6: deploy-dev job runs → resources deployed to NEW cluster
 ```
 Push to dev branch
     ↓
-provision-hetzner-k8s-cluster.yml triggers (cluster/** matched)
-deploy-k8s-resources.yml SKIPPED (path exclusion prevents trigger)
+CI workflow runs (primary trigger)
+    ↓
+CI passes → provision-hetzner-k8s-cluster.yml triggers via workflow_run
     ↓
 provision workflow creates/updates cluster
     ↓
@@ -158,14 +185,12 @@ calls deploy-k8s-resources.yml (deploys both cluster configs + resource changes)
 ```
 Manual workflow_dispatch trigger
     ↓
-ci job RUNS → CI workflow executes
+deploy-dev job runs directly (no CI - manual override)
     ↓
-CI passes → needs.ci.result == 'success'
-    ↓
-deploy-dev job runs if environment matches
+resources deployed to dev cluster
 ```
 
-**Result:** ✅ Manual deployments also validated by CI (no bypass)
+**Result:** ✅ Manual deployments skip CI (operator discretion)
 
 ## Technical Details
 
@@ -173,49 +198,57 @@ deploy-dev job runs if environment matches
 
 ```yaml
 deploy-dev:
-  needs: [ci]
+  needs: [detect-changes]
   if: |
     always() &&
-    needs.ci.result == 'success' &&
-    ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-    (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev') ||
-    (github.event_name == 'workflow_call' && inputs.environment == 'dev'))
+    github.event_name == 'workflow_run' &&
+    github.event.workflow_run.conclusion == 'success' &&
+    github.event.workflow_run.head_branch == 'dev' &&
+    needs.detect-changes.outputs.dev-changed == 'true'
 ```
 
 **Explanation:**
 
-1. `always()`: Run even if previous jobs failed (allows checking CI result)
-2. `needs.ci.result == 'success'`: Only deploy if CI passed (no bypass)
-3. Environment checks: Only run if branch/input matches environment
+1. `always()`: Run even if previous jobs failed (allows checking detect-changes result)
+2. `workflow_run.conclusion == 'success'`: Only deploy if CI passed
+3. `workflow_run.head_branch == 'dev'`: Route to dev environment
+4. `dev-changed == 'true'`: Only deploy if dev resources changed
 
 **Edge Cases Handled:**
 
-- ✅ CI failed on push → deploy blocked
-- ✅ CI failed on workflow_call → deploy blocked (cluster sits empty)
-- ✅ CI failed on manual dispatch → deploy blocked
-- ✅ Wrong environment selected → deploy skipped
-- ✅ No skip bypass → all deployments validated
+- ✅ CI failed on push → deployment blocked (workflow_run never triggers)
+- ✅ Wrong environment → deploy skipped (branch routing)
+- ✅ No changes → deploy skipped (path filtering)
 
 ### Path Filter Patterns
 
 **deploy-k8s-resources.yml:**
 
 ```yaml
-paths:
-  - "infra/k8s/base/**" # Matches all base manifests
-  - "infra/k8s/hetzner/**/patches/**" # Matches environment patches
-  - "!infra/k8s/hetzner/**/cluster/**" # EXCLUDES cluster configs
+filters: |
+  base:
+    - 'infra/k8s/base/**'
+  dev:
+    - 'infra/k8s/hetzner/dev/patches/**'
+  test:
+    - 'infra/k8s/hetzner/test/patches/**'
+  prod:
+    - 'infra/k8s/hetzner/prod/patches/**'
 ```
 
 **provision-hetzner-k8s-cluster.yml:**
 
 ```yaml
-paths:
-  - "infra/k8s/hetzner/*/cluster/*.yaml" # Matches only cluster configs
-  - ".github/actions/provision-hetzner-k8s-cluster/**" # Action changes
+filters: |
+  dev-cluster:
+    - 'infra/k8s/hetzner/dev/cluster/**'
+  test-cluster:
+    - 'infra/k8s/hetzner/test/cluster/**'
+  prod-cluster:
+    - 'infra/k8s/hetzner/prod/cluster/**'
 ```
 
-**Result:** Mutually exclusive triggers, no overlap
+**Result:** Environment-specific routing, no overlap
 
 ## Validation
 
@@ -224,11 +257,11 @@ paths:
 All changes validated before merge:
 
 1. **YAML Syntax:** No syntax errors detected
-2. **Dependency Chain:** All 3 deploy jobs have `needs: [ci]`
-3. **Conditional Logic:** All 3 deploy jobs only check `needs.ci.result == 'success'`
-4. **Path Exclusion:** Cluster configs excluded from deploy triggers
-5. **workflow_call Support:** CI workflow callable by other workflows
-6. **No Skip Bypass:** CI always runs, no conditions on ci job
+2. **workflow_run Triggers:** Both workflows chain after CI completion
+3. **Conditional Logic:** All deploy jobs check `workflow_run.conclusion == 'success'`
+4. **Path Filtering:** detect-changes jobs filter environment-specific paths
+5. **workflow_call Support:** Deploy workflow callable by provisioning for manual override
+6. **CI First:** CI is primary trigger, no embedded CI jobs
 
 ### Manual Testing Scenarios
 
@@ -238,64 +271,77 @@ git checkout -b test/resource-change
 # Edit infra/k8s/base/statefulsets/postgres.statefulset.yaml
 git commit -m "test: resource change"
 git push origin test/resource-change
+# Verify: CI runs first, then deploy-k8s-resources.yml via workflow_run
 
-# Test cluster-only deployment (should skip CI, deploy after cluster ready)
+# Test cluster config deployment (should run CI → Provision → Deploy)
 git checkout -b test/cluster-change
 # Edit infra/k8s/hetzner/dev/cluster/cluster-config.yaml
-git commit -m "test: cluster change"
+git commit -m "test: cluster config change"
 git push origin test/cluster-change
+# Verify: CI runs first, then provision-hetzner-k8s-cluster.yml via workflow_run
 
-# Test both changes (should only trigger provision workflow)
+# Test both changes (should run CI → Provision only)
 git checkout -b test/both-changes
-# Edit both files above
+# Edit both files
 git commit -m "test: both changes"
 git push origin test/both-changes
+# Verify: Only provision workflow runs (deploy called via workflow_dispatch)
 ```
 
 ## Benefits
 
-1. **No Duplicate Deployments:** Path exclusion prevents race conditions
-2. **Quality Gates:** CI ALWAYS passes before deployment (no bypass allowed)
-3. **Security-First:** Prevents deploying broken manifests to any environment
-4. **Correctness:** Resources always deployed to correct cluster after CI validation
-5. **Visibility:** Clear workflow dependencies in GitHub Actions UI
-6. **Maintainability:** Single CI workflow reused by multiple consumers
+1. **No Duplicate Deployments:** Path filtering prevents race conditions
+2. **Quality Gates:** CI runs first for all push/PR events
+3. **Security-First:** workflow_run chaining ensures CI passes before deployment
+4. **Correctness:** Resources always deployed to correct cluster
+5. **Visibility:** Clean workflow sequencing in GitHub Actions UI
+6. **Maintainability:** Single CI workflow, no embedded CI complexity
 
 ## Troubleshooting
 
-### Deploy job shows "skipped" but should run
+### Deploy job doesn't run after push
 
 **Check:**
 
-1. Verify `needs.ci.result` - if CI failed, deploy won't run (expected behavior)
-2. Check environment conditions - branch must match environment
-3. Review deployment control flags in `infra/deploy-control.yaml`
+1. Verify CI workflow ran and succeeded
+2. Check `workflow_run.conclusion == 'success'` in deploy job logs
+3. Check path filters - did changed files match filter patterns?
+4. Check branch routing - `workflow_run.head_branch` matches environment
 
-### CI doesn't run (workflow shows no ci job)
+**Common Issues:**
 
-**Problem:** CI job has conditional skip (OLD implementation - this was a security bug)
+- CI failed → deployment blocked (expected behavior)
+- Files changed outside filtered paths → no deployment (expected)
+- Wrong branch → deploy skipped (expected)
 
-**Solution:** Verify ci job has NO conditions:
+### Multiple workflows triggered simultaneously
 
-```yaml
-ci:
-  uses: ./.github/workflows/ci.yml # No 'if' condition - ALWAYS runs
-```
+**Check:**
 
-### Deploy runs without CI validation
+1. Verify path filters are mutually exclusive (provision vs deploy)
+2. Check detect-changes outputs in workflow logs
+3. Verify provision workflow calls deploy via workflow_dispatch (not duplicate trigger)
 
-**Problem:** Deploy job checks for skipped state (OLD implementation - this was a security bug)
+**Common Issues:**
 
-**Solution:** Verify deploy job only checks success:
+- Path filters overlap → fix filter patterns
+- Manual dispatch + push → expected (two independent triggers)
 
-```yaml
-deploy-dev:
-  needs: [ci]
-  if: |
-    always() &&
-    needs.ci.result == 'success' &&  # Only 'success', NOT 'skipped'
-    ...
-```
+### Workflow_run not triggering
+
+**Check:**
+
+1. Verify CI workflow name in workflow_run matches exactly: `workflows: ["CI"]`
+2. Check workflow_run branches match push branches
+3. Verify CI workflow completed (check GitHub Actions tab)
+
+**Common Issues:**
+
+- Workflow name mismatch → no trigger
+- Branch not in workflow_run list → no trigger
+- CI still running → workflow_run waits for completion
+
+````
 
 ### Deploy runs on cluster changes (duplicate deployment)
 
@@ -304,7 +350,7 @@ deploy-dev:
 ```yaml
 paths:
   - "!infra/k8s/hetzner/**/cluster/**"
-```
+````
 
 Path exclusion must be present to prevent deploy trigger on cluster changes.
 

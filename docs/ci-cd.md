@@ -243,37 +243,48 @@ provision-hetzner-k8s-cluster.yml (cluster provisioning)
 
 **Triggers:**
 
-1. **Push to dev/test/main** with path filters:
-   - `infra/k8s/base/**` (base manifests)
-   - `infra/k8s/hetzner/**/patches/**` (environment patches)
-   - `!infra/k8s/hetzner/**/cluster/**` (EXCLUDES cluster configs to prevent race conditions)
+1. **workflow_run** (runs after CI completes successfully on push to dev/test/main)
 
-2. **workflow_call** (called by cluster provisioning after cluster creation)
+2. **workflow_dispatch** (manual deployment with environment selection)
 
-3. **workflow_dispatch** (manual deployment with environment selection)
+3. **workflow_call** (called by cluster provisioning after cluster creation)
 
 **Job Flow:**
 
 ```yaml
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: ["completed"]
+    branches: [dev, test, main]
+  workflow_dispatch:
+    inputs:
+      environment: { required: true, type: choice, options: [dev, test, prod] }
+  workflow_call:
+    inputs:
+      environment: { required: true, type: string }
+
 jobs:
-  ci:
-    if: |
-      github.event_name == 'push' ||
-      github.event_name == 'pull_request' ||
-      (github.event_name == 'workflow_dispatch' && (github.event.inputs.ci_already_passed != 'true')) ||
-      (github.event_name == 'workflow_call' && (inputs.ci_already_passed != 'true'))
-    uses: ./.github/workflows/ci.yml
+  detect-changes:
+    if: github.event_name == 'workflow_run' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      base-changed: ${{ steps.filter.outputs.base }}
+      dev-changed: ${{ steps.filter.outputs.dev }}
+      # ... test/prod change outputs
 
   deploy-{dev,test,prod}:
-    needs: [ci]
+    needs: [detect-changes]
     if: |
       always() &&
-      (
-        needs.ci.result == 'success' ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.ci_already_passed == 'true') ||
-        (github.event_name == 'workflow_call' && inputs.ci_already_passed == 'true')
-      ) &&
-      ...branch/environment checks...
+      (github.event_name == 'workflow_run' && 
+       github.event.workflow_run.conclusion == 'success' && 
+       github.event.workflow_run.head_branch == '{env}' &&
+       needs.detect-changes.outputs.{env}-changed == 'true') ||
+      (github.event_name == 'workflow_dispatch' && 
+       github.event.inputs.environment == '{env}') ||
+      (github.event_name == 'workflow_call' && 
+       inputs.environment == '{env}')
 ```
 
 **Deployment Scenarios:**
@@ -284,19 +295,19 @@ jobs:
 
 2. **Cluster config changes** (cluster/\*.yaml):
 
-- Push → CI runs → provision-hetzner workflow creates/updates cluster → calls deploy with `ci_already_passed=true` → deploy runs (skips CI)
-- Single CI gate enforced upstream; efficient and secure
+- Push → CI runs → provision-hetzner workflow (via workflow_run) creates/updates cluster → calls deploy via workflow_dispatch → deploy runs
+- Single CI gate enforced via workflow_run; both workflows chained after CI success
 
 3. **Both cluster + resource changes**:
    - Only provision-hetzner triggers (path exclusion prevents duplicate)
-   - Cluster provisioned first, CI validates, then deploy runs
+   - Cluster provisioned first, then deploy runs (all after CI via workflow_run)
 
 **Key Design Decisions:**
 
 - **Path exclusion**: `!infra/k8s/hetzner/**/cluster/**` prevents race conditions
-- **CI always enforced**: Quality checks MUST pass before provisioning/deployment. Deploy may skip its own CI only when upstream has already validated (`ci_already_passed=true`).
-- **Security-first**: Prevents deploying untested code while avoiding redundant CI runs
-- **Trade-off**: Single CI pass maintains safety with better efficiency
+- **CI always enforced**: Quality checks MUST pass before provisioning/deployment. Both workflows trigger via workflow_run only after CI succeeds.
+- **Security-first**: Prevents deploying untested code with clean workflow chaining
+- **Trade-off**: Single CI pass maintains safety; no embedded CI complexity
 
 ### provision-hetzner-k8s-cluster.yml (Cluster Lifecycle)
 
@@ -410,22 +421,29 @@ User pushes broken code
     ↓
 CI runs → FAILS
     ↓
-deploy-k8s-resources blocked
+Provisioning/deployment blocked (workflow_run doesn't trigger)
 ```
 
-**Why conditional skip check matters:**
+**Why workflow_run chaining matters:**
 
 ```yaml
-if: |
-  always() &&
-  (needs.ci.result == 'success' || needs.ci.result == 'skipped') &&
-  ...
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: ["completed"]
+    branches: [dev, test, main]
+
+deploy-dev:
+  if: |
+    github.event_name == 'workflow_run' &&
+    github.event.workflow_run.conclusion == 'success' &&
+    ...
 ```
 
-- `always()`: Run even if CI skipped (workflow_call scenario)
-- `success`: Normal push event, CI passed
-- `skipped`: workflow_call event, CI intentionally skipped
-- Without `skipped` check: deploy fails when called by cluster workflow
+- **workflow_run trigger**: Only fires after CI completes
+- **conclusion == 'success'**: Only deploy if CI passed
+- **Clean sequencing**: No embedded CI, no skip logic
+- **Security**: Broken code never reaches deployment workflows
 
 ### Manual Deployment
 

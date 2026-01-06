@@ -1,33 +1,14 @@
 name: Deploy K8s Resources
 
 on:
-  push:
+  # Trigger deployment only AFTER CI completes successfully on push
+  workflow_run:
+    workflows: ["CI"]
+    types: ["completed"]
     branches:
       - dev
       - test
       - main
-    paths:
-      - "infra/k8s/base/**"
-      - "infra/k8s/hetzner/**/patches/**"
-      - "infra/k8s/hetzner/**/kustomization.yaml"
-      - "infra/deploy-control.yaml"
-      - ".github/workflows/deploy-k8s-resources.yml"
-      - ".github/actions/deploy-k8s-resources/**"
-      # CRITICAL: Exclude cluster configs to prevent duplicate deployments
-      # When cluster configs change, provision-hetzner-k8s-cluster.yml handles deployment via workflow_call
-      - "!infra/k8s/hetzner/**/cluster/**"
-  pull_request:
-    branches:
-      - dev
-      - test
-      - main
-    paths:
-      - "infra/k8s/base/**"
-      - "infra/k8s/hetzner/**/patches/**"
-      - "infra/k8s/hetzner/**/kustomization.yaml"
-      - "infra/deploy-control.yaml"
-      - ".github/workflows/deploy-k8s-resources.yml"
-      - ".github/actions/deploy-k8s-resources/**"
   workflow_dispatch:
     inputs:
       environment:
@@ -55,31 +36,45 @@ on:
         type: boolean
 
 jobs:
-  # Wait for CI to pass before deploying (ALWAYS runs, even when called by cluster provisioning)
-  ci:
-    # Reuses the shared ci.yml (same checks, not a separate CI)
-    # Purpose: enforce quality gates for ALL triggers (push/dispatch/workflow_call)
-    # Optimization: skips when 'ci_already_passed=true' to avoid double CI
-    # Run CI unless explicitly told it already passed upstream
-    if: |
-      github.event_name == 'push' ||
-      github.event_name == 'pull_request' ||
-      (github.event_name == 'workflow_dispatch' && (github.event.inputs.ci_already_passed != 'true')) ||
-      (github.event_name == 'workflow_call' && (inputs.ci_already_passed != 'true'))
-    uses: ./.github/workflows/ci.yml
+  detect-changes:
+    # Runs for workflow_run (post-CI) and manual dispatch to detect env-specific resource changes
+    if: github.event_name == 'workflow_run' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      base-changed: ${{ steps.filter.outputs.base }}
+      dev-changed: ${{ steps.filter.outputs.dev }}
+      test-changed: ${{ steps.filter.outputs.test }}
+      prod-changed: ${{ steps.filter.outputs.prod }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            base:
+              - 'infra/k8s/base/**'
+              - 'infra/deploy-control.yaml'
+            dev:
+              - 'infra/k8s/hetzner/dev/**'
+              - '!infra/k8s/hetzner/dev/cluster/**'
+            test:
+              - 'infra/k8s/hetzner/test/**'
+              - '!infra/k8s/hetzner/test/cluster/**'
+            prod:
+              - 'infra/k8s/hetzner/prod/**'
+              - '!infra/k8s/hetzner/prod/cluster/**'
 
   deploy-dev:
-    needs: [ci]
+    needs: [detect-changes]
     if: |
-      always() &&
-      (
-        needs.ci.result == 'success' ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.ci_already_passed == 'true') ||
-        (github.event_name == 'workflow_call' && inputs.ci_already_passed == 'true')
-      ) &&
-      ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev') ||
-      (github.event_name == 'workflow_call' && inputs.environment == 'dev'))
+      always() && (
+        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'dev' && (needs.detect-changes.outputs.base-changed == 'true' || needs.detect-changes.outputs.dev-changed == 'true')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev') ||
+        (github.event_name == 'workflow_call' && inputs.environment == 'dev')
+      )
     runs-on: ubuntu-latest
     environment: dev
     steps:
@@ -144,17 +139,13 @@ jobs:
           JAEGER_BASIC_AUTH: ${{ secrets.JAEGER_BASIC_AUTH }}
 
   deploy-test:
-    needs: [ci]
+    needs: [detect-changes]
     if: |
-      always() &&
-      (
-        needs.ci.result == 'success' ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.ci_already_passed == 'true') ||
-        (github.event_name == 'workflow_call' && inputs.ci_already_passed == 'true')
-      ) &&
-      ((github.event_name == 'push' && github.ref == 'refs/heads/test') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'test') ||
-      (github.event_name == 'workflow_call' && inputs.environment == 'test'))
+      always() && (
+        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'test' && (needs.detect-changes.outputs.base-changed == 'true' || needs.detect-changes.outputs.test-changed == 'true')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'test') ||
+        (github.event_name == 'workflow_call' && inputs.environment == 'test')
+      )
     runs-on: ubuntu-latest
     environment: test
     steps:
@@ -328,17 +319,13 @@ jobs:
           JAEGER_BASIC_AUTH: ${{ secrets.JAEGER_BASIC_AUTH }}
 
   deploy-prod:
-    needs: [ci]
+    needs: [detect-changes]
     if: |
-      always() &&
-      (
-        needs.ci.result == 'success' ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.ci_already_passed == 'true') ||
-        (github.event_name == 'workflow_call' && inputs.ci_already_passed == 'true')
-      ) &&
-      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod') ||
-      (github.event_name == 'workflow_call' && inputs.environment == 'prod'))
+      always() && (
+        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && (needs.detect-changes.outputs.base-changed == 'true' || needs.detect-changes.outputs.prod-changed == 'true')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod') ||
+        (github.event_name == 'workflow_call' && inputs.environment == 'prod')
+      )
     runs-on: ubuntu-latest
     environment: prod
     steps:

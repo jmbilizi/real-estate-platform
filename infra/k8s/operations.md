@@ -65,12 +65,12 @@ environments:
 
 2. **Cluster provisioning** (`hetzner/**/cluster/**`):
 
-- Push to dev/test/main → CI runs → Triggers provision-hetzner-k8s-cluster.yml → Creates/updates cluster → Calls deploy-k8s-resources.yml with `ci_already_passed=true` → Deploy runs (skips CI)
-- Single CI gate enforced upstream; deploy skips CI only when explicitly flagged
+- Push to dev/test/main → CI runs → provision-hetzner-k8s-cluster.yml (via workflow_run) → Creates/updates cluster → Calls deploy-k8s-resources.yml via workflow_dispatch → Deploy runs
+- Single CI gate enforced via workflow_run; both workflows chained after CI success
 
 3. **Both cluster + resource changes**:
    - Only provision-hetzner workflow triggers (path exclusion prevents duplicate)
-   - Cluster provisioned first, CI validates manifests, then resources deployed
+   - Cluster provisioned first, then resources deployed (all after CI via workflow_run)
 
 **Manual Triggers:**
 
@@ -87,8 +87,8 @@ gh workflow run provision-hetzner-k8s-cluster.yml -f environment=dev
 
 **CRITICAL**:
 
-- Path exclusion `!infra/k8s/hetzner/**/cluster/**` prevents race conditions between cluster provisioning and resource deployment
-- CI runs once before provisioning/deployment. Deploy workflow may skip its own CI only when upstream provisioning passed (`ci_already_passed=true`).
+- Path exclusion in deploy's change detection (`!infra/k8s/hetzner/**/cluster/**`) prevents race conditions
+- CI runs once via workflow_run before both provisioning and deployment workflows execute
 
 ### Check Deployment Status
 
