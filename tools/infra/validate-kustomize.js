@@ -17,6 +17,7 @@
 const { execSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
+const yaml = require("yaml");
 
 const colors = {
   reset: "\x1b[0m",
@@ -115,6 +116,56 @@ function validateEnvironment(provider, env) {
   }
 }
 
+function validateHetznerLocation(env) {
+  const basePath = path.resolve(__dirname, "../..", "infra/k8s/hetzner", env);
+  const clusterConfigPath = path.join(basePath, "cluster/cluster-config.yaml");
+  const serviceYamlPath = path.join(basePath, "patches/services/ingress-nginx-controller.service.yaml");
+
+  // Skip if cluster config doesn't exist (optional check)
+  if (!fs.existsSync(clusterConfigPath)) {
+    return { valid: true, skipped: true, reason: "No cluster config" };
+  }
+
+  if (!fs.existsSync(serviceYamlPath)) {
+    return { valid: true, skipped: true, reason: "No ingress controller service patch" };
+  }
+
+  try {
+    // Extract cluster location
+    const clusterConfig = yaml.parse(fs.readFileSync(clusterConfigPath, "utf-8"));
+
+    // hetzner-k3s uses masters_pool.locations (array) for cluster location
+    const clusterLocation = clusterConfig.masters_pool?.locations?.[0];
+
+    if (!clusterLocation) {
+      return { valid: false, error: "No location found in masters_pool.locations" };
+    }
+
+    // Extract load balancer location
+    const serviceYaml = yaml.parse(fs.readFileSync(serviceYamlPath, "utf-8"));
+    const lbLocation = serviceYaml.metadata?.annotations?.["load-balancer.hetzner.cloud/location"];
+
+    if (!lbLocation) {
+      return { valid: false, error: "No load-balancer.hetzner.cloud/location annotation found" };
+    }
+
+    // Compare locations
+    if (clusterLocation !== lbLocation) {
+      return {
+        valid: false,
+        error: `Location mismatch: cluster=${clusterLocation}, load-balancer=${lbLocation}`,
+        clusterLocation,
+        lbLocation,
+        serviceYamlPath,
+      };
+    }
+
+    return { valid: true, clusterLocation, lbLocation };
+  } catch (error) {
+    return { valid: false, error: `Validation error: ${error.message}` };
+  }
+}
+
 function main() {
   const args = process.argv.slice(2);
   const targetEnv = args[0]; // dev, test, prod, or undefined (all)
@@ -162,6 +213,7 @@ function main() {
 
   const envArray = Array.from(environments).sort();
   const results = {};
+  const hetznerLocationResults = {};
 
   // Loop through all providers and environments
   for (const provider of providers) {
@@ -170,6 +222,12 @@ function main() {
       if (result !== null) {
         // null means environment doesn't exist, skip it
         results[`${provider}/${env}`] = result;
+
+        // Hetzner-specific location validation
+        if (provider === "hetzner") {
+          const locationResult = validateHetznerLocation(env);
+          hetznerLocationResults[env] = locationResult;
+        }
       }
     }
   }
@@ -196,12 +254,34 @@ function main() {
     }
   }
 
+  // Hetzner location validation summary
+  if (Object.keys(hetznerLocationResults).length > 0) {
+    log("\n" + "=".repeat(80), "cyan");
+    log("  Hetzner Location Consistency", "bright");
+    log("=".repeat(80), "cyan");
+
+    for (const [env, result] of Object.entries(hetznerLocationResults)) {
+      if (result.skipped) {
+        logWarning(`hetzner/${env}: SKIPPED (${result.reason})`);
+      } else if (result.valid) {
+        logSuccess(`hetzner/${env}: Locations match (${result.clusterLocation})`);
+      } else {
+        logError(`hetzner/${env}: ${result.error}`);
+        if (result.serviceYamlPath) {
+          log(`  Fix: Update ${path.relative(process.cwd(), result.serviceYamlPath)}`, "yellow");
+          log(`  Change annotation to: load-balancer.hetzner.cloud/location: ${result.clusterLocation}`, "yellow");
+        }
+        allPassed = false;
+      }
+    }
+  }
+
   if (allPassed) {
-    log("\n✅ All Kustomize validations passed\n", "green");
+    log("\n✅ All validations passed\n", "green");
     log(`Validated ${Object.keys(results).length} environment(s) across ${providers.length} provider(s)\n`, "cyan");
     process.exit(0);
   } else {
-    log("\n❌ Some Kustomize validations failed\n", "red");
+    log("\n❌ Some validations failed\n", "red");
     logWarning("Fix the errors above and try again");
     process.exit(1);
   }
