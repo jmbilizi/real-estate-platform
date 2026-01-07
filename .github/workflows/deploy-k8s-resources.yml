@@ -7,43 +7,46 @@ on:
     types: ["completed"]
     branches:
       - dev
-      - test
-      - main
-  workflow_dispatch:
-    inputs:
+      base-changed: ${{ steps.detect.outputs.base-changed }}
+      dev-changed: ${{ steps.detect.outputs.dev-changed }}
+      test-changed: ${{ steps.detect.outputs.test-changed }}
+      prod-changed: ${{ steps.detect.outputs.prod-changed }}
       environment:
         description: "Environment to deploy"
         required: true
         type: choice
         options:
-          - dev
-          - test
-          - prod
-      ci_already_passed:
-        description: "Set to true to skip CI when already validated upstream"
-        required: false
-        type: boolean
-        default: false
-  workflow_call:
-    inputs:
-      environment:
-        description: "Environment to deploy"
-        required: true
-        type: string
-      ci_already_passed:
-        description: "Set to true to skip CI when already validated upstream"
-        required: false
-        type: boolean
 
-jobs:
-  detect-changes:
-    # Runs for workflow_run (post-CI) and manual dispatch to detect env-specific resource changes
-    if: github.event_name == 'workflow_run' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    outputs:
-      base-changed: ${{ steps.filter.outputs.base }}
-      dev-changed: ${{ steps.filter.outputs.dev }}
-      test-changed: ${{ steps.filter.outputs.test }}
+      - name: Detect changed paths (HEAD^ → HEAD)
+        id: detect
+        shell: bash
+        run: |
+          set -e
+          git fetch --no-tags --prune --unshallow || true
+          git diff --name-only HEAD^ HEAD > changed.txt || true
+          files=$(cat changed.txt || echo "")
+          echo "Changed files:\n$files"
+
+          base=false
+          dev=false
+          test=false
+          prod=false
+
+          # Base resources or workflow changes
+          if echo "$files" | grep -E -q '^infra/k8s/base/|^infra/deploy-control\.yaml|^\.github/workflows/deploy-k8s-resources\.yml|^\.github/actions/deploy-k8s-resources/'; then base=true; fi
+
+          # Environment resource changes (exclude cluster paths), also trigger on workflow changes
+          if echo "$files" | grep -E -q '^infra/k8s/hetzner/dev/' && ! echo "$files" | grep -E -q '^infra/k8s/hetzner/dev/cluster/'; then dev=true; fi
+          if echo "$files" | grep -E -q '^infra/k8s/hetzner/test/' && ! echo "$files" | grep -E -q '^infra/k8s/hetzner/test/cluster/'; then test=true; fi
+          if echo "$files" | grep -E -q '^infra/k8s/hetzner/prod/' && ! echo "$files" | grep -E -q '^infra/k8s/hetzner/prod/cluster/'; then prod=true; fi
+
+          # Workflow changes should also mark env-specific flags true so branch routing runs
+          if echo "$files" | grep -E -q '^\.github/workflows/deploy-k8s-resources\.yml|^\.github/actions/deploy-k8s-resources/'; then dev=true; test=true; prod=true; fi
+
+          echo "base-changed=$base" >> $GITHUB_OUTPUT
+          echo "dev-changed=$dev" >> $GITHUB_OUTPUT
+          echo "test-changed=$test" >> $GITHUB_OUTPUT
+          echo "prod-changed=$prod" >> $GITHUB_OUTPUT
       prod-changed: ${{ steps.filter.outputs.prod }}
     steps:
       - uses: actions/checkout@v4

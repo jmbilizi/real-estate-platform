@@ -80,34 +80,39 @@ jobs:
     if: github.event_name == 'workflow_run' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
-      dev-changed: ${{ steps.filter.outputs.dev }}
-      test-changed: ${{ steps.filter.outputs.test }}
-      prod-changed: ${{ steps.filter.outputs.prod }}
+      dev-changed: ${{ steps.detect.outputs.dev-changed }}
+      test-changed: ${{ steps.detect.outputs.test-changed }}
+      prod-changed: ${{ steps.detect.outputs.prod-changed }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
 
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          # For workflow_run, compare current HEAD against its parent commit
-          # HEAD points to the commit that triggered CI; HEAD^ is the previous commit
-          base: ${{ github.event_name == 'workflow_run' && 'HEAD^' || github.event.before }}
-          filters: |
-            dev:
-              - 'infra/k8s/hetzner/dev/cluster/**'
-              - '.github/workflows/provision-hetzner-k8s-cluster.yml'
-              - '.github/actions/provision-hetzner-k8s-cluster/**'
-            test:
-              - 'infra/k8s/hetzner/test/cluster/**'
-              - '.github/workflows/provision-hetzner-k8s-cluster.yml'
-              - '.github/actions/provision-hetzner-k8s-cluster/**'
-            prod:
-              - 'infra/k8s/hetzner/prod/cluster/**'
-              - '.github/workflows/provision-hetzner-k8s-cluster.yml'
-              - '.github/actions/provision-hetzner-k8s-cluster/**'
+      - name: Detect changed paths (HEAD^ → HEAD)
+        id: detect
+        shell: bash
+        run: |
+          set -e
+          # Ensure full history for diff
+          git fetch --no-tags --prune --unshallow || true
+          # List files changed in the commit that triggered CI
+          git diff --name-only HEAD^ HEAD > changed.txt || true
+          files=$(cat changed.txt || echo "")
+          echo "Changed files:\n$files"
+
+          dev=false
+          test=false
+          prod=false
+
+          # Trigger provisioning when cluster configs OR workflow/action files change
+          if echo "$files" | grep -E -q '^infra/k8s/hetzner/dev/cluster/|^\.github/workflows/provision-hetzner-k8s-cluster\.yml|^\.github/actions/provision-hetzner-k8s-cluster/'; then dev=true; fi
+          if echo "$files" | grep -E -q '^infra/k8s/hetzner/test/cluster/|^\.github/workflows/provision-hetzner-k8s-cluster\.yml|^\.github/actions/provision-hetzner-k8s-cluster/'; then test=true; fi
+          if echo "$files" | grep -E -q '^infra/k8s/hetzner/prod/cluster/|^\.github/workflows/provision-hetzner-k8s-cluster\.yml|^\.github/actions/provision-hetzner-k8s-cluster/'; then prod=true; fi
+
+          echo "dev-changed=$dev" >> $GITHUB_OUTPUT
+          echo "test-changed=$test" >> $GITHUB_OUTPUT
+          echo "prod-changed=$prod" >> $GITHUB_OUTPUT
 
   # Dev environment provisioning (gated by detect-changes and CI success)
   update-dev-cluster:
