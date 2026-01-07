@@ -28,6 +28,7 @@ jobs:
     name: Detect changed paths
     runs-on: ubuntu-latest
     outputs:
+      cluster-changed: ${{ steps.detect.outputs.cluster-changed }}
       base-changed: ${{ steps.detect.outputs.base-changed }}
       dev-changed: ${{ steps.detect.outputs.dev-changed }}
       test-changed: ${{ steps.detect.outputs.test-changed }}
