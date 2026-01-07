@@ -2,10 +2,11 @@ name: Deploy K8s Resources
 
 on:
   # Trigger deployment only AFTER CI completes successfully on push
+  # CRITICAL: workflow_run reads this file from the DEFAULT BRANCH (dev)
+  # even when triggered by CI running on other branches.
   workflow_run:
     workflows: ["CI"]
     types: ["completed"]
-    # No branches filter - all branches trigger; jobs gate by head_branch
   workflow_dispatch:
     inputs:
       environment:
@@ -23,22 +24,6 @@ on:
         type: string
 
 jobs:
-  log-context:
-    name: Log workflow_run context
-    if: github.event_name == 'workflow_run'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Print workflow_run event details
-        run: |
-          echo "=== Workflow Run Event Context ==="
-          echo "Event name: ${{ github.event_name }}"
-          echo "Workflow run name: ${{ github.event.workflow_run.name }}"
-          echo "Workflow run conclusion: ${{ github.event.workflow_run.conclusion }}"
-          echo "Workflow run head_branch: ${{ github.event.workflow_run.head_branch }}"
-          echo "Workflow run head_sha: ${{ github.event.workflow_run.head_sha }}"
-          echo "Workflow run event: ${{ github.event.workflow_run.event }}"
-          echo "==================================="
-
   detect-changes:
     name: Detect changed paths
     runs-on: ubuntu-latest

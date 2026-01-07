@@ -241,9 +241,17 @@ provision-hetzner-k8s-cluster.yml (cluster provisioning)
 
 ### deploy-k8s-resources.yml (Primary Deployment)
 
+**CRITICAL: Default Branch Requirement**
+
+GitHub Actions reads `workflow_run` triggers from the **repository's default branch** (currently `dev`), not from the branch where CI is running. This means:
+
+- This workflow file MUST exist on the default branch for triggers to work
+- Changes to this workflow on feature branches won't take effect until merged to default
+- This is a GitHub Actions security feature to prevent workflow injection attacks
+
 **Triggers:**
 
-1. **workflow_run** (runs after CI completes successfully on push to dev/test/main)
+1. **workflow_run** (runs after CI completes successfully on push)
 
 2. **workflow_dispatch** (manual deployment with environment selection)
 
@@ -253,10 +261,10 @@ provision-hetzner-k8s-cluster.yml (cluster provisioning)
 
 ```yaml
 on:
+  # Workflow file read from DEFAULT BRANCH (dev), not triggering branch
   workflow_run:
     workflows: ["CI"]
     types: ["completed"]
-    branches: [dev, test, main]
   workflow_dispatch:
     inputs:
       environment: { required: true, type: choice, options: [dev, test, prod] }
@@ -304,6 +312,7 @@ jobs:
 
 **Key Design Decisions:**
 
+- **Default branch requirement**: workflow_run triggers are read from the default branch (dev), not the triggering branch
 - **Path exclusion**: `!infra/k8s/hetzner/**/cluster/**` prevents race conditions
 - **CI always enforced**: Quality checks MUST pass before provisioning/deployment. Both workflows trigger via workflow_run only after CI succeeds.
 - **Security-first**: Prevents deploying untested code with clean workflow chaining
@@ -428,10 +437,10 @@ Provisioning/deployment blocked (workflow_run doesn't trigger)
 
 ```yaml
 on:
+  # CRITICAL: This workflow file is read from DEFAULT BRANCH (dev)
   workflow_run:
     workflows: ["CI"]
     types: ["completed"]
-    branches: [dev, test, main]
 
 deploy-dev:
   if: |
@@ -441,6 +450,9 @@ deploy-dev:
 ```
 
 - **workflow_run trigger**: Only fires after CI completes
+- **Default branch requirement**: Workflow file read from default branch (dev), not triggering branch
+- **Conclusion check**: `conclusion == 'success'` ensures CI passed
+- **Result**: Broken code never reaches deployment
 - **conclusion == 'success'**: Only deploy if CI passed
 - **Clean sequencing**: No embedded CI, no skip logic
 - **Security**: Broken code never reaches deployment workflows

@@ -230,6 +230,13 @@ npm run nx:python-lint    # Runs: nx run-many --target=lint --projects=tag:pytho
 
 **Architecture**: CI-first workflow with path-based routing to prevent duplicate deployments.
 
+**CRITICAL: Default Branch Requirement for workflow_run**  
+GitHub Actions reads `workflow_run` triggers from the **repository's default branch** (currently `dev`), not from the branch where CI is running. This means:
+
+- Deploy/provision workflow files MUST exist on the default branch for triggers to work
+- Changes to these workflows on feature branches won't take effect until merged to default
+- This is a GitHub Actions security feature to prevent workflow injection attacks
+
 **Workflow Orchestration:**
 
 ```yaml
@@ -244,13 +251,10 @@ npm run nx:python-lint    # Runs: nx run-many --target=lint --projects=tag:pytho
 ```yaml
 on:
   # Trigger deployment only AFTER CI completes successfully on push
+  # Workflow file read from DEFAULT BRANCH (dev), not triggering branch
   workflow_run:
     workflows: ["CI"]
     types: ["completed"]
-    branches:
-      - dev
-      - test
-      - main
   workflow_dispatch:
     inputs:
       environment: { required: true, type: choice, options: [dev, test, prod] }
@@ -298,6 +302,7 @@ jobs:
 
 **CRITICAL Design Decisions:**
 
+- **Default branch requirement**: workflow_run triggers are read from the default branch (dev), not the triggering branch
 - **Path exclusion prevents race conditions**: Cluster configs excluded from deploy's change detection
 - **CI always enforced**: Quality checks MUST pass before provisioning/deployment. Both workflows run via workflow_run only after CI succeeds.
 - **No bypass allowed**: Even fresh clusters must pass CI to prevent broken manifests
