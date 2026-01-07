@@ -7,15 +7,38 @@ on:
     types: ["completed"]
     branches:
       - dev
-      base-changed: ${{ steps.detect.outputs.base-changed }}
-      dev-changed: ${{ steps.detect.outputs.dev-changed }}
-      test-changed: ${{ steps.detect.outputs.test-changed }}
-      prod-changed: ${{ steps.detect.outputs.prod-changed }}
+      - test
+      - main
+  workflow_dispatch:
+    inputs:
       environment:
         description: "Environment to deploy"
         required: true
         type: choice
         options:
+          - dev
+          - test
+          - prod
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+
+jobs:
+  detect-changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      base-changed: ${{ steps.detect.outputs.base-changed }}
+      dev-changed: ${{ steps.detect.outputs.dev-changed }}
+      test-changed: ${{ steps.detect.outputs.test-changed }}
+      prod-changed: ${{ steps.detect.outputs.prod-changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
 
       - name: Detect changed paths (HEAD^ → HEAD)
         id: detect
@@ -23,9 +46,13 @@ on:
         run: |
           set -e
           git fetch --no-tags --prune --unshallow || true
-          git diff --name-only HEAD^ HEAD > changed.txt || true
+          if git rev-parse HEAD^ >/dev/null 2>&1; then
+            git diff --name-only HEAD^ HEAD > changed.txt || true
+          else
+            git diff --name-only ${{ github.event.before }} ${{ github.sha }} > changed.txt || true
+          fi
           files=$(cat changed.txt || echo "")
-          echo "Changed files:\n$files"
+          echo -e "Changed files:\n$files"
 
           base=false
           dev=false
@@ -35,7 +62,7 @@ on:
           # Base resources or workflow changes
           if echo "$files" | grep -E -q '^infra/k8s/base/|^infra/deploy-control\.yaml|^\.github/workflows/deploy-k8s-resources\.yml|^\.github/actions/deploy-k8s-resources/'; then base=true; fi
 
-          # Environment resource changes (exclude cluster paths), also trigger on workflow changes
+          # Environment resource changes (exclude cluster paths)
           if echo "$files" | grep -E -q '^infra/k8s/hetzner/dev/' && ! echo "$files" | grep -E -q '^infra/k8s/hetzner/dev/cluster/'; then dev=true; fi
           if echo "$files" | grep -E -q '^infra/k8s/hetzner/test/' && ! echo "$files" | grep -E -q '^infra/k8s/hetzner/test/cluster/'; then test=true; fi
           if echo "$files" | grep -E -q '^infra/k8s/hetzner/prod/' && ! echo "$files" | grep -E -q '^infra/k8s/hetzner/prod/cluster/'; then prod=true; fi
@@ -47,40 +74,6 @@ on:
           echo "dev-changed=$dev" >> $GITHUB_OUTPUT
           echo "test-changed=$test" >> $GITHUB_OUTPUT
           echo "prod-changed=$prod" >> $GITHUB_OUTPUT
-      prod-changed: ${{ steps.filter.outputs.prod }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
-          fetch-depth: 0
-
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          # For workflow_run, compare current HEAD against its parent commit
-          # HEAD points to the commit that triggered CI; HEAD^ is the previous commit
-          base: ${{ github.event_name == 'workflow_run' && 'HEAD^' || github.event.before }}
-          filters: |
-            base:
-              - 'infra/k8s/base/**'
-              - 'infra/deploy-control.yaml'
-              - '.github/workflows/deploy-k8s-resources.yml'
-              - '.github/actions/deploy-k8s-resources/**'
-            dev:
-              - 'infra/k8s/hetzner/dev/**'
-              - '!infra/k8s/hetzner/dev/cluster/**'
-              - '.github/workflows/deploy-k8s-resources.yml'
-              - '.github/actions/deploy-k8s-resources/**'
-            test:
-              - 'infra/k8s/hetzner/test/**'
-              - '!infra/k8s/hetzner/test/cluster/**'
-              - '.github/workflows/deploy-k8s-resources.yml'
-              - '.github/actions/deploy-k8s-resources/**'
-            prod:
-              - 'infra/k8s/hetzner/prod/**'
-              - '!infra/k8s/hetzner/prod/cluster/**'
-              - '.github/workflows/deploy-k8s-resources.yml'
-              - '.github/actions/deploy-k8s-resources/**'
 
   deploy-dev:
     needs: [detect-changes]
@@ -94,6 +87,9 @@ on:
     environment: dev
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
 
       - name: Load deployment control
         id: deploy-control
@@ -165,6 +161,9 @@ on:
     environment: test
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
 
       - name: Load deployment control
         id: deploy-control
@@ -345,6 +344,9 @@ on:
     environment: prod
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
 
       - name: Load deployment control
         id: deploy-control
