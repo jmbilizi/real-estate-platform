@@ -30,7 +30,7 @@ This directory contains comprehensive documentation for the Kubernetes infrastru
    - **When to read**: Daily operations, troubleshooting
 
 3. **[testing.md](./testing.md)** - Local testing, validation procedures, dry-run commands
-3. **[testing.md](./testing.md)** - Local testing, validation procedures, dry-run commands
+4. **[testing.md](./testing.md)** - Local testing, validation procedures, dry-run commands
    - Local testing (no cluster required)
    - Cluster testing procedures
    - GitHub Actions testing
