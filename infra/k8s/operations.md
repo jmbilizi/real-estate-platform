@@ -60,17 +60,20 @@ environments:
 **Workflows and Triggers:**
 
 1. **Resource changes** (`base/**` or `hetzner/**/patches/**`):
-   - Push to dev/test/main → Triggers CI → If passes → Triggers deploy-k8s-resources.yml
-   - Deploy job waits for CI success before running
+   - Push to dev/test/main → CI runs (quality checks) → If passes → CI triggers deploy-k8s-resources.yml via `gh workflow run`
+   - ONLY Deploy workflow appears in Actions
 
 2. **Cluster provisioning** (`hetzner/**/cluster/**`):
-
-- Push to dev/test/main → CI runs → provision-hetzner-k8s-cluster.yml (via workflow_run) → Creates/updates cluster → Calls deploy-k8s-resources.yml via workflow_dispatch → Deploy runs
-- Single CI gate enforced via workflow_run; both workflows chained after CI success
+   - Push to dev/test/main → CI runs (quality checks) → If passes → CI triggers provision-hetzner-k8s-cluster.yml via `gh workflow run` → Creates/updates cluster → Calls deploy-k8s-resources.yml via workflow_call → Deploy runs
+   - ONLY Provision workflow appears in Actions (then Deploy)
 
 3. **Both cluster + resource changes**:
-   - Only provision-hetzner workflow triggers (path exclusion prevents duplicate)
-   - Cluster provisioned first, then resources deployed (all after CI via workflow_run)
+   - Push to dev/test/main → CI runs → CI triggers ONLY provision-hetzner (cluster precedence logic) → Provision runs → Calls deploy via workflow_call
+   - ONLY Provision workflow appears (then Deploy)
+
+4. **Unrelated files** (README.md, src/, docs/):
+   - Push to dev/test/main → CI runs (quality checks) → No infrastructure changes detected → No provision/deploy triggered
+   - ONLY CI workflow appears
 
 **Manual Triggers:**
 
@@ -87,8 +90,9 @@ gh workflow run provision-hetzner-k8s-cluster.yml -f environment=dev
 
 **CRITICAL**:
 
-- Path exclusion in deploy's change detection (`!infra/k8s/hetzner/**/cluster/**`) prevents race conditions
-- CI runs once via workflow_run before both provisioning and deployment workflows execute
+- CI detects changes AFTER quality checks pass, then explicitly triggers ONLY relevant workflows
+- Cluster precedence logic: if both cluster+deploy change, only provision triggers (deploy follows via workflow_call)
+- Workflows ONLY appear in Actions UI when they have work to do (clean UI)
 
 ### Check Deployment Status
 

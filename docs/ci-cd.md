@@ -229,42 +229,40 @@ This enforces code style discipline and prevents masking formatting issues.
 
 ### CD Architecture
 
-**Three-workflow orchestration system** prevents duplicate deployments and ensures quality checks pass before deployment:
+**CI-driven selective triggering system** ensures workflows only appear when they have relevant work to do:
 
 ```
-ci.yml (quality checks)
-    ↓ (workflow_call)
-deploy-k8s-resources.yml (deploy infrastructure + applications)
-    ↑ (workflow_call)
-provision-hetzner-k8s-cluster.yml (cluster provisioning)
+ci.yml (quality checks + change detection)
+    ↓ (gh workflow run - explicit triggering)
+    ├─→ provision-hetzner-k8s-cluster.yml (if cluster files changed)
+    │       ↓ (workflow_call)
+    │   deploy-k8s-resources.yml (after cluster ready)
+    │
+    └─→ deploy-k8s-resources.yml (if deploy files changed, cluster files unchanged)
 ```
+
+### Workflow Orchestration
+
+**Three workflows with clear separation of concerns:**
+
+1. `ci.yml` - Quality checks + change detection + workflow triggering
+2. `provision-hetzner-k8s-cluster.yml` - Cluster creation (triggered by CI)
+3. `deploy-k8s-resources.yml` - Resource deployment (triggered by CI or Provision)
+
+**Key Principle:** CI detects which workflows need to run AFTER quality checks pass, then explicitly triggers ONLY those workflows via GitHub CLI.
 
 ### deploy-k8s-resources.yml (Primary Deployment)
 
-**CRITICAL: Default Branch Requirement**
-
-GitHub Actions reads `workflow_run` triggers from the **repository's default branch** (currently `dev`), not from the branch where CI is running. This means:
-
-- This workflow file MUST exist on the default branch for triggers to work
-- Changes to this workflow on feature branches won't take effect until merged to default
-- This is a GitHub Actions security feature to prevent workflow injection attacks
-
 **Triggers:**
 
-1. **workflow_run** (runs after CI completes successfully on push)
-
-2. **workflow_dispatch** (manual deployment with environment selection)
-
-3. **workflow_call** (called by cluster provisioning after cluster creation)
+1. **workflow_dispatch** (manual deployment with environment selection)
+2. **workflow_call** (called by cluster provisioning after cluster creation)
+3. **Explicit from CI** (via `gh workflow run` after quality checks pass)
 
 **Job Flow:**
 
 ```yaml
 on:
-  # Workflow file read from DEFAULT BRANCH (dev), not triggering branch
-  workflow_run:
-    workflows: ["CI"]
-    types: ["completed"]
   workflow_dispatch:
     inputs:
       environment: { required: true, type: choice, options: [dev, test, prod] }
@@ -273,74 +271,44 @@ on:
       environment: { required: true, type: string }
 
 jobs:
-  detect-changes:
-    if: github.event_name == 'workflow_run' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    outputs:
-      base-changed: ${{ steps.filter.outputs.base }}
-      dev-changed: ${{ steps.filter.outputs.dev }}
-      # ... test/prod change outputs
-
   deploy-{dev,test,prod}:
-    needs: [detect-changes]
     if: |
-      always() &&
-      (github.event_name == 'workflow_run' && 
-       github.event.workflow_run.conclusion == 'success' && 
-       github.event.workflow_run.head_branch == '{env}' &&
-       needs.detect-changes.outputs.{env}-changed == 'true') ||
       (github.event_name == 'workflow_dispatch' && 
        github.event.inputs.environment == '{env}') ||
       (github.event_name == 'workflow_call' && 
        inputs.environment == '{env}')
 ```
 
-**Deployment Scenarios:**
-
-1. **Resource-only changes** (base/ or patches/):
-   - Push → CI runs → Deploy runs
-   - CI validates manifests before deployment
-
-2. **Cluster config changes** (cluster/\*.yaml):
-
-- Push → CI runs → provision-hetzner workflow (via workflow_run) creates/updates cluster → calls deploy via workflow_dispatch → deploy runs
-- Single CI gate enforced via workflow_run; both workflows chained after CI success
-
-3. **Both cluster + resource changes**:
-   - Only provision-hetzner triggers (path exclusion prevents duplicate)
-   - Cluster provisioned first, then deploy runs (all after CI via workflow_run)
-
-**Key Design Decisions:**
-
-- **Default branch requirement**: workflow_run triggers are read from the default branch (dev), not the triggering branch
-- **Path exclusion**: `!infra/k8s/hetzner/**/cluster/**` prevents race conditions
-- **CI always enforced**: Quality checks MUST pass before provisioning/deployment. Both workflows trigger via workflow_run only after CI succeeds.
-- **Security-first**: Prevents deploying untested code with clean workflow chaining
-- **Trade-off**: Single CI pass maintains safety; no embedded CI complexity
-
 ### provision-hetzner-k8s-cluster.yml (Cluster Lifecycle)
 
 **Triggers:**
 
-1. **Push to dev/test/main** with path filters:
-   - `infra/k8s/hetzner/*/cluster/*.yaml` (cluster configs)
-   - `.github/actions/provision-hetzner-k8s-cluster/**` (provisioning action changes)
+1. **workflow_dispatch** (manual cluster provisioning)
+2. **Explicit from CI** (via `gh workflow run` after quality checks pass)
 
-2. **workflow_dispatch** (manual cluster provisioning)
+**Job Flow:**
 
-**Workflow Sequence:**
+```yaml
+on:
+  workflow_dispatch:
+    inputs:
+      environment: { required: true, type: choice, options: [dev, test, prod] }
 
-1. Detect cluster config changes (dorny/paths-filter)
-2. Route to environment job (dev/test/prod) based on branch and changes
-3. Composite action executes:
-   - Install kubectl, Helm, hetzner-k3s CLI
-   - Setup SSH keys from GitHub Secrets
-   - Substitute secrets in cluster-config.yaml
-   - Create/update cluster (includes cert-manager v1.13.3 installation)
-   - Wait for cluster readiness (nodes, CSI driver, StorageClass)
-   - Verify cert-manager installation
-   - Upload KUBECONFIG to GitHub environment secrets
-   - **Trigger deploy-k8s-resources.yml** via workflow_dispatch
+jobs:
+  update-{dev,test,prod}-cluster:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == '{env}'
+```
+
+**Composite Action Sequence:**
+
+1. Install kubectl, Helm, hetzner-k3s CLI
+2. Setup SSH keys from GitHub Secrets
+3. Substitute secrets in cluster-config.yaml
+4. Create/update cluster (includes cert-manager v1.13.3 installation)
+5. Wait for cluster readiness (nodes, CSI driver, StorageClass)
+6. Verify cert-manager installation
+7. Upload KUBECONFIG to GitHub environment secrets
+8. **Trigger deploy-k8s-resources.yml** via workflow_dispatch
 
 **Automatic cert-manager Installation:**
 
@@ -350,6 +318,189 @@ cert-manager v1.13.3 + `letsencrypt-prod` ClusterIssuer installed during cluster
 - Waits for deployment readiness (180s timeout)
 - Creates ClusterIssuer inline (no separate manifest files)
 - Certificates auto-provisioned when Ingress resources deployed (~2-5 min via ACME HTTP-01)
+
+### ci.yml (Primary Entry Point)
+
+**Triggers:**
+
+1. **Push to dev/test/main**
+2. **Pull requests** targeting dev/test/main
+
+**Job Flow:**
+
+```yaml
+on:
+  push:
+    branches: [main, test, dev]
+  pull_request:
+    branches: [main, test, dev]
+
+permissions:
+  actions: write # Required to trigger workflows via gh workflow run
+  contents: read
+
+jobs:
+  # 1. Quality checks (lint, test, build)
+  node: ...
+  python: ...
+  dotnet: ...
+
+  # 2. Detect infrastructure changes (only on push, after quality checks pass)
+  detect-infra-changes:
+    needs: [node, python, dotnet]
+    if: github.event_name == 'push'
+    outputs:
+      cluster-changed: ${{ steps.detect.outputs.cluster-changed }}
+      deploy-changed: ${{ steps.detect.outputs.deploy-changed }}
+    steps:
+      - name: Detect changes
+        run: |
+          # Cluster changes: infra/k8s/hetzner/*/cluster/, provision workflow/action
+          git diff HEAD^ HEAD --name-only | grep -E "pattern" && echo "cluster-changed=true"
+
+          # Deploy changes: infra/k8s/base/, deploy-control.yaml, patches/, deploy workflow/action
+          git diff HEAD^ HEAD --name-only | grep -E "pattern" && echo "deploy-changed=true"
+
+  # 3. Trigger provision ONLY if cluster files changed
+  trigger-provision:
+    needs: [detect-infra-changes]
+    if: needs.detect-infra-changes.outputs.cluster-changed == 'true'
+    steps:
+      - name: Trigger provision workflow
+        run: |
+          gh workflow run provision-hetzner-k8s-cluster.yml \
+            --repo ${{ github.repository }} \
+            --ref ${{ github.ref_name }} \
+            --field environment=${{ env.TARGET_ENV }}
+
+  # 4. Trigger deploy ONLY if deploy files changed (and cluster didn't change)
+  trigger-deploy:
+    needs: [detect-infra-changes]
+    if: |
+      needs.detect-infra-changes.outputs.deploy-changed == 'true' &&
+      needs.detect-infra-changes.outputs.cluster-changed != 'true'
+    steps:
+      - name: Trigger deploy workflow
+        run: |
+          gh workflow run deploy-k8s-resources.yml \
+            --repo ${{ github.repository }} \
+            --ref ${{ github.ref_name }} \
+            --field environment=${{ env.TARGET_ENV }}
+```
+
+### Deployment Scenarios
+
+**1. Cluster files change** (`infra/k8s/hetzner/*/cluster/`, provision workflow, provision action):
+
+```
+Push to dev branch
+    ↓
+CI runs (quality checks: lint, test, build)
+    ↓
+detect-infra-changes job (cluster-changed=true)
+    ↓
+trigger-provision job runs
+    ↓
+provision-hetzner-k8s-cluster.yml triggered via gh workflow run
+    ↓
+Cluster created/updated
+    ↓
+Provision triggers deploy-k8s-resources.yml via workflow_call
+    ↓
+Resources deployed to new cluster
+```
+
+**Result:** ONLY Provision workflow appears in Actions (then Deploy when Provision completes)
+
+**2. Deploy files change** (`infra/k8s/base/`, `deploy-control.yaml`, `patches/`, deploy workflow, deploy action):
+
+```
+Push to dev branch
+    ↓
+CI runs (quality checks)
+    ↓
+detect-infra-changes job (deploy-changed=true, cluster-changed=false)
+    ↓
+trigger-deploy job runs
+    ↓
+deploy-k8s-resources.yml triggered via gh workflow run
+    ↓
+Resources deployed
+```
+
+**Result:** ONLY Deploy workflow appears in Actions
+
+**3. Both cluster + deploy files change**:
+
+```
+Push to dev branch
+    ↓
+CI runs (quality checks)
+    ↓
+detect-infra-changes job (cluster-changed=true, deploy-changed=true)
+    ↓
+trigger-provision job runs (trigger-deploy skipped due to cluster precedence)
+    ↓
+Provision workflow runs → triggers Deploy via workflow_call
+```
+
+**Result:** ONLY Provision workflow appears (then Deploy)  
+**Why:** Cluster changes take precedence; trigger-deploy condition excludes when cluster-changed=true
+
+**4. Unrelated files change** (`README.md`, `src/`, `docs/`):
+
+```
+Push to dev branch
+    ↓
+CI runs (quality checks)
+    ↓
+detect-infra-changes job (cluster-changed=false, deploy-changed=false)
+    ↓
+No trigger jobs run
+```
+
+**Result:** ONLY CI workflow appears in Actions
+
+**5. Provision workflow files change** (`.github/workflows/provision-hetzner-k8s-cluster.yml`, `.github/actions/provision-hetzner-k8s-cluster/`):
+
+```
+Push to dev branch
+    ↓
+CI runs (quality checks)
+    ↓
+detect-infra-changes job (cluster-changed=true - workflow files match pattern)
+    ↓
+trigger-provision job runs
+    ↓
+Provision workflow runs (validates workflow changes)
+```
+
+**Result:** Provision workflow appears (validates workflow changes)
+
+**6. Deploy workflow files change** (`.github/workflows/deploy-k8s-resources.yml`, `.github/actions/deploy-k8s-resources/`):
+
+```
+Push to dev branch
+    ↓
+CI runs (quality checks)
+    ↓
+detect-infra-changes job (deploy-changed=true - workflow files match pattern)
+    ↓
+trigger-deploy job runs
+    ↓
+Deploy workflow runs (validates workflow changes)
+```
+
+**Result:** Deploy workflow appears (validates workflow changes)
+
+### Key Design Decisions
+
+- **Explicit triggering**: CI uses `gh workflow run` to trigger provision/deploy ONLY when needed
+- **No unnecessary workflows**: Workflows only appear when they have work to do
+- **CI always enforced**: Quality checks MUST pass before any infrastructure operations
+- **Cluster takes precedence**: If both cluster and deploy change, only provision is triggered (provision will trigger deploy)
+- **Security-first**: Prevents deploying untested code; CI gates all infrastructure workflows
+- **Clean UI**: No workflow_run triggers that always appear regardless of relevance
 
 ### Deployment Control System
 
@@ -387,67 +538,96 @@ deployment_strategies:
 
 ### Workflow Orchestration Patterns
 
-**Why path exclusion matters:**
+**Why cluster precedence matters:**
 
-Without `!infra/k8s/hetzner/**/cluster/**`:
+Without cluster-precedence logic in trigger-deploy condition:
 
 ```
 User changes cluster config + base manifests
     ↓
 Both workflows trigger simultaneously:
     ├── provision-hetzner (creates NEW cluster)
-    └── deploy-k8s-resources (deploys to OLD cluster)
-Result: Resources deployed to wrong cluster!
 ```
 
-With path exclusion:
-
-```
 User changes cluster config + base manifests
-    ↓
-Only provision-hetzner triggers:
-    ├── Creates new cluster
-    └── Calls deploy-k8s-resources (deploys to NEW cluster)
+↓
+CI triggers BOTH provision and deploy workflows:
+├── provision-hetzner (creates NEW cluster)
+└── deploy-k8s-resources (deploys to OLD cluster - race condition!)
+Result: Resources deployed to wrong cluster!
+
+```
+
+With cluster-precedence logic (`trigger-deploy` condition: `cluster-changed != 'true'`):
+
+```
+
+User changes cluster config + base manifests
+↓
+CI triggers ONLY provision:
+├── Creates new cluster
+└── Calls deploy-k8s-resources via workflow_call (deploys to NEW cluster)
 Result: Resources deployed to correct cluster ✓
-```
-
-**Why CI dependency matters:**
-
-Before CI dependency:
 
 ```
+
+**Why CI gating matters:**
+
+Before explicit CI triggering:
+
+```
+
 User pushes broken code
-    ↓
+↓
 deploy-k8s-resources triggers
-    ↓
+↓
 Broken code deployed to production
-```
-
-After CI dependency:
 
 ```
+
+After CI gating (explicit triggering):
+
+```
+
 User pushes broken code
-    ↓
+↓
 CI runs → FAILS
-    ↓
-Provisioning/deployment blocked (workflow_run doesn't trigger)
-```
+↓
+Provisioning/deployment never triggered (gh workflow run never executes)
+Result: Broken code blocked ✓
 
-**Why workflow_run chaining matters:**
+````
+
+**Why explicit triggering matters:**
+
+With workflow_run (old approach):
 
 ```yaml
 on:
-  # CRITICAL: This workflow file is read from DEFAULT BRANCH (dev)
   workflow_run:
     workflows: ["CI"]
     types: ["completed"]
 
-deploy-dev:
-  if: |
-    github.event_name == 'workflow_run' &&
-    github.event.workflow_run.conclusion == 'success' &&
-    ...
+# Problem: Workflows ALWAYS appear in Actions UI after EVERY CI run
+# Even when no infrastructure changes exist (UI clutter)
+````
+
+With explicit triggering (current approach):
+
+```yaml
+# CI detects changes first
+detect-infra-changes:
+  outputs:
+    cluster-changed: ${{ steps.detect.outputs.cluster-changed }}
+    deploy-changed: ${{ steps.detect.outputs.deploy-changed }}
+
+# Only trigger relevant workflows
+trigger-provision:
+  if: needs.detect-infra-changes.outputs.cluster-changed == 'true'
+# Result: Workflows ONLY appear when they have work to do ✓
 ```
+
+````
 
 - **workflow_run trigger**: Only fires after CI completes
 - **Default branch requirement**: Workflow file read from default branch (dev), not triggering branch
@@ -468,7 +648,7 @@ gh workflow run provision-hetzner-k8s-cluster.yml -f environment=dev
 
 # Via GitHub UI
 # Actions → Select workflow → Run workflow → Select environment
-```
+````
 
 **CRITICAL:** Manual cluster provisioning is destructive (recreates cluster). Use deploy-k8s-resources.yml for updates.
 
