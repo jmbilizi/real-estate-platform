@@ -529,9 +529,9 @@ TARGET_ENV: ${{
 
 ## References
 
-- CI Workflow: [.github/workflows/ci.yml](../../.github/workflows/ci.yml)
-- Deploy Workflow: [.github/workflows/deploy-k8s-resources.yml](../../.github/workflows/deploy-k8s-resources.yml)
-- Cluster Provisioning: [.github/workflows/provision-hetzner-k8s-cluster.yml](../../.github/workflows/provision-hetzner-k8s-cluster.yml)
-- Deployment Control: [infra/deploy-control.yaml](../deploy-control.yaml)
-- CI/CD Documentation: [docs/ci-cd.md](../../docs/ci-cd.md)
+- CI Workflow: [.github/workflows/ci.yml](workflows/ci.yml)
+- Deploy Workflow: [.github/workflows/deploy-k8s-resources.yml](workflows/deploy-k8s-resources.yml)
+- Cluster Provisioning: [.github/workflows/provision-hetzner-k8s-cluster.yml](workflows/provision-hetzner-k8s-cluster.yml)
+- Deployment Control: [infra/deploy-control.yaml](../infra/deploy-control.yaml)
+- CI/CD Documentation: [docs/ci-cd.md](../docs/ci-cd.md)
 ````
