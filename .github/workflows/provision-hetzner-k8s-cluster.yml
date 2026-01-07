@@ -92,7 +92,9 @@ jobs:
       - uses: dorny/paths-filter@v3
         id: filter
         with:
-          base: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.event.before }}
+          # For workflow_run, compare current HEAD against its parent commit
+          # HEAD points to the commit that triggered CI; HEAD^ is the previous commit
+          base: ${{ github.event_name == 'workflow_run' && 'HEAD^' || github.event.before }}
           filters: |
             dev:
               - 'infra/k8s/hetzner/dev/cluster/**'
