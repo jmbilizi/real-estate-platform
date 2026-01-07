@@ -28,19 +28,52 @@ jobs:
     name: Detect changed paths
     runs-on: ubuntu-latest
     outputs:
-      cluster-changed: ${{ steps.detect.outputs.cluster-changed }}
-      base-changed: ${{ steps.detect.outputs.base-changed }}
-      dev-changed: ${{ steps.detect.outputs.dev-changed }}
-      test-changed: ${{ steps.detect.outputs.test-changed }}
-      prod-changed: ${{ steps.detect.outputs.prod-changed }}
+      cluster-changed: ${{ steps.quick-check.outputs.cluster-changed || steps.detect.outputs.cluster-changed || 'false' }}
+      base-changed: ${{ steps.quick-check.outputs.base-changed || steps.detect.outputs.base-changed || 'false' }}
+      dev-changed: ${{ steps.quick-check.outputs.dev-changed || steps.detect.outputs.dev-changed || 'false' }}
+      test-changed: ${{ steps.quick-check.outputs.test-changed || steps.detect.outputs.test-changed || 'false' }}
+      prod-changed: ${{ steps.quick-check.outputs.prod-changed || steps.detect.outputs.prod-changed || 'false' }}
     steps:
+      - name: Quick check for deploy-related changes (skip expensive checkout if not needed)
+        id: quick-check
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "🔍 Quick check: Are there any deploy-related changes?"
+
+          # Get commit SHA from workflow_run event
+          COMMIT_SHA="${{ github.event.workflow_run.head_sha }}"
+
+          # Fetch changed files using GitHub API (no checkout needed)
+          FILES=$(gh api repos/${{ github.repository }}/commits/$COMMIT_SHA --jq '.files[].filename' || echo "")
+
+          echo "Changed files:"
+          echo "$FILES"
+
+          # Check if ANY deploy-related files changed (excluding cluster configs handled by provision)
+          if echo "$FILES" | grep -E -q '^infra/k8s/base/|^infra/deploy-control\.yaml|^infra/k8s/hetzner/.*/patches/|^\.github/workflows/deploy-k8s-resources\.yml|^\.github/actions/deploy-k8s-resources/'; then
+            echo "✅ Deploy-related files detected - continuing with full analysis"
+            echo "skip-full-detection=false" >> $GITHUB_OUTPUT
+          else
+            echo "⏭️  No deploy-related files changed - skipping this workflow"
+            echo "skip-full-detection=true" >> $GITHUB_OUTPUT
+            echo "cluster-changed=false" >> $GITHUB_OUTPUT
+            echo "base-changed=false" >> $GITHUB_OUTPUT
+            echo "dev-changed=false" >> $GITHUB_OUTPUT
+            echo "test-changed=false" >> $GITHUB_OUTPUT
+            echo "prod-changed=false" >> $GITHUB_OUTPUT
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.quick-check.outputs.skip-full-detection != 'true'
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
 
       - name: Detect changed paths (HEAD^ → HEAD)
         id: detect
+        if: steps.quick-check.outputs.skip-full-detection != 'true'
         shell: bash
         run: |
           set -e
