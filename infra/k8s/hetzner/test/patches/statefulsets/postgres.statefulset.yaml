@@ -31,4 +31,4 @@ spec:
         storageClassName: hcloud-volumes
         resources:
           requests:
-            storage: 15Gi
+            storage: 10Gi

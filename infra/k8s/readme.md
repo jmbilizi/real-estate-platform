@@ -40,16 +40,7 @@ This directory contains comprehensive documentation for the Kubernetes infrastru
 
 ### Configuration References
 
-4. **[STORAGE-GUIDE.md](./STORAGE-GUIDE.md)** - Storage configuration guide
-   - Storage sizing decisions and rationale (PostgreSQL, Redis, Jaeger)
-   - Cost analysis and breakdown per environment
-   - PVC expansion strategy and best practices
-   - Troubleshooting storage issues
-   - Performance considerations and monitoring
-   - **Who should read**: DevOps engineers, platform architects, cost managers
-   - **When to read**: When planning capacity, expanding storage, troubleshooting PVC issues
-
-5. **[redis-acl-guide.md](./redis-acl-guide.md)** - Redis ACL guide
+4. **[redis-acl-guide.md](./redis-acl-guide.md)** - Redis ACL guide
    - ACL user permissions and key patterns
    - Application connection examples (Node.js, Python, .NET)
    - Key naming conventions
@@ -58,7 +49,7 @@ This directory contains comprehensive documentation for the Kubernetes infrastru
    - **Who should read**: Developers (backend, services)
    - **When to read**: When connecting to Redis, implementing caching/pub-sub
 
-6. **[../deploy-control.yaml](../deploy-control.yaml)** - Deployment control
+5. **[../deploy-control.yaml](../deploy-control.yaml)** - Deployment control
    - **Most deployment controls are actively enforced by workflows**
    - Environment gates: `enabled`, `auto_deploy` (enforced), `require_manual_approval` (not yet enforced)
    - Deployment windows: Time/day-based restrictions (enforced)
@@ -70,7 +61,7 @@ This directory contains comprehensive documentation for the Kubernetes infrastru
    - **Who should read**: DevOps engineers, release managers
    - **When to read**: When configuring deployment policies or troubleshooting deployments
 
-7. **Directory Structure Reference**
+6. **Directory Structure Reference**
    - `base/` - Shared configurations (see below)
    - `hetzner/` - Provider-specific overlays (see below)
    - `.github/workflows/` - CI/CD pipelines (see below)
