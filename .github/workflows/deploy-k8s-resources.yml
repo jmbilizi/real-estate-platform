@@ -59,15 +59,23 @@ jobs:
             base:
               - 'infra/k8s/base/**'
               - 'infra/deploy-control.yaml'
+              - '.github/workflows/deploy-k8s-resources.yml'
+              - '.github/actions/deploy-k8s-resources/**'
             dev:
               - 'infra/k8s/hetzner/dev/**'
               - '!infra/k8s/hetzner/dev/cluster/**'
+              - '.github/workflows/deploy-k8s-resources.yml'
+              - '.github/actions/deploy-k8s-resources/**'
             test:
               - 'infra/k8s/hetzner/test/**'
               - '!infra/k8s/hetzner/test/cluster/**'
+              - '.github/workflows/deploy-k8s-resources.yml'
+              - '.github/actions/deploy-k8s-resources/**'
             prod:
               - 'infra/k8s/hetzner/prod/**'
               - '!infra/k8s/hetzner/prod/cluster/**'
+              - '.github/workflows/deploy-k8s-resources.yml'
+              - '.github/actions/deploy-k8s-resources/**'
 
   deploy-dev:
     needs: [detect-changes]

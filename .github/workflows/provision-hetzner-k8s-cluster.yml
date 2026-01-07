@@ -95,11 +95,17 @@ jobs:
           base: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.event.before }}
           filters: |
             dev:
-              - 'infra/k8s/hetzner/dev/cluster/cluster-config.yaml'
+              - 'infra/k8s/hetzner/dev/cluster/**'
+              - '.github/workflows/provision-hetzner-k8s-cluster.yml'
+              - '.github/actions/provision-hetzner-k8s-cluster/**'
             test:
-              - 'infra/k8s/hetzner/test/cluster/cluster-config.yaml'
+              - 'infra/k8s/hetzner/test/cluster/**'
+              - '.github/workflows/provision-hetzner-k8s-cluster.yml'
+              - '.github/actions/provision-hetzner-k8s-cluster/**'
             prod:
-              - 'infra/k8s/hetzner/prod/cluster/cluster-config.yaml'
+              - 'infra/k8s/hetzner/prod/cluster/**'
+              - '.github/workflows/provision-hetzner-k8s-cluster.yml'
+              - '.github/actions/provision-hetzner-k8s-cluster/**'
 
   # Dev environment provisioning (gated by detect-changes and CI success)
   update-dev-cluster:
