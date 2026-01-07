@@ -56,6 +56,10 @@ jobs:
           dev=false
           test=false
           prod=false
+          cluster=false
+
+          # Cluster configuration changes (provision workflow will handle these)
+          if echo "$files" | grep -E -q '^infra/k8s/hetzner/.*/cluster/|^\.github/workflows/provision-hetzner-k8s-cluster\.yml|^\.github/actions/provision-hetzner-k8s-cluster/'; then cluster=true; fi
 
           # Base resources or workflow changes
           if echo "$files" | grep -E -q '^infra/k8s/base/|^infra/deploy-control\.yaml|^\.github/workflows/deploy-k8s-resources\.yml|^\.github/actions/deploy-k8s-resources/'; then base=true; fi
@@ -68,6 +72,7 @@ jobs:
           # Workflow changes should also mark env-specific flags true so branch routing runs
           if echo "$files" | grep -E -q '^\.github/workflows/deploy-k8s-resources\.yml|^\.github/actions/deploy-k8s-resources/'; then dev=true; test=true; prod=true; fi
 
+          echo "cluster-changed=$cluster" >> $GITHUB_OUTPUT
           echo "base-changed=$base" >> $GITHUB_OUTPUT
           echo "dev-changed=$dev" >> $GITHUB_OUTPUT
           echo "test-changed=$test" >> $GITHUB_OUTPUT
@@ -77,7 +82,7 @@ jobs:
     needs: [detect-changes]
     if: |
       always() && (
-        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'dev' && (needs.detect-changes.outputs.base-changed == 'true' || needs.detect-changes.outputs.dev-changed == 'true')) ||
+        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'dev' && needs.detect-changes.outputs.cluster-changed != 'true' && (needs.detect-changes.outputs.base-changed == 'true' || needs.detect-changes.outputs.dev-changed == 'true')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev') ||
         (github.event_name == 'workflow_call' && inputs.environment == 'dev')
       )
@@ -151,7 +156,7 @@ jobs:
     needs: [detect-changes]
     if: |
       always() && (
-        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'test' && (needs.detect-changes.outputs.base-changed == 'true' || needs.detect-changes.outputs.test-changed == 'true')) ||
+        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'test' && needs.detect-changes.outputs.cluster-changed != 'true' && (needs.detect-changes.outputs.base-changed == 'true' || needs.detect-changes.outputs.test-changed == 'true')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'test') ||
         (github.event_name == 'workflow_call' && inputs.environment == 'test')
       )
@@ -334,7 +339,7 @@ jobs:
     needs: [detect-changes]
     if: |
       always() && (
-        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && (needs.detect-changes.outputs.base-changed == 'true' || needs.detect-changes.outputs.prod-changed == 'true')) ||
+        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && needs.detect-changes.outputs.cluster-changed != 'true' && (needs.detect-changes.outputs.base-changed == 'true' || needs.detect-changes.outputs.prod-changed == 'true')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod') ||
         (github.event_name == 'workflow_call' && inputs.environment == 'prod')
       )
