@@ -1,12 +1,6 @@
 name: Provision Hetzner K8s Cluster
 
 on:
-  # Trigger provisioning only AFTER CI completes successfully on push
-  # CRITICAL: workflow_run reads this file from the DEFAULT BRANCH (dev)
-  # even when triggered by CI running on other branches.
-  workflow_run:
-    workflows: ["CI"]
-    types: ["completed"]
   pull_request:
     branches:
       - dev
@@ -18,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: "Environment to deploy"
+        description: "Environment to provision"
         required: true
         type: choice
         options:
@@ -73,84 +67,9 @@ jobs:
           python3 -c "import yaml; yaml.safe_load(open('infra/k8s/hetzner/prod/cluster/cluster-config.yaml'))" || exit 1
           echo "✅ Prod cluster config is valid YAML"
 
-  detect-changes:
-    # Runs for workflow_run (post-CI) and manual dispatch to detect env-specific changes
-    if: github.event_name == 'workflow_run' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    outputs:
-      dev-changed: ${{ steps.quick-check.outputs.dev-changed || steps.detect.outputs.dev-changed || 'false' }}
-      test-changed: ${{ steps.quick-check.outputs.test-changed || steps.detect.outputs.test-changed || 'false' }}
-      prod-changed: ${{ steps.quick-check.outputs.prod-changed || steps.detect.outputs.prod-changed || 'false' }}
-    steps:
-      - name: Quick check for provision-related changes (skip expensive checkout if not needed)
-        id: quick-check
-        if: github.event_name == 'workflow_run'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          echo "🔍 Quick check: Are there any provision-related changes?"
-
-          # Get commit SHA from workflow_run event
-          COMMIT_SHA="${{ github.event.workflow_run.head_sha }}"
-
-          # Fetch changed files using GitHub API (no checkout needed)
-          FILES=$(gh api repos/${{ github.repository }}/commits/$COMMIT_SHA --jq '.files[].filename' || echo "")
-
-          echo "Changed files:"
-          echo "$FILES"
-
-          # Check if ANY provision-related files changed
-          if echo "$FILES" | grep -E -q '^infra/k8s/hetzner/.*/cluster/|^\.github/workflows/provision-hetzner-k8s-cluster\.yml|^\.github/actions/provision-hetzner-k8s-cluster/'; then
-            echo "✅ Provision-related files detected - continuing with full analysis"
-            echo "skip-full-detection=false" >> $GITHUB_OUTPUT
-          else
-            echo "⏭️  No provision-related files changed - skipping this workflow"
-            echo "skip-full-detection=true" >> $GITHUB_OUTPUT
-            echo "dev-changed=false" >> $GITHUB_OUTPUT
-            echo "test-changed=false" >> $GITHUB_OUTPUT
-            echo "prod-changed=false" >> $GITHUB_OUTPUT
-          fi
-
-      - uses: actions/checkout@v4
-        if: steps.quick-check.outputs.skip-full-detection != 'true'
-        with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
-          fetch-depth: 0
-
-      - name: Detect changed paths (HEAD^ → HEAD)
-        id: detect
-        if: steps.quick-check.outputs.skip-full-detection != 'true'
-        shell: bash
-        run: |
-          set -e
-          # Ensure full history for diff
-          git fetch --no-tags --prune --unshallow || true
-          # List files changed in the commit that triggered CI
-          git diff --name-only HEAD^ HEAD > changed.txt || true
-          files=$(cat changed.txt || echo "")
-          echo "Changed files:\n$files"
-
-          dev=false
-          test=false
-          prod=false
-
-          # Trigger provisioning when cluster configs OR workflow/action files change
-          if echo "$files" | grep -E -q '^infra/k8s/hetzner/dev/cluster/|^\.github/workflows/provision-hetzner-k8s-cluster\.yml|^\.github/actions/provision-hetzner-k8s-cluster/'; then dev=true; fi
-          if echo "$files" | grep -E -q '^infra/k8s/hetzner/test/cluster/|^\.github/workflows/provision-hetzner-k8s-cluster\.yml|^\.github/actions/provision-hetzner-k8s-cluster/'; then test=true; fi
-          if echo "$files" | grep -E -q '^infra/k8s/hetzner/prod/cluster/|^\.github/workflows/provision-hetzner-k8s-cluster\.yml|^\.github/actions/provision-hetzner-k8s-cluster/'; then prod=true; fi
-
-          echo "dev-changed=$dev" >> $GITHUB_OUTPUT
-          echo "test-changed=$test" >> $GITHUB_OUTPUT
-          echo "prod-changed=$prod" >> $GITHUB_OUTPUT
-
-  # Dev environment provisioning (gated by detect-changes and CI success)
+  # Dev environment provisioning
   update-dev-cluster:
-    needs: [detect-changes]
-    if: |
-      always() && (
-        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'dev' && needs.detect-changes.outputs.dev-changed == 'true') ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev')
-      )
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev'
     runs-on: ubuntu-latest
     environment: dev
     steps:
@@ -169,14 +88,9 @@ jobs:
           hetzner-token: ${{ secrets.HETZNER_TOKEN }}
           infra-deploy-token: ${{ secrets.INFRA_DEPLOY_TOKEN }}
 
-  # Test environment provisioning (gated by detect-changes and CI success)
+  # Test environment provisioning
   update-test-cluster:
-    needs: [detect-changes]
-    if: |
-      always() && (
-        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'test' && needs.detect-changes.outputs.test-changed == 'true') ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'test')
-      )
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'test'
     runs-on: ubuntu-latest
     environment: test
     steps:
@@ -195,14 +109,9 @@ jobs:
           hetzner-token: ${{ secrets.HETZNER_TOKEN }}
           infra-deploy-token: ${{ secrets.INFRA_DEPLOY_TOKEN }}
 
-  # Prod environment provisioning (gated by detect-changes and CI success)
+  # Production environment provisioning
   update-prod-cluster:
-    needs: [detect-changes]
-    if: |
-      always() && (
-        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && needs.detect-changes.outputs.prod-changed == 'true') ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod')
-      )
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod'
     runs-on: ubuntu-latest
     environment: prod
     steps:

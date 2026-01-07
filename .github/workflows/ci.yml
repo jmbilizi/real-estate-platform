@@ -1,7 +1,7 @@
 # CI Workflow
 # Primary push/PR trigger for quality checks.
-# Provisioning is chained via workflow_run in provision-hetzner-k8s-cluster.yml
-# after this CI completes successfully, ensuring CI always runs first.
+# After CI completes successfully, triggers provision/deploy workflows based on changed files.
+# This ensures CI always runs first and only relevant workflows are triggered.
 name: CI
 
 on:
@@ -16,6 +16,10 @@ on:
       - test
       - dev
   workflow_call: # Allow other workflows to call CI
+
+permissions:
+  actions: write # Required to trigger provision/deploy workflows
+  contents: read
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -308,3 +312,110 @@ jobs:
             coverage/
             test-results/
           retention-days: 7
+  # Detect which infrastructure workflows need to be triggered
+  detect-infra-changes:
+    needs: [node, python, dotnet] # Wait for all quality checks to pass
+    if: github.event_name == 'push' # Only trigger workflows on push, not PR
+    runs-on: ubuntu-latest
+    outputs:
+      cluster-changed: ${{ steps.detect.outputs.cluster-changed }}
+      deploy-changed: ${{ steps.detect.outputs.deploy-changed }}
+      branch: ${{ steps.detect.outputs.branch }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # Need HEAD and HEAD^ for diff
+
+      - name: Detect infrastructure changes
+        id: detect
+        shell: bash
+        run: |
+          # Get changed files between HEAD^ and HEAD
+          if git rev-parse HEAD^ >/dev/null 2>&1; then
+            FILES=$(git diff --name-only HEAD^ HEAD)
+          else
+            FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+          fi
+
+          echo "Changed files:"
+          echo "$FILES"
+
+          cluster=false
+          deploy=false
+
+          # Check for cluster configuration changes
+          if echo "$FILES" | grep -E -q '^infra/k8s/hetzner/.*/cluster/|^\.github/workflows/provision-hetzner-k8s-cluster\.yml|^\.github/actions/provision-hetzner-k8s-cluster/'; then
+            cluster=true
+            echo "✅ Cluster configuration changes detected"
+          fi
+
+          # Check for deploy resource changes (excluding cluster paths)
+          if echo "$FILES" | grep -E -q '^infra/k8s/base/|^infra/deploy-control\.yaml|^infra/k8s/hetzner/.*/patches/|^\.github/workflows/deploy-k8s-resources\.yml|^\.github/actions/deploy-k8s-resources/'; then
+            deploy=true
+            echo "✅ Deploy resource changes detected"
+          fi
+
+          # Determine environment based on branch
+          BRANCH="${{ github.ref_name }}"
+
+          echo "cluster-changed=$cluster" >> $GITHUB_OUTPUT
+          echo "deploy-changed=$deploy" >> $GITHUB_OUTPUT
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+
+  # Trigger cluster provisioning workflow if cluster configs changed
+  trigger-provision:
+    needs: [detect-infra-changes]
+    if: needs.detect-infra-changes.outputs.cluster-changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine environment from branch
+        id: env
+        run: |
+          BRANCH="${{ needs.detect-infra-changes.outputs.branch }}"
+          if [ "$BRANCH" = "main" ]; then
+            echo "environment=prod" >> $GITHUB_OUTPUT
+          elif [ "$BRANCH" = "test" ]; then
+            echo "environment=test" >> $GITHUB_OUTPUT
+          else
+            echo "environment=dev" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Trigger cluster provisioning
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "🚀 Triggering cluster provisioning for ${{ steps.env.outputs.environment }} environment..."
+          gh workflow run provision-hetzner-k8s-cluster.yml \
+            --repo ${{ github.repository }} \
+            --ref ${{ github.ref }} \
+            --field environment=${{ steps.env.outputs.environment }}
+          echo "✅ Cluster provisioning workflow triggered"
+
+  # Trigger deploy workflow if deploy resources changed (and cluster didn't change)
+  trigger-deploy:
+    needs: [detect-infra-changes]
+    if: needs.detect-infra-changes.outputs.deploy-changed == 'true' && needs.detect-infra-changes.outputs.cluster-changed != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine environment from branch
+        id: env
+        run: |
+          BRANCH="${{ needs.detect-infra-changes.outputs.branch }}"
+          if [ "$BRANCH" = "main" ]; then
+            echo "environment=prod" >> $GITHUB_OUTPUT
+          elif [ "$BRANCH" = "test" ]; then
+            echo "environment=test" >> $GITHUB_OUTPUT
+          else
+            echo "environment=dev" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Trigger resource deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "🚀 Triggering resource deployment for ${{ steps.env.outputs.environment }} environment..."
+          gh workflow run deploy-k8s-resources.yml \
+            --repo ${{ github.repository }} \
+            --ref ${{ github.ref }} \
+            --field environment=${{ steps.env.outputs.environment }}
+          echo "✅ Resource deployment workflow triggered"

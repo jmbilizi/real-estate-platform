@@ -228,85 +228,92 @@ npm run nx:python-lint    # Runs: nx run-many --target=lint --projects=tag:pytho
 
 ## CI/CD Pipeline
 
-**Architecture**: CI-first workflow with path-based routing to prevent duplicate deployments.
-
-**CRITICAL: Default Branch Requirement for workflow_run**  
-GitHub Actions reads `workflow_run` triggers from the **repository's default branch** (currently `dev`), not from the branch where CI is running. This means:
-
-- Deploy/provision workflow files MUST exist on the default branch for triggers to work
-- Changes to these workflows on feature branches won't take effect until merged to default
-- This is a GitHub Actions security feature to prevent workflow injection attacks
+**Architecture**: CI-first workflow with explicit change detection and selective workflow triggering.
 
 **Workflow Orchestration:**
 
 ```yaml
 # Three workflows with clear separation of concerns:
-1. ci.yml                            # Quality checks (lint, test, build)
-2. provision-hetzner-k8s-cluster.yml # Cluster creation
-3. deploy-k8s-resources.yml          # Resource deployment
+1. ci.yml                            # Quality checks + change detection + workflow triggering
+2. provision-hetzner-k8s-cluster.yml # Cluster creation (triggered by CI)
+3. deploy-k8s-resources.yml          # Resource deployment (triggered by CI or Provision)
 ```
 
-**deploy-k8s-resources.yml Flow (workflow_run chaining):**
+**CI Workflow Flow (Selective Triggering):**
 
 ```yaml
 on:
-  # Trigger deployment only AFTER CI completes successfully on push
-  # Workflow file read from DEFAULT BRANCH (dev), not triggering branch
-  workflow_run:
-    workflows: ["CI"]
-    types: ["completed"]
-  workflow_dispatch:
-    inputs:
-      environment: { required: true, type: choice, options: [dev, test, prod] }
-  workflow_call:
-    inputs:
-      environment: { required: true, type: string }
+  push:
+    branches: [main, test, dev]
+  pull_request:
+    branches: [main, test, dev]
+
+permissions:
+  actions: write # Required to trigger provision/deploy workflows
+  contents: read
 
 jobs:
-  detect-changes:
-    # Path-based filtering for env-specific resource changes
-    if: github.event_name == 'workflow_run' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    outputs:
-      base-changed: ${{ steps.filter.outputs.base }}
-      dev-changed: ${{ steps.filter.outputs.dev }}
-      test-changed: ${{ steps.filter.outputs.test }}
-      prod-changed: ${{ steps.filter.outputs.prod }}
+  # 1. Quality checks (lint, test, build)
+  node: ...
+  python: ...
+  dotnet: ...
 
-  deploy-{dev,test,prod}:
-    needs: [detect-changes]
-    if: |
-      always() &&
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && ...) ||
-      (github.event_name == 'workflow_dispatch' && ...) ||
-      (github.event_name == 'workflow_call' && ...)
+  # 2. Detect infrastructure changes (only on push, after quality checks pass)
+  detect-infra-changes:
+    needs: [node, python, dotnet]
+    if: github.event_name == 'push'
+    # Detects cluster-changed and deploy-changed flags
+
+  # 3. Trigger provision ONLY if cluster files changed
+  trigger-provision:
+    needs: [detect-infra-changes]
+    if: needs.detect-infra-changes.outputs.cluster-changed == 'true'
+    # Uses gh workflow run to trigger provision-hetzner-k8s-cluster.yml
+
+  # 4. Trigger deploy ONLY if deploy files changed (and cluster didn't change)
+  trigger-deploy:
+    needs: [detect-infra-changes]
+    if: needs.detect-infra-changes.outputs.deploy-changed == 'true' && needs.detect-infra-changes.outputs.cluster-changed != 'true'
+    # Uses gh workflow run to trigger deploy-k8s-resources.yml
 ```
 
 **Deployment Scenarios:**
 
-1. **Resource-only changes** (base/ or patches/):
-   - Triggers: push event → deploy-k8s-resources.yml
-   - Flow: CI job runs → passes → deploy job runs
-   - Why: Path filter matches, quality gates enforced
+1. **Cluster files change** (infra/k8s/hetzner/\*/cluster/, provision workflow, provision action):
+   - Flow: CI (quality checks) → detect-infra-changes (cluster=true) → trigger-provision → Provision runs → Provision triggers Deploy
+   - Result: ONLY Provision workflow appears in Actions (then Deploy when Provision completes)
+   - Why: CI detects cluster changes and ONLY triggers provision workflow
 
-2. **Cluster config changes** (cluster/\*.yaml):
+2. **Deploy files change** (infra/k8s/base/, deploy-control.yaml, patches/, deploy workflow, deploy action):
+   - Flow: CI (quality checks) → detect-infra-changes (deploy=true, cluster=false) → trigger-deploy → Deploy runs
+   - Result: ONLY Deploy workflow appears in Actions
+   - Why: CI detects deploy changes and ONLY triggers deploy workflow
 
-- Triggers: push event → CI runs → provision-hetzner-k8s-cluster.yml (via workflow_run after CI success)
-- Flow: CI passes → Provision cluster → calls deploy via workflow_dispatch → deploy runs
-- Why: Path exclusion in deploy's change detection prevents duplicate triggers; single CI gate enforced via workflow_run
+3. **Both cluster + deploy files change**:
+   - Flow: CI → detect-infra-changes (cluster=true, deploy=true) → trigger-provision ONLY → Provision → Deploy
+   - Result: ONLY Provision workflow appears (then Deploy)
+   - Why: Cluster changes take precedence; trigger-deploy condition excludes when cluster-changed=true
 
-3. **Both cluster + resource changes**:
-   - Triggers: push event → provision-hetzner-k8s-cluster.yml ONLY
-   - Flow: Same as scenario 2 (path exclusion prevents duplicate)
-   - Why: `!infra/k8s/hetzner/**/cluster/**` excludes cluster changes from deploy's change detection
+4. **Unrelated files change** (README.md, src/, docs/):
+   - Flow: CI (quality checks) → detect-infra-changes (cluster=false, deploy=false) → NO triggers
+   - Result: ONLY CI workflow appears in Actions
+   - Why: No infrastructure changes detected, no workflows triggered
+
+5. **Provision workflow files change**:
+   - Flow: CI → detect-infra-changes (cluster=true) → trigger-provision → Provision runs
+   - Result: Provision workflow appears (validates workflow changes)
+
+6. **Deploy workflow files change**:
+   - Flow: CI → detect-infra-changes (deploy=true) → trigger-deploy → Deploy runs
+   - Result: Deploy workflow appears (validates workflow changes)
 
 **CRITICAL Design Decisions:**
 
-- **Default branch requirement**: workflow_run triggers are read from the default branch (dev), not the triggering branch
-- **Path exclusion prevents race conditions**: Cluster configs excluded from deploy's change detection
-- **CI always enforced**: Quality checks MUST pass before provisioning/deployment. Both workflows run via workflow_run only after CI succeeds.
-- **No bypass allowed**: Even fresh clusters must pass CI to prevent broken manifests
-- **Security-first**: Prevents deploying untested code; workflow_run chaining ensures clean sequencing
+- **Explicit triggering**: CI uses `gh workflow run` to trigger provision/deploy ONLY when needed
+- **No unnecessary workflows**: Workflows only appear when they have work to do
+- **CI always enforced**: Quality checks MUST pass before any infrastructure operations
+- **Cluster takes precedence**: If both cluster and deploy change, only provision is triggered (provision will trigger deploy)
+- **Security-first**: Prevents deploying untested code; CI gates all infrastructure workflows
 
 **Affected vs Full Suite:**
 

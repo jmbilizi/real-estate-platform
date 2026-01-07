@@ -1,12 +1,6 @@
 name: Deploy K8s Resources
 
 on:
-  # Trigger deployment only AFTER CI completes successfully on push
-  # CRITICAL: workflow_run reads this file from the DEFAULT BRANCH (dev)
-  # even when triggered by CI running on other branches.
-  workflow_run:
-    workflows: ["CI"]
-    types: ["completed"]
   workflow_dispatch:
     inputs:
       environment:
@@ -24,108 +18,15 @@ on:
         type: string
 
 jobs:
-  detect-changes:
-    name: Detect changed paths
-    runs-on: ubuntu-latest
-    outputs:
-      cluster-changed: ${{ steps.quick-check.outputs.cluster-changed || steps.detect.outputs.cluster-changed || 'false' }}
-      base-changed: ${{ steps.quick-check.outputs.base-changed || steps.detect.outputs.base-changed || 'false' }}
-      dev-changed: ${{ steps.quick-check.outputs.dev-changed || steps.detect.outputs.dev-changed || 'false' }}
-      test-changed: ${{ steps.quick-check.outputs.test-changed || steps.detect.outputs.test-changed || 'false' }}
-      prod-changed: ${{ steps.quick-check.outputs.prod-changed || steps.detect.outputs.prod-changed || 'false' }}
-    steps:
-      - name: Quick check for deploy-related changes (skip expensive checkout if not needed)
-        id: quick-check
-        if: github.event_name == 'workflow_run'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          echo "🔍 Quick check: Are there any deploy-related changes?"
-
-          # Get commit SHA from workflow_run event
-          COMMIT_SHA="${{ github.event.workflow_run.head_sha }}"
-
-          # Fetch changed files using GitHub API (no checkout needed)
-          FILES=$(gh api repos/${{ github.repository }}/commits/$COMMIT_SHA --jq '.files[].filename' || echo "")
-
-          echo "Changed files:"
-          echo "$FILES"
-
-          # Check if ANY deploy-related files changed (excluding cluster configs handled by provision)
-          if echo "$FILES" | grep -E -q '^infra/k8s/base/|^infra/deploy-control\.yaml|^infra/k8s/hetzner/.*/patches/|^\.github/workflows/deploy-k8s-resources\.yml|^\.github/actions/deploy-k8s-resources/'; then
-            echo "✅ Deploy-related files detected - continuing with full analysis"
-            echo "skip-full-detection=false" >> $GITHUB_OUTPUT
-          else
-            echo "⏭️  No deploy-related files changed - skipping this workflow"
-            echo "skip-full-detection=true" >> $GITHUB_OUTPUT
-            echo "cluster-changed=false" >> $GITHUB_OUTPUT
-            echo "base-changed=false" >> $GITHUB_OUTPUT
-            echo "dev-changed=false" >> $GITHUB_OUTPUT
-            echo "test-changed=false" >> $GITHUB_OUTPUT
-            echo "prod-changed=false" >> $GITHUB_OUTPUT
-          fi
-
-      - uses: actions/checkout@v4
-        if: steps.quick-check.outputs.skip-full-detection != 'true'
-        with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
-          fetch-depth: 0
-
-      - name: Detect changed paths (HEAD^ → HEAD)
-        id: detect
-        if: steps.quick-check.outputs.skip-full-detection != 'true'
-        shell: bash
-        run: |
-          set -e
-          git fetch --no-tags --prune --unshallow || true
-          if git rev-parse HEAD^ >/dev/null 2>&1; then
-            git diff --name-only HEAD^ HEAD > changed.txt || true
-          else
-            git diff --name-only ${{ github.event.before }} ${{ github.sha }} > changed.txt || true
-          fi
-          files=$(cat changed.txt || echo "")
-          echo -e "Changed files:\n$files"
-
-          base=false
-          dev=false
-          test=false
-          prod=false
-          cluster=false
-
-          # Cluster configuration changes (provision workflow will handle these)
-          if echo "$files" | grep -E -q '^infra/k8s/hetzner/.*/cluster/|^\.github/workflows/provision-hetzner-k8s-cluster\.yml|^\.github/actions/provision-hetzner-k8s-cluster/'; then cluster=true; fi
-
-          # Base resources or workflow changes
-          if echo "$files" | grep -E -q '^infra/k8s/base/|^infra/deploy-control\.yaml|^\.github/workflows/deploy-k8s-resources\.yml|^\.github/actions/deploy-k8s-resources/'; then base=true; fi
-
-          # Environment resource changes (exclude cluster paths)
-          if echo "$files" | grep -E -q '^infra/k8s/hetzner/dev/' && ! echo "$files" | grep -E -q '^infra/k8s/hetzner/dev/cluster/'; then dev=true; fi
-          if echo "$files" | grep -E -q '^infra/k8s/hetzner/test/' && ! echo "$files" | grep -E -q '^infra/k8s/hetzner/test/cluster/'; then test=true; fi
-          if echo "$files" | grep -E -q '^infra/k8s/hetzner/prod/' && ! echo "$files" | grep -E -q '^infra/k8s/hetzner/prod/cluster/'; then prod=true; fi
-
-          # Workflow changes should also mark env-specific flags true so branch routing runs
-          if echo "$files" | grep -E -q '^\.github/workflows/deploy-k8s-resources\.yml|^\.github/actions/deploy-k8s-resources/'; then dev=true; test=true; prod=true; fi
-
-          echo "cluster-changed=$cluster" >> $GITHUB_OUTPUT
-          echo "base-changed=$base" >> $GITHUB_OUTPUT
-          echo "dev-changed=$dev" >> $GITHUB_OUTPUT
-          echo "test-changed=$test" >> $GITHUB_OUTPUT
-          echo "prod-changed=$prod" >> $GITHUB_OUTPUT
-
   deploy-dev:
-    needs: [detect-changes]
     if: |
-      always() && (
-        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'dev' && needs.detect-changes.outputs.cluster-changed != 'true' && (needs.detect-changes.outputs.base-changed == 'true' || needs.detect-changes.outputs.dev-changed == 'true')) ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev') ||
-        (github.event_name == 'workflow_call' && inputs.environment == 'dev')
-      )
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev') ||
+      (github.event_name == 'workflow_call' && inputs.environment == 'dev')
     runs-on: ubuntu-latest
     environment: dev
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
 
       - name: Load deployment control
@@ -187,19 +88,14 @@ jobs:
           JAEGER_BASIC_AUTH: ${{ secrets.JAEGER_BASIC_AUTH }}
 
   deploy-test:
-    needs: [detect-changes]
     if: |
-      always() && (
-        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'test' && needs.detect-changes.outputs.cluster-changed != 'true' && (needs.detect-changes.outputs.base-changed == 'true' || needs.detect-changes.outputs.test-changed == 'true')) ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'test') ||
-        (github.event_name == 'workflow_call' && inputs.environment == 'test')
-      )
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'test') ||
+      (github.event_name == 'workflow_call' && inputs.environment == 'test')
     runs-on: ubuntu-latest
     environment: test
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
 
       - name: Load deployment control
@@ -370,19 +266,14 @@ jobs:
           JAEGER_BASIC_AUTH: ${{ secrets.JAEGER_BASIC_AUTH }}
 
   deploy-prod:
-    needs: [detect-changes]
     if: |
-      always() && (
-        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && needs.detect-changes.outputs.cluster-changed != 'true' && (needs.detect-changes.outputs.base-changed == 'true' || needs.detect-changes.outputs.prod-changed == 'true')) ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod') ||
-        (github.event_name == 'workflow_call' && inputs.environment == 'prod')
-      )
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod') ||
+      (github.event_name == 'workflow_call' && inputs.environment == 'prod')
     runs-on: ubuntu-latest
     environment: prod
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
 
       - name: Load deployment control
