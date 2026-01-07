@@ -629,13 +629,13 @@ trigger-provision:
 
 ````
 
-- **workflow_run trigger**: Only fires after CI completes
-- **Default branch requirement**: Workflow file read from default branch (dev), not triggering branch
-- **Conclusion check**: `conclusion == 'success'` ensures CI passed
-- **Result**: Broken code never reaches deployment
-- **conclusion == 'success'**: Only deploy if CI passed
-- **Clean sequencing**: No embedded CI, no skip logic
-- **Security**: Broken code never reaches deployment workflows
+**Why it works:**
+
+- **CI gating**: All infrastructure workflows triggered ONLY after quality checks pass
+- **Change detection**: git diff patterns detect cluster/deploy file changes
+- **Cluster precedence**: If both change, only provision triggers (deploy follows via workflow_call)
+- **Clean UI**: Workflows only appear when relevant
+- **Security**: Broken code blocked at CI, never reaches infrastructure workflows
 
 ### Manual Deployment
 
