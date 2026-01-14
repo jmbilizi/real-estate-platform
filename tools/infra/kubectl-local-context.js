@@ -102,8 +102,58 @@ function runKustomizeAndKubectl(op) {
       process.exit(0);
     }
 
-    // Check for immutable field errors across multiple resource types
+    // Check for specific error types
     const errorOutput = kubectl.stderr.toString();
+
+    // Check for webhook validation errors (ingress controller not ready)
+    if (/failed calling webhook|failed to call webhook|connection refused.*ingress-nginx/i.test(errorOutput)) {
+      console.log("\n⚠️  Nginx Ingress Controller webhook not ready");
+      console.log("⏳ Waiting for ingress controller to be ready (max 60s)...");
+
+      // Wait for ingress controller pods to be ready
+      const waitResult = spawnSync(
+        "kubectl",
+        [
+          "wait",
+          "--for=condition=ready",
+          "pod",
+          "-l",
+          "app.kubernetes.io/component=controller",
+          "-n",
+          "ingress-nginx",
+          "--timeout=60s",
+        ],
+        { stdio: "inherit" },
+      );
+
+      if (waitResult.status === 0) {
+        console.log("✅ Ingress controller ready, retrying deployment...");
+        const kustomizeRetry = spawnSync(kustomizeCmd[0], kustomizeCmd.slice(1), {
+          stdio: ["ignore", "pipe", "inherit"],
+        });
+        if (kustomizeRetry.status !== 0) {
+          console.error("❌ Kustomize build failed on retry");
+          process.exit(kustomizeRetry.status);
+        }
+
+        const kubectlRetry = spawnSync(
+          "kubectl",
+          ["apply", "-f", "-", "--prune", "-l", "app.kubernetes.io/managed-by=kustomize"],
+          {
+            input: kustomizeRetry.stdout,
+            stdio: ["pipe", "inherit", "inherit"],
+          },
+        );
+        process.exit(kubectlRetry.status);
+      } else {
+        console.error("❌ Timeout waiting for ingress controller. Try again in a few moments.");
+        console.error("\nAlternative: Delete ValidatingWebhookConfiguration temporarily:");
+        console.error("  kubectl delete validatingwebhookconfig ingress-nginx-admission");
+        console.error("\nOr skip webhook validation:");
+        console.error("  kubectl apply -f manifests.yaml --validate=false");
+        process.exit(1);
+      }
+    }
 
     // Define patterns for all resource types with immutable fields
     const immutableFieldPatterns = [
