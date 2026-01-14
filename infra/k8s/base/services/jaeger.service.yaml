@@ -6,6 +6,8 @@ apiVersion: v1
 kind: Service
 metadata:
   name: jaeger-hl
+  labels:
+    app: jaeger
 spec:
   clusterIP: None
   selector:
@@ -41,6 +43,8 @@ apiVersion: v1
 kind: Service
 metadata:
   name: jaeger-svc
+  labels:
+    app: jaeger
 spec:
   type: ClusterIP
   selector:

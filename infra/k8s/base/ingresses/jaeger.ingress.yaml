@@ -2,6 +2,8 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: jaeger
+  labels:
+    app: jaeger
   annotations:
     # Session affinity for consistent UI experience
     nginx.ingress.kubernetes.io/affinity: "cookie"
