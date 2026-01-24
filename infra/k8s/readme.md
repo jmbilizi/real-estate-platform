@@ -58,7 +58,25 @@ This directory contains comprehensive documentation for the Kubernetes infrastru
    - **Who should read**: Developers (backend, services)
    - **When to read**: When connecting to Redis, implementing caching/pub-sub
 
-6. **[../deploy-control.yaml](../deploy-control.yaml)** - Deployment control
+6. **[smart-deployment.md](./smart-deployment.md)** - Smart service-level deployment
+   - Intelligent granular deployment (deploy individual services)
+   - Configuration-driven service detection
+   - Parallel deployment with auto-rollback
+   - Environment isolation
+   - Performance: 60-70% faster for single-service changes
+   - **Who should read**: DevOps engineers, developers
+   - **When to read**: When deploying changes, understanding CI/CD behavior, optimizing deployment workflows
+
+7. **[../smart-deployment-config.yaml](../smart-deployment-config.yaml)** - Service deployment mapping
+   - Central configuration for service-to-file mappings
+   - Service definitions (postgres, redis, jaeger, future apps)
+   - Global triggers and ignored paths
+   - Parallel deployment settings
+   - **Used by**: CI workflow for smart service detection
+   - **Who should read**: DevOps engineers, when adding new services
+   - **When to read**: When adding new K8s services or modifying deployment logic
+
+8. **[../deploy-control.yaml](../deploy-control.yaml)** - Deployment control
    - **Most deployment controls are actively enforced by workflows**
    - Environment gates: `enabled`, `auto_deploy` (enforced), `require_manual_approval` (not yet enforced)
    - Deployment windows: Time/day-based restrictions (enforced)
@@ -70,7 +88,7 @@ This directory contains comprehensive documentation for the Kubernetes infrastru
    - **Who should read**: DevOps engineers, release managers
    - **When to read**: When configuring deployment policies or troubleshooting deployments
 
-7. **Directory Structure Reference**
+9. **Directory Structure Reference**
    - `base/` - Shared configurations (see below)
    - `hetzner/` - Provider-specific overlays (see below)
    - `.github/workflows/` - CI/CD pipelines (see below)

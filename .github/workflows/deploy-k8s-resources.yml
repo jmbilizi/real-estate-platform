@@ -11,11 +11,32 @@ on:
           - dev
           - test
           - prod
+      deploy_strategy:
+        description: "Deployment strategy"
+        required: false
+        type: choice
+        default: all
+        options:
+          - all # Deploy all services
+          - single # Deploy specific services only
+      services:
+        description: "Comma-separated services to deploy (when strategy=single)"
+        required: false
+        type: string
+        default: "all"
   workflow_call:
     inputs:
       environment:
         required: true
         type: string
+      deploy_strategy:
+        required: false
+        type: string
+        default: all
+      services:
+        required: false
+        type: string
+        default: "all"
 
 jobs:
   deploy-dev:
@@ -69,6 +90,8 @@ jobs:
         with:
           kustomizePath: infra/k8s/hetzner/dev
           kubeconfig: ${{ secrets.KUBECONFIG }}
+          deployStrategy: ${{ github.event.inputs.deploy_strategy || inputs.deploy_strategy || 'all' }}
+          services: ${{ github.event.inputs.services || inputs.services || 'all' }}
           statefulset_timeout: ${{ steps.deploy-control.outputs.statefulset_timeout }}
           deployment_timeout: ${{ steps.deploy-control.outputs.deployment_timeout }}
           daemonset_timeout: ${{ steps.deploy-control.outputs.daemonset_timeout }}
@@ -247,6 +270,8 @@ jobs:
         with:
           kustomizePath: infra/k8s/hetzner/test
           kubeconfig: ${{ secrets.KUBECONFIG }}
+          deployStrategy: ${{ github.event.inputs.deploy_strategy || inputs.deploy_strategy || 'all' }}
+          services: ${{ github.event.inputs.services || inputs.services || 'all' }}
           statefulset_timeout: ${{ steps.deploy-control.outputs.statefulset_timeout }}
           deployment_timeout: ${{ steps.deploy-control.outputs.deployment_timeout }}
           daemonset_timeout: ${{ steps.deploy-control.outputs.daemonset_timeout }}
@@ -425,6 +450,8 @@ jobs:
         with:
           kustomizePath: infra/k8s/hetzner/prod
           kubeconfig: ${{ secrets.KUBECONFIG }}
+          deployStrategy: ${{ github.event.inputs.deploy_strategy || inputs.deploy_strategy || 'all' }}
+          services: ${{ github.event.inputs.services || inputs.services || 'all' }}
           statefulset_timeout: ${{ steps.deploy-control.outputs.statefulset_timeout }}
           deployment_timeout: ${{ steps.deploy-control.outputs.deployment_timeout }}
           daemonset_timeout: ${{ steps.deploy-control.outputs.daemonset_timeout }}

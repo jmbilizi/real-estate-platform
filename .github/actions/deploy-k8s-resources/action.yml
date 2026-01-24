@@ -7,6 +7,14 @@ inputs:
   kubeconfig:
     description: "Kubeconfig content to write to ~/.kube/config"
     required: true
+  deployStrategy:
+    description: "Deployment strategy (all or single)"
+    required: false
+    default: "all"
+  services:
+    description: "Comma-separated services to deploy (when strategy=single)"
+    required: false
+    default: "all"
   statefulset_timeout:
     description: "Timeout for rollout of StatefulSets"
     required: true
@@ -166,8 +174,185 @@ runs:
       shell: bash
       run: |
         set -e
-        echo "Applying manifests (with prune)"
-        if ! kubectl apply -f manifests.yaml --prune -l app.kubernetes.io/managed-by=kustomize 2>&1 | tee apply.log; then
+        STRATEGY="${{ inputs.deployStrategy }}"
+        SERVICES="${{ inputs.services }}"
+
+        echo "Deployment strategy: $STRATEGY"
+        echo "Services to deploy: $SERVICES"
+
+        if [ "$STRATEGY" = "all" ]; then
+          echo "Applying ALL manifests (with prune)"
+          APPLY_CMD="kubectl apply -f manifests.yaml --prune -l app.kubernetes.io/managed-by=kustomize"
+        else
+          echo "Applying FILTERED manifests (single service strategy)"
+          
+          # Validate services list is not empty
+          if [ -z "$SERVICES" ] || [ "$SERVICES" = "all" ]; then
+            echo "❌ Deployment strategy is 'single' but no specific services provided"
+            echo "Services value: '$SERVICES'"
+            echo ""
+            echo "Please provide comma-separated service names, for example:"
+            echo "  - Single service: services=postgres"
+            echo "  - Multiple services: services=postgres,redis,jaeger"
+            echo ""
+            echo "Or change strategy to 'all' to deploy all services"
+            exit 1
+          fi
+          
+          SERVICES_TRIMMED=$(echo "$SERVICES" | tr -d ' ')  # Remove any whitespace
+          
+          # Check if multiple services (enables parallel deployment)
+          SERVICE_COUNT=$(echo "$SERVICES_TRIMMED" | tr ',' '\n' | wc -l)
+          
+          if [ "$SERVICE_COUNT" -gt 1 ]; then
+            echo "📦 Multiple services detected: $SERVICE_COUNT services"
+            echo "🚀 Deploying services in PARALLEL with rollout monitoring"
+            echo ""
+            
+            # Deploy each service in parallel with rollout monitoring
+            PIDS=()
+            FAILED_SERVICES=()
+            SUCCEEDED_SERVICES=()
+            
+            IFS=',' read -ra SERVICE_ARRAY <<< "$SERVICES_TRIMMED"
+            for service in "${SERVICE_ARRAY[@]}"; do
+              echo "Starting deployment: $service"
+              (
+                # Apply the service
+                if ! kubectl apply -f manifests.yaml -l "app=$service" > "/tmp/deploy-$service.log" 2>&1; then
+                  echo "❌ $service: kubectl apply failed"
+                  cat "/tmp/deploy-$service.log"
+                  exit 1
+                fi
+                
+                # Wait for rollout status
+                echo "⏳ $service: Waiting for rollout..."
+                ROLLOUT_FAILED=false
+                
+                # Check StatefulSets for this service
+                STATEFULSETS=$(yq -N e "select(.kind == \"StatefulSet\" and .metadata.labels.app == \"$service\") | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+                for sts in $STATEFULSETS; do
+                  if ! kubectl rollout status statefulset/$sts --timeout=${{ inputs.statefulset_timeout }} >> "/tmp/deploy-$service.log" 2>&1; then
+                    echo "❌ $service: StatefulSet $sts rollout failed"
+                    ROLLOUT_FAILED=true
+                  fi
+                done
+                
+                # Check Deployments for this service
+                DEPLOYMENTS=$(yq -N e "select(.kind == \"Deployment\" and .metadata.labels.app == \"$service\") | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+                for deploy in $DEPLOYMENTS; do
+                  DEPLOY_NS=$(yq -N e "select(.kind == \"Deployment\" and .metadata.name == \"$deploy\") | .metadata.namespace // \"default\"" manifests.yaml 2>/dev/null | head -1)
+                  if ! kubectl rollout status deployment/$deploy -n "$DEPLOY_NS" --timeout=${{ inputs.deployment_timeout }} >> "/tmp/deploy-$service.log" 2>&1; then
+                    echo "❌ $service: Deployment $deploy rollout failed"
+                    ROLLOUT_FAILED=true
+                  fi
+                done
+                
+                # Check DaemonSets for this service
+                DAEMONSETS=$(yq -N e "select(.kind == \"DaemonSet\" and .metadata.labels.app == \"$service\") | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+                for ds in $DAEMONSETS; do
+                  if ! kubectl rollout status daemonset/$ds --timeout=${{ inputs.daemonset_timeout }} >> "/tmp/deploy-$service.log" 2>&1; then
+                    echo "❌ $service: DaemonSet $ds rollout failed"
+                    ROLLOUT_FAILED=true
+                  fi
+                done
+                
+                if [ "$ROLLOUT_FAILED" = "true" ]; then
+                  cat "/tmp/deploy-$service.log"
+                  exit 1
+                fi
+                
+                echo "✅ $service: All workloads ready"
+              ) &
+              PIDS+=("$!:$service")
+            done
+            
+            echo ""
+            echo "⏳ Waiting for all services to complete rollout..."
+            
+            # Wait for all background jobs and collect results
+            for pid_service in "${PIDS[@]}"; do
+              PID="${pid_service%%:*}"
+              SERVICE="${pid_service##*:}"
+              if wait "$PID"; then
+                echo "  ✅ $SERVICE: Deployment + rollout succeeded"
+                SUCCEEDED_SERVICES+=("$SERVICE")
+              else
+                echo "  ❌ $SERVICE: Deployment or rollout failed"
+                FAILED_SERVICES+=("$SERVICE")
+              fi
+            done
+            
+            # Trigger rollback for failed services (if enabled)
+            if [ ${#FAILED_SERVICES[@]} -gt 0 ]; then
+              echo ""
+              echo "❌ Parallel deployment completed with failures:"
+              printf '  - %s\n' "${FAILED_SERVICES[@]}"
+              
+              if [ "${{ inputs.rollback_on_failure }}" = "true" ] || [ "${{ inputs.statefulset_rollback }}" = "true" ]; then
+                echo ""
+                echo "🔄 Auto-rollback enabled - rolling back FAILED services only"
+                for service in "${FAILED_SERVICES[@]}"; do
+                  echo ""
+                  echo "🔄 Rolling back service: $service"
+                  
+                  # Rollback StatefulSets
+                  STATEFULSETS=$(yq -N e "select(.kind == \"StatefulSet\" and .metadata.labels.app == \"$service\") | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+                  for sts in $STATEFULSETS; do
+                    echo "  🔄 Rolling back StatefulSet/$sts..."
+                    kubectl rollout undo statefulset/$sts || true
+                    kubectl rollout status statefulset/$sts --timeout=${{ inputs.statefulset_timeout }} || true
+                  done
+                  
+                  # Rollback Deployments
+                  DEPLOYMENTS=$(yq -N e "select(.kind == \"Deployment\" and .metadata.labels.app == \"$service\") | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+                  for deploy in $DEPLOYMENTS; do
+                    DEPLOY_NS=$(yq -N e "select(.kind == \"Deployment\" and .metadata.name == \"$deploy\") | .metadata.namespace // \"default\"" manifests.yaml 2>/dev/null | head -1)
+                    echo "  🔄 Rolling back Deployment/$deploy (namespace: $DEPLOY_NS)..."
+                    kubectl rollout undo deployment/$deploy -n "$DEPLOY_NS" || true
+                    kubectl rollout status deployment/$deploy -n "$DEPLOY_NS" --timeout=${{ inputs.deployment_timeout }} || true
+                  done
+                  
+                  # Rollback DaemonSets
+                  DAEMONSETS=$(yq -N e "select(.kind == \"DaemonSet\" and .metadata.labels.app == \"$service\") | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+                  for ds in $DAEMONSETS; do
+                    echo "  🔄 Rolling back DaemonSet/$ds..."
+                    kubectl rollout undo daemonset/$ds || true
+                    kubectl rollout status daemonset/$ds --timeout=${{ inputs.daemonset_timeout }} || true
+                  done
+                done
+                
+                echo ""
+                echo "✅ Rollback completed for failed services"
+              else
+                echo ""
+                echo "ℹ️  Auto-rollback disabled - failed services remain in failed state"
+              fi
+              
+              if [ ${#SUCCEEDED_SERVICES[@]} -gt 0 ]; then
+                echo ""
+                echo "✅ Successfully deployed services (remain active):"
+                printf '  - %s\n' "${SUCCEEDED_SERVICES[@]}"
+              fi
+              
+              exit 1
+            fi
+            
+            echo ""
+            echo "✅ All services deployed successfully in parallel"
+            
+            # Skip the regular apply command (already done in parallel)
+            APPLY_CMD="echo 'Parallel deployment completed'"
+          else
+            # Single service - use standard deployment
+            echo "📦 Single service deployment: $SERVICES_TRIMMED"
+            LABEL_SELECTOR="app=$SERVICES_TRIMMED"
+            echo "Label selector: $LABEL_SELECTOR"
+            APPLY_CMD="kubectl apply -f manifests.yaml -l '$LABEL_SELECTOR'"
+          fi
+        fi
+
+        if ! $APPLY_CMD 2>&1 | tee apply.log; then
           echo "❌ Apply failed - checking for immutable field conflicts"
           RESOURCE_TYPE=""
           DISPLAY_NAME=""
@@ -238,7 +423,7 @@ runs:
               fi
             done
             echo "\n🔄 Retrying deployment with recreated ${DISPLAY_NAME}s..."
-            kubectl apply -f manifests.yaml --prune -l app.kubernetes.io/managed-by=kustomize
+            $APPLY_CMD
           else
             echo "❌ Deployment failed with non-immutable-field error:"
             cat apply.log

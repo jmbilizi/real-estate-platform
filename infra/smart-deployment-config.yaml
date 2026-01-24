@@ -1,0 +1,221 @@
+# Smart Deployment Configuration
+# Service-level deployment mapping for granular K8s resource deployment
+# Version: 1.0.0
+#
+# SCOPE: Service-level deployments (postgres, redis, api-gateway, etc.)
+# OUT OF SCOPE: Cluster provisioning (handled by provision-hetzner-k8s-cluster.yml)
+#
+# BEHAVIOR:
+#   - Service file changes → Deploy only that service
+#   - Global trigger changes → Deploy all services
+#   - Cluster config changes → Handled by separate workflow (triggers full deployment)
+#   - Environment isolation → dev changes only trigger dev deployment
+
+# =============================================================================
+# SERVICE DEFINITIONS
+# Each service is independent within base/ folder
+# =============================================================================
+
+services:
+  postgres:
+    type: infrastructure
+    description: "PostgreSQL database with PostGIS"
+    resources:
+      # Base resources (provider/environment-agnostic)
+      - infra/k8s/base/statefulsets/postgres.statefulset.yaml
+      - infra/k8s/base/configmaps/postgres.configmap.yaml
+      - infra/k8s/base/services/postgres.service.yaml
+      - infra/k8s/base/secrets/postgres.secret.yaml
+      # Environment patches (provider/environment-specific)
+      - infra/k8s/hetzner/dev/patches/statefulsets/postgres.statefulset.yaml
+      - infra/k8s/hetzner/test/patches/statefulsets/postgres.statefulset.yaml
+      - infra/k8s/hetzner/prod/patches/statefulsets/postgres.statefulset.yaml
+      - infra/k8s/podman/local/patches/statefulsets/postgres.statefulset.yaml
+    kubectl_labels:
+      app: postgres
+
+  redis:
+    type: infrastructure
+    description: "Redis/Valkey cache and pub/sub"
+    resources:
+      - infra/k8s/base/statefulsets/redis.statefulset.yaml
+      - infra/k8s/base/configmaps/redis.configmap.yaml
+      - infra/k8s/base/services/redis.service.yaml
+      - infra/k8s/base/secrets/redis.secret.yaml
+      - infra/k8s/hetzner/dev/patches/statefulsets/redis.statefulset.yaml
+      - infra/k8s/hetzner/test/patches/statefulsets/redis.statefulset.yaml
+      - infra/k8s/hetzner/prod/patches/statefulsets/redis.statefulset.yaml
+      - infra/k8s/podman/local/patches/statefulsets/redis.statefulset.yaml
+    kubectl_labels:
+      app: redis
+
+  jaeger:
+    type: infrastructure
+    description: "Jaeger distributed tracing"
+    resources:
+      - infra/k8s/base/statefulsets/jaeger.statefulset.yaml
+      - infra/k8s/base/configmaps/jaeger.configmap.yaml
+      - infra/k8s/base/services/jaeger.service.yaml
+      - infra/k8s/base/secrets/jaeger.secret.yaml
+      - infra/k8s/base/ingresses/jaeger.ingress.yaml
+      - infra/k8s/hetzner/dev/patches/statefulsets/jaeger.statefulset.yaml
+      - infra/k8s/hetzner/dev/patches/ingresses/jaeger.ingress.yaml
+      - infra/k8s/hetzner/test/patches/statefulsets/jaeger.statefulset.yaml
+      - infra/k8s/hetzner/test/patches/ingresses/jaeger.ingress.yaml
+      - infra/k8s/hetzner/prod/patches/statefulsets/jaeger.statefulset.yaml
+      - infra/k8s/hetzner/prod/patches/ingresses/jaeger.ingress.yaml
+      - infra/k8s/podman/local/patches/statefulsets/jaeger.statefulset.yaml
+      - infra/k8s/podman/local/patches/ingresses/jaeger.ingress.yaml
+    kubectl_labels:
+      app: jaeger
+
+  # ───────────────────────────────────────────────────────────────────────
+  # APPLICATION SERVICES (FUTURE)
+  # ───────────────────────────────────────────────────────────────────────
+  api-gateway:
+    type: application
+    description: "Ocelot API Gateway (.NET 9.0)"
+    resources:
+      - apps/api-gateway/**
+      - infra/k8s/base/deployments/api-gateway.deployment.yaml
+      - infra/k8s/base/services/api-gateway.service.yaml
+      - infra/k8s/base/configmaps/api-gateway.configmap.yaml
+      - infra/k8s/base/ingresses/api-gateway.ingress.yaml
+      - infra/k8s/hetzner/dev/patches/deployments/api-gateway.deployment.yaml
+      - infra/k8s/hetzner/test/patches/deployments/api-gateway.deployment.yaml
+      - infra/k8s/hetzner/prod/patches/deployments/api-gateway.deployment.yaml
+      - infra/k8s/podman/local/patches/deployments/api-gateway.deployment.yaml
+    kubectl_labels:
+      app: api-gateway
+
+  account-service:
+    type: application
+    description: "Account management service"
+    resources:
+      - apps/account-service/**
+      - infra/k8s/base/deployments/account-service.deployment.yaml
+      - infra/k8s/base/services/account-service.service.yaml
+      - infra/k8s/base/configmaps/account-service.configmap.yaml
+      - infra/k8s/hetzner/dev/patches/deployments/account-service.deployment.yaml
+      - infra/k8s/hetzner/test/patches/deployments/account-service.deployment.yaml
+      - infra/k8s/hetzner/prod/patches/deployments/account-service.deployment.yaml
+      - infra/k8s/podman/local/patches/deployments/account-service.deployment.yaml
+    kubectl_labels:
+      app: account-service
+
+  listings-service:
+    type: application
+    description: "Property listings service"
+    resources:
+      - apps/listings-service/**
+      - infra/k8s/base/deployments/listings-service.deployment.yaml
+      - infra/k8s/base/services/listings-service.service.yaml
+      - infra/k8s/base/configmaps/listings-service.configmap.yaml
+      - infra/k8s/hetzner/dev/patches/deployments/listings-service.deployment.yaml
+      - infra/k8s/hetzner/test/patches/deployments/listings-service.deployment.yaml
+      - infra/k8s/hetzner/prod/patches/deployments/listings-service.deployment.yaml
+      - infra/k8s/podman/local/patches/deployments/listings-service.deployment.yaml
+    kubectl_labels:
+      app: listings-service
+
+  messaging-service:
+    type: application
+    description: "Real-time messaging service"
+    resources:
+      - apps/messaging-service/**
+      - infra/k8s/base/deployments/messaging-service.deployment.yaml
+      - infra/k8s/base/services/messaging-service.service.yaml
+      - infra/k8s/base/configmaps/messaging-service.configmap.yaml
+      - infra/k8s/hetzner/dev/patches/deployments/messaging-service.deployment.yaml
+      - infra/k8s/hetzner/test/patches/deployments/messaging-service.deployment.yaml
+      - infra/k8s/hetzner/prod/patches/deployments/messaging-service.deployment.yaml
+      - infra/k8s/podman/local/patches/deployments/messaging-service.deployment.yaml
+    kubectl_labels:
+      app: messaging-service
+
+# =============================================================================
+# DEPLOYMENT SETTINGS
+# =============================================================================
+
+deployment_mode:
+  description: "Deployment execution mode"
+  parallel_deployment:
+    enabled: true # Deploy multiple services in parallel when possible
+    description: |
+      When multiple services are detected (e.g., postgres,redis,jaeger), deploy them
+      simultaneously using background jobs instead of sequentially.
+
+      Benefits:
+      - Faster deployment (3 services: ~3min sequential → ~1min parallel)
+      - Better resource utilization
+      - Independent service failures don't block others
+
+      Trade-offs:
+      - Harder to debug (logs interleaved)
+      - May cause resource contention on small clusters
+      - All services must be truly independent (no deployment-time dependencies)
+
+# =============================================================================
+# GLOBAL TRIGGERS
+# Changes to these files trigger FULL deployment (all services)
+# =============================================================================
+
+global_triggers:
+  description: "Files that affect all services - triggers full deployment"
+  paths:
+    - infra/k8s/base/kustomization.yaml # Resource ordering/references
+    - .github/workflows/deploy-k8s-resources.yml # Deployment workflow logic
+    - .github/actions/deploy-k8s-resources/** # Deployment action logic
+    - infra/deploy-control.yaml # Deployment control flags
+
+# =============================================================================
+# IGNORED PATHS
+# Changes to these files do NOT trigger any deployment
+# =============================================================================
+
+ignored_paths:
+  description: "Documentation and non-deployment files"
+  paths:
+    - infra/k8s/base/nginx-ingress/** # Documentation only
+    - infra/k8s/**/*.md # Markdown documentation
+    - infra/k8s/**/README.md # README files
+    - infra/k8s/**/readme.md # README files (lowercase)
+    - infra/k8s/**/operations.md # Operations documentation
+    - infra/k8s/**/testing.md # Testing documentation
+    - infra/k8s/**/implementation-summary.md # Implementation docs
+
+# =============================================================================
+# ENVIRONMENT MAPPINGS
+# Map git branches to deployment environments
+# =============================================================================
+
+environment_mappings:
+  main: prod
+  test: test
+  dev: dev
+  develop: dev # Alias
+
+# =============================================================================
+# NOTES
+# =============================================================================
+#
+# CLUSTER CHANGES:
+#   Cluster provisioning configs (infra/k8s/hetzner/*/cluster/**) are handled
+#   by a SEPARATE workflow (provision-hetzner-k8s-cluster.yml) via the
+#   detect-infra-changes job in ci.yml. Cluster changes trigger:
+#     1. Provision workflow (creates/updates cluster)
+#     2. Provision workflow then triggers deploy workflow (deploys all services)
+#
+#   This file (smart-deployment-config.yaml) does NOT handle cluster-level changes.
+#
+# ENVIRONMENT ISOLATION:
+#   - Changes to dev patches only trigger dev deployment
+#   - Changes to test patches only trigger test deployment
+#   - Changes to prod patches only trigger prod deployment
+#   - Changes to base resources trigger deployment to current branch's environment
+#
+# DEPLOYMENT FLOW:
+#   1. CI detects cluster changes → triggers provision → triggers full deploy
+#   2. CI detects global trigger changes → triggers full deploy (current env)
+#   3. CI detects service-specific changes → triggers single service deploy (current env)
+#   4. CI detects ignored path changes → no deployment triggered

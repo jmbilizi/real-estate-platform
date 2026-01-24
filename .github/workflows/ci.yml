@@ -397,25 +397,152 @@ jobs:
     if: needs.detect-infra-changes.outputs.deploy-changed == 'true' && needs.detect-infra-changes.outputs.cluster-changed != 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Determine environment from branch
-        id: env
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Install yq
         run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Detect changed services
+        id: detect-services
+        shell: bash
+        run: |
+          # Get changed files
+          if git rev-parse HEAD^ >/dev/null 2>&1; then
+            FILES=$(git diff --name-only HEAD^ HEAD)
+          else
+            FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+          fi
+
+          echo "Changed files:"
+          echo "$FILES"
+
+          # Determine environment from branch
           BRANCH="${{ needs.detect-infra-changes.outputs.branch }}"
           if [ "$BRANCH" = "main" ]; then
-            echo "environment=prod" >> $GITHUB_OUTPUT
+            ENV="prod"
           elif [ "$BRANCH" = "test" ]; then
-            echo "environment=test" >> $GITHUB_OUTPUT
+            ENV="test"
           else
-            echo "environment=dev" >> $GITHUB_OUTPUT
+            ENV="dev"
+          fi
+
+          echo "Target environment: $ENV"
+
+          # Load smart-deployment-config.yaml configuration
+          CONFIG_FILE="infra/smart-deployment-config.yaml"
+          if [ ! -f "$CONFIG_FILE" ]; then
+            echo "❌ Configuration file not found: $CONFIG_FILE"
+            exit 1
+          fi
+
+          # Extract global triggers from config
+          GLOBAL_TRIGGERS=$(yq -r '.global_triggers[]' "$CONFIG_FILE" | paste -sd '|' -)
+
+          # Extract ignored paths from config
+          IGNORED_PATHS=$(yq -r '.ignored_paths[]' "$CONFIG_FILE" | paste -sd '|' -)
+
+          # Check for global triggers (files that affect all services)
+          if echo "$FILES" | grep -E -q "$GLOBAL_TRIGGERS"; then
+            echo "deploy_strategy=all" >> $GITHUB_OUTPUT
+            echo "services=all" >> $GITHUB_OUTPUT
+            echo "environment=$ENV" >> $GITHUB_OUTPUT
+            echo "🚨 Global trigger detected - deploying ALL services to $ENV"
+            exit 0
+          fi
+
+          # Check for ignored paths (documentation only)
+          if [ -n "$IGNORED_PATHS" ] && echo "$FILES" | grep -E -q "$IGNORED_PATHS"; then
+            # Filter out ignored files
+            FILES=$(echo "$FILES" | grep -v -E "$IGNORED_PATHS")
+            if [ -z "$FILES" ]; then
+              echo "deploy_strategy=none" >> $GITHUB_OUTPUT
+              echo "services=" >> $GITHUB_OUTPUT
+              echo "environment=$ENV" >> $GITHUB_OUTPUT
+              echo "ℹ️  Only ignored files changed - skipping deployment"
+              exit 0
+            fi
+          fi
+
+          # Detect affected services by checking each service's resource paths
+          affected_services=""
+
+          # Get list of all services from config
+          SERVICES=$(yq -r '.services | keys[]' "$CONFIG_FILE")
+
+          for service in $SERVICES; do
+            echo "Checking service: $service"
+            
+            # Get all resource paths for this service and convert wildcards to regex
+            RESOURCE_PATHS=$(yq -r ".services.$service.resources[]" "$CONFIG_FILE" | while read -r path; do
+              # Replace ** with .* for regex matching
+              # Replace * with [^/]* for single-level wildcard
+              # Escape dots
+              echo "$path" | sed 's|\*\*|.*|g; s|\*|[^/]*|g; s|\.|\\.|g'
+            done | paste -sd '|' -)
+            
+            # Check if any changed files match this service's resource paths
+            # Use environment-aware matching (only match files for current env or base/)
+            if echo "$FILES" | grep -E -q "^($RESOURCE_PATHS)$"; then
+              # Additional environment isolation check
+              # If file is in a patch directory, verify it's for the correct environment
+              ENV_FILES=$(echo "$FILES" | grep -E "^($RESOURCE_PATHS)$" | grep -E "infra/k8s/(hetzner|podman)/")
+              BASE_FILES=$(echo "$FILES" | grep -E "^($RESOURCE_PATHS)$" | grep -v -E "infra/k8s/(hetzner|podman)/")
+              
+              # If we have env-specific files, check they match our target env
+              if [ -n "$ENV_FILES" ]; then
+                if echo "$ENV_FILES" | grep -E -q "/$ENV/"; then
+                  echo "  ✅ Service affected (environment-specific change for $ENV)"
+                  affected_services="$service,$affected_services"
+                else
+                  echo "  ⏭️  Skipping (change for different environment)"
+                fi
+              # If only base files changed, they affect this environment
+              elif [ -n "$BASE_FILES" ]; then
+                echo "  ✅ Service affected (base resource change)"
+                affected_services="$service,$affected_services"
+              fi
+            fi
+          done
+
+          # Remove trailing comma
+          affected_services=${affected_services%,}
+
+          if [ -z "$affected_services" ]; then
+            echo "deploy_strategy=none" >> $GITHUB_OUTPUT
+            echo "services=" >> $GITHUB_OUTPUT
+            echo "environment=$ENV" >> $GITHUB_OUTPUT
+            echo "ℹ️  No K8s services affected in $ENV environment - skipping deployment"
+          else
+            echo "deploy_strategy=single" >> $GITHUB_OUTPUT
+            echo "services=$affected_services" >> $GITHUB_OUTPUT
+            echo "environment=$ENV" >> $GITHUB_OUTPUT
+            echo "✅ Affected services in $ENV: $affected_services"
           fi
 
       - name: Trigger resource deployment
+        if: steps.detect-services.outputs.deploy_strategy != 'none'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          echo "🚀 Triggering resource deployment for ${{ steps.env.outputs.environment }} environment..."
+          STRATEGY="${{ steps.detect-services.outputs.deploy_strategy }}"
+          SERVICES="${{ steps.detect-services.outputs.services }}"
+          ENV="${{ steps.detect-services.outputs.environment }}"
+
+          if [ "$STRATEGY" = "all" ]; then
+            echo "🚀 Triggering FULL deployment (all services) for $ENV environment..."
+          else
+            echo "🎯 Triggering TARGETED deployment for $ENV environment: $SERVICES"
+          fi
+
           gh workflow run deploy-k8s-resources.yml \
             --repo ${{ github.repository }} \
             --ref ${{ github.ref }} \
-            --field environment=${{ steps.env.outputs.environment }}
-          echo "✅ Resource deployment workflow triggered"
+            --field environment="$ENV" \
+            --field deploy_strategy="$STRATEGY" \
+            --field services="$SERVICES"
+
+          echo "✅ Deployment workflow triggered"
