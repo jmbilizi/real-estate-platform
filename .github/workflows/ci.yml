@@ -440,10 +440,10 @@ jobs:
           fi
 
           # Extract global triggers from config
-          GLOBAL_TRIGGERS=$(yq -r '.global_triggers[]' "$CONFIG_FILE" | paste -sd '|' -)
+          GLOBAL_TRIGGERS=$(yq -r '.global_triggers.paths[]' "$CONFIG_FILE" | paste -sd '|' -)
 
           # Extract ignored paths from config
-          IGNORED_PATHS=$(yq -r '.ignored_paths[]' "$CONFIG_FILE" | paste -sd '|' -)
+          IGNORED_PATHS=$(yq -r '.ignored_paths.paths[]' "$CONFIG_FILE" | paste -sd '|' -)
 
           # Check for global triggers (files that affect all services)
           if echo "$FILES" | grep -E -q "$GLOBAL_TRIGGERS"; then
