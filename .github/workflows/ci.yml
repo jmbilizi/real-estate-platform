@@ -350,7 +350,7 @@ jobs:
           fi
 
           # Check for deploy resource changes (excluding cluster paths)
-          if echo "$FILES" | grep -E -q '^infra/k8s/base/|^infra/deploy-control\.yaml|^infra/k8s/hetzner/.*/patches/|^\.github/workflows/deploy-k8s-resources\.yml|^\.github/actions/deploy-k8s-resources/'; then
+          if echo "$FILES" | grep -E -q '^infra/k8s/base/|^infra/deploy-control\.yaml|^infra/smart-deployment-config\.yaml|^infra/k8s/hetzner/.*/patches/|^\.github/workflows/deploy-k8s-resources\.yml|^\.github/actions/deploy-k8s-resources/|^\.github/workflows/ci\.yml'; then
             deploy=true
             echo "✅ Deploy resource changes detected"
           fi
