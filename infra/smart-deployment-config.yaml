@@ -104,6 +104,7 @@ global_triggers:
   description: "Files that affect all services - triggers full deployment"
   paths:
     - infra/k8s/base/kustomization.yaml # Resource ordering/references
+    - infra/smart-deployment-config.yaml # Service mapping configuration (this file)
     - .github/workflows/ci.yml # CI workflow with service detection logic
     - .github/workflows/deploy-k8s-resources.yml # Deployment workflow logic
     - .github/actions/deploy-k8s-resources/** # Deployment action logic
