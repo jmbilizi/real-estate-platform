@@ -38,10 +38,12 @@ services:
     type: infrastructure
     description: "Redis/Valkey cache and pub/sub"
     resources:
+      # Base resources (provider/environment-agnostic)
       - infra/k8s/base/statefulsets/redis.statefulset.yaml
       - infra/k8s/base/configmaps/redis.configmap.yaml
       - infra/k8s/base/services/redis.service.yaml
       - infra/k8s/base/secrets/redis.secret.yaml
+      # Environment patches (provider/environment-specific)
       - infra/k8s/hetzner/dev/patches/statefulsets/redis.statefulset.yaml
       - infra/k8s/hetzner/test/patches/statefulsets/redis.statefulset.yaml
       - infra/k8s/hetzner/prod/patches/statefulsets/redis.statefulset.yaml
@@ -53,11 +55,13 @@ services:
     type: infrastructure
     description: "Jaeger distributed tracing"
     resources:
+      # Base resources (provider/environment-agnostic)
       - infra/k8s/base/statefulsets/jaeger.statefulset.yaml
       - infra/k8s/base/configmaps/jaeger.configmap.yaml
       - infra/k8s/base/services/jaeger.service.yaml
       - infra/k8s/base/secrets/jaeger.secret.yaml
       - infra/k8s/base/ingresses/jaeger.ingress.yaml
+      # Environment patches (provider/environment-specific)
       - infra/k8s/hetzner/dev/patches/statefulsets/jaeger.statefulset.yaml
       - infra/k8s/hetzner/dev/patches/ingresses/jaeger.ingress.yaml
       - infra/k8s/hetzner/test/patches/statefulsets/jaeger.statefulset.yaml
@@ -68,70 +72,6 @@ services:
       - infra/k8s/podman/local/patches/ingresses/jaeger.ingress.yaml
     kubectl_labels:
       app: jaeger
-
-  # ───────────────────────────────────────────────────────────────────────
-  # APPLICATION SERVICES (FUTURE)
-  # ───────────────────────────────────────────────────────────────────────
-  api-gateway:
-    type: application
-    description: "Ocelot API Gateway (.NET 9.0)"
-    resources:
-      - apps/api-gateway/**
-      - infra/k8s/base/deployments/api-gateway.deployment.yaml
-      - infra/k8s/base/services/api-gateway.service.yaml
-      - infra/k8s/base/configmaps/api-gateway.configmap.yaml
-      - infra/k8s/base/ingresses/api-gateway.ingress.yaml
-      - infra/k8s/hetzner/dev/patches/deployments/api-gateway.deployment.yaml
-      - infra/k8s/hetzner/test/patches/deployments/api-gateway.deployment.yaml
-      - infra/k8s/hetzner/prod/patches/deployments/api-gateway.deployment.yaml
-      - infra/k8s/podman/local/patches/deployments/api-gateway.deployment.yaml
-    kubectl_labels:
-      app: api-gateway
-
-  account-service:
-    type: application
-    description: "Account management service"
-    resources:
-      - apps/account-service/**
-      - infra/k8s/base/deployments/account-service.deployment.yaml
-      - infra/k8s/base/services/account-service.service.yaml
-      - infra/k8s/base/configmaps/account-service.configmap.yaml
-      - infra/k8s/hetzner/dev/patches/deployments/account-service.deployment.yaml
-      - infra/k8s/hetzner/test/patches/deployments/account-service.deployment.yaml
-      - infra/k8s/hetzner/prod/patches/deployments/account-service.deployment.yaml
-      - infra/k8s/podman/local/patches/deployments/account-service.deployment.yaml
-    kubectl_labels:
-      app: account-service
-
-  listings-service:
-    type: application
-    description: "Property listings service"
-    resources:
-      - apps/listings-service/**
-      - infra/k8s/base/deployments/listings-service.deployment.yaml
-      - infra/k8s/base/services/listings-service.service.yaml
-      - infra/k8s/base/configmaps/listings-service.configmap.yaml
-      - infra/k8s/hetzner/dev/patches/deployments/listings-service.deployment.yaml
-      - infra/k8s/hetzner/test/patches/deployments/listings-service.deployment.yaml
-      - infra/k8s/hetzner/prod/patches/deployments/listings-service.deployment.yaml
-      - infra/k8s/podman/local/patches/deployments/listings-service.deployment.yaml
-    kubectl_labels:
-      app: listings-service
-
-  messaging-service:
-    type: application
-    description: "Real-time messaging service"
-    resources:
-      - apps/messaging-service/**
-      - infra/k8s/base/deployments/messaging-service.deployment.yaml
-      - infra/k8s/base/services/messaging-service.service.yaml
-      - infra/k8s/base/configmaps/messaging-service.configmap.yaml
-      - infra/k8s/hetzner/dev/patches/deployments/messaging-service.deployment.yaml
-      - infra/k8s/hetzner/test/patches/deployments/messaging-service.deployment.yaml
-      - infra/k8s/hetzner/prod/patches/deployments/messaging-service.deployment.yaml
-      - infra/k8s/podman/local/patches/deployments/messaging-service.deployment.yaml
-    kubectl_labels:
-      app: messaging-service
 
 # =============================================================================
 # DEPLOYMENT SETTINGS
