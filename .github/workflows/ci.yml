@@ -489,8 +489,8 @@ jobs:
             if echo "$FILES" | grep -E -q "^($RESOURCE_PATHS)$"; then
               # Additional environment isolation check
               # If file is in a patch directory, verify it's for the correct environment
-              ENV_FILES=$(echo "$FILES" | grep -E "^($RESOURCE_PATHS)$" | grep -E "infra/k8s/(hetzner|podman)/")
-              BASE_FILES=$(echo "$FILES" | grep -E "^($RESOURCE_PATHS)$" | grep -v -E "infra/k8s/(hetzner|podman)/")
+              ENV_FILES=$(echo "$FILES" | grep -E "^($RESOURCE_PATHS)$" | grep -E "infra/k8s/(hetzner|podman)/" || true)
+              BASE_FILES=$(echo "$FILES" | grep -E "^($RESOURCE_PATHS)$" | grep -v -E "infra/k8s/(hetzner|podman)/" || true)
               
               # If we have env-specific files, check they match our target env
               if [ -n "$ENV_FILES" ]; then
