@@ -348,7 +348,7 @@ runs:
             echo "📦 Single service deployment: $SERVICES_TRIMMED"
             LABEL_SELECTOR="app=$SERVICES_TRIMMED"
             echo "Label selector: $LABEL_SELECTOR"
-            APPLY_CMD="kubectl apply -f manifests.yaml -l '$LABEL_SELECTOR'"
+            APPLY_CMD="kubectl apply -f manifests.yaml -l $LABEL_SELECTOR"
           fi
         fi
 
