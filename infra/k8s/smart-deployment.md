@@ -52,11 +52,13 @@ Changed files detected
 - Triggered by: Global triggers (kustomization.yaml, workflow changes, deploy-control.yaml)
 - Action: `kubectl apply -f manifests.yaml --prune -l app.kubernetes.io/managed-by=kustomize`
 - Deploys: All services in environment
+- Note: The `app.kubernetes.io/managed-by=kustomize` label is added by kustomization.yaml's commonLabels, not on individual resources
 
 **Strategy: `single`** (targeted deployment)
 
 - Triggered by: Service-specific file changes
-- Action: `kubectl apply -f manifests.yaml -l app=postgres,app=redis`
+- Action: `kubectl apply -f manifests.yaml -l app=postgres` (single service)
+- OR: Multiple parallel commands for multiple services (see Parallel Deployment section)
 - Deploys: Only specified services
 
 ### 4. Label-Based Filtering
@@ -78,7 +80,7 @@ spec:
 
 This enables `kubectl apply -l app=postgres` to deploy only postgres resources.
 
-When multiple services are affected, uses OR logic: `kubectl apply -l 'app in (postgres,redis)'`
+**For multiple services**: The parallel deployment system runs separate `kubectl apply` commands for each service in background jobs (see Parallel Deployment section).
 
 ## Deployment Scenarios
 
@@ -125,17 +127,7 @@ When multiple services are affected, uses OR logic: `kubectl apply -l 'app in (p
 
 **Why**: Documentation changes are in `ignored_paths` list.
 
-### Scenario 5: Application Code Change (Future)
-
-**Change**: Edit `apps/api-gateway/src/controllers/auth.ts`
-
-**Behavior**:
-
-- **Dev branch**: Deploys only api-gateway to **dev** environment
-
-**Why**: Application code changes trigger only that service's deployment.
-
-### Scenario 6: Multiple Services Changed
+### Scenario 5: Multiple Services Changed
 
 **Change**: Edit both `infra/k8s/base/statefulsets/postgres.statefulset.yaml` and `infra/k8s/base/statefulsets/redis.statefulset.yaml`
 
@@ -151,7 +143,7 @@ When multiple services are affected, uses OR logic: `kubectl apply -l 'app in (p
 
 **Why**: Parallel deployment automatically activates for multiple services, reducing total deployment time by ~60%.
 
-### Scenario 7: Cluster Configuration Change
+### Scenario 6: Cluster Configuration Change
 
 **Change**: Edit `infra/k8s/hetzner/dev/cluster/cluster-config.yaml`
 
@@ -171,17 +163,20 @@ When multiple services are affected, uses OR logic: `kubectl apply -l 'app in (p
 When multiple services are detected (e.g., `services=postgres,redis,jaeger`), the deployment action automatically switches to **parallel mode**:
 
 ```bash
-# Traditional sequential deployment (OLD)
+# Traditional approach - single command with all services
+# (NOT used in parallel mode)
 kubectl apply -f manifests.yaml -l 'app in (postgres,redis,jaeger)'
-# Total time: ~3 minutes (1 min per service)
+# Total time: ~1-3 minutes (applies all, then waits for all rollouts)
 
-# Parallel deployment (NEW - automatic)
+# Parallel deployment (ACTUAL implementation)
 kubectl apply -f manifests.yaml -l 'app=postgres' &  # Background job
 kubectl apply -f manifests.yaml -l 'app=redis' &     # Background job
 kubectl apply -f manifests.yaml -l 'app=jaeger' &    # Background job
-wait  # Wait for all to complete
-# Total time: ~1 minute (all services deploy simultaneously)
+wait  # Wait for all background jobs to complete
+# Total time: ~1 minute (each service monitored independently)
 ```
+
+**Key difference**: Each service gets its own apply + rollout monitoring, allowing independent success/failure tracking.
 
 ### Performance Comparison
 
@@ -255,19 +250,22 @@ environments:
   dev:
     services:
       postgres:
-        rollback_on_failure: true # Enable per-service rollback
+        rollback_on_failure: false # Disabled by default - set to true to enable
       redis:
-        rollback_on_failure: true
+        rollback_on_failure: false
 
 deployment_strategies:
   statefulset:
     rollback_on_failure: true # OR: Enable for all StatefulSets
+    timeout: "2m" # Configurable rollout timeout
 ```
+
+**Note**: Rollback uses OR logic - enabled if EITHER service-level OR strategy-level is true.
 
 **Rollout Monitoring**:
 
 - Each service's rollout status checked in parallel
-- Timeout: StatefulSets (10m), Deployments (5m), DaemonSets (5m)
+- Timeout: Configurable via deploy-control.yaml (default: 2m for all workload types)
 - Failure triggers rollback only for that specific service
 - Other services continue independently
 
@@ -320,20 +318,21 @@ Services: postgres,redis,jaeger
 
 ## Adding New Services
 
-To add a new service (e.g., `account-service`):
+To add a new infrastructure service (e.g., `rabbitmq`):
 
 ### 1. Create K8s Resources
 
 ```bash
 # Create base resources
-infra/k8s/base/deployments/account-service.deployment.yaml
-infra/k8s/base/services/account-service.service.yaml
-infra/k8s/base/configmaps/account-service.configmap.yaml
+infra/k8s/base/statefulsets/rabbitmq.statefulset.yaml
+infra/k8s/base/services/rabbitmq.service.yaml
+infra/k8s/base/configmaps/rabbitmq.configmap.yaml
+infra/k8s/base/secrets/rabbitmq.secret.yaml
 
 # Add app label to all resources
 metadata:
   labels:
-    app: account-service
+    app: rabbitmq
 ```
 
 ### 2. Add to smart-deployment-config.yaml
@@ -342,19 +341,22 @@ metadata:
 
 ```yaml
 services:
-  account-service:
-    type: application
-    description: "Account management service"
+  rabbitmq:
+    type: infrastructure
+    description: "RabbitMQ message broker"
     resources:
-      - apps/account-service/**
-      - infra/k8s/base/deployments/account-service.deployment.yaml
-      - infra/k8s/base/services/account-service.service.yaml
-      - infra/k8s/base/configmaps/account-service.configmap.yaml
-      - infra/k8s/hetzner/dev/patches/deployments/account-service.deployment.yaml
-      - infra/k8s/hetzner/test/patches/deployments/account-service.deployment.yaml
-      - infra/k8s/hetzner/prod/patches/deployments/account-service.deployment.yaml
+      # Base resources (provider/environment-agnostic)
+      - infra/k8s/base/statefulsets/rabbitmq.statefulset.yaml
+      - infra/k8s/base/services/rabbitmq.service.yaml
+      - infra/k8s/base/configmaps/rabbitmq.configmap.yaml
+      - infra/k8s/base/secrets/rabbitmq.secret.yaml
+      # Environment patches (provider/environment-specific)
+      - infra/k8s/hetzner/dev/patches/statefulsets/rabbitmq.statefulset.yaml
+      - infra/k8s/hetzner/test/patches/statefulsets/rabbitmq.statefulset.yaml
+      - infra/k8s/hetzner/prod/patches/statefulsets/rabbitmq.statefulset.yaml
+      - infra/k8s/podman/local/patches/statefulsets/rabbitmq.statefulset.yaml
     kubectl_labels:
-      app: account-service
+      app: rabbitmq
 ```
 
 **No workflow changes needed!** CI dynamically reads smart-deployment-config.yaml.
@@ -363,15 +365,15 @@ services:
 
 ```bash
 # Make a change to the service
-echo "# test" >> apps/account-service/README.md
-git add . && git commit -m "test: trigger account-service deployment"
+echo "# Updated config" >> infra/k8s/base/configmaps/rabbitmq.configmap.yaml
+git add . && git commit -m "test: trigger rabbitmq deployment"
 git push origin dev
 
 # CI will:
-# 1. Detect apps/account-service/** changed
+# 1. Detect infra/k8s/base/configmaps/rabbitmq.configmap.yaml changed
 # 2. Determine environment from branch (dev)
-# 3. Trigger deploy workflow with strategy=single, services=account-service
-# 4. Deploy only account-service to dev environment
+# 3. Trigger deploy workflow with strategy=single, services=rabbitmq
+# 4. Deploy only rabbitmq to dev environment
 ```
 
 ## Benefits
@@ -450,8 +452,9 @@ git push origin dev
                   └────────┬───────────┘
                            │
                  ┌─────────▼──────────┐
-                 │ Parse deploy-      │
-                 │ groups.yaml        │
+                 │ Parse smart-       │
+                 │ deployment-        │
+                 │ config.yaml        │
                  └─────────┬──────────┘
                            │
               ┌────────────┼────────────┐
@@ -646,7 +649,7 @@ Use correct combination of inputs:
    ```yaml
    deployment_strategies:
      statefulset:
-       timeout: "10m" # May need adjustment for slow clusters
+       timeout: "2m" # Default is 2m - may need adjustment for slow clusters
    ```
 
 **Common Fixes**:
@@ -656,6 +659,14 @@ Use correct combination of inputs:
 - Check if PVC binding is stuck (for StatefulSets)
 
 ## Future Enhancements
+
+### Application Services
+
+- [ ] **Application Deployment Support**: Extend to application services (not just infrastructure)
+  - Add api-gateway, account-service, messaging-service, etc. to smart-deployment-config.yaml
+  - Map application code changes (`apps/**`) to trigger service deployments
+  - Current state: Only infrastructure services supported (postgres, redis, jaeger)
+  - Future: `apps/api-gateway/src/**` changes trigger api-gateway deployment
 
 ### Deployment Intelligence
 
