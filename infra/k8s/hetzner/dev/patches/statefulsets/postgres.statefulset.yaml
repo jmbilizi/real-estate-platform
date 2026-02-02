@@ -1,4 +1,5 @@
 # yaml-language-server: disable
+# Dev environment configuration: Lower resources for cost efficiency
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
