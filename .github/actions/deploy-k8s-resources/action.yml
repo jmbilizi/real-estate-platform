@@ -95,6 +95,12 @@ runs:
           echo "   ✅ JAEGER_DOMAIN is set (value redacted for security)"
           echo "   📝 Domain length: ${#JAEGER_DOMAIN} characters"
         fi
+        if [ -z "$API_GATEWAY_DOMAIN" ]; then
+          echo "   ❌ API_GATEWAY_DOMAIN is not set"
+        else
+          echo "   ✅ API_GATEWAY_DOMAIN is set (value redacted for security)"
+          echo "   📝 Domain length: ${#API_GATEWAY_DOMAIN} characters"
+        fi
 
         # Jaeger ingress
         if [ -f "${{ inputs.kustomizePath }}/patches/ingresses/jaeger.ingress.yaml" ]; then
@@ -115,6 +121,27 @@ runs:
           fi
         else
           echo "   ⚠️  Jaeger ingress file not found at: ${{ inputs.kustomizePath }}/patches/ingresses/jaeger.ingress.yaml"
+        fi
+
+        # API Gateway ingress
+        if [ -f "${{ inputs.kustomizePath }}/patches/ingresses/api-gateway.ingress.yaml" ]; then
+          echo "   📄 Before substitution:"
+          grep -E "host:|API_GATEWAY_DOMAIN" "${{ inputs.kustomizePath }}/patches/ingresses/api-gateway.ingress.yaml" || true
+          
+          sed -i "s/API_GATEWAY_DOMAIN_PLACEHOLDER/${API_GATEWAY_DOMAIN}/g" \
+            "${{ inputs.kustomizePath }}/patches/ingresses/api-gateway.ingress.yaml"
+          
+          echo "   📄 After substitution:"
+          grep -E "host:" "${{ inputs.kustomizePath }}/patches/ingresses/api-gateway.ingress.yaml" || true
+          
+          # Check if placeholder still exists (substitution failed)
+          if grep -q "API_GATEWAY_DOMAIN_PLACEHOLDER" "${{ inputs.kustomizePath }}/patches/ingresses/api-gateway.ingress.yaml"; then
+            echo "   ❌ WARNING: API_GATEWAY_DOMAIN_PLACEHOLDER still present after substitution!"
+          else
+            echo "   ✅ Substitution completed"
+          fi
+        else
+          echo "   ⚠️  API Gateway ingress file not found at: ${{ inputs.kustomizePath }}/patches/ingresses/api-gateway.ingress.yaml"
         fi
 
     - name: Build manifests

@@ -109,11 +109,16 @@ function determineProjectType(projectRoot) {
   const csprojPath = path.join(projectRoot, csprojFiles[0]);
   const csprojContent = fs.readFileSync(csprojPath, "utf8");
 
+  return {
+    type: determineProjectTypeInternal(projectRoot, csprojContent),
+    isTest: isTestProject(csprojContent),
+  };
+}
+
+// Internal helper to determine base project type
+function determineProjectTypeInternal(projectRoot, csprojContent) {
   // Check if it's a test project
-  if (
-    csprojContent.includes("<IsTestProject>true</IsTestProject>") ||
-    csprojContent.includes('<IsTestProject value="true"')
-  ) {
+  if (isTestProject(csprojContent)) {
     // For test projects, infer type from location
     // If in libs/ folder, it's a library test; otherwise, it's an application test
     if (projectRoot.includes("libs/") || projectRoot.includes("libs\\")) {
@@ -142,32 +147,86 @@ function determineProjectType(projectRoot) {
   return "application";
 }
 
+// Check if project is a test project
+function isTestProject(csprojContent) {
+  return (
+    csprojContent.includes("<IsTestProject>true</IsTestProject>") ||
+    csprojContent.includes('<IsTestProject value="true"') ||
+    csprojContent.includes("Microsoft.NET.Test.Sdk") ||
+    csprojContent.includes("xunit") ||
+    csprojContent.includes("nunit") ||
+    csprojContent.includes("MSTest")
+  );
+}
+
 // Create project.json for a .NET project
 function createProjectJson(projectName, projectConfig) {
   const projectRoot = projectConfig.root;
   const projectJsonPath = path.join(projectRoot, "project.json");
 
+  // Determine project characteristics
+  const projectInfo = determineProjectType(projectRoot);
+  const projectType = projectInfo.type;
+  const isTest = projectInfo.isTest;
+
   // Check if project.json already exists
   if (fs.existsSync(projectJsonPath)) {
     const existingContent = JSON.parse(fs.readFileSync(projectJsonPath, "utf8"));
-
-    // Determine correct projectType
-    const correctProjectType = determineProjectType(projectRoot);
     let needsUpdate = false;
 
     // Check if projectType needs correction
-    if (existingContent.projectType !== correctProjectType) {
-      existingContent.projectType = correctProjectType;
+    if (existingContent.projectType !== projectType) {
+      existingContent.projectType = projectType;
       needsUpdate = true;
     }
 
-    // Check if it already has lint and format targets
-    const hasAllTargets =
-      existingContent.targets?.lint && existingContent.targets?.format && existingContent.targets?.["format-check"];
+    // Ensure targets object exists
+    existingContent.targets = existingContent.targets || {};
 
-    if (!hasAllTargets) {
+    // Add missing targets based on project type
+    const missingTargets = [];
+
+    // Build target (all projects)
+    if (!existingContent.targets.build) {
+      existingContent.targets.build = {
+        executor: "nx:run-commands",
+        options: {
+          command: "dotnet build",
+          cwd: projectRoot,
+        },
+      };
+      missingTargets.push("build");
       needsUpdate = true;
-      existingContent.targets = existingContent.targets || {};
+    }
+
+    // Serve target (application projects only, not libraries or tests)
+    if (projectType === "application" && !isTest && !existingContent.targets.serve) {
+      existingContent.targets.serve = {
+        executor: "nx:run-commands",
+        options: {
+          command: "dotnet run",
+          cwd: projectRoot,
+        },
+      };
+      missingTargets.push("serve");
+      needsUpdate = true;
+    }
+
+    // Test target (test projects only)
+    if (isTest && !existingContent.targets.test) {
+      existingContent.targets.test = {
+        executor: "nx:run-commands",
+        options: {
+          command: "dotnet test",
+          cwd: projectRoot,
+        },
+      };
+      missingTargets.push("test");
+      needsUpdate = true;
+    }
+
+    // Lint target (all projects)
+    if (!existingContent.targets.lint) {
       existingContent.targets.lint = {
         executor: "nx:run-commands",
         options: {
@@ -175,6 +234,12 @@ function createProjectJson(projectName, projectConfig) {
           cwd: projectRoot,
         },
       };
+      missingTargets.push("lint");
+      needsUpdate = true;
+    }
+
+    // Format target (all projects)
+    if (!existingContent.targets.format) {
       existingContent.targets.format = {
         executor: "nx:run-commands",
         options: {
@@ -182,6 +247,12 @@ function createProjectJson(projectName, projectConfig) {
           cwd: projectRoot,
         },
       };
+      missingTargets.push("format");
+      needsUpdate = true;
+    }
+
+    // Format-check target (all projects)
+    if (!existingContent.targets["format-check"]) {
       existingContent.targets["format-check"] = {
         executor: "nx:run-commands",
         options: {
@@ -189,6 +260,8 @@ function createProjectJson(projectName, projectConfig) {
           cwd: projectRoot,
         },
       };
+      missingTargets.push("format-check");
+      needsUpdate = true;
     }
 
     // Ensure tags include 'dotnet'
@@ -204,45 +277,80 @@ function createProjectJson(projectName, projectConfig) {
     }
 
     writeFilePreservingEncoding(projectJsonPath, JSON.stringify(existingContent, null, 2) + "\n");
-    log(`  ✓ ${projectName}: Updated project.json`, "green");
+    if (missingTargets.length > 0) {
+      log(`  ✓ ${projectName}: Added missing targets: ${missingTargets.join(", ")}`, "green");
+    } else {
+      log(`  ✓ ${projectName}: Updated project.json`, "green");
+    }
     return true;
   }
 
   // Create new project.json
-  const projectType = determineProjectType(projectRoot);
+  const targets = {
+    build: {
+      executor: "nx:run-commands",
+      options: {
+        command: "dotnet build",
+        cwd: projectRoot,
+      },
+    },
+    lint: {
+      executor: "nx:run-commands",
+      options: {
+        command: "dotnet format analyzers --verify-no-changes",
+        cwd: projectRoot,
+      },
+    },
+    format: {
+      executor: "nx:run-commands",
+      options: {
+        command: "dotnet format",
+        cwd: projectRoot,
+      },
+    },
+    "format-check": {
+      executor: "nx:run-commands",
+      options: {
+        command: "dotnet format --verify-no-changes",
+        cwd: projectRoot,
+      },
+    },
+  };
+
+  // Add serve target for application projects (not libraries or tests)
+  if (projectType === "application" && !isTest) {
+    targets.serve = {
+      executor: "nx:run-commands",
+      options: {
+        command: "dotnet run",
+        cwd: projectRoot,
+      },
+    };
+  }
+
+  // Add test target for test projects
+  if (isTest) {
+    targets.test = {
+      executor: "nx:run-commands",
+      options: {
+        command: "dotnet test",
+        cwd: projectRoot,
+      },
+    };
+  }
+
   const projectJson = {
     name: projectName,
     $schema: "../../node_modules/nx/schemas/project-schema.json",
     sourceRoot: projectRoot,
     projectType: projectType,
-    targets: {
-      lint: {
-        executor: "nx:run-commands",
-        options: {
-          command: "dotnet format analyzers --verify-no-changes",
-          cwd: projectRoot,
-        },
-      },
-      format: {
-        executor: "nx:run-commands",
-        options: {
-          command: "dotnet format",
-          cwd: projectRoot,
-        },
-      },
-      "format-check": {
-        executor: "nx:run-commands",
-        options: {
-          command: "dotnet format --verify-no-changes",
-          cwd: projectRoot,
-        },
-      },
-    },
+    targets: targets,
     tags: ["dotnet"],
   };
 
   writeFilePreservingEncoding(projectJsonPath, JSON.stringify(projectJson, null, 2) + "\n");
-  log(`  ✓ ${projectName}: Created project.json`, "green");
+  const targetsList = Object.keys(targets).join(", ");
+  log(`  ✓ ${projectName}: Created project.json with targets: ${targetsList}`, "green");
   return true;
 }
 

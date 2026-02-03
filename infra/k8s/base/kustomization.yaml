@@ -35,6 +35,7 @@ resources:
   - services/postgres.service.yaml
   - services/redis.service.yaml
   - services/jaeger.service.yaml
+  - services/api-gateway.service.yaml
 
   # Workloads (statefulsets, deployments, etc.)
   ## StatefulSets (stateful infrastructure)
@@ -43,9 +44,11 @@ resources:
   - statefulsets/jaeger.statefulset.yaml
 
   ## Deployments (stateless applications - future: api-gateway, microservices)
+  - deployments/api-gateway.deployment.yaml
 
   # Ingress rules (external routing - uses Nginx controller above)
   - ingresses/jaeger.ingress.yaml
+  - ingresses/api-gateway.ingress.yaml
 
   ## DaemonSets (node-level services like Logging, monitoring, networking on every node)
 

@@ -109,6 +109,7 @@ jobs:
           REDIS_MONITOR_PASSWORD: ${{ secrets.REDIS_MONITOR_PASSWORD }}
           JAEGER_DOMAIN: ${{ secrets.JAEGER_DOMAIN }}
           JAEGER_BASIC_AUTH: ${{ secrets.JAEGER_BASIC_AUTH }}
+          API_GATEWAY_DOMAIN: ${{ secrets.API_GATEWAY_DOMAIN }}
 
   deploy-test:
     if: |
@@ -289,6 +290,7 @@ jobs:
           REDIS_MONITOR_PASSWORD: ${{ secrets.REDIS_MONITOR_PASSWORD }}
           JAEGER_DOMAIN: ${{ secrets.JAEGER_DOMAIN }}
           JAEGER_BASIC_AUTH: ${{ secrets.JAEGER_BASIC_AUTH }}
+          API_GATEWAY_DOMAIN: ${{ secrets.API_GATEWAY_DOMAIN }}
 
   deploy-prod:
     if: |
@@ -469,3 +471,4 @@ jobs:
           REDIS_MONITOR_PASSWORD: ${{ secrets.REDIS_MONITOR_PASSWORD }}
           JAEGER_DOMAIN: ${{ secrets.JAEGER_DOMAIN }}
           JAEGER_BASIC_AUTH: ${{ secrets.JAEGER_BASIC_AUTH }}
+          API_GATEWAY_DOMAIN: ${{ secrets.API_GATEWAY_DOMAIN }}

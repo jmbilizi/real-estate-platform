@@ -5,14 +5,28 @@ kind: Kustomization
 resources:
   - ../../base
 
-# Environment-specific patches
+# Environment-specific patches (production environment)
+# Patches override base resources with production-grade configuration:
+# - High resource requests/limits for performance and stability
+# - Production-optimized settings (5% OTEL sampling, minimal logging)
+# - HA configurations (3+ replicas for critical services)
+# - LoadBalancer service type for external access
+# - TLS certificates via cert-manager with security headers
 patches:
+  ## StatefulSets (stateful infrastructure)
   - path: patches/statefulsets/postgres.statefulset.yaml
   - path: patches/statefulsets/redis.statefulset.yaml
   - path: patches/statefulsets/jaeger.statefulset.yaml
 
+  ## Deployments (stateless applications)
+  - path: patches/deployments/api-gateway.deployment.yaml
+
+  ## Services (network access)
   - path: patches/services/ingress-nginx-controller.service.yaml
+
+  ## Ingress rules (external routing with TLS + security headers)
   - path: patches/ingresses/jaeger.ingress.yaml
+  - path: patches/ingresses/api-gateway.ingress.yaml
 
 # Common labels for all resources
 labels:

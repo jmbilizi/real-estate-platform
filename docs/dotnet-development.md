@@ -32,7 +32,14 @@ After creating or deleting projects:
 npm run dotnet:setup-projects
 ```
 
-This syncs `real-estate-platform.sln` with all .csproj files and creates project.json files.
+This script:
+
+- Syncs `real-estate-platform.sln` with all .csproj files
+- Creates/updates `project.json` files with Nx targets
+- Intelligently adds missing targets based on project type:
+  - **Applications** (non-test): build, serve, lint, format, format-check
+  - **Test projects**: build, test, lint, format, format-check
+  - **Libraries**: build, lint, format, format-check
 
 > **Note**: This also runs automatically as part of `npm run nx:reset` and during pre-commit hooks, ensuring solution files stay synchronized.
 

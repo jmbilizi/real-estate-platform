@@ -106,12 +106,12 @@ All projects are created using Nx generators which automatically create the appr
 
 ### .NET Projects
 
-.NET projects created with `dotnet new` and detected by `@nx/dotnet`:
+.NET projects created with `dotnet new` and configured by `setup-dotnet-projects.js`:
 
 - Standard .NET project structure (`.csproj` based)
 - MSBuild configuration from `tools/dotnet/configs/`
-- Nx targets auto-generated based on project type
-- Automatic dependency detection via `<ProjectReference>`
+- Nx targets created via `project.json` with `nx:run-commands` executor
+- Dependency graph analysis via `@nx/dotnet` plugin (graph only, no target inference)
 
 **Available Templates**:
 
@@ -122,13 +122,14 @@ All projects are created using Nx generators which automatically create the appr
 - `xunit`/`nunit`/`mstest` - Test Projects
 - See all: `dotnet new list`
 
-**Auto-generated Nx Targets**:
+**Nx Targets Created by Setup Script**:
 
-- `build` - All projects
-- `serve` - Executable projects (web apps, console apps)
-- `test` - Test projects
-- `pack` - Libraries
-- `publish` - Applications
+- `build` - All projects (dotnet build)
+- `serve` - Application projects only (dotnet run)
+- `test` - Test projects only (dotnet test)
+- `lint` - All projects (dotnet format analyzers --verify-no-changes)
+- `format` - All projects (dotnet format)
+- `format-check` - All projects (dotnet format --verify-no-changes)
 
 ### Python Projects
 

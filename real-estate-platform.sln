@@ -2,13 +2,32 @@
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "apps", "apps", "{1787FE1D-075E-9E68-7218-25F1BD1BBEAB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "api-gateway", "apps\api-gateway\api-gateway.csproj", "{0DF873DB-0AFF-415E-A8EE-2E5B7B28E6FD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
-		Debug|Any CPU = Debug|Any CPU
-		Release|Any CPU = Release|Any CPU
+		Debug|Any CPU = Debug|Any CPU		Release|Any CPU = Release|Any CPU	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0DF873DB-0AFF-415E-A8EE-2E5B7B28E6FD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0DF873DB-0AFF-415E-A8EE-2E5B7B28E6FD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0DF873DB-0AFF-415E-A8EE-2E5B7B28E6FD}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0DF873DB-0AFF-415E-A8EE-2E5B7B28E6FD}.Debug|x64.Build.0 = Debug|Any CPU
+		{0DF873DB-0AFF-415E-A8EE-2E5B7B28E6FD}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{0DF873DB-0AFF-415E-A8EE-2E5B7B28E6FD}.Debug|x86.Build.0 = Debug|Any CPU
+		{0DF873DB-0AFF-415E-A8EE-2E5B7B28E6FD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0DF873DB-0AFF-415E-A8EE-2E5B7B28E6FD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0DF873DB-0AFF-415E-A8EE-2E5B7B28E6FD}.Release|x64.ActiveCfg = Release|Any CPU
+		{0DF873DB-0AFF-415E-A8EE-2E5B7B28E6FD}.Release|x64.Build.0 = Release|Any CPU
+		{0DF873DB-0AFF-415E-A8EE-2E5B7B28E6FD}.Release|x86.ActiveCfg = Release|Any CPU
+		{0DF873DB-0AFF-415E-A8EE-2E5B7B28E6FD}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{0DF873DB-0AFF-415E-A8EE-2E5B7B28E6FD} = {1787FE1D-075E-9E68-7218-25F1BD1BBEAB}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {44E3A91E-3F8E-441A-A8AF-B84A508CC66C}

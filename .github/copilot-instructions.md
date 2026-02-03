@@ -177,11 +177,11 @@ bash py-env.sh check  # Unix
 
 ## .NET Project Management
 
-**.NET is inference-based** - no Nx generators. The `@nx/dotnet` plugin automatically:
+**.NET uses explicit project.json configuration** - no Nx generators or auto-inference. The `@nx/dotnet` plugin provides:
 
-1. Detects `.csproj` files
-2. Generates Nx targets based on project type
-3. Infers dependencies from `<ProjectReference>`
+1. Dependency graph analysis for `.csproj` files
+2. Detects `<ProjectReference>` relationships
+3. **Does NOT auto-generate targets** (graph support only)
 
 **After creating .NET projects, ALWAYS run:**
 
@@ -189,16 +189,20 @@ bash py-env.sh check  # Unix
 npm run nx:reset
 ```
 
-**Why**: This runs `dotnet:setup-projects.js` which syncs `real-estate-platform.sln` with all `.csproj` files and creates/updates `project.json` files.
+**Why**: This runs `dotnet:setup-projects.js` which:
 
-**Available targets auto-generated:**
+- Syncs `real-estate-platform.sln` with all `.csproj` files
+- Creates/updates `project.json` files with explicit targets
+- Intelligently adds missing targets based on project type
+
+**Targets created by setup script:**
 
 - `build` - All projects
-- `serve` - Executable projects (web apps, console apps)
-- `test` - Test projects (xunit, nunit, mstest)
-- `pack` - Libraries
-- `format`/`format-check` - All projects (dotnet format)
-- `lint` - All projects (StyleCop via Directory.Build.props)
+- `serve` - Application projects only (not libraries or tests)
+- `test` - Test projects only (xunit, nunit, mstest)
+- `lint` - All projects (dotnet format analyzers)
+- `format` - All projects (dotnet format)
+- `format-check` - All projects (dotnet format --verify-no-changes)
 
 ## Auto-Tagging System
 

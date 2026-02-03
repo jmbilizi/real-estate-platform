@@ -73,6 +73,26 @@ services:
     kubectl_labels:
       app: jaeger
 
+  api-gateway:
+    type: application
+    description: "Ocelot API Gateway (.NET 9.0)"
+    resources:
+      # Base resources (provider/environment-agnostic)
+      - infra/k8s/base/deployments/api-gateway.deployment.yaml
+      - infra/k8s/base/services/api-gateway.service.yaml
+      - infra/k8s/base/ingresses/api-gateway.ingress.yaml
+      # Environment patches (provider/environment-specific)
+      - infra/k8s/hetzner/dev/patches/deployments/api-gateway.deployment.yaml
+      - infra/k8s/hetzner/dev/patches/ingresses/api-gateway.ingress.yaml
+      - infra/k8s/hetzner/test/patches/deployments/api-gateway.deployment.yaml
+      - infra/k8s/hetzner/test/patches/ingresses/api-gateway.ingress.yaml
+      - infra/k8s/hetzner/prod/patches/deployments/api-gateway.deployment.yaml
+      - infra/k8s/hetzner/prod/patches/ingresses/api-gateway.ingress.yaml
+      - infra/k8s/podman/local/patches/deployments/api-gateway.deployment.yaml
+      - infra/k8s/podman/local/patches/ingresses/api-gateway.ingress.yaml
+    kubectl_labels:
+      app: api-gateway
+
 # =============================================================================
 # DEPLOYMENT SETTINGS
 # =============================================================================

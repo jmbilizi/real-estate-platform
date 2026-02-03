@@ -5,13 +5,25 @@ kind: Kustomization
 resources:
   - ../../base
 
-# Environment-specific patches
+# Environment-specific patches (local Podman environment)
+# Patches override base resources with local development configuration:
+# - Minimal resource requests/limits for laptop/workstation constraints
+# - Development settings (100% OTEL sampling for debugging)
+# - Single replica only (no HA needed locally)
+# - Static hostnames (*.localhost for local DNS)
+# - No TLS (HTTP only for simplicity)
 patches:
+  ## StatefulSets (stateful infrastructure)
   - path: patches/statefulsets/postgres.statefulset.yaml
   - path: patches/statefulsets/redis.statefulset.yaml
   - path: patches/statefulsets/jaeger.statefulset.yaml
 
+  ## Deployments (stateless applications)
+  - path: patches/deployments/api-gateway.deployment.yaml
+
+  ## Ingress rules (local routing via *.localhost)
   - path: patches/ingresses/jaeger.ingress.yaml
+  - path: patches/ingresses/api-gateway.ingress.yaml
 
 # Common labels for all resources
 labels:
