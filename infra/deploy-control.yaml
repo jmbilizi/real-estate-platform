@@ -29,7 +29,7 @@ environments:
   # Fast iteration - all safety features disabled for speed
   # ────────────────────────────────────────────────────────────────────────────
   dev:
-    enabled: true
+    enabled: false
     auto_deploy: true # Auto-deploy on push to dev branch
     require_manual_approval: false # No approval needed in dev
 

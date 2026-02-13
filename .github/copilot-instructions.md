@@ -11,6 +11,15 @@ This is an **Nx-powered polyglot monorepo** supporting Node.js/TypeScript, Pytho
 - **Unified Git hooks**: Two-tier validation (pre-commit: fast checks, pre-push: full suite) with intelligent language detection
 - **Centralized configs**: All language-specific configurations in `tools/{language}/configs/`
 
+## Cross-Platform First (CRITICAL)
+
+This repo must remain usable on **Windows, macOS, and Linux**.
+
+- Prefer **Node.js scripts** (in `tools/`) for automation over OS-specific shell/batch scripts.
+- Avoid Windows-only constructs (e.g., `.bat`-only workflows) unless there is an equivalent cross-platform path.
+- Do not assume `bash`, `sed`, `grep`, or GNU tool availability.
+- If a workflow behaves differently on Windows due to `npm.cmd` Ctrl+C behavior, provide a **cross-platform Node launcher** that can be run directly via `node`.
+
 ## Critical Workflows
 
 ### Creating New Projects
@@ -692,7 +701,7 @@ kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins | kubectl diff -f -
    - Continues rollback attempts even if individual rollbacks fail
    - Reports any failures requiring manual intervention
 
-**Kubernetes Immutable Field Handling**: Uses error-driven pattern to handle immutable fields across **5 resource types** (StatefulSet, Deployment, Service, DaemonSet, Job). Instead of preemptive checks, lets kubectl fail first, then parses stderr to identify resource type and extract specific resource names, deletes only those affected resources. Uses `--cascade=orphan` for stateful resources (preserves PVCs/Pods). This eliminates false positives and scales to any number of resources. Applied to all deployment targets: GitHub Actions (dev L312, test L636, prod L983) and local (kubectl-local-context.js).
+**Kubernetes Immutable Field Handling**: Uses error-driven pattern to handle immutable fields across **5 resource types** (StatefulSet, Deployment, Service, DaemonSet, Job). Instead of preemptive checks, lets kubectl fail first, then parses stderr to identify resource type and extract specific resource names, deletes only those affected resources. Uses `--cascade=orphan` for stateful resources (preserves PVCs/Pods). This eliminates false positives and scales to any number of resources. Applied to all deployment targets: GitHub Actions (dev L312, test L636, prod L983) and local (Skaffold + scripts in tools/infra).
 
 **Workload Discovery Pattern**: All workload operations use manifest-based discovery:
 
@@ -825,7 +834,9 @@ grep -r "ACCOUNT_SERVICE_DB_USER_PASSWORD" .github/workflows/ infra/k8s/base/
 → Check BOTH `rollback_on_failure` (service level) AND `statefulset_rollback` (strategy level). Either can trigger rollback (OR logic).
 
 **"Resource updates failing with immutable field errors"**
-→ Immutable fields changed on StatefulSet/Deployment/Service/DaemonSet/Job. Workflow automatically detects error type, extracts resource names, deletes with appropriate flags (`--cascade=orphan` for stateful resources), and retries. Supports 5 resource types. For local testing, use `npm run infra:local:k8s-resources:apply` which has the same error-driven logic.
+→ Immutable fields changed on StatefulSet/Deployment/Service/DaemonSet/Job. Workflow automatically detects error type, extracts resource names, deletes with appropriate flags (`--cascade=orphan` for stateful resources), and retries. Supports 5 resource types. For local testing, use `node tools/infra/run-skaffold.js run --port-forward --tail`.
+
+For the watch loop on Windows, prefer `node tools/infra/dev-skaffold.js` (avoids `npm.cmd` Ctrl+C prompts).
 
 ### Infrastructure Documentation
 
@@ -888,7 +899,7 @@ sdk.start();
 
 ### Infrastructure Scripts (ALWAYS USE THESE)
 
-**CRITICAL**: Always use npm scripts for infrastructure operations. These scripts handle context validation, error recovery, and follow best practices.
+**CRITICAL**: The Node scripts under `tools/infra/` are the source of truth for infrastructure operations. `npm run ...` scripts are convenience aliases.
 
 **Local Cluster Management**:
 
@@ -903,14 +914,14 @@ npm run infra:local:cluster:delete   # Removes cluster and context
 **Local Kubernetes Resources**:
 
 ```bash
-# Build manifests (validation only)
-npm run infra:local:k8s-resources:build
+# Watch loop (preferred, cross-platform)
+node tools/infra/dev-skaffold.js
 
-# Apply resources (handles immutable field errors automatically)
-npm run infra:local:k8s-resources:apply
+# Apply resources (safe context)
+node tools/infra/run-skaffold.js run --port-forward --tail
 
-# Delete all resources
-npm run infra:local:k8s-resources:delete
+# Delete resources (safe context)
+node tools/infra/run-skaffold.js delete
 ```
 
 **Validation**:

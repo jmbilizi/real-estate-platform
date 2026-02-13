@@ -1,72 +1,68 @@
-# Local Kubernetes Podman Development: Image Pull & Access Troubleshooting
+# Local Kubernetes (Kind + Podman): Image Pull & Access Troubleshooting
 
-## Known Issues
+This repo’s local Kubernetes setup uses **Kind with the Podman provider** (see `npm run infra:local:cluster:setup`).
 
-- Podman/Minikube local setup may fail to pull some images (e.g., PostGIS, Valkey, Alpine) due to TLS certificate verification failures.
-- Even with correct registry config, images must be loaded manually using the Podman machine.
-- This is a known limitation of Podman Desktop's Kubernetes cluster and does not affect cloud deployments.
+## Common Failure Modes
 
-## Manual Steps Required for Local Development with Podman
+- **ImagePullBackOff** for public images (PostGIS/Valkey/Jaeger/etc.)
+  - Usually a TLS/CA issue inside the Podman VM or Kind nodes.
+- **Local images not found** (your app image)
+  - The image was built but not pushed to the local registry.
 
-### 1. Manually Pull and Load Required Images
+## Quick Fix Checklist
 
-For local development with Podman, you must manually pull and load the following images if any pods are stuck in `ImagePullBackOff` or `ContainerCreating` status:
+### 1) Re-sync certs and repair the cluster
 
-**A. Kindnetd (CNI):**
-
-```sh
-podman machine ssh 'podman pull docker.io/kindest/kindnetd:v20250512-df8de77b'
-minikube image load docker.io/kindest/kindnetd:v20250512-df8de77b --profile=myapp-podman-local
-```
-
-**B. PostGIS/Postgres:**
+Run the cluster bootstrapper again; it installs CA material and configures containerd registry trust:
 
 ```sh
-podman machine ssh 'podman pull docker.io/postgis/postgis:18-3.6'
-minikube image load docker.io/postgis/postgis:18-3.6 --profile=myapp-podman-local
+npm run infra:local:cluster:setup
 ```
 
-**C. Alpine (Redis init container):**
+Then re-apply base resources:
 
 ```sh
-podman machine ssh 'podman pull docker.io/library/alpine:3.19'
-minikube image load docker.io/library/alpine:3.19 --profile=myapp-podman-local
+node tools/infra/run-skaffold.js run --port-forward --tail
 ```
 
-**D. Valkey/Redis:**
+Deploy `api-gateway` via Skaffold:
 
 ```sh
-podman machine ssh 'podman pull docker.io/valkey/valkey:9.0-alpine'
-minikube image load docker.io/valkey/valkey:9.0-alpine --profile=myapp-podman-local
+node tools/infra/dev-skaffold.js -- --cache-artifacts=false
 ```
 
-**E. Jaeger (OpenTelemetry All-in-One):**
+### 2) Force a fresh Skaffold rebuild (for local app images)
+
+If your service image isn’t showing up in-cluster:
 
 ```sh
-podman machine ssh 'podman pull docker.io/jaegertracing/all-in-one:1.76.0'
-minikube image load docker.io/jaegertracing/all-in-one:1.76.0 --profile=myapp-podman-local
+node tools/infra/dev-skaffold.js -- --cache-artifacts=false
 ```
 
-**Check loaded images:**
+This repo’s custom Skaffold builder **pushes images to the persistent local registry** at `localhost:5001`.
+
+### 3) Manual image push to local registry (rare)
+
+If you need to manually preload a public image for local use, push it into the local registry:
 
 ```sh
-# List all loaded images in the profile
-minikube image ls --profile=myapp-podman-local
-
-# Check for specific images (Windows)
-minikube image ls --profile=myapp-podman-local | findstr "postgis valkey jaeger"
-
-# Check for specific images (Linux/macOS)
-minikube image ls --profile=myapp-podman-local | grep -E "postgis|valkey|jaeger"
+podman pull docker.io/postgis/postgis:18-3.6
+npm run infra:local:registry:ensure
+podman tag docker.io/postgis/postgis:18-3.6 localhost:5001/postgis/postgis:18-3.6
+podman push localhost:5001/postgis/postgis:18-3.6
 ```
 
-Check pod status after loading images:
+Then reference `localhost:5001/postgis/postgis:18-3.6` in your manifests (or re-run the cluster setup to restore normal pull behavior).
+
+## Diagnostics
 
 ```sh
 kubectl get pods -A
+kubectl describe pod <pod> -n <ns>
+kubectl get events -A --sort-by=.lastTimestamp
 ```
 
-### 2. Port Forwarding for Local Access
+## Port Forwarding (Manual)
 
 **Postgres:**
 
@@ -120,4 +116,4 @@ To access Jaeger UI from your host:
 
 ---
 
-_Last updated: 2025-12-07_
+_Last updated: 2026-02-07_

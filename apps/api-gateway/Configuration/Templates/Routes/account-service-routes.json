@@ -1,0 +1,78 @@
+{
+  "ServiceName": "Account",
+  "Active": true,
+  "SwaggerEndPoints": [
+    {
+      "Key": "Account",
+      "Config": [
+        {
+          "Name": "Account API",
+          "Version": "v1",
+          "Url": "/swagger/docs/v1"
+        }
+      ]
+    }
+  ],
+  "Routes": [
+    {
+      "UpstreamPathTemplate": "/gateway/account/register",
+      "UpstreamHttpMethod": ["POST"],
+      "DownstreamPathTemplate": "/api/account/register",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 7072
+        }
+      ]
+    },
+    {
+      "UpstreamPathTemplate": "/gateway/account/login",
+      "UpstreamHttpMethod": ["POST"],
+      "DownstreamPathTemplate": "/api/account/login",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 7072
+        }
+      ]
+    },
+    {
+      "UpstreamPathTemplate": "/gateway/account/logout",
+      "UpstreamHttpMethod": ["POST"],
+      "DownstreamPathTemplate": "/api/account/logout",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 7072
+        }
+      ]
+    },
+    {
+      "UpstreamPathTemplate": "/gateway/account/current-user",
+      "UpstreamHttpMethod": ["GET"],
+      "DownstreamPathTemplate": "/api/account/current-user",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 7072
+        }
+      ]
+    },
+    {
+      "UpstreamPathTemplate": "/gateway/account/online-hub",
+      "UpstreamHttpMethod": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      "DownstreamPathTemplate": "/api/account/online-hub",
+      "DownstreamScheme": "ws",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 7072
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+# yaml-language-server: disable
+# API Gateway Deployment Patch for Hetzner Dev Environment
+# Low resources for development cluster
+# OTEL Sampling: 100% (trace everything for debugging)
+# Environment: Development
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    spec:
+      containers:
+        - name: ocelot
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "250m"
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: "Development"
+            - name: OTEL_TRACES_SAMPLER_ARG
+              value: "1.0" # 100% sampling for dev

@@ -1,0 +1,53 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Nx
+.nx/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.mypy_cache/
+.pytest_cache/
+.tox/
+
+# .NET build outputs
+**/bin/
+**/obj/
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Git
+.git/
+
+# IDEs
+.idea/
+.history/
+.vs/
+.vscode/
+
+# Env files
+.env
+.env.*.local
+
+# Test outputs
+coverage/
+TestResults/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.log
+
+# Other build artifacts
+dist/

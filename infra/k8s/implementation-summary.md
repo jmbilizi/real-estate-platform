@@ -790,7 +790,7 @@ fi
 **Applied To**:
 
 - GitHub Actions: dev (L312), test (L636), prod (L983)
-- Local: `tools/infra/kubectl-local-context.js`
+- Local: `tools/infra/run-skaffold.js` (Skaffold `infra` profile + kube-context enforcement)
 
 ## Next Features (Future Work)
 

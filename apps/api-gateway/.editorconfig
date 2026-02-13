@@ -1,0 +1,8 @@
+# Project-specific EditorConfig overrides
+# Inherits from root .editorconfig
+root = false
+
+# Add any api-gateway specific overrides here
+# Example:
+# [*.cs]
+# dotnet_diagnostic.SA1633.severity = none  # Disable file header requirement for this project

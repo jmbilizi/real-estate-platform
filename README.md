@@ -25,7 +25,7 @@ npm run dotnet:env         # .NET development
 npm run infra:setup        # Kubernetes/Kustomize (for infrastructure work)
 
 # Local cluster setup (optional - for local K8s development)
-npm run infra:local:cluster:setup    # Podman + Minikube cluster
+npm run infra:local:cluster:setup    # Kind + Podman cluster
 ```
 
 See individual stack documentation for details:
@@ -168,13 +168,20 @@ See the [CI/CD documentation](./docs/ci-cd.md#quality-checks) for more details.
 - Please follow code style and commit guidelines enforced by pre-commit hooks
 - Run lint, format, and type-check commands before submitting a PR
 
-# Local Kubernetes Resource Operations (Podman+Minikube)
+# Local Kubernetes Resource Operations (Kind+Podman)
 
-All local resource scripts (apply, delete, build) now automatically enforce the correct kubectl context (`podman-local`). This prevents accidental changes to the wrong cluster, even if you have multiple clusters or cloud contexts configured.
+All local resource scripts (apply, delete, build) automatically enforce the correct kubectl context for your local Kind cluster. This prevents accidental changes to the wrong cluster, even if you have multiple clusters or cloud contexts configured.
 
-- Scripts: `infra:local:k8s-resources:build`, `infra:local:k8s-resources:apply`, `infra:local:k8s-resources:delete`
-- Implementation: Uses `tools/infra/kubectl-local-context.js` to check and switch context before running any resource operation.
+- Deploy resources the same way as production: apply the full Kustomize overlay via Skaffold.
+
+- Scripts: `skaffold`, `skaffold:deploy`, `skaffold:delete`
+- Implementation: Uses `tools/infra/run-skaffold.js` and enforces the correct `kubectl` context before touching the cluster.
 - If the context cannot be switched, the script aborts with a clear error.
 
-**If you change your local cluster name, update the `LOCAL_CONTEXT` variable in `tools/infra/kubectl-local-context.js` to match.**
+Default registry repo:
+
+- Local dev defaults to `localhost:5001`.
+- Override with `DEFAULT_REPO` or `SKAFFOLD_DEFAULT_REPO` (e.g., `ghcr.io/<org-or-user>/<repo>` for CI/CD).
+
+The target cluster name comes from `infra/k8s/podman/local/cluster/cluster-config.yaml` (`cluster_name`), and the context is typically `kind-<cluster_name>`.
 ```

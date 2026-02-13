@@ -197,9 +197,9 @@ Only customize what's different per provider:
 
 Everything else stays in `base/` and is shared.
 
-## Local Kubernetes Resource Operations (Podman+Minikube)
+## Local Kubernetes Resource Operations (Kind+Podman)
 
-The following scripts ensure all resource operations (apply, delete, build) are always run against your intended local cluster context (e.g., `podman-local`).
+The following scripts ensure all resource operations are always run against your intended local cluster context (typically `kind-<cluster_name>`).
 
 **Why?**
 
@@ -209,29 +209,46 @@ The following scripts ensure all resource operations (apply, delete, build) are 
 ## Usage
 
 ```bash
-# Build manifests for local cluster (prints YAML)
-npm run infra:local:k8s-resources:build
+# Start the Skaffold watch loop (single cross-platform entrypoint)
+node tools/infra/dev-skaffold.js
 
 # Apply manifests to local cluster (safe context)
-npm run infra:local:k8s-resources:apply
+node tools/infra/run-skaffold.js run --port-forward --tail
 
 # Delete manifests from local cluster (safe context)
-npm run infra:local:k8s-resources:delete
+node tools/infra/run-skaffold.js delete
 ```
 
-These scripts use `tools/infra/kubectl-local-context.js` to:
+### Registry / Default Repo
+
+By default, local dev uses `localhost:5001` as the Skaffold `--default-repo`.
+
+To use a different registry (e.g., GHCR in CI/CD), set one of:
+
+- `SKAFFOLD_DEFAULT_REPO`
+- `DEFAULT_REPO`
+
+Example (CI): `DEFAULT_REPO=ghcr.io/<org-or-user>/<repo>`
+
+These scripts use `tools/infra/run-skaffold.js` to:
 
 - Check your current `kubectl` context
-- Switch to `podman-local` if needed
-- Only then run the resource operation
+- Switch to the intended local Kind context if needed
+  - Run Skaffold using the standard local manifests
 
 **If the context cannot be switched, the script aborts with a clear error.**
 
 ## Customizing the Cluster Name
 
-If you change your local cluster name in `infra/k8s/podman/local/cluster/cluster-config.yaml`, update the `LOCAL_CONTEXT` variable in `tools/infra/kubectl-local-context.js` to match.
+If you change your local cluster name in `infra/k8s/podman/local/cluster/cluster-config.yaml`, the resource scripts will automatically pick it up.
 
 ## Troubleshooting
+
+**Deploy app without rebuilding** (only works if the image is already present in the Kind node image store with the expected tag):
+
+```bash
+node tools/infra/run-skaffold.js run --skip-build
+```
 
 **Kustomize not found after setup**:
 

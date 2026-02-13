@@ -1,0 +1,23 @@
+@api_gateway_HostAddress = http://localhost:5123
+
+# Swagger UI
+GET {{api_gateway_HostAddress}}/swagger
+
+###
+
+# Account Service - Current User
+GET {{api_gateway_HostAddress}}/gateway/account/current-user
+Accept: application/json
+
+###
+
+# Account Service - Login
+POST {{api_gateway_HostAddress}}/gateway/account/login
+Content-Type: application/json
+
+{
+  "username": "test@example.com",
+  "password": "password123"
+}
+
+###

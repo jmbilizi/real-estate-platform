@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-gateway
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod # TLS cert for test
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - API_GATEWAY_DOMAIN_PLACEHOLDER
+      secretName: api-gateway-test-tls
+  rules:
+    - host: API_GATEWAY_DOMAIN_PLACEHOLDER
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway-svc
+                port:
+                  number: 8080

@@ -46,10 +46,10 @@
     <PackageVersion Include="Dapper" Version="2.1.28" />
 
     <!-- API packages -->
-    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="9.0.10" />
-    <PackageVersion Include="Swashbuckle.AspNetCore" Version="9.0.6" />
-    <PackageVersion Include="MMLib.SwaggerForOcelot" Version="9.0.0" />
-    <PackageVersion Include="Ocelot" Version="24.0.1" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.2" />
+    <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.1.1" />
+    <PackageVersion Include="MMLib.SwaggerForOcelot" Version="10.0.0" />
+    <PackageVersion Include="Ocelot" Version="24.1.0" />
     <PackageVersion Include="FluentValidation.AspNetCore" Version="11.3.0" />
     
     <!-- Configuration packages -->
@@ -74,6 +74,6 @@
 
     <!-- Code analysis packages -->
     <PackageVersion Include="StyleCop.Analyzers" Version="1.2.0-beta.507" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="9.0.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.102" />
   </ItemGroup>
 </Project>

@@ -1,67 +1,40 @@
 #!/usr/bin/env node
-// Robust check for Minikube cluster existence (mirrors setup-local-cluster.js)
-function isMinikubeClusterExists() {
-  const result = run(`minikube status --profile=${CLUSTER_NAME}`, {
-    silent: true,
-  });
-  const output = result.output ? result.output.toLowerCase() : "";
-  if (
-    output.includes("no such container") ||
-    output.includes("does not exist") ||
-    output.includes("not found") ||
-    output.includes("no cluster") ||
-    output.includes("no such profile")
-  ) {
-    return false;
-  }
-  return result.success || output.includes("stopped") || output.includes("paused");
-}
+
 /**
- * Delete Local Podman Cluster Script
+ * Delete Kind + Podman Local Cluster
  *
- * Completely removes the local cluster and all related resources:
- * - Deletes Kubernetes resources (pods, services, etc.)
- * - Deletes Minikube cluster
- * - Removes containers
- * - Removes cached images
- * - Cleans up volumes
+ * Performs a thorough cleanup:
+ * - Deletes Kubernetes resources defined in infra/k8s/podman/local
+ * - Removes the Kind cluster (Podman provider)
+ * - Cleans up orphaned Kind containers and images
  *
- * Podman machine is preserved for fast cluster recreation.
- *
- * Usage: npm run infra:local:cluster:delete
+ * Podman machine remains untouched for faster re-creation.
  */
 
 const { execSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 
-// Load and validate cluster name from config
+const WORKSPACE_ROOT = path.resolve(__dirname, "../..");
+const CONFIG_PATH = path.join(WORKSPACE_ROOT, "infra/k8s/podman/local/cluster/cluster-config.yaml");
+const KIND_ENV = { KIND_EXPERIMENTAL_PROVIDER: "podman" };
+
 function getClusterName() {
-  const configPath = path.resolve(__dirname, "../../infra/k8s/podman/local/cluster/cluster-config.yaml");
-  if (!fs.existsSync(configPath)) {
-    console.error(
-      `ERROR: cluster-config.yaml not found at ${configPath}. Please ensure your local cluster config exists and is named correctly.`,
-    );
+  if (!fs.existsSync(CONFIG_PATH)) {
+    console.error(`cluster-config.yaml not found at ${CONFIG_PATH}`);
     process.exit(1);
   }
-  let content;
-  try {
-    content = fs.readFileSync(configPath, "utf-8");
-  } catch (error) {
-    console.error(`ERROR: Failed to read cluster-config.yaml: ${error.message}`);
-    process.exit(1);
-  }
+  const content = fs.readFileSync(CONFIG_PATH, "utf-8");
   const match = content.match(/cluster_name:\s*(.+)/);
   if (!match || !match[1].trim()) {
-    console.error(
-      "ERROR: cluster-config.yaml is missing a valid 'cluster_name' field. Please specify your cluster name, e.g.\ncluster_name: podman-local",
-    );
+    console.error("cluster-config.yaml must define cluster_name");
     process.exit(1);
   }
   return match[1].trim();
 }
 
 const CLUSTER_NAME = getClusterName();
+const KIND_CONTEXT = `kind-${CLUSTER_NAME}`;
 
 const colors = {
   reset: "\x1b[0m",
@@ -91,16 +64,16 @@ function logInfo(message) {
 function run(command, options = {}) {
   try {
     const result = execSync(command, {
-      cwd: path.resolve(__dirname, "../.."),
+      cwd: WORKSPACE_ROOT,
       stdio: options.silent ? "pipe" : "inherit",
       encoding: "utf-8",
       shell: true,
+      env: options.env ? { ...process.env, ...options.env } : process.env,
     });
     return { success: true, output: result };
   } catch (error) {
     return {
       success: false,
-      error,
       output: error.stdout || error.stderr || error.message,
     };
   }
@@ -110,92 +83,96 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isKindClusterPresent() {
+  const result = run("kind get clusters", { silent: true, env: KIND_ENV });
+  if (!result.success) {
+    return false;
+  }
+  return result.output
+    .split(/\r?\n/)
+    .map((name) => name.trim())
+    .filter(Boolean)
+    .includes(CLUSTER_NAME);
+}
+
 async function main() {
-  // Check if cluster exists before attempting deletion
-  if (!isMinikubeClusterExists()) {
-    logInfo(`No Minikube cluster named '${CLUSTER_NAME}' exists. Nothing to delete.`);
-    logInfo("Podman machine is preserved.\n");
+  if (!isKindClusterPresent()) {
+    logInfo(`No Kind cluster named '${CLUSTER_NAME}' detected. Nothing to delete.`);
     return;
   }
+
   log("\n╔════════════════════════════════════════════════════════════╗", "cyan");
   log("║         Delete Local Cluster & All Resources              ║", "cyan");
   log("╚════════════════════════════════════════════════════════════╝\n", "cyan");
 
-  logWarning("This will completely delete the cluster and all its data!");
-  logWarning("Kubernetes resources, containers, images, and volumes will be removed.");
+  logWarning("This will delete the Kind cluster, workloads, and cached images.");
   log("\nPress Ctrl+C to cancel, or wait 5 seconds to continue...\n", "yellow");
-
   await sleep(5000);
 
-  // Step 1: Delete Kubernetes resources (if cluster is running)
   log("\n📋 Deleting Kubernetes resources...", "bright");
-  const deleteResources = run("kustomize build infra/k8s/podman/local --enable-alpha-plugins | kubectl delete -f -", {
-    silent: false,
-  });
-
+  const deleteResources = run(
+    "kustomize build infra/k8s/podman/local --enable-alpha-plugins | kubectl delete -f - --wait=false --timeout=10s",
+  );
   if (deleteResources.success) {
-    logSuccess("Kubernetes resources deleted");
+    logSuccess("Kubernetes resources deletion initiated (non-blocking)");
   } else {
-    logWarning("Could not delete resources (cluster may not be running)");
+    logWarning("Unable to delete resources automatically (cluster may already be down)");
   }
 
-  // Step 2: Delete Minikube cluster
-  log("\n☸️  Deleting Minikube cluster...", "bright");
-  const deleteCluster = run(`minikube delete --profile=${CLUSTER_NAME}`, {
-    silent: false,
-  });
-
+  log("\n☸️  Deleting Kind cluster...", "bright");
+  const deleteCluster = run(`kind delete cluster --name ${CLUSTER_NAME}`, { env: KIND_ENV });
   if (deleteCluster.success) {
-    logSuccess("Cluster deleted successfully");
+    logSuccess("Kind cluster deleted");
   } else {
-    logWarning("Cluster deletion may have failed - continuing cleanup anyway");
+    logWarning("Kind cluster deletion reported an error. Continuing cleanup.");
   }
 
-  // Step 3: Remove orphaned containers
-  logInfo("Cleaning up orphaned containers...");
-  const containers = run(`podman ps -a --filter name=${CLUSTER_NAME} --format {{.Names}}`, { silent: true });
-  if (containers.success && containers.output.trim()) {
-    containers.output
+  logInfo("Cleaning up orphaned Kind containers...");
+  const containerList = run(`podman ps -a --filter label=io.x-k8s.kind.cluster=${CLUSTER_NAME} --format {{.ID}}`, {
+    silent: true,
+  });
+  if (containerList.success && containerList.output.trim()) {
+    containerList.output
       .trim()
-      .split("\n")
-      .forEach((container) => {
-        if (container) {
-          run(`podman rm -f ${container}`, { silent: true });
-        }
-      });
-    logSuccess("Orphaned containers removed");
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .forEach((id) => run(`podman rm -f ${id}`, { silent: true }));
+    logSuccess("Removed orphaned containers");
   } else {
-    logInfo("No orphaned containers found");
+    logInfo("No orphaned containers detected");
   }
 
-  // Step 4: Remove cluster images
-  logInfo("Removing cluster-specific images...");
-  const images = run("podman images --filter reference=gcr.io/k8s-minikube/kicbase --format {{.ID}}", { silent: true });
-  if (images.success && images.output.trim()) {
-    images.output
+  logInfo("Removing cached Kind images...");
+  const imageList = run("podman images --filter reference=kindest/node --format {{.ID}}", { silent: true });
+  if (imageList.success && imageList.output.trim()) {
+    imageList.output
       .trim()
-      .split("\n")
-      .forEach((imageId) => {
-        if (imageId) {
-          run(`podman rmi -f ${imageId}`, { silent: true });
-        }
-      });
-    logSuccess("Cluster images removed");
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .forEach((id) => run(`podman rmi -f ${id}`, { silent: true }));
+    logSuccess("Removed Kind base images");
   } else {
-    logInfo("No cluster images found");
+    logInfo("No cached Kind images found");
   }
 
-  // Step 5: Clean up volumes
-  logInfo("Removing cluster volumes...");
-  run("podman volume prune -f", { silent: true });
-  logSuccess("Volumes cleaned up");
+  logInfo("Cleaning up workspace certificates...");
+  const workspaceCertsPath = path.join(WORKSPACE_ROOT, ".workspace-certs");
+  if (fs.existsSync(workspaceCertsPath)) {
+    try {
+      fs.rmSync(workspaceCertsPath, { recursive: true, force: true });
+      logSuccess("Removed .workspace-certs directory");
+    } catch (error) {
+      logWarning(`Failed to remove .workspace-certs: ${error.message}`);
+    }
+  } else {
+    logInfo("No .workspace-certs directory to clean");
+  }
 
-  log("\n✅ Complete cluster deletion finished", "green");
-  log("\nPodman machine preserved - next setup will be fast (~30s)\n", "cyan");
-  log("To recreate cluster: npm run infra:local:cluster:setup\n", "cyan");
+  log("\n✅ Cluster deletion complete", "green");
+  logInfo("Podman machine preserved. Recreate later via npm run infra:local:cluster:setup");
 }
 
 main().catch((error) => {
-  log(`\n❌ Error: ${error.message}`, "red");
+  log(`\n❌ Error: ${error.message}`);
   process.exit(1);
 });

@@ -49,7 +49,8 @@ data:
     # Create users and grant privileges (idempotent)
     psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
         -- Create dedicated users for each database
-        DO $$
+        -- Using $BODY$ delimiter instead of $$ to avoid Skaffold kustomize YAML parsing bug
+        DO \$BODY\$
         BEGIN
             IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'account_service_db_user') THEN
                 CREATE USER account_service_db_user WITH PASSWORD '${ACCOUNT_SERVICE_DB_USER_PASSWORD}';
@@ -61,7 +62,7 @@ data:
                 CREATE USER property_service_db_user WITH PASSWORD '${PROPERTY_SERVICE_DB_USER_PASSWORD}';
             END IF;
         END
-        $$;
+        \$BODY\$;
         
         -- Grant privileges
         GRANT ALL PRIVILEGES ON DATABASE account_db TO account_service_db_user;

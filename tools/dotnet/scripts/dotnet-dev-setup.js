@@ -34,7 +34,7 @@ if (args.includes("--help") || args.includes("-h")) {
 }
 
 // Configuration
-const requiredDotNetVersion = "9.0.305"; // The required .NET SDK version
+const requiredDotNetVersion = "10.0.102"; // The required .NET SDK version
 
 // Determine if we're running on Windows
 const isWindows = os.platform() === "win32";

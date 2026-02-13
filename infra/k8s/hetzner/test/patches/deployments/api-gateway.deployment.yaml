@@ -1,0 +1,31 @@
+# yaml-language-server: disable
+# API Gateway Deployment Patch for Hetzner Test Environment
+# Medium resources for staging testing
+# OTEL Sampling: 50% (balance between visibility and performance)
+# Environment: Staging
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+spec:
+  replicas: 2 # HA for realistic testing
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    spec:
+      containers:
+        - name: ocelot
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "250m"
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: "Staging"
+            - name: OTEL_TRACES_SAMPLER_ARG
+              value: "0.5" # 50% sampling for test

@@ -308,7 +308,7 @@ Configure in: Repository Settings → Secrets and variables → Actions
   ```bash
   npm run infra:local:cluster:setup         # Setup cluster (one-time)
   npm run infra:local:cluster:setup -- --apply   # Setup + deploy resources
-  npm run infra:local:k8s-resources:apply         # Deploy resources only
+   node tools/infra/run-skaffold.js run --port-forward --tail  # Deploy resources (same apply semantics)
   npm run infra:local:cluster:delete        # Remove cluster
   ```
 

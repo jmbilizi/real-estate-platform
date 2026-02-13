@@ -1,0 +1,7 @@
+{
+  "GlobalConfiguration": {
+    "BaseUrl": "https://localhost"
+  },
+  "Routes": [],
+  "SwaggerEndPoints": []
+}

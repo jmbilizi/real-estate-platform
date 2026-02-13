@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: default
+  labels:
+    app: api-gateway
+spec:
+  # Patches can confirm or override this default replica count
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      containers:
+        - name: ocelot
+          image: ghcr.io/REPLACE_WITH_YOUR_USERNAME/api-gateway:latest
+          imagePullPolicy: IfNotPresent
+          # Patches can confirm or override these minimal resource settings
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "100m"
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            # ASPNETCORE_ENVIRONMENT: Defined in patches (Development/Staging/Production)
+            - name: ASPNETCORE_URLS
+              value: "http://+:8080"
+            # OpenTelemetry integration (Jaeger)
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://jaeger-svc:4318"
+            - name: OTEL_SERVICE_NAME
+              value: "api-gateway"
+            - name: OTEL_TRACES_SAMPLER
+              value: "traceidratio"
+            # OTEL_TRACES_SAMPLER_ARG: Defined in patches (1.0 dev, 0.5 test, 0.05 prod)
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3

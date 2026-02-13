@@ -1,0 +1,31 @@
+# yaml-language-server: disable
+# API Gateway Deployment Patch for Hetzner Prod Environment
+# Production-grade resources with HA
+# OTEL Sampling: 5% (performance optimized)
+# Environment: Production
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+spec:
+  replicas: 3 # HA with 3 replicas for production
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    spec:
+      containers:
+        - name: ocelot
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: "Production"
+            - name: OTEL_TRACES_SAMPLER_ARG
+              value: "0.05" # 5% sampling for prod (adjust based on traffic)

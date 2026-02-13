@@ -1,0 +1,67 @@
+# Skaffold Configuration for Real Estate Platform
+# https://skaffold.dev/docs/references/yaml/
+#
+# Relationship with Nx:
+# - Local dev: Skaffold watches files directly (bypasses Nx for speed)
+# - CI/CD: Use an Nx-driven profile in the future to leverage caching/affected detection
+apiVersion: skaffold/v4beta11
+kind: Config
+metadata:
+  name: real-estate-platform
+
+build:
+  tagPolicy:
+    gitCommit:
+      variant: AbbrevCommitSha
+
+  artifacts:
+    - image: api-gateway
+      context: .
+      custom:
+        buildCommand: node tools/infra/skaffold-build.js
+        dependencies:
+          paths:
+            - apps/api-gateway/**
+
+  local:
+    # IMPORTANT: This must be true for the Podman+Kind workflow.
+    # - The cluster pulls from the local registry (localhost:5001)
+    # - Skaffold will resolve the image digest from the registry
+    # - The digest change updates the Deployment and triggers a rollout
+    push: true
+    useBuildkit: false
+    concurrency: 0
+
+manifests:
+  kustomize:
+    paths:
+      - infra/k8s/podman/local
+    buildArgs:
+      - --enable-alpha-plugins
+
+deploy:
+  kubectl: {}
+
+portForward:
+  - resourceType: service
+    resourceName: api-gateway-svc
+    namespace: default
+    port: 8080
+    localPort: 8080
+  - resourceType: service
+    resourceName: postgres-svc
+    namespace: default
+    port: 5432
+    localPort: 5432
+  - resourceType: service
+    resourceName: redis-svc
+    namespace: default
+    port: 6379
+    localPort: 6379
+  - resourceType: service
+    resourceName: jaeger-svc
+    namespace: default
+    port: 16686
+    localPort: 16686
+
+profiles: []

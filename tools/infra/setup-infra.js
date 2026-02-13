@@ -158,7 +158,7 @@ function addToPath(binDir) {
       }
 
       // Add to shell profile
-      fs.appendFileSync(shellProfile, `\n# Kustomize\n${exportLine}\n`);
+      fs.appendFileSync(shellProfile, `\n# Infrastructure tools\n${exportLine}\n`);
       logSuccess(`Added to ${shellProfile}`);
       logWarning("Run: source " + shellProfile + " (or restart terminal)");
 
@@ -313,7 +313,7 @@ function installKustomize() {
 
       // Make executable on Unix systems
       if (platform !== "win32") {
-        fs.chmodSync(binaryPath, "755");
+        fs.chmodSync(binaryPath, 0o755);
       }
 
       logSuccess(`Kustomize installed to ${binaryPath}`);
@@ -381,12 +381,234 @@ function installKubectl() {
     return true;
   }
 
-  logWarning("kubectl not found - install for advanced validation");
-  logWarning("Windows: choco install kubernetes-cli");
-  logWarning("macOS: brew install kubectl");
-  logWarning("Linux: https://kubernetes.io/docs/tasks/tools/");
+  const version = "1.31.0"; // Latest stable as of Feb 2026
+  const platform = os.platform();
+  const arch = os.arch();
+  const binDir = path.join(os.homedir(), ".local", "bin");
+  const binaryName = platform === "win32" ? "kubectl.exe" : "kubectl";
+  const binaryPath = path.join(binDir, binaryName);
 
+  // Check if binary exists but not in PATH
+  if (fs.existsSync(binaryPath)) {
+    log("kubectl binary found but not in PATH", "yellow");
+    addToPath(binDir);
+
+    // Verify it's now accessible
+    if (checkKubectl()) {
+      return true;
+    }
+  }
+
+  // Determine platform-specific download URL
+  let downloadUrl;
+
+  if (platform === "win32") {
+    downloadUrl = `https://dl.k8s.io/release/v${version}/bin/windows/amd64/kubectl.exe`;
+  } else if (platform === "darwin") {
+    const macArch = arch === "arm64" ? "arm64" : "amd64";
+    downloadUrl = `https://dl.k8s.io/release/v${version}/bin/darwin/${macArch}/kubectl`;
+  } else {
+    // Linux
+    const linuxArch = arch === "arm64" ? "arm64" : "amd64";
+    downloadUrl = `https://dl.k8s.io/release/v${version}/bin/linux/${linuxArch}/kubectl`;
+  }
+
+  // Ensure bin directory exists
+  if (!fs.existsSync(binDir)) {
+    fs.mkdirSync(binDir, { recursive: true });
+    logSuccess(`Created ${binDir}`);
+  }
+
+  try {
+    log(`Downloading kubectl v${version} for ${platform}...`, "blue");
+
+    // Download the binary
+    const downloadCmd = `curl -L -o "${binaryPath}" "${downloadUrl}"`;
+    const downloadResult = run(downloadCmd, { silent: true });
+    if (!downloadResult.success) {
+      throw new Error("Download failed");
+    }
+
+    logSuccess("Download complete");
+
+    // Make executable on Unix-like systems
+    if (platform !== "win32") {
+      fs.chmodSync(binaryPath, 0o755);
+      logSuccess("Binary marked as executable");
+    }
+
+    // Add to PATH on Windows
+    if (platform === "win32") {
+      addToPath(binDir);
+
+      // Refresh PATH from registry (same as Kustomize and Skaffold)
+      try {
+        const { spawnSync } = require("child_process");
+        const refreshPathCmd =
+          "[System.Environment]::GetEnvironmentVariable('PATH', 'Machine') + ';' + [System.Environment]::GetEnvironmentVariable('PATH', 'User')";
+
+        const result = spawnSync("powershell", ["-NoProfile", "-Command", refreshPathCmd], {
+          encoding: "utf8",
+          stdio: "pipe",
+        });
+
+        if (result.status === 0 && result.stdout) {
+          const newPath = result.stdout.trim();
+          process.env.PATH = newPath;
+          logSuccess("PATH refreshed - kubectl is now available in this session");
+        }
+      } catch (error) {
+        logWarning(`Failed to refresh PATH: ${error.message}`);
+      }
+    }
+
+    // Verify installation
+    if (checkKubectl()) {
+      logSuccess(`kubectl v${version} installed successfully`);
+      return true;
+    } else {
+      throw new Error("Installation verification failed");
+    }
+  } catch (error) {
+    logError(`Failed to install kubectl: ${error.message}`);
+
+    // Clean up on failure
+    if (fs.existsSync(binaryPath)) {
+      fs.unlinkSync(binaryPath);
+    }
+
+    logWarning("Fallback: Install manually");
+    logWarning("Windows: choco install kubernetes-cli");
+    logWarning("macOS: brew install kubectl");
+    logWarning(`Linux/Manual: curl -LO ${downloadUrl} && chmod +x kubectl && sudo mv kubectl /usr/local/bin`);
+
+    return false;
+  }
+}
+
+function checkSkaffold() {
+  const result = run("skaffold version", { silent: true });
+  if (result.success) {
+    const version = result.output.trim();
+    logSuccess(`Skaffold already installed: ${version}`);
+    return true;
+  }
   return false;
+}
+
+function installSkaffold() {
+  logStep("Installing Skaffold (for local K8s development workflow)");
+
+  if (checkSkaffold()) {
+    return true;
+  }
+
+  const version = "2.13.2"; // Latest stable with Kind hooks support (customActions)
+  const platform = os.platform();
+  const arch = os.arch();
+  const binDir = path.join(os.homedir(), ".local", "bin");
+  const binaryName = platform === "win32" ? "skaffold.exe" : "skaffold";
+  const binaryPath = path.join(binDir, binaryName);
+
+  // Check if binary exists but not in PATH
+  if (fs.existsSync(binaryPath)) {
+    log("Skaffold binary found but not in PATH", "yellow");
+    addToPath(binDir);
+
+    // Verify it's now accessible
+    if (checkSkaffold()) {
+      return true;
+    }
+  }
+
+  // Determine platform-specific download URL
+  let downloadUrl;
+
+  if (platform === "win32") {
+    downloadUrl = `https://github.com/GoogleContainerTools/skaffold/releases/download/v${version}/skaffold-windows-amd64.exe`;
+  } else if (platform === "darwin") {
+    const macArch = arch === "arm64" ? "arm64" : "amd64";
+    downloadUrl = `https://github.com/GoogleContainerTools/skaffold/releases/download/v${version}/skaffold-darwin-${macArch}`;
+  } else {
+    // Linux
+    const linuxArch = arch === "arm64" ? "arm64" : "amd64";
+    downloadUrl = `https://github.com/GoogleContainerTools/skaffold/releases/download/v${version}/skaffold-linux-${linuxArch}`;
+  }
+
+  // Ensure bin directory exists
+  if (!fs.existsSync(binDir)) {
+    fs.mkdirSync(binDir, { recursive: true });
+    logSuccess(`Created ${binDir}`);
+  }
+
+  try {
+    log(`Downloading Skaffold v${version} for ${platform}...`, "blue");
+
+    // Download the binary
+    const downloadCmd = `curl -L -o "${binaryPath}" "${downloadUrl}"`;
+    const downloadResult = run(downloadCmd, { silent: true });
+    if (!downloadResult.success) {
+      throw new Error("Download failed");
+    }
+
+    logSuccess("Download complete");
+
+    // Make executable on Unix-like systems
+    if (platform !== "win32") {
+      fs.chmodSync(binaryPath, 0o755);
+      logSuccess("Binary marked as executable");
+    }
+
+    // Add to PATH
+    addToPath(binDir);
+
+    // Windows: Refresh PATH from registry
+    if (platform === "win32") {
+      // Refresh PATH from registry (same as Kustomize)
+      try {
+        const { spawnSync } = require("child_process");
+        const refreshPathCmd =
+          "[System.Environment]::GetEnvironmentVariable('PATH', 'Machine') + ';' + [System.Environment]::GetEnvironmentVariable('PATH', 'User')";
+
+        const result = spawnSync("powershell", ["-NoProfile", "-Command", refreshPathCmd], {
+          encoding: "utf8",
+          stdio: "pipe",
+        });
+
+        if (result.status === 0 && result.stdout) {
+          const newPath = result.stdout.trim();
+          process.env.PATH = newPath;
+          logSuccess("PATH refreshed - Skaffold is now available in this session");
+        }
+      } catch (error) {
+        logWarning(`Failed to refresh PATH: ${error.message}`);
+      }
+    }
+
+    // Verify installation
+    if (checkSkaffold()) {
+      logSuccess(`Skaffold v${version} installed successfully`);
+      return true;
+    } else {
+      throw new Error("Installation verification failed");
+    }
+  } catch (error) {
+    logError(`Failed to install Skaffold: ${error.message}`);
+
+    // Clean up on failure
+    if (fs.existsSync(binaryPath)) {
+      fs.unlinkSync(binaryPath);
+    }
+
+    logWarning("Fallback: Install manually");
+    logWarning("Windows: choco install skaffold");
+    logWarning("macOS: brew install skaffold");
+    logWarning(
+      `Linux/Manual: curl -Lo skaffold ${downloadUrl} && chmod +x skaffold && sudo mv skaffold /usr/local/bin`,
+    );
+
+    return false;
+  }
 }
 
 function main() {
@@ -394,9 +616,11 @@ function main() {
 
   log("\nThis script installs tools for Kubernetes infrastructure development:", "blue");
   log("  • Kustomize - Kubernetes manifest templating", "blue");
+  log("  • Skaffold - Local K8s development workflow (watch/build/deploy)", "blue");
   log("  • kubectl (optional) - Kubernetes CLI for dry-run validation\n", "blue");
 
   const kustomizeInstalled = installKustomize();
+  const skaffoldInstalled = installSkaffold();
   const kubectlInstalled = installKubectl();
 
   logStep("Setup Summary");
@@ -405,6 +629,12 @@ function main() {
     logSuccess("Kustomize is ready");
   } else {
     logError("Kustomize installation failed - manual installation required");
+  }
+
+  if (skaffoldInstalled) {
+    logSuccess("Skaffold is ready");
+  } else {
+    logWarning("Skaffold installation failed - install manually for local K8s dev workflow");
   }
 
   if (kubectlInstalled) {
@@ -418,11 +648,15 @@ function main() {
   log("\n1. Validate Kustomize files:", "cyan");
   log("   npm run infra:validate", "bright");
 
-  log("\n2. Build manifests for local testing:", "cyan");
+  log("\n2. Start local K8s development workflow:", "cyan");
+  log("   npm run skaffold", "bright");
+  log("   (auto-watch/rebuild/deploy on code changes)", "blue");
+
+  log("\n3. Build manifests for manual testing:", "cyan");
   log("   kustomize build infra/k8s/{provider}/{env} --enable-alpha-plugins", "bright");
   log("   Example: kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins", "blue");
 
-  log("\n3. Git hooks will automatically validate Kustomize files on commit/push\n", "cyan");
+  log("\n4. Git hooks will automatically validate Kustomize files on commit/push\n", "cyan");
 
   if (!kustomizeInstalled && os.platform() === "win32") {
     log("\n⚠ Windows users: Install Kustomize manually and re-run this script\n", "yellow");

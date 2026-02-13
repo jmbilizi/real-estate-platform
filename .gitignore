@@ -5,6 +5,9 @@
 .nx/nx-cloud.env
 .nx/project-graph.json
 
+# Workspace CA certificates (auto-generated for Docker builds)
+.workspace-certs/
+
 # Node
 node_modules/
 dist/

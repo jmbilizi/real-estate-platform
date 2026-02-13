@@ -1,0 +1,52 @@
+{
+  "ServiceName": "GenericService",
+  "Active": false,
+  "SwaggerEndPoints": [
+    {
+      "Key": "GenericService",
+      "Config": [
+        {
+          "Name": "Generic Service API",
+          "Version": "v1",
+          "Url": "/swagger/docs/v1"
+        }
+      ]
+    }
+  ],
+  "Routes": [
+    {
+      "UpstreamPathTemplate": "/gateway/service/{everything}",
+      "UpstreamHttpMethod": ["GET", "POST", "PUT", "DELETE", "PATCH"],
+      "DownstreamPathTemplate": "/api/service/{everything}",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "service-name",
+          "Port": 8080
+        }
+      ],
+      "AuthenticationOptions": {
+        "AuthenticationProviderKey": "Bearer",
+        "AllowedScopes": []
+      },
+      "RateLimitOptions": {
+        "ClientWhitelist": [],
+        "EnableRateLimiting": true,
+        "Period": "1s",
+        "PeriodTimespan": 1,
+        "Limit": 100
+      },
+      "QoSOptions": {
+        "ExceptionsAllowedBeforeBreaking": 3,
+        "DurationOfBreak": 10000,
+        "TimeoutValue": 5000
+      },
+      "LoadBalancerOptions": {
+        "Type": "RoundRobin"
+      },
+      "FileCacheOptions": {
+        "TtlSeconds": 0
+      }
+    }
+  ]
+}

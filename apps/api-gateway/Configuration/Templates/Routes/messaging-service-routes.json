@@ -1,0 +1,42 @@
+{
+  "ServiceName": "Messaging",
+  "Active": true,
+  "SwaggerEndPoints": [
+    {
+      "Key": "Messaging",
+      "Config": [
+        {
+          "Name": "Messaging API",
+          "Version": "v1",
+          "Url": "/swagger/docs/v1"
+        }
+      ]
+    }
+  ],
+  "Routes": [
+    {
+      "UpstreamPathTemplate": "/gateway/messaging/send-message",
+      "UpstreamHttpMethod": ["POST"],
+      "DownstreamPathTemplate": "/api/messaging/send-message",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 7163
+        }
+      ]
+    },
+    {
+      "UpstreamPathTemplate": "/gateway/messaging/current-user-chats",
+      "UpstreamHttpMethod": ["GET"],
+      "DownstreamPathTemplate": "/api/messaging/current-user-chats",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 7163
+        }
+      ]
+    }
+  ]
+}

@@ -1,36 +1,34 @@
-# LOCAL CLUSTER CONFIGURATION (Minikube + Podman)
-# ------------------------------------------------
+# LOCAL CLUSTER CONFIGURATION (Kind + Podman)
+# ------------------------------------------
 # Edit ONLY the fields below to control your local Kubernetes cluster.
-# All other settings are handled automatically for you.
+# Everything else (CA install, Kind creation, manifest apply) is automated by
+# tools/infra/setup-local-cluster.js.
 #
 # USAGE:
 #   npm run infra:local:cluster:setup   # Create or repair cluster
 #   npm run infra:local:cluster:delete  # Delete cluster
 #
-# For application deployment controls, see: infra/deploy-control.yaml
+# For application deployment controls, see infra/deploy-control.yaml.
 
-# Name for your local cluster (rarely changed)
-kubernetes_version: v1.28.3
+# Kubernetes version Kind should use (must match a published kindest/node tag)
+kubernetes_version: v1.28.0
 
+# Name for your local cluster (also used for kubectl context: kind-<name>)
 cluster_name: myapp-podman-local
 
-# Minikube driver: set to 'docker' for Docker Desktop, 'podman' for Podman Desktop
-driver: podman
-
-# Number of nodes (set to 1 for single-node, 2+ for multi-node dev)
+# Number of nodes (1 = control-plane only, 2+ adds workers)
 nodes: 1
 
-# Resources PER NODE (adjust if you need more/less power)
+# Resources PER NODE (Kind reuses the Podman machine, so total = nodes * values)
 resources:
   # CPU cores per node
   cpus: 2
-  # Memory in MB per node (3GB)
+  # Memory in MB per node (3GB default)
   memory: 3072
-  # Disk size per node
+  # Disk size per node (affects Podman machine disk allocation)
   disk: 20g
 
-# (Optional) List of insecure registries for dev images (rarely changed)
-# Only add here if you use a custom/local registry without TLS
+# (Optional) List of insecure registries Podman should trust for local dev
 registries:
   insecure:
     - gcr.io
