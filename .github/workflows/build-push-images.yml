@@ -202,20 +202,21 @@ jobs:
                 # For workflow_call from CI, use affected based on last commit
                 BASE="HEAD~1"
               else
-                # For workflow_dispatch, compare against branch base
-                BRANCH="${{ github.ref_name }}"
-                if [ "$BRANCH" = "main" ]; then
-                  BASE="origin/main~1"
-                elif [ "$BRANCH" = "test" ]; then
-                  BASE="origin/test~1"
-                else
-                  BASE="origin/dev"
-                fi
+                # For workflow_dispatch, use lookback to find affected changes
+                # (comparing current branch to origin/branch returns nothing)
+                BASE="HEAD~5"
               fi
               echo "🔍 DEBUG: Using base: $BASE"
               echo "🔍 DEBUG: Running: npx nx show projects --affected --base=$BASE --withTarget=container-build"
               PROJECTS=$(npx nx show projects --affected --base=$BASE --withTarget=container-build)
               echo "🔍 DEBUG: Affected projects result: '$PROJECTS'"
+              
+              # If no projects affected in last 5 commits, build all
+              if [ -z "$PROJECTS" ]; then
+                echo "⚠️  No affected projects in last 5 commits, building ALL services"
+                PROJECTS=$(npx nx show projects --withTarget=container-build)
+                echo "🔍 DEBUG: Building all: '$PROJECTS'"
+              fi
             else
               echo "🔍 DEBUG: Using explicit projects list: ${{ inputs.projects }}"
               PROJECTS="${{ inputs.projects }}"
