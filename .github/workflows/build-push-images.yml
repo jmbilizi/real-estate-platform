@@ -134,6 +134,31 @@ jobs:
         id: affected
         shell: bash
         run: |
+          # Check if workflow files changed (global trigger - build all services)
+          if [ "${{ github.event_name }}" = "workflow_call" ] || [ "${{ github.event_name }}" = "push" ]; then
+            # Get changed files to detect workflow changes
+            if git rev-parse HEAD^ >/dev/null 2>&1; then
+              FILES=$(git diff --name-only HEAD^ HEAD)
+            else
+              FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+            fi
+            
+            # If workflow files changed, build all services
+            if echo "$FILES" | grep -E -q '^\.github/workflows/build-push-images\.yml|^\.github/actions/build-push-image/'; then
+              echo "🚨 Build workflow files changed - building ALL services"
+              PROJECTS=$(npx nx show projects --withTarget=container-build 2>/dev/null || echo "")
+              echo "projects=$PROJECTS" >> $GITHUB_OUTPUT
+              
+              if [ -n "$PROJECTS" ]; then
+                echo "📦 Projects to build:"
+                echo "$PROJECTS" | tr ' ' '\n' | sed 's/^/  - /'
+              else
+                echo "ℹ️  No projects with container-build target found"
+              fi
+              exit 0
+            fi
+          fi
+
           # workflow_call and workflow_dispatch both use inputs
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "workflow_call" ]; then
             if [ "${{ inputs.projects }}" = "all" ]; then
@@ -188,8 +213,9 @@ jobs:
             exit 0
           fi
 
-          # Convert space-separated list to JSON array
-          JSON_ARRAY=$(echo "$PROJECTS" | jq -R 'split(" ") | map(select(. != ""))')
+          # Convert to JSON array
+          # Handle newline-separated (from nx), space-separated, or comma-separated formats
+          JSON_ARRAY=$(echo "$PROJECTS" | tr ',\n' ' ' | tr -s ' ' | xargs -n1 | jq -R -s -c 'split("\n") | map(select(length > 0))')
 
           echo "build-required=true" >> $GITHUB_OUTPUT
           echo "projects=$JSON_ARRAY" >> $GITHUB_OUTPUT

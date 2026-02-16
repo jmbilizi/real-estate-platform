@@ -59,7 +59,15 @@ Push → CI (quality checks) → Build-Push-Images → Deploy (after images read
 
 # Scenario 4: Cluster config changed
 Push → CI (quality checks) → Provision Cluster → Deploy
+
+# Scenario 5: Build workflow files changed
+Push → CI (quality checks) → Build-Push-Images (ALL services) → Deploy
 ```
+
+**Global Triggers:**
+
+- **Build workflow changes** (`.github/workflows/build-push-images.yml`, `.github/actions/build-push-image/`): Rebuilds ALL services to validate workflow integrity
+- Similar to deploy workflow, ensures changes to build infrastructure are tested against all services
 
 **Key Benefits:**
 
@@ -159,6 +167,7 @@ All Dockerfiles follow this pattern:
 
 - ✅ CI-gated execution (only runs after quality checks pass)
 - ✅ Nx affected detection (only builds changed services)
+- ✅ Global trigger: workflow file changes rebuild ALL services
 - ✅ Matrix builds (parallel image building)
 - ✅ Docker BuildKit with layer caching
 - ✅ Multi-architecture support
