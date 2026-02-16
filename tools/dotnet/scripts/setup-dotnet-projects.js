@@ -264,6 +264,22 @@ function createProjectJson(projectName, projectConfig) {
       needsUpdate = true;
     }
 
+    // Container-build target (application projects with Dockerfile only)
+    const dockerfilePath = path.join(projectRoot, "Dockerfile");
+    if (projectType === "application" && !isTest && fs.existsSync(dockerfilePath)) {
+      if (!existingContent.targets["container-build"]) {
+        existingContent.targets["container-build"] = {
+          executor: "nx:run-commands",
+          options: {
+            command: "node tools/docker/build-image.js {projectName} --tag={args.tag}",
+            cwd: ".",
+          },
+        };
+        missingTargets.push("container-build");
+        needsUpdate = true;
+      }
+    }
+
     // Ensure tags include 'dotnet'
     existingContent.tags = existingContent.tags || [];
     if (!existingContent.tags.includes("dotnet")) {
@@ -335,6 +351,18 @@ function createProjectJson(projectName, projectConfig) {
       options: {
         command: "dotnet test",
         cwd: projectRoot,
+      },
+    };
+  }
+
+  // Add container-build target for application projects with Dockerfile
+  const dockerfilePath = path.join(projectRoot, "Dockerfile");
+  if (projectType === "application" && !isTest && fs.existsSync(dockerfilePath)) {
+    targets["container-build"] = {
+      executor: "nx:run-commands",
+      options: {
+        command: "node tools/docker/build-image.js {projectName} --tag={args.tag}",
+        cwd: ".",
       },
     };
   }

@@ -38,6 +38,13 @@
         "command": "dotnet run",
         "cwd": "apps/api-gateway"
       }
+    },
+    "container-build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node tools/docker/build-image.js {projectName} --tag={args.tag}",
+        "cwd": "."
+      }
     }
   },
   "tags": ["dotnet", "service"]

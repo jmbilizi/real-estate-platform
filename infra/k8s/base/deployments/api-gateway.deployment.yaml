@@ -18,7 +18,10 @@ spec:
     spec:
       containers:
         - name: ocelot
-          image: ghcr.io/REPLACE_WITH_YOUR_USERNAME/api-gateway:latest
+          # Image format: ghcr.io/<owner>/<repo>/api-gateway:<tag>
+          # CI/CD workflow substitutes GITHUB_REPOSITORY_OWNER, GITHUB_REPOSITORY_NAME
+          # Local development uses Skaffold override (see podman/local/patches)
+          image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/api-gateway:latest
           imagePullPolicy: IfNotPresent
           # Patches can confirm or override these minimal resource settings
           resources:

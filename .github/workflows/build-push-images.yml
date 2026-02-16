@@ -1,0 +1,365 @@
+name: Build and Push Container Images
+
+# Workflow to build and push Docker images to GitHub Container Registry
+# Only runs on target branches (dev, test, main) - feature branches are excluded
+# Uses Nx affected detection to build only changed services
+
+on:
+  push:
+    branches:
+      - main
+      - test
+      - dev
+    paths:
+      - "apps/**/Dockerfile"
+      - "apps/**/*.csproj"
+      - "apps/**/*.cs"
+      - "apps/**/package.json"
+      - "apps/**/*.ts"
+      - "apps/**/*.py"
+      - "libs/**"
+      - "tools/docker/**"
+      - ".github/workflows/build-push-images.yml"
+      - ".github/actions/build-push-image/**"
+  pull_request:
+    branches:
+      - main
+      - test
+      - dev
+    paths:
+      - "apps/**/Dockerfile"
+      - "apps/**/*.csproj"
+      - "apps/**/*.cs"
+      - "apps/**/package.json"
+      - "apps/**/*.ts"
+      - "apps/**/*.py"
+      - "libs/**"
+      - "tools/docker/**"
+      - ".github/workflows/build-push-images.yml"
+      - ".github/actions/build-push-image/**"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment (determines tag)"
+        required: true
+        type: choice
+        options:
+          - dev
+          - test
+          - prod
+      projects:
+        description: "Projects to build (comma-separated, or 'all')"
+        required: false
+        default: "affected"
+      push:
+        description: "Push images to registry"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  packages: write # Required for GHCR push
+  security-events: write # Required for Trivy scan upload
+
+concurrency:
+  group: build-images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Detect affected projects with container-build target
+  detect-affected:
+    runs-on: ubuntu-latest
+    outputs:
+      projects: ${{ steps.matrix.outputs.projects }}
+      build-required: ${{ steps.matrix.outputs.build-required }}
+      environment: ${{ steps.env.outputs.environment }}
+      tag: ${{ steps.env.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Enable Nx affected commands
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.19.5"
+
+      - name: Cache node_modules
+        uses: actions/cache/restore@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Determine environment and tag
+        id: env
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ENV="${{ inputs.environment }}"
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            ENV="prod"
+          elif [ "${{ github.ref }}" = "refs/heads/test" ]; then
+            ENV="test"
+          else
+            ENV="dev"
+          fi
+
+          # Determine tag based on environment
+          if [ "$ENV" = "prod" ]; then
+            TAG="latest"
+          else
+            TAG="$ENV"
+          fi
+
+          # Add commit SHA for traceability
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          FULL_TAG="${TAG}-sha-${SHORT_SHA}"
+
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+          echo "tag=$FULL_TAG" >> $GITHUB_OUTPUT
+          echo "base_tag=$TAG" >> $GITHUB_OUTPUT
+
+          echo "🎯 Environment: $ENV"
+          echo "🏷️  Tag: $FULL_TAG"
+
+      - name: Get affected projects
+        id: affected
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ inputs.projects }}" = "all" ]; then
+              PROJECTS=$(npx nx show projects --withTarget=container-build 2>/dev/null || echo "")
+            elif [ "${{ inputs.projects }}" = "affected" ]; then
+              if [ "${{ github.event_name }}" = "pull_request" ]; then
+                PROJECTS=$(npx nx print-affected --base=origin/${{ github.base_ref }} --target=container-build --select=projects 2>/dev/null || echo "")
+              else
+                PROJECTS=$(npx nx show projects --withTarget=container-build 2>/dev/null || echo "")
+              fi
+            else
+              PROJECTS="${{ inputs.projects }}"
+            fi
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            # For PRs, only build affected projects
+            PROJECTS=$(npx nx print-affected --base=origin/${{ github.base_ref }} --target=container-build --select=projects 2>/dev/null || echo "")
+          else
+            # For push to target branches, build all projects with container-build target
+            PROJECTS=$(npx nx show projects --withTarget=container-build 2>/dev/null || echo "")
+          fi
+
+          echo "projects=$PROJECTS" >> $GITHUB_OUTPUT
+
+          if [ -n "$PROJECTS" ]; then
+            echo "📦 Projects to build:"
+            echo "$PROJECTS" | tr ' ' '\n' | sed 's/^/  - /'
+          else
+            echo "ℹ️  No projects with container-build target found"
+          fi
+
+      - name: Build matrix
+        id: matrix
+        shell: bash
+        run: |
+          PROJECTS="${{ steps.affected.outputs.projects }}"
+
+          if [ -z "$PROJECTS" ]; then
+            echo "build-required=false" >> $GITHUB_OUTPUT
+            echo "projects=[]" >> $GITHUB_OUTPUT
+            echo "ℹ️  No projects to build"
+            exit 0
+          fi
+
+          # Convert space-separated list to JSON array
+          JSON_ARRAY=$(echo "$PROJECTS" | jq -R 'split(" ") | map(select(. != ""))')
+
+          echo "build-required=true" >> $GITHUB_OUTPUT
+          echo "projects=$JSON_ARRAY" >> $GITHUB_OUTPUT
+
+          echo "✅ Build matrix:"
+          echo "$JSON_ARRAY" | jq -r '.[]' | sed 's/^/  - /'
+
+  # Build and push images for dev environment
+  build-dev:
+    needs: detect-affected
+    if: |
+      needs.detect-affected.outputs.build-required == 'true' &&
+      needs.detect-affected.outputs.environment == 'dev'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project: ${{ fromJson(needs.detect-affected.outputs.projects) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and push ${{ matrix.project }}
+        uses: ./.github/actions/build-push-image
+        with:
+          project: ${{ matrix.project }}
+          tag: ${{ needs.detect-affected.outputs.tag }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          push: ${{ github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.push) }}
+          scan-image: "false" # Disable scanning in dev for speed
+
+      - name: Generate deployment artifact
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          cat > artifacts/${{ matrix.project }}-image.txt <<EOF
+          IMAGE=ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ matrix.project }}:${{ needs.detect-affected.outputs.tag }}
+          PROJECT=${{ matrix.project }}
+          ENVIRONMENT=dev
+          TAG=${{ needs.detect-affected.outputs.tag }}
+          SHA=${{ github.sha }}
+          EOF
+
+      - name: Upload deployment artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ matrix.project }}-dev
+          path: artifacts/${{ matrix.project }}-image.txt
+          retention-days: 30
+
+  # Build and push images for test environment
+  build-test:
+    needs: detect-affected
+    if: |
+      needs.detect-affected.outputs.build-required == 'true' &&
+      needs.detect-affected.outputs.environment == 'test'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project: ${{ fromJson(needs.detect-affected.outputs.projects) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and push ${{ matrix.project }}
+        uses: ./.github/actions/build-push-image
+        with:
+          project: ${{ matrix.project }}
+          tag: ${{ needs.detect-affected.outputs.tag }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          push: ${{ github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.push) }}
+          scan-image: "true" # Enable scanning in test
+
+      - name: Generate deployment artifact
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          cat > artifacts/${{ matrix.project }}-image.txt <<EOF
+          IMAGE=ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ matrix.project }}:${{ needs.detect-affected.outputs.tag }}
+          PROJECT=${{ matrix.project }}
+          ENVIRONMENT=test
+          TAG=${{ needs.detect-affected.outputs.tag }}
+          SHA=${{ github.sha }}
+          EOF
+
+      - name: Upload deployment artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ matrix.project }}-test
+          path: artifacts/${{ matrix.project }}-image.txt
+          retention-days: 30
+
+  # Build and push images for production environment
+  build-prod:
+    needs: detect-affected
+    if: |
+      needs.detect-affected.outputs.build-required == 'true' &&
+      needs.detect-affected.outputs.environment == 'prod'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project: ${{ fromJson(needs.detect-affected.outputs.projects) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and push ${{ matrix.project }}
+        id: build
+        uses: ./.github/actions/build-push-image
+        with:
+          project: ${{ matrix.project }}
+          tag: ${{ needs.detect-affected.outputs.tag }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          push: ${{ github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.push) }}
+          scan-image: "true" # Enable scanning in prod
+
+      - name: Tag as latest
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          IMAGE_BASE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ matrix.project }}"
+
+          # Tag with 'latest' for production
+          docker buildx imagetools create \
+            "$IMAGE_BASE:${{ needs.detect-affected.outputs.tag }}" \
+            --tag "$IMAGE_BASE:latest" \
+            --tag "$IMAGE_BASE:prod"
+
+          echo "✅ Additional tags created: latest, prod"
+
+      - name: Generate deployment artifact
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          cat > artifacts/${{ matrix.project }}-image.txt <<EOF
+          IMAGE=ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ matrix.project }}:${{ needs.detect-affected.outputs.tag }}
+          PROJECT=${{ matrix.project }}
+          ENVIRONMENT=prod
+          TAG=${{ needs.detect-affected.outputs.tag }}
+          SHA=${{ github.sha }}
+          LATEST=ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ matrix.project }}:latest
+          EOF
+
+      - name: Upload deployment artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ matrix.project }}-prod
+          path: artifacts/${{ matrix.project }}-image.txt
+          retention-days: 90 # Keep production artifacts longer
+
+  # Summary job
+  summary:
+    needs: [detect-affected, build-dev, build-test, build-prod]
+    if: always() && needs.detect-affected.outputs.build-required == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build summary
+        shell: bash
+        run: |
+          echo "## 🐳 Container Image Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Environment** | ${{ needs.detect-affected.outputs.environment }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Tag** | \`${{ needs.detect-affected.outputs.tag }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Projects Built** | ${{ join(fromJson(needs.detect-affected.outputs.projects), ', ') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Trigger** | ${{ github.event_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Job status
+          echo "### 📊 Build Status" >> $GITHUB_STEP_SUMMARY
+          DEV_STATUS="${{ needs.build-dev.result }}"
+          TEST_STATUS="${{ needs.build-test.result }}"
+          PROD_STATUS="${{ needs.build-prod.result }}"
+
+          if [ "$DEV_STATUS" != "skipped" ]; then
+            echo "- **Dev**: $DEV_STATUS" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "$TEST_STATUS" != "skipped" ]; then
+            echo "- **Test**: $TEST_STATUS" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "$PROD_STATUS" != "skipped" ]; then
+            echo "- **Prod**: $PROD_STATUS" >> $GITHUB_STEP_SUMMARY
+          fi

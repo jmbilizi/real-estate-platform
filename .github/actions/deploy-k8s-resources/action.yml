@@ -150,6 +150,38 @@ runs:
         echo "Building manifests for ${{ inputs.kustomizePath }}"
         kustomize build "${{ inputs.kustomizePath }}" --enable-alpha-plugins > manifests.yaml
 
+    - name: Substitute image placeholders (template-friendly pattern)
+      shell: bash
+      run: |
+        # Get repository owner and name from GitHub context
+        # GITHUB_REPOSITORY format: owner/repo (e.g., jmbilizi/real-estate-platform)
+        OWNER="${GITHUB_REPOSITORY_OWNER}"
+        REPO="${GITHUB_REPOSITORY##*/}"  # Extract repo name from full path
+
+        echo "🏷️  Image substitution status:"
+        echo "   Repository Owner: $OWNER"
+        echo "   Repository Name: $REPO"
+
+        # Count placeholders before substitution
+        PLACEHOLDER_COUNT=$(grep -c "GITHUB_REPOSITORY_OWNER" manifests.yaml || echo "0")
+        echo "   📊 Found $PLACEHOLDER_COUNT placeholder references"
+
+        # Substitute placeholders in manifests.yaml (in-memory, same pattern as secrets)
+        sed -i "s|GITHUB_REPOSITORY_OWNER|${OWNER}|g" manifests.yaml
+        sed -i "s|GITHUB_REPOSITORY_NAME|${REPO}|g" manifests.yaml
+
+        # Verify substitution completed
+        if grep -q "GITHUB_REPOSITORY_OWNER\|GITHUB_REPOSITORY_NAME" manifests.yaml; then
+          echo "   ❌ WARNING: Placeholders still present after substitution!"
+          grep -n "GITHUB_REPOSITORY_OWNER\|GITHUB_REPOSITORY_NAME" manifests.yaml || true
+        else
+          echo "   ✅ All placeholders substituted successfully"
+        fi
+
+        # Show final image URLs for verification
+        echo "   🖼️  Final image references:"
+        grep "image: ghcr.io" manifests.yaml | head -5 || true
+
     - name: PVC cleanup (BadgerDB corruption handling)
       id: pvc_cleanup
       shell: bash

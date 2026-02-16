@@ -18,8 +18,9 @@ on:
   workflow_call: # Allow other workflows to call CI
 
 permissions:
-  actions: write # Required to trigger provision/deploy workflows
+  actions: write # Required to trigger provision/deploy/build-images workflows
   contents: read
+  packages: write # Required for container image pushes
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -320,6 +321,7 @@ jobs:
     outputs:
       cluster-changed: ${{ steps.detect.outputs.cluster-changed }}
       deploy-changed: ${{ steps.detect.outputs.deploy-changed }}
+      images-changed: ${{ steps.detect.outputs.images-changed }}
       branch: ${{ steps.detect.outputs.branch }}
     steps:
       - uses: actions/checkout@v4
@@ -342,6 +344,7 @@ jobs:
 
           cluster=false
           deploy=false
+          images=false
 
           # Check for cluster configuration changes
           if echo "$FILES" | grep -E -q '^infra/k8s/hetzner/.*/cluster/|^\.github/workflows/provision-hetzner-k8s-cluster\.yml|^\.github/actions/provision-hetzner-k8s-cluster/'; then
@@ -355,11 +358,18 @@ jobs:
             echo "✅ Deploy resource changes detected"
           fi
 
+          # Check for container image changes (Dockerfile, source code, build scripts)
+          if echo "$FILES" | grep -E -q '^apps/.*/Dockerfile|^apps/.*\.(cs|ts|py|js)$|^libs/|^tools/docker/|^\.github/workflows/build-push-images\.yml|^\.github/actions/build-push-image/'; then
+            images=true
+            echo "✅ Container image changes detected"
+          fi
+
           # Determine environment based on branch
           BRANCH="${{ github.ref_name }}"
 
           echo "cluster-changed=$cluster" >> $GITHUB_OUTPUT
           echo "deploy-changed=$deploy" >> $GITHUB_OUTPUT
+          echo "images-changed=$images" >> $GITHUB_OUTPUT
           echo "branch=$BRANCH" >> $GITHUB_OUTPUT
 
   # Trigger cluster provisioning workflow if cluster configs changed
@@ -390,6 +400,37 @@ jobs:
             --ref ${{ github.ref }} \
             --field environment=${{ steps.env.outputs.environment }}
           echo "✅ Cluster provisioning workflow triggered"
+
+  # Trigger container image build workflow if source code changed
+  trigger-image-build:
+    needs: [detect-infra-changes]
+    if: needs.detect-infra-changes.outputs.images-changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine environment from branch
+        id: env
+        run: |
+          BRANCH="${{ needs.detect-infra-changes.outputs.branch }}"
+          if [ "$BRANCH" = "main" ]; then
+            echo "environment=prod" >> $GITHUB_OUTPUT
+          elif [ "$BRANCH" = "test" ]; then
+            echo "environment=test" >> $GITHUB_OUTPUT
+          else
+            echo "environment=dev" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Trigger image build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "🐳 Triggering container image build for ${{ steps.env.outputs.environment }} environment..."
+          gh workflow run build-push-images.yml \
+            --repo ${{ github.repository }} \
+            --ref ${{ github.ref }} \
+            --field environment=${{ steps.env.outputs.environment }} \
+            --field projects=affected \
+            --field push=true
+          echo "✅ Image build workflow triggered"
 
   # Trigger deploy workflow if deploy resources changed (and cluster didn't change)
   trigger-deploy:

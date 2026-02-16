@@ -17,6 +17,11 @@ spec:
     spec:
       containers:
         - name: ocelot
+          # Image is updated by CI/CD workflow with actual GHCR URL and dev tag
+          # Format: ghcr.io/<owner>/<repo>/api-gateway:dev
+          # Placeholders: GITHUB_REPOSITORY_OWNER, GITHUB_REPOSITORY_NAME
+          image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/api-gateway:dev
+          imagePullPolicy: Always # Always pull latest dev image
           resources:
             requests:
               memory: "256Mi"

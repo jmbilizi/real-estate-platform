@@ -17,6 +17,11 @@ spec:
     spec:
       containers:
         - name: ocelot
+          # Image is updated by CI/CD workflow with actual GHCR URL and prod tag
+          # Format: ghcr.io/<owner>/<repo>/api-gateway:latest
+          # Placeholders: GITHUB_REPOSITORY_OWNER, GITHUB_REPOSITORY_NAME
+          image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/api-gateway:latest
+          imagePullPolicy: IfNotPresent # Production uses immutable tags
           resources:
             requests:
               memory: "512Mi"

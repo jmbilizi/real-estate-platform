@@ -19,6 +19,7 @@
 
 const { spawnSync } = require("child_process");
 const path = require("path");
+const fs = require("fs");
 
 const { applyLocalRetention } = require("./registry-retention");
 
@@ -40,10 +41,77 @@ function must(status, message) {
   }
 }
 
+/**
+ * Extract project name from fully qualified image reference
+ * Examples:
+ *   localhost:5001/api-gateway:tag -> api-gateway
+ *   ghcr.io/owner/repo/messaging-service:dev -> messaging-service
+ */
+function extractProjectName(image) {
+  // Remove tag first (everything after last ':' that's not part of registry port)
+  let imageWithoutTag = image;
+  const lastColonIndex = image.lastIndexOf(":");
+  const lastSlashIndex = image.lastIndexOf("/");
+
+  // If colon is after last slash, it's a tag (not a registry port)
+  if (lastColonIndex > lastSlashIndex) {
+    imageWithoutTag = image.substring(0, lastColonIndex);
+  }
+
+  // Extract last segment (project name)
+  const segments = imageWithoutTag.split("/");
+  return segments[segments.length - 1];
+}
+
+/**
+ * Detect Dockerfile location for a project (scale-ready)
+ * Searches common monorepo patterns
+ */
+function detectDockerfile(projectName) {
+  const searchPatterns = [
+    `apps/${projectName}/Dockerfile`,
+    `apps/services/${projectName}/Dockerfile`,
+    `libs/${projectName}/Dockerfile`,
+    `apps/backend/${projectName}/Dockerfile`,
+    `apps/frontend/${projectName}/Dockerfile`,
+  ];
+
+  for (const pattern of searchPatterns) {
+    const dockerfilePath = path.join(workspaceRoot, pattern);
+    if (fs.existsSync(dockerfilePath)) {
+      return pattern; // Return relative path for podman -f flag
+    }
+  }
+
+  throw new Error(
+    `Dockerfile not found for project: ${projectName}\n` +
+      `Searched:\n` +
+      searchPatterns.map((p) => `  - ${p}`).join("\n"),
+  );
+}
+
 function buildImage(image) {
-  // Keep the build explicit and repo-root anchored.
-  // NOTE: We currently have a single artifact (api-gateway) so a fixed Dockerfile is OK.
-  const status = run("podman", ["build", "-f", "apps/api-gateway/Dockerfile", "-t", image, "."]);
+  // Extract project name from image reference
+  const projectName = extractProjectName(image);
+  console.log(`Building project: ${projectName}`);
+
+  // Auto-detect Dockerfile location (scales to any number of services)
+  const dockerfilePath = detectDockerfile(projectName);
+  console.log(`Found Dockerfile: ${dockerfilePath}`);
+
+  const args = [
+    "build",
+    "-f",
+    dockerfilePath,
+    "--build-arg",
+    "BUILD_CONFIGURATION=Release",
+    "--build-arg",
+    "COPY_CERTS=true", // Local dev needs enterprise certs
+    "-t",
+    image,
+    ".",
+  ];
+  const status = run("podman", args);
   must(status, "podman build failed");
 }
 
