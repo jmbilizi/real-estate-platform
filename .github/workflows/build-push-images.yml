@@ -1,42 +1,28 @@
 name: Build and Push Container Images
 
 # Workflow to build and push Docker images to GitHub Container Registry
-# Only runs on target branches (dev, test, main) - feature branches are excluded
+# Triggered by CI workflow after quality checks pass (not directly on push)
 # Uses Nx affected detection to build only changed services
 
 on:
-  push:
-    branches:
-      - main
-      - test
-      - dev
-    paths:
-      - "apps/**/Dockerfile"
-      - "apps/**/*.csproj"
-      - "apps/**/*.cs"
-      - "apps/**/package.json"
-      - "apps/**/*.ts"
-      - "apps/**/*.py"
-      - "libs/**"
-      - "tools/docker/**"
-      - ".github/workflows/build-push-images.yml"
-      - ".github/actions/build-push-image/**"
-  pull_request:
-    branches:
-      - main
-      - test
-      - dev
-    paths:
-      - "apps/**/Dockerfile"
-      - "apps/**/*.csproj"
-      - "apps/**/*.cs"
-      - "apps/**/package.json"
-      - "apps/**/*.ts"
-      - "apps/**/*.py"
-      - "libs/**"
-      - "tools/docker/**"
-      - ".github/workflows/build-push-images.yml"
-      - ".github/actions/build-push-image/**"
+  # Called by CI workflow after quality checks pass
+  workflow_call:
+    inputs:
+      environment:
+        description: "Target environment (determines tag)"
+        required: true
+        type: string
+      projects:
+        description: "Projects to build (comma-separated, or 'all' or 'affected')"
+        required: false
+        type: string
+        default: "affected"
+      push:
+        description: "Push images to registry"
+        required: false
+        type: boolean
+        default: true
+  # Manual trigger
   workflow_dispatch:
     inputs:
       environment:
@@ -56,6 +42,23 @@ on:
         required: false
         type: boolean
         default: true
+  # Validate on PRs (build only, no push)
+  pull_request:
+    branches:
+      - main
+      - test
+      - dev
+    paths:
+      - "apps/**/Dockerfile"
+      - "apps/**/*.csproj"
+      - "apps/**/*.cs"
+      - "apps/**/package.json"
+      - "apps/**/*.ts"
+      - "apps/**/*.py"
+      - "libs/**"
+      - "tools/docker/**"
+      - ".github/workflows/build-push-images.yml"
+      - ".github/actions/build-push-image/**"
 
 permissions:
   contents: read
@@ -98,7 +101,8 @@ jobs:
         id: env
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          # workflow_call and workflow_dispatch both use inputs.environment
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "workflow_call" ]; then
             ENV="${{ inputs.environment }}"
           elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
             ENV="prod"
@@ -130,14 +134,16 @@ jobs:
         id: affected
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          # workflow_call and workflow_dispatch both use inputs
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "workflow_call" ]; then
             if [ "${{ inputs.projects }}" = "all" ]; then
               PROJECTS=$(npx nx show projects --withTarget=container-build 2>/dev/null || echo "")
             elif [ "${{ inputs.projects }}" = "affected" ]; then
               if [ "${{ github.event_name }}" = "pull_request" ]; then
                 PROJECTS=$(npx nx print-affected --base=origin/${{ github.base_ref }} --target=container-build --select=projects 2>/dev/null || echo "")
               else
-                PROJECTS=$(npx nx show projects --withTarget=container-build 2>/dev/null || echo "")
+                # For workflow_call from CI, use affected based on last commit
+                PROJECTS=$(npx nx print-affected --base=HEAD~1 --target=container-build --select=projects 2>/dev/null || echo "")
               fi
             else
               PROJECTS="${{ inputs.projects }}"
@@ -146,7 +152,7 @@ jobs:
             # For PRs, only build affected projects
             PROJECTS=$(npx nx print-affected --base=origin/${{ github.base_ref }} --target=container-build --select=projects 2>/dev/null || echo "")
           else
-            # For push to target branches, build all projects with container-build target
+            # Fallback: build all projects with container-build target
             PROJECTS=$(npx nx show projects --withTarget=container-build 2>/dev/null || echo "")
           fi
 
@@ -167,7 +173,7 @@ jobs:
 
           if [ -z "$PROJECTS" ]; then
             echo "build-required=false" >> $GITHUB_OUTPUT
-            echo "projects=[]" >> $GITHUB_OUTPUT
+            echo 'projects=["__NONE__"]' >> $GITHUB_OUTPUT  # Valid JSON placeholder
             echo "ℹ️  No projects to build"
             exit 0
           fi
@@ -192,6 +198,8 @@ jobs:
       fail-fast: false
       matrix:
         project: ${{ fromJson(needs.detect-affected.outputs.projects) }}
+        exclude:
+          - project: __NONE__ # Exclude placeholder
     steps:
       - uses: actions/checkout@v4
 
@@ -201,7 +209,7 @@ jobs:
           project: ${{ matrix.project }}
           tag: ${{ needs.detect-affected.outputs.tag }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          push: ${{ github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.push) }}
+          push: ${{ github.event_name != 'pull_request' && (inputs.push || !(github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call')) }}
           scan-image: "false" # Disable scanning in dev for speed
 
       - name: Generate deployment artifact
@@ -236,6 +244,8 @@ jobs:
       fail-fast: false
       matrix:
         project: ${{ fromJson(needs.detect-affected.outputs.projects) }}
+        exclude:
+          - project: __NONE__ # Exclude placeholder
     steps:
       - uses: actions/checkout@v4
 
@@ -245,7 +255,7 @@ jobs:
           project: ${{ matrix.project }}
           tag: ${{ needs.detect-affected.outputs.tag }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          push: ${{ github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.push) }}
+          push: ${{ github.event_name != 'pull_request' && (inputs.push || !(github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call')) }}
           scan-image: "true" # Enable scanning in test
 
       - name: Generate deployment artifact
@@ -280,6 +290,8 @@ jobs:
       fail-fast: false
       matrix:
         project: ${{ fromJson(needs.detect-affected.outputs.projects) }}
+        exclude:
+          - project: __NONE__ # Exclude placeholder
     steps:
       - uses: actions/checkout@v4
 
@@ -290,7 +302,7 @@ jobs:
           project: ${{ matrix.project }}
           tag: ${{ needs.detect-affected.outputs.tag }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          push: ${{ github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.push) }}
+          push: ${{ github.event_name != 'pull_request' && (inputs.push || !(github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call')) }}
           scan-image: "true" # Enable scanning in prod
 
       - name: Tag as latest
@@ -338,13 +350,17 @@ jobs:
       - name: Build summary
         shell: bash
         run: |
+          # Filter out __NONE__ placeholder from projects list
+          PROJECTS='${{ needs.detect-affected.outputs.projects }}'
+          PROJECTS_CLEAN=$(echo "$PROJECTS" | jq -r '. - ["__NONE__"] | join(", ")')
+
           echo "## 🐳 Container Image Build Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| **Environment** | ${{ needs.detect-affected.outputs.environment }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Tag** | \`${{ needs.detect-affected.outputs.tag }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Projects Built** | ${{ join(fromJson(needs.detect-affected.outputs.projects), ', ') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Projects Built** | ${PROJECTS_CLEAN:-None} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Trigger** | ${{ github.event_name }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
@@ -363,3 +379,24 @@ jobs:
           if [ "$PROD_STATUS" != "skipped" ]; then
             echo "- **Prod**: $PROD_STATUS" >> $GITHUB_STEP_SUMMARY
           fi
+
+      - name: Trigger deployment with new images
+        if: |
+          github.event_name == 'workflow_call' &&
+          (needs.build-dev.result == 'success' || needs.build-test.result == 'success' || needs.build-prod.result == 'success')
+        env:
+          GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
+        shell: bash
+        run: |
+          ENV="${{ needs.detect-affected.outputs.environment }}"
+
+          echo "🚀 Images built successfully, triggering deployment to $ENV..."
+
+          gh workflow run deploy-k8s-resources.yml \
+            --repo ${{ github.repository }} \
+            --ref ${{ github.ref }} \
+            --field environment="$ENV" \
+            --field deploy_strategy="all" \
+            --field services="all"
+
+          echo "✅ Deployment workflow triggered"

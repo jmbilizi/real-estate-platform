@@ -432,10 +432,14 @@ jobs:
             --field push=true
           echo "✅ Image build workflow triggered"
 
-  # Trigger deploy workflow if deploy resources changed (and cluster didn't change)
+  # Trigger deploy workflow if ONLY deploy resources changed (not images)
+  # If images also changed, build-push-images workflow will trigger deploy after images are ready
   trigger-deploy:
     needs: [detect-infra-changes]
-    if: needs.detect-infra-changes.outputs.deploy-changed == 'true' && needs.detect-infra-changes.outputs.cluster-changed != 'true'
+    if: |
+      needs.detect-infra-changes.outputs.deploy-changed == 'true' &&
+      needs.detect-infra-changes.outputs.cluster-changed != 'true' &&
+      needs.detect-infra-changes.outputs.images-changed != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

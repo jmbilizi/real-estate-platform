@@ -35,12 +35,37 @@ ghcr.io/yourusername/real-estate-platform/api-gateway:latest
 When you push to `dev`/`test`/`main` branches:
 
 1. **CI Workflow** runs quality checks (lint, test, build)
-2. **Detects changes** to Dockerfiles or source code
-3. **Triggers build-push-images** workflow
-4. **Builds affected containers** using Nx
+2. **Detects changes** to three areas: cluster configs, container images, deployment resources
+3. **Orchestrates workflows** based on what changed:
+   - **Images changed**: Triggers build-push-images → Builds containers → Auto-triggers deployment
+   - **Only deploy resources changed**: Triggers deployment directly
+   - **Cluster changed**: Triggers cluster provisioning → Auto-triggers deployment
+4. **Builds affected containers** using Nx (if images changed)
 5. **Pushes to GHCR** with environment-specific tags
 6. **Scans for vulnerabilities** (test/prod only)
-7. **Triggers deployment** workflow with new images
+7. **Deployment waits** for image builds to complete
+
+**Flows:**
+
+```
+# Scenario 1: Only deployment manifests changed
+Push → CI (quality checks) → Deploy
+
+# Scenario 2: Only container code changed
+Push → CI (quality checks) → Build-Push-Images → Deploy (after images ready)
+
+# Scenario 3: Both containers and manifests changed
+Push → CI (quality checks) → Build-Push-Images → Deploy (after images ready)
+
+# Scenario 4: Cluster config changed
+Push → CI (quality checks) → Provision Cluster → Deploy
+```
+
+**Key Benefits:**
+
+- ✅ Images never built from failing code (CI gates execution)
+- ✅ Deployment never starts before images finish building (synchronized)
+- ✅ Only relevant workflows trigger (no wasted CI minutes)
 
 ### 2. Manual Build (Local Development)
 
@@ -124,12 +149,15 @@ All Dockerfiles follow this pattern:
 
 **Triggers:**
 
-- Push to `dev`/`test`/`main` (when Dockerfile or source changes)
-- Pull requests (build only, no push)
-- Manual dispatch via workflow_dispatch
+- **workflow_call** from CI workflow (automatic after quality checks pass)
+- **Pull requests** (validation only - build but don't push)
+- **Manual dispatch** via workflow_dispatch (for on-demand builds)
+
+**NOT triggered directly on push** - CI workflow handles orchestration.
 
 **Features:**
 
+- ✅ CI-gated execution (only runs after quality checks pass)
 - ✅ Nx affected detection (only builds changed services)
 - ✅ Matrix builds (parallel image building)
 - ✅ Docker BuildKit with layer caching
