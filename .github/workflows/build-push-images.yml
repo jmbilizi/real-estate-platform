@@ -140,17 +140,17 @@ jobs:
               PROJECTS=$(npx nx show projects --withTarget=container-build 2>/dev/null || echo "")
             elif [ "${{ inputs.projects }}" = "affected" ]; then
               if [ "${{ github.event_name }}" = "pull_request" ]; then
-                PROJECTS=$(npx nx print-affected --base=origin/${{ github.base_ref }} --target=container-build --select=projects 2>/dev/null || echo "")
+                PROJECTS=$(npx nx show projects --affected --base=origin/${{ github.base_ref }} --withTarget=container-build 2>/dev/null || echo "")
               else
                 # For workflow_call from CI, use affected based on last commit
-                PROJECTS=$(npx nx print-affected --base=HEAD~1 --target=container-build --select=projects 2>/dev/null || echo "")
+                PROJECTS=$(npx nx show projects --affected --base=HEAD~1 --withTarget=container-build 2>/dev/null || echo "")
               fi
             else
               PROJECTS="${{ inputs.projects }}"
             fi
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
             # For PRs, only build affected projects
-            PROJECTS=$(npx nx print-affected --base=origin/${{ github.base_ref }} --target=container-build --select=projects 2>/dev/null || echo "")
+            PROJECTS=$(npx nx show projects --affected --base=origin/${{ github.base_ref }} --withTarget=container-build 2>/dev/null || echo "")
           else
             # Fallback: build all projects with container-build target
             PROJECTS=$(npx nx show projects --withTarget=container-build 2>/dev/null || echo "")
