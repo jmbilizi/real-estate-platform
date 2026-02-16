@@ -146,15 +146,18 @@ jobs:
             # If workflow files changed, build all services
             if echo "$FILES" | grep -E -q '^\.github/workflows/build-push-images\.yml|^\.github/actions/build-push-image/'; then
               echo "🚨 Build workflow files changed - building ALL services"
-              PROJECTS=$(npx nx show projects --withTarget=container-build 2>/dev/null || echo "")
-              echo "projects=$PROJECTS" >> $GITHUB_OUTPUT
-              
-              if [ -n "$PROJECTS" ]; then
-                echo "📦 Projects to build:"
-                echo "$PROJECTS" | tr ' ' '\n' | sed 's/^/  - /'
-              else
-                echo "ℹ️  No projects with container-build target found"
+              PROJECTS=$(npx nx show projects --withTarget=container-build)
+              if [ -z "$PROJECTS" ]; then
+                echo "❌ No projects with container-build target found after workflow changes"
+                echo "🔎 Nx projects (all):"
+                npx nx show projects --all
+                exit 1
               fi
+
+              echo "projects=$PROJECTS" >> $GITHUB_OUTPUT
+
+              echo "📦 Projects to build:"
+              echo "$PROJECTS" | tr ' ' '\n' | sed 's/^/  - /'
               exit 0
             fi
           fi
@@ -162,7 +165,7 @@ jobs:
           # workflow_call and workflow_dispatch both use inputs
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "workflow_call" ]; then
             if [ "${{ inputs.projects }}" = "all" ]; then
-              PROJECTS=$(npx nx show projects --withTarget=container-build 2>/dev/null || echo "")
+              PROJECTS=$(npx nx show projects --withTarget=container-build)
             elif [ "${{ inputs.projects }}" = "affected" ]; then
               # Determine base for affected detection
               if [ "${{ github.event_name }}" = "workflow_call" ]; then
@@ -179,16 +182,16 @@ jobs:
                   BASE="origin/dev"
                 fi
               fi
-              PROJECTS=$(npx nx show projects --affected --base=$BASE --withTarget=container-build 2>/dev/null || echo "")
+              PROJECTS=$(npx nx show projects --affected --base=$BASE --withTarget=container-build)
             else
               PROJECTS="${{ inputs.projects }}"
             fi
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
             # For PRs, only build affected projects
-            PROJECTS=$(npx nx show projects --affected --base=origin/${{ github.base_ref }} --withTarget=container-build 2>/dev/null || echo "")
+            PROJECTS=$(npx nx show projects --affected --base=origin/${{ github.base_ref }} --withTarget=container-build)
           else
             # Fallback: build all projects with container-build target
-            PROJECTS=$(npx nx show projects --withTarget=container-build 2>/dev/null || echo "")
+            PROJECTS=$(npx nx show projects --withTarget=container-build)
           fi
 
           echo "projects=$PROJECTS" >> $GITHUB_OUTPUT
