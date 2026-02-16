@@ -109,6 +109,14 @@ runs:
           exit 1
         fi
 
+    - name: Create workspace certs directory for BuildKit
+      shell: bash
+      run: |
+        # Docker BuildKit requires bind mount sources to exist even when not used
+        # Create empty directory to satisfy BuildKit cache key calculation
+        mkdir -p .workspace-certs
+        echo "✅ Created .workspace-certs directory (required for BuildKit, unused in CI/CD)"
+
     - name: Build and push Docker image
       id: build
       uses: docker/build-push-action@v5
