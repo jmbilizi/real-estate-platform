@@ -139,12 +139,22 @@ jobs:
             if [ "${{ inputs.projects }}" = "all" ]; then
               PROJECTS=$(npx nx show projects --withTarget=container-build 2>/dev/null || echo "")
             elif [ "${{ inputs.projects }}" = "affected" ]; then
-              if [ "${{ github.event_name }}" = "pull_request" ]; then
-                PROJECTS=$(npx nx show projects --affected --base=origin/${{ github.base_ref }} --withTarget=container-build 2>/dev/null || echo "")
-              else
+              # Determine base for affected detection
+              if [ "${{ github.event_name }}" = "workflow_call" ]; then
                 # For workflow_call from CI, use affected based on last commit
-                PROJECTS=$(npx nx show projects --affected --base=HEAD~1 --withTarget=container-build 2>/dev/null || echo "")
+                BASE="HEAD~1"
+              else
+                # For workflow_dispatch, compare against branch base
+                BRANCH="${{ github.ref_name }}"
+                if [ "$BRANCH" = "main" ]; then
+                  BASE="origin/main~1"
+                elif [ "$BRANCH" = "test" ]; then
+                  BASE="origin/test~1"
+                else
+                  BASE="origin/dev"
+                fi
               fi
+              PROJECTS=$(npx nx show projects --affected --base=$BASE --withTarget=container-build 2>/dev/null || echo "")
             else
               PROJECTS="${{ inputs.projects }}"
             fi
