@@ -92,6 +92,7 @@ namespace ApiGateway
 
             app.UseEndpoints(endpoints =>
             {
+                // Redirect root URL to Swagger UI
                 endpoints.MapGet("/", context =>
                 {
                     context.Response.Redirect("/swagger", permanent: false);
