@@ -465,7 +465,7 @@ jobs:
 
       - name: Trigger deployment with new images
         if: |
-          github.event_name == 'workflow_call' &&
+          github.event_name != 'pull_request' &&
           (needs.build-dev.result == 'success' || needs.build-test.result == 'success' || needs.build-prod.result == 'success')
         env:
           GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
@@ -474,6 +474,7 @@ jobs:
           ENV="${{ needs.detect-affected.outputs.environment }}"
 
           echo "🚀 Images built successfully, triggering deployment to $ENV..."
+          echo "📋 Event type: ${{ github.event_name }}"
 
           gh workflow run deploy-k8s-resources.yml \
             --repo ${{ github.repository }} \
