@@ -267,6 +267,37 @@ runs:
             echo "📦 Multiple services detected: $SERVICE_COUNT services"
             echo "🚀 Deploying services in PARALLEL with rollout monitoring"
             echo ""
+
+            deployment_is_ready() {
+              local ns="$1"
+              local name="$2"
+
+              if ! kubectl get deployment "$name" -n "$ns" >/dev/null 2>&1; then
+                return 1
+              fi
+
+              local spec_replicas available_replicas updated_replicas generation observed_generation
+              spec_replicas=$(kubectl get deployment "$name" -n "$ns" -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "")
+              spec_replicas=${spec_replicas:-1}
+              available_replicas=$(kubectl get deployment "$name" -n "$ns" -o jsonpath='{.status.availableReplicas}' 2>/dev/null || echo "0")
+              available_replicas=${available_replicas:-0}
+              updated_replicas=$(kubectl get deployment "$name" -n "$ns" -o jsonpath='{.status.updatedReplicas}' 2>/dev/null || echo "0")
+              updated_replicas=${updated_replicas:-0}
+              generation=$(kubectl get deployment "$name" -n "$ns" -o jsonpath='{.metadata.generation}' 2>/dev/null || echo "0")
+              generation=${generation:-0}
+              observed_generation=$(kubectl get deployment "$name" -n "$ns" -o jsonpath='{.status.observedGeneration}' 2>/dev/null || echo "0")
+              observed_generation=${observed_generation:-0}
+
+              if [ "$observed_generation" -lt "$generation" ]; then
+                return 1
+              fi
+
+              if [ "$available_replicas" -ge "$spec_replicas" ] && [ "$updated_replicas" -ge "$spec_replicas" ]; then
+                return 0
+              fi
+
+              return 1
+            }
             
             # Deploy each service in parallel with rollout monitoring
             PIDS=()
@@ -301,9 +332,19 @@ runs:
                 DEPLOYMENTS=$(yq -N e "select(.kind == \"Deployment\" and .metadata.labels.app == \"$service\") | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
                 for deploy in $DEPLOYMENTS; do
                   DEPLOY_NS=$(yq -N e "select(.kind == \"Deployment\" and .metadata.name == \"$deploy\") | .metadata.namespace // \"default\"" manifests.yaml 2>/dev/null | head -1)
+                  if deployment_is_ready "$DEPLOY_NS" "$deploy"; then
+                    echo "✅ $service: Deployment $deploy already Available - skipping rollout wait" >> "/tmp/deploy-$service.log" 2>&1
+                    continue
+                  fi
+
                   if ! kubectl rollout status deployment/$deploy -n "$DEPLOY_NS" --timeout=${{ inputs.deployment_timeout }} >> "/tmp/deploy-$service.log" 2>&1; then
-                    echo "❌ $service: Deployment $deploy rollout failed"
-                    ROLLOUT_FAILED=true
+                    echo "⚠️  $service: Deployment $deploy rollout status reported failure - re-checking availability" >> "/tmp/deploy-$service.log" 2>&1
+                    if deployment_is_ready "$DEPLOY_NS" "$deploy"; then
+                      echo "✅ $service: Deployment $deploy is Available despite rollout warning" >> "/tmp/deploy-$service.log" 2>&1
+                    else
+                      echo "❌ $service: Deployment $deploy rollout failed"
+                      ROLLOUT_FAILED=true
+                    fi
                   fi
                 done
                 
@@ -368,7 +409,11 @@ runs:
                   for deploy in $DEPLOYMENTS; do
                     DEPLOY_NS=$(yq -N e "select(.kind == \"Deployment\" and .metadata.name == \"$deploy\") | .metadata.namespace // \"default\"" manifests.yaml 2>/dev/null | head -1)
                     echo "  🔄 Rolling back Deployment/$deploy (namespace: $DEPLOY_NS)..."
-                    kubectl rollout undo deployment/$deploy -n "$DEPLOY_NS" || true
+                    if kubectl rollout history deployment/$deploy -n "$DEPLOY_NS" >/dev/null 2>&1; then
+                      kubectl rollout undo deployment/$deploy -n "$DEPLOY_NS" || true
+                    else
+                      echo "  ℹ️  No rollout history for Deployment/$deploy - skipping undo"
+                    fi
                     kubectl rollout status deployment/$deploy -n "$DEPLOY_NS" --timeout=${{ inputs.deployment_timeout }} || true
                   done
                   
@@ -497,26 +542,29 @@ runs:
       run: |
         echo "🔄 Checking if StatefulSet pod templates changed before restarting..."
         NEED_RESTART_STS=""
-        EXPECTED_STS=$(yq -N e 'select(.kind=="StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' || echo "")
-        for name in $EXPECTED_STS; do
-          DESIRED_RAW=$(yq -N e "select(.kind==\"StatefulSet\" and .metadata.name==\"$name\") | .spec.template" manifests.yaml 2>/dev/null || echo "")
-          LIVE_RAW=$(kubectl get statefulset "$name" -o json 2>/dev/null | jq -c '.spec.template' 2>/dev/null || echo "")
-          DESIRED_TEMPLATE=$(printf "%s" "$DESIRED_RAW" | jq -c '.' 2>/dev/null || echo "")
-          LIVE_TEMPLATE=$(printf "%s" "$LIVE_RAW" | jq -c '.' 2>/dev/null || echo "")
+        EXPECTED_STS=$(yq -N e 'select(.kind=="StatefulSet") | ((.metadata.namespace // "default") + "/" + .metadata.name)' manifests.yaml 2>/dev/null | grep -v '^---$' || echo "")
+        for sts_ref in $EXPECTED_STS; do
+          STS_NS="${sts_ref%%/*}"
+          STS_NAME="${sts_ref##*/}"
+
+          DESIRED_TEMPLATE=$(yq -o=json -I=0 e "select(.kind==\"StatefulSet\" and (.metadata.namespace // \"default\") == \"$STS_NS\" and .metadata.name==\"$STS_NAME\") | .spec.template" manifests.yaml 2>/dev/null | jq -cS '.' 2>/dev/null || echo "")
+          LIVE_TEMPLATE=$(kubectl get statefulset "$STS_NAME" -n "$STS_NS" -o json 2>/dev/null | jq -cS '.spec.template' 2>/dev/null || echo "")
           if [ -z "$DESIRED_TEMPLATE" ] || [ -z "$LIVE_TEMPLATE" ]; then
-            echo "ℹ️  Skipping $name: unable to parse desired/live pod template"
+            echo "ℹ️  Skipping $STS_NAME: unable to parse desired/live pod template (ns: $STS_NS)"
             continue
           fi
           LIVE_HASH=$(printf "%s" "$LIVE_TEMPLATE" | sha1sum | awk '{print $1}')
           DESIRED_HASH=$(printf "%s" "$DESIRED_TEMPLATE" | sha1sum | awk '{print $1}')
           if [ "$LIVE_HASH" != "$DESIRED_HASH" ]; then
-            NEED_RESTART_STS="$NEED_RESTART_STS $name"
+            NEED_RESTART_STS="$NEED_RESTART_STS $STS_NS/$STS_NAME"
           fi
         done
         if [ -n "$NEED_RESTART_STS" ]; then
           echo "🔄 Forcing rollout restart for changed StatefulSets: $NEED_RESTART_STS"
           for sts in $NEED_RESTART_STS; do
-            kubectl rollout restart statefulset/$sts || true
+            STS_NS="${sts%%/*}"
+            STS_NAME="${sts##*/}"
+            kubectl rollout restart statefulset/$STS_NAME -n "$STS_NS" || true
           done
           echo "⏳ Waiting 60 seconds for pods to terminate and restart..."
           sleep 60
@@ -531,6 +579,37 @@ runs:
       run: |
         echo "⏳ Waiting for workloads to be ready..."
         ROLLOUT_FAILED=false
+
+        deployment_is_ready() {
+          local ns="$1"
+          local name="$2"
+
+          if ! kubectl get deployment "$name" -n "$ns" >/dev/null 2>&1; then
+            return 1
+          fi
+
+          local spec_replicas available_replicas updated_replicas generation observed_generation
+          spec_replicas=$(kubectl get deployment "$name" -n "$ns" -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "")
+          spec_replicas=${spec_replicas:-1}
+          available_replicas=$(kubectl get deployment "$name" -n "$ns" -o jsonpath='{.status.availableReplicas}' 2>/dev/null || echo "0")
+          available_replicas=${available_replicas:-0}
+          updated_replicas=$(kubectl get deployment "$name" -n "$ns" -o jsonpath='{.status.updatedReplicas}' 2>/dev/null || echo "0")
+          updated_replicas=${updated_replicas:-0}
+          generation=$(kubectl get deployment "$name" -n "$ns" -o jsonpath='{.metadata.generation}' 2>/dev/null || echo "0")
+          generation=${generation:-0}
+          observed_generation=$(kubectl get deployment "$name" -n "$ns" -o jsonpath='{.status.observedGeneration}' 2>/dev/null || echo "0")
+          observed_generation=${observed_generation:-0}
+
+          if [ "$observed_generation" -lt "$generation" ]; then
+            return 1
+          fi
+
+          if [ "$available_replicas" -ge "$spec_replicas" ] && [ "$updated_replicas" -ge "$spec_replicas" ]; then
+            return 0
+          fi
+
+          return 1
+        }
 
         # StatefulSets
         STATEFULSETS=$(yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
@@ -557,9 +636,19 @@ runs:
             # Extract namespace for this deployment (default to 'default')
             DEPLOY_NS=$(yq -N e "select(.kind == \"Deployment\" and .metadata.name == \"$deploy\") | .metadata.namespace // \"default\"" manifests.yaml 2>/dev/null | head -1)
             echo "\n🔄 Checking rollout status for Deployment/$deploy (namespace: $DEPLOY_NS)..."
+            if deployment_is_ready "$DEPLOY_NS" "$deploy"; then
+              echo "✅ Deployment $deploy already Available - skipping rollout wait"
+              continue
+            fi
+
             if ! kubectl rollout status deployment/$deploy -n "$DEPLOY_NS" --timeout=${{ inputs.deployment_timeout }}; then
-              echo "❌ Deployment $deploy rollout failed"
-              ROLLOUT_FAILED=true
+              echo "⚠️  Deployment $deploy rollout status reported failure - re-checking availability"
+              if deployment_is_ready "$DEPLOY_NS" "$deploy"; then
+                echo "✅ Deployment $deploy is Available despite rollout warning"
+              else
+                echo "❌ Deployment $deploy rollout failed"
+                ROLLOUT_FAILED=true
+              fi
             else
               echo "✅ Deployment $deploy deployment completed"
             fi
@@ -608,7 +697,11 @@ runs:
           # Extract namespace for this deployment (default to 'default')
           DEPLOY_NS=$(yq -N e "select(.kind == \"Deployment\" and .metadata.name == \"$deploy\") | .metadata.namespace // \"default\"" manifests.yaml 2>/dev/null | head -1)
           echo "\n🔄 Rolling back Deployment/$deploy (namespace: $DEPLOY_NS)..."
-          kubectl rollout undo deployment/$deploy -n "$DEPLOY_NS" || true
+          if kubectl rollout history deployment/$deploy -n "$DEPLOY_NS" >/dev/null 2>&1; then
+            kubectl rollout undo deployment/$deploy -n "$DEPLOY_NS" || true
+          else
+            echo "ℹ️  No rollout history for Deployment/$deploy - skipping undo"
+          fi
           kubectl rollout status deployment/$deploy -n "$DEPLOY_NS" --timeout=${{ inputs.deployment_timeout }} || true
         done
         DAEMONSETS=$(yq -N e 'select(.kind == "DaemonSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
