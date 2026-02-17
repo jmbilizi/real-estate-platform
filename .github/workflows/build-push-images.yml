@@ -61,6 +61,7 @@ on:
       - ".github/actions/build-push-image/**"
 
 permissions:
+  actions: write # Required to trigger deployment workflow
   contents: read
   packages: write # Required for GHCR push
   security-events: write # Required for Trivy scan upload
