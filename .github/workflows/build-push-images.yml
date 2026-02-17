@@ -295,6 +295,19 @@ jobs:
           push: ${{ github.event_name != 'pull_request' && (inputs.push || !(github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call')) }}
           scan-image: "false" # Disable scanning in dev for speed
 
+      - name: Tag as dev
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          IMAGE_BASE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ matrix.project }}"
+
+          # Tag with 'dev' for easy deployment reference
+          docker buildx imagetools create \
+            "$IMAGE_BASE:${{ needs.detect-affected.outputs.tag }}" \
+            --tag "$IMAGE_BASE:dev"
+
+          echo "✅ Additional tag created: dev"
+
       - name: Generate deployment artifact
         if: github.event_name != 'pull_request'
         shell: bash
@@ -340,6 +353,19 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           push: ${{ github.event_name != 'pull_request' && (inputs.push || !(github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call')) }}
           scan-image: "true" # Enable scanning in test
+
+      - name: Tag as test
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          IMAGE_BASE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ matrix.project }}"
+
+          # Tag with 'test' for easy deployment reference
+          docker buildx imagetools create \
+            "$IMAGE_BASE:${{ needs.detect-affected.outputs.tag }}" \
+            --tag "$IMAGE_BASE:test"
+
+          echo "✅ Additional tag created: test"
 
       - name: Generate deployment artifact
         if: github.event_name != 'pull_request'
