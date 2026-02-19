@@ -32,5 +32,7 @@ spec:
           env:
             - name: ASPNETCORE_ENVIRONMENT
               value: "Staging"
+            - name: OTEL_ENABLED # OTEL = OpenTelemetry
+              value: "true" # Enable tracing in test
             - name: OTEL_TRACES_SAMPLER_ARG
               value: "0.5" # 50% sampling for test

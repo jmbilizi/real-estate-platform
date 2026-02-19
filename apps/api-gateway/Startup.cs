@@ -7,6 +7,9 @@ using System.Text;
 using ApiGateway.Extensions;
 using Ocelot.DependencyInjection;
 using Ocelot.Middleware;
+using OpenTelemetry.Exporter;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 namespace ApiGateway
 {
@@ -16,6 +19,25 @@ namespace ApiGateway
     [SuppressMessage("Performance", "CA1515:Consider making public types internal", Justification = "Used by ASP.NET Core via reflection")]
     public class Startup
     {
+        // LoggerMessage delegates for performance (CA1848)
+        private static readonly Action<ILogger, Exception?> LogTracingDisabledAction =
+            LoggerMessage.Define(
+                LogLevel.Warning,
+                new EventId(1, "TracingDisabled"),
+                "OpenTelemetry tracing is DISABLED for this environment");
+
+        private static readonly Action<ILogger, string, Exception?> LogInvalidEndpointAction =
+            LoggerMessage.Define<string>(
+                LogLevel.Error,
+                new EventId(2, "InvalidEndpoint"),
+                "Invalid OTEL_EXPORTER_OTLP_ENDPOINT: {Endpoint}. Tracing disabled.");
+
+        private static readonly Action<ILogger, string, string, string, double, string, Exception?> LogOpenTelemetryConfiguredAction =
+            LoggerMessage.Define<string, string, string, double, string>(
+                LogLevel.Information,
+                new EventId(3, "OpenTelemetryConfigured"),
+                "OpenTelemetry configured: Endpoint={Endpoint}, Service={Service}, Sampler={Sampler}:{Rate}, Pod={Pod}");
+
         /// <summary>
         /// Initializes a new instance of the <see cref="Startup"/> class.
         /// </summary>
@@ -53,6 +75,9 @@ namespace ApiGateway
             services.AddHealthChecks();
 
             services.AddEndpointsApiExplorer();
+
+            // Configure OpenTelemetry (conditional based on environment)
+            ConfigureOpenTelemetry(services);
 
             string serviceRoutesFolderPath = "Configuration/Routes";
 
@@ -112,6 +137,122 @@ namespace ApiGateway
             });
 
             app.UseOcelot().Wait();
+        }
+
+        private static void LogTracingDisabled(ILogger logger) =>
+            LogTracingDisabledAction(logger, null);
+
+        private static void LogInvalidEndpoint(ILogger logger, string endpoint) =>
+            LogInvalidEndpointAction(logger, endpoint, null);
+
+        private static void LogOpenTelemetryConfigured(
+            ILogger logger,
+            string endpoint,
+            string service,
+            string sampler,
+            double rate,
+            string pod) =>
+            LogOpenTelemetryConfiguredAction(logger, endpoint, service, sampler, rate, pod, null);
+
+        /// <summary>
+        /// Configures OpenTelemetry tracing with environment-based toggle.
+        /// </summary>
+        /// <param name="services">The service collection.</param>
+        private void ConfigureOpenTelemetry(IServiceCollection services)
+        {
+            // Read OTEL_ENABLED from environment (OTEL = OpenTelemetry, defaults to true)
+            bool otelEnabled = Configuration.GetValue("OTEL_ENABLED", true);
+
+            // Build logger for startup visibility
+            ILogger<Startup> logger = services.BuildServiceProvider().GetRequiredService<ILogger<Startup>>();
+
+            if (!otelEnabled)
+            {
+                LogTracingDisabled(logger);
+                return;
+            }
+
+            // Get configuration from environment variables (set in Kubernetes)
+            // Using standard OpenTelemetry environment variable names
+            string otlpEndpoint = Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"] ?? "http://jaeger-svc:4317";
+            string serviceName = Configuration["OTEL_SERVICE_NAME"] ?? "api-gateway";
+            string sampler = Configuration["OTEL_TRACES_SAMPLER"] ?? "traceidratio";
+            double samplerArg = Configuration.GetValue("OTEL_TRACES_SAMPLER_ARG", 1.0);
+            string environment = Configuration["ASPNETCORE_ENVIRONMENT"] ?? "Production";
+
+            // Get Kubernetes metadata from downward API (injected via deployment YAML)
+            string podName = Configuration["K8S_POD_NAME"] ?? Environment.MachineName;
+            string podNamespace = Configuration["K8S_NAMESPACE_NAME"] ?? "default";
+            string nodeName = Configuration["K8S_NODE_NAME"] ?? "unknown";
+
+            // Validate OTLP endpoint
+            if (!Uri.TryCreate(otlpEndpoint, UriKind.Absolute, out Uri? endpoint))
+            {
+                LogInvalidEndpoint(logger, otlpEndpoint);
+                return;
+            }
+
+            LogOpenTelemetryConfigured(
+                logger,
+                endpoint.ToString(),
+                serviceName,
+                sampler.ToUpperInvariant(),
+                samplerArg,
+                podName);
+
+            services.AddOpenTelemetry()
+                .ConfigureResource(resource =>
+                {
+                    resource.AddService(
+                        serviceName: serviceName,
+                        serviceVersion: typeof(Startup).Assembly.GetName().Version?.ToString() ?? "unknown")
+                        .AddAttributes(
+                            new Dictionary<string, object>
+                            {
+                                ["deployment.environment"] = environment.ToUpperInvariant(),
+                                ["service.instance.id"] = podName,
+                                ["k8s.pod.name"] = podName,
+                                ["k8s.namespace.name"] = podNamespace,
+                                ["k8s.node.name"] = nodeName,
+                            });
+                })
+                .WithTracing(tracing =>
+                {
+                    tracing
+
+                        // Instrument incoming HTTP requests to the gateway
+                        .AddAspNetCoreInstrumentation(options =>
+                        {
+                            options.RecordException = true;
+                            options.Filter = httpContext =>
+                            {
+                                // Don't trace health checks to reduce noise
+                                return !httpContext.Request.Path.StartsWithSegments("/health", StringComparison.Ordinal);
+                            };
+                        })
+
+                        // Instrument outgoing HTTP requests from Ocelot to downstream services
+                        .AddHttpClientInstrumentation(options =>
+                        {
+                            options.RecordException = true;
+                        })
+
+                        // Configure sampler based on environment
+                        .SetSampler(sampler.ToUpperInvariant() switch
+                        {
+                            "ALWAYS_ON" => new AlwaysOnSampler(),
+                            "ALWAYS_OFF" => new AlwaysOffSampler(),
+                            "TRACEIDRATIO" => new TraceIdRatioBasedSampler(samplerArg),
+                            _ => new TraceIdRatioBasedSampler(samplerArg),
+                        })
+
+                        // Export to Jaeger via OTLP (batch export is default in 1.15.0)
+                        .AddOtlpExporter(options =>
+                        {
+                            options.Endpoint = endpoint;
+                            options.Protocol = OtlpExportProtocol.Grpc; // Use gRPC (port 4317) - 2.5x faster than HTTP
+                        });
+                });
         }
     }
 }

@@ -32,5 +32,7 @@ spec:
           env:
             - name: ASPNETCORE_ENVIRONMENT
               value: "Production"
+            - name: OTEL_ENABLED # OTEL = OpenTelemetry
+              value: "true" # Enable tracing in prod (set to "false" to disable)
             - name: OTEL_TRACES_SAMPLER_ARG
               value: "0.05" # 5% sampling for prod (adjust based on traffic)

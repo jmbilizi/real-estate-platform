@@ -52,6 +52,13 @@
     <PackageVersion Include="Ocelot" Version="24.1.0" />
     <PackageVersion Include="FluentValidation.AspNetCore" Version="11.3.0" />
     
+    <!-- OpenTelemetry packages (v1.15.0 - latest stable, fixes security vulnerabilities) -->
+    <PackageVersion Include="OpenTelemetry" Version="1.15.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.0" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.15.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.15.0" />
+    
     <!-- Configuration packages -->
     <PackageVersion Include="DotNetEnv" Version="3.1.1" />
 
