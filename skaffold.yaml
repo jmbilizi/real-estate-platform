@@ -22,6 +22,11 @@ build:
         dependencies:
           paths:
             - apps/api-gateway/**
+      sync:
+        manual:
+          - src: apps/api-gateway/GeoLite2-City.mmdb
+            dest: /opt/geoip/GeoLite2-City.mmdb
+            strip: apps/api-gateway/
 
   local:
     # IMPORTANT: This must be true for the Podman+Kind workflow.

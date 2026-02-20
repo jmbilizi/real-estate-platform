@@ -57,3 +57,6 @@ Desktop.ini
 # Python hook setup files
 tools/python/scripts/set-hook-env.bat
 tools/python/scripts/set-hook-env.sh
+
+# GeoIP Database (download separately - see docs/geoip-setup.md)
+apps/api-gateway/GeoLite2-City.mmdb

@@ -292,6 +292,7 @@ jobs:
           project: ${{ matrix.project }}
           tag: ${{ needs.detect-affected.outputs.tag }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          maxmind-license-key: ${{ secrets.MAXMIND_LICENSE_KEY }}
           push: ${{ github.event_name != 'pull_request' && (inputs.push || !(github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call')) }}
           scan-image: "false" # Disable scanning in dev for speed
 
@@ -351,6 +352,7 @@ jobs:
           project: ${{ matrix.project }}
           tag: ${{ needs.detect-affected.outputs.tag }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          maxmind-license-key: ${{ secrets.MAXMIND_LICENSE_KEY }}
           push: ${{ github.event_name != 'pull_request' && (inputs.push || !(github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call')) }}
           scan-image: "true" # Enable scanning in test
 
@@ -411,6 +413,7 @@ jobs:
           project: ${{ matrix.project }}
           tag: ${{ needs.detect-affected.outputs.tag }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          maxmind-license-key: ${{ secrets.MAXMIND_LICENSE_KEY }}
           push: ${{ github.event_name != 'pull_request' && (inputs.push || !(github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call')) }}
           scan-image: "true" # Enable scanning in prod
 

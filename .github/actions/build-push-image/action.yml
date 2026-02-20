@@ -40,6 +40,10 @@ inputs:
     description: "External cache sources (comma-separated)"
     required: false
     default: ""
+  maxmind-license-key:
+    description: "MaxMind license key for GeoIP2 database download"
+    required: false
+    default: ""
 
 outputs:
   image:
@@ -130,6 +134,7 @@ runs:
         build-args: |
           BUILD_CONFIGURATION=Release
           COPY_CERTS=false
+          MAXMIND_LICENSE_KEY=${{ inputs.maxmind-license-key }}
         cache-from: |
           type=registry,ref=${{ inputs.registry }}/${{ inputs.owner }}/${{ inputs.repo }}/${{ inputs.project }}:buildcache
           ${{ inputs.cache-from }}
@@ -224,6 +229,11 @@ runs:
         echo "### 📋 Build Args" >> $GITHUB_STEP_SUMMARY
         echo "- BUILD_CONFIGURATION=Release" >> $GITHUB_STEP_SUMMARY
         echo "- COPY_CERTS=false (CI/CD mode)" >> $GITHUB_STEP_SUMMARY
+        if [ -n "${{ inputs.maxmind-license-key }}" ]; then
+          echo "- MAXMIND_LICENSE_KEY=*** (GeoIP database download enabled)" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- MAXMIND_LICENSE_KEY=<not set> (GeoIP features disabled)" >> $GITHUB_STEP_SUMMARY
+        fi
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### 🔧 BuildKit Features" >> $GITHUB_STEP_SUMMARY
         echo "- ✅ Layer caching enabled (registry-backed)" >> $GITHUB_STEP_SUMMARY

@@ -2,6 +2,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 ARG COPY_CERTS=false
+ARG MAXMIND_LICENSE_KEY=""
 WORKDIR /src
 
 # Optional: Enterprise CA setup (local dev only, skipped in CI/CD)
@@ -45,11 +46,39 @@ COPY --from=publish /app/publish .
 # Create Configuration directory structure
 RUN mkdir -p Configuration/Routes
 
+# Create GeoIP directory and copy database
+RUN mkdir -p /opt/geoip
+# Download GeoLite2-City database (optional - required for geographic enrichment)
+# If MAXMIND_LICENSE_KEY is provided, download the database
+# Otherwise, log a warning and continue (GeoIP features will be disabled)
+ARG MAXMIND_LICENSE_KEY=""
+RUN if [ -n "$MAXMIND_LICENSE_KEY" ]; then \
+      echo "Downloading GeoLite2-City database..."; \
+      apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \
+      curl -L "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=${MAXMIND_LICENSE_KEY}&suffix=tar.gz" \
+        -o /tmp/GeoLite2-City.tar.gz && \
+      tar -xzf /tmp/GeoLite2-City.tar.gz -C /tmp && \
+      find /tmp -name "GeoLite2-City.mmdb" -exec mv {} /opt/geoip/GeoLite2-City.mmdb \; && \
+      rm -rf /tmp/GeoLite2-City.tar.gz /tmp/GeoLite2-City_* && \
+      apt-get remove -y curl && apt-get autoremove -y && rm -rf /var/lib/apt/lists/* && \
+      echo "GeoLite2-City database installed successfully"; \
+    else \
+      echo "WARNING: MAXMIND_LICENSE_KEY not provided - GeoIP features will be unavailable"; \
+      echo "To enable GeoIP: Set build arg MAXMIND_LICENSE_KEY or manually copy GeoLite2-City.mmdb"; \
+      echo "For local dev: Skaffold will sync the file at runtime from apps/api-gateway/GeoLite2-City.mmdb"; \
+    fi
+
+# Note: GeoLite2-City.mmdb is NOT copied during build for these reasons:
+# - CI/CD: Downloaded above using MAXMIND_LICENSE_KEY (file is gitignored)
+# - Local dev: Skaffold syncs file after container starts (see skaffold.yaml)
+# - Manual builds: Either provide license key OR file sync/volume mount at runtime
+
 # Security: Create non-root user and set ownership
 # Note: Check if group/user already exists (dotnet:10 base images may pre-create them)
 RUN (groupadd -r app 2>/dev/null || true) && \
     (useradd -r -g app app 2>/dev/null || true) && \
-    chown -R app:app /app
+    chown -R app:app /app && \
+    chown -R app:app /opt/geoip
 USER app
 
 # Expose ports
