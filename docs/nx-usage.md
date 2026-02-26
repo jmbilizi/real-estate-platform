@@ -27,7 +27,7 @@ For custom or one-off commands, you can use `npx nx` directly:
 
 ```bash
 # Run a specific command
-npx nx run-many --target=lint --projects=tag:node
+npx nx run-many --target=lint --projects=tag:runtime:node
 
 # View the project graph
 npx nx graph
@@ -134,7 +134,7 @@ npm run clean
 
 ## Handling "No Projects" Errors
 
-When running commands like `run-many` with project filters (e.g., `--projects=tag:node`), you might get an error if no projects match the criteria. This is expected if you haven't created any projects of that type yet.
+When running commands like `run-many` with project filters (e.g., `--projects=tag:runtime:node`), you might get an error if no projects match the criteria. This is expected if you haven't created any projects of that type yet.
 
 For npm scripts, we've added error handling to ensure these commands exit successfully with a helpful message, which is especially useful in CI/CD pipelines.
 

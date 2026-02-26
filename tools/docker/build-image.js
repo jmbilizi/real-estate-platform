@@ -114,7 +114,8 @@ function parseArgs() {
 
   args.slice(1).forEach((arg) => {
     if (arg.startsWith("--tag=")) {
-      options.tag = arg.split("=")[1];
+      const value = arg.split("=")[1];
+      if (value) options.tag = value;
     } else if (arg.startsWith("--registry=")) {
       options.registry = arg.split("=")[1];
     } else if (arg.startsWith("--owner=")) {

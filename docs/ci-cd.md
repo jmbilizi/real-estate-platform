@@ -164,7 +164,7 @@ concurrency:
 **Nx:**
 
 - Computation cache stored at `.nx/cache`
-- Unified cache key across all languages (composite hash of package-lock.json, requirements.txt, \*.csproj)
+- Unified cache key across all languages (composite hash of package-lock.json, uv.lock, \*.csproj)
 - Enables cross-language cache sharing (e.g., Python job reuses Node.js affected computations)
 - Restore keys allow fallback to OS-level cache
 
@@ -174,7 +174,7 @@ concurrency:
 
 ```bash
 # Dynamically compares against the target branch (dev, test, or main)
-npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:node
+npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:runtime:node
 ```
 
 **Push to main/dev/test** runs the full test suite for all projects:
@@ -997,7 +997,7 @@ git push origin feature/new-feature
 **"Python environment not set up"**
 
 ```bash
-py-env.bat create
+npm run python:env
 ```
 
 **".NET SDK not found"**

@@ -1,0 +1,33 @@
+[project]
+name = "nx-workspace"
+version = "1.0.0"
+requires-python = ">=3.9,<4"
+dependencies = ["hello-world-fastapi"]
+
+[tool.uv.workspace]
+members = ["apps/services/hello-world-fastapi"]
+
+[tool.uv.sources.hello-world-fastapi]
+workspace = true
+
+[tool.nx]
+autoActivate = true
+
+[dependency-groups]
+dev = [
+  # Per-project tools (moved from hello-world-fastapi by migrate-to-shared-venv)
+  "autopep8>=2.3.1",
+  "ruff>=0.8.2",
+  "pytest>=8.3.4",
+  "pytest-sugar>=1.0.0",
+  "pytest-cov>=6.0.0",
+  "pytest-html>=4.1.1",
+  # Workspace-wide tools (migrated from pip-based .venv)
+  "black>=25.1.0",
+  "flake8>=7.3.0",
+  "mypy>=1.18.1",
+  "pylint>=3.3.8",
+  "sqlfluff>=3.4.2",
+  "yamllint>=1.37.1",
+  "python-dotenv>=1.0.0",
+]

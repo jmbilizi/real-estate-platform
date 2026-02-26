@@ -159,6 +159,22 @@ function isTestProject(csprojContent) {
   );
 }
 
+/**
+ * Check for a companion test project in a Tests/ subfolder.
+ * Convention: {project}/Tests/{name}.Tests.csproj
+ * Returns the subfolder name ('Tests') if found, or null.
+ */
+function findCompanionTestSubdir(projectRootAbs) {
+  const testsDir = path.join(projectRootAbs, "Tests");
+  try {
+    if (!fs.existsSync(testsDir) || !fs.statSync(testsDir).isDirectory()) return null;
+    const csprojFiles = fs.readdirSync(testsDir).filter((f) => f.endsWith(".Tests.csproj"));
+    return csprojFiles.length > 0 ? "Tests" : null;
+  } catch {
+    return null;
+  }
+}
+
 // Create project.json for a .NET project
 function createProjectJson(projectName, projectConfig) {
   const projectRoot = projectConfig.root;
@@ -225,6 +241,22 @@ function createProjectJson(projectName, projectConfig) {
       needsUpdate = true;
     }
 
+    // Test target (non-test projects with companion Tests/ subfolder)
+    if (!isTest && !existingContent.targets.test) {
+      const companionSubdir = findCompanionTestSubdir(path.resolve(projectRoot));
+      if (companionSubdir) {
+        existingContent.targets.test = {
+          executor: "nx:run-commands",
+          options: {
+            command: "dotnet test",
+            cwd: projectRoot.replace(/\\/g, "/") + "/" + companionSubdir,
+          },
+        };
+        missingTargets.push("test");
+        needsUpdate = true;
+      }
+    }
+
     // Lint target (all projects)
     if (!existingContent.targets.lint) {
       existingContent.targets.lint = {
@@ -261,6 +293,19 @@ function createProjectJson(projectName, projectConfig) {
         },
       };
       missingTargets.push("format-check");
+      needsUpdate = true;
+    }
+
+    // Type-check target (all projects – dotnet build IS the type checker)
+    if (!existingContent.targets["type-check"]) {
+      existingContent.targets["type-check"] = {
+        executor: "nx:run-commands",
+        options: {
+          command: "dotnet build --nologo --no-restore",
+          cwd: projectRoot,
+        },
+      };
+      missingTargets.push("type-check");
       needsUpdate = true;
     }
 
@@ -331,6 +376,13 @@ function createProjectJson(projectName, projectConfig) {
         cwd: projectRoot,
       },
     },
+    "type-check": {
+      executor: "nx:run-commands",
+      options: {
+        command: "dotnet build --nologo --no-restore",
+        cwd: projectRoot,
+      },
+    },
   };
 
   // Add serve target for application projects (not libraries or tests)
@@ -353,6 +405,20 @@ function createProjectJson(projectName, projectConfig) {
         cwd: projectRoot,
       },
     };
+  }
+
+  // Add test target for non-test projects with companion Tests/ subfolder
+  if (!isTest) {
+    const companionSubdir = findCompanionTestSubdir(path.resolve(projectRoot));
+    if (companionSubdir) {
+      targets.test = {
+        executor: "nx:run-commands",
+        options: {
+          command: "dotnet test",
+          cwd: projectRoot.replace(/\\/g, "/") + "/" + companionSubdir,
+        },
+      };
+    }
   }
 
   // Add container-build target for application projects with Dockerfile
@@ -402,8 +468,11 @@ function addProjectsToSolution() {
   const solutionContent = fs.readFileSync(solutionPath, "utf8");
   const existingProjects = [];
 
-  // Extract existing project paths from solution file
-  const projectRegex = /Project\([^)]+\)\s*=\s*"[^"]+",\s*"([^"]+)"/g;
+  // Extract existing project paths from solution file.
+  // Only match actual C# projects (FAE04EC0 GUID), NOT solution folders (2150E333 GUID).
+  // Solution folders have virtual paths (e.g. "Tests") that don't point to real files,
+  // which would cause the stale-project cleanup below to incorrectly remove them.
+  const projectRegex = /Project\("\{FAE04EC0[^}]*\}"\)\s*=\s*"[^"]+",\s*"([^"]+)"/g;
   let match;
   while ((match = projectRegex.exec(solutionContent)) !== null) {
     // Normalize path separators for comparison
@@ -494,6 +563,45 @@ function addProjectsToSolution() {
   return { added: addedCount, removed: removedCount };
 }
 
+// Clean up .sln file: remove stale platform configs, normalise line endings
+function cleanupSolutionFile() {
+  const solutionPath = path.join(process.cwd(), "real-estate-platform.sln");
+  if (!fs.existsSync(solutionPath)) return;
+
+  try {
+    const buffer = fs.readFileSync(solutionPath);
+    const hasBOM = buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf;
+
+    let solutionContent = buffer.toString("utf8");
+    if (solutionContent.charCodeAt(0) === 0xfeff) {
+      solutionContent = solutionContent.substring(1);
+    }
+
+    const hasCRLF = solutionContent.includes("\r\n");
+    const lineEnding = hasCRLF ? "\r\n" : "\n";
+
+    solutionContent = solutionContent.replace(/^\s*Debug\|x64 = Debug\|x64\r?\n/gm, "");
+    solutionContent = solutionContent.replace(/^\s*Debug\|x86 = Debug\|x86\r?\n/gm, "");
+    solutionContent = solutionContent.replace(/^\s*Release\|x64 = Release\|x64\r?\n/gm, "");
+    solutionContent = solutionContent.replace(/^\s*Release\|x86 = Release\|x86\r?\n/gm, "");
+
+    if (hasCRLF) {
+      solutionContent = solutionContent.replace(/\r?\n/g, "\r\n");
+    } else {
+      solutionContent = solutionContent.replace(/\r\n/g, "\n");
+    }
+
+    solutionContent = solutionContent.trim() + lineEnding;
+
+    const outputBuffer = hasBOM
+      ? Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(solutionContent, "utf8")])
+      : Buffer.from(solutionContent, "utf8");
+    fs.writeFileSync(solutionPath, outputBuffer);
+  } catch (error) {
+    // Ignore cleanup errors
+  }
+}
+
 // Main function
 function main() {
   log("\n🔧 Setting up .NET project configurations...\n", "blue");
@@ -526,50 +634,7 @@ function main() {
   log("\n🔗 Synchronizing solution file...\n", "blue");
   const solutionResult = addProjectsToSolution();
 
-  // Clean up the solution file - remove leading/trailing blank lines and fix platforms (always)
-  const solutionPath = path.join(process.cwd(), "real-estate-platform.sln");
-  if (fs.existsSync(solutionPath)) {
-    try {
-      // Read as buffer to preserve exact encoding
-      const buffer = fs.readFileSync(solutionPath);
-      const hasBOM = buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf;
-
-      let solutionContent = buffer.toString("utf8");
-      // Remove BOM character from string if present
-      if (solutionContent.charCodeAt(0) === 0xfeff) {
-        solutionContent = solutionContent.substring(1);
-      }
-
-      // Detect current line ending style to preserve it
-      const hasCRLF = solutionContent.includes("\r\n");
-      const lineEnding = hasCRLF ? "\r\n" : "\n";
-
-      // Remove extra platform configurations that dotnet sln adds
-      // Keep only Debug|Any CPU and Release|Any CPU
-      solutionContent = solutionContent.replace(/^\s*Debug\|x64 = Debug\|x64\r?\n/gm, "");
-      solutionContent = solutionContent.replace(/^\s*Debug\|x86 = Debug\|x86\r?\n/gm, "");
-      solutionContent = solutionContent.replace(/^\s*Release\|x64 = Release\|x64\r?\n/gm, "");
-      solutionContent = solutionContent.replace(/^\s*Release\|x86 = Release\|x86\r?\n/gm, "");
-
-      // Normalize all line endings to match detected style
-      if (hasCRLF) {
-        solutionContent = solutionContent.replace(/\r?\n/g, "\r\n");
-      } else {
-        solutionContent = solutionContent.replace(/\r\n/g, "\n");
-      }
-
-      // Trim and add single trailing newline
-      solutionContent = solutionContent.trim() + lineEnding;
-
-      // Write with same BOM state as original
-      const outputBuffer = hasBOM
-        ? Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(solutionContent, "utf8")])
-        : Buffer.from(solutionContent, "utf8");
-      fs.writeFileSync(solutionPath, outputBuffer);
-    } catch (error) {
-      // Ignore cleanup errors
-    }
-  }
+  cleanupSolutionFile();
 
   log(`\n✅ Solution synchronization complete!`, "green");
   log(`   Added to solution: ${solutionResult.added}`, "green");
@@ -591,5 +656,17 @@ function main() {
   log("   • Use VersionOverride in Directory.Packages.props for transitive deps\n", "yellow");
 }
 
-// Run the script
-main();
+// Export for reuse by the unified workspace targets script
+module.exports = {
+  writeFilePreservingEncoding,
+  determineProjectType,
+  isTestProject,
+  findCompanionTestSubdir,
+  addProjectsToSolution,
+  cleanupSolutionFile,
+};
+
+// Run standalone
+if (require.main === module) {
+  main();
+}

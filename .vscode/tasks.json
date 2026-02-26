@@ -2,9 +2,9 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Python: Create Virtual Environment",
+      "label": "Python: Sync Environment (uv sync)",
       "type": "shell",
-      "command": "py-env.bat create",
+      "command": "uv sync",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -13,42 +13,9 @@
       "group": "none"
     },
     {
-      "label": "Python: Install All Dependencies",
+      "label": "Python: Add Dependency",
       "type": "shell",
-      "command": "py-env.bat install",
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "new"
-      },
-      "group": "none"
-    },
-    {
-      "label": "Python: Install Dev Dependencies",
-      "type": "shell",
-      "command": "py-env.bat install dev",
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "new"
-      },
-      "group": "none"
-    },
-    {
-      "label": "Python: Set Up Service Dependencies",
-      "type": "shell",
-      "command": "py-env.bat service ${input:pythonService}",
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "new"
-      },
-      "group": "none"
-    },
-    {
-      "label": "FastAPI: Run Service",
-      "type": "shell",
-      "command": "npx nx run fastapi-service:serve",
+      "command": "uv add ${input:pythonPackage}",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -59,7 +26,7 @@
     {
       "label": "Python: Format All Code",
       "type": "shell",
-      "command": "npm run format-python",
+      "command": "npm run python:format",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -70,7 +37,7 @@
     {
       "label": "Python: Lint All Code",
       "type": "shell",
-      "command": "npm run lint-python",
+      "command": "npm run python:lint",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -81,7 +48,18 @@
     {
       "label": "Python: Check All Code",
       "type": "shell",
-      "command": "npm run check-python",
+      "command": "npm run python:check",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "group": "none"
+    },
+    {
+      "label": "Python: Run Tests",
+      "type": "shell",
+      "command": "npm run nx:python-test",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -92,9 +70,9 @@
   ],
   "inputs": [
     {
-      "id": "pythonService",
-      "description": "Python Service Name",
-      "default": "fastapi-service",
+      "id": "pythonPackage",
+      "description": "Python package name to add (e.g. fastapi)",
+      "default": "",
       "type": "promptString"
     }
   ]

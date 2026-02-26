@@ -87,15 +87,15 @@ jobs:
 
       - name: Check Node.js formatting (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: npx nx format:check --base=origin/${{ github.base_ref }} --head=HEAD --projects=tag:node || echo "No affected Node.js projects"
+        run: npx nx format:check --base=origin/${{ github.base_ref }} --head=HEAD --projects=tag:runtime:node || echo "No affected Node.js projects"
 
       - name: Check Node.js formatting (Push - all projects)
         if: github.event_name == 'push'
-        run: npx nx format:check --projects=tag:node || echo "No Node.js projects found"
+        run: npx nx format:check --projects=tag:runtime:node || echo "No Node.js projects found"
 
       - name: Lint Node.js projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=lint --projects=tag:node || echo "No affected Node.js projects"
+        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=lint --projects=tag:runtime:node || echo "No affected Node.js projects"
 
       - name: Lint Node.js projects (Push - all projects)
         if: github.event_name == 'push'
@@ -103,7 +103,7 @@ jobs:
 
       - name: Test Node.js projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:node || echo "No affected Node.js projects"
+        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:runtime:node || echo "No affected Node.js projects"
 
       - name: Test Node.js projects (Push - all projects)
         if: github.event_name == 'push'
@@ -111,7 +111,7 @@ jobs:
 
       - name: Build Node.js projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=build --projects=tag:node || echo "No affected Node.js projects"
+        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=build --projects=tag:runtime:node || echo "No affected Node.js projects"
 
       - name: Build Node.js projects (Push - all projects)
         if: github.event_name == 'push'
@@ -139,15 +139,18 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.11"
 
-      - name: Cache pip
+      - name: Install UV
+        uses: astral-sh/setup-uv@v5
+
+      - name: Cache UV
         uses: actions/cache@v4
         with:
-          path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ hashFiles('tools/python/requirements.txt', 'tools/python/python-dev-requirements.txt') }}
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
           restore-keys: |
-            pip-${{ runner.os }}-
+            uv-${{ runner.os }}-
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -170,7 +173,7 @@ jobs:
             nx-${{ runner.os }}-
 
       - name: Set up Python environment
-        run: npm run python:env
+        run: uv sync
 
       # Note: We do NOT run nx:reset in CI to ensure we validate code exactly as committed.
       # If project tags or workspace state is incorrect, CI should fail (not auto-fix).
@@ -178,15 +181,15 @@ jobs:
 
       - name: Check Python formatting (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: .venv/bin/black --check . --exclude "(/\\.venv/|/node_modules/|/\\.git/|/\\.nx/|/__pycache__/|/dist/|/build/)" || echo "No affected Python projects"
+        run: uv run black --check . --exclude "(/\\.venv/|/node_modules/|/\\.git/|/\\.nx/|/__pycache__/|/dist/|/build/)" || echo "No affected Python projects"
 
       - name: Check Python formatting (Push - all projects)
         if: github.event_name == 'push'
-        run: .venv/bin/black --check . --exclude "(/\\.venv/|/node_modules/|/\\.git/|/\\.nx/|/__pycache__/|/dist/|/build/)" || echo "No Python projects found"
+        run: uv run black --check . --exclude "(/\\.venv/|/node_modules/|/\\.git/|/\\.nx/|/__pycache__/|/dist/|/build/)" || echo "No Python projects found"
 
       - name: Lint Python projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=lint --projects=tag:python || echo "No affected Python projects"
+        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=lint --projects=tag:runtime:python || echo "No affected Python projects"
 
       - name: Lint Python projects (Push - all projects)
         if: github.event_name == 'push'
@@ -194,7 +197,7 @@ jobs:
 
       - name: Test Python projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:python || echo "No affected Python projects"
+        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:runtime:python || echo "No affected Python projects"
 
       - name: Test Python projects (Push - all projects)
         if: github.event_name == 'push'
@@ -202,7 +205,7 @@ jobs:
 
       - name: Build Python projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=build --projects=tag:python || echo "No affected Python projects"
+        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=build --projects=tag:runtime:python || echo "No affected Python projects"
 
       - name: Build Python projects (Push - all projects)
         if: github.event_name == 'push'
@@ -273,7 +276,7 @@ jobs:
 
       - name: Check .NET formatting (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=format-check --projects=tag:dotnet || echo "No affected .NET projects"
+        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=format-check --projects=tag:runtime:dotnet || echo "No affected .NET projects"
 
       - name: Check .NET formatting (Push - all projects)
         if: github.event_name == 'push'
@@ -281,15 +284,23 @@ jobs:
 
       - name: Lint .NET projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=lint --projects=tag:dotnet || echo "No affected .NET projects"
+        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=lint --projects=tag:runtime:dotnet || echo "No affected .NET projects"
 
       - name: Lint .NET projects (Push - all projects)
         if: github.event_name == 'push'
         run: npm run nx:dotnet-lint || echo "No .NET projects found"
 
+      - name: Type check .NET projects (PR - affected only)
+        if: github.event_name == 'pull_request'
+        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=type-check --projects=tag:runtime:dotnet || echo "No affected .NET projects"
+
+      - name: Type check .NET projects (Push - all projects)
+        if: github.event_name == 'push'
+        run: npm run nx:dotnet-type-check || echo "No .NET projects found"
+
       - name: Test .NET projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:dotnet || echo "No affected .NET projects"
+        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:runtime:dotnet || echo "No affected .NET projects"
 
       - name: Test .NET projects (Push - all projects)
         if: github.event_name == 'push'
@@ -297,7 +308,7 @@ jobs:
 
       - name: Build .NET projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=build --projects=tag:dotnet || echo "No affected .NET projects"
+        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=build --projects=tag:runtime:dotnet || echo "No affected .NET projects"
 
       - name: Build .NET projects (Push - all projects)
         if: github.event_name == 'push'

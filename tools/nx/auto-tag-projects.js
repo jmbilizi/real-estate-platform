@@ -1,321 +1,381 @@
 #!/usr/bin/env node
 
 /**
- * Auto-Tag Projects
+ * Auto-Tag Projects (Namespaced)
  *
- * This script automatically detects and tags projects based on their executors.
- * It scans all projects in the workspace and applies appropriate language tags.
+ * Scans all Nx projects and applies a consistent, namespaced tag taxonomy.
+ *
+ * AUTO-DETECTED dimensions (set or corrected on every run):
+ *   runtime:    node | dotnet | python        — based on project files & executors
+ *   type:       service | client | lib | gateway — based on project role
+ *   platform:   web | server | mobile          — based on deployment target (omitted = agnostic)
+ *
+ * MANUAL dimensions (placeholder added if missing, never overwritten):
+ *   scope:      business domain (accounts, messaging, properties, shared, client, ...)
+ *   framework:  tech stack (next, expo, fastapi, express, ocelot, aspnetcore, ...)
+ *   devteam:    owning team
+ *
+ * Called by `npm run nx:reset` after setup-workspace-targets.js.
  */
 
 const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
 
-/**
- * Write file preserving original BOM and line endings
- * @param {string} filePath - Path to file
- * @param {string} content - Content to write
- */
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const colors = {
+  green: "\x1b[32m",
+  yellow: "\x1b[33m",
+  blue: "\x1b[34m",
+  red: "\x1b[31m",
+  reset: "\x1b[0m",
+};
+
+function log(msg, color = "reset") {
+  console.log(`${colors[color]}${msg}${colors.reset}`);
+}
+
+const rootDir = process.cwd();
+
+// Disable daemon – avoids stale graph issues when setup-workspace-targets.js
+// just created project.json files in the same nx:reset run.
+const nxEnv = { ...process.env, NX_DAEMON: "false" };
+
 function writeFilePreservingEncoding(filePath, content) {
-  // Check if file exists to detect original encoding
   let hasBOM = false;
   let lineEnding = "\n";
 
   if (fs.existsSync(filePath)) {
-    const originalBuffer = fs.readFileSync(filePath);
-    hasBOM =
-      originalBuffer.length >= 3 &&
-      originalBuffer[0] === 0xef &&
-      originalBuffer[1] === 0xbb &&
-      originalBuffer[2] === 0xbf;
-
-    const originalContent = originalBuffer.toString("utf8");
-    lineEnding = originalContent.includes("\r\n") ? "\r\n" : "\n";
-  } else {
-    // For new files, detect from content being written
-    lineEnding = content.includes("\r\n") ? "\r\n" : "\n";
+    const buf = fs.readFileSync(filePath);
+    hasBOM = buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf;
+    const original = buf.toString("utf8");
+    lineEnding = original.includes("\r\n") ? "\r\n" : "\n";
   }
 
-  // Normalize line endings
   if (lineEnding === "\r\n") {
     content = content.replace(/\r?\n/g, "\r\n");
   } else {
     content = content.replace(/\r\n/g, "\n");
   }
 
-  // Write with appropriate BOM
-  const outputBuffer = hasBOM
+  const out = hasBOM
     ? Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(content, "utf8")])
     : Buffer.from(content, "utf8");
-
-  fs.writeFileSync(filePath, outputBuffer);
+  fs.writeFileSync(filePath, out);
 }
 
-// Colors for console output
-const colors = {
-  green: "\x1b[32m",
-  yellow: "\x1b[33m",
-  blue: "\x1b[34m",
-  reset: "\x1b[0m",
-};
+// ---------------------------------------------------------------------------
+// Nx helpers
+// ---------------------------------------------------------------------------
 
-// Root path
-const rootDir = process.cwd();
-
-// Get all projects in the workspace
 function getAllProjects() {
   try {
     const output = execSync("npx nx show projects --json", {
       encoding: "utf8",
+      env: nxEnv,
+      stdio: ["ignore", "pipe", "pipe"],
     });
     return JSON.parse(output);
   } catch (error) {
-    console.error("Error getting projects:", error.message);
+    log(`Error getting projects: ${error.message}`, "red");
     return [];
   }
 }
 
-// Get project configuration
 function getProjectConfig(projectName) {
   try {
     const output = execSync(`npx nx show project ${projectName} --json`, {
       encoding: "utf8",
+      env: nxEnv,
+      stdio: ["ignore", "pipe", "pipe"],
     });
     return JSON.parse(output);
-  } catch (error) {
-    console.error(`Error getting config for ${projectName}:`, error.message);
+  } catch {
     return null;
   }
 }
 
-// Detect language based on executors
-function detectLanguage(projectConfig) {
+// ---------------------------------------------------------------------------
+// Tag helpers
+// ---------------------------------------------------------------------------
+
+/** Get the value of a namespaced tag, e.g. getTagValue(tags, "runtime") → "node" */
+function getTagValue(tags, prefix) {
+  const tag = tags.find((t) => t.startsWith(`${prefix}:`));
+  return tag ? tag.substring(prefix.length + 1) : null;
+}
+
+/** Remove all tags matching a prefix */
+function removeTagsWithPrefix(tags, prefix) {
+  return tags.filter((t) => !t.startsWith(`${prefix}:`));
+}
+
+/** Set a namespaced tag, replacing any existing value for that prefix */
+function setTag(tags, prefix, value) {
+  const filtered = removeTagsWithPrefix(tags, prefix);
+  filtered.push(`${prefix}:${value}`);
+  return filtered;
+}
+
+/** Remove legacy bare tags that are being replaced by namespaced equivalents */
+const LEGACY_BARE_TAGS = new Set([
+  "node",
+  "dotnet",
+  "python",
+  "service",
+  "lib",
+  "next",
+  "expo",
+  "express",
+  "api",
+  "client",
+  "react",
+  "fastapi",
+  "django",
+  "webapi",
+  "blazor",
+]);
+
+/** Old namespaced tags that don't fit the new taxonomy */
+const LEGACY_NAMESPACED_TAGS = new Set(["client:platform", "type:app"]);
+
+function removeLegacyTags(tags) {
+  return tags.filter((t) => !LEGACY_BARE_TAGS.has(t) && !LEGACY_NAMESPACED_TAGS.has(t));
+}
+
+// ---------------------------------------------------------------------------
+// Detection: runtime
+// ---------------------------------------------------------------------------
+
+function detectRuntime(projectConfig) {
   const targets = projectConfig.targets || {};
   const executors = [];
   const commands = [];
 
-  // Collect all executors and commands
-  for (const targetName in targets) {
-    const target = targets[targetName];
-    if (target.executor) {
-      executors.push(target.executor);
-    }
-    if (target.options && target.options.command) {
-      commands.push(target.options.command);
-    }
+  for (const name in targets) {
+    const t = targets[name];
+    if (t.executor) executors.push(t.executor);
+    if (t.options?.command) commands.push(t.options.command);
   }
 
-  const executorString = executors.join(" ");
-  const commandString = commands.join(" ");
+  const executorStr = executors.join(" ");
+  const commandStr = commands.join(" ");
+  const projectRoot = path.join(rootDir, projectConfig.root);
 
-  // Node.js detection
+  // Python — executor-based (check first, most specific)
+  if (executorStr.includes("@nxlv/python")) return "python";
+
+  // .NET — executor or command or file based
+  if (executorStr.includes("@nx/dotnet") || commandStr.includes("dotnet")) return "dotnet";
+  try {
+    if (fs.readdirSync(projectRoot).some((f) => /\.(csproj|fsproj|vbproj)$/.test(f))) return "dotnet";
+  } catch {}
+
+  // Node — executor, command, or file based
   if (
-    executorString.includes("@nx/node") ||
-    executorString.includes("@nx/express") ||
-    executorString.includes("@nx/next") ||
-    executorString.includes("@nx/react") ||
-    executorString.includes("@nx/web") ||
-    executorString.includes("@nx/js") ||
-    executorString.includes("@nx/jest") ||
-    executorString.includes("@nx/eslint")
+    executorStr.includes("@nx/node") ||
+    executorStr.includes("@nx/express") ||
+    executorStr.includes("@nx/next") ||
+    executorStr.includes("@nx/react") ||
+    executorStr.includes("@nx/web") ||
+    executorStr.includes("@nx/js") ||
+    executorStr.includes("@nx/jest") ||
+    executorStr.includes("@nx/eslint") ||
+    executorStr.includes("@nx/expo")
   ) {
     return "node";
   }
+  if (/\b(eslint|jest|prettier|tsc |tsc--|next |expo )\b/.test(commandStr)) return "node";
+  try {
+    if (fs.readdirSync(projectRoot).some((f) => f === "package.json" || f === "tsconfig.json")) return "node";
+  } catch {}
 
-  // Python detection
-  if (executorString.includes("@nxlv/python")) {
-    return "python";
-  }
-
-  // .NET detection
-  if (executorString.includes("@nx/dotnet")) {
-    return "dotnet";
-  }
-
-  // .NET detection via commands (for nx:run-commands with dotnet)
-  if (commandString.includes("dotnet")) {
-    return "dotnet";
-  }
-
-  // .NET detection via project files
-  const projectRoot = projectConfig.root;
-  const projectPath = path.join(rootDir, projectRoot);
-  if (fs.existsSync(projectPath)) {
-    const files = fs.readdirSync(projectPath);
-    if (files.some((file) => file.endsWith(".csproj") || file.endsWith(".vbproj") || file.endsWith(".fsproj"))) {
-      return "dotnet";
-    }
-  }
+  // Python — file based (fallback)
+  try {
+    if (fs.existsSync(path.join(projectRoot, "pyproject.toml"))) return "python";
+  } catch {}
 
   return null;
 }
 
-// Get additional tags based on executors
-function getAdditionalTags(projectConfig, language) {
+// ---------------------------------------------------------------------------
+// Detection: type
+// ---------------------------------------------------------------------------
+
+function detectType(projectConfig) {
+  const root = (projectConfig.root || "").replace(/\\/g, "/");
+  const isLibPath = root.startsWith("libs/") || root.includes("/libs/");
+  const isLibType = projectConfig.projectType === "library";
+
+  // Libraries
+  if (isLibPath || isLibType) return "lib";
+
+  // Folder-based detection under apps/
+  if (/^apps\/clients(\/|$)/.test(root)) return "client";
+  if (/^apps\/services(\/|$)/.test(root)) return "service";
+  if (/^apps\/databases(\/|$)/.test(root)) return "database";
+
+  // Gateway — name-based fallback
+  const name = projectConfig.name || "";
+  if (name.includes("gateway")) return "gateway";
+
+  // Everything else under apps/ → service
+  return "service";
+}
+
+// ---------------------------------------------------------------------------
+// Detection: platform
+// ---------------------------------------------------------------------------
+
+function detectPlatform(projectConfig, runtime, type) {
   const targets = projectConfig.targets || {};
-  const executors = [];
-  const additionalTags = [];
+  const executors = Object.values(targets)
+    .map((t) => t.executor || "")
+    .join(" ");
+  const commands = Object.values(targets)
+    .map((t) => t.options?.command || "")
+    .join(" ");
 
-  // Collect all executors
-  for (const targetName in targets) {
-    const target = targets[targetName];
-    if (target.executor) {
-      executors.push(target.executor);
-    }
+  // Web — Next.js
+  if (executors.includes("@nx/next") || commands.includes("next ")) return "web";
+
+  // Mobile — Expo
+  if (executors.includes("@nx/expo") || commands.includes("expo ")) return "mobile";
+
+  // Server — backend services/gateways
+  if ((type === "service" || type === "gateway") && (runtime === "dotnet" || runtime === "python")) {
+    return "server";
   }
 
-  const executorString = executors.join(" ");
-
-  // Check if this is a test project
-  const isTestProject =
-    projectConfig.name?.toLowerCase().includes("test") ||
-    projectConfig.root?.toLowerCase().includes("test") ||
-    targets.test ||
-    executorString.includes("jest") ||
-    executorString.includes("xunit") ||
-    executorString.includes("nunit") ||
-    executorString.includes("mstest") ||
-    executorString.includes("pytest");
-
-  // Determine the base type (lib vs service) - for test projects, infer from location
-  const isLibraryType =
-    projectConfig.projectType === "library" ||
-    projectConfig.root?.includes("libs/") ||
-    projectConfig.root?.includes("libs\\");
-
-  if (language === "node") {
-    if (executorString.includes("@nx/express")) additionalTags.push("express", "api");
-    if (executorString.includes("@nx/next")) additionalTags.push("next", "client");
-    if (executorString.includes("@nx/react")) additionalTags.push("react", "client");
-
-    // Add composite tags: both type (lib/service) AND test if applicable
-    if (isLibraryType) {
-      additionalTags.push("lib");
-      if (isTestProject) additionalTags.push("test");
-    } else {
-      additionalTags.push("service");
-      if (isTestProject) additionalTags.push("test");
-    }
+  // Node.js backend services (express, etc.)
+  if (type === "service" && runtime === "node") {
+    if (executors.includes("@nx/express") || commands.includes("express")) return "server";
   }
 
-  if (language === "python") {
-    if (executorString.includes("fastapi")) additionalTags.push("fastapi", "api");
-    if (executorString.includes("django")) additionalTags.push("django", "api");
-
-    // Add composite tags: both type (lib/service) AND test if applicable
-    if (isLibraryType) {
-      additionalTags.push("lib");
-      if (isTestProject) additionalTags.push("test");
-    } else {
-      additionalTags.push("service");
-      if (isTestProject) additionalTags.push("test");
-    }
-  }
-
-  if (language === "dotnet") {
-    if (executorString.includes("webapi")) additionalTags.push("webapi", "api");
-    if (executorString.includes("blazor")) additionalTags.push("blazor", "client");
-
-    // Add composite tags: both type (lib/service) AND test if applicable
-    if (isLibraryType) {
-      additionalTags.push("lib");
-      if (isTestProject) additionalTags.push("test");
-    } else {
-      additionalTags.push("service");
-      if (isTestProject) additionalTags.push("test");
-    }
-  }
-
-  return additionalTags;
+  // Libraries and ambiguous projects — no platform (agnostic)
+  return null;
 }
 
-// Update project tags
-function updateProjectTags(projectName, projectConfig, newTags) {
-  const projectRoot = projectConfig.root;
-  const projectJsonPath = path.join(rootDir, projectRoot, "project.json");
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
 
-  if (!fs.existsSync(projectJsonPath)) {
-    console.warn(`project.json not found for ${projectName} at ${projectJsonPath}`);
-    return false;
-  }
-
-  try {
-    const projectJson = JSON.parse(fs.readFileSync(projectJsonPath, "utf8"));
-
-    // Initialize tags if not exist
-    if (!projectJson.tags) {
-      projectJson.tags = [];
-    }
-
-    const originalTags = [...projectJson.tags];
-    let tagsAdded = false;
-
-    // Add new tags if they don't exist
-    for (const tag of newTags) {
-      if (!projectJson.tags.includes(tag)) {
-        projectJson.tags.push(tag);
-        tagsAdded = true;
-      }
-    }
-
-    if (tagsAdded) {
-      // Write the updated project.json
-      writeFilePreservingEncoding(projectJsonPath, JSON.stringify(projectJson, null, 2) + "\n");
-      console.log(
-        `${colors.green}✓${colors.reset} Tagged ${colors.blue}${projectName}${colors.reset}: ${newTags.join(", ")}`,
-      );
-      return true;
-    }
-
-    return false;
-  } catch (error) {
-    console.error(`Error updating tags for ${projectName}:`, error.message);
-    return false;
-  }
-}
-
-// Main function
 function main() {
-  console.log(`${colors.blue}🏷️  Auto-tagging projects...${colors.reset}\n`);
+  log("\n🏷️  Auto-tagging projects...\n", "blue");
 
   const projects = getAllProjects();
   let taggedCount = 0;
   let processedCount = 0;
+  const warnings = [];
 
   for (const projectName of projects) {
-    const projectConfig = getProjectConfig(projectName);
-    if (!projectConfig) {
-      continue;
+    const config = getProjectConfig(projectName);
+    if (!config) continue;
+
+    // Skip companion test subfolders — managed by parent project
+    const posixRoot = (config.root || "").replace(/\\/g, "/");
+    if (/\/Tests$/i.test(posixRoot)) {
+      const parentDir = path.join(rootDir, posixRoot.replace(/\/Tests$/i, ""));
+      try {
+        if (fs.readdirSync(parentDir).some((f) => f.endsWith(".csproj"))) continue;
+      } catch {}
     }
 
     processedCount++;
-    const language = detectLanguage(projectConfig);
 
-    if (language) {
-      const additionalTags = getAdditionalTags(projectConfig, language);
-      const allTags = [language, ...additionalTags];
+    // Read current project.json
+    const projectJsonPath = path.join(rootDir, config.root, "project.json");
+    if (!fs.existsSync(projectJsonPath)) continue;
 
-      const wasTagged = updateProjectTags(projectName, projectConfig, allTags);
-      if (wasTagged) {
-        taggedCount++;
-      }
+    const raw = fs.readFileSync(projectJsonPath, "utf8");
+    const projectJson = JSON.parse(raw);
+    let tags = projectJson.tags || [];
+
+    // --- Step 1: Remove legacy bare tags ---
+    tags = removeLegacyTags(tags);
+
+    // --- Step 2: Auto-detect and set runtime ---
+    const runtime = detectRuntime(config);
+    if (runtime) {
+      tags = setTag(tags, "runtime", runtime);
     } else {
-      console.log(
-        `${colors.yellow}⚠${colors.reset}  Could not detect language for ${colors.blue}${projectName}${colors.reset}`,
-      );
+      warnings.push(`${projectName}: Could not detect runtime`);
+    }
+
+    // --- Step 3: Auto-detect and set type ---
+    const type = detectType(config);
+    tags = setTag(tags, "type", type);
+
+    // --- Step 4: Auto-detect platform (may be null = agnostic) ---
+    const platform = detectPlatform(config, runtime, type);
+    if (platform) {
+      tags = setTag(tags, "platform", platform);
+    } else {
+      // Remove stale platform tag if project is now agnostic
+      tags = removeTagsWithPrefix(tags, "platform");
+    }
+
+    // --- Step 5: Manual dimensions — add placeholder if missing ---
+    if (!getTagValue(tags, "scope")) {
+      tags.push("scope:unassigned");
+      warnings.push(`${projectName}: Missing scope: → added scope:unassigned`);
+    }
+
+    if (!getTagValue(tags, "framework")) {
+      tags.push("framework:unassigned");
+      warnings.push(`${projectName}: Missing framework: → added framework:unassigned`);
+    }
+
+    if (!getTagValue(tags, "devteam")) {
+      tags.push("devteam:unassigned");
+      warnings.push(`${projectName}: Missing devteam: → added devteam:unassigned`);
+    }
+
+    // --- Step 6: Sort tags by dimension for consistency ---
+    const dimensionOrder = ["runtime", "type", "platform", "framework", "scope", "devteam"];
+    tags.sort((a, b) => {
+      const aIdx = dimensionOrder.findIndex((d) => a.startsWith(`${d}:`));
+      const bIdx = dimensionOrder.findIndex((d) => b.startsWith(`${d}:`));
+      const aOrder = aIdx >= 0 ? aIdx : dimensionOrder.length;
+      const bOrder = bIdx >= 0 ? bIdx : dimensionOrder.length;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return a.localeCompare(b);
+    });
+
+    // --- Step 7: Write back if changed ---
+    projectJson.tags = tags;
+    const newContent = JSON.stringify(projectJson, null, 2) + "\n";
+
+    // Normalize for comparison
+    const normalizedOld = raw.replace(/\r\n/g, "\n");
+    const normalizedNew = newContent.replace(/\r\n/g, "\n");
+
+    if (normalizedNew !== normalizedOld) {
+      writeFilePreservingEncoding(projectJsonPath, newContent);
+      const tagSummary = tags.join(", ");
+      log(`✓ ${projectName}: ${tagSummary}`, "green");
+      taggedCount++;
     }
   }
 
-  console.log(`\n${colors.green}✅ Auto-tagging complete!${colors.reset}`);
-  console.log(`   Processed: ${processedCount} projects`);
-  console.log(`   Tagged: ${taggedCount} projects`);
+  // --- Summary ---
+  log(`\n✅ Auto-tagging complete!`, "green");
+  log(`   Processed: ${processedCount} projects`, "blue");
+  log(`   Tagged/updated: ${taggedCount} projects`, "blue");
+
+  if (warnings.length > 0) {
+    log(`\n⚠  Warnings:`, "yellow");
+    for (const w of warnings) {
+      log(`   ${w}`, "yellow");
+    }
+  }
 
   if (taggedCount > 0) {
-    console.log(
-      `\n${colors.blue}💡 Tip:${colors.reset} Your nx:*-lint, nx:*-test, and nx:*-build commands will now work correctly!`,
-    );
+    log(`\n💡 Tip: Your nx:*-lint, nx:*-test, and nx:*-build commands use tag:runtime:* selectors.`, "blue");
   }
 }
 
-// Run the script
 main();

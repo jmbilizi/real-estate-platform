@@ -7,7 +7,7 @@ This is an **Nx-powered polyglot monorepo** supporting Node.js/TypeScript, Pytho
 **Key Structural Decisions:**
 
 - **Empty `apps/` and `libs/`**: Projects are created on-demand using Nx generators or standard tooling
-- **Auto-tagging system**: All projects automatically tagged by language (`node`, `python`, `dotnet`) and type (`api`, `service`, `lib`) based on their executors
+- **Auto-tagging system**: All projects tagged with namespaced dimensions (`runtime:node`, `type:service`, `platform:web`, `scope:`, `framework:`, `devteam:`) — auto-detected and manual placeholders
 - **Unified Git hooks**: Two-tier validation (pre-commit: fast checks, pre-push: full suite) with intelligent language detection
 - **Centralized configs**: All language-specific configurations in `tools/{language}/configs/`
 
@@ -45,11 +45,14 @@ dotnet new classlib -n MyLib -o libs/my-lib
 npm run nx:reset
 ```
 
-**Why**: `nx:reset` runs three critical operations:
+**Why**: `nx:reset` runs four critical operations:
 
 1. `nx:repair` - Validates Nx configuration
 2. `nx reset` - Clears computation cache
-3. `dotnet:setup-projects` - Syncs .NET solution files
+3. `setup-workspace-targets.js` - Ensures all projects have correct targets:
+   - .NET: build, serve, test, lint, format, format-check, container-build
+   - Node: lint, type-check, format, format-check, test, container-build
+   - Syncs .NET solution file (.sln)
 4. `auto-tag-projects.js` - Auto-tags projects for `--projects=tag:*` filtering
 
 ### Running Commands
@@ -153,34 +156,44 @@ if (hasPythonProjectsAffected(isAffected, base)) {
 
 ## Python Environment Management
 
-**Consolidated approach**: Single `.venv` at workspace root for development tools (Black, Flake8, mypy, pytest). Global package managers (UV, Poetry) installed via pipx for Nx generators. Project-specific dependencies managed by Nx `@nxlv/python` plugin.
+**UV workspace mode**: Single `.venv` at workspace root, managed by UV. Each project has its own `pyproject.toml` (like `package.json`), but all packages install into the shared `.venv` (like `node_modules/`). Single `uv.lock` lockfile at root.
 
 ```bash
-# Full setup (environment + Nx integration + UV + Poetry)
-npm run python:env:full
-
-# Basic setup (environment + common tools)
+# One-time setup (installs UV if missing + creates .venv + installs all packages)
 npm run python:env
 
-# Just dependencies
-npm run python:deps
+# With all optional dependency groups
+npm run python:env:full
 
-# Check environment
-py-env.bat check  # Windows
-bash py-env.sh check  # Unix
+# Check environment status
+npm run python:env -- --check
 ```
 
-**Automatic global tool installation**: When you run `python:env:full`, the setup automatically:
+**What `python:env` does automatically:**
 
-1. Creates/verifies `.venv` with development tools
-2. Installs `pipx` into the venv (uses venv Python to avoid SSL cert issues)
-3. Uses pipx to install **UV** and **Poetry** globally at `~/.local/bin`
-4. Updates Windows PATH registry permanently
-5. Refreshes `process.env.PATH` so tools are **immediately available** (no restart required)
+1. Checks for UV installation — installs it if missing (cross-platform: PowerShell/winget/brew/curl)
+2. Runs `uv sync` — creates `.venv`, auto-downloads Python from `.python-version` if needed, installs all packages from `uv.lock`
+3. Verifies key tools are available (black, flake8, mypy, pytest, ruff)
 
-**Why global installation?** Nx generators (`@nxlv/python:uv-project`, `@nxlv/python:poetry-project`) require UV and Poetry to be globally accessible. Installing via pipx isolates them from the venv while keeping them available system-wide.
+**UV handles Python installation**: No need to pre-install Python. UV reads `.python-version` (pinned to 3.11) and auto-downloads the correct version.
 
-**Zero-restart workflow**: Just like .NET setup, UV and Poetry are immediately available after running `python:env:full` - no need to restart VS Code or terminals.
+**Running tools**: Use `uv run` instead of activating the venv:
+
+```bash
+uv run pytest              # Run tests
+uv run black .             # Format code
+uv run python script.py    # Run a script
+```
+
+**Adding dependencies**:
+
+```bash
+# To a specific project
+uv add --project apps/services/my-service fastapi "uvicorn[standard]"
+
+# Workspace-wide dev tool
+uv add --dev ruff
+```
 
 **CRITICAL**: Python venv is auto-created by git hooks if Python projects are affected. Don't force users to set it up manually unless they're actively developing Python code.
 
@@ -198,46 +211,102 @@ bash py-env.sh check  # Unix
 npm run nx:reset
 ```
 
-**Why**: This runs `dotnet:setup-projects.js` which:
+**Why**: This runs `setup-workspace-targets.js` which:
 
 - Syncs `real-estate-platform.sln` with all `.csproj` files
-- Creates/updates `project.json` files with explicit targets
-- Intelligently adds missing targets based on project type
+- Creates/updates `project.json` files with explicit targets for both .NET and Node projects
+- Intelligently adds missing targets based on project type and language
 
 **Targets created by setup script:**
 
+.NET projects:
+
 - `build` - All projects
 - `serve` - Application projects only (not libraries or tests)
-- `test` - Test projects only (xunit, nunit, mstest)
+- `test` - Test projects only (xunit, nunit, mstest) **or** non-test projects with a companion `Tests/` subfolder
 - `lint` - All projects (dotnet format analyzers)
 - `format` - All projects (dotnet format)
 - `format-check` - All projects (dotnet format --verify-no-changes)
+- `type-check` - All projects (dotnet build --nologo --no-restore)
+
+Node projects:
+
+- `lint` - All projects (eslint)
+- `type-check` - All projects with tsconfig.json (tsc --noEmit)
+- `format` - All projects (prettier --write)
+- `format-check` - All projects (prettier --check)
+- `test` - All projects (jest --passWithNoTests)
+
+### .NET Companion Test Convention
+
+.NET test projects use a **companion `Tests/` subfolder** inside the parent project directory:
+
+```
+apps/my-api/
+├── my-api.csproj          # Main project
+├── project.json           # Nx project config (test target delegates here ↓)
+└── Tests/
+    └── my-api.Tests.csproj  # Test project (PascalCase folder, .Tests.csproj suffix)
+```
+
+**How it works:**
+
+- `setup-workspace-targets.js` detects `Tests/*.Tests.csproj` inside .NET project directories
+- Adds a `test` target to the parent project with `cwd` pointing to the `Tests/` subfolder
+- The companion `.csproj` is NOT registered as a separate Nx project (skipped during setup)
+- `@nx/dotnet` still discovers it for dependency graph analysis
+- Solution file includes both `.csproj` files
+
+**Creating a companion test project:**
+
+```bash
+# Create the Tests/ subfolder and .csproj manually
+mkdir apps/my-api/Tests
+# Use dotnet CLI to create the test project
+dotnet new xunit -o apps/my-api/Tests -n my-api.Tests
+# Remove version attributes from PackageReference (CPM manages versions)
+# Ensure TargetFramework matches the parent project
+# Then sync everything
+npm run nx:reset
+```
+
+**CRITICAL**: The `.Tests.csproj` must:
+
+- Use versionless `<PackageReference>` (Central Package Management in `Directory.Packages.props`)
+- Have `<IsTestProject>true</IsTestProject>`
+- Include a `<ProjectReference>` to the parent `.csproj`
+- Match the parent's `<TargetFramework>`
 
 ## Auto-Tagging System
 
-**How it works**: `tools/nx/auto-tag-projects.js` scans all projects and tags them based on executors:
+**Namespaced tag taxonomy** with 6 dimensions. `tools/nx/auto-tag-projects.js` runs on every `nx:reset`.
 
-```javascript
-// Detection logic
-if (executorString.includes("@nx/express")) {
-  tags.push("node", "express", "api");
-}
-if (executorString.includes("@nxlv/python")) {
-  tags.push("python");
-}
-if (executorString.includes("@nx/dotnet") || file.endsWith(".csproj")) {
-  tags.push("dotnet");
-}
-```
+**Auto-detected dimensions** (set or corrected on every run):
+
+| Dimension   | Values                                | Detection                                |
+| ----------- | ------------------------------------- | ---------------------------------------- |
+| `runtime:`  | `node`, `dotnet`, `python`            | Executors, commands, project files       |
+| `type:`     | `service`, `client`, `lib`, `gateway` | Project location, executors, name        |
+| `platform:` | `web`, `server`, `mobile`             | Framework executors; omitted if agnostic |
+
+**Manual dimensions** (placeholder `unassigned` added if missing, never overwritten):
+
+| Dimension    | Purpose                                          |
+| ------------ | ------------------------------------------------ |
+| `scope:`     | Business domain (`accounts`, `shared`, `client`) |
+| `framework:` | Tech stack (`next`, `expo`, `fastapi`, `ocelot`) |
+| `devteam:`   | Owning team                                      |
 
 **Usage in commands:**
 
 ```bash
-npm run nx:node-test      # Runs: nx run-many --target=test --projects=tag:node
-npm run nx:python-lint    # Runs: nx run-many --target=lint --projects=tag:python
+npm run nx:node-test      # Runs: nx run-many --target=test --projects=tag:runtime:node
+npm run nx:python-lint    # Runs: nx run-many --target=lint --projects=tag:runtime:python
+npx nx run-many --target=test --projects=tag:type:client   # All client apps
+npx nx run-many --target=lint --projects=tag:scope:shared   # All shared-scope projects
 ```
 
-**CRITICAL**: If `--projects=tag:*` commands don't find your new project, run `npm run nx:tag-projects` (or `npm run nx:reset` which includes it).
+**CRITICAL**: If `--projects=tag:runtime:*` commands don't find your new project, run `npm run nx:tag-projects` (or `npm run nx:reset` which includes it).
 
 ## CI/CD Pipeline
 
@@ -406,14 +475,14 @@ npm run nx:dotnet-format    # Format .NET projects
 
 ## Common Pitfalls & Solutions
 
-**"No projects found for tag:python"**
+**"No projects found for tag:runtime:python"**
 → Run `npm run nx:reset` to auto-tag projects
 
 **".NET project not detected by Nx"**  
 → Run `npm run nx:reset` to sync solution file and generate project.json
 
 **"Python environment not set up" in git hooks**
-→ Hooks auto-create it. If manual setup needed: `py-env.bat create`
+→ Hooks auto-create it via `uv sync`. If manual setup needed: `npm run python:env`
 
 **"Git hook modifying files during commit"**
 → By design, hooks use `--skip-reset`. Manual commands (`npm run pre-commit`) DO reset for clean validation
@@ -436,7 +505,7 @@ npm run nx:dotnet-format    # Format .NET projects
 **Dependency graph**: Nx automatically infers from:
 
 - `package.json` dependencies (Node.js)
-- `requirements.txt` references (Python: `-r ../../../requirements.txt`)
+- `pyproject.toml` dependencies (Python: UV workspace members)
 - `<ProjectReference>` elements (.NET)
 
 **Testing integration points**: Not applicable yet (no projects). When implemented, use contract testing (Pact) or integration tests in dedicated test projects.
@@ -999,7 +1068,7 @@ kubectl rollout status statefulset/postgres -w
 
 - **Nx 22.0.1**: Monorepo orchestration
 - **Node.js 20.19.5**: Runtime (LTS, pinned in `.nvmrc`)
-- **Python 3.8+**: Runtime (auto-installed by `py-env` scripts)
+- **Python 3.11**: Runtime (pinned in `.python-version`, auto-downloaded by UV)
 - **.NET SDK 8.0**: Runtime (pinned in `tools/dotnet/configs/global.json`)
 - **GitHub Actions**: CI/CD platform (`.github/workflows/ci.yml`, `.github/workflows/deploy-k8s-resources.yml`, `.github/workflows/provision-hetzner-k8s-cluster.yml`)
 - **Kustomize**: Kubernetes manifest templating (required for local testing and workflows)
@@ -1007,4 +1076,6 @@ kubectl rollout status statefulset/postgres -w
 - **yq**: YAML processor for secret substitution and config parsing (installed in workflows)
 - **hetzner-k3s**: K3s cluster provisioning CLI (v2.4.1, installed by provision-hetzner-k8s-cluster action)
 
-**Version management**: `.nvmrc` (Node), `global.json` (.NET), `pyproject.toml` (Python 3.8+ in tool.poetry.dependencies)
+- **UV**: Python package manager and workspace tool (auto-installed by `python:env` script)
+
+**Version management**: `.nvmrc` (Node), `global.json` (.NET), `.python-version` (Python 3.11, auto-downloaded by UV)

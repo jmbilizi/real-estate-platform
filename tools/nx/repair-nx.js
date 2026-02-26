@@ -234,5 +234,5 @@ try {
 console.log("🎉 NX repair completed successfully!");
 console.log("You can now try running NX commands like:");
 console.log("  npx nx graph");
-console.log("  npx nx run-many --target=lint --projects=tag:python");
+console.log("  npx nx run-many --target=lint --projects=tag:runtime:python");
 console.log("Or use the npm scripts defined in package.json.");

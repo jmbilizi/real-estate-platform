@@ -95,82 +95,34 @@ function isPythonInstalled() {
   }
 }
 
-// Setup Python environment for hooks
+// Setup Python environment for hooks (UV workspace shared venv)
 function setupPythonEnvironment() {
   log("Setting up Python environment for hooks...");
 
-  // Check Python
-  if (!isPythonInstalled()) {
-    log("Python is not installed. Running Python installation...", true);
-    const pythonInstallScript = path.join(
-      scriptsDir,
-      isWindows ? "check-python-ondemand.bat" : "check-python-ondemand.sh",
-    );
-    const result = execute(isWindows ? pythonInstallScript : "bash", isWindows ? [] : [pythonInstallScript]);
-
-    if (!result.success) {
-      log("Failed to verify or install Python. Hooks setup will continue but Python linting may not work.", true);
-      return false;
-    }
+  // Check if UV is available
+  const uvCheck = spawnSync("uv", ["--version"], { shell: true });
+  if (uvCheck.status !== 0) {
+    log("UV is not installed. Install UV first: https://docs.astral.sh/uv/getting-started/installation/", true);
+    log("Hooks setup will continue but Python linting may not work.", true);
+    return false;
   }
 
-  log("Python is installed. Setting up virtual environment...");
-
-  // Create virtual environment if it doesn't exist
-  if (!fs.existsSync(venvPath)) {
-    log("Creating Python virtual environment...");
-    const pythonCmd = isWindows ? "python" : "python3";
-    const venvResult = execute(pythonCmd, ["-m", "venv", venvPath]);
-
-    if (!venvResult.success) {
-      log(
-        "Failed to create Python virtual environment. Hooks setup will continue but Python linting may not work.",
-        true,
-      );
-      return false;
-    }
-  }
-
-  // Install Python formatting tools
-  log("Installing Python formatting tools...");
-  const pipCmd = path.join(venvBinDir, isWindows ? "pip.exe" : "pip");
-  const formatRequirements = path.join(pythonToolsDir, "format-requirements.txt");
-
-  if (fs.existsSync(formatRequirements)) {
-    const pipResult = execute(isWindows ? path.join(venvBinDir, "python.exe") : path.join(venvBinDir, "python"), [
-      "-m",
-      "pip",
-      "install",
-      "--upgrade",
-      "pip",
-      "-r",
-      formatRequirements,
-    ]);
-
-    if (!pipResult.success) {
-      log(
-        "Failed to install Python formatting tools. Hooks setup will continue but Python linting may not work.",
-        true,
-      );
-      return false;
-    }
+  // Check if shared venv already exists
+  const pythonExe = path.join(venvBinDir, isWindows ? "python.exe" : "python");
+  if (fs.existsSync(venvPath) && fs.existsSync(pythonExe)) {
+    log("UV workspace venv already exists. Syncing dependencies...");
   } else {
-    log(`Python format requirements file not found: ${formatRequirements}`, true);
+    log("Creating UV workspace shared venv via uv sync...");
+  }
+
+  // Run uv sync to create/update venv with all workspace dependencies
+  const syncResult = execute("uv", ["sync"]);
+  if (!syncResult.success) {
+    log("Failed to run uv sync. Hooks setup will continue but Python linting may not work.", true);
     return false;
   }
 
-  // Create environment variable script
-  log("Creating Python environment script for hooks...");
-  const envScriptPath = path.join(scriptsDir, "set-hook-env.bat");
-
-  try {
-    fs.writeFileSync(envScriptPath, `@echo off\nset PYTHON_ENV=${path.join(venvPath, "Scripts")}\n`);
-    log(`Created environment script at ${envScriptPath}`);
-  } catch (error) {
-    log(`Failed to create environment script: ${error.message}`, true);
-    return false;
-  }
-
+  log("Python environment set up successfully via UV workspace.");
   return true;
 }
 

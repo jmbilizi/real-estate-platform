@@ -4,18 +4,9 @@
     "${workspaceFolder}/apps",
     "${workspaceFolder}/libs"
   ],
-  "python.formatting.provider": "black",
-  "python.formatting.blackPath": "${workspaceFolder}\\.venv\\Scripts\\black",
-  "python.linting.enabled": true,
-  "python.linting.flake8Enabled": true,
-  "python.linting.flake8Path": "${workspaceFolder}\\.venv\\Scripts\\flake8",
-  "python.linting.mypyEnabled": true,
-  "python.linting.mypyPath": "${workspaceFolder}\\.venv\\Scripts\\mypy",
-  "python.testing.pytestEnabled": true,
-  "python.testing.pytestPath": "${workspaceFolder}\\.venv\\Scripts\\pytest",
-  "python.envFile": "${workspaceFolder}\\.env",
   "[python]": {
     "editor.formatOnSave": true,
+    "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.codeActionsOnSave": {
       "source.organizeImports": "explicit"
     }

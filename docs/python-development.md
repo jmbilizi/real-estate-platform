@@ -1,217 +1,199 @@
 # Python Development in the Polyglot Monorepo
 
-This document provides guidelines for working with Python projects in this monorepo.
-
 ## Quick Start
 
 ```bash
-# One-time setup: Install Python environment + UV + Poetry
-npm run python:env:full
+# 1. One-time setup (installs UV + creates .venv + installs all packages)
+npm run python:env
 
-# Create a Python project using UV (recommended)
-npx nx g @nxlv/python:uv-project my-service --directory=apps --projectType=application
+# 2. Create a Python project
+npx nx g @nxlv/python:uv-project my-service --directory=apps/services
 
-# Or using Poetry
-npx nx g @nxlv/python:poetry-project my-service --directory=apps --projectType=application
-
-# After creating any project, sync and auto-tag
+# 3. Sync Nx projects and auto-tag
 npm run nx:reset
 ```
 
-**That's it!** UV and Poetry are immediately available without restarting VS Code or terminals.
+That's it! UV auto-downloads the correct Python version from `.python-version` if it's not already installed.
 
-## Python Environment Setup
+## Architecture
 
-### Automatic Setup (Recommended)
+This monorepo uses **UV workspace mode** — identical to how npm workspaces work for Node.js:
 
-Run the full setup once to get everything configured:
+- **Root `pyproject.toml`** defines the workspace members and shared dev tools
+- **Each project's `pyproject.toml`** declares its own dependencies
+- **Single `.venv/`** at workspace root holds all installed packages
+- **Single `uv.lock`** is the deterministic lockfile for the entire workspace
 
-```bash
-npm run python:env:full
+### File Layout
+
+```
+/                               # Workspace root
+├── pyproject.toml              # UV workspace config + shared dev deps
+├── uv.toml                    # UV settings (native-tls, etc.)
+├── uv.lock                    # Workspace-wide lockfile
+├── .python-version            # Python version (UV auto-downloads)
+├── .venv/                     # Shared venv (like node_modules/)
+├── apps/services/
+│   └── my-service/
+│       ├── pyproject.toml     # Project deps (like package.json)
+│       ├── my_service/        # Source package
+│       │   ├── __init__.py
+│       │   └── main.py
+│       └── tests/
+│           └── test_main.py
+└── tools/python/              # Tool configs (.flake8, mypy.ini, etc.)
 ```
 
-**What this does automatically:**
+## Development Workflow
 
-1. ✅ Creates `.venv` at workspace root with development tools (Black, Flake8, mypy, pytest)
-2. ✅ Installs `pipx` into the venv (avoids SSL certificate issues)
-3. ✅ Installs **UV** and **Poetry** globally via pipx at `~/.local/bin`
-4. ✅ Updates Windows PATH registry permanently
-5. ✅ Refreshes PATH in current process - **no restart needed!**
+### Running Tools
 
-**Why UV and Poetry are installed globally:** Nx generators (`@nxlv/python:uv-project`, `@nxlv/python:poetry-project`) require these tools to be globally accessible. Installing via pipx isolates them while keeping them available system-wide.
-
-### Alternative Setup Commands
+Use `uv run` — no need to activate the venv manually:
 
 ```bash
-# Basic setup (environment + common tools, no global UV/Poetry)
-npm run python:env
-
-# Just install dependencies
-npm run python:deps
-
-# Check environment status
-py-env.bat check  # Windows
-bash py-env.sh check  # Unix
+uv run pytest                    # Run tests
+uv run black .                   # Format code
+uv run python my_script.py       # Run a script
+uv run uvicorn app:app --reload  # Start a server
 ```
 
-### Verify Installation
-
-After running `python:env:full`, verify tools are available:
+### Managing Dependencies
 
 ```bash
-uv --version        # Should show: uv 0.9.8
-poetry --version    # Should show: Poetry (version 2.2.1)
-pipx list          # Shows UV and Poetry installed globally
+# Add a dependency to a specific project
+uv add --project apps/services/my-service fastapi "uvicorn[standard]"
+
+# Add a workspace-wide dev tool
+uv add --dev ruff
+
+# Remove a dependency
+uv remove --project apps/services/my-service some-package
+
+# Sync environment after manual pyproject.toml edits
+uv sync
 ```
 
-### Using VS Code Tasks
+### Nx Commands
 
-For a better IDE experience, use the provided VS Code tasks:
+```bash
+# All Python projects
+npm run nx:python-dev            # Start all Python services
+npm run nx:python-test           # Test all Python projects
+npm run nx:python-lint           # Lint all Python projects
+npm run nx:python-format         # Format all Python projects
+npm run nx:python-build          # Build all Python projects
 
-1. Press `Ctrl+Shift+P` and select "Tasks: Run Task"
-2. Choose from Python-related tasks like:
-   - Python: Create Virtual Environment
-   - Python: Install All Dependencies
-   - Python: Install Dev Dependencies
-   - Python: Set Up Service Dependencies
-   - FastAPI: Run Service
-   - Python: Format All Code
-   - Python: Lint All Code
-   - Python: Check All Code
+# Specific project
+npx nx test my-service
+npx nx serve my-service
+npx nx lint my-service
+```
 
-## Python Configuration Files
+### Code Quality
 
-The repository uses multiple configuration files for Python tools, all located in `tools/python`:
-
-- `.flake8` - Configuration for the Flake8 linter
-- `mypy.ini` - Configuration for the MyPy type checker
-- `pyproject.toml` - Configuration for Black formatter and other tools
-- `.sqlfluff` - Configuration for SQLFluff SQL linter
-- `.yamllint` - Configuration for YAMLLint YAML linter
-
-The package.json scripts and lint-staged configuration have been updated to reference these files in their new location.
-
-## Python Requirements Files
-
-The repository uses multiple requirements files for different purposes:
-
-- `tools/python/requirements.txt` - Main requirements file with all Python dependencies and version constraints
-- `tools/python/format-requirements.txt` - Minimal set of formatting tools for Git hooks (references main file)
-- `tools/python/python-dev-requirements.txt` - Development dependencies (references main file)
-- `requirements.txt` - Root directory redirect to main requirements file (for backward compatibility)
-- Service-specific requirements files (e.g., in FastAPI service directory)
-
-The service-specific files reference the main requirements using `-r ../../../tools/python/requirements.txt` to ensure version consistency.
-
-## Python Environment for Git Hooks
-
-Git hooks automatically manage the Python environment:
-
-**Pre-commit hook behavior:**
-
-- When you commit Python files (`.py`, `.pyx`, `.pxd`, `.pxi`, `.pyi`, `.ipynb`): Python environment is automatically set up if needed, then linting/formatting is applied
-- When you commit only JavaScript/TypeScript files: No Python environment setup occurs (faster commits)
-
-**What gets installed automatically:**
-
-- `.venv` with Black, Flake8, mypy for code quality checks
-- No manual setup required - hooks handle everything
-
-**Note:** UV and Poetry (for Nx generators) are only installed when you run `npm run python:env:full`. Git hooks don't need these tools since they only run formatters/linters.
+```bash
+npm run python:format            # Format all Python code (Black)
+npm run python:lint              # Lint all Python code (Flake8 + mypy)
+npm run python:check             # Format + lint
+```
 
 ## Creating Python Projects
 
-**CRITICAL:** Always use Nx generators to create Python projects. UV and Poetry must be installed globally first.
-
-### Using UV (Recommended - Fastest)
+Always use Nx generators:
 
 ```bash
-# Application (FastAPI, Flask, etc.)
-npx nx g @nxlv/python:uv-project my-api --directory=apps --projectType=application --linter=flake8
+# Application (API, service)
+npx nx g @nxlv/python:uv-project my-api --directory=apps/services --projectType=application
 
-# Library
-npx nx g @nxlv/python:uv-project my-utils --directory=libs --projectType=library --linter=flake8
-```
+# Library (shared code)
+npx nx g @nxlv/python:uv-project my-utils --directory=libs --projectType=library
 
-### Using Poetry (Traditional)
-
-```bash
-# Application
-npx nx g @nxlv/python:poetry-project my-api --directory=apps --projectType=application --linter=flake8
-
-# Library
-npx nx g @nxlv/python:poetry-project my-utils --directory=libs --projectType=library --linter=flake8
-```
-
-### After Creating Projects
-
-```bash
-# Sync .NET solution files and auto-tag all projects
+# After creating any project, sync Nx
 npm run nx:reset
 ```
 
-**Auto-tagging:** Projects are automatically tagged with `python` and project type tags, enabling commands like `npm run nx:python-test` to run tests on all Python projects.
+**Auto-tagging**: Projects are automatically tagged with `python`, enabling commands like `npm run nx:python-test`.
 
-## Nx Commands for Python Projects
+## Environment Setup Details
 
-We use Nx to manage Python projects within the monorepo. All Python services have the `python` tag and can be managed collectively:
+### What `npm run python:env` Does
 
-```bash
-# Run all Python services
-npm run nx:python-dev
+1. **Checks for UV** — installs it automatically if missing (Windows: PowerShell installer / winget, macOS: brew, Linux: curl)
+2. **Runs `uv sync`** — creates `.venv`, downloads Python if needed (from `.python-version`), installs all packages from `uv.lock`
+3. **Verifies tools** — confirms black, flake8, mypy, pytest, ruff are working
 
-# Format all Python projects
-npm run nx:python-format
-
-# Lint all Python projects
-npm run nx:python-lint
-
-# Run tests for all Python projects
-npm run nx:python-test
-
-# Build all Python projects
-npm run nx:python-build
-```
-
-Or you can target specific services:
+### Check Environment Status
 
 ```bash
-nx run fastapi-service:serve
-nx run fastapi-service:lint
-nx run fastapi-service:test
-nx run fastapi-service:format
-nx run fastapi-service:install-deps
+npm run python:env -- --check
 ```
 
-## Debugging Python Code
+Shows UV version, Python version, venv status, and tool availability.
 
-We've configured VS Code for Python debugging:
+### CI/CD
 
-1. Open any Python file in the FastAPI service
-2. Press F5 or select the debug icon in the sidebar
-3. Choose "Python: FastAPI" from the debug configuration dropdown
-4. Start debugging with breakpoints
+In GitHub Actions, UV is installed via `astral-sh/setup-uv@v5`:
 
-You can also debug:
+```yaml
+- uses: astral-sh/setup-uv@v5
+- run: uv sync
+- run: uv run pytest
+```
 
-- The current Python file with "Python: Current File"
-- Test files with "Python: Debug Tests"
+## Git Hooks
 
-## Code Style and Quality
+Hooks are automatic — no manual setup needed:
 
-We use the following tools for Python code quality:
+- **Pre-commit**: Runs Black, Flake8, mypy on staged `.py` files via `uv run`
+- **Pre-push**: Runs full lint + test suite on affected Python projects
+- **Auto-setup**: Hooks run `uv sync` if `.venv` doesn't exist
 
-- **Black** - Code formatter (strict, opinionated)
-- **Flake8** - Linter for style and error checking
-- **mypy** - Static type checking
-- **pytest** - Testing framework with coverage reporting
+## Configuration Files
 
-These tools are automatically run on staged Python files during Git commits.
+All tool configs live in `tools/python/`:
 
-## Additional Documentation
+| File             | Tool     | Purpose             |
+| ---------------- | -------- | ------------------- |
+| `.flake8`        | Flake8   | Linter rules        |
+| `mypy.ini`       | mypy     | Type checker config |
+| `pyproject.toml` | Black    | Formatter settings  |
+| `.sqlfluff`      | SQLFluff | SQL linter config   |
+| `.yamllint`      | YAMLLint | YAML linter config  |
 
-For more detailed information about Python in this monorepo, see:
+## Debugging
 
-- [Python Setup Guide](../tools/python/python-setup.md) - Complete setup instructions
-- [Python Documentation](../tools/python/docs/README-PYTHON.md) - Comprehensive Python guides
-- [Python Project Structure](../tools/python/docs/python-project-structure.md) - Standard structure for Python projects
+VS Code is configured for Python debugging:
+
+1. Open any Python file
+2. Press F5 or use the debug sidebar
+3. Choose a debug configuration (e.g., "Python: FastAPI")
+
+## Troubleshooting
+
+### "uv is not recognized"
+
+```bash
+npm run python:env    # Auto-installs UV
+```
+
+Or install manually: `winget install astral-sh.uv` (Windows), `brew install uv` (macOS).
+
+### SSL Certificate Errors
+
+Already handled — `uv.toml` has `native-tls = true` (uses system certificates).
+
+### .venv Broken
+
+```bash
+rm -rf .venv          # or: rmdir /s .venv (Windows)
+npm run python:env    # Recreate
+```
+
+### Import Errors
+
+UV workspace mode installs each project as an editable package. Imports should work automatically. If not, run `uv sync` to re-link.
+
+## Additional References
+
+- [Python Tools README](../tools/python/README.md) — Directory structure and config files
+- [Copilot Instructions](../.github/copilot-instructions.md) — Full architecture overview

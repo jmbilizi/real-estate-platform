@@ -1,0 +1,5 @@
+# UV configuration for the workspace
+# See: https://docs.astral.sh/uv/reference/settings/
+
+# Use system TLS certificates (required for corporate proxies/firewalls)
+native-tls = true

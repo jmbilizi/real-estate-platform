@@ -7,7 +7,7 @@
       "plugin": "@nx/js/typescript",
       "options": {
         "typecheck": {
-          "targetName": "typecheck"
+          "targetName": "type-check"
         },
         "build": {
           "targetName": "build",
@@ -60,6 +60,38 @@
   "targetDefaults": {
     "build": {
       "inputs": ["production", "^production"]
+    },
+    "test": {
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        "{workspaceRoot}/tools/node/configs/jest.config.js"
+      ]
+    },
+    "type-check": {
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/**/*.ts",
+        "{projectRoot}/**/*.tsx",
+        "{projectRoot}/tsconfig.json",
+        "{workspaceRoot}/tsconfig.json",
+        "^production"
+      ]
+    },
+    "format": {
+      "cache": true,
+      "inputs": [
+        "default",
+        "{workspaceRoot}/tools/node/configs/prettier-config.js"
+      ]
+    },
+    "format-check": {
+      "cache": true,
+      "inputs": [
+        "default",
+        "{workspaceRoot}/tools/node/configs/prettier-config.js"
+      ]
     }
   },
   "nxIgnore": []

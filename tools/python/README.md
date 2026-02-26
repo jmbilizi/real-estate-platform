@@ -1,193 +1,153 @@
 # Python Tools Directory
 
-This directory contains all the Python-related tooling for the Polyglot monorepo.
+This directory contains all the Python-related tooling and configuration for the Polyglot monorepo.
 
 ## Quick Start
 
 ```bash
-# One-time setup: Install everything (venv + UV + Poetry)
-npm run python:env:full
-
-# Create a Python project immediately (no restart needed!)
-npx nx g @nxlv/python:uv-project my-service --directory=apps
-
-# Sync and auto-tag
-npm run nx:reset
-```
-
-**That's it!** UV and Poetry are immediately available without restarting VS Code or terminals.
-
-## Directory Structure
-
-- `python-dev-setup.js` - **Main setup script** - Unified Python environment management
-- `scripts/` - Implementation scripts for Python tasks
-- `docs/` - Detailed documentation for Python tooling
-- `requirements.txt` - Main Python requirements file (Black, Flake8, mypy, pytest)
-- `format-requirements.txt` - Minimal formatting tools for Git hooks
-- `python-dev-requirements.txt` - Development requirements
-- Configuration files: `.flake8`, `mypy.ini`, `pyproject.toml`, `.sqlfluff`, `.yamllint`
-
-## What Gets Installed?
-
-### Development Tools (in `.venv`)
-
-- **Black** - Code formatter
-- **Flake8** - Linter
-- **mypy** - Type checker
-- **pytest** - Testing framework
-- **SQLFluff** - SQL linter
-- **YAMLLint** - YAML linter
-
-### Global Tools (via pipx at `~/.local/bin`)
-
-- **UV** (0.9.8) - Ultra-fast Python package installer
-- **Poetry** (2.2.1) - Dependency management
-- **pipx** - Python application installer
-
-## Available Scripts
-
-### Environment Setup
-
-```bash
-# Full setup (venv + UV + Poetry) - Run this once
-npm run python:env:full
-
-# Basic setup (venv only, no global tools)
+# One-time setup (installs UV if missing, creates .venv, installs all packages)
 npm run python:env
 
-# Just install dependencies
-npm run python:deps
-```
+# Create a Python project
+npx nx g @nxlv/python:uv-project my-service --directory=apps/services
 
-### Verify Installation
-
-```bash
-# Check what's installed
-uv --version         # Should show: uv 0.9.8
-poetry --version     # Should show: Poetry (version 2.2.1)
-pipx list           # Shows all global tools
-```
-
-### Nx Commands
-
-```bash
-# Run all Python services
-npm run nx:python-dev
-
-# Format all Python projects
-npm run nx:python-format
-
-# Lint all Python projects
-npm run nx:python-lint
-
-# Test all Python projects
-npm run nx:python-test
-
-# Build all Python projects
-npm run nx:python-build
+# Sync Nx and auto-tag
+npm run nx:reset
 ```
 
 ## How It Works
 
-### Automatic Setup Process
+This monorepo uses **UV workspace mode** — the same concept as npm workspaces for Node.js:
 
-When you run `npm run python:env:full`, the setup:
+| Concept              | Node.js                     | Python (UV Workspace)                            |
+| -------------------- | --------------------------- | ------------------------------------------------ |
+| **Project manifest** | `apps/*/package.json`       | `apps/*/pyproject.toml`                          |
+| **Project deps**     | `dependencies`              | `[project] dependencies`                         |
+| **Workspace root**   | Root `package.json`         | Root `pyproject.toml` with `[tool.uv.workspace]` |
+| **Shared dev tools** | Root `devDependencies`      | Root `[dependency-groups] dev`                   |
+| **Single install**   | One `node_modules/` at root | One `.venv/` at root                             |
+| **Lockfile**         | `package-lock.json`         | `uv.lock`                                        |
 
-1. ✅ **Creates `.venv`** at workspace root with development tools
-2. ✅ **Checks for pipx** - If not found as a Python module, installs it into the venv
-3. ✅ **Runs `pipx ensurepath --force`** - Adds `~/.local/bin` to PATH
-4. ✅ **Updates Windows PATH registry** - Makes change permanent
-5. ✅ **Installs UV globally** - `C:\Users\<username>\.local\bin\uv.exe`
-6. ✅ **Installs Poetry globally** - `C:\Users\<username>\.local\bin\poetry.exe`
-7. ✅ **Refreshes `process.env.PATH`** - Tools immediately available (no restart!)
+### Key Files
 
-### Why Use Venv Python for Installation?
+| File              | Location       | Purpose                                                       |
+| ----------------- | -------------- | ------------------------------------------------------------- |
+| `pyproject.toml`  | Workspace root | UV workspace config, shared dev dependencies                  |
+| `uv.toml`         | Workspace root | UV settings (e.g., `native-tls = true` for corporate proxies) |
+| `uv.lock`         | Workspace root | Deterministic lockfile for all packages                       |
+| `.python-version` | Workspace root | Python version (UV auto-downloads if missing)                 |
+| `.venv/`          | Workspace root | Shared virtual environment (all packages installed here)      |
+| `pyproject.toml`  | Each project   | Project-specific dependencies and tool config                 |
 
-The setup uses the **venv Python** (not system Python) to install pipx/UV/Poetry because:
+### Configuration Files (in this directory)
 
-- **SSL Certificates**: Venv Python has certificates properly configured
-- **Corporate Networks**: Avoids `[SSL: CERTIFICATE_VERIFY_FAILED]` errors
-- **Reliability**: Works in environments where system Python might have SSL issues
+| File             | Purpose                  |
+| ---------------- | ------------------------ |
+| `.flake8`        | Flake8 linter rules      |
+| `mypy.ini`       | mypy type checker config |
+| `pyproject.toml` | Black/isort settings     |
+| `.sqlfluff`      | SQL linter config        |
+| `.yamllint`      | YAML linter config       |
 
-### Zero-Restart Workflow
+## Available Commands
 
-Just like the .NET setup in this monorepo, UV and Poetry are **immediately available** after running `python:env:full`:
+### Environment Setup
 
 ```bash
-# Run setup
-npm run python:env:full
-
-# Use immediately (no restart!)
-uv --version
-poetry --version
-npx nx g @nxlv/python:uv-project my-service --directory=apps
+npm run python:env             # Install UV (if needed) + create .venv + install packages
+npm run python:env:full        # Same as above, with all optional dependency groups
+npm run python:env -- --check  # Check environment status without installing
 ```
 
-The PATH registry update ensures tools remain available in new terminals/sessions.
+### Code Quality
 
-## Integration with Git Hooks
+```bash
+npm run python:format       # Format all Python code (Black)
+npm run python:lint         # Lint all Python code (Flake8 + mypy)
+npm run python:check        # Format + lint
+```
 
-Git hooks **automatically** set up the Python environment when needed:
+### Nx Commands (per-project)
 
-**Pre-commit hook:**
+```bash
+npm run nx:python-dev       # Start all Python services
+npm run nx:python-test      # Test all Python projects
+npm run nx:python-lint      # Lint all Python projects
+npm run nx:python-format    # Format all Python projects
+npm run nx:python-build     # Build all Python projects
+```
 
-- Detects Python files (`.py`, `.pyx`, `.pxd`, `.pxi`, `.pyi`, `.ipynb`) being committed
-- Auto-creates `.venv` if it doesn't exist
-- Runs Black (formatter), Flake8 (linter), and mypy (type checker)
-- Skips setup entirely if only non-Python files are committed (faster!)
+### Adding Dependencies
 
-**Note:** Git hooks only need the `.venv` with formatters/linters. They **don't** need UV or Poetry (those are only for Nx generators).
+```bash
+# Add a dependency to a specific project
+uv add --project apps/services/my-service fastapi "uvicorn[standard]"
+
+# Add a workspace-wide dev tool
+uv add --dev ruff
+
+# Sync after changes
+uv sync
+```
+
+## Development Workflow
+
+### Running Tools in the Venv
+
+Use `uv run` to execute any tool without manually activating the venv:
+
+```bash
+uv run pytest                    # Run tests
+uv run black .                   # Format code
+uv run python -c "print('hi')"  # Run Python
+```
+
+### Manual Venv Activation (optional)
+
+If you prefer to activate the venv directly:
+
+```bash
+# Windows
+.venv\Scripts\activate
+
+# macOS/Linux
+source .venv/bin/activate
+```
+
+## Git Hooks Integration
+
+Git hooks **automatically** handle Python:
+
+- **Pre-commit**: Runs Black, Flake8, mypy on staged `.py` files via `uv run`
+- **Pre-push**: Runs full lint + test suite on affected Python projects
+- **Auto-setup**: Hooks run `uv sync` to create `.venv` if it doesn't exist
+
+No manual setup required — hooks handle everything.
 
 ## Troubleshooting
 
-### "uv is not recognized" or "poetry is not recognized"
+### "uv is not recognized"
 
-After running `python:env:full`, if commands aren't found:
-
-1. **Check if installed**: `pipx list` (should show UV and Poetry)
-2. **Verify PATH**: Ensure `C:\Users\<username>\.local\bin` is in your PATH
-3. **New terminal**: Open a fresh terminal (PATH registry update persists)
-4. **Re-run setup**: `npm run python:env:full` (idempotent - safe to run multiple times)
-
-### Python Environment Issues
-
-If `.venv` isn't working:
+UV is not installed. The setup script installs it automatically:
 
 ```bash
-# Delete and recreate
-rmdir /s .venv  # Windows
-rm -rf .venv    # Linux/Mac
-
-# Run basic setup
 npm run python:env
 ```
 
+Or install manually: `winget install astral-sh.uv` (Windows), `brew install uv` (macOS), `curl -LsSf https://astral.sh/uv/install.sh | sh` (Linux).
+
 ### SSL Certificate Errors
 
-If you see `[SSL: CERTIFICATE_VERIFY_FAILED]` errors:
+The workspace has `uv.toml` with `native-tls = true` which uses system certificates. If you still see errors, check your corporate proxy settings.
 
-✅ **Already handled!** The setup uses venv Python which has certificates configured properly. If you still see errors, ensure you're running `npm run python:env:full` (not manual pip commands).
-
-### Advanced Troubleshooting
-
-**Check venv Python works:**
+### .venv Issues
 
 ```bash
-.venv\Scripts\python.exe --version  # Windows
-.venv/bin/python --version          # Linux/Mac
+# Delete and recreate
+rm -rf .venv     # or: rmdir /s .venv (Windows)
+npm run python:env
 ```
 
-**Manually verify pipx:**
+### Import Path Issues
 
-```bash
-.venv\Scripts\python.exe -m pipx --version
-```
-
-**Check global tools location:**
-
-```bash
-where uv      # Windows
-which uv      # Linux/Mac
-```
-
-Should show: `C:\Users\<username>\.local\bin\uv.exe`
+UV workspace mode handles this automatically. Each project is installed as an editable package in the shared `.venv`, so imports work without path manipulation.

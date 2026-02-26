@@ -71,14 +71,14 @@ function hasPythonProjectsAffected(isAffected, base) {
   try {
     if (!isAffected || !base) {
       // On base branch, check if any Python projects exist
-      const result = run("npx nx show projects --projects=tag:python", {
+      const result = run("npx nx show projects --projects=tag:runtime:python", {
         silent: true,
       });
       return result.success && result.output && result.output.trim().length > 0;
     }
 
     // On feature branch, check for affected Python projects
-    const result = run(`npx nx show projects --affected --base=${base} --head=HEAD --projects=tag:python`, {
+    const result = run(`npx nx show projects --affected --base=${base} --head=HEAD --projects=tag:runtime:python`, {
       silent: true,
     });
     return result.success && result.output && result.output.trim().length > 0;
@@ -93,14 +93,14 @@ function hasDotNetProjectsAffected(isAffected, base) {
   try {
     if (!isAffected || !base) {
       // On base branch, check if any .NET projects exist
-      const result = run("npx nx show projects --projects=tag:dotnet", {
+      const result = run("npx nx show projects --projects=tag:runtime:dotnet", {
         silent: true,
       });
       return result.success && result.output && result.output.trim().length > 0;
     }
 
     // On feature branch, check for affected .NET projects
-    const result = run(`npx nx show projects --affected --base=${base} --head=HEAD --projects=tag:dotnet`, {
+    const result = run(`npx nx show projects --affected --base=${base} --head=HEAD --projects=tag:runtime:dotnet`, {
       silent: true,
     });
     return result.success && result.output && result.output.trim().length > 0;
@@ -118,38 +118,34 @@ function setupPythonEnvironment() {
   const pythonBinPath = path.join(venvPath, isWindows ? "Scripts" : "bin");
   const pythonExecutable = path.join(pythonBinPath, isWindows ? "python.exe" : "python");
 
-  // Check if virtual environment already exists and is valid
+  // Check if UV workspace venv already exists and is valid
   if (fs.existsSync(venvPath) && fs.existsSync(pythonExecutable)) {
     // Already set up - just set the env var
     process.env.PYTHON_ENV = pythonBinPath;
+    process.env.VIRTUAL_ENV = venvPath;
     return true;
   }
 
-  // Virtual environment doesn't exist - create it
-  log("Python virtual environment not found. Creating it now...", "yellow");
+  // Virtual environment doesn't exist - create it via uv sync
+  log("Python virtual environment not found. Running uv sync...", "yellow");
 
   try {
-    // Try to create virtual environment
-    if (isWindows) {
-      run("call py-env.bat create", { silent: false });
-    } else {
-      run("bash py-env.sh create", { silent: false });
-    }
+    run("uv sync", { silent: false });
 
     if (!fs.existsSync(pythonExecutable)) {
-      logError("Failed to create Python virtual environment. Python checks may fail.");
+      logError("Failed to create Python virtual environment via uv sync.");
       return false;
     }
 
-    logSuccess("Python virtual environment created successfully");
+    logSuccess("Python virtual environment created successfully via UV");
 
-    // Set PYTHON_ENV environment variable for the process
     process.env.PYTHON_ENV = pythonBinPath;
+    process.env.VIRTUAL_ENV = venvPath;
 
     return true;
   } catch (error) {
     logError(`Failed to create Python virtual environment: ${error.message}`);
-    logWarning("Run 'npm run py:setup' manually to set up Python environment");
+    logWarning("Run 'npm run python:env' (uv sync) manually to set up Python environment");
     return false;
   }
 }
@@ -235,7 +231,7 @@ function checkNodeProjects(isAffected, base) {
   log("\n2. Linting code...", "blue");
   const lintCmd =
     isAffected && base
-      ? `npx nx affected --base=${base} --head=HEAD --target=lint --projects=tag:node`
+      ? `npx nx affected --base=${base} --head=HEAD --target=lint --projects=tag:runtime:node`
       : `npm run nx:node-lint`;
 
   const lintResult = run(lintCmd);
@@ -249,7 +245,7 @@ function checkNodeProjects(isAffected, base) {
   log("\n3. Type checking...", "blue");
   const typeCmd =
     isAffected && base
-      ? `npx nx affected --base=${base} --head=HEAD --target=type-check --projects=tag:node`
+      ? `npx nx affected --base=${base} --head=HEAD --target=type-check --projects=tag:runtime:node`
       : `npm run nx:node-type-check`;
 
   const typeResult = run(typeCmd);
@@ -265,11 +261,14 @@ function checkNodeProjects(isAffected, base) {
 function checkPythonProjects(isAffected, base) {
   logStep("Quick Check: Python");
 
-  // Check if Python environment is set up
-  const venvCheck = run("py-env.bat check", { silent: true });
-  if (!venvCheck.success) {
+  // Check if UV workspace venv is set up
+  const rootDir = path.resolve(__dirname, "..");
+  const venvPath = path.join(rootDir, ".venv");
+  const isWindows = process.platform === "win32";
+  const pythonExe = path.join(venvPath, isWindows ? "Scripts" : "bin", isWindows ? "python.exe" : "python");
+  if (!fs.existsSync(venvPath) || !fs.existsSync(pythonExe)) {
     logWarning("Python environment not set up - skipping Python checks");
-    logWarning('Run "py-env.bat create" to set up Python environment');
+    logWarning('Run "npm run python:env" (uv sync) to set up Python environment');
     return true; // Don't fail if Python isn't set up
   }
 
@@ -279,7 +278,7 @@ function checkPythonProjects(isAffected, base) {
   log("\n1. Checking code formatting (Black)...", "blue");
   const formatCmd =
     isAffected && base
-      ? `npx nx affected --base=${base} --head=HEAD --target=format-check --projects=tag:python`
+      ? `npx nx affected --base=${base} --head=HEAD --target=format-check --projects=tag:runtime:python`
       : `npm run nx:python-format-check`;
 
   const formatResult = run(formatCmd);
@@ -293,7 +292,7 @@ function checkPythonProjects(isAffected, base) {
   log("\n2. Linting code (Flake8)...", "blue");
   const lintCmd =
     isAffected && base
-      ? `npx nx affected --base=${base} --head=HEAD --target=lint --projects=tag:python`
+      ? `npx nx affected --base=${base} --head=HEAD --target=lint --projects=tag:runtime:python`
       : `npm run nx:python-lint`;
 
   const lintResult = run(lintCmd);
@@ -307,7 +306,7 @@ function checkPythonProjects(isAffected, base) {
   log("\n3. Type checking (mypy)...", "blue");
   const typeCmd =
     isAffected && base
-      ? `npx nx affected --base=${base} --head=HEAD --target=type-check --projects=tag:python`
+      ? `npx nx affected --base=${base} --head=HEAD --target=type-check --projects=tag:runtime:python`
       : `npm run nx:python-type-check`;
 
   const typeResult = run(typeCmd);
@@ -346,7 +345,7 @@ function checkDotNetProjects(isAffected, base) {
   log("\n1. Checking code formatting (dotnet format)...", "blue");
   const formatCmd =
     isAffected && base
-      ? `npx nx affected --base=${base} --head=HEAD --target=format-check --projects=tag:dotnet`
+      ? `npx nx affected --base=${base} --head=HEAD --target=format-check --projects=tag:runtime:dotnet`
       : `npm run nx:dotnet-format-check`;
 
   const formatResult = run(formatCmd);
@@ -360,7 +359,7 @@ function checkDotNetProjects(isAffected, base) {
   log("\n2. Linting code (StyleCop)...", "blue");
   const lintCmd =
     isAffected && base
-      ? `npx nx affected --base=${base} --head=HEAD --target=lint --projects=tag:dotnet`
+      ? `npx nx affected --base=${base} --head=HEAD --target=lint --projects=tag:runtime:dotnet`
       : `npm run nx:dotnet-lint`;
 
   const lintResult = run(lintCmd);
@@ -369,6 +368,20 @@ function checkDotNetProjects(isAffected, base) {
     return false; // Exit early
   }
   logSuccess("Linting passed");
+
+  // 3. Type check (MUST PASS to continue)
+  log("\n3. Type checking (dotnet build)...", "blue");
+  const typeCmd =
+    isAffected && base
+      ? `npx nx affected --base=${base} --head=HEAD --target=type-check --projects=tag:runtime:dotnet`
+      : `npm run nx:dotnet-type-check`;
+
+  const typeResult = run(typeCmd);
+  if (!typeResult.success) {
+    logError("Type checking failed");
+    return false; // Exit early
+  }
+  logSuccess("Type checking passed");
 
   return true; // All checks passed
 }
