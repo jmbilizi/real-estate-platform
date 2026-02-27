@@ -39,15 +39,27 @@ jobs:
         with:
           node-version: "20.19.5"
 
+      # Cache the npm download cache (~/.npm) so packages don't re-download from the internet.
+      # npm ci always deletes node_modules before installing, so caching node_modules is pointless.
+      - name: Cache npm download cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-cache-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            npm-cache-${{ runner.os }}-
+
+      # Cache node_modules so downstream jobs (node, python, dotnet) can restore it
+      # and skip running npm ci entirely.
       - name: Cache node_modules
+        id: cache-node-modules
         uses: actions/cache@v4
         with:
           path: node_modules
           key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            node-modules-${{ runner.os }}-
 
       - name: Install Node.js dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
         run: npm ci
 
       - name: Check workspace formatting
@@ -67,10 +79,16 @@ jobs:
           node-version: "20.19.5"
 
       - name: Restore node_modules
+        id: restore-node-modules
         uses: actions/cache/restore@v4
         with:
           path: node_modules
           key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      # Fallback: install if cache miss (should not happen since setup-base saves it)
+      - name: Install Node.js dependencies (fallback)
+        if: steps.restore-node-modules.outputs.cache-hit != 'true'
+        run: npm ci
 
       # Cache Nx cache directory for faster builds
       - name: Cache Nx
@@ -158,10 +176,16 @@ jobs:
           node-version: "20.19.5"
 
       - name: Restore node_modules
+        id: restore-node-modules-python
         uses: actions/cache/restore@v4
         with:
           path: node_modules
           key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      # Fallback: install if cache miss
+      - name: Install Node.js dependencies (fallback)
+        if: steps.restore-node-modules-python.outputs.cache-hit != 'true'
+        run: npm ci
 
       # Cache Nx cache directory for faster builds
       - name: Cache Nx
@@ -249,10 +273,16 @@ jobs:
           node-version: "20.19.5"
 
       - name: Restore node_modules
+        id: restore-node-modules-dotnet
         uses: actions/cache/restore@v4
         with:
           path: node_modules
           key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      # Fallback: install if cache miss
+      - name: Install Node.js dependencies (fallback)
+        if: steps.restore-node-modules-dotnet.outputs.cache-hit != 'true'
+        run: npm ci
 
       # Cache Nx cache directory for faster builds
       - name: Cache Nx

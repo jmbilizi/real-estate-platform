@@ -45,7 +45,28 @@
         "command": "node tools/docker/build-image.js {projectName} --tag={args.tag}",
         "cwd": "."
       }
+    },
+    "type-check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "dotnet build --nologo --no-restore",
+        "cwd": "apps/api-gateway"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "dotnet test",
+        "cwd": "apps/api-gateway/Tests"
+      }
     }
   },
-  "tags": ["dotnet", "service"]
+  "tags": [
+    "runtime:dotnet",
+    "type:gateway",
+    "platform:server",
+    "framework:unassigned",
+    "scope:unassigned",
+    "devteam:unassigned"
+  ]
 }
