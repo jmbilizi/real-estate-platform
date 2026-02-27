@@ -4,7 +4,7 @@
  * Cross-platform Skaffold dev launcher.
  *
  * Why this exists:
- * - On Windows, running `npm run skaffold` uses npm.cmd, and Ctrl+C can trigger
+ * - On Windows, running `pnpm run skaffold` uses pnpm.cmd, and Ctrl+C can trigger
  *   the interactive `Terminate batch job (Y/N)?` prompt.
  * - Running the wrapper via `node` avoids the batch wrapper entirely.
  *

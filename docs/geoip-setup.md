@@ -29,10 +29,10 @@ $env:MAXMIND_LICENSE_KEY="your_key_here"  # PowerShell
 export MAXMIND_LICENSE_KEY=your_key_here  # Unix/macOS
 
 # 3. Download database (one command, automatic extraction)
-npm run geoip:download
+pnpm run geoip:download
 
 # Done! Start developing
-npm run skaffold
+pnpm run skaffold
 ```
 
 **This script automatically:**
@@ -47,8 +47,8 @@ npm run skaffold
 Just start developing - no setup needed! Geographic tags won't appear in traces, but everything else works.
 
 ```bash
-npm run infra:local:cluster:setup
-npm run skaffold
+pnpm run infra:local:cluster:setup
+pnpm run skaffold
 ```
 
 **When to enable GeoIP locally:**
@@ -387,7 +387,7 @@ kubectl logs -l app=api-gateway --tail=100 | grep -i geoip
 
    **Fix:**
    - **Container/K8s:** Create ConfigMap and mount volume (or use Dockerfile auto-download)
-   - **Local dev:** Run `npm run geoip:download`
+   - **Local dev:** Run `pnpm run geoip:download`
 
 2. **GeoIP disabled:**
 

@@ -4,20 +4,20 @@
 
 ```bash
 # 1. One-time setup (installs UV + creates .venv + installs all packages)
-npm run python:env
+pnpm run python:env
 
 # 2. Create a Python project
-npx nx g @nxlv/python:uv-project my-service --directory=apps/services
+pnpm exec nx g @nxlv/python:uv-project my-service --directory=apps/services
 
 # 3. Sync Nx projects and auto-tag
-npm run nx:reset
+pnpm run nx:reset
 ```
 
 That's it! UV auto-downloads the correct Python version from `.python-version` if it's not already installed.
 
 ## Architecture
 
-This monorepo uses **UV workspace mode** — identical to how npm workspaces work for Node.js:
+This monorepo uses **UV workspace mode** — identical to how pnpm workspaces work for Node.js:
 
 - **Root `pyproject.toml`** defines the workspace members and shared dev tools
 - **Each project's `pyproject.toml`** declares its own dependencies
@@ -77,24 +77,24 @@ uv sync
 
 ```bash
 # All Python projects
-npm run nx:python-dev            # Start all Python services
-npm run nx:python-test           # Test all Python projects
-npm run nx:python-lint           # Lint all Python projects
-npm run nx:python-format         # Format all Python projects
-npm run nx:python-build          # Build all Python projects
+pnpm run nx:python-dev            # Start all Python services
+pnpm run nx:python-test           # Test all Python projects
+pnpm run nx:python-lint           # Lint all Python projects
+pnpm run nx:python-format         # Format all Python projects
+pnpm run nx:python-build          # Build all Python projects
 
 # Specific project
-npx nx test my-service
-npx nx serve my-service
-npx nx lint my-service
+pnpm exec nx test my-service
+pnpm exec nx serve my-service
+pnpm exec nx lint my-service
 ```
 
 ### Code Quality
 
 ```bash
-npm run python:format            # Format all Python code (Black)
-npm run python:lint              # Lint all Python code (Flake8 + mypy)
-npm run python:check             # Format + lint
+pnpm run python:format            # Format all Python code (Black)
+pnpm run python:lint              # Lint all Python code (Flake8 + mypy)
+pnpm run python:check             # Format + lint
 ```
 
 ## Creating Python Projects
@@ -103,20 +103,20 @@ Always use Nx generators:
 
 ```bash
 # Application (API, service)
-npx nx g @nxlv/python:uv-project my-api --directory=apps/services --projectType=application
+pnpm exec nx g @nxlv/python:uv-project my-api --directory=apps/services --projectType=application
 
 # Library (shared code)
-npx nx g @nxlv/python:uv-project my-utils --directory=libs --projectType=library
+pnpm exec nx g @nxlv/python:uv-project my-utils --directory=libs --projectType=library
 
 # After creating any project, sync Nx
-npm run nx:reset
+pnpm run nx:reset
 ```
 
-**Auto-tagging**: Projects are automatically tagged with `python`, enabling commands like `npm run nx:python-test`.
+**Auto-tagging**: Projects are automatically tagged with `python`, enabling commands like `pnpm run nx:python-test`.
 
 ## Environment Setup Details
 
-### What `npm run python:env` Does
+### What `pnpm run python:env` Does
 
 1. **Checks for UV** — installs it automatically if missing (Windows: PowerShell installer / winget, macOS: brew, Linux: curl)
 2. **Runs `uv sync`** — creates `.venv`, downloads Python if needed (from `.python-version`), installs all packages from `uv.lock`
@@ -125,7 +125,7 @@ npm run nx:reset
 ### Check Environment Status
 
 ```bash
-npm run python:env -- --check
+pnpm run python:env -- --check
 ```
 
 Shows UV version, Python version, venv status, and tool availability.
@@ -173,7 +173,7 @@ VS Code is configured for Python debugging:
 ### "uv is not recognized"
 
 ```bash
-npm run python:env    # Auto-installs UV
+pnpm run python:env    # Auto-installs UV
 ```
 
 Or install manually: `winget install astral-sh.uv` (Windows), `brew install uv` (macOS).
@@ -186,7 +186,7 @@ Already handled — `uv.toml` has `native-tls = true` (uses system certificates)
 
 ```bash
 rm -rf .venv          # or: rmdir /s .venv (Windows)
-npm run python:env    # Recreate
+pnpm run python:env    # Recreate
 ```
 
 ### Import Errors

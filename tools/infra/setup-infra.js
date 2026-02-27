@@ -7,7 +7,7 @@
  * and CI/CD validation.
  *
  * Usage:
- *   npm run infra:setup
+ *   pnpm run infra:setup
  *   node tools/infra/setup-infra.js
  */
 
@@ -646,10 +646,10 @@ function main() {
   logStep("Next Steps");
 
   log("\n1. Validate Kustomize files:", "cyan");
-  log("   npm run infra:validate", "bright");
+  log("   pnpm run infra:validate", "bright");
 
   log("\n2. Start local K8s development workflow:", "cyan");
-  log("   npm run skaffold", "bright");
+  log("   pnpm run skaffold", "bright");
   log("   (auto-watch/rebuild/deploy on code changes)", "blue");
 
   log("\n3. Build manifests for manual testing:", "cyan");

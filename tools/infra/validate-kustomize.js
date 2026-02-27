@@ -8,10 +8,10 @@
  * Used by git hooks (pre-commit, pre-push) and can be run manually.
  *
  * Usage:
- *   npm run infra:validate                 # All providers, all environments
- *   npm run infra:validate:dev             # All providers, dev only
- *   npm run infra:validate:test            # All providers, test only
- *   npm run infra:validate:prod            # All providers, prod only
+ *   pnpm run infra:validate                 # All providers, all environments
+ *   pnpm run infra:validate:dev             # All providers, dev only
+ *   pnpm run infra:validate:test            # All providers, test only
+ *   pnpm run infra:validate:prod            # All providers, prod only
  */
 
 const { execSync } = require("child_process");
@@ -63,7 +63,7 @@ function checkKustomize() {
   const result = run("kustomize version", { silent: true });
   if (!result.success) {
     logError("Kustomize not found");
-    logWarning("Install: npm run infra:setup");
+    logWarning("Install: pnpm run infra:setup");
     return false;
   }
   return true;

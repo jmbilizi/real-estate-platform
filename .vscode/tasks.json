@@ -26,7 +26,7 @@
     {
       "label": "Python: Format All Code",
       "type": "shell",
-      "command": "npm run python:format",
+      "command": "pnpm run python:format",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -37,7 +37,7 @@
     {
       "label": "Python: Lint All Code",
       "type": "shell",
-      "command": "npm run python:lint",
+      "command": "pnpm run python:lint",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -48,7 +48,7 @@
     {
       "label": "Python: Check All Code",
       "type": "shell",
-      "command": "npm run python:check",
+      "command": "pnpm run python:check",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -59,7 +59,7 @@
     {
       "label": "Python: Run Tests",
       "type": "shell",
-      "command": "npm run nx:python-test",
+      "command": "pnpm run nx:python-test",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",

@@ -8,10 +8,10 @@ Automated tooling for Kubernetes infrastructure development and validation.
 
 ```bash
 # One-time setup (installs Kustomize + adds to PATH)
-npm run infra:setup
+pnpm run infra:setup
 
 # Validate all environments
-npm run infra:validate
+pnpm run infra:validate
 ```
 
 ## Tools Installed
@@ -33,12 +33,12 @@ npm run infra:validate
 
 ```bash
 # Validate all providers and environments (auto-discovery)
-npm run infra:validate
+pnpm run infra:validate
 
 # Validate specific environment across all providers
-npm run infra:validate:dev
-npm run infra:validate:test
-npm run infra:validate:prod
+pnpm run infra:validate:dev
+pnpm run infra:validate:test
+pnpm run infra:validate:prod
 
 # Build manifests manually (replace {provider} and {env})
 kustomize build infra/k8s/{provider}/{env} --enable-alpha-plugins
@@ -57,11 +57,11 @@ Automatically validates infrastructure changes:
 - **Pre-push**: Safety net if pre-commit bypassed
 - **Graceful**: Skips with warning if Kustomize not installed
 
-**Setup**: Run `npm run hooks:setup` (includes all git hooks)
+**Setup**: Run `pnpm run hooks:setup` (includes all git hooks)
 
 ## How It Works
 
-1. **First-time setup**: `npm run infra:setup`
+1. **First-time setup**: `pnpm run infra:setup`
    - Downloads Kustomize binary for your OS
    - Installs to `~/.local/bin`
    - Adds to PATH permanently
@@ -74,7 +74,7 @@ Automatically validates infrastructure changes:
 
 3. **Validation**: Automatic via git hooks or manual
    - Git hooks run on commit/push
-   - Manual: `npm run infra:validate`
+   - Manual: `pnpm run infra:validate`
 
 ## Multi-Provider Support
 
@@ -120,7 +120,7 @@ infra/k8s/
 **Validation automatically includes both:**
 
 ```bash
-npm run infra:validate
+pnpm run infra:validate
 
 # Output:
 # Discovered providers: aws, hetzner
@@ -183,7 +183,7 @@ spec:
 EOF
 
 # 4. Validate (AWS automatically discovered!)
-npm run infra:validate
+pnpm run infra:validate
 ```
 
 ### Provider-Specific Differences

@@ -68,7 +68,7 @@ function main() {
 
   let projectsWithTarget;
   try {
-    projectsWithTarget = runNxJson(`npx nx show projects --withTarget=${target} --json`);
+    projectsWithTarget = runNxJson(`pnpm exec nx show projects --withTarget=${target} --json`);
   } catch (e) {
     const stderr = (e && (e.stderr || e.message)) || "";
     console.error(`[nx] Failed to list projects with target \"${target}\"`);
@@ -80,7 +80,7 @@ function main() {
   if (projectsFilter) {
     let filteredProjects;
     try {
-      filteredProjects = runNxJson(`npx nx show projects --projects=${projectsFilter} --json`);
+      filteredProjects = runNxJson(`pnpm exec nx show projects --projects=${projectsFilter} --json`);
     } catch (e) {
       const stderr = (e && (e.stderr || e.message)) || "";
       console.error(`[nx] Failed to list projects for filter: --projects=${projectsFilter}`);
@@ -108,7 +108,7 @@ function main() {
 
   const nxArgs = ["nx", "run-many", `--target=${target}`, `--projects=${finalProjects.join(",")}`, ...passThrough];
 
-  const result = spawnSync("npx", nxArgs, {
+  const result = spawnSync("pnpm", ["exec", ...nxArgs], {
     stdio: "inherit",
     shell: true,
   });

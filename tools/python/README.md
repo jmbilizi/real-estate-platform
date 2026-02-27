@@ -6,13 +6,13 @@ This directory contains all the Python-related tooling and configuration for the
 
 ```bash
 # One-time setup (installs UV if missing, creates .venv, installs all packages)
-npm run python:env
+pnpm run python:env
 
 # Create a Python project
-npx nx g @nxlv/python:uv-project my-service --directory=apps/services
+pnpm exec nx g @nxlv/python:uv-project my-service --directory=apps/services
 
 # Sync Nx and auto-tag
-npm run nx:reset
+pnpm run nx:reset
 ```
 
 ## How It Works
@@ -26,7 +26,7 @@ This monorepo uses **UV workspace mode** — the same concept as npm workspaces 
 | **Workspace root**   | Root `package.json`         | Root `pyproject.toml` with `[tool.uv.workspace]` |
 | **Shared dev tools** | Root `devDependencies`      | Root `[dependency-groups] dev`                   |
 | **Single install**   | One `node_modules/` at root | One `.venv/` at root                             |
-| **Lockfile**         | `package-lock.json`         | `uv.lock`                                        |
+| **Lockfile**         | `pnpm-lock.yaml`            | `uv.lock`                                        |
 
 ### Key Files
 
@@ -54,27 +54,27 @@ This monorepo uses **UV workspace mode** — the same concept as npm workspaces 
 ### Environment Setup
 
 ```bash
-npm run python:env             # Install UV (if needed) + create .venv + install packages
-npm run python:env:full        # Same as above, with all optional dependency groups
-npm run python:env -- --check  # Check environment status without installing
+pnpm run python:env             # Install UV (if needed) + create .venv + install packages
+pnpm run python:env:full        # Same as above, with all optional dependency groups
+pnpm run python:env -- --check  # Check environment status without installing
 ```
 
 ### Code Quality
 
 ```bash
-npm run python:format       # Format all Python code (Black)
-npm run python:lint         # Lint all Python code (Flake8 + mypy)
-npm run python:check        # Format + lint
+pnpm run python:format       # Format all Python code (Black)
+pnpm run python:lint         # Lint all Python code (Flake8 + mypy)
+pnpm run python:check        # Format + lint
 ```
 
 ### Nx Commands (per-project)
 
 ```bash
-npm run nx:python-dev       # Start all Python services
-npm run nx:python-test      # Test all Python projects
-npm run nx:python-lint      # Lint all Python projects
-npm run nx:python-format    # Format all Python projects
-npm run nx:python-build     # Build all Python projects
+pnpm run nx:python-dev       # Start all Python services
+pnpm run nx:python-test      # Test all Python projects
+pnpm run nx:python-lint      # Lint all Python projects
+pnpm run nx:python-format    # Format all Python projects
+pnpm run nx:python-build     # Build all Python projects
 ```
 
 ### Adding Dependencies
@@ -131,7 +131,7 @@ No manual setup required — hooks handle everything.
 UV is not installed. The setup script installs it automatically:
 
 ```bash
-npm run python:env
+pnpm run python:env
 ```
 
 Or install manually: `winget install astral-sh.uv` (Windows), `brew install uv` (macOS), `curl -LsSf https://astral.sh/uv/install.sh | sh` (Linux).
@@ -145,7 +145,7 @@ The workspace has `uv.toml` with `native-tls = true` which uses system certifica
 ```bash
 # Delete and recreate
 rm -rf .venv     # or: rmdir /s .venv (Windows)
-npm run python:env
+pnpm run python:env
 ```
 
 ### Import Path Issues

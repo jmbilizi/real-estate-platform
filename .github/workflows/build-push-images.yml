@@ -84,34 +84,38 @@ jobs:
         with:
           fetch-depth: 0 # Enable Nx affected commands
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20.19.5"
+          cache: "pnpm"
 
       - name: Cache node_modules
         uses: actions/cache/restore@v4
         with:
           path: node_modules
-          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install Node.js dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Initialize Nx workspace
         shell: bash
         run: |
           echo "🔍 Diagnosing Nx workspace state..."
           echo "All projects:"
-          npx nx show projects --all || echo "Failed to list projects"
+          pnpm exec nx show projects --all || echo "Failed to list projects"
 
           echo ""
           echo "Projects with container-build:"
-          npx nx show projects --withTarget=container-build || echo "Failed to find container-build targets"
+          pnpm exec nx show projects --withTarget=container-build || echo "Failed to find container-build targets"
 
           echo ""
           echo "Checking api-gateway project:"
-          npx nx show project api-gateway || echo "api-gateway not found"
+          pnpm exec nx show project api-gateway || echo "api-gateway not found"
 
       - name: Determine environment and tag
         id: env
@@ -170,16 +174,16 @@ jobs:
             # If workflow files changed, build all services
             if echo "$FILES" | grep -E -q '^\.github/workflows/build-push-images\.yml|^\.github/actions/build-push-image/'; then
               echo "🚨 Build workflow files changed - building ALL services"
-              echo "🔍 DEBUG: Running: npx nx show projects --withTarget=container-build"
-              PROJECTS=$(npx nx show projects --withTarget=container-build)
+              echo "🔍 DEBUG: Running: pnpm exec nx show projects --withTarget=container-build"
+              PROJECTS=$(pnpm exec nx show projects --withTarget=container-build)
               echo "🔍 DEBUG: Result: '$PROJECTS'"
               
               if [ -z "$PROJECTS" ]; then
                 echo "❌ No projects with container-build target found after workflow changes"
                 echo "🔎 Nx projects (all):"
-                npx nx show projects --all
+                pnpm exec nx show projects --all
                 echo "🔎 Checking api-gateway specifically:"
-                npx nx show project api-gateway || echo "api-gateway not found"
+                pnpm exec nx show project api-gateway || echo "api-gateway not found"
                 exit 1
               fi
 
@@ -195,7 +199,7 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "workflow_call" ]; then
             if [ "${{ inputs.projects }}" = "all" ]; then
               echo "🔍 DEBUG: Building all projects with container-build target"
-              PROJECTS=$(npx nx show projects --withTarget=container-build)
+              PROJECTS=$(pnpm exec nx show projects --withTarget=container-build)
               echo "🔍 DEBUG: All projects result: '$PROJECTS'"
             elif [ "${{ inputs.projects }}" = "affected" ]; then
               # Determine base for affected detection
@@ -208,14 +212,14 @@ jobs:
                 BASE="HEAD~5"
               fi
               echo "🔍 DEBUG: Using base: $BASE"
-              echo "🔍 DEBUG: Running: npx nx show projects --affected --base=$BASE --withTarget=container-build"
-              PROJECTS=$(npx nx show projects --affected --base=$BASE --withTarget=container-build)
+              echo "🔍 DEBUG: Running: pnpm exec nx show projects --affected --base=$BASE --withTarget=container-build"
+              PROJECTS=$(pnpm exec nx show projects --affected --base=$BASE --withTarget=container-build)
               echo "🔍 DEBUG: Affected projects result: '$PROJECTS'"
               
               # If no projects affected in last 5 commits, build all
               if [ -z "$PROJECTS" ]; then
                 echo "⚠️  No affected projects in last 5 commits, building ALL services"
-                PROJECTS=$(npx nx show projects --withTarget=container-build)
+                PROJECTS=$(pnpm exec nx show projects --withTarget=container-build)
                 echo "🔍 DEBUG: Building all: '$PROJECTS'"
               fi
             else
@@ -225,12 +229,12 @@ jobs:
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
             # For PRs, only build affected projects
             echo "🔍 DEBUG: PR mode, base=origin/${{ github.base_ref }}"
-            PROJECTS=$(npx nx show projects --affected --base=origin/${{ github.base_ref }} --withTarget=container-build)
+            PROJECTS=$(pnpm exec nx show projects --affected --base=origin/${{ github.base_ref }} --withTarget=container-build)
             echo "🔍 DEBUG: PR affected result: '$PROJECTS'"
           else
             # Fallback: build all projects with container-build target
             echo "🔍 DEBUG: Fallback - building all container-build projects"
-            PROJECTS=$(npx nx show projects --withTarget=container-build)
+            PROJECTS=$(pnpm exec nx show projects --withTarget=container-build)
             echo "🔍 DEBUG: Fallback result: '$PROJECTS'"
           fi
 
@@ -242,9 +246,9 @@ jobs:
           else
             echo "⚠️  No projects with container-build target found"
             echo "🔎 Debugging - all projects:"
-            npx nx show projects --all
+            pnpm exec nx show projects --all
             echo "🔎 Checking api-gateway:"
-            npx nx show project api-gateway || echo "api-gateway not detected"
+            pnpm exec nx show project api-gateway || echo "api-gateway not detected"
           fi
 
       - name: Build matrix

@@ -196,7 +196,7 @@ function ensureContainerBuildTarget(projectJson, hasDockerfile) {
 function main() {
   const workspaceRoot = process.cwd();
   const createMissing = hasFlag(process.argv.slice(2), "--create-missing");
-  const projectNames = runJson("npx nx show projects --json");
+  const projectNames = runJson("pnpm exec nx show projects --json");
 
   const stats = {
     totalProjects: projectNames.length,
@@ -208,7 +208,7 @@ function main() {
   };
 
   for (const projectName of projectNames) {
-    const effective = runJson(`npx nx show project ${projectName} --json`);
+    const effective = runJson(`pnpm exec nx show project ${projectName} --json`);
     const projectRootRel = effective.root;
     const projectRootAbs = path.join(workspaceRoot, projectRootRel);
     const projectJsonPath = path.join(projectRootAbs, "project.json");

@@ -8,24 +8,24 @@ This monorepo is set up to support .NET, Node/TypeScript, Python, Next.js, React
 - **Nx**: 22.0.1 (automatically installed)
 - **.NET SDK**: 8.0 or higher
 - **Python**: 3.8 or higher
-- **Kustomize**: Auto-installed via `npm run infra:setup` (for infrastructure work)
+- **Kustomize**: Auto-installed via `pnpm run infra:setup` (for infrastructure work)
 
 ## Getting Started
 
 ```bash
 # Install Node.js dependencies
-npm install
+pnpm install
 
 # Setup git hooks
-npm run hooks:setup
+pnpm run hooks:setup
 
 # Language-specific setup (as needed)
-npm run python:env:full    # Python + UV + Poetry
-npm run dotnet:env         # .NET development
-npm run infra:setup        # Kubernetes/Kustomize (for infrastructure work)
+pnpm run python:env:full    # Python + UV + Poetry
+pnpm run dotnet:env         # .NET development
+pnpm run infra:setup        # Kubernetes/Kustomize (for infrastructure work)
 
 # Local cluster setup (optional - for local K8s development)
-npm run infra:local:cluster:setup    # Kind + Podman cluster
+pnpm run infra:local:cluster:setup    # Kind + Podman cluster
 ```
 
 See individual stack documentation for details:
@@ -44,41 +44,41 @@ The repository has a two-tier validation system to balance speed with safety:
 
 # Formatting commands
 
-npm run nx:workspace-format # Format all files (workspace + projects)
-npm run nx:node-format # Format Node.js projects only
-npm run nx:python-format # Format Python projects only
-npm run nx:dotnet-format # Format .NET projects only
+pnpm run nx:workspace-format # Format all files (workspace + projects)
+pnpm run nx:node-format # Format Node.js projects only
+pnpm run nx:python-format # Format Python projects only
+pnpm run nx:dotnet-format # Format .NET projects only
 
 # Infrastructure validation
 
-npm run infra:validate # Validate all providers and environments (auto-discovery)
-npm run infra:validate:dev # Validate dev across all providers
-npm run infra:validate:test # Validate test across all providers
+pnpm run infra:validate # Validate all providers and environments (auto-discovery)
+pnpm run infra:validate:dev # Validate dev across all providers
+pnpm run infra:validate:test # Validate test across all providers
 
 # Full validation (same as pre-push hook)
 
-npm run pre-push
+pnpm run pre-push
 
 # Quick validation (same as pre-commit hook)
 
-npm run pre-commit
+pnpm run pre-commit
 
 # Formatting commands
 
-npm run nx:workspace-format # Format all files (workspace + projects)
-npm run nx:node-format # Format Node.js projects only
-npm run nx:python-format # Format Python projects only
-npm run nx:dotnet-format # Format .NET projects only
+pnpm run nx:workspace-format # Format all files (workspace + projects)
+pnpm run nx:node-format # Format Node.js projects only
+pnpm run nx:python-format # Format Python projects only
+pnpm run nx:dotnet-format # Format .NET projects only
 
 # Individual language checks (fast, uses cached nx state)
 
-npm run nx:node-lint # Lint Node.js projects
-npm run nx:python-test # Test Python projects
-npm run nx:dotnet-build # Build .NET projects
+pnpm run nx:node-lint # Lint Node.js projects
+pnpm run nx:python-test # Test Python projects
+pnpm run nx:dotnet-build # Build .NET projects
 
 # Reset nx cache (run this after structural changes)
 
-npm run nx:reset
+pnpm run nx:reset
 
 ```
 
@@ -102,17 +102,17 @@ The scripts only run checks for affected languages:
 The validation system is optimized for both speed and accuracy:
 
 - **Git hooks** (`pre-commit`, `pre-push`): Skip `nx:reset` to avoid modifying files during commit/push. Fast and non-invasive.
-- **Manual validation** (`npm run pre-commit`, `npm run pre-push`): Runs `nx:reset` once at start for clean state, then all checks without redundant resets.
-- **Individual commands** (`npm run nx:node-lint`, etc.): Skip reset for instant execution during development.
+- **Manual validation** (`pnpm run pre-commit`, `pnpm run pre-push`): Runs `nx:reset` once at start for clean state, then all checks without redundant resets.
+- **Individual commands** (`pnpm run nx:node-lint`, etc.): Skip reset for instant execution during development.
 
 **When to use each:**
 
 - **Git hooks**: Automatic validation during commit/push (fast, no file modifications)
-- **`npm run pre-push`**: Before creating PRs or when you want full validation with clean workspace state
-- **`npm run pre-commit`**: Quick manual validation with clean workspace state
+- **`pnpm run pre-push`**: Before creating PRs or when you want full validation with clean workspace state
+- **`pnpm run pre-commit`**: Quick manual validation with clean workspace state
 - **Individual scripts**: During active development for instant feedback
 
-Both hooks and `npm run pre-push` perfectly mirror what CI will verify, so if they pass locally, CI will pass too.
+Both hooks and `pnpm run pre-push` perfectly mirror what CI will verify, so if they pass locally, CI will pass too.
 
 See the [CI/CD documentation](./docs/ci-cd.md#quality-checks) for more details.
 

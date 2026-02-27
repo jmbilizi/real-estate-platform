@@ -4,7 +4,7 @@
  * Download MaxMind GeoLite2-City database for local development
  *
  * Usage:
- *   npm run geoip:download
+ *   pnpm run geoip:download
  *
  * Requirements:
  *   - MAXMIND_LICENSE_KEY environment variable (get free key at https://www.maxmind.com/en/geolite2/signup)
@@ -115,7 +115,7 @@ async function main() {
     console.log("   OR add to workspace root .env file (gitignored):");
     console.log("   MAXMIND_LICENSE_KEY=your_key_here");
     console.log("");
-    console.log("4. Run this script again: npm run geoip:download");
+    console.log("4. Run this script again: pnpm run geoip:download");
     console.log("");
     process.exit(1);
   }
@@ -211,7 +211,7 @@ async function main() {
     log("🎉 GeoIP database ready for local development!", "success");
     console.log("");
     console.log("Next steps:");
-    console.log("1. Start local cluster: npm run infra:local:cluster:setup");
+    console.log("1. Start local cluster: pnpm run infra:local:cluster:setup");
     console.log("2. Run Skaffold: node tools/infra/dev-skaffold.js");
     console.log("3. Send test requests to see geographic tags in Jaeger");
     console.log("");

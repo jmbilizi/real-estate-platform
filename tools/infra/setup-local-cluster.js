@@ -663,7 +663,7 @@ function applyLocalResources() {
   if (result.success) {
     logSuccess("Local resources applied successfully");
   } else {
-    logWarning("Failed to apply resources automatically. Run npm run infra:local:k8s-resources:apply later.");
+    logWarning("Failed to apply resources automatically. Run pnpm run infra:local:k8s-resources:apply later.");
   }
 }
 
@@ -699,8 +699,8 @@ async function main() {
 
   log("\nKind + Podman environment is ready!", "green");
   logInfo("Next steps:");
-  logInfo("  • Deploy manifests: npm run skaffold:deploy");
-  logInfo("  • Delete cluster:  npm run infra:local:cluster:delete");
+  logInfo("  • Deploy manifests: pnpm run skaffold:deploy");
+  logInfo("  • Delete cluster:  pnpm run infra:local:cluster:delete");
 }
 
 main().catch((error) => {

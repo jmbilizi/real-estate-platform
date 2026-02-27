@@ -215,15 +215,15 @@ if (updateNxBat) {
   console.log("✅ Updated nx.bat file");
 }
 
-// Run npx nx --version to verify installation
+// Run pnpm exec nx --version to verify installation
 try {
   console.log("⚙️ Verifying NX installation...");
-  const version = execSync("npx nx --version", { stdio: "pipe" }).toString().trim();
+  const version = execSync("pnpm exec nx --version", { stdio: "pipe" }).toString().trim();
   console.log(`✅ NX is installed: ${version}`);
 } catch (error) {
   console.log("⚠️ Error verifying NX. Trying to reinstall NX...");
   try {
-    execSync("npm install nx@latest --save-dev", { stdio: "inherit" });
+    execSync("pnpm add -D nx@latest", { stdio: "inherit" });
     console.log("✅ Reinstalled NX");
   } catch (installError) {
     console.error("❌ Failed to reinstall NX", installError.message);
@@ -233,6 +233,6 @@ try {
 
 console.log("🎉 NX repair completed successfully!");
 console.log("You can now try running NX commands like:");
-console.log("  npx nx graph");
-console.log("  npx nx run-many --target=lint --projects=tag:runtime:python");
-console.log("Or use the npm scripts defined in package.json.");
+console.log("  pnpm exec nx graph");
+console.log("  pnpm exec nx run-many --target=lint --projects=tag:runtime:python");
+console.log("Or use the pnpm scripts defined in package.json.");

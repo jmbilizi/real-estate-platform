@@ -44,7 +44,7 @@ if (args.length === 0 || !hasTargetArg || !hasProjectsArg) {
   console.log("[NX] Running nx run-many command");
 
   // Just pass through to regular nx without special handling
-  const result = spawnSync("npx", ["nx", "run-many", ...args], {
+  const result = spawnSync("pnpm", ["exec", "nx", "run-many", ...args], {
     stdio: "inherit",
     shell: true,
   });
@@ -55,7 +55,7 @@ if (args.length === 0 || !hasTargetArg || !hasProjectsArg) {
 console.log(`[NX] Running nx run-many for ${projectType} projects with target "${target}"`);
 
 // Run the nx command
-const result = spawnSync("npx", ["nx", "run-many", ...args], {
+const result = spawnSync("pnpm", ["exec", "nx", "run-many", ...args], {
   stdio: "inherit",
   shell: true,
 });

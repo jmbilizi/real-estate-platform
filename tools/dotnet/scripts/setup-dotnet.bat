@@ -40,7 +40,7 @@ REM Check if NX .NET plugin is installed
 findstr "@nx/dotnet" package.json >nul
 if %ERRORLEVEL% neq 0 (
     echo Installing @nx/dotnet NX plugin...
-    call npm install --save-dev @nx/dotnet
+    call pnpm add -D @nx/dotnet
 ) else (
     echo @nx/dotnet NX plugin is already installed.
 )
@@ -59,6 +59,6 @@ if not exist tools\dotnet (
 
 echo .NET development environment setup completed.
 echo You can now create .NET projects using Nx generators:
-echo Example: npx nx generate @nx/dotnet:app my-app --directory=apps
+echo Example: pnpm exec nx generate @nx/dotnet:app my-app --directory=apps
 
 exit /b 0

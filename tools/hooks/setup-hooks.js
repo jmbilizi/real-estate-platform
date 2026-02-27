@@ -136,7 +136,7 @@ function setupNodeEnvironment() {
     log("Verifying Node.js dependencies...");
 
     // Install husky if needed
-    execute("npm", ["run", "prepare"]);
+    execute("pnpm", ["run", "prepare"]);
 
     return true;
   } catch (error) {
@@ -268,7 +268,7 @@ async function main() {
 
   // First setup Husky
   log("Setting up Husky...");
-  const huskyResult = execute("npm", ["run", "prepare"]);
+  const huskyResult = execute("pnpm", ["run", "prepare"]);
 
   if (!huskyResult.success) {
     log("Failed to set up Husky. Aborting hooks setup.", true);

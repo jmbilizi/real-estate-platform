@@ -45,7 +45,7 @@ setup-base (15s) ──┐
          ↓
     Total: ~135s (setup + longest job)
 
-vs. previous matrix: ~150s (with redundant npm ci)
+vs. previous matrix: ~150s (with redundant pnpm install)
 ```### Job Breakdown
 
 #### 1. `setup-base` (Sequential)
@@ -56,14 +56,14 @@ vs. previous matrix: ~150s (with redundant npm ci)
 
 - Checkout code with full git history (for Nx affected commands)
 - Set up Node.js 20.19.5
-- Install npm dependencies (`npm ci`)
+- Install pnpm dependencies (`pnpm install --frozen-lockfile`)
 - Save `node_modules` to cache
 
 **Duration:** ~10-15 seconds
 
 **Benefits:**
 
-- Eliminates redundant `npm ci` across multiple jobs
+- Eliminates redundant `pnpm install --frozen-lockfile` across multiple jobs
 - Reduces total CI time by 30-60 seconds per run
 - Single source of truth for Node.js tooling
 
@@ -149,7 +149,7 @@ concurrency:
 **Node.js:**
 
 - `node_modules` cached and shared across all jobs
-- npm cache automatically managed by `setup-node` action
+- pnpm cache automatically managed by `setup-node` action
 
 **Python:**
 
@@ -164,7 +164,7 @@ concurrency:
 **Nx:**
 
 - Computation cache stored at `.nx/cache`
-- Unified cache key across all languages (composite hash of package-lock.json, uv.lock, \*.csproj)
+- Unified cache key across all languages (composite hash of pnpm-lock.yaml, uv.lock, \*.csproj)
 - Enables cross-language cache sharing (e.g., Python job reuses Node.js affected computations)
 - Restore keys allow fallback to OS-level cache
 
@@ -174,14 +174,14 @@ concurrency:
 
 ```bash
 # Dynamically compares against the target branch (dev, test, or main)
-npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:runtime:node
+pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:runtime:node
 ```
 
 **Push to main/dev/test** runs the full test suite for all projects:
 
 ```bash
 # Test all projects
-npm run nx:node-test
+pnpm run nx:node-test
 ```
 
 **How it works:**
@@ -754,7 +754,7 @@ Current quality checks enforced by CI:
 
 1. Test result reporting with JUnit/TRX parsers
 2. Coverage thresholds and badge generation
-3. Security scanning (npm audit, pip-audit, dotnet list package --vulnerable)
+3. Security scanning (pnpm audit, pip-audit, dotnet list package --vulnerable)
 4. Remove "No projects found" fallback guards after adding sample projects
 
 **Medium-term (1-3 months):**
@@ -796,7 +796,7 @@ Current quality checks enforced by CI:
 
 **Issue:** `node_modules` cache not restoring
 
-- **Solution:** Check that `package-lock.json` exists and is committed
+- **Solution:** Check that `pnpm-lock.yaml` exists and is committed
 - **Solution:** Verify cache key matches between `setup-base` and language jobs
 
 **Issue:** Python formatting check fails with "No such file"
@@ -841,18 +841,18 @@ The repository uses a **two-tier validation system** to balance speed with safet
 
 ```bash
 # Full validation (same as pre-push hook)
-npm run pre-push
+pnpm run pre-push
 
 # Quick validation (same as pre-commit hook)
-npm run pre-commit
+pnpm run pre-commit
 
 # Individual language checks (fast, uses cached nx state)
-npm run nx:node-lint       # Lint Node.js projects
-npm run nx:python-test     # Test Python projects
-npm run nx:dotnet-build    # Build .NET projects
+pnpm run nx:node-lint       # Lint Node.js projects
+pnpm run nx:python-test     # Test Python projects
+pnpm run nx:dotnet-build    # Build .NET projects
 
 # Reset nx cache (run after structural changes)
-npm run nx:reset
+pnpm run nx:reset
 ```
 
 ### Performance Optimization
@@ -866,18 +866,18 @@ The validation system is architected for optimal performance and to avoid file m
 - No file modifications means no unstaged changes after commit
 - Runs with `--skip-reset` flag
 
-**Manual Validation (`npm run pre-commit` and `npm run pre-push`):**
+**Manual Validation (`pnpm run pre-commit` and `pnpm run pre-push`):**
 
 - **Runs `nx:reset` once** at the start to ensure clean, accurate state
 - Then executes all checks without redundant resets
 - Total: 1 reset per session vs previous 20+ resets = **massive speed improvement**
 - Use these before creating PRs or when you want guaranteed clean validation
 
-**Individual Commands (`npm run nx:node-lint`, etc.):**
+**Individual Commands (`pnpm run nx:node-lint`, etc.):**
 
 - **Skip reset** for instant execution during development
 - Use cached nx state for faster iteration
-- If structural changes made, run `npm run nx:reset` manually first
+- If structural changes made, run `pnpm run nx:reset` manually first
 
 **Why this matters:**
 
@@ -890,17 +890,17 @@ The validation system is architected for optimal performance and to avoid file m
 
 ```bash
 # During development - instant feedback
-npm run nx:node-lint              # Fast, uses cache
+pnpm run nx:node-lint              # Fast, uses cache
 
 # Committing code - automatic validation
 git commit                        # Hook runs with --skip-reset, no file changes
 
 # Before PR - thorough validation with clean state
-npm run pre-push                  # Runs reset once, full clean validation
+pnpm run pre-push                  # Runs reset once, full clean validation
 
 # After structural changes (new project, dependencies, etc.)
-npm run nx:reset                  # Refresh project graph
-npm run nx:node-lint              # Now has fresh state
+pnpm run nx:reset                  # Refresh project graph
+pnpm run nx:node-lint              # Now has fresh state
 ```
 
 ### How It Works
@@ -944,7 +944,7 @@ This means if you only change Node.js files, you won't waste time setting up Pyt
 - ⏭️ Tests (skipped for speed)
 - ⏭️ Build (skipped for speed)
 
-**Pre-Push Hook + `npm run pre-push` (Full):**
+**Pre-Push Hook + `pnpm run pre-push` (Full):**
 
 - ✅ Format Check (Prettier, Black, dotnet format)
 - ✅ Lint (ESLint, Flake8, StyleCop)
@@ -968,7 +968,7 @@ git commit -m "Add new feature"
 # ⚡ Pre-commit hook runs automatically (fast checks ~5-15s)
 
 # 3. Before pushing - optionally run full check manually
-npm run pre-push
+pnpm run pre-push
 # 🔍 Same validation that pre-push hook will run
 
 # 4. Push to remote
@@ -979,13 +979,13 @@ git push origin feature/new-feature
 
 ### When to Use Manual Commands
 
-**Use `npm run pre-commit`:**
+**Use `pnpm run pre-commit`:**
 
 - Before committing if you bypassed the pre-commit hook (`git commit --no-verify`)
 - Quick sanity check during development
 - Faster feedback loop while iterating
 
-**Use `npm run pre-push`:**
+**Use `pnpm run pre-push`:**
 
 - Before creating a Pull Request
 - To preview what pre-push hook will check
@@ -997,7 +997,7 @@ git push origin feature/new-feature
 **"Python environment not set up"**
 
 ```bash
-npm run python:env
+pnpm run python:env
 ```
 
 **".NET SDK not found"**
@@ -1022,15 +1022,15 @@ git commit --no-verify
 git push --no-verify
 ```
 
-**Note:** Bypassing hooks means you skip validation. Use `npm run pre-commit` or `npm run pre-push` manually instead.
+**Note:** Bypassing hooks means you skip validation. Use `pnpm run pre-commit` or `pnpm run pre-push` manually instead.
 
 **Format check fails**
 
 - Run the appropriate format command:
-  - **All files (workspace + projects):** `npm run nx:workspace-format`
-  - **Node.js projects only:** `npm run nx:node-format`
-  - **Python projects only:** `npm run nx:python-format`
-  - **.NET projects only:** `npm run nx:dotnet-format`
+  - **All files (workspace + projects):** `pnpm run nx:workspace-format`
+  - **Node.js projects only:** `pnpm run nx:node-format`
+  - **Python projects only:** `pnpm run nx:python-format`
+  - **.NET projects only:** `pnpm run nx:dotnet-format`
 
 > **Tip:** Use `nx:workspace-format` to format all files including repo-level files (scripts/, docs/, package.json, etc.). Use project-specific format commands when working on individual projects.
 
@@ -1038,10 +1038,10 @@ git push --no-verify
 
 ```bash
 # On feature branch - see affected projects
-npx nx affected:graph
+pnpm exec nx affected:graph
 
 # On any branch - see all projects
-npx nx graph
+pnpm exec nx graph
 ```
 
 ### Best Practices
@@ -1052,7 +1052,7 @@ npx nx graph
    ```bash
    git push -u origin feature/my-feature
    ```
-4. **Run `npm run check` before creating PRs** - Preview full validation
+4. **Run `pnpm run check` before creating PRs** - Preview full validation
 5. **Fix issues immediately** - Don't accumulate technical debt
 6. **Pre-push hook = CI preview** - If pre-push passes, CI passes
 

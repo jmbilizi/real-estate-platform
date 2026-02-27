@@ -299,17 +299,17 @@ Configure in: Repository Settings → Secrets and variables → Actions
 ### Local Development with Podman
 
 - **Podman Desktop**: https://podman-desktop.io/
-  - **Automated setup**: `npm run infra:local:cluster:setup` (installs Podman Desktop, creates cluster)
+  - **Automated setup**: `pnpm run infra:local:cluster:setup` (installs Podman Desktop, creates cluster)
   - **Manual install**: Download from https://podman-desktop.io/downloads
   - Includes: Podman CLI, kubectl, local Kubernetes cluster
   - StorageClass: `local-path` (automatically created)
 - **Cross-platform**: Windows (WSL2), macOS (libkrun/applehv), Linux (QEMU)
 - **Quick start**:
   ```bash
-  npm run infra:local:cluster:setup         # Setup cluster (one-time)
-  npm run infra:local:cluster:setup -- --apply   # Setup + deploy resources
+  pnpm run infra:local:cluster:setup         # Setup cluster (one-time)
+  pnpm run infra:local:cluster:setup -- --apply   # Setup + deploy resources
    node tools/infra/run-skaffold.js run --port-forward --tail  # Deploy resources (same apply semantics)
-  npm run infra:local:cluster:delete        # Remove cluster
+  pnpm run infra:local:cluster:delete        # Remove cluster
   ```
 
 ### Optional (for enhanced workflow)

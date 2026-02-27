@@ -449,12 +449,12 @@ async function setupDotNetEnvironment() {
   if (!checkNxDotNetPluginInstalled()) {
     console.log("Installing @nx/dotnet NX plugin...");
     try {
-      executeCommand("npm install --save-dev @nx/dotnet");
+      executeCommand("pnpm add -D @nx/dotnet");
       console.log("@nx/dotnet NX plugin installed successfully");
     } catch (error) {
       console.error("Error installing @nx/dotnet plugin:");
       console.error(error.message);
-      console.error("You may need to install it manually with: npm install --save-dev @nx/dotnet");
+      console.error("You may need to install it manually with: pnpm add -D @nx/dotnet");
     }
   } else {
     console.log("@nx/dotnet NX plugin is already installed.");
@@ -463,11 +463,11 @@ async function setupDotNetEnvironment() {
   // Step 5: Provide usage instructions
   console.log("\n===== .NET development environment setup completed =====");
   console.log("\nYou can now create .NET projects using Nx generators:");
-  console.log("  npx nx generate @nx/dotnet:app my-api --directory=apps");
-  console.log("  npx nx generate @nx/dotnet:lib my-lib --directory=libs");
+  console.log("  pnpm exec nx generate @nx/dotnet:app my-api --directory=apps");
+  console.log("  pnpm exec nx generate @nx/dotnet:lib my-lib --directory=libs");
   console.log("\nProjects will be automatically tagged when you run:");
-  console.log("  npm run nx:reset     # Triggers auto-tagging");
-  console.log("  npm run nx:tag-projects  # Manual tagging if needed");
+  console.log("  pnpm run nx:reset     # Triggers auto-tagging");
+  console.log("  pnpm run nx:tag-projects  # Manual tagging if needed");
 }
 
 // Run the setup

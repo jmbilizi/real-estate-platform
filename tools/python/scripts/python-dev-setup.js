@@ -278,7 +278,7 @@ function checkEnvironment() {
     console.log(`  ✓ UV: ${uvVersion}`);
   } else {
     console.log("  ✗ UV: NOT INSTALLED");
-    console.log("\n  Run 'npm run python:env' to set up the environment.");
+    console.log("\n  Run 'pnpm run python:env' to set up the environment.");
     process.exit(1);
   }
 
@@ -313,7 +313,7 @@ function checkEnvironment() {
     console.log("  ✓ .venv: exists");
   } else {
     console.log("  ✗ .venv: NOT FOUND");
-    console.log("\n  Run 'npm run python:env' to create it.");
+    console.log("\n  Run 'pnpm run python:env' to create it.");
     process.exit(1);
   }
 
@@ -324,7 +324,7 @@ function checkEnvironment() {
   console.log(
     toolsOk
       ? "\n✅ Python environment is fully set up!"
-      : "\n⚠️  Some tools are missing. Run 'npm run python:env' to fix.",
+      : "\n⚠️  Some tools are missing. Run 'pnpm run python:env' to fix.",
   );
   process.exit(toolsOk ? 0 : 1);
 }
@@ -379,10 +379,10 @@ function main() {
   console.log("\nUseful commands:");
   console.log("  uv run <tool>           Run a tool in the venv (e.g., uv run pytest)");
   console.log("  uv add <package>        Add a dependency to the workspace");
-  console.log("  npm run python:format   Format all Python code");
-  console.log("  npm run python:lint     Lint all Python code");
-  console.log("  npm run python:check    Format + lint");
-  console.log("  npm run python:env -- --check   Check environment status");
+  console.log("  pnpm run python:format   Format all Python code");
+  console.log("  pnpm run python:lint     Lint all Python code");
+  console.log("  pnpm run python:check    Format + lint");
+  console.log("  pnpm run python:env -- --check   Check environment status");
 }
 
 main();

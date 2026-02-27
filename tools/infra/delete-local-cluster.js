@@ -169,7 +169,7 @@ async function main() {
   }
 
   log("\n✅ Cluster deletion complete", "green");
-  logInfo("Podman machine preserved. Recreate later via npm run infra:local:cluster:setup");
+  logInfo("Podman machine preserved. Recreate later via pnpm run infra:local:cluster:setup");
 }
 
 main().catch((error) => {

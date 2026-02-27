@@ -34,36 +34,30 @@ jobs:
         with:
           fetch-depth: 0 # Enable Nx affected commands
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20.19.5"
-
-      # Cache the npm download cache (~/.npm) so packages don't re-download from the internet.
-      # npm ci always deletes node_modules before installing, so caching node_modules is pointless.
-      - name: Cache npm download cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: npm-cache-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            npm-cache-${{ runner.os }}-
+          cache: "pnpm"
 
       # Cache node_modules so downstream jobs (node, python, dotnet) can restore it
-      # and skip running npm ci entirely.
+      # and skip running pnpm install entirely.
       - name: Cache node_modules
         id: cache-node-modules
         uses: actions/cache@v4
         with:
           path: node_modules
-          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install Node.js dependencies
         if: steps.cache-node-modules.outputs.cache-hit != 'true'
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Check workspace formatting
-        run: npm run nx:workspace-format-check
+        run: pnpm run nx:workspace-format-check
 
   node:
     needs: setup-base
@@ -73,67 +67,71 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20.19.5"
+          cache: "pnpm"
 
       - name: Restore node_modules
         id: restore-node-modules
         uses: actions/cache/restore@v4
         with:
           path: node_modules
-          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       # Fallback: install if cache miss (should not happen since setup-base saves it)
       - name: Install Node.js dependencies (fallback)
         if: steps.restore-node-modules.outputs.cache-hit != 'true'
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       # Cache Nx cache directory for faster builds
       - name: Cache Nx
         uses: actions/cache@v4
         with:
           path: .nx/cache
-          key: nx-${{ runner.os }}-${{ hashFiles('**/package-lock.json', '**/requirements.txt', '**/*.csproj') }}
+          key: nx-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml', '**/requirements.txt', '**/*.csproj') }}
           restore-keys: |
             nx-${{ runner.os }}-
 
       # Note: We do NOT run nx:reset in CI to ensure we validate code exactly as committed.
       # If project tags or workspace state is incorrect, CI should fail (not auto-fix).
-      # Developers should run 'npm run check' locally before pushing.
+      # Developers should run 'pnpm run check' locally before pushing.
 
       - name: Check Node.js formatting (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: npx nx format:check --base=origin/${{ github.base_ref }} --head=HEAD --projects=tag:runtime:node || echo "No affected Node.js projects"
+        run: pnpm exec nx format:check --base=origin/${{ github.base_ref }} --head=HEAD --projects=tag:runtime:node || echo "No affected Node.js projects"
 
       - name: Check Node.js formatting (Push - all projects)
         if: github.event_name == 'push'
-        run: npx nx format:check --projects=tag:runtime:node || echo "No Node.js projects found"
+        run: pnpm exec nx format:check --projects=tag:runtime:node || echo "No Node.js projects found"
 
       - name: Lint Node.js projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=lint --projects=tag:runtime:node || echo "No affected Node.js projects"
+        run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=lint --projects=tag:runtime:node || echo "No affected Node.js projects"
 
       - name: Lint Node.js projects (Push - all projects)
         if: github.event_name == 'push'
-        run: npm run nx:node-lint || echo "No Node.js projects found"
+        run: pnpm run nx:node-lint || echo "No Node.js projects found"
 
       - name: Test Node.js projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:runtime:node || echo "No affected Node.js projects"
+        run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:runtime:node || echo "No affected Node.js projects"
 
       - name: Test Node.js projects (Push - all projects)
         if: github.event_name == 'push'
-        run: npm run nx:node-test || echo "No Node.js projects found"
+        run: pnpm run nx:node-test || echo "No Node.js projects found"
 
       - name: Build Node.js projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=build --projects=tag:runtime:node || echo "No affected Node.js projects"
+        run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=build --projects=tag:runtime:node || echo "No affected Node.js projects"
 
       - name: Build Node.js projects (Push - all projects)
         if: github.event_name == 'push'
-        run: npm run nx:node-build || echo "No Node.js projects found"
+        run: pnpm run nx:node-build || echo "No Node.js projects found"
 
       - name: Upload Node.js artifacts
         if: always()
@@ -170,29 +168,33 @@ jobs:
           restore-keys: |
             uv-${{ runner.os }}-
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20.19.5"
+          cache: "pnpm"
 
       - name: Restore node_modules
         id: restore-node-modules-python
         uses: actions/cache/restore@v4
         with:
           path: node_modules
-          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       # Fallback: install if cache miss
       - name: Install Node.js dependencies (fallback)
         if: steps.restore-node-modules-python.outputs.cache-hit != 'true'
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       # Cache Nx cache directory for faster builds
       - name: Cache Nx
         uses: actions/cache@v4
         with:
           path: .nx/cache
-          key: nx-${{ runner.os }}-${{ hashFiles('**/package-lock.json', '**/requirements.txt', '**/*.csproj') }}
+          key: nx-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml', '**/requirements.txt', '**/*.csproj') }}
           restore-keys: |
             nx-${{ runner.os }}-
 
@@ -201,7 +203,7 @@ jobs:
 
       # Note: We do NOT run nx:reset in CI to ensure we validate code exactly as committed.
       # If project tags or workspace state is incorrect, CI should fail (not auto-fix).
-      # Developers should run 'npm run check' locally before pushing.
+      # Developers should run 'pnpm run check' locally before pushing.
 
       - name: Check Python formatting (PR - affected only)
         if: github.event_name == 'pull_request'
@@ -213,27 +215,27 @@ jobs:
 
       - name: Lint Python projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=lint --projects=tag:runtime:python || echo "No affected Python projects"
+        run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=lint --projects=tag:runtime:python || echo "No affected Python projects"
 
       - name: Lint Python projects (Push - all projects)
         if: github.event_name == 'push'
-        run: npm run nx:python-lint || echo "No Python projects found"
+        run: pnpm run nx:python-lint || echo "No Python projects found"
 
       - name: Test Python projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:runtime:python || echo "No affected Python projects"
+        run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:runtime:python || echo "No affected Python projects"
 
       - name: Test Python projects (Push - all projects)
         if: github.event_name == 'push'
-        run: npm run nx:python-test || echo "No Python projects found"
+        run: pnpm run nx:python-test || echo "No Python projects found"
 
       - name: Build Python projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=build --projects=tag:runtime:python || echo "No affected Python projects"
+        run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=build --projects=tag:runtime:python || echo "No affected Python projects"
 
       - name: Build Python projects (Push - all projects)
         if: github.event_name == 'push'
-        run: npm run nx:python-build || echo "No Python projects found"
+        run: pnpm run nx:python-build || echo "No Python projects found"
 
       - name: Upload Python artifacts
         if: always()
@@ -267,34 +269,38 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20.19.5"
+          cache: "pnpm"
 
       - name: Restore node_modules
         id: restore-node-modules-dotnet
         uses: actions/cache/restore@v4
         with:
           path: node_modules
-          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       # Fallback: install if cache miss
       - name: Install Node.js dependencies (fallback)
         if: steps.restore-node-modules-dotnet.outputs.cache-hit != 'true'
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       # Cache Nx cache directory for faster builds
       - name: Cache Nx
         uses: actions/cache@v4
         with:
           path: .nx/cache
-          key: nx-${{ runner.os }}-${{ hashFiles('**/package-lock.json', '**/requirements.txt', '**/*.csproj') }}
+          key: nx-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml', '**/requirements.txt', '**/*.csproj') }}
           restore-keys: |
             nx-${{ runner.os }}-
 
       - name: Set up .NET environment
-        run: npm run dotnet:env
+        run: pnpm run dotnet:env
 
       # Restore NuGet packages to catch version conflicts early
       - name: Restore .NET packages
@@ -302,47 +308,47 @@ jobs:
 
       # Note: We do NOT run nx:reset in CI to ensure we validate code exactly as committed.
       # If project tags or workspace state is incorrect, CI should fail (not auto-fix).
-      # Developers should run 'npm run check' locally before pushing.
+      # Developers should run 'pnpm run check' locally before pushing.
 
       - name: Check .NET formatting (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=format-check --projects=tag:runtime:dotnet || echo "No affected .NET projects"
+        run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=format-check --projects=tag:runtime:dotnet || echo "No affected .NET projects"
 
       - name: Check .NET formatting (Push - all projects)
         if: github.event_name == 'push'
-        run: npm run nx:dotnet-format-check || echo "No .NET projects found"
+        run: pnpm run nx:dotnet-format-check || echo "No .NET projects found"
 
       - name: Lint .NET projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=lint --projects=tag:runtime:dotnet || echo "No affected .NET projects"
+        run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=lint --projects=tag:runtime:dotnet || echo "No affected .NET projects"
 
       - name: Lint .NET projects (Push - all projects)
         if: github.event_name == 'push'
-        run: npm run nx:dotnet-lint || echo "No .NET projects found"
+        run: pnpm run nx:dotnet-lint || echo "No .NET projects found"
 
       - name: Type check .NET projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=type-check --projects=tag:runtime:dotnet || echo "No affected .NET projects"
+        run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=type-check --projects=tag:runtime:dotnet || echo "No affected .NET projects"
 
       - name: Type check .NET projects (Push - all projects)
         if: github.event_name == 'push'
-        run: npm run nx:dotnet-type-check || echo "No .NET projects found"
+        run: pnpm run nx:dotnet-type-check || echo "No .NET projects found"
 
       - name: Test .NET projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:runtime:dotnet || echo "No affected .NET projects"
+        run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:runtime:dotnet || echo "No affected .NET projects"
 
       - name: Test .NET projects (Push - all projects)
         if: github.event_name == 'push'
-        run: npm run nx:dotnet-test || echo "No .NET projects found"
+        run: pnpm run nx:dotnet-test || echo "No .NET projects found"
 
       - name: Build .NET projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: npx nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=build --projects=tag:runtime:dotnet || echo "No affected .NET projects"
+        run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=build --projects=tag:runtime:dotnet || echo "No affected .NET projects"
 
       - name: Build .NET projects (Push - all projects)
         if: github.event_name == 'push'
-        run: npm run nx:dotnet-build || echo "No .NET projects found"
+        run: pnpm run nx:dotnet-build || echo "No .NET projects found"
 
       - name: Upload .NET artifacts
         if: always()

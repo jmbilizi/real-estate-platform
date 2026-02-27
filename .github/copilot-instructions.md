@@ -18,7 +18,7 @@ This repo must remain usable on **Windows, macOS, and Linux**.
 - Prefer **Node.js scripts** (in `tools/`) for automation over OS-specific shell/batch scripts.
 - Avoid Windows-only constructs (e.g., `.bat`-only workflows) unless there is an equivalent cross-platform path.
 - Do not assume `bash`, `sed`, `grep`, or GNU tool availability.
-- If a workflow behaves differently on Windows due to `npm.cmd` Ctrl+C behavior, provide a **cross-platform Node launcher** that can be run directly via `node`.
+- If a workflow behaves differently on Windows due to `pnpm.cmd` Ctrl+C behavior, provide a **cross-platform Node launcher** that can be run directly via `node`.
 
 ## Critical Workflows
 
@@ -28,21 +28,21 @@ This repo must remain usable on **Windows, macOS, and Linux**.
 
 ```bash
 # Node.js/TypeScript - Use Nx generators
-npx nx generate @nx/express:app my-api --directory=apps
-npx nx generate @nx/next:app my-web --directory=apps
-npx nx generate @nx/node:lib shared-utils --directory=libs
+pnpm exec nx generate @nx/express:app my-api --directory=apps
+pnpm exec nx generate @nx/next:app my-web --directory=apps
+pnpm exec nx generate @nx/node:lib shared-utils --directory=libs
 
 # Python - Use Nx generators (requires Poetry or UV installed)
-npx nx generate @nxlv/python:poetry-project my-service --directory=apps
-npx nx generate @nxlv/python:uv-project my-service --directory=apps
-npx nx generate @nxlv/python:poetry-project utils --directory=libs --projectType=library
+pnpm exec nx generate @nxlv/python:poetry-project my-service --directory=apps
+pnpm exec nx generate @nxlv/python:uv-project my-service --directory=apps
+pnpm exec nx generate @nxlv/python:poetry-project utils --directory=libs --projectType=library
 
 # .NET - Use standard dotnet CLI (auto-detected by @nx/dotnet)
 dotnet new webapi -n MyApi -o apps/my-api
 dotnet new classlib -n MyLib -o libs/my-lib
 
 # After creating ANY project, run this to sync solution files and auto-tag
-npm run nx:reset
+pnpm run nx:reset
 ```
 
 **Why**: `nx:reset` runs four critical operations:
@@ -57,27 +57,27 @@ npm run nx:reset
 
 ### Running Commands
 
-**Pattern**: Use `npm run nx:{language}-{target}` for language-specific bulk operations:
+**Pattern**: Use `pnpm run nx:{language}-{target}` for language-specific bulk operations:
 
 ```bash
 # Language-specific commands (all projects of that type)
-npm run nx:node-lint          # Lint all Node.js projects
-npm run nx:python-test        # Test all Python projects
-npm run nx:dotnet-build       # Build all .NET projects
+pnpm run nx:node-lint          # Lint all Node.js projects
+pnpm run nx:python-test        # Test all Python projects
+pnpm run nx:dotnet-build       # Build all .NET projects
 
 # Individual project
-npx nx test my-api            # Test specific project
-npx nx build my-service       # Build specific project
+pnpm exec nx test my-api            # Test specific project
+pnpm exec nx build my-service       # Build specific project
 
 # Affected projects (automatically uses correct base branch)
-npx nx affected --target=test
+pnpm exec nx affected --target=test
 ```
 
 **CRITICAL**: The `safe-run-many.js` wrapper handles "no projects found" gracefully. Commands won't fail in CI if no projects of that type exist yet.
 
 ### Nx Reset vs Repair
 
-**Use `npm run nx:reset` when:**
+**Use `pnpm run nx:reset` when:**
 
 - After creating/deleting projects (syncs solution files + auto-tags)
 - Before running affected commands in CI
@@ -90,7 +90,7 @@ npx nx affected --target=test
 - Individual development commands (`nx build`, `nx test`) - Nx manages cache automatically
 - Rapid iteration - reset adds ~5-10s overhead
 
-**Pattern in scripts**: Manual validation commands (`npm run pre-commit`, `npm run pre-push`) run reset once at start; git hooks skip it entirely.
+**Pattern in scripts**: Manual validation commands (`pnpm run pre-commit`, `pnpm run pre-push`) run reset once at start; git hooks skip it entirely.
 
 ## Git Hooks & Validation
 
@@ -114,7 +114,7 @@ npx nx affected --target=test
 - Uses `--skip-reset` flag (no workspace file modifications)
 - **Performance**: Exits immediately if no projects exist (avoids expensive nx operations)
 
-**Why `--skip-reset` in hooks**: Git operations must not modify workspace files (prevents unstaged changes after commit). Manual commands (`npm run pre-commit`, `npm run pre-push`) DO run reset for clean state validation.
+**Why `--skip-reset` in hooks**: Git operations must not modify workspace files (prevents unstaged changes after commit). Manual commands (`pnpm run pre-commit`, `pnpm run pre-push`) DO run reset for clean state validation.
 
 **Performance Optimization**: Both hooks check if any projects exist before running expensive operations. On empty workspaces (no projects in `apps/` or `libs/`), they exit in <1 second instead of running nx:reset and empty checks.
 
@@ -129,7 +129,7 @@ npx nx affected --target=test
 **If Kustomize not installed:**
 
 - Pre-commit/pre-push will skip validation with a warning
-- Install: `npm run infra:setup` (one-time setup)
+- Install: `pnpm run infra:setup` (one-time setup)
 - Optional tool - won't block commits if not installed
 
 **Why both hooks?**
@@ -160,13 +160,13 @@ if (hasPythonProjectsAffected(isAffected, base)) {
 
 ```bash
 # One-time setup (installs UV if missing + creates .venv + installs all packages)
-npm run python:env
+pnpm run python:env
 
 # With all optional dependency groups
-npm run python:env:full
+pnpm run python:env:full
 
 # Check environment status
-npm run python:env -- --check
+pnpm run python:env -- --check
 ```
 
 **What `python:env` does automatically:**
@@ -208,7 +208,7 @@ uv add --dev ruff
 **After creating .NET projects, ALWAYS run:**
 
 ```bash
-npm run nx:reset
+pnpm run nx:reset
 ```
 
 **Why**: This runs `setup-workspace-targets.js` which:
@@ -267,7 +267,7 @@ dotnet new xunit -o apps/my-api/Tests -n my-api.Tests
 # Remove version attributes from PackageReference (CPM manages versions)
 # Ensure TargetFramework matches the parent project
 # Then sync everything
-npm run nx:reset
+pnpm run nx:reset
 ```
 
 **CRITICAL**: The `.Tests.csproj` must:
@@ -300,13 +300,13 @@ npm run nx:reset
 **Usage in commands:**
 
 ```bash
-npm run nx:node-test      # Runs: nx run-many --target=test --projects=tag:runtime:node
-npm run nx:python-lint    # Runs: nx run-many --target=lint --projects=tag:runtime:python
-npx nx run-many --target=test --projects=tag:type:client   # All client apps
-npx nx run-many --target=lint --projects=tag:scope:shared   # All shared-scope projects
+pnpm run nx:node-test      # Runs: nx run-many --target=test --projects=tag:runtime:node
+pnpm run nx:python-lint    # Runs: nx run-many --target=lint --projects=tag:runtime:python
+pnpm exec nx run-many --target=test --projects=tag:type:client   # All client apps
+pnpm exec nx run-many --target=lint --projects=tag:scope:shared   # All shared-scope projects
 ```
 
-**CRITICAL**: If `--projects=tag:runtime:*` commands don't find your new project, run `npm run nx:tag-projects` (or `npm run nx:reset` which includes it).
+**CRITICAL**: If `--projects=tag:runtime:*` commands don't find your new project, run `pnpm run nx:tag-projects` (or `pnpm run nx:reset` which includes it).
 
 ## CI/CD Pipeline
 
@@ -459,16 +459,16 @@ Automatically cancels outdated runs when new commits pushed.
 **Workspace-level** (includes repo files like `package.json`, `docs/`, `scripts/`):
 
 ```bash
-npm run nx:workspace-format        # Format all files
-npm run nx:workspace-format-check  # Check all files
+pnpm run nx:workspace-format        # Format all files
+pnpm run nx:workspace-format-check  # Check all files
 ```
 
 **Project-level** (only project source code):
 
 ```bash
-npm run nx:node-format      # Format Node.js projects
-npm run nx:python-format    # Format Python projects
-npm run nx:dotnet-format    # Format .NET projects
+pnpm run nx:node-format      # Format Node.js projects
+pnpm run nx:python-format    # Format Python projects
+pnpm run nx:dotnet-format    # Format .NET projects
 ```
 
 **When to use which**: Use workspace format for repo-wide changes (pre-commit/pre-push). Use project format during development of specific projects.
@@ -476,16 +476,16 @@ npm run nx:dotnet-format    # Format .NET projects
 ## Common Pitfalls & Solutions
 
 **"No projects found for tag:runtime:python"**
-→ Run `npm run nx:reset` to auto-tag projects
+→ Run `pnpm run nx:reset` to auto-tag projects
 
 **".NET project not detected by Nx"**  
-→ Run `npm run nx:reset` to sync solution file and generate project.json
+→ Run `pnpm run nx:reset` to sync solution file and generate project.json
 
 **"Python environment not set up" in git hooks**
-→ Hooks auto-create it via `uv sync`. If manual setup needed: `npm run python:env`
+→ Hooks auto-create it via `uv sync`. If manual setup needed: `pnpm run python:env`
 
 **"Git hook modifying files during commit"**
-→ By design, hooks use `--skip-reset`. Manual commands (`npm run pre-commit`) DO reset for clean validation
+→ By design, hooks use `--skip-reset`. Manual commands (`pnpm run pre-commit`) DO reset for clean validation
 
 **"Affected commands not working"**
 → Ensure `fetch-depth: 0` in CI checkout. Locally, set upstream: `git push -u origin feature-branch`
@@ -514,38 +514,38 @@ npm run nx:dotnet-format    # Format .NET projects
 
 ```bash
 # First-time setup
-npm install                   # Install Node.js dependencies
-npm run hooks:setup          # Configure Git hooks
-npm run python:env           # Setup Python (if working with Python)
-npm run dotnet:env           # Setup .NET (if working with .NET)
-npm run infra:setup          # Setup infrastructure tools (Kustomize)
+pnpm install                   # Install Node.js dependencies
+pnpm run hooks:setup          # Configure Git hooks
+pnpm run python:env           # Setup Python (if working with Python)
+pnpm run dotnet:env           # Setup .NET (if working with .NET)
+pnpm run infra:setup          # Setup infrastructure tools (Kustomize)
 
 # Create projects
-npx nx generate @nx/express:app my-api --directory=apps
+pnpm exec nx generate @nx/express:app my-api --directory=apps
 dotnet new webapi -n MyApi -o apps/my-api
-npm run nx:reset             # After creating any project
+pnpm run nx:reset             # After creating any project
 
 # Development
-npx nx serve my-api          # Run specific project
-npm run nx:node-dev          # Run all Node.js projects
-npm run nx:python-test       # Test all Python projects
+pnpm exec nx serve my-api          # Run specific project
+pnpm run nx:node-dev          # Run all Node.js projects
+pnpm run nx:python-test       # Test all Python projects
 
 # Infrastructure
-npm run infra:validate       # Validate all Kustomize manifests (all providers)
-npm run infra:validate:dev   # Validate dev environment (all providers)
+pnpm run infra:validate       # Validate all Kustomize manifests (all providers)
+pnpm run infra:validate:dev   # Validate dev environment (all providers)
 kustomize build infra/k8s/{provider}/{env} --enable-alpha-plugins  # Build manifests
 kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins       # Example: Hetzner dev
 
 # Validation
-npm run pre-commit           # Quick checks (manual)
-npm run pre-push             # Full validation (manual)
+pnpm run pre-commit           # Quick checks (manual)
+pnpm run pre-push             # Full validation (manual)
 git commit                   # Triggers pre-commit hook (automatic)
 git push                     # Triggers pre-push hook (automatic)
 
 # Troubleshooting
-npm run nx:reset             # Fix project detection, sync .NET, auto-tag
-npm run nx:workspace-format  # Format all files (fix format check failures)
-npx nx graph                 # Visualize project dependencies
+pnpm run nx:reset             # Fix project detection, sync .NET, auto-tag
+pnpm run nx:workspace-format  # Format all files (fix format check failures)
+pnpm exec nx graph                 # Visualize project dependencies
 ```
 
 ## Kubernetes & Infrastructure
@@ -905,7 +905,7 @@ grep -r "ACCOUNT_SERVICE_DB_USER_PASSWORD" .github/workflows/ infra/k8s/base/
 **"Resource updates failing with immutable field errors"**
 → Immutable fields changed on StatefulSet/Deployment/Service/DaemonSet/Job. Workflow automatically detects error type, extracts resource names, deletes with appropriate flags (`--cascade=orphan` for stateful resources), and retries. Supports 5 resource types. For local testing, use `node tools/infra/run-skaffold.js run --port-forward --tail`.
 
-For the watch loop on Windows, prefer `node tools/infra/dev-skaffold.js` (avoids `npm.cmd` Ctrl+C prompts).
+For the watch loop on Windows, prefer `node tools/infra/dev-skaffold.js` (avoids `pnpm.cmd` Ctrl+C prompts).
 
 ### Infrastructure Documentation
 
@@ -968,16 +968,16 @@ sdk.start();
 
 ### Infrastructure Scripts (ALWAYS USE THESE)
 
-**CRITICAL**: The Node scripts under `tools/infra/` are the source of truth for infrastructure operations. `npm run ...` scripts are convenience aliases.
+**CRITICAL**: The Node scripts under `tools/infra/` are the source of truth for infrastructure operations. `pnpm run ...` scripts are convenience aliases.
 
 **Local Cluster Management**:
 
 ```bash
 # First-time setup or cluster recreation
-npm run infra:local:cluster:setup   # Creates Kind/Podman cluster with proper context
+pnpm run infra:local:cluster:setup   # Creates Kind/Podman cluster with proper context
 
 # Delete cluster (cleanup)
-npm run infra:local:cluster:delete   # Removes cluster and context
+pnpm run infra:local:cluster:delete   # Removes cluster and context
 ```
 
 **Local Kubernetes Resources**:
@@ -997,19 +997,19 @@ node tools/infra/run-skaffold.js delete
 
 ```bash
 # Validate all environments
-npm run infra:validate
+pnpm run infra:validate
 
 # Validate specific environment
-npm run infra:validate:dev
-npm run infra:validate:test
-npm run infra:validate:prod
+pnpm run infra:validate:dev
+pnpm run infra:validate:test
+pnpm run infra:validate:prod
 ```
 
 **Setup Tools** (one-time):
 
 ```bash
 # Install Kustomize, kubectl, yq, etc.
-npm run infra:setup
+pnpm run infra:setup
 ```
 
 **Why use scripts instead of kubectl directly?**

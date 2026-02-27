@@ -69,7 +69,7 @@ async function main() {
       logStep("Recreating empty local registry");
       const ensureStatus = run("node", ["tools/infra/local-registry.js", "ensure"], { stdio: "inherit" });
       if (ensureStatus !== 0) {
-        warn("local registry ensure failed (you may need to run `npm run infra:local:registry:ensure` manually)");
+        warn("local registry ensure failed (you may need to run `pnpm run infra:local:registry:ensure` manually)");
       }
     }
   }

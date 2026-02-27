@@ -35,13 +35,13 @@ Create Python projects using Nx generators directly:
 
 ```bash
 # FastAPI application
-npx nx generate @nxlv/python:fastapi-app my-service --directory=apps
+pnpm exec nx generate @nxlv/python:fastapi-app my-service --directory=apps
 
 # Python library
-npx nx generate @nxlv/python:lib my-lib --directory=libs
+pnpm exec nx generate @nxlv/python:lib my-lib --directory=libs
 
 # Python application
-npx nx generate @nxlv/python:app my-app --directory=apps
+pnpm exec nx generate @nxlv/python:app my-app --directory=apps
 ```
 
 Projects are automatically tagged when you run any nx command.
@@ -52,10 +52,10 @@ Create .NET projects using Nx generators directly:
 
 ```bash
 # .NET application
-npx nx generate @nx/dotnet:app my-api --directory=apps
+pnpm exec nx generate @nx/dotnet:app my-api --directory=apps
 
 # .NET library
-npx nx generate @nx/dotnet:lib my-lib --directory=libs
+pnpm exec nx generate @nx/dotnet:lib my-lib --directory=libs
 ```
 
 Projects are automatically tagged when you run any nx command.
@@ -97,15 +97,15 @@ The generation script will:
 Once projects are created, they can be used with NX commands:
 
 ```
-npx nx build <project-name>
-npx nx test <project-name>
-npx nx lint <project-name>
+pnpm exec nx build <project-name>
+pnpm exec nx test <project-name>
+pnpm exec nx lint <project-name>
 ```
 
 For app projects, you can also use:
 
 ```
-npx nx serve <project-name>
+pnpm exec nx serve <project-name>
 ```
 
 ## Modifying Templates

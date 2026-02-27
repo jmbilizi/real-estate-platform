@@ -15,7 +15,7 @@
  *   framework:  tech stack (next, expo, fastapi, express, ocelot, aspnetcore, ...)
  *   devteam:    owning team
  *
- * Called by `npm run nx:reset` after setup-workspace-targets.js.
+ * Called by `pnpm run nx:reset` after setup-workspace-targets.js.
  */
 
 const fs = require("fs");
@@ -73,7 +73,7 @@ function writeFilePreservingEncoding(filePath, content) {
 
 function getAllProjects() {
   try {
-    const output = execSync("npx nx show projects --json", {
+    const output = execSync("pnpm exec nx show projects --json", {
       encoding: "utf8",
       env: nxEnv,
       stdio: ["ignore", "pipe", "pipe"],
@@ -87,7 +87,7 @@ function getAllProjects() {
 
 function getProjectConfig(projectName) {
   try {
-    const output = execSync(`npx nx show project ${projectName} --json`, {
+    const output = execSync(`pnpm exec nx show project ${projectName} --json`, {
       encoding: "utf8",
       env: nxEnv,
       stdio: ["ignore", "pipe", "pipe"],

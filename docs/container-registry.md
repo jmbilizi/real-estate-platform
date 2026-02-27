@@ -79,32 +79,32 @@ Push → CI (quality checks) → Build-Push-Images (ALL services) → Deploy
 
 ```bash
 # Build single project
-npm run container:build api-gateway -- --tag=local
+pnpm run container:build api-gateway -- --tag=local
 
 # Build with enterprise certificates (corporate proxy)
-npm run container:build api-gateway -- --copy-certs --tag=local
+pnpm run container:build api-gateway -- --copy-certs --tag=local
 
 # Build and push to GHCR
-npm run container:build api-gateway -- --tag=dev --push
+pnpm run container:build api-gateway -- --tag=dev --push
 
 # Build all services with container-build target
-npm run container:build:all
+pnpm run container:build:all
 
 # Build only affected services
-npm run container:build:affected
+pnpm run container:build:affected
 ```
 
 ### 3. Using Nx Directly
 
 ```bash
 # Run container-build target for specific project
-npx nx container-build api-gateway --tag=local
+pnpm exec nx container-build api-gateway --tag=local
 
 # Run for all projects with container-build target
-npx nx run-many --target=container-build --all
+pnpm exec nx run-many --target=container-build --all
 
 # Run for affected projects only
-npx nx affected --target=container-build
+pnpm exec nx affected --target=container-build
 ```
 
 ## Dockerfile Best Practices
@@ -125,7 +125,7 @@ RUN --mount=type=bind,source=.workspace-certs,target=/tmp/certs,readonly \
 **Local build with certs:**
 
 ```bash
-npm run container:build api-gateway -- --copy-certs
+pnpm run container:build api-gateway -- --copy-certs
 ```
 
 **CI/CD build (no certs):**
@@ -279,21 +279,21 @@ spec:
 2. **Run setup script** to add container-build target:
 
    ```bash
-   npm run dotnet:setup-projects  # For .NET services
+   pnpm run dotnet:setup-projects  # For .NET services
    # OR
-   npm run nx:reset  # For all projects
+   pnpm run nx:reset  # For all projects
    ```
 
 3. **Verify Nx target** was added:
 
    ```bash
-   npx nx show project my-service --json
+   pnpm exec nx show project my-service --json
    ```
 
 4. **Test local build:**
 
    ```bash
-   npx nx container-build my-service --tag=local
+   pnpm exec nx container-build my-service --tag=local
    ```
 
 5. **Create K8s manifests** in `infra/k8s/base/deployments/my-service.deployment.yaml`
@@ -435,7 +435,7 @@ Monitor base image updates and rebuild regularly:
 docker pull mcr.microsoft.com/dotnet/aspnet:10.0
 
 # Rebuild if newer version available
-npm run container:build:all
+pnpm run container:build:all
 ```
 
 ### 3. Vulnerability Scanning

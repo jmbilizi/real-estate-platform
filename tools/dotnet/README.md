@@ -10,7 +10,7 @@
 ## Setup
 
 ```bash
-npm run dotnet:env
+pnpm run dotnet:env
 ```
 
 ## Creating Projects
@@ -22,7 +22,7 @@ dotnet new classlib -n my-lib -o libs/my-lib
 dotnet new xunit -n my-api-tests -o apps/my-api/tests
 
 # Detect projects
-npm run nx:reset
+pnpm run nx:reset
 ```
 
 ## Common Commands
@@ -34,9 +34,9 @@ nx test my-api-tests
 nx serve my-api
 
 # All .NET projects
-npm run nx:dotnet-build
-npm run nx:dotnet-test
-npm run nx:dotnet-dev
+pnpm run nx:dotnet-build
+pnpm run nx:dotnet-test
+pnpm run nx:dotnet-dev
 ```
 
 ## Configuration Files

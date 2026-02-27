@@ -71,16 +71,19 @@ function hasPythonProjectsAffected(isAffected, base) {
   try {
     if (!isAffected || !base) {
       // On base branch, check if any Python projects exist
-      const result = run("npx nx show projects --projects=tag:runtime:python", {
+      const result = run("pnpm exec nx show projects --projects=tag:runtime:python", {
         silent: true,
       });
       return result.success && result.output && result.output.trim().length > 0;
     }
 
     // On feature branch, check for affected Python projects
-    const result = run(`npx nx show projects --affected --base=${base} --head=HEAD --projects=tag:runtime:python`, {
-      silent: true,
-    });
+    const result = run(
+      `pnpm exec nx show projects --affected --base=${base} --head=HEAD --projects=tag:runtime:python`,
+      {
+        silent: true,
+      },
+    );
     return result.success && result.output && result.output.trim().length > 0;
   } catch (error) {
     // If we can't determine, assume there might be Python projects
@@ -93,16 +96,19 @@ function hasDotNetProjectsAffected(isAffected, base) {
   try {
     if (!isAffected || !base) {
       // On base branch, check if any .NET projects exist
-      const result = run("npx nx show projects --projects=tag:runtime:dotnet", {
+      const result = run("pnpm exec nx show projects --projects=tag:runtime:dotnet", {
         silent: true,
       });
       return result.success && result.output && result.output.trim().length > 0;
     }
 
     // On feature branch, check for affected .NET projects
-    const result = run(`npx nx show projects --affected --base=${base} --head=HEAD --projects=tag:runtime:dotnet`, {
-      silent: true,
-    });
+    const result = run(
+      `pnpm exec nx show projects --affected --base=${base} --head=HEAD --projects=tag:runtime:dotnet`,
+      {
+        silent: true,
+      },
+    );
     return result.success && result.output && result.output.trim().length > 0;
   } catch (error) {
     // If we can't determine, assume there might be .NET projects
@@ -145,7 +151,7 @@ function setupPythonEnvironment() {
     return true;
   } catch (error) {
     logError(`Failed to create Python virtual environment: ${error.message}`);
-    logWarning("Run 'npm run python:env' (uv sync) manually to set up Python environment");
+    logWarning("Run 'pnpm run python:env' (uv sync) manually to set up Python environment");
     return false;
   }
 }
@@ -218,11 +224,11 @@ function checkNodeProjects(isAffected, base) {
   // 1. Format check (MUST PASS to continue)
   log("\n1. Checking code formatting...", "blue");
   const formatCmd =
-    isAffected && base ? `npx nx format:check --base=${base} --head=HEAD` : `npm run nx:workspace-format-check`;
+    isAffected && base ? `pnpm exec nx format:check --base=${base} --head=HEAD` : `pnpm run nx:workspace-format-check`;
 
   const formatResult = run(formatCmd);
   if (!formatResult.success) {
-    logError('Formatting failed - run "npm run nx:workspace-format" to fix');
+    logError('Formatting failed - run "pnpm run nx:workspace-format" to fix');
     return false; // Exit early
   }
   logSuccess("Formatting passed");
@@ -231,8 +237,8 @@ function checkNodeProjects(isAffected, base) {
   log("\n2. Linting code...", "blue");
   const lintCmd =
     isAffected && base
-      ? `npx nx affected --base=${base} --head=HEAD --target=lint --projects=tag:runtime:node`
-      : `npm run nx:node-lint`;
+      ? `pnpm exec nx affected --base=${base} --head=HEAD --target=lint --projects=tag:runtime:node`
+      : `pnpm run nx:node-lint`;
 
   const lintResult = run(lintCmd);
   if (!lintResult.success) {
@@ -245,8 +251,8 @@ function checkNodeProjects(isAffected, base) {
   log("\n3. Type checking...", "blue");
   const typeCmd =
     isAffected && base
-      ? `npx nx affected --base=${base} --head=HEAD --target=type-check --projects=tag:runtime:node`
-      : `npm run nx:node-type-check`;
+      ? `pnpm exec nx affected --base=${base} --head=HEAD --target=type-check --projects=tag:runtime:node`
+      : `pnpm run nx:node-type-check`;
 
   const typeResult = run(typeCmd);
   if (!typeResult.success) {
@@ -268,7 +274,7 @@ function checkPythonProjects(isAffected, base) {
   const pythonExe = path.join(venvPath, isWindows ? "Scripts" : "bin", isWindows ? "python.exe" : "python");
   if (!fs.existsSync(venvPath) || !fs.existsSync(pythonExe)) {
     logWarning("Python environment not set up - skipping Python checks");
-    logWarning('Run "npm run python:env" (uv sync) to set up Python environment');
+    logWarning('Run "pnpm run python:env" (uv sync) to set up Python environment');
     return true; // Don't fail if Python isn't set up
   }
 
@@ -278,12 +284,12 @@ function checkPythonProjects(isAffected, base) {
   log("\n1. Checking code formatting (Black)...", "blue");
   const formatCmd =
     isAffected && base
-      ? `npx nx affected --base=${base} --head=HEAD --target=format-check --projects=tag:runtime:python`
-      : `npm run nx:python-format-check`;
+      ? `pnpm exec nx affected --base=${base} --head=HEAD --target=format-check --projects=tag:runtime:python`
+      : `pnpm run nx:python-format-check`;
 
   const formatResult = run(formatCmd);
   if (!formatResult.success) {
-    logError('Formatting failed - run "npm run nx:python-format" to fix');
+    logError('Formatting failed - run "pnpm run nx:python-format" to fix');
     return false; // Exit early
   }
   logSuccess("Formatting passed");
@@ -292,8 +298,8 @@ function checkPythonProjects(isAffected, base) {
   log("\n2. Linting code (Flake8)...", "blue");
   const lintCmd =
     isAffected && base
-      ? `npx nx affected --base=${base} --head=HEAD --target=lint --projects=tag:runtime:python`
-      : `npm run nx:python-lint`;
+      ? `pnpm exec nx affected --base=${base} --head=HEAD --target=lint --projects=tag:runtime:python`
+      : `pnpm run nx:python-lint`;
 
   const lintResult = run(lintCmd);
   if (!lintResult.success) {
@@ -306,8 +312,8 @@ function checkPythonProjects(isAffected, base) {
   log("\n3. Type checking (mypy)...", "blue");
   const typeCmd =
     isAffected && base
-      ? `npx nx affected --base=${base} --head=HEAD --target=type-check --projects=tag:runtime:python`
-      : `npm run nx:python-type-check`;
+      ? `pnpm exec nx affected --base=${base} --head=HEAD --target=type-check --projects=tag:runtime:python`
+      : `pnpm run nx:python-type-check`;
 
   const typeResult = run(typeCmd);
   if (!typeResult.success) {
@@ -345,12 +351,12 @@ function checkDotNetProjects(isAffected, base) {
   log("\n1. Checking code formatting (dotnet format)...", "blue");
   const formatCmd =
     isAffected && base
-      ? `npx nx affected --base=${base} --head=HEAD --target=format-check --projects=tag:runtime:dotnet`
-      : `npm run nx:dotnet-format-check`;
+      ? `pnpm exec nx affected --base=${base} --head=HEAD --target=format-check --projects=tag:runtime:dotnet`
+      : `pnpm run nx:dotnet-format-check`;
 
   const formatResult = run(formatCmd);
   if (!formatResult.success) {
-    logError('Formatting failed - run "npm run nx:dotnet-format" to fix');
+    logError('Formatting failed - run "pnpm run nx:dotnet-format" to fix');
     return false; // Exit early
   }
   logSuccess("Formatting passed");
@@ -359,8 +365,8 @@ function checkDotNetProjects(isAffected, base) {
   log("\n2. Linting code (StyleCop)...", "blue");
   const lintCmd =
     isAffected && base
-      ? `npx nx affected --base=${base} --head=HEAD --target=lint --projects=tag:runtime:dotnet`
-      : `npm run nx:dotnet-lint`;
+      ? `pnpm exec nx affected --base=${base} --head=HEAD --target=lint --projects=tag:runtime:dotnet`
+      : `pnpm run nx:dotnet-lint`;
 
   const lintResult = run(lintCmd);
   if (!lintResult.success) {
@@ -373,8 +379,8 @@ function checkDotNetProjects(isAffected, base) {
   log("\n3. Type checking (dotnet build)...", "blue");
   const typeCmd =
     isAffected && base
-      ? `npx nx affected --base=${base} --head=HEAD --target=type-check --projects=tag:runtime:dotnet`
-      : `npm run nx:dotnet-type-check`;
+      ? `pnpm exec nx affected --base=${base} --head=HEAD --target=type-check --projects=tag:runtime:dotnet`
+      : `pnpm run nx:dotnet-type-check`;
 
   const typeResult = run(typeCmd);
   if (!typeResult.success) {
@@ -417,7 +423,7 @@ function checkInfrastructure() {
   const kustomizeCheck = run("kustomize version", { silent: true });
   if (!kustomizeCheck.success) {
     logWarning("Kustomize not installed - skipping validation");
-    logWarning("Install: npm run infra:setup");
+    logWarning("Install: pnpm run infra:setup");
     logWarning("Or install manually: https://kubectl.docs.kubernetes.io/installation/kustomize/");
     return true; // Don't fail if Kustomize not installed (optional tool)
   }
@@ -431,10 +437,10 @@ function checkInfrastructure() {
     return false;
   }
 
-  const result = run("npm run infra:validate");
+  const result = run("pnpm run infra:validate");
   if (!result.success) {
     logError("Kustomize validation failed");
-    logError("Fix the errors above or run: npm run infra:validate");
+    logError("Fix the errors above or run: pnpm run infra:validate");
     return false;
   }
 
@@ -448,7 +454,7 @@ function main() {
   log("Running: Format + Lint + Type Check (fast, no tests/builds)\n", "yellow");
 
   // Early exit if no projects exist (empty workspace)
-  const projectCheck = run("npx nx show projects", { silent: true });
+  const projectCheck = run("pnpm exec nx show projects", { silent: true });
   if (!projectCheck.output || projectCheck.output.trim().length === 0) {
     log("\nℹ No projects in workspace - skipping all checks", "cyan");
     logSuccess("\n✅ Commit allowed (empty workspace)\n");
@@ -462,7 +468,7 @@ function main() {
   if (!skipReset) {
     logStep("Preparing NX Workspace");
     log("Running nx:reset to ensure clean state...", "cyan");
-    const resetResult = run("npm run nx:reset");
+    const resetResult = run("pnpm run nx:reset");
     if (!resetResult.success) {
       logWarning("nx:reset had warnings but continuing...");
     } else {
@@ -471,7 +477,7 @@ function main() {
 
     // Format any files modified by nx:reset (e.g., .nx/project-graph.json)
     log("Formatting workspace files...", "cyan");
-    const formatResetResult = run("npx nx format:write");
+    const formatResetResult = run("pnpm exec nx format:write");
     if (!formatResetResult.success) {
       logWarning("Format after reset had warnings but continuing...");
     }
@@ -537,15 +543,15 @@ function main() {
   logStep("Summary");
   if (allPassed) {
     logSuccess("\n✅ Quick checks passed!");
-    logSuccess("Commit is allowed. Run 'npm run check' before pushing for full validation.\n");
+    logSuccess("Commit is allowed. Run 'pnpm run check' before pushing for full validation.\n");
     process.exit(0);
   } else {
     logError("\n❌ Quick checks failed.");
     logError("Please fix the issues above before committing.\n");
     logError("💡 Tip: Run format commands to auto-fix formatting issues:");
-    logError("  - Node: npm run nx:node-format");
-    logError("  - Python: npm run nx:python-format");
-    logError("  - .NET: npm run nx:dotnet-format\n");
+    logError("  - Node: pnpm run nx:node-format");
+    logError("  - Python: pnpm run nx:python-format");
+    logError("  - .NET: pnpm run nx:dotnet-format\n");
     process.exit(1);
   }
 }

@@ -1,6 +1,6 @@
 # Local Kubernetes (Kind + Podman): Image Pull & Access Troubleshooting
 
-This repo’s local Kubernetes setup uses **Kind with the Podman provider** (see `npm run infra:local:cluster:setup`).
+This repo's local Kubernetes setup uses **Kind with the Podman provider** (see `pnpm run infra:local:cluster:setup`).
 
 ## Common Failure Modes
 
@@ -16,7 +16,7 @@ This repo’s local Kubernetes setup uses **Kind with the Podman provider** (see
 Run the cluster bootstrapper again; it installs CA material and configures containerd registry trust:
 
 ```sh
-npm run infra:local:cluster:setup
+pnpm run infra:local:cluster:setup
 ```
 
 Then re-apply base resources:
@@ -47,7 +47,7 @@ If you need to manually preload a public image for local use, push it into the l
 
 ```sh
 podman pull docker.io/postgis/postgis:18-3.6
-npm run infra:local:registry:ensure
+pnpm run infra:local:registry:ensure
 podman tag docker.io/postgis/postgis:18-3.6 localhost:5001/postgis/postgis:18-3.6
 podman push localhost:5001/postgis/postgis:18-3.6
 ```

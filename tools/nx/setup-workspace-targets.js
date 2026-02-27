@@ -17,7 +17,7 @@
  *
  * Also synchronises the .NET solution file (.sln) after processing.
  *
- * Called by `npm run nx:reset`.
+ * Called by `pnpm run nx:reset`.
  *
  * The individual language scripts still work standalone:
  *   node tools/dotnet/scripts/setup-dotnet-projects.js
@@ -84,7 +84,7 @@ function runJsonSilent(command) {
 
 function tryGetProjectConfig(projectName) {
   try {
-    return runJsonSilent(`npx nx show project ${projectName} --json`);
+    return runJsonSilent(`pnpm exec nx show project ${projectName} --json`);
   } catch (e) {
     return null;
   }
@@ -282,7 +282,7 @@ function createMinimalPythonProjectJson(projectName, projectRootRel, projectRoot
 /**
  * Pre-scan: discover Python UV workspace members that lack project.json.
  * Creates project.json with full @nxlv/python targets + supplementary targets.
- * Must run BEFORE `npx nx show projects` so Nx discovers them.
+ * Must run BEFORE `pnpm exec nx show projects` so Nx discovers them.
  */
 function discoverMissingPythonProjects(workspaceRoot) {
   const members = getUvWorkspaceMembers(workspaceRoot);
@@ -501,14 +501,14 @@ function main() {
   // --- Pre-scan: create project.json for undiscovered Python projects -----
   // The @nxlv/python plugin does NOT auto-discover projects from pyproject.toml
   // (unlike @nx/dotnet which auto-discovers .csproj files).  We must create
-  // project.json BEFORE `npx nx show projects` so Nx registers them.
+  // project.json BEFORE `pnpm exec nx show projects` so Nx registers them.
   const pythonPreCreated = discoverMissingPythonProjects(workspaceRoot);
   if (pythonPreCreated > 0) {
     log(`   Pre-scan: created ${pythonPreCreated} Python project.json file(s)\n`, "green");
   }
 
   // --- Single project scan ------------------------------------------------
-  const projectNames = runJsonSilent("npx nx show projects --json");
+  const projectNames = runJsonSilent("pnpm exec nx show projects --json");
 
   if (projectNames.length === 0) {
     log("No Nx projects found in the workspace.\n", "yellow");

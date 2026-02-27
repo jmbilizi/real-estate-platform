@@ -724,7 +724,7 @@ Use correct combination of inputs:
 ### Developer Experience
 
 - [ ] **Local Service Deployment**: Test single-service deployment on local Podman cluster
-  - Add `npm run infra:local:deploy:single -- postgres` script
+  - Add `pnpm run infra:local:deploy:single -- postgres` script
   - Use same label-filtering logic as CI
   - Faster iteration cycle for service-specific changes
 

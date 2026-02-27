@@ -4,7 +4,7 @@ This directory contains the unified Git hooks system for the Polyglot monorepo.
 
 ## Quick Start
 
-Git hooks are automatically set up when you run `npm install` (via the `prepare` script).
+Git hooks are automatically set up when you run `pnpm install` (via the `prepare` script).
 
 ## Available Scripts
 

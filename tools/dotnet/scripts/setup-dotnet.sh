@@ -33,7 +33,7 @@ dotnet tool install --global dotnet-format || dotnet tool update --global dotnet
 # Check if NX .NET plugin is installed
 if ! grep -q "@nx/dotnet" package.json; then
     echo "Installing @nx/dotnet NX plugin..."
-    npm install --save-dev @nx/dotnet
+    pnpm add -D @nx/dotnet
 else
     echo "@nx/dotnet NX plugin is already installed."
 fi
@@ -51,6 +51,6 @@ fi
 
 echo ".NET development environment setup completed."
 echo "You can now create .NET projects using Nx generators:"
-echo "Example: npx nx generate @nx/dotnet:app my-app --directory=apps"
+echo "Example: pnpm exec nx generate @nx/dotnet:app my-app --directory=apps"
 
 exit 0

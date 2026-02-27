@@ -16,26 +16,26 @@ function main() {
   console.log("-------------------------------------------------");
 
   printHeader("Environment Setup:");
-  console.log("  npm run dotnet:env           - Setup .NET development environment (includes tools)");
-  console.log("  npm run dotnet:env -- --skip-tools  - Setup .NET without installing tools");
-  console.log("  npm run dotnet:help          - Show this help message");
+  console.log("  pnpm run dotnet:env           - Setup .NET development environment (includes tools)");
+  console.log("  pnpm run dotnet:env -- --skip-tools  - Setup .NET without installing tools");
+  console.log("  pnpm run dotnet:help          - Show this help message");
 
   printHeader("Package Management:");
-  console.log("  npm run dotnet:restore       - Install packages for all .NET projects");
-  console.log("  npm run dotnet:restore:project    - Install a package to a specific project");
+  console.log("  pnpm run dotnet:restore       - Install packages for all .NET projects");
+  console.log("  pnpm run dotnet:restore:project    - Install a package to a specific project");
 
   printHeader("Project Creation:");
   console.log("  dotnet new webapi -n MyApi -o apps/my-api");
   console.log("  dotnet new classlib -n MyLib -o libs/my-lib");
   console.log("\n  After creating/deleting projects:");
-  console.log("    npm run dotnet:setup-projects");
+  console.log("    pnpm run dotnet:setup-projects");
 
   printHeader("NX Commands:");
-  console.log("  npm run nx:dotnet-dev        - Run all .NET projects");
-  console.log("  npm run nx:dotnet-format     - Format all .NET projects");
-  console.log("  npm run nx:dotnet-lint       - Lint all .NET projects");
-  console.log("  npm run nx:dotnet-test       - Run tests for all .NET projects");
-  console.log("  npm run nx:dotnet-build      - Build all .NET projects");
+  console.log("  pnpm run nx:dotnet-dev        - Run all .NET projects");
+  console.log("  pnpm run nx:dotnet-format     - Format all .NET projects");
+  console.log("  pnpm run nx:dotnet-lint       - Lint all .NET projects");
+  console.log("  pnpm run nx:dotnet-test       - Run tests for all .NET projects");
+  console.log("  pnpm run nx:dotnet-build      - Build all .NET projects");
 
   printHeader("Available .NET Tools:");
   console.log("  dotnet format               - Format .NET code");

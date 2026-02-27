@@ -4,7 +4,7 @@ This guide covers testing the new Kustomize-based Kubernetes infrastructure loca
 
 ## Prerequisites
 
-- **Kustomize**: Run `npm run infra:setup` (auto-installs and configures PATH)
+- **Kustomize**: Run `pnpm run infra:setup` (auto-installs and configures PATH)
 - **kubectl**: Optional - for dry-run validation (install from https://kubernetes.io/docs/tasks/tools/)
 - **Access to dev cluster**: Kubeconfig file for hetzner-dev-cluster (for cluster testing only)
 
@@ -16,12 +16,12 @@ Use the automated validation script:
 
 ```bash
 # Validate all environments
-npm run infra:validate
+pnpm run infra:validate
 
 # Validate specific environment
-npm run infra:validate:dev
-npm run infra:validate:test
-npm run infra:validate:prod
+pnpm run infra:validate:dev
+pnpm run infra:validate:test
+pnpm run infra:validate:prod
 ```
 
 **Expected Result**: All environments show `✓ PASSED`

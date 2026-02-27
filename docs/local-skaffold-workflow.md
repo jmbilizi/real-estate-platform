@@ -15,10 +15,10 @@ Skaffold provides a continuous development loop for Kubernetes:
 
 ```bash
 # 1. Install Skaffold (one-time)
-npm run infra:setup
+pnpm run infra:setup
 
 # 2. Create local Podman cluster (if not exists)
-npm run infra:local:cluster:setup
+pnpm run infra:local:cluster:setup
 
 # 3. Start development mode
 node tools/infra/dev-skaffold.js
@@ -95,7 +95,7 @@ node tools/infra/dev-reset-disk.js
 
 ```bash
 # GitHub Actions workflow:
-AFFECTED=$(npx nx show projects --affected --withTarget=docker-build)
+AFFECTED=$(pnpm exec nx show projects --affected --withTarget=docker-build)
 skaffold build --profile=ci --tag=$GIT_SHA
 ```
 
@@ -105,7 +105,7 @@ skaffold build --profile=ci --tag=$GIT_SHA
 
 ```bash
 # Edit code
-npx nx serve api-gateway  # OR
+pnpm exec nx serve api-gateway  # OR
 podman build -t api-gateway:local -f apps/api-gateway/Dockerfile .
 kubectl apply -k infra/k8s/podman/local
 kubectl rollout restart deployment/api-gateway
@@ -239,7 +239,7 @@ Skaffold's file sync requires compatible Dockerfile. For full hot reload:
 
 ## When to Use Skaffold vs nx serve
 
-### Use `npx nx serve api-gateway`
+### Use `pnpm exec nx serve api-gateway`
 
 - Regular feature development
 - Unit testing
@@ -249,12 +249,12 @@ Skaffold's file sync requires compatible Dockerfile. For full hot reload:
 ### Use the cross-platform launcher (preferred)
 
 - Run: `node tools/infra/dev-skaffold.js`
-- Why: avoids Windows `npm.cmd` Ctrl+C prompts (like `Terminate batch job (Y/N)?`) while still working on macOS/Linux.
+- Why: avoids Windows `pnpm.cmd` Ctrl+C prompts (like `Terminate batch job (Y/N)?`) while still working on macOS/Linux.
 
 ### Use the cross-platform launcher (preferred)
 
 - Run: `node tools/infra/dev-skaffold.js`
-- Why: avoids Windows `npm.cmd` Ctrl+C prompts (like `Terminate batch job (Y/N)?`) while still working on macOS/Linux.
+- Why: avoids Windows `pnpm.cmd` Ctrl+C prompts (like `Terminate batch job (Y/N)?`) while still working on macOS/Linux.
 
 ## Next Steps
 

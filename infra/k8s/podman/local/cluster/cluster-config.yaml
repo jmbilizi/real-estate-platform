@@ -5,8 +5,8 @@
 # tools/infra/setup-local-cluster.js.
 #
 # USAGE:
-#   npm run infra:local:cluster:setup   # Create or repair cluster
-#   npm run infra:local:cluster:delete  # Delete cluster
+#   pnpm run infra:local:cluster:setup   # Create or repair cluster
+#   pnpm run infra:local:cluster:delete  # Delete cluster
 #
 # For application deployment controls, see infra/deploy-control.yaml.
 

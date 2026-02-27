@@ -46,7 +46,7 @@ You can also download and install Node.js 20.19.5 directly from [nodejs.org](htt
 To verify that you have the correct Node.js version:
 
 ```bash
-npm run node:check-version
+pnpm run node:check-version
 ```
 
 ## Project Structure
@@ -74,25 +74,25 @@ Use Nx generators directly to create Node.js projects:
 ### Node.js Application
 
 ```bash
-npx nx generate @nx/node:app my-service --directory=apps
+pnpm exec nx generate @nx/node:app my-service --directory=apps
 ```
 
 ### Node.js Library
 
 ```bash
-npx nx generate @nx/node:lib my-lib --directory=libs
+pnpm exec nx generate @nx/node:lib my-lib --directory=libs
 ```
 
 ### Express.js Application
 
 ```bash
-npx nx generate @nx/express:app my-api --directory=apps
+pnpm exec nx generate @nx/express:app my-api --directory=apps
 ```
 
 ### Next.js Application
 
 ```bash
-npx nx generate @nx/next:app my-web-app --directory=apps
+pnpm exec nx generate @nx/next:app my-web-app --directory=apps
 ```
 
 ### Auto-Configuration
@@ -100,8 +100,8 @@ npx nx generate @nx/next:app my-web-app --directory=apps
 After creating projects, they are automatically configured when you run any nx command:
 
 1. **Auto-tagging**: Projects are tagged based on their executors (`node`, `express`, `next`, `api`, `client`, etc.)
-2. **Centralized configs**: Apply configs manually with `npm run node:apply-configs <project-path>`
-3. **Nx integration**: Projects are immediately available for `npm run nx:node-*` commands
+2. **Centralized configs**: Apply configs manually with `pnpm run node:apply-configs <project-path>`
+3. **Nx integration**: Projects are immediately available for `pnpm run nx:node-*` commands
 
 ## Centralized Configurations
 
@@ -121,7 +121,7 @@ The monorepo uses centralized configurations for all Node.js projects to ensure 
 2. **Existing Projects**: To apply centralized configurations to an existing project, run:
 
    ```bash
-   npm run node:apply-configs <project-directory>
+   pnpm run node:apply-configs <project-directory>
    ```
 
 3. **Configuration Structure**: Each tool's configuration extends the centralized config:
@@ -142,7 +142,7 @@ We are transitioning away from root-level configuration files (`.eslintrc.json`,
 
 ```bash
 # Run all Node.js projects
-npm run nx:node-dev
+pnpm run nx:node-dev
 
 # Run a specific project
 nx serve my-project
@@ -152,19 +152,19 @@ nx serve my-project
 
 ```bash
 # Format all files in workspace (including repo-level files)
-npm run nx:workspace-format
+pnpm run nx:workspace-format
 
 # Format only Node.js project files
-npm run nx:node-format
+pnpm run nx:node-format
 
 # Check formatting for all files
-npm run nx:workspace-format-check
+pnpm run nx:workspace-format-check
 
 # Lint all Node.js projects
-npm run nx:node-lint
+pnpm run nx:node-lint
 
 # Type check all Node.js projects
-npm run nx:node-type-check
+pnpm run nx:node-type-check
 
 # Format a specific project
 nx format:write --projects=my-project
@@ -179,7 +179,7 @@ nx lint my-project
 
 ```bash
 # Run all tests
-npm run nx:node-test
+pnpm run nx:node-test
 
 # Run tests for a specific project
 nx test my-project
@@ -192,7 +192,7 @@ nx test my-project --coverage
 
 ```bash
 # Build all Node.js projects
-npm run nx:node-build
+pnpm run nx:node-build
 
 # Build a specific project
 nx build my-project
@@ -233,9 +233,9 @@ nx g @nx/next:page my-page --project=my-web-app
 
 If you encounter issues:
 
-1. Verify your Node.js version: `npm run node:check-version`
-2. Clear the NX cache: `npm run nx:reset`
-3. Check for linting errors: `npm run nx:node-lint`
+1. Verify your Node.js version: `pnpm run node:check-version`
+2. Clear the NX cache: `pnpm run nx:reset`
+3. Check for linting errors: `pnpm run nx:node-lint`
 4. Verify project dependencies: `nx dep-graph`
-5. Re-apply configurations: `npm run node:apply-configs <project-directory>`
-6. Get help: `npm run node:help`
+5. Re-apply configurations: `pnpm run node:apply-configs <project-directory>`
+6. Get help: `pnpm run node:help`

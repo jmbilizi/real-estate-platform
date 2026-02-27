@@ -3,7 +3,7 @@
 ## Setup
 
 ```bash
-npm run dotnet:env
+pnpm run dotnet:env
 ```
 
 Installs .NET SDK (if missing), global tools, and Nx plugin.
@@ -29,7 +29,7 @@ dotnet new xunit -n MyApi.Tests -o apps/my-api/tests
 After creating or deleting projects:
 
 ```bash
-npm run dotnet:setup-projects
+pnpm run dotnet:setup-projects
 ```
 
 This script:
@@ -41,7 +41,7 @@ This script:
   - **Test projects**: build, test, lint, format, format-check
   - **Libraries**: build, lint, format, format-check
 
-> **Note**: This also runs automatically as part of `npm run nx:reset` and during pre-commit hooks, ensuring solution files stay synchronized.
+> **Note**: This also runs automatically as part of `pnpm run nx:reset` and during pre-commit hooks, ensuring solution files stay synchronized.
 
 ## Configuration
 
@@ -85,8 +85,8 @@ nx serve my-api
 nx test my-api-tests
 
 # All .NET projects
-npm run nx:dotnet-build
-npm run nx:dotnet-test
+pnpm run nx:dotnet-build
+pnpm run nx:dotnet-test
 ```
 
 **Problem**: After creating a .NET project, Nx doesn't recognize it.
@@ -95,7 +95,7 @@ npm run nx:dotnet-test
 
 ```bash
 # Run the reset command to detect projects
-npm run nx:reset
+pnpm run nx:reset
 
 # Verify project was detected
 nx show projects
@@ -124,7 +124,7 @@ nx build my-api
 
 ```bash
 # Verify and fix environment
-npm run dotnet:env
+pnpm run dotnet:env
 
 # Check installed SDKs
 dotnet --list-sdks
@@ -160,7 +160,7 @@ Verify project type in `.csproj`:
 
 ```bash
 # Reinstall all tools
-npm run dotnet:env
+pnpm run dotnet:env
 
 # Verify tools are installed
 dotnet tool list --global
@@ -170,7 +170,7 @@ dotnet tool list --global
 
 If you encounter issues:
 
-1. Run `npm run dotnet:env` to verify and fix your environment
+1. Run `pnpm run dotnet:env` to verify and fix your environment
 2. Check that you have the correct .NET SDK version (see `tools/dotnet/configs/global.json`)
 3. Verify that required tools are installed: `dotnet tool list --global`
 4. Check the Nx plugin documentation: https://nx.dev/nx-api/dotnet

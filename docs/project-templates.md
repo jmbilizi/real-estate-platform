@@ -58,7 +58,7 @@ dotnet new classlib -n MyLibrary -o libs/my-library
 dotnet new console -n MyConsoleApp -o apps/my-console-app
 
 # Detect projects and create Nx targets
-npm run nx:reset
+pnpm run nx:reset
 ```
 
 See all available .NET templates: `dotnet new list`
@@ -69,13 +69,13 @@ Use Nx generators directly:
 
 ```bash
 # FastAPI application
-npx nx generate @nxlv/python:fastapi-app my-service --directory=apps
+pnpm exec nx generate @nxlv/python:fastapi-app my-service --directory=apps
 
 # Python library
-npx nx generate @nxlv/python:lib shared-utils --directory=libs
+pnpm exec nx generate @nxlv/python:lib shared-utils --directory=libs
 
 # Python application
-npx nx generate @nxlv/python:app my-app --directory=apps
+pnpm exec nx generate @nxlv/python:app my-app --directory=apps
 ```
 
 Projects are automatically tagged when you run any nx command.
@@ -86,16 +86,16 @@ Use Nx generators directly:
 
 ```bash
 # Node.js application
-npx nx generate @nx/node:app my-service --directory=apps
+pnpm exec nx generate @nx/node:app my-service --directory=apps
 
 # Node.js library
-npx nx generate @nx/node:lib my-lib --directory=libs
+pnpm exec nx generate @nx/node:lib my-lib --directory=libs
 
 # Express.js API
-npx nx generate @nx/express:app my-api --directory=apps
+pnpm exec nx generate @nx/express:app my-api --directory=apps
 
 # Next.js application
-npx nx generate @nx/next:app my-web-app --directory=apps
+pnpm exec nx generate @nx/next:app my-web-app --directory=apps
 ```
 
 Projects are automatically tagged when you run any nx command.
@@ -145,20 +145,20 @@ Python projects created with `@nxlv/python` generators include:
 
 Node.js projects use NX generators with centralized configurations:
 
-- **Node.js Applications**: Created with `npm run node:create-app`
+- **Node.js Applications**: Created with `pnpm run node:create-app`
   - Includes proper project structure with src/ directory
   - Configured with centralized ESLint, Prettier, TypeScript, and Jest configs
   - Tagged with "node" and "service" tags
 
-- **Node.js Libraries**: Created with `npm run node:create-lib`
+- **Node.js Libraries**: Created with `pnpm run node:create-lib`
   - Optimized for sharing code between applications
   - Tagged with "node" and "lib" tags
 
-- **Express.js APIs**: Created with `npm run node:create-express`
+- **Express.js APIs**: Created with `pnpm run node:create-express`
   - Includes Express.js setup with proper middleware
   - Tagged with "node", "express", and "api" tags
 
-- **Next.js Applications**: Created with `npm run node:create-next`
+- **Next.js Applications**: Created with `pnpm run node:create-next`
   - Includes modern Next.js setup
   - Tagged with "node", "next", and "client" tags
 
@@ -180,19 +180,19 @@ After creating a project, it will automatically be integrated with NX:
 
 ```bash
 # Build a specific project
-npx nx build my-project
+pnpm exec nx build my-project
 
 # Run tests for a specific project
-npx nx test my-project
+pnpm exec nx test my-project
 
 # Serve an application project
-npx nx serve my-app
+pnpm exec nx serve my-app
 ```
 
 You can also view all projects:
 
 ```bash
-npm run nx:list-projects
+pnpm run nx:list-projects
 ```
 
 ## Best Practices

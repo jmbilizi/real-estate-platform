@@ -67,7 +67,7 @@ function log(message, color = "reset") {
 // Get all .NET projects from Nx
 function getDotNetProjects() {
   try {
-    const output = execSync("npx nx show projects --json", {
+    const output = execSync("pnpm exec nx show projects --json", {
       encoding: "utf8",
     });
     const allProjects = JSON.parse(output);
@@ -90,7 +90,7 @@ function getDotNetProjects() {
 // Get project configuration
 function getProjectConfig(projectName) {
   try {
-    const output = execSync(`npx nx show project ${projectName} --json`, {
+    const output = execSync(`pnpm exec nx show project ${projectName} --json`, {
       encoding: "utf8",
     });
     return JSON.parse(output);
@@ -644,7 +644,7 @@ function main() {
   log("");
 
   if (dotNetProjects.length > 0) {
-    log("💡 Tip: Run 'npm run nx:dotnet-lint' to lint all .NET projects\n", "blue");
+    log("💡 Tip: Run 'pnpm run nx:dotnet-lint' to lint all .NET projects\n", "blue");
   }
 
   // Important reminders based on common issues

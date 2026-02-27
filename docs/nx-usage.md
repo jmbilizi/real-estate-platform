@@ -6,34 +6,34 @@ This document explains how to run NX commands in this project.
 
 There are two main ways to run NX commands:
 
-### 1. Using NPM Scripts (Recommended for Common Tasks)
+### 1. Using PNPM Scripts (Recommended for Common Tasks)
 
-We've defined npm scripts for common tasks in `package.json`. For example:
+We've defined pnpm scripts for common tasks in `package.json`. For example:
 
 ```bash
 # Run lint on Node.js projects
-npm run nx:node-lint
+pnpm run nx:node-lint
 
 # Run tests on Python projects
-npm run nx:python-test
+pnpm run nx:python-test
 
 # Run the development server for .NET projects
-npm run nx:dotnet-dev
+pnpm run nx:dotnet-dev
 ```
 
-### 2. Using NPX Directly (For Custom Commands)
+### 2. Using pnpm exec Directly (For Custom Commands)
 
-For custom or one-off commands, you can use `npx nx` directly:
+For custom or one-off commands, you can use `pnpm exec nx` directly:
 
 ```bash
 # Run a specific command
-npx nx run-many --target=lint --projects=tag:runtime:node
+pnpm exec nx run-many --target=lint --projects=tag:runtime:node
 
 # View the project graph
-npx nx graph
+pnpm exec nx graph
 
 # Run a specific project
-npx nx run project-name:target
+pnpm exec nx run project-name:target
 ```
 
 ## NX Maintenance Commands
@@ -45,7 +45,7 @@ These commands help maintain a healthy Nx workspace:
 ### nx:repair
 
 ```bash
-npm run nx:repair
+pnpm run nx:repair
 ```
 
 **What it does**: Repairs and validates Nx configuration files
@@ -65,7 +65,7 @@ npm run nx:repair
 ### nx:reset
 
 ```bash
-npm run nx:reset
+pnpm run nx:reset
 ```
 
 **What it does**: Runs `nx:repair` + clears the Nx cache + syncs .NET solution files + auto-tags projects
@@ -89,7 +89,7 @@ npm run nx:reset
 ### nx:tag-projects
 
 ```bash
-npm run nx:tag-projects
+pnpm run nx:tag-projects
 ```
 
 **What it does**: Automatically detects and tags all projects based on their executors
@@ -109,7 +109,7 @@ npm run nx:tag-projects
 ### clean
 
 ```bash
-npm run clean
+pnpm run clean
 ```
 
 **What it does**: Full workspace cleanup
@@ -136,7 +136,7 @@ npm run clean
 
 When running commands like `run-many` with project filters (e.g., `--projects=tag:runtime:node`), you might get an error if no projects match the criteria. This is expected if you haven't created any projects of that type yet.
 
-For npm scripts, we've added error handling to ensure these commands exit successfully with a helpful message, which is especially useful in CI/CD pipelines.
+For pnpm scripts, we've added error handling to ensure these commands exit successfully with a helpful message, which is especially useful in CI/CD pipelines.
 
 ## Creating New Projects
 
@@ -144,16 +144,16 @@ Create projects using Nx generators directly. Projects will be automatically tag
 
 ```bash
 # Create Node.js/TypeScript projects using Nx generators
-npx nx generate @nx/express:app my-api --directory=apps
-npx nx generate @nx/next:app my-web-app --directory=apps
+pnpm exec nx generate @nx/express:app my-api --directory=apps
+pnpm exec nx generate @nx/next:app my-web-app --directory=apps
 
 # Create Python projects using Nx generators
-npx nx generate @nxlv/python:fastapi-app my-service --directory=apps
+pnpm exec nx generate @nxlv/python:fastapi-app my-service --directory=apps
 
 # Create .NET projects using dotnet CLI (auto-detected by @nx/dotnet)
 dotnet new webapi -n MyDotnetApi -o apps/my-dotnet-api
 
 # Projects are automatically tagged when you run:
-npm run nx:reset          # Tags all projects automatically
-npm run nx:tag-projects   # Manual tagging if needed
+pnpm run nx:reset          # Tags all projects automatically
+pnpm run nx:tag-projects   # Manual tagging if needed
 ```
