@@ -2,13 +2,10 @@
 name = "nx-workspace"
 version = "1.0.0"
 requires-python = ">=3.9,<4"
-dependencies = ["hello-world-fastapi"]
+dependencies = []
 
 [tool.uv.workspace]
-members = ["apps/services/hello-world-fastapi"]
-
-[tool.uv.sources.hello-world-fastapi]
-workspace = true
+members = []
 
 [tool.nx]
 autoActivate = true
