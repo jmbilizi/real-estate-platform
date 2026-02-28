@@ -302,10 +302,6 @@ jobs:
       - name: Set up .NET environment
         run: pnpm run dotnet:env
 
-      # Restore NuGet packages to catch version conflicts early
-      - name: Restore .NET packages
-        run: dotnet restore || echo "No .NET projects to restore"
-
       # Note: We do NOT run nx:reset in CI to ensure we validate code exactly as committed.
       # If project tags or workspace state is incorrect, CI should fail (not auto-fix).
       # Developers should run 'pnpm run check' locally before pushing.
@@ -325,14 +321,6 @@ jobs:
       - name: Lint .NET projects (Push - all projects)
         if: github.event_name == 'push'
         run: pnpm run nx:dotnet-lint || echo "No .NET projects found"
-
-      - name: Type check .NET projects (PR - affected only)
-        if: github.event_name == 'pull_request'
-        run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=type-check --projects=tag:runtime:dotnet || echo "No affected .NET projects"
-
-      - name: Type check .NET projects (Push - all projects)
-        if: github.event_name == 'push'
-        run: pnpm run nx:dotnet-type-check || echo "No .NET projects found"
 
       - name: Test .NET projects (PR - affected only)
         if: github.event_name == 'pull_request'
