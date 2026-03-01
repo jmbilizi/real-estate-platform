@@ -9,6 +9,8 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: jaeger
+  labels:
+    app: jaeger
 spec:
   serviceName: jaeger-hl
   # replicas: Defined in environment patches (1 all envs - all-in-one doesn't cluster)

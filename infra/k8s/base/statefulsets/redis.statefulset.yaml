@@ -9,6 +9,8 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: redis
+  labels:
+    app: redis
 spec:
   serviceName: redis-hl
   # replicas: Defined in environment patches (1 all envs for MVP)

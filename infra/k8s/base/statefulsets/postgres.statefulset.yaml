@@ -9,6 +9,8 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: postgres
+  labels:
+    app: postgres
 spec:
   serviceName: postgres-hl
   # replicas: Defined in environment patches (1 local/dev, 2 test, 3 prod)
