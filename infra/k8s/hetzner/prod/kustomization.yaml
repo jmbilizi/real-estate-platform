@@ -18,6 +18,9 @@ patches:
   - path: patches/statefulsets/redis.statefulset.yaml
   - path: patches/statefulsets/jaeger.statefulset.yaml
 
+  ## ConfigMaps (environment-specific overrides)
+  - path: patches/configmaps/jaeger.configmap.yaml
+
   ## Deployments (stateless applications)
   - path: patches/deployments/api-gateway.deployment.yaml
 

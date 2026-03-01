@@ -1,7 +1,5 @@
-# Jaeger Sampling Strategies ConfigMap
-# Defines default sampling rate for trace collection
-# Default: 100% sampling (overridden per environment via configmap patches)
-# Dev: 50%, Test: 10%, Prod: 5%
+# Jaeger Sampling Strategies Patch for Test Environment
+# Overrides base 100% sampling to 10% (realistic load simulation)
 
 apiVersion: v1
 kind: ConfigMap
@@ -15,6 +13,6 @@ data:
       "service_strategies": [],
       "default_strategy": {
         "type": "probabilistic",
-        "param": 1.0
+        "param": 0.1
       }
     }

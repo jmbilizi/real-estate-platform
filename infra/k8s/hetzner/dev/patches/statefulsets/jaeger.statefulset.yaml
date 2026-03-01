@@ -1,8 +1,8 @@
 # yaml-language-server: disable
 # Jaeger StatefulSet Patch for Hetzner Dev Environment
 # Adds minimal resources and storage for development use
-# Retention: 7 days
-# Sampling: 100% (trace all requests for debugging)
+# Retention: 2 days (keeps storage manageable on 2Gi volume)
+# Sampling: 50% via configmap patch (balance debugging visibility with resource use)
 
 apiVersion: apps/v1
 kind: StatefulSet
@@ -27,7 +27,7 @@ spec:
               memory: 512Mi
           env:
             - name: BADGER_SPAN_STORE_TTL
-              value: "168h" # 7 days retention for dev
+              value: "48h" # 2 days retention for dev (keeps storage manageable)
   volumeClaimTemplates:
     - metadata:
         name: jaeger-data

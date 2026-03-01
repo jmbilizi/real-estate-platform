@@ -70,23 +70,27 @@ spec:
               value: /badger/data
             - name: BADGER_DIRECTORY_KEY
               value: /badger/key
-            - name: METRICS_STORAGE_TYPE
-              value: "prometheus"
-            - name: PROMETHEUS_SERVER_URL
-              value: "http://localhost:9090" # Future: integrate with Prometheus
+            # METRICS_STORAGE_TYPE and PROMETHEUS_SERVER_URL intentionally omitted
+            # Add back when Prometheus is deployed (currently no Prometheus in cluster)
+          startupProbe:
+            httpGet:
+              path: /
+              port: 16686
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30 # 10 + (30 * 10) = 310s max startup time
           livenessProbe:
             httpGet:
               path: /
               port: 16686
-            initialDelaySeconds: 90
-            periodSeconds: 10
+            periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /
               port: 16686
-            initialDelaySeconds: 45
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
@@ -102,4 +106,4 @@ spec:
           configMap:
             name: jaeger-config
   # volumeClaimTemplates intentionally omitted - MUST be defined in environment patches
-  # This ensures explicit storage decisions per environment (dev: 2Gi, test: 5Gi, prod: 20Gi)
+  # This ensures explicit storage decisions per environment (dev: 2Gi, test: 5Gi, prod: 5Gi)
