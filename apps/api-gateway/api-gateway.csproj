@@ -7,7 +7,13 @@
     <RootNamespace>ApiGateway</RootNamespace>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Exclude companion test project from this project's compilation -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);Tests/**</DefaultItemExcludes>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="api-gateway.Tests" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="DotNetEnv" />

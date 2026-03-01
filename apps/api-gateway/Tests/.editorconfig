@@ -1,0 +1,20 @@
+# Test project EditorConfig overrides
+# Inherits from parent .editorconfig
+root = false
+
+[*.cs]
+# Allow underscores in test method names (BDD/Given-When-Then style)
+dotnet_diagnostic.CA1707.severity = none
+
+# Test classes don't need to be internal
+dotnet_diagnostic.CA1515.severity = none
+
+# Simplify Dispose pattern for test fixtures
+dotnet_diagnostic.CA1063.severity = none
+
+# Allow default struct constructors in tests
+dotnet_diagnostic.SA1129.severity = none
+
+# XML docs not required for tests
+dotnet_diagnostic.SA0001.severity = none
+dotnet_diagnostic.CS1591.severity = none

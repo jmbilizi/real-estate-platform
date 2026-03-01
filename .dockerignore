@@ -39,6 +39,9 @@ Desktop.ini
 .env
 .env.*.local
 
+# Test projects (companion Tests/ folders inside app directories)
+**/Tests/
+
 # Test outputs
 coverage/
 TestResults/
