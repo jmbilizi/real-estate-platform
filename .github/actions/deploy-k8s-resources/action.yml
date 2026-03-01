@@ -682,7 +682,7 @@ runs:
         fi
 
     - name: Conditional rollback
-      if: ${{ steps.rollout.outputs.rollout_success != 'true' && (inputs.rollback_on_failure == 'true' || inputs.statefulset_rollback == 'true') }}
+      if: ${{ steps.rollout.outputs.rollout_success != 'true' && steps.pvc_cleanup.outputs.rollout_success != 'true' && (inputs.rollback_on_failure == 'true' || inputs.statefulset_rollback == 'true') }}
       shell: bash
       run: |
         echo "🔄 Rollback enabled - discovering workloads from manifests"
@@ -977,11 +977,11 @@ runs:
 
         if [ "${{ steps.pvc_cleanup.outputs.pvc_cleanup_ran }}" = "true" ]; then
           echo "\n📋 Recent pod events (PVC cleanup was executed):"
-          kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail-30 || true
+          kubectl get events --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -30 || true
         fi
 
     - name: Mark failure if rollout did not succeed
-      if: ${{ steps.rollout.outputs.rollout_success != 'true' }}
+      if: ${{ steps.rollout.outputs.rollout_success != 'true' && steps.pvc_cleanup.outputs.rollout_success != 'true' }}
       shell: bash
       run: |
         echo "❌ Deployment failed or rollback executed"
