@@ -376,6 +376,29 @@ function main() {
   if (taggedCount > 0) {
     log(`\n💡 Tip: Your nx:*-lint, nx:*-test, and nx:*-build commands use tag:runtime:* selectors.`, "blue");
   }
+
+  // --- Format all project.json files with Prettier (nx format) -----------
+  // Both setup-workspace-targets.js and this script write JSON.stringify
+  // which doesn't match Prettier's compact style for short arrays.
+  // Run format at the end of the chain so CI format-check passes.
+  const projectJsonFiles = projects
+    .map((p) => {
+      const cfg = getProjectConfig(p);
+      return cfg ? cfg.root + "/project.json" : null;
+    })
+    .filter(Boolean);
+
+  if (projectJsonFiles.length > 0) {
+    try {
+      execSync(`pnpm exec nx format:write --files=${projectJsonFiles.join(",")}`, {
+        cwd: rootDir,
+        stdio: "ignore",
+        env: nxEnv,
+      });
+    } catch {
+      // Non-fatal: files are valid JSON, just not Prettier-formatted
+    }
+  }
 }
 
 main();
