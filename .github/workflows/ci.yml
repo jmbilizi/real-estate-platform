@@ -357,6 +357,7 @@ jobs:
       cluster-changed: ${{ steps.detect.outputs.cluster-changed }}
       deploy-changed: ${{ steps.detect.outputs.deploy-changed }}
       images-changed: ${{ steps.detect.outputs.images-changed }}
+      manifest_services: ${{ steps.detect.outputs.manifest_services }}
       branch: ${{ steps.detect.outputs.branch }}
     steps:
       - uses: actions/checkout@v4
@@ -380,6 +381,7 @@ jobs:
           cluster=false
           deploy=false
           images=false
+          manifest_services=""
 
           # Check for cluster configuration changes
           if echo "$FILES" | grep -E -q '^infra/k8s/hetzner/.*/cluster/|^\.github/workflows/provision-hetzner-k8s-cluster\.yml|^\.github/actions/provision-hetzner-k8s-cluster/'; then
@@ -388,13 +390,20 @@ jobs:
           fi
 
           # Check for deploy resource changes (excluding cluster paths)
-          if echo "$FILES" | grep -E -q '^infra/k8s/base/|^infra/deploy-control\.yaml|^infra/smart-deployment-config\.yaml|^infra/k8s/hetzner/.*/patches/|^\.github/workflows/deploy-k8s-resources\.yml|^\.github/actions/deploy-k8s-resources/|^\.github/workflows/ci\.yml'; then
+          if echo "$FILES" | grep -E -q '^infra/k8s/base/|^infra/deploy-control\.yaml|^infra/smart-deployment-config\.yaml|^infra/k8s/hetzner/.*/patches/|^\.github/workflows/deploy-k8s-resources\.yml|^\.github/actions/deploy-k8s-resources/|^\.github/actions/load-deploy-control/|^\.github/workflows/ci\.yml'; then
             deploy=true
             echo "✅ Deploy resource changes detected"
           fi
 
-          # Check for container image changes (Dockerfile, source code, build scripts)
-          if echo "$FILES" | grep -E -q '^apps/.*/Dockerfile|^apps/.*\.(cs|ts|py|js)$|^libs/|^tools/docker/|^\.github/workflows/build-push-images\.yml|^\.github/actions/build-push-image/'; then
+          # Extract targeted service names from changed deployment manifests
+          DEPLOY_FILES=$(echo "$FILES" | grep -E '^infra/k8s/(base|hetzner/.*/patches)/deployments/.*\.deployment\.yaml$' || true)
+          if [ -n "$DEPLOY_FILES" ]; then
+            manifest_services=$(echo "$DEPLOY_FILES" | sed 's|.*/||; s|\.deployment\.yaml$||' | sort -u | paste -sd ',' -)
+            echo "✅ Deployment manifest services detected: $manifest_services"
+          fi
+
+          # Check for container image changes (Dockerfile, source code, build scripts, or deployment-manifest changes)
+          if echo "$FILES" | grep -E -q '^apps/.*/Dockerfile|^apps/.*\.(cs|ts|py|js)$|^apps/.*\.csproj$|^apps/.*/package\.json$|^apps/.*/pyproject\.toml$|^apps/.*/requirements\.txt$|^apps/api-gateway/Configuration/.*\.(json)$|^libs/|^tools/docker/|^\.github/workflows/build-push-images\.yml|^\.github/actions/build-push-image/|^pnpm-lock\.yaml$|^uv\.lock$|^pyproject\.toml$|^Directory\.Build\.(props|targets)$|^Directory\.Packages\.props$|^nuget\.config$|^global\.json$|^infra/k8s/base/deployments/|^infra/k8s/hetzner/.*/patches/deployments/'; then
             images=true
             echo "✅ Container image changes detected"
           fi
@@ -405,6 +414,7 @@ jobs:
           echo "cluster-changed=$cluster" >> $GITHUB_OUTPUT
           echo "deploy-changed=$deploy" >> $GITHUB_OUTPUT
           echo "images-changed=$images" >> $GITHUB_OUTPUT
+          echo "manifest_services=$manifest_services" >> $GITHUB_OUTPUT
           echo "branch=$BRANCH" >> $GITHUB_OUTPUT
 
   # Trigger cluster provisioning workflow if cluster configs changed
@@ -459,11 +469,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           echo "🐳 Triggering container image build for ${{ steps.env.outputs.environment }} environment..."
+          MANIFEST_SERVICES="${{ needs.detect-infra-changes.outputs.manifest_services }}"
+
           gh workflow run build-push-images.yml \
             --repo ${{ github.repository }} \
             --ref ${{ github.ref }} \
             --field environment=${{ steps.env.outputs.environment }} \
             --field projects=affected \
+            --field additional_projects="$MANIFEST_SERVICES" \
             --field push=true
           echo "✅ Image build workflow triggered"
 

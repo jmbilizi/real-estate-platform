@@ -52,50 +52,24 @@ jobs:
 
       - name: Load deployment control
         id: deploy-control
-        run: |
-          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
-          sudo chmod +x /usr/local/bin/yq
-          sudo apt-get update && sudo apt-get install -y jq
-
-          global_auto_deploy=$(yq '.global.auto_deploy // true' infra/deploy-control.yaml)
-          enabled=$(yq '.environments.dev.enabled // false' infra/deploy-control.yaml)
-          auto_deploy=$(yq '.environments.dev.auto_deploy // false' infra/deploy-control.yaml)
-          service_enabled=$(yq '.environments.dev.services.postgres.enabled // true' infra/deploy-control.yaml)
-          service_auto_deploy=$(yq '.environments.dev.services.postgres.auto_deploy // true' infra/deploy-control.yaml)
-          statefulset_timeout=$(yq '.deployment_strategies.statefulset.timeout // "10m"' infra/deploy-control.yaml)
-          deployment_timeout=$(yq '.deployment_strategies.deployment.timeout // "10m"' infra/deploy-control.yaml)
-          daemonset_timeout=$(yq '.deployment_strategies.daemonset.timeout // "10m"' infra/deploy-control.yaml)
-          rollback_on_failure_service=$(yq '.environments.dev.services.postgres.rollback_on_failure // false' infra/deploy-control.yaml)
-          statefulset_rollback=$(yq '.deployment_strategies.statefulset.rollback_on_failure // true' infra/deploy-control.yaml)
-
-          echo "global_auto_deploy=$global_auto_deploy" >> $GITHUB_OUTPUT
-          echo "enabled=$enabled" >> $GITHUB_OUTPUT
-          echo "auto_deploy=$auto_deploy" >> $GITHUB_OUTPUT
-          echo "service_enabled=$service_enabled" >> $GITHUB_OUTPUT
-          echo "service_auto_deploy=$service_auto_deploy" >> $GITHUB_OUTPUT
-          echo "statefulset_timeout=$statefulset_timeout" >> $GITHUB_OUTPUT
-          echo "deployment_timeout=$deployment_timeout" >> $GITHUB_OUTPUT
-          echo "daemonset_timeout=$daemonset_timeout" >> $GITHUB_OUTPUT
-          echo "rollback_on_failure_service=$rollback_on_failure_service" >> $GITHUB_OUTPUT
-          echo "statefulset_rollback=$statefulset_rollback" >> $GITHUB_OUTPUT
+        uses: ./.github/actions/load-deploy-control
+        with:
+          environment: dev
+          deploy_strategy: ${{ github.event.inputs.deploy_strategy || inputs.deploy_strategy || 'all' }}
+          services: ${{ github.event.inputs.services || inputs.services || 'all' }}
 
       - name: Deploy K8s Resources (DRY composite)
-        if: |
-          steps.deploy-control.outputs.global_auto_deploy == 'true' &&
-          steps.deploy-control.outputs.enabled == 'true' &&
-          steps.deploy-control.outputs.service_enabled == 'true' &&
-          steps.deploy-control.outputs.auto_deploy == 'true' &&
-          steps.deploy-control.outputs.service_auto_deploy == 'true'
+        if: steps.deploy-control.outputs.deploy_allowed == 'true'
         uses: ./.github/actions/deploy-k8s-resources
         with:
           kustomizePath: infra/k8s/hetzner/dev
           kubeconfig: ${{ secrets.KUBECONFIG }}
-          deployStrategy: ${{ github.event.inputs.deploy_strategy || inputs.deploy_strategy || 'all' }}
-          services: ${{ github.event.inputs.services || inputs.services || 'all' }}
+          deployStrategy: ${{ steps.deploy-control.outputs.deploy_strategy }}
+          services: ${{ steps.deploy-control.outputs.deploy_services }}
           statefulset_timeout: ${{ steps.deploy-control.outputs.statefulset_timeout }}
           deployment_timeout: ${{ steps.deploy-control.outputs.deployment_timeout }}
           daemonset_timeout: ${{ steps.deploy-control.outputs.daemonset_timeout }}
-          rollback_on_failure: ${{ steps.deploy-control.outputs.rollback_on_failure_service }}
+          rollback_on_failure: ${{ steps.deploy-control.outputs.rollback_on_failure }}
           statefulset_rollback: ${{ steps.deploy-control.outputs.statefulset_rollback }}
         env:
           POSTGRES_SA_PASSWORD: ${{ secrets.POSTGRES_SA_PASSWORD }}
@@ -124,155 +98,20 @@ jobs:
 
       - name: Load deployment control
         id: deploy-control
-        run: |
-          # Install yq first (needed for parsing YAML)
-          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
-          sudo chmod +x /usr/local/bin/yq
+        uses: ./.github/actions/load-deploy-control
+        with:
+          environment: test
+          deploy_strategy: ${{ github.event.inputs.deploy_strategy || inputs.deploy_strategy || 'all' }}
+          services: ${{ github.event.inputs.services || inputs.services || 'all' }}
 
-          # Install jq for JSON processing (used by PVC cleanup)
-          sudo apt-get update && sudo apt-get install -y jq
-
-          # Parse GLOBAL settings first (master kill switch)
-          global_auto_deploy=$(yq '.global.auto_deploy // true' infra/deploy-control.yaml)
-
-          # Parse deploy-control.yaml for test environment
-          enabled=$(yq '.environments.test.enabled' infra/deploy-control.yaml)
-          auto_deploy=$(yq '.environments.test.auto_deploy' infra/deploy-control.yaml)
-          require_manual_approval=$(yq '.environments.test.require_manual_approval // false' infra/deploy-control.yaml)
-
-          # Deployment windows
-          deployment_windows_enabled=$(yq '.environments.test.deployment_windows.enabled // false' infra/deploy-control.yaml)
-          allowed_days=$(yq '.environments.test.deployment_windows.allowed_days // []' infra/deploy-control.yaml)
-          allowed_hours=$(yq '.environments.test.deployment_windows.allowed_hours // "00:00-23:59"' infra/deploy-control.yaml)
-          emergency_override=$(yq '.environments.test.deployment_windows.emergency_override // false' infra/deploy-control.yaml)
-
-          # Service-specific settings (postgres)
-          service_enabled=$(yq '.environments.test.services.postgres.enabled // true' infra/deploy-control.yaml)
-          service_auto_deploy=$(yq '.environments.test.services.postgres.auto_deploy // false' infra/deploy-control.yaml)
-          service_require_approval=$(yq '.environments.test.services.postgres.require_approval // false' infra/deploy-control.yaml)
-          rollback_on_failure=$(yq '.environments.test.services.postgres.rollback_on_failure // false' infra/deploy-control.yaml)
-
-          # Deployment strategies (for StatefulSet rollout)
-          statefulset_timeout=$(yq '.deployment_strategies.statefulset.timeout // "10m"' infra/deploy-control.yaml)
-          deployment_timeout=$(yq '.deployment_strategies.deployment.timeout // "10m"' infra/deploy-control.yaml)
-          daemonset_timeout=$(yq '.deployment_strategies.daemonset.timeout // "10m"' infra/deploy-control.yaml)
-          statefulset_rollback=$(yq '.deployment_strategies.statefulset.rollback_on_failure // true' infra/deploy-control.yaml)
-
-          # Export all values
-          echo "global_auto_deploy=$global_auto_deploy" >> $GITHUB_OUTPUT
-          echo "enabled=$enabled" >> $GITHUB_OUTPUT
-          echo "auto_deploy=$auto_deploy" >> $GITHUB_OUTPUT
-          echo "require_manual_approval=$require_manual_approval" >> $GITHUB_OUTPUT
-          echo "deployment_windows_enabled=$deployment_windows_enabled" >> $GITHUB_OUTPUT
-          echo "allowed_days=$allowed_days" >> $GITHUB_OUTPUT
-          echo "allowed_hours=$allowed_hours" >> $GITHUB_OUTPUT
-          echo "emergency_override=$emergency_override" >> $GITHUB_OUTPUT
-          echo "service_enabled=$service_enabled" >> $GITHUB_OUTPUT
-          echo "service_auto_deploy=$service_auto_deploy" >> $GITHUB_OUTPUT
-          echo "service_require_approval=$service_require_approval" >> $GITHUB_OUTPUT
-          echo "rollback_on_failure=$rollback_on_failure" >> $GITHUB_OUTPUT
-          echo "statefulset_timeout=$statefulset_timeout" >> $GITHUB_OUTPUT
-          echo "deployment_timeout=$deployment_timeout" >> $GITHUB_OUTPUT
-          echo "daemonset_timeout=$daemonset_timeout" >> $GITHUB_OUTPUT
-          echo "statefulset_rollback=$statefulset_rollback" >> $GITHUB_OUTPUT
-
-          # ═══════════════════════════════════════════════════════════
-          # DEPLOYMENT CONTROL CHECKS (enforced in order)
-          # ═══════════════════════════════════════════════════════════
-
-          # 1. Check GLOBAL auto_deploy (master kill switch)
-          if [ "$global_auto_deploy" != "true" ]; then
-            echo "🛑 GLOBAL auto-deployment is disabled (global.auto_deploy: $global_auto_deploy)"
-            echo "All automated deployments are blocked. Set global.auto_deploy: true to enable."
-            exit 0
-          fi
-
-          # 2. Check environment enabled
-          if [ "$enabled" != "true" ]; then
-            echo "❌ Test environment is disabled (enabled: $enabled)"
-            exit 0
-          fi
-
-          # 3. Check service enabled
-          if [ "$service_enabled" != "true" ]; then
-            echo "❌ PostgreSQL service is disabled (services.postgres.enabled: $service_enabled)"
-            exit 0
-          fi
-
-          # 4. Check auto-deploy (environment level)
-          if [ "$auto_deploy" != "true" ]; then
-            echo "⚠️  Test environment auto-deployment is disabled"
-            echo "Set 'auto_deploy: true' in infra/deploy-control.yaml to enable deployment"
-            exit 0
-          fi
-
-          # 5. Check auto-deploy (service level)
-          if [ "$service_auto_deploy" != "true" ]; then
-            echo "⚠️  PostgreSQL service auto-deployment is disabled"
-            echo "Set 'services.postgres.auto_deploy: true' to enable deployment"
-            exit 0
-          fi
-
-          # 6. Check manual approval requirement (environment level)
-          if [ "$require_manual_approval" == "true" ]; then
-            echo "⚠️  Manual approval required for test environment"
-            echo "This deployment requires manual approval. Configure reviewers in GitHub Environment settings."
-            echo "Note: GitHub Actions 'environment' keyword provides the approval gate automatically."
-            # Don't exit - GitHub Actions environment protection handles this
-          fi
-
-          # 7. Check manual approval requirement (service level)
-          if [ "$service_require_approval" == "true" ]; then
-            echo "⚠️  Manual approval required for PostgreSQL service"
-            echo "This service deployment requires manual approval."
-            # Don't exit - GitHub Actions environment protection handles this
-          fi
-
-          # 8. Check deployment windows
-          if [ "$deployment_windows_enabled" == "true" ]; then
-            current_day=$(date +%a)
-            current_time=$(date +%H:%M)
-            
-            # Check if current day is allowed
-            if ! echo "$allowed_days" | grep -q "$current_day"; then
-              if [ "$emergency_override" != "true" ]; then
-                echo "❌ Deployment not allowed on $current_day (allowed: $allowed_days)"
-                exit 0
-              else
-                echo "⚠️  Deployment on $current_day normally restricted, but emergency_override is enabled"
-              fi
-            fi
-            
-            # Check if current time is within allowed hours
-            start_hour=$(echo "$allowed_hours" | cut -d'-' -f1)
-            end_hour=$(echo "$allowed_hours" | cut -d'-' -f2)
-            if [[ "$current_time" < "$start_hour" || "$current_time" > "$end_hour" ]]; then
-              if [ "$emergency_override" != "true" ]; then
-                echo "❌ Deployment not allowed at $current_time (allowed: $allowed_hours)"
-                exit 0
-              else
-                echo "⚠️  Deployment at $current_time normally restricted, but emergency_override is enabled"
-              fi
-            fi
-            
-            echo "✅ Deployment window check passed (day: $current_day, time: $current_time)"
-          fi
-
-          echo "✅ All deployment control checks passed"
-
-      - name: Deploy env (DRY composite)
-        if: |
-          steps.deploy-control.outputs.global_auto_deploy == 'true' &&
-          steps.deploy-control.outputs.enabled == 'true' &&
-          steps.deploy-control.outputs.service_enabled == 'true' &&
-          steps.deploy-control.outputs.auto_deploy == 'true' &&
-          steps.deploy-control.outputs.service_auto_deploy == 'true'
+      - name: Deploy K8s Resources (DRY composite)
+        if: steps.deploy-control.outputs.deploy_allowed == 'true'
         uses: ./.github/actions/deploy-k8s-resources
         with:
           kustomizePath: infra/k8s/hetzner/test
           kubeconfig: ${{ secrets.KUBECONFIG }}
-          deployStrategy: ${{ github.event.inputs.deploy_strategy || inputs.deploy_strategy || 'all' }}
-          services: ${{ github.event.inputs.services || inputs.services || 'all' }}
+          deployStrategy: ${{ steps.deploy-control.outputs.deploy_strategy }}
+          services: ${{ steps.deploy-control.outputs.deploy_services }}
           statefulset_timeout: ${{ steps.deploy-control.outputs.statefulset_timeout }}
           deployment_timeout: ${{ steps.deploy-control.outputs.deployment_timeout }}
           daemonset_timeout: ${{ steps.deploy-control.outputs.daemonset_timeout }}
@@ -305,155 +144,20 @@ jobs:
 
       - name: Load deployment control
         id: deploy-control
-        run: |
-          # Install yq first (needed for parsing YAML)
-          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
-          sudo chmod +x /usr/local/bin/yq
+        uses: ./.github/actions/load-deploy-control
+        with:
+          environment: prod
+          deploy_strategy: ${{ github.event.inputs.deploy_strategy || inputs.deploy_strategy || 'all' }}
+          services: ${{ github.event.inputs.services || inputs.services || 'all' }}
 
-          # Install jq for JSON processing (used by PVC cleanup)
-          sudo apt-get update && sudo apt-get install -y jq
-
-          # Parse GLOBAL settings first (master kill switch)
-          global_auto_deploy=$(yq '.global.auto_deploy // true' infra/deploy-control.yaml)
-
-          # Parse deploy-control.yaml for prod environment
-          enabled=$(yq '.environments.prod.enabled' infra/deploy-control.yaml)
-          auto_deploy=$(yq '.environments.prod.auto_deploy' infra/deploy-control.yaml)
-          require_manual_approval=$(yq '.environments.prod.require_manual_approval // true' infra/deploy-control.yaml)
-
-          # Deployment windows
-          deployment_windows_enabled=$(yq '.environments.prod.deployment_windows.enabled // false' infra/deploy-control.yaml)
-          allowed_days=$(yq '.environments.prod.deployment_windows.allowed_days // []' infra/deploy-control.yaml)
-          allowed_hours=$(yq '.environments.prod.deployment_windows.allowed_hours // "00:00-23:59"' infra/deploy-control.yaml)
-          emergency_override=$(yq '.environments.prod.deployment_windows.emergency_override // false' infra/deploy-control.yaml)
-
-          # Service-specific settings (postgres)
-          service_enabled=$(yq '.environments.prod.services.postgres.enabled // true' infra/deploy-control.yaml)
-          service_auto_deploy=$(yq '.environments.prod.services.postgres.auto_deploy // false' infra/deploy-control.yaml)
-          service_require_approval=$(yq '.environments.prod.services.postgres.require_approval // true' infra/deploy-control.yaml)
-          rollback_on_failure=$(yq '.environments.prod.services.postgres.rollback_on_failure // false' infra/deploy-control.yaml)
-
-          # Deployment strategies (for StatefulSet rollout)
-          statefulset_timeout=$(yq '.deployment_strategies.statefulset.timeout // "10m"' infra/deploy-control.yaml)
-          deployment_timeout=$(yq '.deployment_strategies.deployment.timeout // "10m"' infra/deploy-control.yaml)
-          daemonset_timeout=$(yq '.deployment_strategies.daemonset.timeout // "10m"' infra/deploy-control.yaml)
-          statefulset_rollback=$(yq '.deployment_strategies.statefulset.rollback_on_failure // true' infra/deploy-control.yaml)
-
-          # Export all values
-          echo "global_auto_deploy=$global_auto_deploy" >> $GITHUB_OUTPUT
-          echo "enabled=$enabled" >> $GITHUB_OUTPUT
-          echo "auto_deploy=$auto_deploy" >> $GITHUB_OUTPUT
-          echo "require_manual_approval=$require_manual_approval" >> $GITHUB_OUTPUT
-          echo "deployment_windows_enabled=$deployment_windows_enabled" >> $GITHUB_OUTPUT
-          echo "allowed_days=$allowed_days" >> $GITHUB_OUTPUT
-          echo "allowed_hours=$allowed_hours" >> $GITHUB_OUTPUT
-          echo "emergency_override=$emergency_override" >> $GITHUB_OUTPUT
-          echo "service_enabled=$service_enabled" >> $GITHUB_OUTPUT
-          echo "service_auto_deploy=$service_auto_deploy" >> $GITHUB_OUTPUT
-          echo "service_require_approval=$service_require_approval" >> $GITHUB_OUTPUT
-          echo "rollback_on_failure=$rollback_on_failure" >> $GITHUB_OUTPUT
-          echo "statefulset_timeout=$statefulset_timeout" >> $GITHUB_OUTPUT
-          echo "deployment_timeout=$deployment_timeout" >> $GITHUB_OUTPUT
-          echo "daemonset_timeout=$daemonset_timeout" >> $GITHUB_OUTPUT
-          echo "statefulset_rollback=$statefulset_rollback" >> $GITHUB_OUTPUT
-
-          # ═══════════════════════════════════════════════════════════════
-          # DEPLOYMENT CONTROL CHECKS (enforced in order)
-          # ═══════════════════════════════════════════════════════════════
-
-          # 1. Check GLOBAL auto_deploy (master kill switch)
-          if [ "$global_auto_deploy" != "true" ]; then
-            echo "🛑 GLOBAL auto-deployment is disabled (global.auto_deploy: $global_auto_deploy)"
-            echo "All automated deployments are blocked. Set global.auto_deploy: true to enable."
-            exit 0
-          fi
-
-          # 2. Check environment enabled
-          if [ "$enabled" != "true" ]; then
-            echo "❌ Prod environment is disabled (enabled: $enabled)"
-            exit 0
-          fi
-
-          # 3. Check service enabled
-          if [ "$service_enabled" != "true" ]; then
-            echo "❌ PostgreSQL service is disabled (services.postgres.enabled: $service_enabled)"
-            exit 0
-          fi
-
-          # 4. Check auto-deploy (environment level)
-          if [ "$auto_deploy" != "true" ]; then
-            echo "⚠️  Prod environment auto-deployment is disabled"
-            echo "Set 'auto_deploy: true' in infra/deploy-control.yaml to enable deployment"
-            exit 0
-          fi
-
-          # 5. Check auto-deploy (service level)
-          if [ "$service_auto_deploy" != "true" ]; then
-            echo "⚠️  PostgreSQL service auto-deployment is disabled"
-            echo "Set 'services.postgres.auto_deploy: true' to enable deployment"
-            exit 0
-          fi
-
-          # 6. Check manual approval requirement (environment level)
-          if [ "$require_manual_approval" == "true" ]; then
-            echo "⚠️  Manual approval required for prod environment"
-            echo "This deployment requires manual approval. Configure reviewers in GitHub Environment settings."
-            echo "Note: GitHub Actions 'environment' keyword provides the approval gate automatically."
-            # Don't exit - GitHub Actions environment protection handles this
-          fi
-
-          # 7. Check manual approval requirement (service level)
-          if [ "$service_require_approval" == "true" ]; then
-            echo "⚠️  Manual approval required for PostgreSQL service"
-            echo "This service deployment requires manual approval."
-            # Don't exit - GitHub Actions environment protection handles this
-          fi
-
-          # 8. Check deployment windows
-          if [ "$deployment_windows_enabled" == "true" ]; then
-            current_day=$(date +%a)
-            current_time=$(date +%H:%M)
-            
-            # Check if current day is allowed
-            if ! echo "$allowed_days" | grep -q "$current_day"; then
-              if [ "$emergency_override" != "true" ]; then
-                echo "❌ Deployment not allowed on $current_day (allowed: $allowed_days)"
-                exit 0
-              else
-                echo "⚠️  Deployment on $current_day normally restricted, but emergency_override is enabled"
-              fi
-            fi
-            
-            # Check if current time is within allowed hours
-            start_hour=$(echo "$allowed_hours" | cut -d'-' -f1)
-            end_hour=$(echo "$allowed_hours" | cut -d'-' -f2)
-            if [[ "$current_time" < "$start_hour" || "$current_time" > "$end_hour" ]]; then
-              if [ "$emergency_override" != "true" ]; then
-                echo "❌ Deployment not allowed at $current_time (allowed: $allowed_hours)"
-                exit 0
-              else
-                echo "⚠️  Deployment at $current_time normally restricted, but emergency_override is enabled"
-              fi
-            fi
-            
-            echo "✅ Deployment window check passed (day: $current_day, time: $current_time)"
-          fi
-
-          echo "✅ All deployment control checks passed"
-
-      - name: Deploy env (DRY composite)
-        if: |
-          steps.deploy-control.outputs.global_auto_deploy == 'true' &&
-          steps.deploy-control.outputs.enabled == 'true' &&
-          steps.deploy-control.outputs.service_enabled == 'true' &&
-          steps.deploy-control.outputs.auto_deploy == 'true' &&
-          steps.deploy-control.outputs.service_auto_deploy == 'true'
+      - name: Deploy K8s Resources (DRY composite)
+        if: steps.deploy-control.outputs.deploy_allowed == 'true'
         uses: ./.github/actions/deploy-k8s-resources
         with:
           kustomizePath: infra/k8s/hetzner/prod
           kubeconfig: ${{ secrets.KUBECONFIG }}
-          deployStrategy: ${{ github.event.inputs.deploy_strategy || inputs.deploy_strategy || 'all' }}
-          services: ${{ github.event.inputs.services || inputs.services || 'all' }}
+          deployStrategy: ${{ steps.deploy-control.outputs.deploy_strategy }}
+          services: ${{ steps.deploy-control.outputs.deploy_services }}
           statefulset_timeout: ${{ steps.deploy-control.outputs.statefulset_timeout }}
           deployment_timeout: ${{ steps.deploy-control.outputs.deployment_timeout }}
           daemonset_timeout: ${{ steps.deploy-control.outputs.daemonset_timeout }}

@@ -1,0 +1,234 @@
+name: "Load Deployment Control"
+description: "Parse deploy-control.yaml and evaluate deployment gates: global → environment → windows → per-service → strategy"
+inputs:
+  environment:
+    description: "Target environment (dev, test, prod)"
+    required: true
+  deploy_strategy:
+    description: "Requested deployment strategy (all or single)"
+    required: false
+    default: "all"
+  services:
+    description: "Comma-separated services to deploy (when strategy=single), or 'all'"
+    required: false
+    default: "all"
+outputs:
+  deploy_allowed:
+    description: "Whether deployment is allowed after all checks"
+    value: ${{ steps.evaluate.outputs.deploy_allowed }}
+  deploy_strategy:
+    description: "Computed deployment strategy (all or single)"
+    value: ${{ steps.evaluate.outputs.deploy_strategy }}
+  deploy_services:
+    description: "Comma-separated list of services to deploy, or 'all'"
+    value: ${{ steps.evaluate.outputs.deploy_services }}
+  rollback_on_failure:
+    description: "Whether any allowed service has rollback enabled"
+    value: ${{ steps.evaluate.outputs.rollback_on_failure }}
+  statefulset_timeout:
+    description: "Timeout for StatefulSet rollouts"
+    value: ${{ steps.evaluate.outputs.statefulset_timeout }}
+  deployment_timeout:
+    description: "Timeout for Deployment rollouts"
+    value: ${{ steps.evaluate.outputs.deployment_timeout }}
+  daemonset_timeout:
+    description: "Timeout for DaemonSet rollouts"
+    value: ${{ steps.evaluate.outputs.daemonset_timeout }}
+  statefulset_rollback:
+    description: "Strategy-level rollback for StatefulSets"
+    value: ${{ steps.evaluate.outputs.statefulset_rollback }}
+runs:
+  using: "composite"
+  steps:
+    - name: Install tools (yq, jq)
+      shell: bash
+      run: |
+        echo "Installing yq and jq"
+        sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+        sudo chmod +x /usr/local/bin/yq
+        sudo apt-get update && sudo apt-get install -y jq
+
+    - name: Evaluate deployment control flags
+      id: evaluate
+      shell: bash
+      run: |
+        ENV="${{ inputs.environment }}"
+        CONFIG="infra/deploy-control.yaml"
+
+        # ═══════════════════════════════════════════════════════════
+        # DEPLOYMENT CONTROL CHECKS (enforced in order)
+        # 1. Global → 2. Environment → 3. Deployment windows →
+        # 4. Per-service iteration → 5. Final strategy
+        # ═══════════════════════════════════════════════════════════
+
+        # 1. GLOBAL auto_deploy (master kill switch)
+        global_auto_deploy=$(yq '.global.auto_deploy // true' "$CONFIG")
+        if [ "$global_auto_deploy" != "true" ]; then
+          echo "🛑 GLOBAL auto-deployment is disabled (global.auto_deploy: $global_auto_deploy)"
+          echo "All automated deployments are blocked. Set global.auto_deploy: true to enable."
+          echo "deploy_allowed=false" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        # 2. Environment enabled + auto-deploy
+        enabled=$(yq ".environments.$ENV.enabled // false" "$CONFIG")
+        if [ "$enabled" != "true" ]; then
+          echo "❌ $ENV environment is disabled (enabled: $enabled)"
+          echo "deploy_allowed=false" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        auto_deploy=$(yq ".environments.$ENV.auto_deploy // false" "$CONFIG")
+        if [ "$auto_deploy" != "true" ]; then
+          echo "⚠️  $ENV environment auto-deployment is disabled"
+          echo "Set environments.$ENV.auto_deploy: true in infra/deploy-control.yaml to enable."
+          echo "deploy_allowed=false" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        # 3. Deployment windows
+        deployment_windows_enabled=$(yq ".environments.$ENV.deployment_windows.enabled // false" "$CONFIG")
+        if [ "$deployment_windows_enabled" = "true" ]; then
+          allowed_days=$(yq ".environments.$ENV.deployment_windows.allowed_days // []" "$CONFIG")
+          allowed_hours=$(yq ".environments.$ENV.deployment_windows.allowed_hours // \"00:00-23:59\"" "$CONFIG")
+          emergency_override=$(yq ".environments.$ENV.deployment_windows.emergency_override // false" "$CONFIG")
+
+          current_day=$(date +%a)
+          current_time=$(date +%H:%M)
+
+          if ! echo "$allowed_days" | grep -q "$current_day"; then
+            if [ "$emergency_override" != "true" ]; then
+              echo "❌ Deployment not allowed on $current_day (allowed: $allowed_days)"
+              echo "deploy_allowed=false" >> $GITHUB_OUTPUT
+              exit 0
+            else
+              echo "⚠️  Deployment on $current_day normally restricted, but emergency_override is enabled"
+            fi
+          fi
+
+          start_hour=$(echo "$allowed_hours" | cut -d'-' -f1)
+          end_hour=$(echo "$allowed_hours" | cut -d'-' -f2)
+          if [[ "$current_time" < "$start_hour" || "$current_time" > "$end_hour" ]]; then
+            if [ "$emergency_override" != "true" ]; then
+              echo "❌ Deployment not allowed at $current_time (allowed: $allowed_hours)"
+              echo "deploy_allowed=false" >> $GITHUB_OUTPUT
+              exit 0
+            else
+              echo "⚠️  Deployment at $current_time normally restricted, but emergency_override is enabled"
+            fi
+          fi
+
+          echo "✅ Deployment window check passed (day: $current_day, time: $current_time)"
+        fi
+
+        # Manual approval (informational — GitHub Environments handle the actual gate)
+        require_manual_approval=$(yq ".environments.$ENV.require_manual_approval // false" "$CONFIG")
+        if [ "$require_manual_approval" = "true" ]; then
+          echo "⚠️  Manual approval required for $ENV environment"
+          echo "GitHub Actions 'environment' keyword provides the approval gate automatically."
+        fi
+
+        # ═══════════════════════════════════════════════════════════
+        # 4. SERVICE-LEVEL CHECKS (iterate each service independently)
+        # ═══════════════════════════════════════════════════════════
+        echo ""
+        echo "📋 Evaluating service-level deployment flags for $ENV..."
+
+        ALL_SERVICES=$(yq -r ".environments.$ENV.services | keys[]" "$CONFIG")
+        ALLOWED_SERVICES=""
+        BLOCKED_SERVICES=""
+        ROLLBACK_ANY="false"
+
+        for svc in $ALL_SERVICES; do
+          svc_enabled=$(yq ".environments.$ENV.services.\"$svc\".enabled // true" "$CONFIG")
+          svc_auto_deploy=$(yq ".environments.$ENV.services.\"$svc\".auto_deploy // false" "$CONFIG")
+          svc_rollback=$(yq ".environments.$ENV.services.\"$svc\".rollback_on_failure // false" "$CONFIG")
+          svc_approval=$(yq ".environments.$ENV.services.\"$svc\".require_approval // false" "$CONFIG")
+
+          if [ "$svc_enabled" = "true" ] && [ "$svc_auto_deploy" = "true" ]; then
+            ALLOWED_SERVICES="${ALLOWED_SERVICES:+$ALLOWED_SERVICES,}$svc"
+            if [ "$svc_rollback" = "true" ]; then
+              ROLLBACK_ANY="true"
+            fi
+            if [ "$svc_approval" = "true" ]; then
+              echo "  ✅ $svc: enabled (approval handled by GitHub Environment)"
+            else
+              echo "  ✅ $svc: enabled + auto-deploy"
+            fi
+          else
+            BLOCKED_SERVICES="${BLOCKED_SERVICES:+$BLOCKED_SERVICES,}$svc"
+            echo "  ⏭️  $svc: skipped (enabled=$svc_enabled, auto_deploy=$svc_auto_deploy)"
+          fi
+        done
+
+        if [ -z "$ALLOWED_SERVICES" ]; then
+          echo ""
+          echo "❌ No services are enabled for auto-deployment in $ENV"
+          echo "deploy_allowed=false" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        # ═══════════════════════════════════════════════════════════
+        # 5. DETERMINE FINAL DEPLOY STRATEGY AND SERVICES
+        # ═══════════════════════════════════════════════════════════
+        INPUT_STRATEGY="${{ inputs.deploy_strategy }}"
+        INPUT_SERVICES="${{ inputs.services }}"
+
+        TOTAL_SERVICES=$(echo "$ALL_SERVICES" | wc -w)
+        ALLOWED_COUNT=$(echo "$ALLOWED_SERVICES" | tr ',' '\n' | wc -w)
+
+        if [ "$INPUT_STRATEGY" = "all" ] || [ "$INPUT_SERVICES" = "all" ]; then
+          if [ "$ALLOWED_COUNT" -eq "$TOTAL_SERVICES" ]; then
+            FINAL_STRATEGY="all"
+            FINAL_SERVICES="all"
+            echo ""
+            echo "✅ All $TOTAL_SERVICES services enabled — deploying ALL"
+          else
+            FINAL_STRATEGY="single"
+            FINAL_SERVICES="$ALLOWED_SERVICES"
+            echo ""
+            echo "⚠️  $ALLOWED_COUNT/$TOTAL_SERVICES services enabled — deploying: $ALLOWED_SERVICES"
+            if [ -n "$BLOCKED_SERVICES" ]; then
+              echo "  Blocked: $BLOCKED_SERVICES"
+            fi
+          fi
+        else
+          FINAL_SERVICES=""
+          IFS=',' read -ra REQUESTED <<< "$INPUT_SERVICES"
+          for req in "${REQUESTED[@]}"; do
+            req=$(echo "$req" | xargs)
+            if echo ",$ALLOWED_SERVICES," | grep -q ",$req,"; then
+              FINAL_SERVICES="${FINAL_SERVICES:+$FINAL_SERVICES,}$req"
+            else
+              echo "⚠️  Requested service '$req' is not enabled for auto-deployment — skipping"
+            fi
+          done
+          FINAL_STRATEGY="single"
+
+          if [ -z "$FINAL_SERVICES" ]; then
+            echo ""
+            echo "❌ None of the requested services ($INPUT_SERVICES) are enabled for deployment in $ENV"
+            echo "deploy_allowed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          echo ""
+          echo "✅ Deploying requested services: $FINAL_SERVICES"
+        fi
+
+        # Deployment strategy timeouts
+        statefulset_timeout=$(yq '.deployment_strategies.statefulset.timeout // "10m"' "$CONFIG")
+        deployment_timeout=$(yq '.deployment_strategies.deployment.timeout // "10m"' "$CONFIG")
+        daemonset_timeout=$(yq '.deployment_strategies.daemonset.timeout // "10m"' "$CONFIG")
+        statefulset_rollback=$(yq '.deployment_strategies.statefulset.rollback_on_failure // true' "$CONFIG")
+
+        echo ""
+        echo "deploy_allowed=true" >> $GITHUB_OUTPUT
+        echo "deploy_strategy=$FINAL_STRATEGY" >> $GITHUB_OUTPUT
+        echo "deploy_services=$FINAL_SERVICES" >> $GITHUB_OUTPUT
+        echo "rollback_on_failure=$ROLLBACK_ANY" >> $GITHUB_OUTPUT
+        echo "statefulset_timeout=$statefulset_timeout" >> $GITHUB_OUTPUT
+        echo "deployment_timeout=$deployment_timeout" >> $GITHUB_OUTPUT
+        echo "daemonset_timeout=$daemonset_timeout" >> $GITHUB_OUTPUT
+        echo "statefulset_rollback=$statefulset_rollback" >> $GITHUB_OUTPUT
+
+        echo "✅ All deployment control checks passed for $ENV"
