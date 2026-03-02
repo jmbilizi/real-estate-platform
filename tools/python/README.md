@@ -17,7 +17,7 @@ pnpm run nx:reset
 
 ## How It Works
 
-This monorepo uses **UV workspace mode** — the same concept as npm workspaces for Node.js:
+This monorepo uses **UV workspace mode** — the same concept as pnpm workspaces for Node.js:
 
 | Concept              | Node.js                     | Python (UV Workspace)                            |
 | -------------------- | --------------------------- | ------------------------------------------------ |
