@@ -2,17 +2,20 @@
 name = "nx-workspace"
 version = "1.0.0"
 requires-python = ">=3.9,<4"
-dependencies = []
+dependencies = ["multi-model-inference"]
 
 [tool.uv.workspace]
-members = []
+members = ["apps/services/multi-model-inference"]
+
+[tool.uv.sources.multi-model-inference]
+workspace = true
 
 [tool.nx]
 autoActivate = true
 
 [dependency-groups]
 dev = [
-  # Per-project tools (moved from hello-world-fastapi by migrate-to-shared-venv)
+  # Per-project tools (moved from multi-model-inference by migrate-to-shared-venv)
   "autopep8>=2.3.1",
   "ruff>=0.8.2",
   "pytest>=8.3.4",
@@ -27,4 +30,5 @@ dev = [
   "sqlfluff>=3.4.2",
   "yamllint>=1.37.1",
   "python-dotenv>=1.0.0",
+  "httpx>=0.28.1",
 ]
