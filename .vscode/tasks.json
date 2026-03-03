@@ -66,6 +66,56 @@
         "panel": "new"
       },
       "group": "none"
+    },
+    {
+      "label": "K8s Debug Pods",
+      "type": "shell",
+      "command": "kubectl get pods -o wide; echo '---LOGS---'; kubectl logs -l app=inference --tail=50 2>&1; echo '---EVENTS---'; kubectl get events --sort-by=.lastTimestamp 2>&1 | Select-Object -Last 20"
+    },
+    {
+      "label": "K8s Debug",
+      "type": "shell",
+      "command": "kubectl get pods -o wide && echo ---LOGS--- && kubectl logs -l app=inference --tail=50 && echo ---EVENTS--- && kubectl get events --sort-by=.lastTimestamp"
+    },
+    {
+      "label": "Inference Logs",
+      "type": "shell",
+      "command": "kubectl logs -l app=inference --all-containers 2>&1"
+    },
+    {
+      "label": "Inference Debug",
+      "type": "shell",
+      "command": "kubectl get pods -l app=inference -o wide && echo ---FULL-LOGS--- && kubectl logs -l app=inference --all-containers 2>&1"
+    },
+    {
+      "label": "Startup Logs",
+      "type": "shell",
+      "command": "kubectl logs -l app=inference --all-containers --timestamps 2>&1 | findstr /V \"GET /ready\" | findstr /V \"GET /health\""
+    },
+    {
+      "label": "Check Ready",
+      "type": "shell",
+      "command": "kubectl exec -it deployment/inference -- python -c \"import urllib.request; print(urllib.request.urlopen('http://localhost:8000/ready').read().decode())\" 2>&1"
+    },
+    {
+      "label": "Debug Model",
+      "type": "shell",
+      "command": "curl -s http://localhost:8080/gateway/inference/models 2>&1 && echo ---READY--- && curl -s http://localhost:8080/gateway/inference/ready 2>&1 && echo ---LOGS--- && kubectl logs -l app=inference --tail=100 2>&1 | findstr /V \"/ready\" | findstr /V \"/health\""
+    },
+    {
+      "label": "SSL Check",
+      "type": "shell",
+      "command": "kubectl exec deployment/inference -- python -c \"import urllib.request; print(urllib.request.urlopen('http://localhost:8000/ready').read().decode())\" && echo --- && kubectl exec deployment/inference -- cat /etc/ssl/certs/ca-certificates.crt | findstr workspace && echo --- && kubectl exec deployment/inference -- env | findstr SSL"
+    },
+    {
+      "label": "Env Check",
+      "type": "shell",
+      "command": "kubectl exec deployment/inference -- env 2>&1"
+    },
+    {
+      "label": "Full Logs",
+      "type": "shell",
+      "command": "kubectl logs deployment/inference --tail=200 2>&1"
     }
   ],
   "inputs": [
