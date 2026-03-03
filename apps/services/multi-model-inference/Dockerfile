@@ -9,6 +9,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy only dependency definition first (cache layer)
 COPY ["apps/services/multi-model-inference/pyproject.toml", "."]
+COPY ["apps/services/multi-model-inference/README.md", "."]
 
 # Install production dependencies only
 RUN pip install --no-cache-dir .
