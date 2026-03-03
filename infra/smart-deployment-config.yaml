@@ -93,6 +93,21 @@ services:
     kubectl_labels:
       app: api-gateway
 
+  inference:
+    type: application
+    description: "FastAPI inference service for ML model serving"
+    resources:
+      # Base resources (provider/environment-agnostic)
+      - infra/k8s/base/deployments/inference.deployment.yaml
+      - infra/k8s/base/services/inference.service.yaml
+      # Environment patches (provider/environment-specific)
+      - infra/k8s/hetzner/dev/patches/deployments/inference.deployment.yaml
+      - infra/k8s/hetzner/test/patches/deployments/inference.deployment.yaml
+      - infra/k8s/hetzner/prod/patches/deployments/inference.deployment.yaml
+      - infra/k8s/podman/local/patches/deployments/inference.deployment.yaml
+    kubectl_labels:
+      app: inference
+
 # =============================================================================
 # DEPLOYMENT SETTINGS
 # =============================================================================

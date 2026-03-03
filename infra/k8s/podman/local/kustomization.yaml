@@ -20,6 +20,7 @@ patches:
 
   ## Deployments (stateless applications)
   - path: patches/deployments/api-gateway.deployment.yaml
+  - path: patches/deployments/inference.deployment.yaml
 
   ## Ingress rules (local routing via *.localhost)
   - path: patches/ingresses/jaeger.ingress.yaml

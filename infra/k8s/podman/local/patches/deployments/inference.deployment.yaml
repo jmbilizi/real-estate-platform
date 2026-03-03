@@ -1,0 +1,27 @@
+# yaml-language-server: disable
+# Inference Deployment Patch for Podman Local Environment
+# Minimal resources for local development
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inference
+  template:
+    spec:
+      containers:
+        - name: api
+          # Skaffold manages image name - use 'inference' to match skaffold.yaml
+          image: inference-service
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

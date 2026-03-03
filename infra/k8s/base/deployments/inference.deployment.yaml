@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference
+  namespace: default
+  labels:
+    app: inference
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inference
+  template:
+    metadata:
+      labels:
+        app: inference
+    spec:
+      containers:
+        - name: api
+          # Image format: ghcr.io/<owner>/<repo>/inference:<tag>
+          # CI/CD workflow substitutes GITHUB_REPOSITORY_OWNER, GITHUB_REPOSITORY_NAME
+          # Local development uses Skaffold override (see podman/local/patches)
+          image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/inference-service:latest
+          imagePullPolicy: IfNotPresent
+          # Minimal resources to satisfy Deployment minimum requirement.
+          # Actual values are overridden by environment patches.
+          # NOTE: ML workloads need more memory than typical services — base
+          # values must be viable for the ONNX model to load without OOM.
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          # Startup probe: gates liveness/readiness until the container is up.
+          # Generous budget for first-time model download (10 + 30*10 = 310s max).
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 30
+          # Readiness probe: controls traffic routing.
+          # Pod only receives requests once all models are loaded.
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3

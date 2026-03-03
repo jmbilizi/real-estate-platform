@@ -28,6 +28,14 @@ build:
             dest: /opt/geoip/GeoLite2-City.mmdb
             strip: apps/api-gateway/
 
+    - image: inference-service
+      context: .
+      custom:
+        buildCommand: node tools/infra/skaffold-build.js
+        dependencies:
+          paths:
+            - apps/services/multi-model-inference/**
+
   local:
     # IMPORTANT: This must be true for the Podman+Kind workflow.
     # - The cluster pulls from the local registry (localhost:5001)

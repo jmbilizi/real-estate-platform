@@ -36,6 +36,7 @@ resources:
   - services/redis.service.yaml
   - services/jaeger.service.yaml
   - services/api-gateway.service.yaml
+  - services/inference.service.yaml
 
   # Workloads (statefulsets, deployments, etc.)
   ## StatefulSets (stateful infrastructure)
@@ -45,6 +46,7 @@ resources:
 
   ## Deployments (stateless applications - future: api-gateway, microservices)
   - deployments/api-gateway.deployment.yaml
+  - deployments/inference.deployment.yaml
 
   # Ingress rules (external routing - uses Nginx controller above)
   - ingresses/jaeger.ingress.yaml

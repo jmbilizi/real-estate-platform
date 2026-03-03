@@ -60,6 +60,12 @@ environments:
         require_approval: false # No approval needed
         rollback_on_failure: false # Disabled in dev for manual investigation
 
+      inference:
+        enabled: true
+        auto_deploy: true # Auto-deploy in dev
+        require_approval: false # No approval needed
+        rollback_on_failure: false # Disabled in dev for manual investigation
+
   # ────────────────────────────────────────────────────────────────────────────
   # TEST/STAGING ENVIRONMENT
   # Moderate controls - test safety features before production
@@ -96,6 +102,12 @@ environments:
         require_approval: false # Optional approval
         rollback_on_failure: false # Disabled for manual validation
 
+      inference:
+        enabled: true
+        auto_deploy: false # Manual deployment in test
+        require_approval: false # Optional approval
+        rollback_on_failure: false # Disabled for manual validation
+
   # ────────────────────────────────────────────────────────────────────────────
   # PRODUCTION ENVIRONMENT
   # Strictest controls - all safety features enabled when workflows support them
@@ -127,6 +139,12 @@ environments:
         rollback_on_failure: false # Manual review recommended for production
 
       api-gateway:
+        enabled: true
+        auto_deploy: false # Manual deployment only
+        require_approval: true # Always require approval
+        rollback_on_failure: false # Manual review recommended for production
+
+      inference:
         enabled: true
         auto_deploy: false # Manual deployment only
         require_approval: true # Always require approval
