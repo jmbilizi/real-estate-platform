@@ -145,8 +145,36 @@ function parseArgs() {
   return { projectName, options };
 }
 
+/**
+ * Load image-name overrides from the centralized map.
+ * Returns { projectName → { imageName, dockerfilePath } }
+ */
+function loadImageNameMap() {
+  const mapPath = path.join(path.resolve(__dirname, "../.."), "tools/docker/image-name-map.json");
+  if (!fs.existsSync(mapPath)) return {};
+  const raw = JSON.parse(fs.readFileSync(mapPath, "utf-8"));
+  // Filter out $comment key
+  const map = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (key !== "$comment" && typeof value === "object") {
+      map[key] = value;
+    }
+  }
+  return map;
+}
+
 function findDockerfile(projectName) {
   const workspaceRoot = path.resolve(__dirname, "../..");
+
+  // Check centralized overrides first (handles renamed projects)
+  const nameMap = loadImageNameMap();
+  if (nameMap[projectName] && nameMap[projectName].dockerfilePath) {
+    const overridePath = path.join(workspaceRoot, nameMap[projectName].dockerfilePath, "Dockerfile");
+    if (fs.existsSync(overridePath)) {
+      return overridePath;
+    }
+  }
+
   const possiblePaths = [
     path.join(workspaceRoot, "apps", projectName, "Dockerfile"),
     path.join(workspaceRoot, "apps/services", projectName, "Dockerfile"),
@@ -162,8 +190,21 @@ function findDockerfile(projectName) {
   return null;
 }
 
+/**
+ * Resolve the Docker image name for a project.
+ * Uses image-name-map.json when the Nx project name differs from the desired image name.
+ */
+function resolveImageName(projectName) {
+  const nameMap = loadImageNameMap();
+  if (nameMap[projectName] && nameMap[projectName].imageName) {
+    return nameMap[projectName].imageName;
+  }
+  return projectName;
+}
+
 function buildImage(projectName, options) {
   const workspaceRoot = path.resolve(__dirname, "../..");
+  const imageName = resolveImageName(projectName);
   const dockerfilePath = findDockerfile(projectName);
 
   if (!dockerfilePath) {
@@ -172,17 +213,25 @@ function buildImage(projectName, options) {
     logInfo(`  - apps/${projectName}/Dockerfile`);
     logInfo(`  - apps/services/${projectName}/Dockerfile`);
     logInfo(`  - libs/${projectName}/Dockerfile`);
+    const nameMap = loadImageNameMap();
+    if (nameMap[projectName]) {
+      logInfo(`  - ${nameMap[projectName].dockerfilePath}/Dockerfile (from image-name-map.json)`);
+    }
     process.exit(1);
   }
 
   logSuccess(`Found Dockerfile: ${path.relative(workspaceRoot, dockerfilePath)}`);
 
-  // Construct image name
-  const imageName = `${options.registry}/${options.owner}/${options.repo}/${projectName}:${options.tag}`;
-  logInfo(`Building image: ${imageName}`);
+  if (imageName !== projectName) {
+    logInfo(`Image name override: ${projectName} → ${imageName} (from image-name-map.json)`);
+  }
+
+  // Construct full image reference (use resolved imageName, not Nx projectName)
+  const fullImageRef = `${options.registry}/${options.owner}/${options.repo}/${imageName}:${options.tag}`;
+  logInfo(`Building image: ${fullImageRef}`);
 
   // Build Docker command
-  const buildArgs = ["build", "-f", dockerfilePath, "-t", imageName, "--platform", options.platform];
+  const buildArgs = ["build", "-f", dockerfilePath, "-t", fullImageRef, "--platform", options.platform];
 
   // Add build configuration
   buildArgs.push("--build-arg", "BUILD_CONFIGURATION=Release");
@@ -223,10 +272,10 @@ function buildImage(projectName, options) {
     process.exit(1);
   }
 
-  logSuccess(`Build completed: ${imageName}`);
+  logSuccess(`Build completed: ${fullImageRef}`);
 
   // Get image size
-  const sizeResult = run(`docker images ${imageName} --format "{{.Size}}"`, { silent: true });
+  const sizeResult = run(`docker images ${fullImageRef} --format "{{.Size}}"`, { silent: true });
   if (sizeResult.success) {
     logInfo(`Image size: ${sizeResult.output.trim()}`);
   }
@@ -234,17 +283,17 @@ function buildImage(projectName, options) {
   // Push if requested
   if (options.push) {
     logInfo(`Pushing image to registry...`);
-    const pushResult = run(`docker push ${imageName}`);
+    const pushResult = run(`docker push ${fullImageRef}`);
 
     if (!pushResult.success) {
       logError("Push failed");
       process.exit(1);
     }
 
-    logSuccess(`Pushed: ${imageName}`);
+    logSuccess(`Pushed: ${fullImageRef}`);
   }
 
-  return imageName;
+  return fullImageRef;
 }
 
 // Main execution
@@ -266,4 +315,4 @@ if (require.main === module) {
   console.log(`\n📦 Image: ${imageName}\n`);
 }
 
-module.exports = { buildImage, parseArgs, findDockerfile };
+module.exports = { buildImage, parseArgs, findDockerfile, resolveImageName };

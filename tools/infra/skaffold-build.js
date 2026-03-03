@@ -64,10 +64,42 @@ function extractProjectName(image) {
 }
 
 /**
+ * Load image-name overrides from the centralized map.
+ * Maps image names (from Skaffold) back to project directories
+ * when the image name differs from the filesystem directory name.
+ */
+function loadImagePathOverrides() {
+  const mapPath = path.join(workspaceRoot, "tools/docker/image-name-map.json");
+  if (!fs.existsSync(mapPath)) return {};
+  const map = JSON.parse(fs.readFileSync(mapPath, "utf-8"));
+  // Invert: imageName → dockerfilePath (skaffold-build receives imageName, needs directory)
+  const overrides = {};
+  for (const [, entry] of Object.entries(map)) {
+    if (entry.imageName && entry.dockerfilePath) {
+      overrides[entry.imageName] = entry.dockerfilePath;
+    }
+  }
+  return overrides;
+}
+
+/**
  * Detect Dockerfile location for a project (scale-ready)
  * Searches common monorepo patterns
  */
 function detectDockerfile(projectName) {
+  // Check centralized image-name overrides first
+  const overrides = loadImagePathOverrides();
+  if (overrides[projectName]) {
+    const overridePath = `${overrides[projectName]}/Dockerfile`;
+    const abs = path.join(workspaceRoot, overridePath);
+    if (fs.existsSync(abs)) {
+      return overridePath;
+    }
+    throw new Error(
+      `Dockerfile not found at override path: ${overridePath}\n` + `Check tools/docker/image-name-map.json`,
+    );
+  }
+
   const searchPatterns = [
     `apps/${projectName}/Dockerfile`,
     `apps/services/${projectName}/Dockerfile`,
