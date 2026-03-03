@@ -14,9 +14,11 @@ def test_root_returns_service_info():
     def _clear_registry():
         registry._models.clear()
 
-    with patch("multi_model_inference.main._register_models", side_effect=_clear_registry):
-        with TestClient(app) as client:
-            response = client.get("/")
+    with patch(
+        "multi_model_inference.main._register_models",
+        side_effect=_clear_registry,
+    ), TestClient(app) as client:
+        response = client.get("/")
     assert response.status_code == 200
     data = response.json()
     assert "service" in data

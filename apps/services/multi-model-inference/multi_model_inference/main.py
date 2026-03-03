@@ -10,7 +10,19 @@ from multi_model_inference.core.model_registry import registry
 from multi_model_inference.models.sentence_embedder import MODEL_NAME, SentenceEmbedder
 from multi_model_inference.routers import embeddings, health, info, models
 
+
+class _ProbeLogFilter(logging.Filter):
+    """Suppress K8s probe endpoints from uvicorn access logs."""
+
+    _PROBE_PATHS = ("/health", "/ready")
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        return not any(p in msg for p in self._PROBE_PATHS)
+
+
 logging.basicConfig(level=logging.INFO)
+logging.getLogger("uvicorn.access").addFilter(_ProbeLogFilter())
 logger = logging.getLogger(__name__)
 
 
@@ -42,6 +54,8 @@ app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     lifespan=lifespan,
+    docs_url=None,  # Served via API Gateway's SwaggerForOcelot
+    redoc_url=None,  # Served via API Gateway's SwaggerForOcelot
 )
 
 # Include routers

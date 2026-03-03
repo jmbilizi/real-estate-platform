@@ -10,8 +10,13 @@ class EmbeddingRequest(BaseModel):
         ...,
         min_length=1,
         max_length=256,
-        description="List of text strings to embed (1-256 items, max 8192 chars each).",
-        json_schema_extra={"examples": [["Find me a 3-bedroom house near good schools"]]},
+        description=(
+            "List of text strings to embed"
+            " (1-256 items, max 8192 chars each)."
+        ),
+        json_schema_extra={
+            "examples": [["Find me a 3-bedroom house near good schools"]]
+        },
     )
 
     @model_validator(mode="after")
@@ -21,7 +26,9 @@ class EmbeddingRequest(BaseModel):
         for i, text in enumerate(self.input):
             if len(text) > max_chars:
                 raise ValueError(
-                    f"Input[{i}] exceeds maximum length of {max_chars} characters ({len(text)} given)."
+                    f"Input[{i}] exceeds maximum length"
+                    f" of {max_chars} characters"
+                    f" ({len(text)} given)."
                 )
         return self
 

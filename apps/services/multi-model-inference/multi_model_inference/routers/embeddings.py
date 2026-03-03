@@ -21,10 +21,16 @@ async def create_embeddings(request: EmbeddingRequest) -> EmbeddingResponse:
     try:
         model = registry.get(MODEL_NAME)
     except KeyError:
-        raise HTTPException(status_code=503, detail=f"Model '{MODEL_NAME}' is not available.")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Model '{MODEL_NAME}' is not available.",
+        ) from None
 
     if not model.is_ready:
-        raise HTTPException(status_code=503, detail=f"Model '{MODEL_NAME}' is still loading.")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Model '{MODEL_NAME}' is still loading.",
+        )
 
     embeddings = await run_in_threadpool(model.predict, request.input)
 

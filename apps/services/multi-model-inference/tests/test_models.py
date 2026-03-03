@@ -17,9 +17,11 @@ def test_list_models():
         registry._models.clear()
         registry.register("sentence-embedder", fake)
 
-    with patch("multi_model_inference.main._register_models", side_effect=_register):
-        with TestClient(app) as client:
-            response = client.get("/api/v1/models")
+    with patch(
+        "multi_model_inference.main._register_models",
+        side_effect=_register,
+    ), TestClient(app) as client:
+        response = client.get("/api/v1/models")
     assert response.status_code == 200
     data = response.json()
     assert len(data["models"]) == 1

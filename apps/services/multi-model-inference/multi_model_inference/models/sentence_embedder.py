@@ -11,7 +11,10 @@ logger = logging.getLogger(__name__)
 # Model identifier used in config and registry
 MODEL_NAME = "sentence-embedder"
 MODEL_ID = "BAAI/bge-small-en-v1.5"
-MODEL_DESCRIPTION = "Fast sentence embedding model (ONNX, ~50MB). Produces 384-dim vectors for semantic search, similarity, and RAG."
+MODEL_DESCRIPTION = (
+    "Fast sentence embedding model (ONNX, ~50MB). "
+    "Produces 384-dim vectors for semantic search, similarity, and RAG."
+)
 
 
 class SentenceEmbedder(InferenceModel):

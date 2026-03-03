@@ -1,7 +1,7 @@
 {
   "$comment": "Maps Nx project names to Docker image names when they differ. Used by skaffold-build.js, build-image.js, and .github/actions/build-push-image.",
   "multi-model-inference": {
-    "imageName": "inference",
+    "imageName": "inference-service",
     "dockerfilePath": "apps/services/multi-model-inference"
   }
 }

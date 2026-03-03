@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from multi_model_inference.core.model_registry import ModelRegistry, registry
+from multi_model_inference.core.model_registry import registry
 from multi_model_inference.main import app
 
 
@@ -53,9 +53,11 @@ def _make_client_with_fake_model():
 
 def test_embeddings_success():
     """Embeddings endpoint returns vectors for valid input."""
-    with _make_client_with_fake_model():
-        with TestClient(app) as client:
-            response = client.post("/api/v1/embeddings", json={"input": ["hello world"]})
+    with _make_client_with_fake_model(), TestClient(app) as client:
+        response = client.post(
+            "/api/v1/embeddings",
+            json={"input": ["hello world"]},
+        )
     assert response.status_code == 200
     data = response.json()
     assert data["model"] == "sentence-embedder"
@@ -67,12 +69,11 @@ def test_embeddings_success():
 
 def test_embeddings_multiple_inputs():
     """Embeddings endpoint handles multiple inputs."""
-    with _make_client_with_fake_model():
-        with TestClient(app) as client:
-            response = client.post(
-                "/api/v1/embeddings",
-                json={"input": ["text one", "text two", "text three"]},
-            )
+    with _make_client_with_fake_model(), TestClient(app) as client:
+        response = client.post(
+            "/api/v1/embeddings",
+            json={"input": ["text one", "text two", "text three"]},
+        )
     assert response.status_code == 200
     data = response.json()
     assert data["count"] == 3
@@ -81,19 +82,20 @@ def test_embeddings_multiple_inputs():
 
 def test_embeddings_empty_input_rejected():
     """Empty input list is rejected with 422."""
-    with _make_client_with_fake_model():
-        with TestClient(app) as client:
-            response = client.post("/api/v1/embeddings", json={"input": []})
+    with _make_client_with_fake_model(), TestClient(app) as client:
+        response = client.post(
+            "/api/v1/embeddings", json={"input": []}
+        )
     assert response.status_code == 422
 
 
 def test_embeddings_oversized_string_rejected():
     """A single string exceeding 8192 chars is rejected with 422."""
-    with _make_client_with_fake_model():
-        with TestClient(app) as client:
-            response = client.post(
-                "/api/v1/embeddings", json={"input": ["x" * 9000]}
-            )
+    with _make_client_with_fake_model(), TestClient(app) as client:
+        response = client.post(
+            "/api/v1/embeddings",
+            json={"input": ["x" * 9000]},
+        )
     assert response.status_code == 422
     assert "maximum length" in response.json()["detail"][0]["msg"]
 
@@ -107,12 +109,18 @@ def test_embeddings_model_not_loaded():
         registry.register("sentence-embedder", fake)
 
     # Don't load -- simulate startup failure
-    with patch("multi_model_inference.main._register_models", side_effect=_register):
-        with patch.object(registry, "load_all"):  # skip actual loading
-            with TestClient(app) as client:
-                response = client.post(
-                    "/api/v1/embeddings", json={"input": ["test"]}
-                )
+    with (
+        patch(
+            "multi_model_inference.main._register_models",
+            side_effect=_register,
+        ),
+        patch.object(registry, "load_all"),
+        TestClient(app) as client,
+    ):
+        response = client.post(
+            "/api/v1/embeddings",
+            json={"input": ["test"]},
+        )
     assert response.status_code == 503
 
 

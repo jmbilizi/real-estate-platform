@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     model_config = ConfigDict(env_prefix="", case_sensitive=False)
 
     # Service metadata
-    app_name: str = "Multi-Model Inference Service"
+    app_name: str = "Inference Service"
     app_version: str = "1.0.0"
 
     # Model configuration
