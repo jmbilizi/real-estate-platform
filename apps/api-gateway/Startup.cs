@@ -21,6 +21,10 @@ namespace ApiGateway
     /// <summary>
     /// Startup class for configuring the API Gateway services and middleware.
     /// </summary>
+    /// <remarks>
+    /// Downstream service routes are loaded from Configuration/Routes/*.json at startup.
+    /// Each route file declares Ocelot routes and SwaggerEndPoints for its service.
+    /// </remarks>
     [SuppressMessage("Performance", "CA1515:Consider making public types internal", Justification = "Used by ASP.NET Core via reflection")]
     public class Startup
     {
