@@ -17,7 +17,7 @@
 const { execSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
-const yaml = require("yaml");
+const yaml = require("js-yaml");
 
 const colors = {
   reset: "\x1b[0m",
@@ -132,7 +132,7 @@ function validateHetznerLocation(env) {
 
   try {
     // Extract cluster location
-    const clusterConfig = yaml.parse(fs.readFileSync(clusterConfigPath, "utf-8"));
+    const clusterConfig = yaml.load(fs.readFileSync(clusterConfigPath, "utf-8"));
 
     // hetzner-k3s uses masters_pool.locations (array) for cluster location
     const clusterLocation = clusterConfig.masters_pool?.locations?.[0];
@@ -142,7 +142,7 @@ function validateHetznerLocation(env) {
     }
 
     // Extract load balancer location
-    const serviceYaml = yaml.parse(fs.readFileSync(serviceYamlPath, "utf-8"));
+    const serviceYaml = yaml.load(fs.readFileSync(serviceYamlPath, "utf-8"));
     const lbLocation = serviceYaml.metadata?.annotations?.["load-balancer.hetzner.cloud/location"];
 
     if (!lbLocation) {
