@@ -197,6 +197,7 @@ jobs:
                 exit 1
               fi
 
+              PROJECTS=$(echo "$PROJECTS" | tr '\n' ' ' | xargs)
               echo "projects=$PROJECTS" >> $GITHUB_OUTPUT
 
               echo "📦 Projects to build:"
@@ -251,6 +252,7 @@ jobs:
             echo "🔍 DEBUG: Fallback all projects: '$PROJECTS'"
           fi
 
+          PROJECTS=$(echo "$PROJECTS" | tr '\n' ' ' | xargs)
           echo "projects=$PROJECTS" >> $GITHUB_OUTPUT
 
           if [ -n "$PROJECTS" ]; then
