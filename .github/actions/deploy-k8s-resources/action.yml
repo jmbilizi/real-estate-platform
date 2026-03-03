@@ -572,6 +572,24 @@ runs:
           echo "✅ No StatefulSet pod template changes detected - skipping restart"
         fi
 
+    - name: Restart Deployments (pull latest images)
+      shell: bash
+      run: |
+        echo "🔄 Restarting Deployments to pull latest images (mutable tags)..."
+        EXPECTED_DEPLOYS=$(yq -N e 'select(.kind=="Deployment") | ((.metadata.namespace // "default") + "/" + .metadata.name)' manifests.yaml 2>/dev/null | grep -v '^---$' || echo "")
+        if [ -z "$EXPECTED_DEPLOYS" ]; then
+          echo "ℹ️  No Deployments found in manifests — skipping restart"
+          exit 0
+        fi
+        for deploy_ref in $EXPECTED_DEPLOYS; do
+          DEPLOY_NS="${deploy_ref%%/*}"
+          DEPLOY_NAME="${deploy_ref##*/}"
+          echo "  🔄 Restarting Deployment/$DEPLOY_NAME (namespace: $DEPLOY_NS)..."
+          kubectl rollout restart deployment/"$DEPLOY_NAME" -n "$DEPLOY_NS" || true
+        done
+        echo "⏳ Waiting 10s for rollout restart to initiate..."
+        sleep 10
+
     - name: Wait for workload rollout
       id: rollout
       if: ${{ steps.pvc_cleanup.outputs.pvc_cleanup_ran != 'true' && steps.pvc_cleanup.outputs.rollout_success != 'true' }}
