@@ -1,0 +1,67 @@
+{
+  "ServiceName": "Inference",
+  "Active": true,
+  "Routes": [
+    {
+      "UpstreamPathTemplate": "/inference/embeddings",
+      "UpstreamHttpMethod": ["POST"],
+      "DownstreamPathTemplate": "/api/v1/embeddings",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "inference-svc",
+          "Port": 8000
+        }
+      ]
+    },
+    {
+      "UpstreamPathTemplate": "/inference/models",
+      "UpstreamHttpMethod": ["GET"],
+      "DownstreamPathTemplate": "/api/v1/models",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "inference-svc",
+          "Port": 8000
+        }
+      ]
+    },
+    {
+      "UpstreamPathTemplate": "/inference/health",
+      "UpstreamHttpMethod": ["GET"],
+      "DownstreamPathTemplate": "/health",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "inference-svc",
+          "Port": 8000
+        }
+      ]
+    },
+    {
+      "UpstreamPathTemplate": "/inference/ready",
+      "UpstreamHttpMethod": ["GET"],
+      "DownstreamPathTemplate": "/ready",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "inference-svc",
+          "Port": 8000
+        }
+      ]
+    }
+  ],
+  "SwaggerEndPoints": [
+    {
+      "Key": "Inference",
+      "TransformByOcelotConfig": true,
+      "Config": [
+        {
+          "Name": "Inference Service",
+          "Version": "v1",
+          "Url": "http://inference-svc:8000/openapi.json"
+        }
+      ]
+    }
+  ]
+}

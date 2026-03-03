@@ -8,6 +8,7 @@ using System.Text;
 using ApiGateway.Extensions;
 using ApiGateway.Services;
 using Microsoft.AspNetCore.HttpOverrides;
+using MMLib.SwaggerForOcelot.Configuration;
 using Ocelot.DependencyInjection;
 using Ocelot.Middleware;
 using OpenTelemetry.Exporter;
@@ -23,6 +24,13 @@ namespace ApiGateway
     [SuppressMessage("Performance", "CA1515:Consider making public types internal", Justification = "Used by ASP.NET Core via reflection")]
     public class Startup
     {
+        /// <summary>
+        /// Display name for the gateway's own docs in the Swagger UI dropdown.
+        /// Shared between <see cref="OcelotGatewayItSelfSwaggerGenOptions.GatewayDocsTitle"/>
+        /// and <c>urls.primaryName</c> so the gateway loads as the default selection.
+        /// </summary>
+        private const string GatewaySwaggerTitle = "Gateway";
+
         // LoggerMessage delegates for performance (CA1848)
         private static readonly Action<ILogger, Exception?> LogTracingDisabledAction =
             LoggerMessage.Define(
@@ -105,6 +113,12 @@ namespace ApiGateway
             {
                 option.GenerateDocsForGatewayItSelf = true;
             });
+
+            // Set the gateway's own docs title in the Swagger UI dropdown
+            services.PostConfigure<OcelotGatewayItSelfSwaggerGenOptions>(option =>
+            {
+                option.GatewayDocsTitle = GatewaySwaggerTitle;
+            });
         }
 
         /// <summary>
@@ -139,6 +153,19 @@ namespace ApiGateway
 
             app.UseAuthorization();
 
+            // Short-circuit .well-known requests (e.g. Chrome DevTools probe) before they reach
+            // Ocelot, which would log UnableToFindDownstreamRouteError warnings for every hit.
+            app.Use(async (context, next) =>
+            {
+                if (context.Request.Path.StartsWithSegments("/.well-known", StringComparison.OrdinalIgnoreCase))
+                {
+                    context.Response.StatusCode = 404;
+                    return;
+                }
+
+                await next().ConfigureAwait(false);
+            });
+
             // OpenTelemetry Prometheus exporter middleware (must be between UseRouting and UseEndpoints)
             app.UseOpenTelemetryPrometheusScrapingEndpoint();
 
@@ -158,10 +185,19 @@ namespace ApiGateway
                 endpoints.MapHealthChecks("/health/ready");
             });
 
-            app.UseSwaggerForOcelotUI(option =>
-            {
-                option.PathToSwaggerGenerator = "/swagger/docs";
-            });
+            app.UseSwaggerForOcelotUI(
+                option =>
+                {
+                    option.PathToSwaggerGenerator = "/swagger/docs";
+                },
+                uiOption =>
+                {
+                    // Make Gateway docs load as default instead of the first downstream service.
+                    // SwaggerForOcelot appends the gateway's own docs AFTER downstream services,
+                    // so without this, the first downstream service loads by default.
+                    // Swagger UI's "urls.primaryName" config selects the default entry by name.
+                    uiOption.ConfigObject.AdditionalItems["urls.primaryName"] = GatewaySwaggerTitle;
+                });
 
             app.UseOcelot().Wait();
         }
