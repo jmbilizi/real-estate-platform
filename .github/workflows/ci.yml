@@ -362,17 +362,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2 # Need HEAD and HEAD^ for diff
+          fetch-depth: 0 # Full history for accurate multi-commit diff
 
       - name: Detect infrastructure changes
         id: detect
         shell: bash
         run: |
-          # Get changed files between HEAD^ and HEAD
-          if git rev-parse HEAD^ >/dev/null 2>&1; then
-            FILES=$(git diff --name-only HEAD^ HEAD)
+          # Get changed files across ALL pushed commits (not just the last one).
+          # github.event.before = SHA the branch pointed to before this push.
+          # github.sha          = SHA the branch points to after this push.
+          # This correctly handles single-commit and multi-commit pushes alike.
+          BEFORE="${{ github.event.before }}"
+          if [ "$BEFORE" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE" 2>/dev/null; then
+            FILES=$(git diff --name-only "$BEFORE" "${{ github.sha }}")
           else
-            FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+            # First push to branch or force-push that rewrote the base — fall back to parent
+            FILES=$(git diff --name-only HEAD^ HEAD)
           fi
 
           echo "Changed files:"
