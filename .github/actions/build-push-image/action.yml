@@ -49,6 +49,9 @@ outputs:
   image:
     description: "Full image name with tag"
     value: ${{ steps.build.outputs.image }}
+  image-name:
+    description: "Resolved image name (may differ from project name)"
+    value: ${{ steps.resolve-name.outputs.image-name }}
   digest:
     description: "Image digest (sha256)"
     value: ${{ steps.build.outputs.digest }}
@@ -62,6 +65,25 @@ outputs:
 runs:
   using: "composite"
   steps:
+    - name: Resolve image name
+      id: resolve-name
+      shell: bash
+      run: |
+        # Check image-name-map.json for overrides (e.g., multi-model-inference → inference)
+        MAP_FILE="tools/docker/image-name-map.json"
+        PROJECT="${{ inputs.project }}"
+        IMAGE_NAME="$PROJECT"  # default: use project name as-is
+
+        if [ -f "$MAP_FILE" ]; then
+          MAPPED=$(jq -r --arg p "$PROJECT" '.[$p].imageName // empty' "$MAP_FILE")
+          if [ -n "$MAPPED" ]; then
+            IMAGE_NAME="$MAPPED"
+            echo "ℹ️  Image name override: $PROJECT → $IMAGE_NAME (from image-name-map.json)"
+          fi
+        fi
+
+        echo "image-name=$IMAGE_NAME" >> $GITHUB_OUTPUT
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
       with:
@@ -80,12 +102,12 @@ runs:
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ${{ inputs.registry }}/${{ inputs.owner }}/${{ inputs.repo }}/${{ inputs.project }}
+        images: ${{ inputs.registry }}/${{ inputs.owner }}/${{ inputs.repo }}/${{ steps.resolve-name.outputs.image-name }}
         tags: |
           type=raw,value=${{ inputs.tag }}
         labels: |
-          org.opencontainers.image.title=${{ inputs.project }}
-          org.opencontainers.image.description=${{ inputs.project }} service
+          org.opencontainers.image.title=${{ steps.resolve-name.outputs.image-name }}
+          org.opencontainers.image.description=${{ steps.resolve-name.outputs.image-name }} service
           org.opencontainers.image.vendor=Real Estate Platform
           org.opencontainers.image.source=https://github.com/${{ inputs.owner }}/${{ inputs.repo }}
           org.opencontainers.image.revision=${{ github.sha }}
@@ -95,21 +117,35 @@ runs:
       id: dockerfile
       shell: bash
       run: |
-        # Search for Dockerfile in common locations
-        if [ -f "apps/${{ inputs.project }}/Dockerfile" ]; then
-          echo "path=apps/${{ inputs.project }}/Dockerfile" >> $GITHUB_OUTPUT
+        PROJECT="${{ inputs.project }}"
+        MAP_FILE="tools/docker/image-name-map.json"
+
+        # Check image-name-map.json for explicit Dockerfile path override
+        if [ -f "$MAP_FILE" ]; then
+          OVERRIDE_PATH=$(jq -r --arg p "$PROJECT" '.[$p].dockerfilePath // empty' "$MAP_FILE")
+          if [ -n "$OVERRIDE_PATH" ] && [ -f "${OVERRIDE_PATH}/Dockerfile" ]; then
+            echo "path=${OVERRIDE_PATH}/Dockerfile" >> $GITHUB_OUTPUT
+            echo "context=." >> $GITHUB_OUTPUT
+            echo "✅ Found Dockerfile at ${OVERRIDE_PATH}/Dockerfile (from image-name-map.json)"
+            exit 0
+          fi
+        fi
+
+        # Fallback: search common locations
+        if [ -f "apps/${PROJECT}/Dockerfile" ]; then
+          echo "path=apps/${PROJECT}/Dockerfile" >> $GITHUB_OUTPUT
           echo "context=." >> $GITHUB_OUTPUT
-          echo "✅ Found Dockerfile at apps/${{ inputs.project }}/Dockerfile"
-        elif [ -f "apps/services/${{ inputs.project }}/Dockerfile" ]; then
-          echo "path=apps/services/${{ inputs.project }}/Dockerfile" >> $GITHUB_OUTPUT
+          echo "✅ Found Dockerfile at apps/${PROJECT}/Dockerfile"
+        elif [ -f "apps/services/${PROJECT}/Dockerfile" ]; then
+          echo "path=apps/services/${PROJECT}/Dockerfile" >> $GITHUB_OUTPUT
           echo "context=." >> $GITHUB_OUTPUT
-          echo "✅ Found Dockerfile at apps/services/${{ inputs.project }}/Dockerfile"
-        elif [ -f "libs/${{ inputs.project }}/Dockerfile" ]; then
-          echo "path=libs/${{ inputs.project }}/Dockerfile" >> $GITHUB_OUTPUT
+          echo "✅ Found Dockerfile at apps/services/${PROJECT}/Dockerfile"
+        elif [ -f "libs/${PROJECT}/Dockerfile" ]; then
+          echo "path=libs/${PROJECT}/Dockerfile" >> $GITHUB_OUTPUT
           echo "context=." >> $GITHUB_OUTPUT
-          echo "✅ Found Dockerfile at libs/${{ inputs.project }}/Dockerfile"
+          echo "✅ Found Dockerfile at libs/${PROJECT}/Dockerfile"
         else
-          echo "❌ Dockerfile not found for project: ${{ inputs.project }}"
+          echo "❌ Dockerfile not found for project: ${PROJECT}"
           exit 1
         fi
 
@@ -136,9 +172,9 @@ runs:
           COPY_CERTS=false
           MAXMIND_LICENSE_KEY=${{ inputs.maxmind-license-key }}
         cache-from: |
-          type=registry,ref=${{ inputs.registry }}/${{ inputs.owner }}/${{ inputs.repo }}/${{ inputs.project }}:buildcache
+          type=registry,ref=${{ inputs.registry }}/${{ inputs.owner }}/${{ inputs.repo }}/${{ steps.resolve-name.outputs.image-name }}:buildcache
           ${{ inputs.cache-from }}
-        cache-to: type=registry,ref=${{ inputs.registry }}/${{ inputs.owner }}/${{ inputs.repo }}/${{ inputs.project }}:buildcache,mode=max
+        cache-to: type=registry,ref=${{ inputs.registry }}/${{ inputs.owner }}/${{ inputs.repo }}/${{ steps.resolve-name.outputs.image-name }}:buildcache,mode=max
         provenance: true
         sbom: true
 
@@ -146,7 +182,7 @@ runs:
       id: info
       shell: bash
       run: |
-        IMAGE="${{ inputs.registry }}/${{ inputs.owner }}/${{ inputs.repo }}/${{ inputs.project }}:${{ inputs.tag }}"
+        IMAGE="${{ inputs.registry }}/${{ inputs.owner }}/${{ inputs.repo }}/${{ steps.resolve-name.outputs.image-name }}:${{ inputs.tag }}"
         echo "image=$IMAGE" >> $GITHUB_OUTPUT
 
         # Get image size if pushed
@@ -211,7 +247,7 @@ runs:
       if: always()
       shell: bash
       run: |
-        echo "## 🐳 Docker Build Summary: ${{ inputs.project }}" >> $GITHUB_STEP_SUMMARY
+        echo "## 🐳 Docker Build Summary: ${{ steps.resolve-name.outputs.image-name }}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
         echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY

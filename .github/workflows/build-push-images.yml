@@ -306,6 +306,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build and push ${{ matrix.project }}
+        id: build
         uses: ./.github/actions/build-push-image
         with:
           project: ${{ matrix.project }}
@@ -319,7 +320,7 @@ jobs:
         if: github.event_name != 'pull_request'
         shell: bash
         run: |
-          IMAGE_BASE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ matrix.project }}"
+          IMAGE_BASE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ steps.build.outputs.image-name }}"
 
           # Tag with 'dev' for easy deployment reference
           docker buildx imagetools create \
@@ -334,7 +335,7 @@ jobs:
         run: |
           mkdir -p artifacts
           cat > artifacts/${{ matrix.project }}-image.txt <<EOF
-          IMAGE=ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ matrix.project }}:${{ needs.detect-affected.outputs.tag }}
+          IMAGE=ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ steps.build.outputs.image-name }}:${{ needs.detect-affected.outputs.tag }}
           PROJECT=${{ matrix.project }}
           ENVIRONMENT=dev
           TAG=${{ needs.detect-affected.outputs.tag }}
@@ -366,6 +367,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build and push ${{ matrix.project }}
+        id: build
         uses: ./.github/actions/build-push-image
         with:
           project: ${{ matrix.project }}
@@ -379,7 +381,7 @@ jobs:
         if: github.event_name != 'pull_request'
         shell: bash
         run: |
-          IMAGE_BASE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ matrix.project }}"
+          IMAGE_BASE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ steps.build.outputs.image-name }}"
 
           # Tag with 'test' for easy deployment reference
           docker buildx imagetools create \
@@ -394,7 +396,7 @@ jobs:
         run: |
           mkdir -p artifacts
           cat > artifacts/${{ matrix.project }}-image.txt <<EOF
-          IMAGE=ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ matrix.project }}:${{ needs.detect-affected.outputs.tag }}
+          IMAGE=ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ steps.build.outputs.image-name }}:${{ needs.detect-affected.outputs.tag }}
           PROJECT=${{ matrix.project }}
           ENVIRONMENT=test
           TAG=${{ needs.detect-affected.outputs.tag }}
@@ -440,7 +442,7 @@ jobs:
         if: github.event_name != 'pull_request'
         shell: bash
         run: |
-          IMAGE_BASE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ matrix.project }}"
+          IMAGE_BASE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ steps.build.outputs.image-name }}"
 
           # Tag with 'latest' for production
           docker buildx imagetools create \
@@ -456,12 +458,12 @@ jobs:
         run: |
           mkdir -p artifacts
           cat > artifacts/${{ matrix.project }}-image.txt <<EOF
-          IMAGE=ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ matrix.project }}:${{ needs.detect-affected.outputs.tag }}
+          IMAGE=ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ steps.build.outputs.image-name }}:${{ needs.detect-affected.outputs.tag }}
           PROJECT=${{ matrix.project }}
           ENVIRONMENT=prod
           TAG=${{ needs.detect-affected.outputs.tag }}
           SHA=${{ github.sha }}
-          LATEST=ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ matrix.project }}:latest
+          LATEST=ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ steps.build.outputs.image-name }}:latest
           EOF
 
       - name: Upload deployment artifact
