@@ -190,7 +190,7 @@ function refreshPath() {
     if (result.status === 0 && result.stdout) {
       const newPath = result.stdout.trim();
       process.env.PATH = newPath;
-      logSuccess("PATH refreshed - Kustomize is now available in this session");
+      logSuccess("PATH refreshed - tools are now available in this session");
     }
   } catch (error) {
     logWarning(`Failed to refresh PATH: ${error.message}`);
@@ -218,8 +218,6 @@ function getLatestKustomizeVersion() {
 }
 
 function installKustomize() {
-  logStep("Installing Kustomize");
-
   // Check if already installed and in PATH
   if (checkKustomize()) {
     return true;
@@ -375,8 +373,6 @@ function checkKubectl() {
 }
 
 function installKubectl() {
-  logStep("Installing kubectl (optional - for dry-run validation)");
-
   if (checkKubectl()) {
     return true;
   }
@@ -497,8 +493,6 @@ function checkSkaffold() {
 }
 
 function installSkaffold() {
-  logStep("Installing Skaffold (for local K8s development workflow)");
-
   if (checkSkaffold()) {
     return true;
   }
@@ -562,29 +556,6 @@ function installSkaffold() {
     // Add to PATH
     addToPath(binDir);
 
-    // Windows: Refresh PATH from registry
-    if (platform === "win32") {
-      // Refresh PATH from registry (same as Kustomize)
-      try {
-        const { spawnSync } = require("child_process");
-        const refreshPathCmd =
-          "[System.Environment]::GetEnvironmentVariable('PATH', 'Machine') + ';' + [System.Environment]::GetEnvironmentVariable('PATH', 'User')";
-
-        const result = spawnSync("powershell", ["-NoProfile", "-Command", refreshPathCmd], {
-          encoding: "utf8",
-          stdio: "pipe",
-        });
-
-        if (result.status === 0 && result.stdout) {
-          const newPath = result.stdout.trim();
-          process.env.PATH = newPath;
-          logSuccess("PATH refreshed - Skaffold is now available in this session");
-        }
-      } catch (error) {
-        logWarning(`Failed to refresh PATH: ${error.message}`);
-      }
-    }
-
     // Verify installation
     if (checkSkaffold()) {
       logSuccess(`Skaffold v${version} installed successfully`);
@@ -603,9 +574,104 @@ function installSkaffold() {
     logWarning("Fallback: Install manually");
     logWarning("Windows: choco install skaffold");
     logWarning("macOS: brew install skaffold");
-    logWarning(
-      `Linux/Manual: curl -Lo skaffold ${downloadUrl} && chmod +x skaffold && sudo mv skaffold /usr/local/bin`,
-    );
+
+    return false;
+  }
+}
+
+function checkKind() {
+  const result = run("kind version", { silent: true });
+  if (result.success) {
+    const version = result.output.match(/v[\d.]+/)?.[0] || "unknown";
+    logSuccess(`kind already installed: ${version}`);
+    return true;
+  }
+  return false;
+}
+
+function installKind() {
+  if (checkKind()) {
+    return true;
+  }
+
+  const version = "0.26.0"; // Latest stable as of early 2026
+  const platform = os.platform();
+  const arch = os.arch();
+  const binDir = path.join(os.homedir(), ".local", "bin");
+  const binaryName = platform === "win32" ? "kind.exe" : "kind";
+  const binaryPath = path.join(binDir, binaryName);
+
+  // Check if binary exists but not in PATH
+  if (fs.existsSync(binaryPath)) {
+    log("kind binary found but not in PATH", "yellow");
+    addToPath(binDir);
+
+    // Verify it's now accessible
+    if (checkKind()) {
+      return true;
+    }
+  }
+
+  // Determine platform-specific download URL
+  let downloadUrl;
+
+  if (platform === "win32") {
+    downloadUrl = `https://github.com/kubernetes-sigs/kind/releases/download/v${version}/kind-windows-amd64`;
+  } else if (platform === "darwin") {
+    const macArch = arch === "arm64" ? "arm64" : "amd64";
+    downloadUrl = `https://github.com/kubernetes-sigs/kind/releases/download/v${version}/kind-darwin-${macArch}`;
+  } else {
+    // Linux
+    const linuxArch = arch === "arm64" ? "arm64" : "amd64";
+    downloadUrl = `https://github.com/kubernetes-sigs/kind/releases/download/v${version}/kind-linux-${linuxArch}`;
+  }
+
+  // Ensure bin directory exists
+  if (!fs.existsSync(binDir)) {
+    fs.mkdirSync(binDir, { recursive: true });
+    logSuccess(`Created ${binDir}`);
+  }
+
+  try {
+    log(`Downloading kind v${version} for ${platform}...`, "blue");
+
+    // Download the binary
+    const downloadCmd = `curl -L -o "${binaryPath}" "${downloadUrl}"`;
+    const downloadResult = run(downloadCmd, { silent: true });
+    if (!downloadResult.success) {
+      throw new Error("Download failed");
+    }
+
+    logSuccess("Download complete");
+
+    // Make executable on Unix-like systems
+    if (platform !== "win32") {
+      fs.chmodSync(binaryPath, 0o755);
+      logSuccess("Binary marked as executable");
+    }
+
+    // Add to PATH
+    addToPath(binDir);
+
+    // Verify installation
+    if (checkKind()) {
+      logSuccess(`kind v${version} installed successfully`);
+      return true;
+    } else {
+      throw new Error("Installation verification failed");
+    }
+  } catch (error) {
+    logError(`Failed to install kind: ${error.message}`);
+
+    // Clean up on failure
+    if (fs.existsSync(binaryPath)) {
+      fs.unlinkSync(binaryPath);
+    }
+
+    logWarning("Fallback: Install manually");
+    logWarning("Windows: choco install kind");
+    logWarning("macOS: brew install kind");
+    logWarning(`Linux/Manual: curl -Lo ./kind ${downloadUrl} && chmod +x ./kind && sudo mv ./kind /usr/local/bin/kind`);
 
     return false;
   }
@@ -617,10 +683,12 @@ function main() {
   log("\nThis script installs tools for Kubernetes infrastructure development:", "blue");
   log("  • Kustomize - Kubernetes manifest templating", "blue");
   log("  • Skaffold - Local K8s development workflow (watch/build/deploy)", "blue");
+  log("  • kind - Kubernetes in Docker (for local cluster management)", "blue");
   log("  • kubectl (optional) - Kubernetes CLI for dry-run validation\n", "blue");
 
   const kustomizeInstalled = installKustomize();
   const skaffoldInstalled = installSkaffold();
+  const kindInstalled = installKind();
   const kubectlInstalled = installKubectl();
 
   logStep("Setup Summary");
@@ -635,6 +703,12 @@ function main() {
     logSuccess("Skaffold is ready");
   } else {
     logWarning("Skaffold installation failed - install manually for local K8s dev workflow");
+  }
+
+  if (kindInstalled) {
+    logSuccess("kind is ready");
+  } else {
+    logWarning("kind installation failed - install manually for local cluster management");
   }
 
   if (kubectlInstalled) {
