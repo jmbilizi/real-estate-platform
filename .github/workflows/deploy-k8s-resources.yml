@@ -39,12 +39,18 @@ on:
         default: "all"
 
 jobs:
-  deploy-dev:
-    if: |
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev') ||
-      (github.event_name == 'workflow_call' && inputs.environment == 'dev')
+  deploy:
+    # Single matrix-driven job. Matrix expands to exactly ONE environment
+    # (the one the caller selected), so this replaces three near-identical
+    # deploy-{dev,test,prod} jobs. `environment: ${{ matrix.environment }}`
+    # ensures environment-scoped secrets still resolve per-env.
     runs-on: ubuntu-latest
-    environment: dev
+    environment: ${{ matrix.environment }}
+    strategy:
+      fail-fast: false
+      matrix:
+        environment:
+          - ${{ github.event.inputs.environment || inputs.environment }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -54,7 +60,7 @@ jobs:
         id: deploy-control
         uses: ./.github/actions/load-deploy-control
         with:
-          environment: dev
+          environment: ${{ matrix.environment }}
           deploy_strategy: ${{ github.event.inputs.deploy_strategy || inputs.deploy_strategy || 'all' }}
           services: ${{ github.event.inputs.services || inputs.services || 'all' }}
 
@@ -62,99 +68,7 @@ jobs:
         if: steps.deploy-control.outputs.deploy_allowed == 'true'
         uses: ./.github/actions/deploy-k8s-resources
         with:
-          kustomizePath: infra/k8s/hetzner/dev
-          kubeconfig: ${{ secrets.KUBECONFIG }}
-          deployStrategy: ${{ steps.deploy-control.outputs.deploy_strategy }}
-          services: ${{ steps.deploy-control.outputs.deploy_services }}
-          statefulset_timeout: ${{ steps.deploy-control.outputs.statefulset_timeout }}
-          deployment_timeout: ${{ steps.deploy-control.outputs.deployment_timeout }}
-          daemonset_timeout: ${{ steps.deploy-control.outputs.daemonset_timeout }}
-          rollback_on_failure: ${{ steps.deploy-control.outputs.rollback_on_failure }}
-          statefulset_rollback: ${{ steps.deploy-control.outputs.statefulset_rollback }}
-        env:
-          POSTGRES_SA_PASSWORD: ${{ secrets.POSTGRES_SA_PASSWORD }}
-          ACCOUNT_SERVICE_DB_USER_PASSWORD: ${{ secrets.ACCOUNT_SERVICE_DB_USER_PASSWORD }}
-          MESSAGING_SERVICE_DB_USER_PASSWORD: ${{ secrets.MESSAGING_SERVICE_DB_USER_PASSWORD }}
-          PROPERTY_SERVICE_DB_USER_PASSWORD: ${{ secrets.PROPERTY_SERVICE_DB_USER_PASSWORD }}
-          REDIS_ADMIN_PASSWORD: ${{ secrets.REDIS_ADMIN_PASSWORD }}
-          REDIS_PUBSUB_PASSWORD: ${{ secrets.REDIS_PUBSUB_PASSWORD }}
-          REDIS_CACHE_PASSWORD: ${{ secrets.REDIS_CACHE_PASSWORD }}
-          REDIS_RATELIMIT_PASSWORD: ${{ secrets.REDIS_RATELIMIT_PASSWORD }}
-          REDIS_MONITOR_PASSWORD: ${{ secrets.REDIS_MONITOR_PASSWORD }}
-          JAEGER_DOMAIN: ${{ secrets.JAEGER_DOMAIN }}
-          JAEGER_BASIC_AUTH: ${{ secrets.JAEGER_BASIC_AUTH }}
-          API_GATEWAY_DOMAIN: ${{ secrets.API_GATEWAY_DOMAIN }}
-
-  deploy-test:
-    if: |
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'test') ||
-      (github.event_name == 'workflow_call' && inputs.environment == 'test')
-    runs-on: ubuntu-latest
-    environment: test
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Load deployment control
-        id: deploy-control
-        uses: ./.github/actions/load-deploy-control
-        with:
-          environment: test
-          deploy_strategy: ${{ github.event.inputs.deploy_strategy || inputs.deploy_strategy || 'all' }}
-          services: ${{ github.event.inputs.services || inputs.services || 'all' }}
-
-      - name: Deploy K8s Resources (DRY composite)
-        if: steps.deploy-control.outputs.deploy_allowed == 'true'
-        uses: ./.github/actions/deploy-k8s-resources
-        with:
-          kustomizePath: infra/k8s/hetzner/test
-          kubeconfig: ${{ secrets.KUBECONFIG }}
-          deployStrategy: ${{ steps.deploy-control.outputs.deploy_strategy }}
-          services: ${{ steps.deploy-control.outputs.deploy_services }}
-          statefulset_timeout: ${{ steps.deploy-control.outputs.statefulset_timeout }}
-          deployment_timeout: ${{ steps.deploy-control.outputs.deployment_timeout }}
-          daemonset_timeout: ${{ steps.deploy-control.outputs.daemonset_timeout }}
-          rollback_on_failure: ${{ steps.deploy-control.outputs.rollback_on_failure }}
-          statefulset_rollback: ${{ steps.deploy-control.outputs.statefulset_rollback }}
-        env:
-          POSTGRES_SA_PASSWORD: ${{ secrets.POSTGRES_SA_PASSWORD }}
-          ACCOUNT_SERVICE_DB_USER_PASSWORD: ${{ secrets.ACCOUNT_SERVICE_DB_USER_PASSWORD }}
-          MESSAGING_SERVICE_DB_USER_PASSWORD: ${{ secrets.MESSAGING_SERVICE_DB_USER_PASSWORD }}
-          PROPERTY_SERVICE_DB_USER_PASSWORD: ${{ secrets.PROPERTY_SERVICE_DB_USER_PASSWORD }}
-          REDIS_ADMIN_PASSWORD: ${{ secrets.REDIS_ADMIN_PASSWORD }}
-          REDIS_PUBSUB_PASSWORD: ${{ secrets.REDIS_PUBSUB_PASSWORD }}
-          REDIS_CACHE_PASSWORD: ${{ secrets.REDIS_CACHE_PASSWORD }}
-          REDIS_RATELIMIT_PASSWORD: ${{ secrets.REDIS_RATELIMIT_PASSWORD }}
-          REDIS_MONITOR_PASSWORD: ${{ secrets.REDIS_MONITOR_PASSWORD }}
-          JAEGER_DOMAIN: ${{ secrets.JAEGER_DOMAIN }}
-          JAEGER_BASIC_AUTH: ${{ secrets.JAEGER_BASIC_AUTH }}
-          API_GATEWAY_DOMAIN: ${{ secrets.API_GATEWAY_DOMAIN }}
-
-  deploy-prod:
-    if: |
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod') ||
-      (github.event_name == 'workflow_call' && inputs.environment == 'prod')
-    runs-on: ubuntu-latest
-    environment: prod
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Load deployment control
-        id: deploy-control
-        uses: ./.github/actions/load-deploy-control
-        with:
-          environment: prod
-          deploy_strategy: ${{ github.event.inputs.deploy_strategy || inputs.deploy_strategy || 'all' }}
-          services: ${{ github.event.inputs.services || inputs.services || 'all' }}
-
-      - name: Deploy K8s Resources (DRY composite)
-        if: steps.deploy-control.outputs.deploy_allowed == 'true'
-        uses: ./.github/actions/deploy-k8s-resources
-        with:
-          kustomizePath: infra/k8s/hetzner/prod
+          kustomizePath: infra/k8s/hetzner/${{ matrix.environment }}
           kubeconfig: ${{ secrets.KUBECONFIG }}
           deployStrategy: ${{ steps.deploy-control.outputs.deploy_strategy }}
           services: ${{ steps.deploy-control.outputs.deploy_services }}
