@@ -59,8 +59,72 @@ jobs:
       - name: Check workspace formatting
         run: pnpm run nx:workspace-format-check
 
-  node:
+  detect-languages:
     needs: setup-base
+    runs-on: ubuntu-latest
+    outputs:
+      node: ${{ steps.filter.outputs.node == 'true' || steps.first-push.outputs.is_first == 'true' }}
+      python: ${{ steps.filter.outputs.python == 'true' || steps.first-push.outputs.is_first == 'true' }}
+      dotnet: ${{ steps.filter.outputs.dotnet == 'true' || steps.first-push.outputs.is_first == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Detect first push to branch (github.event.before is all zeros).
+      # Also treat workflow_call as "run all" since there's no before SHA to diff against.
+      - name: Detect first push
+        id: first-push
+        shell: bash
+        run: |
+          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ] || [ "${{ github.event_name }}" = "workflow_call" ]; then
+            echo "is_first=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_first=false" >> $GITHUB_OUTPUT
+          fi
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: steps.first-push.outputs.is_first == 'false'
+        with:
+          base: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+          ref: ${{ github.sha }}
+          filters: |
+            node:
+              - '**/*.ts'
+              - '**/*.tsx'
+              - '**/*.js'
+              - '**/*.jsx'
+              - '**/*.mjs'
+              - '**/*.cjs'
+              - '**/package.json'
+              - '**/tsconfig*.json'
+              - 'pnpm-lock.yaml'
+              - 'tools/node/**'
+            python:
+              - '**/*.py'
+              - '**/*.pyx'
+              - '**/*.pxd'
+              - '**/*.pyi'
+              - '**/*.ipynb'
+              - '**/pyproject.toml'
+              - 'uv.lock'
+              - 'tools/python/**'
+            dotnet:
+              - '**/*.cs'
+              - '**/*.vb'
+              - '**/*.csproj'
+              - '**/*.sln'
+              - '**/*.fsproj'
+              - '**/Directory.*.props'
+              - '**/Directory.*.targets'
+              - '**/nuget.config'
+              - '**/global.json'
+              - 'tools/dotnet/**'
+
+  node:
+    needs: [setup-base, detect-languages]
+    if: needs.detect-languages.outputs.node == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -100,21 +164,14 @@ jobs:
       # Note: We do NOT run nx:reset in CI to ensure we validate code exactly as committed.
       # If project tags or workspace state is incorrect, CI should fail (not auto-fix).
       # Developers should run 'pnpm run check' locally before pushing.
-
-      - name: Check Node.js formatting (PR - affected only)
-        if: github.event_name == 'pull_request'
-        run: pnpm exec nx format:check --base=origin/${{ github.base_ref }} --head=HEAD --projects=tag:runtime:node || echo "No affected Node.js projects"
-
-      - name: Check Node.js formatting (Push - all projects)
-        if: github.event_name == 'push'
-        run: pnpm exec nx format:check --projects=tag:runtime:node || echo "No Node.js projects found"
+      # Note: workspace format check already ran in setup-base; no need to repeat it here.
 
       - name: Lint Node.js projects (PR - affected only)
         if: github.event_name == 'pull_request'
         run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=lint --projects=tag:runtime:node || echo "No affected Node.js projects"
 
       - name: Lint Node.js projects (Push - all projects)
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         run: pnpm run nx:node-lint || echo "No Node.js projects found"
 
       - name: Test Node.js projects (PR - affected only)
@@ -122,7 +179,7 @@ jobs:
         run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:runtime:node || echo "No affected Node.js projects"
 
       - name: Test Node.js projects (Push - all projects)
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         run: pnpm run nx:node-test || echo "No Node.js projects found"
 
       - name: Build Node.js projects (PR - affected only)
@@ -130,7 +187,7 @@ jobs:
         run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=build --projects=tag:runtime:node || echo "No affected Node.js projects"
 
       - name: Build Node.js projects (Push - all projects)
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         run: pnpm run nx:node-build || echo "No Node.js projects found"
 
       - name: Upload Node.js artifacts
@@ -145,7 +202,8 @@ jobs:
           retention-days: 7
 
   python:
-    needs: setup-base
+    needs: [setup-base, detect-languages]
+    if: needs.detect-languages.outputs.python == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -210,7 +268,7 @@ jobs:
         run: uv run black --check . --exclude "(/\\.venv/|/node_modules/|/\\.git/|/\\.nx/|/__pycache__/|/dist/|/build/)" || echo "No affected Python projects"
 
       - name: Check Python formatting (Push - all projects)
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         run: uv run black --check . --exclude "(/\\.venv/|/node_modules/|/\\.git/|/\\.nx/|/__pycache__/|/dist/|/build/)" || echo "No Python projects found"
 
       - name: Lint Python projects (PR - affected only)
@@ -218,7 +276,7 @@ jobs:
         run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=lint --projects=tag:runtime:python || echo "No affected Python projects"
 
       - name: Lint Python projects (Push - all projects)
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         run: pnpm run nx:python-lint || echo "No Python projects found"
 
       - name: Test Python projects (PR - affected only)
@@ -226,7 +284,7 @@ jobs:
         run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:runtime:python || echo "No affected Python projects"
 
       - name: Test Python projects (Push - all projects)
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         run: pnpm run nx:python-test || echo "No Python projects found"
 
       - name: Build Python projects (PR - affected only)
@@ -234,7 +292,7 @@ jobs:
         run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=build --projects=tag:runtime:python || echo "No affected Python projects"
 
       - name: Build Python projects (Push - all projects)
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         run: pnpm run nx:python-build || echo "No Python projects found"
 
       - name: Upload Python artifacts
@@ -249,7 +307,8 @@ jobs:
           retention-days: 7
 
   dotnet:
-    needs: setup-base
+    needs: [setup-base, detect-languages]
+    if: needs.detect-languages.outputs.dotnet == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -311,7 +370,7 @@ jobs:
         run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=format-check --projects=tag:runtime:dotnet || echo "No affected .NET projects"
 
       - name: Check .NET formatting (Push - all projects)
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         run: pnpm run nx:dotnet-format-check || echo "No .NET projects found"
 
       - name: Lint .NET projects (PR - affected only)
@@ -319,7 +378,7 @@ jobs:
         run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=lint --projects=tag:runtime:dotnet || echo "No affected .NET projects"
 
       - name: Lint .NET projects (Push - all projects)
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         run: pnpm run nx:dotnet-lint || echo "No .NET projects found"
 
       - name: Test .NET projects (PR - affected only)
@@ -327,7 +386,7 @@ jobs:
         run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:runtime:dotnet || echo "No affected .NET projects"
 
       - name: Test .NET projects (Push - all projects)
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         run: pnpm run nx:dotnet-test || echo "No .NET projects found"
 
       - name: Build .NET projects (PR - affected only)
@@ -335,7 +394,7 @@ jobs:
         run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=build --projects=tag:runtime:dotnet || echo "No affected .NET projects"
 
       - name: Build .NET projects (Push - all projects)
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         run: pnpm run nx:dotnet-build || echo "No .NET projects found"
 
       - name: Upload .NET artifacts
@@ -351,7 +410,10 @@ jobs:
   # Detect which infrastructure workflows need to be triggered
   detect-infra-changes:
     needs: [node, python, dotnet] # Wait for all quality checks to pass
-    if: github.event_name == 'push' # Only trigger workflows on push, not PR
+    if: |
+      always() &&
+      github.event_name == 'push' &&
+      !contains(needs.*.result, 'failure')
     runs-on: ubuntu-latest
     outputs:
       cluster-changed: ${{ steps.detect.outputs.cluster-changed }}
