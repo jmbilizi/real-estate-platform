@@ -19,7 +19,9 @@ module.exports = [
       },
     },
     plugins: {
+      "@next/next": require("@next/eslint-plugin-next"),
       "@typescript-eslint": require("@typescript-eslint/eslint-plugin"),
+      "react-hooks": require("eslint-plugin-react-hooks"),
     },
     rules: {
       // Error prevention
@@ -88,6 +90,15 @@ module.exports = [
     },
   },
   {
-    ignores: ["node_modules/", "dist/", "**/*.d.ts", "coverage/"],
+    // Imported app baseline: keep hard errors, suppress warning-only strict typing rules.
+    files: ["apps/clients/cribstop/**/*.{ts,tsx,js,jsx}"],
+    rules: {
+      "@typescript-eslint/explicit-function-return-type": "off",
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-non-null-assertion": "off",
+    },
+  },
+  {
+    ignores: ["node_modules/", "dist/", "**/.next/**", "**/*.d.ts", "coverage/"],
   },
 ];

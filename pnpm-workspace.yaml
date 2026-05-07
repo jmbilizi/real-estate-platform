@@ -1,1 +1,7 @@
-packages: []
+packages:
+  # clients apps
+  - "apps/clients/cribstop/next"
+  # shared libs for web and mobile apps
+  # - "libs/expo-next"
+  # - "libs/next"
+  # - "libs/expo"

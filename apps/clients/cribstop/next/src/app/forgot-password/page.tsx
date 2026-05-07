@@ -1,0 +1,9 @@
+import AuthForm from "@/components/AuthForm";
+
+export default function ForgotPasswordPage() {
+  return (
+    <div className="flex min-h-[70vh] items-center justify-center px-4 py-16">
+      <AuthForm initialMode="forgot" />
+    </div>
+  );
+}

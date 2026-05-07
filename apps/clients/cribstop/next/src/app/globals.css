@@ -1,0 +1,188 @@
+.scrollbar-invisible {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE 10+ */
+}
+.scrollbar-invisible::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/Webkit */
+}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap");
+
+:root {
+  --brand: #ff385c;
+  --accent: #0e7c66;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply antialiased text-ink bg-white;
+}
+
+/* Hide horizontal scrollbar on category rails */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-full bg-brand px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-full border border-surface-border bg-white px-5 py-2.5 text-sm font-semibold text-ink transition hover:border-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2;
+  }
+  .btn-accent {
+    @apply inline-flex items-center justify-center rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2;
+  }
+  .input-field {
+    @apply w-full rounded-xl border border-surface-border bg-white px-4 py-2.5 text-sm text-ink placeholder:text-ink-subtle focus:border-ink focus:outline-none focus:ring-2 focus:ring-ink/10;
+  }
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-wide;
+  }
+  .section {
+    @apply mx-auto max-w-[1760px] px-6 sm:px-10 lg:px-20;
+  }
+}
+
+/* Leaflet overrides */
+.leaflet-container {
+  font-family: inherit;
+}
+
+/* Search bar panel enter animation */
+@keyframes searchPanelIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.search-panel-enter {
+  animation: searchPanelIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Expanded header search bar slide-down animation */
+@keyframes searchBarSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.search-bar-slide-down {
+  animation: searchBarSlideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.cribstop-price-marker,
+.cribstop-cluster {
+  background: transparent !important;
+  border: none !important;
+}
+.leaflet-popup-content-wrapper {
+  border-radius: 14px !important;
+  padding: 0 !important;
+  overflow: hidden;
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.18),
+    0 2px 6px rgba(0, 0, 0, 0.08) !important;
+}
+.leaflet-popup-content {
+  margin: 0 !important;
+  width: 240px !important;
+}
+.leaflet-popup-tip {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+.leaflet-control-zoom a {
+  border-radius: 10px !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  color: #222 !important;
+  font-weight: 700 !important;
+}
+.leaflet-control-zoom {
+  border: none !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12) !important;
+  border-radius: 10px !important;
+  overflow: hidden;
+}
+/* Hide default marker-cluster bubble styles */
+.marker-cluster-small,
+.marker-cluster-medium,
+.marker-cluster-large,
+.marker-cluster-small div,
+.marker-cluster-medium div,
+.marker-cluster-large div {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+.marker-cluster span {
+  display: none !important;
+}
+
+/* ── Header tabs ↔ pill smooth swap via data attribute ──────────────────────
+   data-header-pill is set synchronously on <html> by the scroll handler so
+   CSS transitions fire in the same paint flush — no React re-render lag.    */
+
+/* Tabs: visible by default, fade out when scrolled */
+.header-tabs {
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 200ms ease;
+}
+:root[data-header-pill] .header-tabs {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Pill: hidden by default, fade in when scrolled */
+.header-pill {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+}
+:root[data-header-pill] .header-pill {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* In-page search section: fade out, then collapse height after fade completes */
+.search-section {
+  opacity: 1;
+  transition: none; /* no fade-in — only the data-header-pill rule animates (fade-out direction) */
+}
+:root[data-header-pill] .search-section {
+  opacity: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+  /* opacity fades first (180ms), then height collapses instantly (0s delay = 180ms) */
+  transition:
+    opacity 180ms ease,
+    height 0s 180ms,
+    overflow 0s 180ms;
+}
+/* When Row 2 is open: keep SearchSection fully collapsed, no transition.
+   It snaps back to full height (invisible, opacity 0→1) only after Row 2 unmounts. */
+:root[data-header-expanded] .search-section {
+  opacity: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition: none;
+}
