@@ -52,14 +52,14 @@
     <PackageVersion Include="Ocelot" Version="24.1.0" />
     <PackageVersion Include="FluentValidation.AspNetCore" Version="11.3.0" />
     
-    <!-- OpenTelemetry packages (v1.15.0 - latest stable, fixes security vulnerabilities) -->
-    <PackageVersion Include="OpenTelemetry" Version="1.15.0" />
-    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.0" />
+    <!-- OpenTelemetry packages (patched release to address NU1902 advisories) -->
+    <PackageVersion Include="OpenTelemetry" Version="1.15.1" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.1" />
     <PackageVersion Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.10.0-beta.1" />
-    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.15.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.15.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.15.0" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.15.1" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.1" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.15.1" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.15.1" />
     
     <!-- Geolocation packages -->
     <PackageVersion Include="MaxMind.GeoIP2" Version="5.4.1" />
