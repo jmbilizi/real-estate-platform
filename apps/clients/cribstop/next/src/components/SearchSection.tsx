@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import { useEffect, useRef } from "react";
-import { useApp } from "@/lib/context";
-import CompactSearchBar from "./CompactSearchBar";
+import { useEffect, useRef } from 'react';
+import { useApp } from '@/lib/context';
+import CompactSearchBar from './CompactSearchBar';
 
 /**
  * SearchSection — drives header tabs ↔ compact pill swap.
@@ -20,12 +20,12 @@ export default function SearchSection() {
 
   useEffect(() => {
     // Set initial state — no pill at mount
-    document.documentElement.removeAttribute("data-header-pill");
+    document.documentElement.removeAttribute('data-header-pill');
     setShowHeaderPill(false);
     pillRef.current = false;
 
     // Compute header height once so the threshold is dynamic
-    const headerEl = document.querySelector("header");
+    const headerEl = document.querySelector('header');
     const headerH = headerEl?.getBoundingClientRect().height ?? 64;
 
     // Cache the section's offsetTop NOW (before any display:none hides it).
@@ -40,10 +40,10 @@ export default function SearchSection() {
       const shouldShow = window.scrollY > sectionTop - headerH + 4;
       // 1. Directly toggle the CSS attribute — zero React latency, same frame as scroll
       if (shouldShow) {
-        document.documentElement.setAttribute("data-header-pill", "");
-        window.dispatchEvent(new Event("searchbar:close"));
+        document.documentElement.setAttribute('data-header-pill', '');
+        window.dispatchEvent(new Event('searchbar:close'));
       } else {
-        document.documentElement.removeAttribute("data-header-pill");
+        document.documentElement.removeAttribute('data-header-pill');
       }
       // 2. Sync React state only when it actually changes (avoids excess re-renders)
       if (shouldShow !== pillRef.current) {
@@ -53,13 +53,13 @@ export default function SearchSection() {
     };
 
     check();
-    window.addEventListener("scroll", check, { passive: true });
-    window.addEventListener("resize", check, { passive: true });
+    window.addEventListener('scroll', check, { passive: true });
+    window.addEventListener('resize', check, { passive: true });
 
     return () => {
-      window.removeEventListener("scroll", check);
-      window.removeEventListener("resize", check);
-      document.documentElement.removeAttribute("data-header-pill");
+      window.removeEventListener('scroll', check);
+      window.removeEventListener('resize', check);
+      document.documentElement.removeAttribute('data-header-pill');
       setShowHeaderPill(true);
     };
   }, [setShowHeaderPill]);
@@ -80,15 +80,31 @@ export default function SearchSection() {
             strokeWidth={2.5}
             viewBox="0 0 24 24"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
           </svg>
           <div className="flex flex-col text-left min-w-0 flex-1">
             <span className="text-[14px] font-semibold text-ink leading-tight">Where to?</span>
-            <span className="text-[12px] text-ink-muted leading-snug">Anywhere · Anytime · Add guests</span>
+            <span className="text-[12px] text-ink-muted leading-snug">
+              Anywhere · Anytime · Add guests
+            </span>
           </div>
           <span className="flex-shrink-0 h-8 w-8 rounded-full border border-[rgba(0,0,0,0.12)] flex items-center justify-center">
-            <svg className="h-3.5 w-3.5 text-ink" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h13M3 8h9m-9 4h9m5-4v12m0 0l-4-4m4 4l4-4" />
+            <svg
+              className="h-3.5 w-3.5 text-ink"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M3 4h13M3 8h9m-9 4h9m5-4v12m0 0l-4-4m4 4l4-4"
+              />
             </svg>
           </span>
         </button>

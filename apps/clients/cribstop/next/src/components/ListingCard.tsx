@@ -1,22 +1,22 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { Listing } from "@/lib/types";
-import { formatPrice } from "@/lib/format";
-import { useApp } from "@/lib/context";
+import Link from 'next/link';
+import { Listing } from '@/lib/types';
+import { formatPrice } from '@/lib/format';
+import { useApp } from '@/lib/context';
 
 export default function ListingCard({ listing }: { listing: Listing }) {
   const { toggleSave, isSaved } = useApp();
   const saved = isSaved(listing.id);
 
   const badge = listing.openHouse
-    ? { label: "Open house", tone: "bg-white/95 text-ink" }
+    ? { label: 'Open house', tone: 'bg-white/95 text-ink' }
     : listing.priceReduced
-      ? { label: "Price reduced", tone: "bg-brand text-white" }
+      ? { label: 'Price reduced', tone: 'bg-brand text-white' }
       : listing.newConstruction
-        ? { label: "New construction", tone: "bg-emerald-600 text-white" }
+        ? { label: 'New construction', tone: 'bg-emerald-600 text-white' }
         : listing.featured
-          ? { label: "Featured", tone: "bg-ink text-white" }
+          ? { label: 'Featured', tone: 'bg-ink text-white' }
           : null;
 
   return (
@@ -47,10 +47,10 @@ export default function ListingCard({ listing }: { listing: Listing }) {
             toggleSave(listing.id);
           }}
           className="absolute right-3 top-3 transition hover:scale-110"
-          aria-label={saved ? "Unsave" : "Save"}
+          aria-label={saved ? 'Unsave' : 'Save'}
         >
           <svg
-            className={`h-7 w-7 drop-shadow ${saved ? "fill-brand stroke-white" : "fill-black/40 stroke-white"}`}
+            className={`h-7 w-7 drop-shadow ${saved ? 'fill-brand stroke-white' : 'fill-black/40 stroke-white'}`}
             viewBox="0 0 24 24"
             strokeWidth={2}
           >
@@ -83,8 +83,10 @@ export default function ListingCard({ listing }: { listing: Listing }) {
           {listing.beds} bd · {listing.baths} ba · {listing.sqft.toLocaleString()} sqft
         </p>
         <p className="mt-1 text-ink">
-          <span className="font-semibold">{formatPrice(listing.price, listing.listingType).split("/")[0]}</span>
-          {listing.listingType === "rent" && <span className="text-ink-muted"> /month</span>}
+          <span className="font-semibold">
+            {formatPrice(listing.price, listing.listingType).split('/')[0]}
+          </span>
+          {listing.listingType === 'rent' && <span className="text-ink-muted"> /month</span>}
         </p>
       </div>
     </Link>

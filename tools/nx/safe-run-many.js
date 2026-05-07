@@ -7,33 +7,33 @@
  * It's designed to avoid pipeline failures and provide clear error messages.
  */
 
-const { spawnSync, execSync } = require("child_process");
+const { spawnSync, execSync } = require('child_process');
 const args = process.argv.slice(2);
 
 // Extract target and project type for better error messages
-let target = "unknown";
-let projectType = "matching";
+let target = 'unknown';
+let projectType = 'matching';
 let hasTargetArg = false;
 let hasProjectsArg = false;
 
 // Parse arguments in format --name=value or --name value
 for (const arg of args) {
-  if (arg.startsWith("--target=")) {
-    target = arg.substring("--target=".length);
+  if (arg.startsWith('--target=')) {
+    target = arg.substring('--target='.length);
     hasTargetArg = true;
-  } else if (arg === "--target" && args.indexOf(arg) + 1 < args.length) {
+  } else if (arg === '--target' && args.indexOf(arg) + 1 < args.length) {
     target = args[args.indexOf(arg) + 1];
     hasTargetArg = true;
-  } else if (arg.startsWith("--projects=")) {
+  } else if (arg.startsWith('--projects=')) {
     hasProjectsArg = true;
-    const projectsArg = arg.substring("--projects=".length);
-    if (projectsArg.startsWith("tag:")) {
+    const projectsArg = arg.substring('--projects='.length);
+    if (projectsArg.startsWith('tag:')) {
       projectType = projectsArg.substring(4);
     }
-  } else if (arg === "--projects" && args.indexOf(arg) + 1 < args.length) {
+  } else if (arg === '--projects' && args.indexOf(arg) + 1 < args.length) {
     hasProjectsArg = true;
     const projectsArg = args[args.indexOf(arg) + 1];
-    if (projectsArg.startsWith("tag:")) {
+    if (projectsArg.startsWith('tag:')) {
       projectType = projectsArg.substring(4);
     }
   }
@@ -41,11 +41,11 @@ for (const arg of args) {
 
 // If no command-line args were provided, show usage
 if (args.length === 0 || !hasTargetArg || !hasProjectsArg) {
-  console.log("[NX] Running nx run-many command");
+  console.log('[NX] Running nx run-many command');
 
   // Just pass through to regular nx without special handling
-  const result = spawnSync("pnpm", ["exec", "nx", "run-many", ...args], {
-    stdio: "inherit",
+  const result = spawnSync('pnpm', ['exec', 'nx', 'run-many', ...args], {
+    stdio: 'inherit',
     shell: true,
   });
 
@@ -55,8 +55,8 @@ if (args.length === 0 || !hasTargetArg || !hasProjectsArg) {
 console.log(`[NX] Running nx run-many for ${projectType} projects with target "${target}"`);
 
 // Run the nx command
-const result = spawnSync("pnpm", ["exec", "nx", "run-many", ...args], {
-  stdio: "inherit",
+const result = spawnSync('pnpm', ['exec', 'nx', 'run-many', ...args], {
+  stdio: 'inherit',
   shell: true,
 });
 

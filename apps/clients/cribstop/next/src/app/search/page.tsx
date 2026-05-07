@@ -1,53 +1,60 @@
-"use client";
+'use client';
 
-import { Suspense, useEffect, useState } from "react";
-import ListingCard from "@/components/ListingCard";
-import ListingsMap from "@/components/ListingsMap";
-import SearchSection from "@/components/SearchSection";
-import listings from "@/lib/listings";
-import { useApp } from "@/lib/context";
+import { Suspense, useEffect, useState } from 'react';
+import ListingCard from '@/components/ListingCard';
+import ListingsMap from '@/components/ListingsMap';
+import SearchSection from '@/components/SearchSection';
+import listings from '@/lib/listings';
+import { useApp } from '@/lib/context';
 
-import { applyFilters } from "@/lib/filters";
-import type { SearchFilters } from "@/lib/types";
-import SortDropdown from "@/components/SortDropdown";
-import FilterModal, { countActiveFilters } from "@/components/FilterModal";
+import { applyFilters } from '@/lib/filters';
+import type { SearchFilters } from '@/lib/types';
+import SortDropdown from '@/components/SortDropdown';
+import FilterModal, { countActiveFilters } from '@/components/FilterModal';
 
 function parseFiltersFromUrl(): SearchFilters {
-  if (typeof window === "undefined") return {};
+  if (typeof window === 'undefined') return {};
   const params = new URLSearchParams(window.location.search);
   const filters: SearchFilters = {};
-  if (params.get("q")) filters.query = params.get("q")!;
-  if (params.get("zip")) filters.zip = params.get("zip")!;
-  if (params.get("street")) filters.street = params.get("street")!;
-  if (params.get("type") && params.get("type") !== "all") filters.listingType = params.get("type") as any;
-  if (params.get("minPrice")) filters.minPrice = Number(params.get("minPrice"));
-  if (params.get("maxPrice")) filters.maxPrice = Number(params.get("maxPrice"));
-  if (params.get("beds")) filters.beds = Number(params.get("beds"));
-  if (params.get("baths")) filters.baths = Number(params.get("baths"));
-  if (params.get("sort")) filters.sort = params.get("sort") as any;
+  if (params.get('q')) filters.query = params.get('q')!;
+  if (params.get('zip')) filters.zip = params.get('zip')!;
+  if (params.get('street')) filters.street = params.get('street')!;
+  if (params.get('type') && params.get('type') !== 'all')
+    filters.listingType = params.get('type') as any;
+  if (params.get('minPrice')) filters.minPrice = Number(params.get('minPrice'));
+  if (params.get('maxPrice')) filters.maxPrice = Number(params.get('maxPrice'));
+  if (params.get('beds')) filters.beds = Number(params.get('beds'));
+  if (params.get('baths')) filters.baths = Number(params.get('baths'));
+  if (params.get('sort')) filters.sort = params.get('sort') as any;
   // Add more params as needed
   return filters;
 }
 
 function SearchContent() {
-  const { savedIds, listingTab, setListingTab, searchLocation: location, setSearchLocation: setLocation } = useApp();
+  const {
+    savedIds,
+    listingTab,
+    setListingTab,
+    searchLocation: location,
+    setSearchLocation: setLocation,
+  } = useApp();
   // Sync context location from URL on mount and navigation
   useEffect(() => {
-    if (typeof window !== "undefined") {
+    if (typeof window !== 'undefined') {
       const updateFromUrl = () => {
         const params = new URLSearchParams(window.location.search);
-        const q = params.get("q") || "";
+        const q = params.get('q') || '';
         setLocation(q);
         setFilters(parseFiltersFromUrl());
       };
       updateFromUrl();
-      window.addEventListener("popstate", updateFromUrl);
-      window.addEventListener("pushstate", updateFromUrl);
-      window.addEventListener("replacestate", updateFromUrl);
+      window.addEventListener('popstate', updateFromUrl);
+      window.addEventListener('pushstate', updateFromUrl);
+      window.addEventListener('replacestate', updateFromUrl);
       return () => {
-        window.removeEventListener("popstate", updateFromUrl);
-        window.removeEventListener("pushstate", updateFromUrl);
-        window.removeEventListener("replacestate", updateFromUrl);
+        window.removeEventListener('popstate', updateFromUrl);
+        window.removeEventListener('pushstate', updateFromUrl);
+        window.removeEventListener('replacestate', updateFromUrl);
       };
     }
   }, []);
@@ -60,7 +67,7 @@ function SearchContent() {
 
   // Filters state — lazy-init from URL
   const [filters, setFilters] = useState<SearchFilters>(() =>
-    typeof window !== "undefined" ? parseFiltersFromUrl() : {},
+    typeof window !== 'undefined' ? parseFiltersFromUrl() : {},
   );
   // Two-phase geocode:
   //   Phase 1 — no polygon, ~300 bytes → sets map center immediately so tiles load fast
@@ -75,7 +82,7 @@ function SearchContent() {
     const zip = (location.match(/\b(\d{5})\b/) ?? [])[1];
 
     // Both requests fire immediately — phase 1 just resolves first (no polygon payload)
-    const base = "https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us";
+    const base = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us';
     const qParam = zip
       ? `postalcode=${zip}` // exact zip boundary, not the city that contains it
       : `q=${encodeURIComponent(location)}`;
@@ -104,7 +111,7 @@ function SearchContent() {
         }
         const geo = data[0].geojson;
 
-        if (geo?.type === "Polygon" || geo?.type === "MultiPolygon") {
+        if (geo?.type === 'Polygon' || geo?.type === 'MultiPolygon') {
           // Real OSM boundary relation — use as-is (cities, counties, neighbourhoods)
           setSearchPolygon(geo as object);
         } else if (zip) {
@@ -116,7 +123,7 @@ function SearchContent() {
             .then((fc: { features?: Array<{ geometry?: { type: string } }> }) => {
               if (cancelled) return;
               const geom = fc.features?.[0]?.geometry;
-              if (geom?.type === "Polygon" || geom?.type === "MultiPolygon") {
+              if (geom?.type === 'Polygon' || geom?.type === 'MultiPolygon') {
                 setSearchPolygon(geom as object);
               } else {
                 setSearchPolygon(null);
@@ -148,21 +155,21 @@ function SearchContent() {
   const filtered = applyFilters(listings, filters);
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pagedResults = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const heading = "Search results";
+  const heading = 'Search results';
 
   return (
     <div className="flex flex-col">
       {/* Mobile tab strip — desktop uses header tabs */}
       <div className="md:hidden flex border-b border-surface-border bg-white">
-        {(["for-sale", "for-rent"] as const).map((tab) => (
+        {(['for-sale', 'for-rent'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setListingTab(tab)}
             className={`relative flex-1 py-3 text-sm font-semibold transition-colors duration-150 focus:outline-none ${
-              listingTab === tab ? "text-ink" : "text-ink-muted"
+              listingTab === tab ? 'text-ink' : 'text-ink-muted'
             }`}
           >
-            {tab === "for-sale" ? "For Sale" : "For Rent"}
+            {tab === 'for-sale' ? 'For Sale' : 'For Rent'}
             {listingTab === tab && (
               <span className="absolute bottom-0 left-1/2 h-[2px] w-12 -translate-x-1/2 rounded-full bg-ink" />
             )}
@@ -177,10 +184,12 @@ function SearchContent() {
       <div className="border-b border-surface-border bg-white">
         <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 sm:px-10 lg:px-20">
           <div>
-            <h1 className="font-display text-lg font-extrabold tracking-tight sm:text-xl">{heading}</h1>
+            <h1 className="font-display text-lg font-extrabold tracking-tight sm:text-xl">
+              {heading}
+            </h1>
             <p className="text-xs text-ink-muted">
               <span className="font-semibold text-ink">{filtered.length}</span> home
-              {filtered.length !== 1 ? "s" : ""} · DC · MD · VA
+              {filtered.length !== 1 ? 's' : ''} · DC · MD · VA
             </p>
           </div>
           <div className="ml-auto flex items-center gap-2 relative">
@@ -189,8 +198,8 @@ function SearchContent() {
               onClick={() => setFilterOpen(true)}
               className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition hover:shadow-sm active:scale-[0.98] ${
                 countActiveFilters(filters) > 0
-                  ? "border-ink bg-ink/5 text-ink"
-                  : "border-surface-border bg-white text-ink hover:border-ink/40"
+                  ? 'border-ink bg-ink/5 text-ink'
+                  : 'border-surface-border bg-white text-ink hover:border-ink/40'
               }`}
               aria-label="Open filters"
             >
@@ -220,12 +229,16 @@ function SearchContent() {
               Sort By
             </label>
             <SortDropdown
-              value={filters.sort || "recommended"}
+              value={filters.sort || 'recommended'}
               onChange={(v) => {
                 if (!v) return;
                 const params = new URLSearchParams(window.location.search);
-                params.set("sort", String(v));
-                window.history.pushState({}, "", `${window.location.pathname}?${params.toString()}`);
+                params.set('sort', String(v));
+                window.history.pushState(
+                  {},
+                  '',
+                  `${window.location.pathname}?${params.toString()}`,
+                );
                 setPage(1);
               }}
             />
@@ -255,7 +268,11 @@ function SearchContent() {
             <>
               <div className="grid gap-8 gap-y-12 grid-cols-1 sm:grid-cols-2">
                 {pagedResults.map((l) => (
-                  <div key={l.id} onMouseEnter={() => setHoveredId(l.id)} onMouseLeave={() => setHoveredId(null)}>
+                  <div
+                    key={l.id}
+                    onMouseEnter={() => setHoveredId(l.id)}
+                    onMouseLeave={() => setHoveredId(null)}
+                  >
                     <ListingCard listing={l} />
                   </div>
                 ))}
@@ -276,10 +293,12 @@ function SearchContent() {
                         <button
                           key={p}
                           className={`px-3 py-1.5 rounded-full font-semibold transition ${
-                            p === page ? "bg-ink text-white shadow" : "text-ink-muted hover:text-ink"
+                            p === page
+                              ? 'bg-ink text-white shadow'
+                              : 'text-ink-muted hover:text-ink'
                           }`}
                           onClick={() => setPage(p)}
-                          aria-current={p === page ? "page" : undefined}
+                          aria-current={p === page ? 'page' : undefined}
                         >
                           {p}
                         </button>
@@ -326,12 +345,24 @@ function EmptyState({ onClear }: { onClear: () => void }) {
   return (
     <div className="rounded-3xl border border-dashed border-surface-border bg-surface-alt/60 py-20 text-center">
       <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-sm">
-        <svg className="h-7 w-7 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        <svg
+          className="h-7 w-7 text-ink-muted"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+          />
         </svg>
       </div>
       <p className="mt-5 font-display text-xl font-bold">No homes match your filters</p>
-      <p className="mt-1 text-sm text-ink-muted">Try widening your price range or removing a filter.</p>
+      <p className="mt-1 text-sm text-ink-muted">
+        Try widening your price range or removing a filter.
+      </p>
       <button onClick={onClear} className="btn-primary mt-5 text-sm">
         Clear all filters
       </button>
@@ -341,7 +372,11 @@ function EmptyState({ onClear }: { onClear: () => void }) {
 
 export default function SearchPage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center py-24 text-ink-muted">Loading search…</div>}>
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-24 text-ink-muted">Loading search…</div>
+      }
+    >
       <SearchContent />
     </Suspense>
   );

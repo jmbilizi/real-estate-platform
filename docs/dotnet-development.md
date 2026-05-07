@@ -41,7 +41,8 @@ This script:
   - **Test projects**: build, test, lint, format, format-check
   - **Libraries**: build, lint, format, format-check
 
-> **Note**: This also runs automatically as part of `pnpm run nx:reset` and during pre-commit hooks, ensuring solution files stay synchronized.
+> **Note**: This also runs automatically as part of `pnpm run nx:reset` and during pre-commit hooks,
+> ensuring solution files stay synchronized.
 
 ## Configuration
 

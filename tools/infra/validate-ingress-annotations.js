@@ -11,16 +11,16 @@
  * Runs as part of pre-commit hook.
  */
 
-const fs = require("fs");
-const path = require("path");
-const yaml = require("js-yaml");
+const fs = require('fs');
+const path = require('path');
+const yaml = require('js-yaml');
 
-const INGRESS_BASE_DIR = path.join(__dirname, "../../infra/k8s/base/ingresses");
+const INGRESS_BASE_DIR = path.join(__dirname, '../../infra/k8s/base/ingresses');
 const INGRESS_PATCH_DIRS = [
-  path.join(__dirname, "../../infra/k8s/podman/local/patches/ingresses"),
-  path.join(__dirname, "../../infra/k8s/hetzner/dev/patches/ingresses"),
-  path.join(__dirname, "../../infra/k8s/hetzner/test/patches/ingresses"),
-  path.join(__dirname, "../../infra/k8s/hetzner/prod/patches/ingresses"),
+  path.join(__dirname, '../../infra/k8s/podman/local/patches/ingresses'),
+  path.join(__dirname, '../../infra/k8s/hetzner/dev/patches/ingresses'),
+  path.join(__dirname, '../../infra/k8s/hetzner/test/patches/ingresses'),
+  path.join(__dirname, '../../infra/k8s/hetzner/prod/patches/ingresses'),
 ];
 
 /**
@@ -28,10 +28,10 @@ const INGRESS_PATCH_DIRS = [
  */
 function getAnnotations(filePath) {
   try {
-    const content = fs.readFileSync(filePath, "utf8");
+    const content = fs.readFileSync(filePath, 'utf8');
     const doc = yaml.load(content);
 
-    if (!doc || doc.kind !== "Ingress") {
+    if (!doc || doc.kind !== 'Ingress') {
       return null;
     }
 
@@ -55,7 +55,7 @@ function findIngressFiles(dir) {
 
   return fs
     .readdirSync(dir)
-    .filter((file) => file.endsWith(".ingress.yaml"))
+    .filter((file) => file.endsWith('.ingress.yaml'))
     .map((file) => path.join(dir, file));
 }
 
@@ -63,7 +63,7 @@ function findIngressFiles(dir) {
  * Main validation logic
  */
 function validateIngressAnnotations() {
-  console.log("🔍 Validating ingress annotations for conflicts...\n");
+  console.log('🔍 Validating ingress annotations for conflicts...\n');
 
   let hasErrors = false;
 
@@ -106,15 +106,15 @@ function validateIngressAnnotations() {
         console.error(`❌ Annotation conflict detected:`);
         console.error(`   Base:  ${base.file}`);
         console.error(`   Patch: ${relPath}`);
-        console.error(`   Conflicting annotations: ${conflicts.join(", ")}`);
-        console.error("");
+        console.error(`   Conflicting annotations: ${conflicts.join(', ')}`);
+        console.error('');
 
         conflicts.forEach((key) => {
           console.error(`   "${key}":`);
           console.error(`     Base:  "${base.annotations[key]}"`);
           console.error(`     Patch: "${patch.annotations[key]}"`);
         });
-        console.error("\n   ⚠️  Patch will silently override base value!\n");
+        console.error('\n   ⚠️  Patch will silently override base value!\n');
       }
     });
   });
@@ -128,16 +128,16 @@ function validateIngressAnnotations() {
   });
 
   if (hasErrors) {
-    console.error("❌ Ingress annotation validation FAILED\n");
-    console.error("Resolution:");
-    console.error("  1. Remove conflicting annotation keys from patches");
-    console.error("  2. Keep common annotations (WebSocket, session affinity) in base only");
-    console.error("  3. Keep env-specific annotations (cert-manager, security) in patches only");
-    console.error("  4. Run validation again: node tools/infra/validate-ingress-annotations.js\n");
+    console.error('❌ Ingress annotation validation FAILED\n');
+    console.error('Resolution:');
+    console.error('  1. Remove conflicting annotation keys from patches');
+    console.error('  2. Keep common annotations (WebSocket, session affinity) in base only');
+    console.error('  3. Keep env-specific annotations (cert-manager, security) in patches only');
+    console.error('  4. Run validation again: node tools/infra/validate-ingress-annotations.js\n');
     process.exit(1);
   }
 
-  console.log("✅ No annotation conflicts detected\n");
+  console.log('✅ No annotation conflicts detected\n');
   process.exit(0);
 }
 

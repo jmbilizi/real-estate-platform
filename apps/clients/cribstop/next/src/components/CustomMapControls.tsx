@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useMap } from "react-leaflet";
+import { useEffect, useState } from 'react';
+import { useMap } from 'react-leaflet';
 
 // Custom zoom and fullscreen controls styled for top right
 export function CustomMapControls() {
@@ -8,23 +8,23 @@ export function CustomMapControls() {
   useEffect(() => {
     const container = map.getContainer();
     if (fullscreen) {
-      container.classList.add("fullscreen-map");
+      container.classList.add('fullscreen-map');
     } else {
-      container.classList.remove("fullscreen-map");
+      container.classList.remove('fullscreen-map');
     }
-    return () => container.classList.remove("fullscreen-map");
+    return () => container.classList.remove('fullscreen-map');
   }, [fullscreen, map]);
   return (
     <div
       style={{
-        position: "absolute",
+        position: 'absolute',
         top: 24,
         right: 24,
         zIndex: 1000,
-        display: "flex",
-        flexDirection: "column",
+        display: 'flex',
+        flexDirection: 'column',
         gap: 18,
-        alignItems: "start",
+        alignItems: 'start',
       }}
     >
       {/* Fullscreen button */}
@@ -32,18 +32,18 @@ export function CustomMapControls() {
         aria-label="Toggle fullscreen"
         onClick={() => setFullscreen((f) => !f)}
         style={{
-          background: "#fff",
-          border: "none",
-          borderRadius: "50%",
-          boxShadow: "0 4px 16px 0 rgba(34,34,34,0.10)",
+          background: '#fff',
+          border: 'none',
+          borderRadius: '50%',
+          boxShadow: '0 4px 16px 0 rgba(34,34,34,0.10)',
           width: 44,
           height: 44,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          cursor: "pointer",
-          margin: "0 auto 8px auto",
-          transition: "box-shadow 0.15s, background 0.15s",
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          margin: '0 auto 8px auto',
+          transition: 'box-shadow 0.15s, background 0.15s',
         }}
       >
         <svg
@@ -65,13 +65,13 @@ export function CustomMapControls() {
       {/* Zoom controls */}
       <div
         style={{
-          background: "#fff",
+          background: '#fff',
           borderRadius: 18,
-          boxShadow: "0 4px 16px 0 rgba(34,34,34,0.10)",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          overflow: "hidden",
+          boxShadow: '0 4px 16px 0 rgba(34,34,34,0.10)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          overflow: 'hidden',
           width: 48,
         }}
       >
@@ -81,17 +81,17 @@ export function CustomMapControls() {
           style={{
             width: 48,
             height: 38,
-            border: "none",
-            background: "none",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
+            border: 'none',
+            background: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
             fontSize: 24,
-            color: "#222",
-            borderBottom: "1px solid #e5e7eb",
+            color: '#222',
+            borderBottom: '1px solid #e5e7eb',
             borderRadius: 0,
-            transition: "background 0.15s",
+            transition: 'background 0.15s',
           }}
         >
           <svg
@@ -114,16 +114,16 @@ export function CustomMapControls() {
           style={{
             width: 48,
             height: 38,
-            border: "none",
-            background: "none",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
+            border: 'none',
+            background: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
             fontSize: 24,
-            color: "#222",
+            color: '#222',
             borderRadius: 0,
-            transition: "background 0.15s",
+            transition: 'background 0.15s',
           }}
         >
           <svg

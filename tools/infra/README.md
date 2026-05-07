@@ -2,7 +2,8 @@
 
 Automated tooling for Kubernetes infrastructure development and validation.
 
-**Multi-Cloud Ready**: Automatically detects and validates all cloud providers in `infra/k8s/` (Hetzner, AWS, GCP, Azure, etc.)
+**Multi-Cloud Ready**: Automatically detects and validates all cloud providers in `infra/k8s/`
+(Hetzner, AWS, GCP, Azure, etc.)
 
 ## Quick Start
 
@@ -199,11 +200,13 @@ Everything else stays in `base/` and is shared.
 
 ## Local Kubernetes Resource Operations (Kind+Podman)
 
-The following scripts ensure all resource operations are always run against your intended local cluster context (typically `kind-<cluster_name>`).
+The following scripts ensure all resource operations are always run against your intended local
+cluster context (typically `kind-<cluster_name>`).
 
 **Why?**
 
-- Prevents accidental application of resources to the wrong cluster (especially if you use multiple clusters or cloud contexts).
+- Prevents accidental application of resources to the wrong cluster (especially if you use multiple
+  clusters or cloud contexts).
 - Automatically switches `kubectl` to the correct context before running any resource command.
 
 ## Usage
@@ -240,11 +243,13 @@ These scripts use `tools/infra/run-skaffold.js` to:
 
 ## Customizing the Cluster Name
 
-If you change your local cluster name in `infra/k8s/podman/local/cluster/cluster-config.yaml`, the resource scripts will automatically pick it up.
+If you change your local cluster name in `infra/k8s/podman/local/cluster/cluster-config.yaml`, the
+resource scripts will automatically pick it up.
 
 ## Troubleshooting
 
-**Deploy app without rebuilding** (only works if the image is already present in the Kind node image store with the expected tag):
+**Deploy app without rebuilding** (only works if the image is already present in the Kind node image
+store with the expected tag):
 
 ```bash
 node tools/infra/run-skaffold.js run --skip-build

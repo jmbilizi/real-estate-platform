@@ -1,10 +1,13 @@
 # CI/CD Pipeline Documentation
 
-This document describes the Continuous Integration and Continuous Deployment pipeline for the polyglot monorepo.
+This document describes the Continuous Integration and Continuous Deployment pipeline for the
+polyglot monorepo.
 
 ## Overview
 
-The CI pipeline is implemented using GitHub Actions and supports builds for Node.js/TypeScript, Python, and .NET projects. The workflow is optimized for efficiency with a shared setup phase and parallel language-specific jobs.
+The CI pipeline is implemented using GitHub Actions and supports builds for Node.js/TypeScript,
+Python, and .NET projects. The workflow is optimized for efficiency with a shared setup phase and
+parallel language-specific jobs.
 
 ## Workflow Architecture
 
@@ -187,7 +190,8 @@ pnpm run nx:node-test
 **How it works:**
 
 1. Nx analyzes the dependency graph of your monorepo
-2. For PRs: Compares PR branch (`HEAD`) against **target branch** (`github.base_ref` - could be dev, test, or main)
+2. For PRs: Compares PR branch (`HEAD`) against **target branch** (`github.base_ref` - could be dev,
+   test, or main)
 3. For pushes: Runs full suite on the pushed branch
 4. Identifies which projects are affected by the changes
 5. Runs targets (test/lint/build) only for affected projects (PRs) or all projects (pushes)
@@ -229,7 +233,8 @@ This enforces code style discipline and prevents masking formatting issues.
 
 ### CD Architecture
 
-**CI-driven selective triggering system** ensures workflows only appear when they have relevant work to do:
+**CI-driven selective triggering system** ensures workflows only appear when they have relevant work
+to do:
 
 ```
 ci.yml (quality checks + change detection)
@@ -249,7 +254,8 @@ ci.yml (quality checks + change detection)
 2. `provision-hetzner-k8s-cluster.yml` - Cluster creation (triggered by CI)
 3. `deploy-k8s-resources.yml` - Resource deployment (triggered by CI or Provision)
 
-**Key Principle:** CI detects which workflows need to run AFTER quality checks pass, then explicitly triggers ONLY those workflows via GitHub CLI.
+**Key Principle:** CI detects which workflows need to run AFTER quality checks pass, then explicitly
+triggers ONLY those workflows via GitHub CLI.
 
 ### deploy-k8s-resources.yml (Primary Deployment)
 
@@ -312,7 +318,8 @@ jobs:
 
 **Automatic cert-manager Installation:**
 
-cert-manager v1.13.3 + `letsencrypt-prod` ClusterIssuer installed during cluster provisioning via `additional_post_k3s_commands` in cluster-config.yaml:
+cert-manager v1.13.3 + `letsencrypt-prod` ClusterIssuer installed during cluster provisioning via
+`additional_post_k3s_commands` in cluster-config.yaml:
 
 - Runs on first master node only (prevents race conditions)
 - Waits for deployment readiness (180s timeout)
@@ -412,7 +419,8 @@ Resources deployed to new cluster
 
 **Result:** ONLY Provision workflow appears in Actions (then Deploy when Provision completes)
 
-**2. Deploy files change** (`infra/k8s/base/`, `deploy-control.yaml`, `patches/`, deploy workflow, deploy action):
+**2. Deploy files change** (`infra/k8s/base/`, `deploy-control.yaml`, `patches/`, deploy workflow,
+deploy action):
 
 ```
 Push to dev branch
@@ -445,7 +453,8 @@ Provision workflow runs → triggers Deploy via workflow_call
 ```
 
 **Result:** ONLY Provision workflow appears (then Deploy)  
-**Why:** Cluster changes take precedence; trigger-deploy condition excludes when cluster-changed=true
+**Why:** Cluster changes take precedence; trigger-deploy condition excludes when
+cluster-changed=true
 
 **4. Unrelated files change** (`README.md`, `src/`, `docs/`):
 
@@ -461,7 +470,8 @@ No trigger jobs run
 
 **Result:** ONLY CI workflow appears in Actions
 
-**5. Provision workflow files change** (`.github/workflows/provision-hetzner-k8s-cluster.yml`, `.github/actions/provision-hetzner-k8s-cluster/`):
+**5. Provision workflow files change** (`.github/workflows/provision-hetzner-k8s-cluster.yml`,
+`.github/actions/provision-hetzner-k8s-cluster/`):
 
 ```
 Push to dev branch
@@ -477,7 +487,8 @@ Provision workflow runs (validates workflow changes)
 
 **Result:** Provision workflow appears (validates workflow changes)
 
-**6. Deploy workflow files change** (`.github/workflows/deploy-k8s-resources.yml`, `.github/actions/deploy-k8s-resources/`):
+**6. Deploy workflow files change** (`.github/workflows/deploy-k8s-resources.yml`,
+`.github/actions/deploy-k8s-resources/`):
 
 ```
 Push to dev branch
@@ -498,7 +509,8 @@ Deploy workflow runs (validates workflow changes)
 - **Explicit triggering**: CI uses `gh workflow run` to trigger provision/deploy ONLY when needed
 - **No unnecessary workflows**: Workflows only appear when they have work to do
 - **CI always enforced**: Quality checks MUST pass before any infrastructure operations
-- **Cluster takes precedence**: If both cluster and deploy change, only provision is triggered (provision will trigger deploy)
+- **Cluster takes precedence**: If both cluster and deploy change, only provision is triggered
+  (provision will trigger deploy)
 - **Security-first**: Prevents deploying untested code; CI gates all infrastructure workflows
 - **Clean UI**: No workflow_run triggers that always appear regardless of relevance
 
@@ -522,7 +534,7 @@ environments:
 
 deployment_strategies:
   statefulset:
-    timeout: "10m"
+    timeout: '10m'
     rollback_on_failure: true
 ```
 
@@ -534,7 +546,8 @@ deployment_strategies:
 - `rollback_on_failure` (service OR strategy - combined OR logic)
 - `statefulset_timeout`, `deployment_timeout`, `daemonset_timeout`
 
-**Workflow integration:** Each deploy job parses flags and exits early if disabled (before loading credentials).
+**Workflow integration:** Each deploy job parses flags and exits early if disabled (before loading
+credentials).
 
 ### Workflow Orchestration Patterns
 
@@ -549,12 +562,9 @@ Both workflows trigger simultaneously:
     ├── provision-hetzner (creates NEW cluster)
 ```
 
-User changes cluster config + base manifests
-↓
-CI triggers BOTH provision and deploy workflows:
-├── provision-hetzner (creates NEW cluster)
-└── deploy-k8s-resources (deploys to OLD cluster - race condition!)
-Result: Resources deployed to wrong cluster!
+User changes cluster config + base manifests ↓ CI triggers BOTH provision and deploy workflows: ├──
+provision-hetzner (creates NEW cluster) └── deploy-k8s-resources (deploys to OLD cluster - race
+condition!) Result: Resources deployed to wrong cluster!
 
 ```
 
@@ -562,12 +572,9 @@ With cluster-precedence logic (`trigger-deploy` condition: `cluster-changed != '
 
 ```
 
-User changes cluster config + base manifests
-↓
-CI triggers ONLY provision:
-├── Creates new cluster
-└── Calls deploy-k8s-resources via workflow_call (deploys to NEW cluster)
-Result: Resources deployed to correct cluster ✓
+User changes cluster config + base manifests ↓ CI triggers ONLY provision: ├── Creates new cluster
+└── Calls deploy-k8s-resources via workflow_call (deploys to NEW cluster) Result: Resources deployed
+to correct cluster ✓
 
 ```
 
@@ -577,11 +584,7 @@ Before explicit CI triggering:
 
 ```
 
-User pushes broken code
-↓
-deploy-k8s-resources triggers
-↓
-Broken code deployed to production
+User pushes broken code ↓ deploy-k8s-resources triggers ↓ Broken code deployed to production
 
 ```
 
@@ -589,12 +592,8 @@ After CI gating (explicit triggering):
 
 ```
 
-User pushes broken code
-↓
-CI runs → FAILS
-↓
-Provisioning/deployment never triggered (gh workflow run never executes)
-Result: Broken code blocked ✓
+User pushes broken code ↓ CI runs → FAILS ↓ Provisioning/deployment never triggered (gh workflow run
+never executes) Result: Broken code blocked ✓
 
 ````
 
@@ -650,7 +649,8 @@ gh workflow run provision-hetzner-k8s-cluster.yml -f environment=dev
 # Actions → Select workflow → Run workflow → Select environment
 ````
 
-**CRITICAL:** Manual cluster provisioning is destructive (recreates cluster). Use deploy-k8s-resources.yml for updates.
+**CRITICAL:** Manual cluster provisioning is destructive (recreates cluster). Use
+deploy-k8s-resources.yml for updates.
 
 ## Triggers
 
@@ -734,7 +734,8 @@ Current quality checks enforced by CI:
 ### Linting
 
 - ✅ All linter rules must pass (ESLint, Flake8, StyleCop)
-- ⚠️ Currently allows "No X projects found" fallback (will be removed when sample projects are added)
+- ⚠️ Currently allows "No X projects found" fallback (will be removed when sample projects are
+  added)
 
 ### Testing
 
@@ -779,7 +780,8 @@ Current quality checks enforced by CI:
 **Issue:** Nx affected not detecting changes correctly
 
 - **Solution:** Ensure `fetch-depth: 0` is set in checkout action for full git history
-- **Solution:** Verify base branch reference is correct (should be `origin/dev`, `origin/test`, or `origin/main`)
+- **Solution:** Verify base branch reference is correct (should be `origin/dev`, `origin/test`, or
+  `origin/main`)
 - **Solution:** Check that Nx workspace is properly configured with project dependencies
 
 **Issue:** PR shows "No affected projects" but changes were made
@@ -792,7 +794,8 @@ Current quality checks enforced by CI:
 **Issue:** CI not running on my branch
 
 - **Solution:** Verify your branch is listed in the workflow triggers (main, dev, test)
-- **Solution:** Add your branch to `.github/workflows/ci.yml` under `on.push.branches` and `on.pull_request.branches`
+- **Solution:** Add your branch to `.github/workflows/ci.yml` under `on.push.branches` and
+  `on.pull_request.branches`
 
 **Issue:** `node_modules` cache not restoring
 
@@ -801,7 +804,8 @@ Current quality checks enforced by CI:
 
 **Issue:** Python formatting check fails with "No such file"
 
-- **Solution:** Ensure `.venv/bin/black` path is correct (may need `Scripts/black` on Windows runners)
+- **Solution:** Ensure `.venv/bin/black` path is correct (may need `Scripts/black` on Windows
+  runners)
 
 **Issue:** Jobs stuck in "waiting" state
 
@@ -857,7 +861,8 @@ pnpm run nx:reset
 
 ### Performance Optimization
 
-The validation system is architected for optimal performance and to avoid file modifications during git operations:
+The validation system is architected for optimal performance and to avoid file modifications during
+git operations:
 
 **Git Hooks (Automatic - Pre-Commit & Pre-Push):**
 
@@ -934,7 +939,8 @@ The validation scripts only run checks for languages with affected projects:
   - Checks if .NET SDK is installed
   - Skips entirely if no .NET projects affected
 
-This means if you only change Node.js files, you won't waste time setting up Python or checking .NET projects.
+This means if you only change Node.js files, you won't waste time setting up Python or checking .NET
+projects.
 
 **Pre-Commit Hook (Quick):**
 
@@ -1022,7 +1028,8 @@ git commit --no-verify
 git push --no-verify
 ```
 
-**Note:** Bypassing hooks means you skip validation. Use `pnpm run pre-commit` or `pnpm run pre-push` manually instead.
+**Note:** Bypassing hooks means you skip validation. Use `pnpm run pre-commit` or
+`pnpm run pre-push` manually instead.
 
 **Format check fails**
 
@@ -1032,7 +1039,9 @@ git push --no-verify
   - **Python projects only:** `pnpm run nx:python-format`
   - **.NET projects only:** `pnpm run nx:dotnet-format`
 
-> **Tip:** Use `nx:workspace-format` to format all files including repo-level files (scripts/, docs/, package.json, etc.). Use project-specific format commands when working on individual projects.
+> **Tip:** Use `nx:workspace-format` to format all files including repo-level files (scripts/,
+> docs/, package.json, etc.). Use project-specific format commands when working on individual
+> projects.
 
 **Want to see what will be checked?**
 

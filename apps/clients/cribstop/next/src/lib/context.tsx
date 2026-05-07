@@ -1,6 +1,13 @@
-"use client";
+'use client';
 
-import React, { createContext, ReactNode, useCallback, useContext, useEffect, useState } from "react";
+import React, {
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from 'react';
 
 interface User {
   name: string;
@@ -16,8 +23,8 @@ interface AppContextValue {
   logout: () => void;
   toggleSave: (id: string) => void;
   isSaved: (id: string) => boolean;
-  listingTab: "for-sale" | "for-rent";
-  setListingTab: (tab: "for-sale" | "for-rent") => void;
+  listingTab: 'for-sale' | 'for-rent';
+  setListingTab: (tab: 'for-sale' | 'for-rent') => void;
   /** True when the header should show the search pill instead of the category tabs */
   showHeaderPill: boolean;
   setShowHeaderPill: (v: boolean) => void;
@@ -37,7 +44,12 @@ interface AppContextValue {
   searchMoveInDate: string;
   setSearchMoveInDate: (v: string) => void;
   searchOccupants: { adults: number; children: number; infants: number; pets: number };
-  setSearchOccupants: (v: { adults: number; children: number; infants: number; pets: number }) => void;
+  setSearchOccupants: (v: {
+    adults: number;
+    children: number;
+    infants: number;
+    pets: number;
+  }) => void;
   searchPriceIdx: number;
   setSearchPriceIdx: (v: number) => void;
   searchBedsIdx: number;
@@ -49,14 +61,14 @@ const AppContext = createContext<AppContextValue | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
-  const [listingTab, setListingTab] = useState<"for-sale" | "for-rent">("for-sale");
+  const [listingTab, setListingTab] = useState<'for-sale' | 'for-rent'>('for-sale');
   // Default false — pages with SearchSection manage this; pages without call useShowHeaderPill()
   const [showHeaderPill, setShowHeaderPill] = useState(false);
   const [headerExpanded, setHeaderExpanded] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
-  const [searchLocation, setSearchLocation] = useState("");
+  const [searchLocation, setSearchLocation] = useState('');
   const [searchSuggestion, setSearchSuggestion] = useState<any | null>(null);
-  const [searchMoveInDate, setSearchMoveInDate] = useState("");
+  const [searchMoveInDate, setSearchMoveInDate] = useState('');
   const [searchOccupants, setSearchOccupants] = useState({
     adults: 0,
     children: 0,
@@ -67,7 +79,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [searchBedsIdx, setSearchBedsIdx] = useState(0);
 
   const login = useCallback((_email: string, _password: string) => {
-    setUser({ name: "Alex Johnson", email: _email, avatar: undefined });
+    setUser({ name: 'Alex Johnson', email: _email, avatar: undefined });
   }, []);
 
   const signup = useCallback((_name: string, _email: string, _password: string) => {
@@ -129,7 +141,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
 export function useApp() {
   const ctx = useContext(AppContext);
-  if (!ctx) throw new Error("useApp must be used within AppProvider");
+  if (!ctx) throw new Error('useApp must be used within AppProvider');
   return ctx;
 }
 
@@ -137,10 +149,10 @@ export function useApp() {
 export function useShowHeaderPill() {
   const { setShowHeaderPill } = useApp();
   useEffect(() => {
-    document.documentElement.setAttribute("data-header-pill", "");
+    document.documentElement.setAttribute('data-header-pill', '');
     setShowHeaderPill(true);
     return () => {
-      document.documentElement.removeAttribute("data-header-pill");
+      document.documentElement.removeAttribute('data-header-pill');
       setShowHeaderPill(false);
     };
   }, [setShowHeaderPill]);

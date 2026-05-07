@@ -2,7 +2,9 @@
 
 ## Overview
 
-The platform now supports **intelligent granular deployment** - deploying individual services (postgres, redis, jaeger, etc.) independently based on what files changed, while respecting environment isolation.
+The platform now supports **intelligent granular deployment** - deploying individual services
+(postgres, redis, jaeger, etc.) independently based on what files changed, while respecting
+environment isolation.
 
 ## How It Works
 
@@ -52,7 +54,8 @@ Changed files detected
 - Triggered by: Global triggers (kustomization.yaml, workflow changes, deploy-control.yaml)
 - Action: `kubectl apply -f manifests.yaml --prune -l app.kubernetes.io/managed-by=kustomize`
 - Deploys: All services in environment
-- Note: The `app.kubernetes.io/managed-by=kustomize` label is added by kustomization.yaml's commonLabels, not on individual resources
+- Note: The `app.kubernetes.io/managed-by=kustomize` label is added by kustomization.yaml's
+  commonLabels, not on individual resources
 
 **Strategy: `single`** (targeted deployment)
 
@@ -80,7 +83,8 @@ spec:
 
 This enables `kubectl apply -l app=postgres` to deploy only postgres resources.
 
-**For multiple services**: The parallel deployment system runs separate `kubectl apply` commands for each service in background jobs (see Parallel Deployment section).
+**For multiple services**: The parallel deployment system runs separate `kubectl apply` commands for
+each service in background jobs (see Parallel Deployment section).
 
 ## Deployment Scenarios
 
@@ -129,7 +133,8 @@ This enables `kubectl apply -l app=postgres` to deploy only postgres resources.
 
 ### Scenario 5: Multiple Services Changed
 
-**Change**: Edit both `infra/k8s/base/statefulsets/postgres.statefulset.yaml` and `infra/k8s/base/statefulsets/redis.statefulset.yaml`
+**Change**: Edit both `infra/k8s/base/statefulsets/postgres.statefulset.yaml` and
+`infra/k8s/base/statefulsets/redis.statefulset.yaml`
 
 **Behavior**:
 
@@ -141,7 +146,8 @@ This enables `kubectl apply -l app=postgres` to deploy only postgres resources.
 - **Result**: Both services deployed in ~1min (vs ~2min sequential)
 - Jaeger remains untouched
 
-**Why**: Parallel deployment automatically activates for multiple services, reducing total deployment time by ~60%.
+**Why**: Parallel deployment automatically activates for multiple services, reducing total
+deployment time by ~60%.
 
 ### Scenario 6: Cluster Configuration Change
 
@@ -160,7 +166,8 @@ This enables `kubectl apply -l app=postgres` to deploy only postgres resources.
 
 ### How It Works
 
-When multiple services are detected (e.g., `services=postgres,redis,jaeger`), the deployment action automatically switches to **parallel mode**:
+When multiple services are detected (e.g., `services=postgres,redis,jaeger`), the deployment action
+automatically switches to **parallel mode**:
 
 ```bash
 # Traditional approach - single command with all services
@@ -176,7 +183,8 @@ wait  # Wait for all background jobs to complete
 # Total time: ~1 minute (each service monitored independently)
 ```
 
-**Key difference**: Each service gets its own apply + rollout monitoring, allowing independent success/failure tracking.
+**Key difference**: Each service gets its own apply + rollout monitoring, allowing independent
+success/failure tracking.
 
 ### Performance Comparison
 
@@ -257,7 +265,7 @@ environments:
 deployment_strategies:
   statefulset:
     rollback_on_failure: true # OR: Enable for all StatefulSets
-    timeout: "2m" # Configurable rollout timeout
+    timeout: '2m' # Configurable rollout timeout
 ```
 
 **Note**: Rollback uses OR logic - enabled if EITHER service-level OR strategy-level is true.
@@ -343,7 +351,7 @@ metadata:
 services:
   rabbitmq:
     type: infrastructure
-    description: "RabbitMQ message broker"
+    description: 'RabbitMQ message broker'
     resources:
       # Base resources (provider/environment-agnostic)
       - infra/k8s/base/statefulsets/rabbitmq.statefulset.yaml
@@ -378,12 +386,11 @@ git push origin dev
 
 ## Benefits
 
-✅ **Faster Deployments**: Deploy only what changed (1 service vs 3+ services)
-✅ **Environment Isolation**: Dev changes never trigger prod deployments
-✅ **Reduced Risk**: Smaller blast radius per deployment
-✅ **Better CI Feedback**: Clearer which service triggered deployment
-✅ **Flexible**: Manual override for full deployments when needed
-✅ **Backward Compatible**: Default behavior is still "deploy all"
+✅ **Faster Deployments**: Deploy only what changed (1 service vs 3+ services) ✅ **Environment
+Isolation**: Dev changes never trigger prod deployments ✅ **Reduced Risk**: Smaller blast radius
+per deployment ✅ **Better CI Feedback**: Clearer which service triggered deployment ✅
+**Flexible**: Manual override for full deployments when needed ✅ **Backward Compatible**: Default
+behavior is still "deploy all"
 
 ## Implementation Details
 
@@ -510,7 +517,8 @@ git push origin dev
 
 **Diagnosis Steps**:
 
-1. Check file path matches pattern in [smart-deployment-config.yaml](../smart-deployment-config.yaml)
+1. Check file path matches pattern in
+   [smart-deployment-config.yaml](../smart-deployment-config.yaml)
    ```bash
    # Example: Check if your file is listed
    yq -r '.services.postgres.resources[]' infra/smart-deployment-config.yaml
@@ -622,8 +630,7 @@ git push origin dev
 Services value: ''
 ```
 
-**Fix**:
-Use correct combination of inputs:
+**Fix**: Use correct combination of inputs:
 
 - **Option 1**: `strategy=all`, `services=all` (deploy everything)
 - **Option 2**: `strategy=single`, `services=postgres` (deploy postgres only)
@@ -649,7 +656,7 @@ Use correct combination of inputs:
    ```yaml
    deployment_strategies:
      statefulset:
-       timeout: "2m" # Default is 2m - may need adjustment for slow clusters
+       timeout: '2m' # Default is 2m - may need adjustment for slow clusters
    ```
 
 **Common Fixes**:
@@ -702,7 +709,8 @@ Use correct combination of inputs:
   - Deploys each service simultaneously using background jobs
   - Waits for all to complete and reports any failures
   - **Performance**: 3 services: ~3min sequential → ~1min parallel
-  - **Configuration**: [smart-deployment-config.yaml](../smart-deployment-config.yaml) `deployment_mode.parallel_deployment.enabled`
+  - **Configuration**: [smart-deployment-config.yaml](../smart-deployment-config.yaml)
+    `deployment_mode.parallel_deployment.enabled`
 
 - [ ] **Incremental Rollout**: Canary deployments for single services
   - Add `canary: true` flag to smart-deployment-config.yaml

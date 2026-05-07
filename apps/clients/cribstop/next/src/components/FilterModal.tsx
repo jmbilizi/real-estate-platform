@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import { useEffect } from "react";
-import type { SearchFilters } from "@/lib/types";
-import FilterModalContent from "@/components/FilterModalContent";
+import { useEffect } from 'react';
+import type { SearchFilters } from '@/lib/types';
+import FilterModalContent from '@/components/FilterModalContent';
 
 interface Props {
   isOpen: boolean;
@@ -14,11 +14,11 @@ interface Props {
 
 export function countActiveFilters(filters: SearchFilters): number {
   let n = 0;
-  if (filters.listingType && filters.listingType !== "all") n++;
+  if (filters.listingType && filters.listingType !== 'all') n++;
   if (filters.minPrice !== undefined || filters.maxPrice !== undefined) n++;
   if (filters.beds && filters.beds > 0) n++;
   if (filters.baths && filters.baths > 0) n++;
-  if (filters.propertyType && filters.propertyType !== "all") n++;
+  if (filters.propertyType && filters.propertyType !== 'all') n++;
   if (filters.openHouse) n++;
   if (filters.newConstruction) n++;
   if (filters.waterfront) n++;
@@ -32,12 +32,12 @@ export default function FilterModal({ isOpen, onClose, filters, onChange, result
   // Lock body scroll while open
   useEffect(() => {
     if (isOpen) {
-      document.body.style.overflow = "hidden";
+      document.body.style.overflow = 'hidden';
     } else {
-      document.body.style.overflow = "";
+      document.body.style.overflow = '';
     }
     return () => {
-      document.body.style.overflow = "";
+      document.body.style.overflow = '';
     };
   }, [isOpen]);
 
@@ -45,10 +45,10 @@ export default function FilterModal({ isOpen, onClose, filters, onChange, result
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === 'Escape') onClose();
     };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
@@ -82,7 +82,13 @@ export default function FilterModal({ isOpen, onClose, filters, onChange, result
             aria-label="Close filters"
             className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-surface-alt transition"
           >
-            <svg className="h-4 w-4 text-ink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+            <svg
+              className="h-4 w-4 text-ink"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2.5}
+            >
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -102,7 +108,7 @@ export default function FilterModal({ isOpen, onClose, filters, onChange, result
             onClick={clearAll}
             disabled={!hasFilters}
             className={`text-sm font-semibold underline-offset-2 transition ${
-              hasFilters ? "text-ink underline hover:text-ink/60" : "text-ink-muted cursor-default"
+              hasFilters ? 'text-ink underline hover:text-ink/60' : 'text-ink-muted cursor-default'
             }`}
           >
             Clear all
@@ -111,7 +117,7 @@ export default function FilterModal({ isOpen, onClose, filters, onChange, result
             onClick={onClose}
             className="rounded-xl bg-ink px-6 py-3 text-sm font-bold text-white hover:bg-ink/85 active:scale-[0.98] transition"
           >
-            Show {resultCount.toLocaleString()} home{resultCount !== 1 ? "s" : ""}
+            Show {resultCount.toLocaleString()} home{resultCount !== 1 ? 's' : ''}
           </button>
         </div>
       </div>

@@ -40,7 +40,9 @@ pnpm exec nx run project-name:target
 
 These commands help maintain a healthy Nx workspace:
 
-> **Note**: Many nx commands automatically run `nx:reset` before execution to ensure fresh cache and valid configuration. This prevents stale cache issues and ensures consistent behavior across environments.
+> **Note**: Many nx commands automatically run `nx:reset` before execution to ensure fresh cache and
+> valid configuration. This prevents stale cache issues and ensures consistent behavior across
+> environments.
 
 ### nx:repair
 
@@ -68,7 +70,8 @@ pnpm run nx:repair
 pnpm run nx:reset
 ```
 
-**What it does**: Runs `nx:repair` + clears the Nx cache + syncs .NET solution files + auto-tags projects
+**What it does**: Runs `nx:repair` + clears the Nx cache + syncs .NET solution files + auto-tags
+projects
 
 - Everything that `nx:repair` does
 - Clears Nx's computational cache (executes official `nx reset`)
@@ -134,13 +137,17 @@ pnpm run clean
 
 ## Handling "No Projects" Errors
 
-When running commands like `run-many` with project filters (e.g., `--projects=tag:runtime:node`), you might get an error if no projects match the criteria. This is expected if you haven't created any projects of that type yet.
+When running commands like `run-many` with project filters (e.g., `--projects=tag:runtime:node`),
+you might get an error if no projects match the criteria. This is expected if you haven't created
+any projects of that type yet.
 
-For pnpm scripts, we've added error handling to ensure these commands exit successfully with a helpful message, which is especially useful in CI/CD pipelines.
+For pnpm scripts, we've added error handling to ensure these commands exit successfully with a
+helpful message, which is especially useful in CI/CD pipelines.
 
 ## Creating New Projects
 
-Create projects using Nx generators directly. Projects will be automatically tagged when you run any nx command:
+Create projects using Nx generators directly. Projects will be automatically tagged when you run any
+nx command:
 
 ```bash
 # Create Node.js/TypeScript projects using Nx generators

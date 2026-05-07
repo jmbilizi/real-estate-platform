@@ -1,14 +1,14 @@
-"use client";
+'use client';
 
-import { use } from "react";
-import listings from "@/lib/listings";
-import PropertyGallery from "@/components/PropertyGallery";
-import AmenityChips from "@/components/AmenityChips";
-import MortgageTeaser from "@/components/MortgageTeaser";
-import ListingCard from "@/components/ListingCard";
-import SingleListingMap from "@/components/SingleListingMap";
-import { formatDate, formatNumber, formatPrice } from "@/lib/format";
-import { useApp, useShowHeaderPill } from "@/lib/context";
+import { use } from 'react';
+import listings from '@/lib/listings';
+import PropertyGallery from '@/components/PropertyGallery';
+import AmenityChips from '@/components/AmenityChips';
+import MortgageTeaser from '@/components/MortgageTeaser';
+import ListingCard from '@/components/ListingCard';
+import SingleListingMap from '@/components/SingleListingMap';
+import { formatDate, formatNumber, formatPrice } from '@/lib/format';
+import { useApp, useShowHeaderPill } from '@/lib/context';
 
 export default function ListingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   useShowHeaderPill();
@@ -28,7 +28,9 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
     );
   }
 
-  const similar = listings.filter((l) => l.id !== listing.id && l.propertyType === listing.propertyType).slice(0, 4);
+  const similar = listings
+    .filter((l) => l.id !== listing.id && l.propertyType === listing.propertyType)
+    .slice(0, 4);
   const saved = isSaved(listing.id);
 
   return (
@@ -40,7 +42,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
         </a>
         <span>/</span>
         <a href={`/search?listingType=${listing.listingType}`} className="hover:text-ink">
-          {listing.listingType === "sale" ? "For Sale" : "For Rent"}
+          {listing.listingType === 'sale' ? 'For Sale' : 'For Rent'}
         </a>
         <span>/</span>
         <span className="truncate text-ink">
@@ -60,9 +62,13 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
               <div className="flex flex-wrap gap-1.5">
                 <span className="badge bg-accent/10 text-accent">{listing.status}</span>
                 {listing.openHouse && (
-                  <span className="badge bg-brand text-white">Open House · {formatDate(listing.openHouse.date)}</span>
+                  <span className="badge bg-brand text-white">
+                    Open House · {formatDate(listing.openHouse.date)}
+                  </span>
                 )}
-                {listing.priceReduced && <span className="badge bg-amber-100 text-amber-800">Price Reduced</span>}
+                {listing.priceReduced && (
+                  <span className="badge bg-amber-100 text-amber-800">Price Reduced</span>
+                )}
                 {listing.newConstruction && (
                   <span className="badge bg-emerald-100 text-emerald-800">New Construction</span>
                 )}
@@ -89,10 +95,10 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
               </button>
               <button
                 onClick={() => toggleSave(listing.id)}
-                className={`btn-secondary gap-1.5 ${saved ? "border-brand text-brand" : ""}`}
+                className={`btn-secondary gap-1.5 ${saved ? 'border-brand text-brand' : ''}`}
               >
                 <svg
-                  className={`h-4 w-4 ${saved ? "fill-brand" : "fill-none"}`}
+                  className={`h-4 w-4 ${saved ? 'fill-brand' : 'fill-none'}`}
                   stroke="currentColor"
                   viewBox="0 0 24 24"
                   strokeWidth={2}
@@ -103,7 +109,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
                     d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
                   />
                 </svg>
-                {saved ? "Saved" : "Save"}
+                {saved ? 'Saved' : 'Save'}
               </button>
             </div>
           </div>
@@ -111,18 +117,22 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
           {/* Stats */}
           <div className="mt-6 grid grid-cols-2 gap-0 overflow-hidden rounded-2xl border border-surface-border bg-white sm:grid-cols-3 lg:grid-cols-6">
             {[
-              { label: "Beds", value: listing.beds },
-              { label: "Baths", value: listing.baths },
-              { label: "Sqft", value: formatNumber(listing.sqft) },
-              { label: "Type", value: listing.propertyType },
-              ...(listing.yearBuilt ? [{ label: "Year Built", value: listing.yearBuilt }] : []),
-              ...(listing.lotSqft ? [{ label: "Lot Size", value: `${formatNumber(listing.lotSqft)} sf` }] : []),
+              { label: 'Beds', value: listing.beds },
+              { label: 'Baths', value: listing.baths },
+              { label: 'Sqft', value: formatNumber(listing.sqft) },
+              { label: 'Type', value: listing.propertyType },
+              ...(listing.yearBuilt ? [{ label: 'Year Built', value: listing.yearBuilt }] : []),
+              ...(listing.lotSqft
+                ? [{ label: 'Lot Size', value: `${formatNumber(listing.lotSqft)} sf` }]
+                : []),
             ].map((s, i, arr) => (
               <div
                 key={s.label}
-                className={`px-5 py-4 ${i !== arr.length - 1 ? "border-b border-surface-border sm:border-b-0 sm:border-r" : ""}`}
+                className={`px-5 py-4 ${i !== arr.length - 1 ? 'border-b border-surface-border sm:border-b-0 sm:border-r' : ''}`}
               >
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">{s.label}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
+                  {s.label}
+                </p>
                 <p className="mt-1 font-display text-lg font-bold text-ink">{s.value}</p>
               </div>
             ))}
@@ -144,7 +154,9 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
 
           {/* Where you'll live */}
           <div className="mt-10">
-            <h2 className="font-display text-xl font-bold tracking-tight">Where you&apos;ll live</h2>
+            <h2 className="font-display text-xl font-bold tracking-tight">
+              Where you&apos;ll live
+            </h2>
             <p className="mt-2 text-sm text-ink-muted">
               {listing.neighborhood}, {listing.city}, {listing.state}
             </p>
@@ -156,15 +168,16 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
           {/* Listing disclosure */}
           <div className="mt-10 rounded-2xl border border-surface-border bg-surface-alt p-5 text-xs leading-relaxed text-ink-muted">
             <p>
-              Listing courtesy of <strong className="text-ink">{listing.officeName}</strong>. Listed by{" "}
-              {listing.listedBy}.
+              Listing courtesy of <strong className="text-ink">{listing.officeName}</strong>. Listed
+              by {listing.listedBy}.
             </p>
             <p className="mt-1">
-              Information provided by Bright MLS. Deemed reliable but not guaranteed. Data last updated:{" "}
-              {formatDate(listing.lastUpdated)}.
+              Information provided by Bright MLS. Deemed reliable but not guaranteed. Data last
+              updated: {formatDate(listing.lastUpdated)}.
             </p>
             <p className="mt-1">
-              This information is for personal, non-commercial use. Some properties may no longer be available.
+              This information is for personal, non-commercial use. Some properties may no longer be
+              available.
             </p>
           </div>
 
@@ -185,7 +198,9 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
         <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
           {/* Agent card */}
           <div className="rounded-2xl border border-surface-border bg-white p-6 shadow-card">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">Listing Agent</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
+              Listing Agent
+            </p>
             <div className="mt-3 flex items-center gap-3">
               <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand to-brand-700 font-bold text-white">
                 {listing.brokerName[0]}
@@ -226,17 +241,23 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
           {/* Open house */}
           {listing.openHouse && (
             <div className="rounded-2xl border border-brand/20 bg-brand-50 p-5">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-brand-700">Upcoming Open House</p>
-              <p className="mt-2 font-display text-lg font-bold text-ink">{formatDate(listing.openHouse.date)}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-brand-700">
+                Upcoming Open House
+              </p>
+              <p className="mt-2 font-display text-lg font-bold text-ink">
+                {formatDate(listing.openHouse.date)}
+              </p>
               <p className="text-sm text-ink-muted">
                 {listing.openHouse.startTime} – {listing.openHouse.endTime}
               </p>
-              <button className="mt-3 text-sm font-semibold text-brand hover:underline">+ Add to calendar</button>
+              <button className="mt-3 text-sm font-semibold text-brand hover:underline">
+                + Add to calendar
+              </button>
             </div>
           )}
 
           {/* Mortgage */}
-          {listing.listingType === "sale" && <MortgageTeaser price={listing.price} />}
+          {listing.listingType === 'sale' && <MortgageTeaser price={listing.price} />}
         </aside>
       </div>
     </div>

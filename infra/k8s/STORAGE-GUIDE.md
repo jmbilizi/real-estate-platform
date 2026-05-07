@@ -2,7 +2,8 @@
 
 ## Overview
 
-This guide explains storage sizing decisions, cost implications, and PVC expansion strategies for StatefulSet workloads (PostgreSQL, Redis, Jaeger) across dev, test, and prod environments.
+This guide explains storage sizing decisions, cost implications, and PVC expansion strategies for
+StatefulSet workloads (PostgreSQL, Redis, Jaeger) across dev, test, and prod environments.
 
 ## Storage Architecture
 
@@ -24,7 +25,8 @@ This guide explains storage sizing decisions, cost implications, and PVC expansi
 - Performance: 3 IOPS per GB (baseline), bursts to 60 IOPS per GB
 - Durability: 3x replicated across availability zones
 
-**Important:** The CSI driver is automatically installed during cluster provisioning via `hcloud-csi-driver` Helm chart.
+**Important:** The CSI driver is automatically installed during cluster provisioning via
+`hcloud-csi-driver` Helm chart.
 
 ## Cost Analysis (Hetzner Cloud Volumes)
 
@@ -182,7 +184,8 @@ Compared to other providers (for 69Gi total):
   - ~20 spans per trace (average)
   - ~140,000 spans total (7 days)
   - BadgerDB compression ratio: ~10:1
-- **Rationale:** Full sampling + short retention = small storage footprint. 2Gi provides 10x headroom.
+- **Rationale:** Full sampling + short retention = small storage footprint. 2Gi provides 10x
+  headroom.
 
 **Test (3Gi):**
 
@@ -204,7 +207,8 @@ Compared to other providers (for 69Gi total):
   - ~5% sampled = ~2,500 traces/day
   - ~50 spans per trace (complex microservices)
   - ~3,750,000 spans total (30 days)
-- **Rationale:** Aggressive sampling + BadgerDB efficiency keeps storage minimal. 5Gi handles growth headroom.
+- **Rationale:** Aggressive sampling + BadgerDB efficiency keeps storage minimal. 5Gi handles growth
+  headroom.
 
 **Why Jaeger < Redis Storage?**
 
@@ -248,7 +252,9 @@ Compared to other providers (for 69Gi total):
 
 **Reality:**
 
-> "volumeClaimTemplates field is immutable **on existing StatefulSets**, but PVCs can be expanded by deleting and recreating the StatefulSet with updated storage size. The CSI driver handles the actual volume expansion."
+> "volumeClaimTemplates field is immutable **on existing StatefulSets**, but PVCs can be expanded by
+> deleting and recreating the StatefulSet with updated storage size. The CSI driver handles the
+> actual volume expansion."
 
 ### Best Practices
 

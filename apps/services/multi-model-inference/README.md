@@ -1,6 +1,8 @@
 # Multi-Model Inference Service
 
-A config-driven ML inference microservice built with **FastAPI** and **ONNX Runtime**. Serves multiple models behind a unified REST API with async-safe inference, health probes, and a pluggable model registry.
+A config-driven ML inference microservice built with **FastAPI** and **ONNX Runtime**. Serves
+multiple models behind a unified REST API with async-safe inference, health probes, and a pluggable
+model registry.
 
 ## Architecture
 
@@ -14,9 +16,12 @@ GET  /                  ──► Service metadata
 
 **Key design decisions:**
 
-- **Model registry pattern** — models register at startup via a singleton registry. New model types implement the `InferenceModel` ABC and are added to the model map in `main.py`.
-- **Config-driven loading** — `ENABLED_MODELS` env var controls which models load. Disabled models consume zero resources.
-- **Async-safe inference** — ONNX `predict()` runs in `run_in_threadpool()` to avoid blocking the event loop.
+- **Model registry pattern** — models register at startup via a singleton registry. New model types
+  implement the `InferenceModel` ABC and are added to the model map in `main.py`.
+- **Config-driven loading** — `ENABLED_MODELS` env var controls which models load. Disabled models
+  consume zero resources.
+- **Async-safe inference** — ONNX `predict()` runs in `run_in_threadpool()` to avoid blocking the
+  event loop.
 - **Lifespan management** — models load during FastAPI lifespan startup and unload on shutdown.
 
 ## Loaded Models
@@ -156,7 +161,8 @@ docker build -f apps/services/multi-model-inference/Dockerfile -t multi-model-in
 docker run -p 8000:8000 multi-model-inference
 ```
 
-The Dockerfile uses a multi-stage build (Python 3.11 slim), runs as non-root, and includes a health check with a 60-second start period for model downloading.
+The Dockerfile uses a multi-stage build (Python 3.11 slim), runs as non-root, and includes a health
+check with a 60-second start period for model downloading.
 
 ## Project Structure
 

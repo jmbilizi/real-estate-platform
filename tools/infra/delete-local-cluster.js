@@ -11,23 +11,23 @@
  * Podman machine remains untouched for faster re-creation.
  */
 
-const { execSync } = require("child_process");
-const path = require("path");
-const fs = require("fs");
+const { execSync } = require('child_process');
+const path = require('path');
+const fs = require('fs');
 
-const WORKSPACE_ROOT = path.resolve(__dirname, "../..");
-const CONFIG_PATH = path.join(WORKSPACE_ROOT, "infra/k8s/podman/local/cluster/cluster-config.yaml");
-const KIND_ENV = { KIND_EXPERIMENTAL_PROVIDER: "podman" };
+const WORKSPACE_ROOT = path.resolve(__dirname, '../..');
+const CONFIG_PATH = path.join(WORKSPACE_ROOT, 'infra/k8s/podman/local/cluster/cluster-config.yaml');
+const KIND_ENV = { KIND_EXPERIMENTAL_PROVIDER: 'podman' };
 
 function getClusterName() {
   if (!fs.existsSync(CONFIG_PATH)) {
     console.error(`cluster-config.yaml not found at ${CONFIG_PATH}`);
     process.exit(1);
   }
-  const content = fs.readFileSync(CONFIG_PATH, "utf-8");
+  const content = fs.readFileSync(CONFIG_PATH, 'utf-8');
   const match = content.match(/cluster_name:\s*(.+)/);
   if (!match || !match[1].trim()) {
-    console.error("cluster-config.yaml must define cluster_name");
+    console.error('cluster-config.yaml must define cluster_name');
     process.exit(1);
   }
   return match[1].trim();
@@ -37,36 +37,36 @@ const CLUSTER_NAME = getClusterName();
 const KIND_CONTEXT = `kind-${CLUSTER_NAME}`;
 
 const colors = {
-  reset: "\x1b[0m",
-  bright: "\x1b[1m",
-  red: "\x1b[31m",
-  green: "\x1b[32m",
-  yellow: "\x1b[33m",
-  cyan: "\x1b[36m",
+  reset: '\x1b[0m',
+  bright: '\x1b[1m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  cyan: '\x1b[36m',
 };
 
-function log(message, color = "reset") {
+function log(message, color = 'reset') {
   console.log(`${colors[color]}${message}${colors.reset}`);
 }
 
 function logSuccess(message) {
-  log(`✓ ${message}`, "green");
+  log(`✓ ${message}`, 'green');
 }
 
 function logWarning(message) {
-  log(`⚠ ${message}`, "yellow");
+  log(`⚠ ${message}`, 'yellow');
 }
 
 function logInfo(message) {
-  log(`ℹ ${message}`, "cyan");
+  log(`ℹ ${message}`, 'cyan');
 }
 
 function run(command, options = {}) {
   try {
     const result = execSync(command, {
       cwd: WORKSPACE_ROOT,
-      stdio: options.silent ? "pipe" : "inherit",
-      encoding: "utf-8",
+      stdio: options.silent ? 'pipe' : 'inherit',
+      encoding: 'utf-8',
       shell: true,
       env: options.env ? { ...process.env, ...options.env } : process.env,
     });
@@ -84,7 +84,7 @@ function sleep(ms) {
 }
 
 function isKindClusterPresent() {
-  const result = run("kind get clusters", { silent: true, env: KIND_ENV });
+  const result = run('kind get clusters', { silent: true, env: KIND_ENV });
   if (!result.success) {
     return false;
   }
@@ -101,75 +101,80 @@ async function main() {
     return;
   }
 
-  log("\n╔════════════════════════════════════════════════════════════╗", "cyan");
-  log("║         Delete Local Cluster & All Resources              ║", "cyan");
-  log("╚════════════════════════════════════════════════════════════╝\n", "cyan");
+  log('\n╔════════════════════════════════════════════════════════════╗', 'cyan');
+  log('║         Delete Local Cluster & All Resources              ║', 'cyan');
+  log('╚════════════════════════════════════════════════════════════╝\n', 'cyan');
 
-  logWarning("This will delete the Kind cluster, workloads, and cached images.");
-  log("\nPress Ctrl+C to cancel, or wait 5 seconds to continue...\n", "yellow");
+  logWarning('This will delete the Kind cluster, workloads, and cached images.');
+  log('\nPress Ctrl+C to cancel, or wait 5 seconds to continue...\n', 'yellow');
   await sleep(5000);
 
-  log("\n📋 Deleting Kubernetes resources...", "bright");
+  log('\n📋 Deleting Kubernetes resources...', 'bright');
   const deleteResources = run(
-    "kustomize build infra/k8s/podman/local --enable-alpha-plugins | kubectl delete -f - --wait=false --timeout=10s",
+    'kustomize build infra/k8s/podman/local --enable-alpha-plugins | kubectl delete -f - --wait=false --timeout=10s',
   );
   if (deleteResources.success) {
-    logSuccess("Kubernetes resources deletion initiated (non-blocking)");
+    logSuccess('Kubernetes resources deletion initiated (non-blocking)');
   } else {
-    logWarning("Unable to delete resources automatically (cluster may already be down)");
+    logWarning('Unable to delete resources automatically (cluster may already be down)');
   }
 
-  log("\n☸️  Deleting Kind cluster...", "bright");
+  log('\n☸️  Deleting Kind cluster...', 'bright');
   const deleteCluster = run(`kind delete cluster --name ${CLUSTER_NAME}`, { env: KIND_ENV });
   if (deleteCluster.success) {
-    logSuccess("Kind cluster deleted");
+    logSuccess('Kind cluster deleted');
   } else {
-    logWarning("Kind cluster deletion reported an error. Continuing cleanup.");
+    logWarning('Kind cluster deletion reported an error. Continuing cleanup.');
   }
 
-  logInfo("Cleaning up orphaned Kind containers...");
-  const containerList = run(`podman ps -a --filter label=io.x-k8s.kind.cluster=${CLUSTER_NAME} --format {{.ID}}`, {
-    silent: true,
-  });
+  logInfo('Cleaning up orphaned Kind containers...');
+  const containerList = run(
+    `podman ps -a --filter label=io.x-k8s.kind.cluster=${CLUSTER_NAME} --format {{.ID}}`,
+    {
+      silent: true,
+    },
+  );
   if (containerList.success && containerList.output.trim()) {
     containerList.output
       .trim()
       .split(/\r?\n/)
       .filter(Boolean)
       .forEach((id) => run(`podman rm -f ${id}`, { silent: true }));
-    logSuccess("Removed orphaned containers");
+    logSuccess('Removed orphaned containers');
   } else {
-    logInfo("No orphaned containers detected");
+    logInfo('No orphaned containers detected');
   }
 
-  logInfo("Removing cached Kind images...");
-  const imageList = run("podman images --filter reference=kindest/node --format {{.ID}}", { silent: true });
+  logInfo('Removing cached Kind images...');
+  const imageList = run('podman images --filter reference=kindest/node --format {{.ID}}', {
+    silent: true,
+  });
   if (imageList.success && imageList.output.trim()) {
     imageList.output
       .trim()
       .split(/\r?\n/)
       .filter(Boolean)
       .forEach((id) => run(`podman rmi -f ${id}`, { silent: true }));
-    logSuccess("Removed Kind base images");
+    logSuccess('Removed Kind base images');
   } else {
-    logInfo("No cached Kind images found");
+    logInfo('No cached Kind images found');
   }
 
-  logInfo("Cleaning up workspace certificates...");
-  const workspaceCertsPath = path.join(WORKSPACE_ROOT, ".workspace-certs");
+  logInfo('Cleaning up workspace certificates...');
+  const workspaceCertsPath = path.join(WORKSPACE_ROOT, '.workspace-certs');
   if (fs.existsSync(workspaceCertsPath)) {
     try {
       fs.rmSync(workspaceCertsPath, { recursive: true, force: true });
-      logSuccess("Removed .workspace-certs directory");
+      logSuccess('Removed .workspace-certs directory');
     } catch (error) {
       logWarning(`Failed to remove .workspace-certs: ${error.message}`);
     }
   } else {
-    logInfo("No .workspace-certs directory to clean");
+    logInfo('No .workspace-certs directory to clean');
   }
 
-  log("\n✅ Cluster deletion complete", "green");
-  logInfo("Podman machine preserved. Recreate later via pnpm run infra:local:cluster:setup");
+  log('\n✅ Cluster deletion complete', 'green');
+  logInfo('Podman machine preserved. Recreate later via pnpm run infra:local:cluster:setup');
 }
 
 main().catch((error) => {

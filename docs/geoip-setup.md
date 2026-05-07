@@ -2,9 +2,11 @@
 
 ## 📍 Overview
 
-The API Gateway includes **optional MaxMind GeoIP2** integration for enriching OpenTelemetry traces with geographic location data based on client IP addresses.
+The API Gateway includes **optional MaxMind GeoIP2** integration for enriching OpenTelemetry traces
+with geographic location data based on client IP addresses.
 
-**⚠️ GeoIP is OPTIONAL for local development** - the API Gateway works perfectly without it. You'll just see fewer tags in traces.
+**⚠️ GeoIP is OPTIONAL for local development** - the API Gateway works perfectly without it. You'll
+just see fewer tags in traces.
 
 **What You Get With GeoIP Enabled:**
 
@@ -44,7 +46,8 @@ pnpm run skaffold
 
 ### **Option 2: Skip GeoIP** (Fastest for most development)
 
-Just start developing - no setup needed! Geographic tags won't appear in traces, but everything else works.
+Just start developing - no setup needed! Geographic tags won't appear in traces, but everything else
+works.
 
 ```bash
 pnpm run infra:local:cluster:setup
@@ -57,13 +60,15 @@ pnpm run skaffold
 - Debugging geographic routing logic
 - Validating privacy compliance (IP hashing)
 
-**For most development:** Skip it! Test GeoIP features in deployed environments where it's pre-configured.
+**For most development:** Skip it! Test GeoIP features in deployed environments where it's
+pre-configured.
 
 ---
 
 ## 🏭 Production Deployment (Automatic)
 
-**The Docker build automatically downloads the GeoIP database** during image builds in CI/CD. You just need to add the license key once.
+**The Docker build automatically downloads the GeoIP database** during image builds in CI/CD. You
+just need to add the license key once.
 
 ### One-Time Setup: Add License Key to GitHub
 
@@ -90,7 +95,8 @@ kubectl describe configmap geoip-database -n default
 
 **Update API Gateway Deployment:**
 
-Edit [infra/k8s/base/deployments/api-gateway.deployment.yaml](../../infra/k8s/base/deployments/api-gateway.deployment.yaml):
+Edit
+[infra/k8s/base/deployments/api-gateway.deployment.yaml](../../infra/k8s/base/deployments/api-gateway.deployment.yaml):
 
 ```yaml
 spec:
@@ -104,7 +110,7 @@ spec:
 
             # GeoIP Configuration
             - name: GEOIP_ENABLED
-              value: "true" # Enable in all envs (dev/test/prod)
+              value: 'true' # Enable in all envs (dev/test/prod)
               # Note: Database path auto-detected:
               #   Container: /opt/geoip/GeoLite2-City.mmdb
               #   Local dev: apps/api-gateway/GeoLite2-City.mmdb
@@ -143,14 +149,15 @@ spec:
         - name: api-gateway
           env:
             - name: GEOIP_ENABLED
-              value: "true" # Can disable per environment
+              value: 'true' # Can disable per environment
 ```
 
 ---
 
 ## � CI/CD Setup (GitHub Actions)
 
-**The workflow is already configured** to automatically download the GeoIP database during Docker builds. You just need to add the MaxMind license key as a GitHub Secret.
+**The workflow is already configured** to automatically download the GeoIP database during Docker
+builds. You just need to add the MaxMind license key as a GitHub Secret.
 
 ### **Step 1: Get MaxMind License Key**
 
@@ -214,7 +221,8 @@ The `Dockerfile` automatically:
 4. Removes temporary files and curl dependencies
 5. **Gracefully degrades** if key not provided (GeoIP disabled, but build succeeds)
 
-**Build-time security:** The license key is never stored in the image layers (only used during build).
+**Build-time security:** The license key is never stored in the image layers (only used during
+build).
 
 ---
 
@@ -224,26 +232,26 @@ The `Dockerfile` automatically:
 
 ```yaml
 # Geographic tags (OpenTelemetry semantic conventions)
-client.geo.country_code: "US"
-client.geo.country_name: "United States"
-client.geo.city: "San Francisco"
-client.geo.region: "California"
-client.geo.continent_code: "NA"
+client.geo.country_code: 'US'
+client.geo.country_name: 'United States'
+client.geo.city: 'San Francisco'
+client.geo.region: 'California'
+client.geo.continent_code: 'NA'
 client.geo.latitude: 37.7749
 client.geo.longitude: -122.4194
-client.geo.timezone: "America/Los_Angeles"
+client.geo.timezone: 'America/Los_Angeles'
 
 # Always present (privacy-compliant)
-client.address_hash: "a3f8c2e1b4d6..." # SHA256 hash
-client.ip_type: "public" # Classification
+client.address_hash: 'a3f8c2e1b4d6...' # SHA256 hash
+client.ip_type: 'public' # Classification
 
 # Development only (if OTEL_STORE_FULL_IP=true)
-client.address: "203.0.113.42"
+client.address: '203.0.113.42'
 
 # Network info
-network.peer.address: "172.16.0.1"
-http.user_agent: "Mozilla/5.0..."
-client.type: "mobile"
+network.peer.address: '172.16.0.1'
+http.user_agent: 'Mozilla/5.0...'
+client.type: 'mobile'
 ```
 
 **Search in Jaeger UI:**
@@ -353,7 +361,8 @@ privacy.dnt: "true"
 
 1. **Geographic analysis**: "90% of requests from US, 5% from EU"
 2. **Fraud detection**: Flag requests from high-risk countries
-3. **Performance monitoring**: "EU users experience 200ms higher latency" (routing optimization needed)
+3. **Performance monitoring**: "EU users experience 200ms higher latency" (routing optimization
+   needed)
 4. **Compliance**: Block GDPR-protected regions if not compliant
 5. **Content delivery**: CDN selection based on user location
 6. **Analytics**: Heatmaps showing user distribution
@@ -455,7 +464,8 @@ initContainers:
 
 - **MaxMind Documentation**: https://dev.maxmind.com/geoip/docs
 - **GeoLite2 Free Database**: https://dev.maxmind.com/geoip/geolite2-free-geolocation-data
-- **OpenTelemetry Semantic Conventions**: https://opentelemetry.io/docs/specs/semconv/attributes-registry/client/
+- **OpenTelemetry Semantic Conventions**:
+  https://opentelemetry.io/docs/specs/semconv/attributes-registry/client/
 - **GDPR Article 4 (Personal Data)**: https://gdpr-info.eu/art-4-gdpr/
 
 ---
@@ -481,7 +491,7 @@ kind: CronJob
 metadata:
   name: geoip-updater
 spec:
-  schedule: "0 0 2 * *" # 2nd day of each month
+  schedule: '0 0 2 * *' # 2nd day of each month
   jobTemplate:
     spec:
       template:
@@ -489,7 +499,7 @@ spec:
           containers:
             - name: updater
               image: curlimages/curl:latest
-              command: ["sh", "-c", "curl -L '...' | tar -xz ..."]
+              command: ['sh', '-c', "curl -L '...' | tar -xz ..."]
 ```
 
 ---

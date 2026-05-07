@@ -2,7 +2,8 @@
 
 ## Overview
 
-This document explains how CI and CD workflows are orchestrated to prevent duplicate deployments and ensure quality checks pass before deployment.
+This document explains how CI and CD workflows are orchestrated to prevent duplicate deployments and
+ensure quality checks pass before deployment.
 
 ## Problem Statement
 
@@ -101,7 +102,8 @@ trigger-deploy:
     needs.detect-infra-changes.outputs.cluster-changed != 'true'  # Excludes when cluster changed
 ```
 
-**Why:** Prevents race conditions - provision workflow will trigger deploy via workflow_call after cluster is ready.
+**Why:** Prevents race conditions - provision workflow will trigger deploy via workflow_call after
+cluster is ready.
 
 ## Deployment Scenarios
 
@@ -185,7 +187,8 @@ calls deploy-k8s-resources.yml via workflow_call (deploys both cluster + resourc
 ```
 
 **Result:** ✅ ONLY Provision workflow appears (then Deploy)  
-**Why:** Cluster changes take precedence - trigger-deploy condition excludes when cluster-changed=true
+**Why:** Cluster changes take precedence - trigger-deploy condition excludes when
+cluster-changed=true
 
 ### Scenario 4: Unrelated Files Changed
 
@@ -360,7 +363,8 @@ deploy-dev:
      inputs.environment == 'dev')
 ```
 
-**Why simplified:** No workflow_run conditions, no detect-changes dependency. Clean and maintainable.
+**Why simplified:** No workflow_run conditions, no detect-changes dependency. Clean and
+maintainable.
 
 ## Validation
 
@@ -412,12 +416,15 @@ git push origin test/docs-change
 1. **No Duplicate Workflows:** Explicit triggering prevents unnecessary workflow appearances
 2. **Quality Gates:** CI runs first and gates all infrastructure operations
 3. **Clean UI:** Workflows ONLY appear when they have work to do
-4. **No Unnecessary Runs:** Change detection prevents workflows from running when irrelevant files change
-5. **No Unnecessary Runs:** Change detection prevents workflows from running when irrelevant files change
+4. **No Unnecessary Runs:** Change detection prevents workflows from running when irrelevant files
+   change
+5. **No Unnecessary Runs:** Change detection prevents workflows from running when irrelevant files
+   change
 6. **Security-First:** CI gating ensures untested code never reaches infrastructure
 7. **Correctness:** Cluster precedence logic ensures resources deploy to correct cluster
 8. **Visibility:** Clean workflow history in GitHub Actions UI
-9. **Maintainability:** Simple conditions, no complex workflow_run logic, no detect-changes jobs in provision/deploy workflows
+9. **Maintainability:** Simple conditions, no complex workflow_run logic, no detect-changes jobs in
+   provision/deploy workflows
 
 ## Troubleshooting
 
@@ -467,7 +474,8 @@ git diff HEAD^ HEAD --name-only | grep -E '^infra/k8s/base/|^infra/deploy-contro
 
 ### Workflow appears when it shouldn't
 
-**This should NOT happen with current architecture.** If provision/deploy workflows appear unnecessarily:
+**This should NOT happen with current architecture.** If provision/deploy workflows appear
+unnecessarily:
 
 **Check:**
 

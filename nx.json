@@ -33,17 +33,6 @@
         "serveTargetName": "serve",
         "typecheckTargetName": "type-check"
       }
-    },
-    {
-      "plugin": "@nx/dotnet",
-      "options": {
-        "lintTargetName": "lint",
-        "formatTargetName": "format",
-        "testTargetName": "test",
-        "buildTargetName": "build",
-        "serveTargetName": "serve",
-        "typecheckTargetName": "type-check"
-      }
     }
   ],
   "projects": {},
@@ -63,11 +52,7 @@
     },
     "test": {
       "cache": true,
-      "inputs": [
-        "default",
-        "^production",
-        "{workspaceRoot}/tools/node/configs/jest.config.js"
-      ]
+      "inputs": ["default", "^production", "{workspaceRoot}/tools/node/configs/jest.config.js"]
     },
     "type-check": {
       "cache": true,
@@ -81,17 +66,11 @@
     },
     "format": {
       "cache": true,
-      "inputs": [
-        "default",
-        "{workspaceRoot}/tools/node/configs/prettier-config.js"
-      ]
+      "inputs": ["default", "{workspaceRoot}/tools/node/configs/prettier-config.js"]
     },
     "format-check": {
       "cache": true,
-      "inputs": [
-        "default",
-        "{workspaceRoot}/tools/node/configs/prettier-config.js"
-      ]
+      "inputs": ["default", "{workspaceRoot}/tools/node/configs/prettier-config.js"]
     }
   },
   "nxIgnore": []

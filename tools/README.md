@@ -1,10 +1,13 @@
 # Development Tools for Polyglot Monorepo
 
-This directory contains development tools and configurations for the Polyglot monorepo managed by NX.
+This directory contains development tools and configurations for the Polyglot monorepo managed by
+NX.
 
 ## Overview
 
-The tools system provides standardized development workflows for Python, .NET, and Node.js projects. Projects are created using Nx generators which automatically handle project structure, configuration, and integration with the monorepo.
+The tools system provides standardized development workflows for Python, .NET, and Node.js projects.
+Projects are created using Nx generators which automatically handle project structure,
+configuration, and integration with the monorepo.
 
 ## Directory Structure
 

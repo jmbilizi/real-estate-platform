@@ -1,6 +1,7 @@
 # Ocelot Route Templates
 
-This folder contains **reference templates** for downstream microservices. These are examples and documentation - they are **NOT loaded** by the gateway.
+This folder contains **reference templates** for downstream microservices. These are examples and
+documentation - they are **NOT loaded** by the gateway.
 
 ## 📁 Folder Structure
 
@@ -128,7 +129,8 @@ Set `Active: false` in your route file:
 }
 ```
 
-The gateway will load successfully without the service running. When service is ready, set `Active: true`.
+The gateway will load successfully without the service running. When service is ready, set
+`Active: true`.
 
 ## 🌐 Environment-Specific Configuration
 

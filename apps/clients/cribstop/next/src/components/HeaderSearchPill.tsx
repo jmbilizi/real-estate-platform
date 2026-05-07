@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
-export default function HeaderSearchPill({ className = "" }: { className?: string }) {
-  const [value, setValue] = useState("");
+export default function HeaderSearchPill({ className = '' }: { className?: string }) {
+  const [value, setValue] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -19,8 +19,8 @@ export default function HeaderSearchPill({ className = "" }: { className?: strin
         setIsOpen(false);
       }
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
   }, []);
 
   const handleChange = (val: string) => {
@@ -49,11 +49,11 @@ export default function HeaderSearchPill({ className = "" }: { className?: strin
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setIsOpen(false);
-    router.push(value.trim() ? `/search?q=${encodeURIComponent(value.trim())}` : "/search");
+    router.push(value.trim() ? `/search?q=${encodeURIComponent(value.trim())}` : '/search');
   };
 
   const handleSelect = (s: any) => {
-    const label = s.display_name?.split(",").slice(0, 2).join(",").trim() || "";
+    const label = s.display_name?.split(',').slice(0, 2).join(',').trim() || '';
     setValue(label);
     setIsOpen(false);
     setSuggestions([]);
@@ -68,13 +68,23 @@ export default function HeaderSearchPill({ className = "" }: { className?: strin
         onSubmit={handleSubmit}
         className={`flex items-center bg-white transition-all duration-150 ${
           hasDropdown && suggestions.length > 0
-            ? "rounded-t-full border border-[#dfe1e5] border-b-0 shadow-none"
-            : "rounded-full border border-surface-border shadow-card hover:shadow-md"
+            ? 'rounded-t-full border border-[#dfe1e5] border-b-0 shadow-none'
+            : 'rounded-full border border-surface-border shadow-card hover:shadow-md'
         }`}
       >
         <span className="ml-3.5 flex-shrink-0 text-ink-muted">
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          <svg
+            className="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2.5}
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
           </svg>
         </span>
         <input
@@ -90,8 +100,18 @@ export default function HeaderSearchPill({ className = "" }: { className?: strin
           aria-label="Search"
           className="m-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-brand text-white transition hover:bg-brand-700"
         >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          <svg
+            className="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2.5}
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
           </svg>
         </button>
       </form>
@@ -111,10 +131,14 @@ export default function HeaderSearchPill({ className = "" }: { className?: strin
               onClick={() => handleSelect(s)}
               className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-ink hover:bg-[#f8f9fa] transition-colors"
             >
-              <svg className="h-4 w-4 flex-shrink-0 text-ink-muted" fill="currentColor" viewBox="0 0 24 24">
+              <svg
+                className="h-4 w-4 flex-shrink-0 text-ink-muted"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+              >
                 <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
               </svg>
-              <span className="truncate">{s.display_name?.split(",").slice(0, 3).join(", ")}</span>
+              <span className="truncate">{s.display_name?.split(',').slice(0, 3).join(', ')}</span>
             </button>
           ))}
         </div>

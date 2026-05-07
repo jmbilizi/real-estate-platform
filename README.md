@@ -1,6 +1,7 @@
 # Polyglot Monorepo
 
-This monorepo is set up to support .NET, Node/TypeScript, Python, Next.js, React Native (Expo), and FastAPI apps.
+This monorepo is set up to support .NET, Node/TypeScript, Python, Next.js, React Native (Expo), and
+FastAPI apps.
 
 ## Requirements
 
@@ -44,16 +45,15 @@ The repository has a two-tier validation system to balance speed with safety:
 
 # Formatting commands
 
-pnpm run nx:workspace-format # Format all files (workspace + projects)
-pnpm run nx:node-format # Format Node.js projects only
-pnpm run nx:python-format # Format Python projects only
-pnpm run nx:dotnet-format # Format .NET projects only
+pnpm run nx:workspace-format # Format all files (workspace + projects) pnpm run nx:node-format #
+Format Node.js projects only pnpm run nx:python-format # Format Python projects only pnpm run
+nx:dotnet-format # Format .NET projects only
 
 # Infrastructure validation
 
-pnpm run infra:validate # Validate all providers and environments (auto-discovery)
-pnpm run infra:validate:dev # Validate dev across all providers
-pnpm run infra:validate:test # Validate test across all providers
+pnpm run infra:validate # Validate all providers and environments (auto-discovery) pnpm run
+infra:validate:dev # Validate dev across all providers pnpm run infra:validate:test # Validate test
+across all providers
 
 # Full validation (same as pre-push hook)
 
@@ -65,16 +65,14 @@ pnpm run pre-commit
 
 # Formatting commands
 
-pnpm run nx:workspace-format # Format all files (workspace + projects)
-pnpm run nx:node-format # Format Node.js projects only
-pnpm run nx:python-format # Format Python projects only
-pnpm run nx:dotnet-format # Format .NET projects only
+pnpm run nx:workspace-format # Format all files (workspace + projects) pnpm run nx:node-format #
+Format Node.js projects only pnpm run nx:python-format # Format Python projects only pnpm run
+nx:dotnet-format # Format .NET projects only
 
 # Individual language checks (fast, uses cached nx state)
 
-pnpm run nx:node-lint # Lint Node.js projects
-pnpm run nx:python-test # Test Python projects
-pnpm run nx:dotnet-build # Build .NET projects
+pnpm run nx:node-lint # Lint Node.js projects pnpm run nx:python-test # Test Python projects pnpm
+run nx:dotnet-build # Build .NET projects
 
 # Reset nx cache (run this after structural changes)
 

@@ -18,23 +18,23 @@
  * Called by `pnpm run nx:reset` after setup-workspace-targets.js.
  */
 
-const fs = require("fs");
-const path = require("path");
-const { execSync } = require("child_process");
+const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 const colors = {
-  green: "\x1b[32m",
-  yellow: "\x1b[33m",
-  blue: "\x1b[34m",
-  red: "\x1b[31m",
-  reset: "\x1b[0m",
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  red: '\x1b[31m',
+  reset: '\x1b[0m',
 };
 
-function log(msg, color = "reset") {
+function log(msg, color = 'reset') {
   console.log(`${colors[color]}${msg}${colors.reset}`);
 }
 
@@ -42,28 +42,28 @@ const rootDir = process.cwd();
 
 // Disable daemon – avoids stale graph issues when setup-workspace-targets.js
 // just created project.json files in the same nx:reset run.
-const nxEnv = { ...process.env, NX_DAEMON: "false" };
+const nxEnv = { ...process.env, NX_DAEMON: 'false' };
 
 function writeFilePreservingEncoding(filePath, content) {
   let hasBOM = false;
-  let lineEnding = "\n";
+  let lineEnding = '\n';
 
   if (fs.existsSync(filePath)) {
     const buf = fs.readFileSync(filePath);
     hasBOM = buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf;
-    const original = buf.toString("utf8");
-    lineEnding = original.includes("\r\n") ? "\r\n" : "\n";
+    const original = buf.toString('utf8');
+    lineEnding = original.includes('\r\n') ? '\r\n' : '\n';
   }
 
-  if (lineEnding === "\r\n") {
-    content = content.replace(/\r?\n/g, "\r\n");
+  if (lineEnding === '\r\n') {
+    content = content.replace(/\r?\n/g, '\r\n');
   } else {
-    content = content.replace(/\r\n/g, "\n");
+    content = content.replace(/\r\n/g, '\n');
   }
 
   const out = hasBOM
-    ? Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(content, "utf8")])
-    : Buffer.from(content, "utf8");
+    ? Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(content, 'utf8')])
+    : Buffer.from(content, 'utf8');
   fs.writeFileSync(filePath, out);
 }
 
@@ -73,14 +73,14 @@ function writeFilePreservingEncoding(filePath, content) {
 
 function getAllProjects() {
   try {
-    const output = execSync("pnpm exec nx show projects --json", {
-      encoding: "utf8",
+    const output = execSync('pnpm exec nx show projects --json', {
+      encoding: 'utf8',
       env: nxEnv,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
     return JSON.parse(output);
   } catch (error) {
-    log(`Error getting projects: ${error.message}`, "red");
+    log(`Error getting projects: ${error.message}`, 'red');
     return [];
   }
 }
@@ -88,9 +88,9 @@ function getAllProjects() {
 function getProjectConfig(projectName) {
   try {
     const output = execSync(`pnpm exec nx show project ${projectName} --json`, {
-      encoding: "utf8",
+      encoding: 'utf8',
       env: nxEnv,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
     return JSON.parse(output);
   } catch {
@@ -122,25 +122,25 @@ function setTag(tags, prefix, value) {
 
 /** Remove legacy bare tags that are being replaced by namespaced equivalents */
 const LEGACY_BARE_TAGS = new Set([
-  "node",
-  "dotnet",
-  "python",
-  "service",
-  "lib",
-  "next",
-  "expo",
-  "express",
-  "api",
-  "client",
-  "react",
-  "fastapi",
-  "django",
-  "webapi",
-  "blazor",
+  'node',
+  'dotnet',
+  'python',
+  'service',
+  'lib',
+  'next',
+  'expo',
+  'express',
+  'api',
+  'client',
+  'react',
+  'fastapi',
+  'django',
+  'webapi',
+  'blazor',
 ]);
 
 /** Old namespaced tags that don't fit the new taxonomy */
-const LEGACY_NAMESPACED_TAGS = new Set(["client:platform", "type:app"]);
+const LEGACY_NAMESPACED_TAGS = new Set(['client:platform', 'type:app']);
 
 function removeLegacyTags(tags) {
   return tags.filter((t) => !LEGACY_BARE_TAGS.has(t) && !LEGACY_NAMESPACED_TAGS.has(t));
@@ -161,41 +161,43 @@ function detectRuntime(projectConfig) {
     if (t.options?.command) commands.push(t.options.command);
   }
 
-  const executorStr = executors.join(" ");
-  const commandStr = commands.join(" ");
+  const executorStr = executors.join(' ');
+  const commandStr = commands.join(' ');
   const projectRoot = path.join(rootDir, projectConfig.root);
 
   // Python — executor-based (check first, most specific)
-  if (executorStr.includes("@nxlv/python")) return "python";
+  if (executorStr.includes('@nxlv/python')) return 'python';
 
   // .NET — executor or command or file based
-  if (executorStr.includes("@nx/dotnet") || commandStr.includes("dotnet")) return "dotnet";
+  if (executorStr.includes('@nx/dotnet') || commandStr.includes('dotnet')) return 'dotnet';
   try {
-    if (fs.readdirSync(projectRoot).some((f) => /\.(csproj|fsproj|vbproj)$/.test(f))) return "dotnet";
+    if (fs.readdirSync(projectRoot).some((f) => /\.(csproj|fsproj|vbproj)$/.test(f)))
+      return 'dotnet';
   } catch {}
 
   // Node — executor, command, or file based
   if (
-    executorStr.includes("@nx/node") ||
-    executorStr.includes("@nx/express") ||
-    executorStr.includes("@nx/next") ||
-    executorStr.includes("@nx/react") ||
-    executorStr.includes("@nx/web") ||
-    executorStr.includes("@nx/js") ||
-    executorStr.includes("@nx/jest") ||
-    executorStr.includes("@nx/eslint") ||
-    executorStr.includes("@nx/expo")
+    executorStr.includes('@nx/node') ||
+    executorStr.includes('@nx/express') ||
+    executorStr.includes('@nx/next') ||
+    executorStr.includes('@nx/react') ||
+    executorStr.includes('@nx/web') ||
+    executorStr.includes('@nx/js') ||
+    executorStr.includes('@nx/jest') ||
+    executorStr.includes('@nx/eslint') ||
+    executorStr.includes('@nx/expo')
   ) {
-    return "node";
+    return 'node';
   }
-  if (/\b(eslint|jest|prettier|tsc |tsc--|next |expo )\b/.test(commandStr)) return "node";
+  if (/\b(eslint|jest|prettier|tsc |tsc--|next |expo )\b/.test(commandStr)) return 'node';
   try {
-    if (fs.readdirSync(projectRoot).some((f) => f === "package.json" || f === "tsconfig.json")) return "node";
+    if (fs.readdirSync(projectRoot).some((f) => f === 'package.json' || f === 'tsconfig.json'))
+      return 'node';
   } catch {}
 
   // Python — file based (fallback)
   try {
-    if (fs.existsSync(path.join(projectRoot, "pyproject.toml"))) return "python";
+    if (fs.existsSync(path.join(projectRoot, 'pyproject.toml'))) return 'python';
   } catch {}
 
   return null;
@@ -206,24 +208,24 @@ function detectRuntime(projectConfig) {
 // ---------------------------------------------------------------------------
 
 function detectType(projectConfig) {
-  const root = (projectConfig.root || "").replace(/\\/g, "/");
-  const isLibPath = root.startsWith("libs/") || root.includes("/libs/");
-  const isLibType = projectConfig.projectType === "library";
+  const root = (projectConfig.root || '').replace(/\\/g, '/');
+  const isLibPath = root.startsWith('libs/') || root.includes('/libs/');
+  const isLibType = projectConfig.projectType === 'library';
 
   // Libraries
-  if (isLibPath || isLibType) return "lib";
+  if (isLibPath || isLibType) return 'lib';
 
   // Folder-based detection under apps/
-  if (/^apps\/clients(\/|$)/.test(root)) return "client";
-  if (/^apps\/services(\/|$)/.test(root)) return "service";
-  if (/^apps\/databases(\/|$)/.test(root)) return "database";
+  if (/^apps\/clients(\/|$)/.test(root)) return 'client';
+  if (/^apps\/services(\/|$)/.test(root)) return 'service';
+  if (/^apps\/databases(\/|$)/.test(root)) return 'database';
 
   // Gateway — name-based fallback
-  const name = projectConfig.name || "";
-  if (name.includes("gateway")) return "gateway";
+  const name = projectConfig.name || '';
+  if (name.includes('gateway')) return 'gateway';
 
   // Everything else under apps/ → service
-  return "service";
+  return 'service';
 }
 
 // ---------------------------------------------------------------------------
@@ -233,26 +235,29 @@ function detectType(projectConfig) {
 function detectPlatform(projectConfig, runtime, type) {
   const targets = projectConfig.targets || {};
   const executors = Object.values(targets)
-    .map((t) => t.executor || "")
-    .join(" ");
+    .map((t) => t.executor || '')
+    .join(' ');
   const commands = Object.values(targets)
-    .map((t) => t.options?.command || "")
-    .join(" ");
+    .map((t) => t.options?.command || '')
+    .join(' ');
 
   // Web — Next.js
-  if (executors.includes("@nx/next") || commands.includes("next ")) return "web";
+  if (executors.includes('@nx/next') || commands.includes('next ')) return 'web';
 
   // Mobile — Expo
-  if (executors.includes("@nx/expo") || commands.includes("expo ")) return "mobile";
+  if (executors.includes('@nx/expo') || commands.includes('expo ')) return 'mobile';
 
   // Server — backend services/gateways
-  if ((type === "service" || type === "gateway") && (runtime === "dotnet" || runtime === "python")) {
-    return "server";
+  if (
+    (type === 'service' || type === 'gateway') &&
+    (runtime === 'dotnet' || runtime === 'python')
+  ) {
+    return 'server';
   }
 
   // Node.js backend services (express, etc.)
-  if (type === "service" && runtime === "node") {
-    if (executors.includes("@nx/express") || commands.includes("express")) return "server";
+  if (type === 'service' && runtime === 'node') {
+    if (executors.includes('@nx/express') || commands.includes('express')) return 'server';
   }
 
   // Libraries and ambiguous projects — no platform (agnostic)
@@ -264,7 +269,7 @@ function detectPlatform(projectConfig, runtime, type) {
 // ---------------------------------------------------------------------------
 
 function main() {
-  log("\n🏷️  Auto-tagging projects...\n", "blue");
+  log('\n🏷️  Auto-tagging projects...\n', 'blue');
 
   const projects = getAllProjects();
   let taggedCount = 0;
@@ -276,21 +281,21 @@ function main() {
     if (!config) continue;
 
     // Skip companion test subfolders — managed by parent project
-    const posixRoot = (config.root || "").replace(/\\/g, "/");
+    const posixRoot = (config.root || '').replace(/\\/g, '/');
     if (/\/Tests$/i.test(posixRoot)) {
-      const parentDir = path.join(rootDir, posixRoot.replace(/\/Tests$/i, ""));
+      const parentDir = path.join(rootDir, posixRoot.replace(/\/Tests$/i, ''));
       try {
-        if (fs.readdirSync(parentDir).some((f) => f.endsWith(".csproj"))) continue;
+        if (fs.readdirSync(parentDir).some((f) => f.endsWith('.csproj'))) continue;
       } catch {}
     }
 
     processedCount++;
 
     // Read current project.json
-    const projectJsonPath = path.join(rootDir, config.root, "project.json");
+    const projectJsonPath = path.join(rootDir, config.root, 'project.json');
     if (!fs.existsSync(projectJsonPath)) continue;
 
-    const raw = fs.readFileSync(projectJsonPath, "utf8");
+    const raw = fs.readFileSync(projectJsonPath, 'utf8');
     const projectJson = JSON.parse(raw);
     let tags = projectJson.tags || [];
 
@@ -300,42 +305,42 @@ function main() {
     // --- Step 2: Auto-detect and set runtime ---
     const runtime = detectRuntime(config);
     if (runtime) {
-      tags = setTag(tags, "runtime", runtime);
+      tags = setTag(tags, 'runtime', runtime);
     } else {
       warnings.push(`${projectName}: Could not detect runtime`);
     }
 
     // --- Step 3: Auto-detect and set type ---
     const type = detectType(config);
-    tags = setTag(tags, "type", type);
+    tags = setTag(tags, 'type', type);
 
     // --- Step 4: Auto-detect platform (may be null = agnostic) ---
     const platform = detectPlatform(config, runtime, type);
     if (platform) {
-      tags = setTag(tags, "platform", platform);
+      tags = setTag(tags, 'platform', platform);
     } else {
       // Remove stale platform tag if project is now agnostic
-      tags = removeTagsWithPrefix(tags, "platform");
+      tags = removeTagsWithPrefix(tags, 'platform');
     }
 
     // --- Step 5: Manual dimensions — add placeholder if missing ---
-    if (!getTagValue(tags, "scope")) {
-      tags.push("scope:unassigned");
+    if (!getTagValue(tags, 'scope')) {
+      tags.push('scope:unassigned');
       warnings.push(`${projectName}: Missing scope: → added scope:unassigned`);
     }
 
-    if (!getTagValue(tags, "framework")) {
-      tags.push("framework:unassigned");
+    if (!getTagValue(tags, 'framework')) {
+      tags.push('framework:unassigned');
       warnings.push(`${projectName}: Missing framework: → added framework:unassigned`);
     }
 
-    if (!getTagValue(tags, "devteam")) {
-      tags.push("devteam:unassigned");
+    if (!getTagValue(tags, 'devteam')) {
+      tags.push('devteam:unassigned');
       warnings.push(`${projectName}: Missing devteam: → added devteam:unassigned`);
     }
 
     // --- Step 6: Sort tags by dimension for consistency ---
-    const dimensionOrder = ["runtime", "type", "platform", "framework", "scope", "devteam"];
+    const dimensionOrder = ['runtime', 'type', 'platform', 'framework', 'scope', 'devteam'];
     tags.sort((a, b) => {
       const aIdx = dimensionOrder.findIndex((d) => a.startsWith(`${d}:`));
       const bIdx = dimensionOrder.findIndex((d) => b.startsWith(`${d}:`));
@@ -347,34 +352,37 @@ function main() {
 
     // --- Step 7: Write back if changed ---
     projectJson.tags = tags;
-    const newContent = JSON.stringify(projectJson, null, 2) + "\n";
+    const newContent = JSON.stringify(projectJson, null, 2) + '\n';
 
     // Normalize for comparison
-    const normalizedOld = raw.replace(/\r\n/g, "\n");
-    const normalizedNew = newContent.replace(/\r\n/g, "\n");
+    const normalizedOld = raw.replace(/\r\n/g, '\n');
+    const normalizedNew = newContent.replace(/\r\n/g, '\n');
 
     if (normalizedNew !== normalizedOld) {
       writeFilePreservingEncoding(projectJsonPath, newContent);
-      const tagSummary = tags.join(", ");
-      log(`✓ ${projectName}: ${tagSummary}`, "green");
+      const tagSummary = tags.join(', ');
+      log(`✓ ${projectName}: ${tagSummary}`, 'green');
       taggedCount++;
     }
   }
 
   // --- Summary ---
-  log(`\n✅ Auto-tagging complete!`, "green");
-  log(`   Processed: ${processedCount} projects`, "blue");
-  log(`   Tagged/updated: ${taggedCount} projects`, "blue");
+  log(`\n✅ Auto-tagging complete!`, 'green');
+  log(`   Processed: ${processedCount} projects`, 'blue');
+  log(`   Tagged/updated: ${taggedCount} projects`, 'blue');
 
   if (warnings.length > 0) {
-    log(`\n⚠  Warnings:`, "yellow");
+    log(`\n⚠  Warnings:`, 'yellow');
     for (const w of warnings) {
-      log(`   ${w}`, "yellow");
+      log(`   ${w}`, 'yellow');
     }
   }
 
   if (taggedCount > 0) {
-    log(`\n💡 Tip: Your nx:*-lint, nx:*-test, and nx:*-build commands use tag:runtime:* selectors.`, "blue");
+    log(
+      `\n💡 Tip: Your nx:*-lint, nx:*-test, and nx:*-build commands use tag:runtime:* selectors.`,
+      'blue',
+    );
   }
 
   // --- Format all project.json files with Prettier (nx format) -----------
@@ -384,15 +392,15 @@ function main() {
   const projectJsonFiles = projects
     .map((p) => {
       const cfg = getProjectConfig(p);
-      return cfg ? cfg.root + "/project.json" : null;
+      return cfg ? cfg.root + '/project.json' : null;
     })
     .filter(Boolean);
 
   if (projectJsonFiles.length > 0) {
     try {
-      execSync(`pnpm exec nx format:write --files=${projectJsonFiles.join(",")}`, {
+      execSync(`pnpm exec nx format:write --files=${projectJsonFiles.join(',')}`, {
         cwd: rootDir,
-        stdio: "ignore",
+        stdio: 'ignore',
         env: nxEnv,
       });
     } catch {

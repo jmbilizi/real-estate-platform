@@ -1,11 +1,13 @@
 # Kubernetes Infrastructure Testing Guide
 
-This guide covers testing the new Kustomize-based Kubernetes infrastructure locally before deploying to clusters.
+This guide covers testing the new Kustomize-based Kubernetes infrastructure locally before deploying
+to clusters.
 
 ## Prerequisites
 
 - **Kustomize**: Run `pnpm run infra:setup` (auto-installs and configures PATH)
-- **kubectl**: Optional - for dry-run validation (install from https://kubernetes.io/docs/tasks/tools/)
+- **kubectl**: Optional - for dry-run validation (install from
+  https://kubernetes.io/docs/tasks/tools/)
 - **Access to dev cluster**: Kubeconfig file for hetzner-dev-cluster (for cluster testing only)
 
 ## Local Testing (No Cluster Required)
@@ -47,7 +49,8 @@ kustomize build infra/k8s/hetzner/prod --enable-alpha-plugins
 
 - Invalid YAML syntax: Check base files and patches
 - Missing base resources: Ensure all files referenced in `kustomization.yaml` exist
-- StrongBase64Password values in output: Expected - workflows substitute real secrets before deployment
+- StrongBase64Password values in output: Expected - workflows substitute real secrets before
+  deployment
 
 ### 3. Inspect Generated Manifests
 
@@ -69,7 +72,8 @@ grep -A 5 "kind: Secret" dev-manifests.yaml
 
 **Verify**:
 
-- ✅ Environment-specific resource and storage specs applied (check `hetzner/{env}/patches/statefulsets/postgres.statefulset.yaml`)
+- ✅ Environment-specific resource and storage specs applied (check
+  `hetzner/{env}/patches/statefulsets/postgres.statefulset.yaml`)
 - ✅ Labels: `environment: dev/test/prod`, `provider: hetzner`
 - ✅ Secrets: Base64 encoded passwords (not StrongBase64Password)
 
@@ -326,15 +330,19 @@ gh run view --web
 
 ### Kustomize Build Fails
 
-**Error**: `accumulating resources: accumulation err='accumulating resources from '../../base/secrets/postgres.secret.yaml': security; file '...' is not in or below '...'`: must build at directory`
+**Error**:
+`accumulating resources: accumulation err='accumulating resources from '../../base/secrets/postgres.secret.yaml': security; file '...' is not in or below '...'`:
+must build at directory`
 
-**Root Cause**: Overlay kustomization.yaml referenced individual files (`../../base/secrets/postgres.secret.yaml`) instead of the base directory (`../../base`)
+**Root Cause**: Overlay kustomization.yaml referenced individual files
+(`../../base/secrets/postgres.secret.yaml`) instead of the base directory (`../../base`)
 
 **Solution**:
 
 1. Ensure `base/kustomization.yaml` exists and lists all resources
 2. Change overlay resources to reference base directory: `resources: [../../base]`
-3. This is required by Kustomize security model - overlays must reference directories containing kustomization.yaml
+3. This is required by Kustomize security model - overlays must reference directories containing
+   kustomization.yaml
 
 ---
 
@@ -371,7 +379,8 @@ patches:
 
 ---
 
-**Error**: `accumulating resources: accumulation err='accumulating resources from '...': evalsymlink failure`
+**Error**:
+`accumulating resources: accumulation err='accumulating resources from '...': evalsymlink failure`
 
 **Solution**: Check all paths in `kustomization.yaml` are relative and files exist
 
@@ -379,7 +388,8 @@ patches:
 
 **Error**: `no 'apiVersion' field in postgres.secret.yaml`
 
-**Solution**: Ensure `base/secrets/postgres.secret.yaml` is valid YAML with apiVersion: v1, kind: Secret
+**Solution**: Ensure `base/secrets/postgres.secret.yaml` is valid YAML with apiVersion: v1, kind:
+Secret
 
 ---
 
@@ -411,7 +421,8 @@ kubectl logs postgres-0 -c init-postgres
 
 **Error**: `Secret not found`
 
-**Solution**: Verify `base/secrets/postgres.secret.yaml` exists and is included in kustomization.yaml resources
+**Solution**: Verify `base/secrets/postgres.secret.yaml` exists and is included in
+kustomization.yaml resources
 
 ### GitHub Actions Fails
 

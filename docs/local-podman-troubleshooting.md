@@ -1,6 +1,7 @@
 # Local Kubernetes (Kind + Podman): Image Pull & Access Troubleshooting
 
-This repo's local Kubernetes setup uses **Kind with the Podman provider** (see `pnpm run infra:local:cluster:setup`).
+This repo's local Kubernetes setup uses **Kind with the Podman provider** (see
+`pnpm run infra:local:cluster:setup`).
 
 ## Common Failure Modes
 
@@ -13,7 +14,8 @@ This repo's local Kubernetes setup uses **Kind with the Podman provider** (see `
 
 ### 1) Re-sync certs and repair the cluster
 
-Run the cluster bootstrapper again; it installs CA material and configures containerd registry trust:
+Run the cluster bootstrapper again; it installs CA material and configures containerd registry
+trust:
 
 ```sh
 pnpm run infra:local:cluster:setup
@@ -39,7 +41,8 @@ If your service image isn’t showing up in-cluster:
 node tools/infra/dev-skaffold.js -- --cache-artifacts=false
 ```
 
-This repo’s custom Skaffold builder **pushes images to the persistent local registry** at `localhost:5001`.
+This repo’s custom Skaffold builder **pushes images to the persistent local registry** at
+`localhost:5001`.
 
 ### 3) Manual image push to local registry (rare)
 
@@ -52,7 +55,8 @@ podman tag docker.io/postgis/postgis:18-3.6 localhost:5001/postgis/postgis:18-3.
 podman push localhost:5001/postgis/postgis:18-3.6
 ```
 
-Then reference `localhost:5001/postgis/postgis:18-3.6` in your manifests (or re-run the cluster setup to restore normal pull behavior).
+Then reference `localhost:5001/postgis/postgis:18-3.6` in your manifests (or re-run the cluster
+setup to restore normal pull behavior).
 
 ## Diagnostics
 

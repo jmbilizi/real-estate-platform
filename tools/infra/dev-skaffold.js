@@ -13,22 +13,26 @@
  *   node tools/infra/dev-skaffold.js -- <extra skaffold args>
  */
 
-const { spawn } = require("child_process");
-const path = require("path");
+const { spawn } = require('child_process');
+const path = require('path');
 
-const workspaceRoot = path.resolve(__dirname, "../..");
+const workspaceRoot = path.resolve(__dirname, '../..');
 
-const extraArgsIndex = process.argv.indexOf("--");
+const extraArgsIndex = process.argv.indexOf('--');
 const extraArgs = extraArgsIndex >= 0 ? process.argv.slice(extraArgsIndex + 1) : [];
 
-const child = spawn(process.execPath, ["tools/infra/run-skaffold.js", "dev", "--port-forward", ...extraArgs], {
-  cwd: workspaceRoot,
-  stdio: "inherit",
-  windowsHide: true,
-});
+const child = spawn(
+  process.execPath,
+  ['tools/infra/run-skaffold.js', 'dev', '--port-forward', ...extraArgs],
+  {
+    cwd: workspaceRoot,
+    stdio: 'inherit',
+    windowsHide: true,
+  },
+);
 
-child.on("exit", (code, signal) => {
-  if (typeof code === "number") {
+child.on('exit', (code, signal) => {
+  if (typeof code === 'number') {
     process.exit(code);
   }
   if (signal) {

@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from 'react';
 
 export default function PropertyGallery({ images, title }: { images: string[]; title: string }) {
   const [open, setOpen] = useState(false);
@@ -9,23 +9,25 @@ export default function PropertyGallery({ images, title }: { images: string[]; t
   const handleKey = useCallback(
     (e: KeyboardEvent) => {
       if (!open) return;
-      if (e.key === "Escape") setOpen(false);
-      if (e.key === "ArrowRight") setActiveIdx((p) => (p + 1) % images.length);
-      if (e.key === "ArrowLeft") setActiveIdx((p) => (p - 1 + images.length) % images.length);
+      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'ArrowRight') setActiveIdx((p) => (p + 1) % images.length);
+      if (e.key === 'ArrowLeft') setActiveIdx((p) => (p - 1 + images.length) % images.length);
     },
     [open, images.length],
   );
 
   useEffect(() => {
-    document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
   }, [handleKey]);
 
   if (!images.length) return null;
 
   // Need at least 5 tiles for the mosaic — pad by repeating
   const tiles =
-    images.length >= 5 ? images.slice(0, 5) : [...images, ...images, ...images, ...images, ...images].slice(0, 5);
+    images.length >= 5
+      ? images.slice(0, 5)
+      : [...images, ...images, ...images, ...images, ...images].slice(0, 5);
 
   return (
     <>
@@ -82,7 +84,13 @@ export default function PropertyGallery({ images, title }: { images: string[]; t
             }}
             className="absolute bottom-4 right-4 hidden items-center gap-1.5 rounded-lg border border-ink/15 bg-white px-4 py-2 text-sm font-semibold text-ink shadow-card transition hover:shadow-cardHover md:inline-flex"
           >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              viewBox="0 0 24 24"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -102,7 +110,13 @@ export default function PropertyGallery({ images, title }: { images: string[]; t
               onClick={() => setOpen(false)}
               className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium hover:bg-white/10"
             >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                viewBox="0 0 24 24"
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
               Close
@@ -126,7 +140,13 @@ export default function PropertyGallery({ images, title }: { images: string[]; t
                   className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-white p-3 text-ink shadow-pop transition hover:scale-105"
                   aria-label="Previous"
                 >
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <svg
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2.5}
+                    viewBox="0 0 24 24"
+                  >
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                   </svg>
                 </button>
@@ -135,7 +155,13 @@ export default function PropertyGallery({ images, title }: { images: string[]; t
                   className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-white p-3 text-ink shadow-pop transition hover:scale-105"
                   aria-label="Next"
                 >
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <svg
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2.5}
+                    viewBox="0 0 24 24"
+                  >
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                   </svg>
                 </button>

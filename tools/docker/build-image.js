@@ -22,18 +22,18 @@
  *   node tools/docker/build-image.js api-gateway --copy-certs --tag=local
  */
 
-const { execSync } = require("child_process");
-const fs = require("fs");
-const path = require("path");
+const { execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 
 // ANSI color codes
 const colors = {
-  reset: "\x1b[0m",
-  bright: "\x1b[1m",
-  green: "\x1b[32m",
-  yellow: "\x1b[33m",
-  blue: "\x1b[34m",
-  red: "\x1b[31m",
+  reset: '\x1b[0m',
+  bright: '\x1b[1m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  red: '\x1b[31m',
 };
 
 function log(message, color = colors.reset) {
@@ -61,11 +61,11 @@ function run(command, options = {}) {
   try {
     const output = execSync(command, {
       cwd,
-      encoding: "utf-8",
-      stdio: silent ? "pipe" : "inherit",
+      encoding: 'utf-8',
+      stdio: silent ? 'pipe' : 'inherit',
       shell: true,
     });
-    return { success: true, output: output || "" };
+    return { success: true, output: output || '' };
   } catch (error) {
     return {
       success: false,
@@ -76,10 +76,10 @@ function run(command, options = {}) {
 }
 
 function getGitInfo() {
-  const remote = run("git config --get remote.origin.url", { silent: true });
+  const remote = run('git config --get remote.origin.url', { silent: true });
   if (!remote.success) {
-    logWarning("Could not detect git remote. Using defaults.");
-    return { owner: "unknown", repo: "unknown" };
+    logWarning('Could not detect git remote. Using defaults.');
+    return { owner: 'unknown', repo: 'unknown' };
   }
 
   // Parse GitHub URL (supports both HTTPS and SSH)
@@ -88,50 +88,50 @@ function getGitInfo() {
     return { owner: match[1], repo: match[2].trim() };
   }
 
-  return { owner: "unknown", repo: "unknown" };
+  return { owner: 'unknown', repo: 'unknown' };
 }
 
 function parseArgs() {
   const args = process.argv.slice(2);
-  if (args.length === 0 || args[0].startsWith("--")) {
-    logError("Missing project name");
-    console.log("\nUsage: node tools/docker/build-image.js <project-name> [options]");
+  if (args.length === 0 || args[0].startsWith('--')) {
+    logError('Missing project name');
+    console.log('\nUsage: node tools/docker/build-image.js <project-name> [options]');
     process.exit(1);
   }
 
   const projectName = args[0];
   const options = {
-    tag: "latest",
-    registry: "ghcr.io",
+    tag: 'latest',
+    registry: 'ghcr.io',
     owner: null,
     repo: null,
     push: false,
-    platform: "linux/amd64",
+    platform: 'linux/amd64',
     cache: true,
     copyCerts: false,
     buildArgs: [],
   };
 
   args.slice(1).forEach((arg) => {
-    if (arg.startsWith("--tag=")) {
-      const value = arg.split("=")[1];
+    if (arg.startsWith('--tag=')) {
+      const value = arg.split('=')[1];
       if (value) options.tag = value;
-    } else if (arg.startsWith("--registry=")) {
-      options.registry = arg.split("=")[1];
-    } else if (arg.startsWith("--owner=")) {
-      options.owner = arg.split("=")[1];
-    } else if (arg.startsWith("--repo=")) {
-      options.repo = arg.split("=")[1];
-    } else if (arg === "--push") {
+    } else if (arg.startsWith('--registry=')) {
+      options.registry = arg.split('=')[1];
+    } else if (arg.startsWith('--owner=')) {
+      options.owner = arg.split('=')[1];
+    } else if (arg.startsWith('--repo=')) {
+      options.repo = arg.split('=')[1];
+    } else if (arg === '--push') {
       options.push = true;
-    } else if (arg.startsWith("--platform=")) {
-      options.platform = arg.split("=")[1];
-    } else if (arg === "--no-cache") {
+    } else if (arg.startsWith('--platform=')) {
+      options.platform = arg.split('=')[1];
+    } else if (arg === '--no-cache') {
       options.cache = false;
-    } else if (arg === "--copy-certs") {
+    } else if (arg === '--copy-certs') {
       options.copyCerts = true;
-    } else if (arg.startsWith("--build-arg=")) {
-      options.buildArgs.push(arg.split("=")[1]);
+    } else if (arg.startsWith('--build-arg=')) {
+      options.buildArgs.push(arg.split('=')[1]);
     }
   });
 
@@ -150,13 +150,13 @@ function parseArgs() {
  * Returns { projectName → { imageName, dockerfilePath } }
  */
 function loadImageNameMap() {
-  const mapPath = path.join(path.resolve(__dirname, "../.."), "tools/docker/image-name-map.json");
+  const mapPath = path.join(path.resolve(__dirname, '../..'), 'tools/docker/image-name-map.json');
   if (!fs.existsSync(mapPath)) return {};
-  const raw = JSON.parse(fs.readFileSync(mapPath, "utf-8"));
+  const raw = JSON.parse(fs.readFileSync(mapPath, 'utf-8'));
   // Filter out $comment key
   const map = {};
   for (const [key, value] of Object.entries(raw)) {
-    if (key !== "$comment" && typeof value === "object") {
+    if (key !== '$comment' && typeof value === 'object') {
       map[key] = value;
     }
   }
@@ -164,21 +164,25 @@ function loadImageNameMap() {
 }
 
 function findDockerfile(projectName) {
-  const workspaceRoot = path.resolve(__dirname, "../..");
+  const workspaceRoot = path.resolve(__dirname, '../..');
 
   // Check centralized overrides first (handles renamed projects)
   const nameMap = loadImageNameMap();
   if (nameMap[projectName] && nameMap[projectName].dockerfilePath) {
-    const overridePath = path.join(workspaceRoot, nameMap[projectName].dockerfilePath, "Dockerfile");
+    const overridePath = path.join(
+      workspaceRoot,
+      nameMap[projectName].dockerfilePath,
+      'Dockerfile',
+    );
     if (fs.existsSync(overridePath)) {
       return overridePath;
     }
   }
 
   const possiblePaths = [
-    path.join(workspaceRoot, "apps", projectName, "Dockerfile"),
-    path.join(workspaceRoot, "apps/services", projectName, "Dockerfile"),
-    path.join(workspaceRoot, "libs", projectName, "Dockerfile"),
+    path.join(workspaceRoot, 'apps', projectName, 'Dockerfile'),
+    path.join(workspaceRoot, 'apps/services', projectName, 'Dockerfile'),
+    path.join(workspaceRoot, 'libs', projectName, 'Dockerfile'),
   ];
 
   for (const dockerfilePath of possiblePaths) {
@@ -203,13 +207,13 @@ function resolveImageName(projectName) {
 }
 
 function buildImage(projectName, options) {
-  const workspaceRoot = path.resolve(__dirname, "../..");
+  const workspaceRoot = path.resolve(__dirname, '../..');
   const imageName = resolveImageName(projectName);
   const dockerfilePath = findDockerfile(projectName);
 
   if (!dockerfilePath) {
     logError(`Dockerfile not found for project: ${projectName}`);
-    logInfo("Searched paths:");
+    logInfo('Searched paths:');
     logInfo(`  - apps/${projectName}/Dockerfile`);
     logInfo(`  - apps/services/${projectName}/Dockerfile`);
     logInfo(`  - libs/${projectName}/Dockerfile`);
@@ -231,44 +235,55 @@ function buildImage(projectName, options) {
   logInfo(`Building image: ${fullImageRef}`);
 
   // Build Docker command
-  const buildArgs = ["build", "-f", dockerfilePath, "-t", fullImageRef, "--platform", options.platform];
+  const buildArgs = [
+    'build',
+    '-f',
+    dockerfilePath,
+    '-t',
+    fullImageRef,
+    '--platform',
+    options.platform,
+  ];
 
   // Add build configuration
-  buildArgs.push("--build-arg", "BUILD_CONFIGURATION=Release");
+  buildArgs.push('--build-arg', 'BUILD_CONFIGURATION=Release');
 
   // Add cert handling
   if (options.copyCerts) {
-    logInfo("Enterprise certificates will be included (local dev mode)");
-    buildArgs.push("--build-arg", "COPY_CERTS=true");
+    logInfo('Enterprise certificates will be included (local dev mode)');
+    buildArgs.push('--build-arg', 'COPY_CERTS=true');
   } else {
-    logInfo("Skipping enterprise certificates (CI/CD mode)");
-    buildArgs.push("--build-arg", "COPY_CERTS=false");
+    logInfo('Skipping enterprise certificates (CI/CD mode)');
+    buildArgs.push('--build-arg', 'COPY_CERTS=false');
   }
 
   // Add custom build args
   options.buildArgs.forEach((arg) => {
-    buildArgs.push("--build-arg", arg);
+    buildArgs.push('--build-arg', arg);
   });
 
   // Add cache options
   if (!options.cache) {
-    buildArgs.push("--no-cache");
+    buildArgs.push('--no-cache');
   }
 
   // Add labels
-  buildArgs.push("--label", `org.opencontainers.image.source=https://github.com/${options.owner}/${options.repo}`);
-  buildArgs.push("--label", `org.opencontainers.image.description=${projectName} service`);
-  buildArgs.push("--label", `org.opencontainers.image.licenses=MIT`);
+  buildArgs.push(
+    '--label',
+    `org.opencontainers.image.source=https://github.com/${options.owner}/${options.repo}`,
+  );
+  buildArgs.push('--label', `org.opencontainers.image.description=${projectName} service`);
+  buildArgs.push('--label', `org.opencontainers.image.licenses=MIT`);
 
   // Context is workspace root (needed for monorepo COPY commands)
   buildArgs.push(workspaceRoot);
 
   // Execute build
-  logInfo(`Executing: docker ${buildArgs.join(" ")}`);
-  const buildResult = run(`docker ${buildArgs.join(" ")}`);
+  logInfo(`Executing: docker ${buildArgs.join(' ')}`);
+  const buildResult = run(`docker ${buildArgs.join(' ')}`);
 
   if (!buildResult.success) {
-    logError("Build failed");
+    logError('Build failed');
     process.exit(1);
   }
 
@@ -286,7 +301,7 @@ function buildImage(projectName, options) {
     const pushResult = run(`docker push ${fullImageRef}`);
 
     if (!pushResult.success) {
-      logError("Push failed");
+      logError('Push failed');
       process.exit(1);
     }
 
@@ -309,9 +324,9 @@ if (require.main === module) {
 
   const imageName = buildImage(projectName, options);
 
-  console.log("\n" + "=".repeat(80));
-  logSuccess("Image build completed successfully!");
-  console.log("=".repeat(80));
+  console.log('\n' + '='.repeat(80));
+  logSuccess('Image build completed successfully!');
+  console.log('='.repeat(80));
   console.log(`\n📦 Image: ${imageName}\n`);
 }
 

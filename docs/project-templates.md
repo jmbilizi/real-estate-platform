@@ -1,6 +1,7 @@
 # Project Templates and Generation
 
-This document explains how to use the project templates and generation scripts in the Polyglot monorepo.
+This document explains how to use the project templates and generation scripts in the Polyglot
+monorepo.
 
 ## Overview
 
@@ -10,7 +11,8 @@ The monorepo supports various project types, including:
 - Python applications and libraries
 - Node.js applications and libraries
 
-To maintain consistency and simplify project creation, we use a template-based approach for generating new projects. The templates include:
+To maintain consistency and simplify project creation, we use a template-based approach for
+generating new projects. The templates include:
 
 - Basic project structure
 - Proper NX configuration
@@ -22,7 +24,8 @@ To maintain consistency and simplify project creation, we use a template-based a
 
 Projects are created using:
 
-- **Node.js/TypeScript**: Nx generators (`@nx/node`, `@nx/express`, `@nx/next`) with centralized configurations
+- **Node.js/TypeScript**: Nx generators (`@nx/node`, `@nx/express`, `@nx/next`) with centralized
+  configurations
 - **Python**: Nx generators (`@nxlv/python`) for apps and libraries
 - **.NET**: Standard `dotnet new` command - the `@nx/dotnet` plugin automatically detects projects
 
@@ -45,7 +48,8 @@ Use Nx generators directly for consistent project creation:
 
 #### .NET Projects
 
-The `@nx/dotnet` plugin is inference-based and doesn't provide generators. Use the standard `dotnet new` command:
+The `@nx/dotnet` plugin is inference-based and doesn't provide generators. Use the standard
+`dotnet new` command:
 
 ```bash
 # .NET Web API

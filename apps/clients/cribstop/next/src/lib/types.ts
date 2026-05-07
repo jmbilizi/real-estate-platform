@@ -1,29 +1,29 @@
-export type ListingType = "sale" | "rent" | "sold";
+export type ListingType = 'sale' | 'rent' | 'sold';
 export type PropertyType =
-  | "Single Family"
-  | "Condo"
-  | "Townhome"
-  | "Multi-Family"
-  | "Loft"
-  | "Land"
-  | "New Construction";
+  | 'Single Family'
+  | 'Condo'
+  | 'Townhome'
+  | 'Multi-Family'
+  | 'Loft'
+  | 'Land'
+  | 'New Construction';
 
 export type Amenity =
-  | "Pool"
-  | "Garage"
-  | "Gym"
-  | "Elevator"
-  | "Balcony"
-  | "Fireplace"
-  | "Washer/Dryer"
-  | "Pet Friendly"
-  | "Waterfront"
-  | "Office"
-  | "Rooftop"
-  | "Garden"
-  | "Smart Home"
-  | "Solar"
-  | "EV Charging";
+  | 'Pool'
+  | 'Garage'
+  | 'Gym'
+  | 'Elevator'
+  | 'Balcony'
+  | 'Fireplace'
+  | 'Washer/Dryer'
+  | 'Pet Friendly'
+  | 'Waterfront'
+  | 'Office'
+  | 'Rooftop'
+  | 'Garden'
+  | 'Smart Home'
+  | 'Solar'
+  | 'EV Charging';
 
 export interface Listing {
   id: string;
@@ -34,7 +34,7 @@ export interface Listing {
   zip: string;
   neighborhood: string;
   price: number;
-  status: "Active" | "Pending" | "Coming Soon" | "Sold";
+  status: 'Active' | 'Pending' | 'Coming Soon' | 'Sold';
   listingType: ListingType;
   propertyType: PropertyType;
   beds: number;
@@ -65,8 +65,8 @@ export interface SearchFilters {
   query?: string;
   zip?: string;
   street?: string;
-  listingType?: ListingType | "all";
-  propertyType?: PropertyType | "all";
+  listingType?: ListingType | 'all';
+  propertyType?: PropertyType | 'all';
   minPrice?: number;
   maxPrice?: number;
   beds?: number;
@@ -78,5 +78,5 @@ export interface SearchFilters {
   waterfront?: boolean;
   petFriendly?: boolean;
   amenities?: Amenity[];
-  sort?: "recommended" | "newest" | "price-asc" | "price-desc";
+  sort?: 'recommended' | 'newest' | 'price-asc' | 'price-desc';
 }

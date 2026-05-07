@@ -4,7 +4,8 @@ This document describes the unified Git hooks system used in the Polyglot monore
 
 ## Overview
 
-The unified hooks system centralizes Git hook management across all languages and frameworks in the monorepo, including:
+The unified hooks system centralizes Git hook management across all languages and frameworks in the
+monorepo, including:
 
 - JavaScript/TypeScript
 - Python
@@ -89,7 +90,8 @@ The hooks-runner.js script:
 
 ## Customization
 
-If you need to add custom behavior to the hooks, modify the hooks-runner.js file. The script is organized by hook type (pre-commit, post-merge, pre-push) and has language-specific sections.
+If you need to add custom behavior to the hooks, modify the hooks-runner.js file. The script is
+organized by hook type (pre-commit, post-merge, pre-push) and has language-specific sections.
 
 ## Troubleshooting
 

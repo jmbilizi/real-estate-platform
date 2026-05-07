@@ -10,24 +10,24 @@
  * 3. Creates pre-commit hooks that selectively activate language tools based on staged files
  */
 
-const path = require("path");
-const fs = require("fs");
-const { spawnSync, execSync } = require("child_process");
-const os = require("os");
+const path = require('path');
+const fs = require('fs');
+const { spawnSync, execSync } = require('child_process');
+const os = require('os');
 
 // Determine OS
-const isWindows = os.platform() === "win32";
-const isMacOS = os.platform() === "darwin";
-const isLinux = os.platform() === "linux";
+const isWindows = os.platform() === 'win32';
+const isMacOS = os.platform() === 'darwin';
+const isLinux = os.platform() === 'linux';
 
 // Define paths
 const rootDir = process.cwd();
-const toolsDir = path.join(rootDir, "tools");
-const pythonToolsDir = path.join(toolsDir, "python");
-const scriptsDir = path.join(pythonToolsDir, "scripts");
-const huskyDir = path.join(rootDir, ".husky");
-const venvPath = path.join(rootDir, ".venv");
-const venvBinDir = isWindows ? path.join(venvPath, "Scripts") : path.join(venvPath, "bin");
+const toolsDir = path.join(rootDir, 'tools');
+const pythonToolsDir = path.join(toolsDir, 'python');
+const scriptsDir = path.join(pythonToolsDir, 'scripts');
+const huskyDir = path.join(rootDir, '.husky');
+const venvPath = path.join(rootDir, '.venv');
+const venvBinDir = isWindows ? path.join(venvPath, 'Scripts') : path.join(venvPath, 'bin');
 
 // Logging helper
 function log(message, isError = false) {
@@ -40,10 +40,10 @@ function log(message, isError = false) {
 
 // Execute command helper
 function execute(cmd, args = [], options = {}) {
-  log(`Executing: ${cmd} ${args.join(" ")}`);
+  log(`Executing: ${cmd} ${args.join(' ')}`);
 
   const result = spawnSync(cmd, args, {
-    stdio: "inherit",
+    stdio: 'inherit',
     shell: true,
     cwd: options.cwd || process.cwd(),
     ...options,
@@ -58,31 +58,31 @@ function execute(cmd, args = [], options = {}) {
 
 // Check if Python is installed
 function isPythonInstalled() {
-  log("Checking if Python is installed...");
+  log('Checking if Python is installed...');
 
   try {
     if (isWindows) {
-      const whereResult = spawnSync("where", ["python"], { shell: true });
+      const whereResult = spawnSync('where', ['python'], { shell: true });
       if (whereResult.status === 0 && whereResult.stdout.toString().trim().length > 0) {
         return true;
       }
 
-      const versionResult = spawnSync("python", ["--version"], { shell: true });
+      const versionResult = spawnSync('python', ['--version'], { shell: true });
       if (versionResult.status === 0) {
         return true;
       }
 
-      const pyResult = spawnSync("py", ["--version"], { shell: true });
+      const pyResult = spawnSync('py', ['--version'], { shell: true });
       if (pyResult.status === 0) {
         return true;
       }
     } else {
-      const py3Result = spawnSync("python3", ["--version"], { shell: true });
+      const py3Result = spawnSync('python3', ['--version'], { shell: true });
       if (py3Result.status === 0) {
         return true;
       }
 
-      const pyResult = spawnSync("python", ["--version"], { shell: true });
+      const pyResult = spawnSync('python', ['--version'], { shell: true });
       if (pyResult.status === 0) {
         return true;
       }
@@ -97,46 +97,49 @@ function isPythonInstalled() {
 
 // Setup Python environment for hooks (UV workspace shared venv)
 function setupPythonEnvironment() {
-  log("Setting up Python environment for hooks...");
+  log('Setting up Python environment for hooks...');
 
   // Check if UV is available
-  const uvCheck = spawnSync("uv", ["--version"], { shell: true });
+  const uvCheck = spawnSync('uv', ['--version'], { shell: true });
   if (uvCheck.status !== 0) {
-    log("UV is not installed. Install UV first: https://docs.astral.sh/uv/getting-started/installation/", true);
-    log("Hooks setup will continue but Python linting may not work.", true);
+    log(
+      'UV is not installed. Install UV first: https://docs.astral.sh/uv/getting-started/installation/',
+      true,
+    );
+    log('Hooks setup will continue but Python linting may not work.', true);
     return false;
   }
 
   // Check if shared venv already exists
-  const pythonExe = path.join(venvBinDir, isWindows ? "python.exe" : "python");
+  const pythonExe = path.join(venvBinDir, isWindows ? 'python.exe' : 'python');
   if (fs.existsSync(venvPath) && fs.existsSync(pythonExe)) {
-    log("UV workspace venv already exists. Syncing dependencies...");
+    log('UV workspace venv already exists. Syncing dependencies...');
   } else {
-    log("Creating UV workspace shared venv via uv sync...");
+    log('Creating UV workspace shared venv via uv sync...');
   }
 
   // Run uv sync to create/update venv with all workspace dependencies
-  const syncResult = execute("uv", ["sync"]);
+  const syncResult = execute('uv', ['sync']);
   if (!syncResult.success) {
-    log("Failed to run uv sync. Hooks setup will continue but Python linting may not work.", true);
+    log('Failed to run uv sync. Hooks setup will continue but Python linting may not work.', true);
     return false;
   }
 
-  log("Python environment set up successfully via UV workspace.");
+  log('Python environment set up successfully via UV workspace.');
   return true;
 }
 
 // Setup Node.js environment for hooks
 function setupNodeEnvironment() {
-  log("Setting up Node.js environment for hooks...");
+  log('Setting up Node.js environment for hooks...');
 
   // Check if ESLint and Prettier are installed
   try {
     // We're already running in Node.js, so this should be fine
-    log("Verifying Node.js dependencies...");
+    log('Verifying Node.js dependencies...');
 
     // Install husky if needed
-    execute("pnpm", ["run", "prepare"]);
+    execute('pnpm', ['run', 'prepare']);
 
     return true;
   } catch (error) {
@@ -147,83 +150,16 @@ function setupNodeEnvironment() {
 
 // Setup .NET environment for hooks
 function setupDotNetEnvironment() {
-  log("Setting up .NET environment for hooks...");
+  log('Setting up .NET environment for hooks...');
 
   // Check if .NET is installed
-  const dotnetResult = spawnSync("dotnet", ["--version"], { shell: true });
+  const dotnetResult = spawnSync('dotnet', ['--version'], { shell: true });
 
   if (dotnetResult.status === 0) {
-    log(".NET is installed. No additional setup needed for hooks.");
+    log('.NET is installed. No additional setup needed for hooks.');
     return true;
   } else {
-    log(".NET is not installed or not in PATH. .NET formatting in hooks may not work.", true);
-    return false;
-  }
-}
-
-// Create selective pre-commit hook
-function createPreCommitHook() {
-  log("Creating pre-commit hook...");
-
-  const preCommitPath = path.join(huskyDir, "pre-commit");
-
-  try {
-    // Create a pre-commit hook using our unified hooks system
-    const preCommitContent = `#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
-
-# Run our unified hooks system for pre-commit
-node tools/hooks/hooks-runner.js pre-commit
-`;
-
-    fs.writeFileSync(preCommitPath, preCommitContent);
-
-    // Make the pre-commit hook executable on Unix
-    if (!isWindows) {
-      execute("chmod", ["+x", preCommitPath]);
-    }
-
-    log(`Created pre-commit hook at ${preCommitPath}`);
-
-    // Create post-merge hook
-    log("Creating post-merge hook...");
-    const postMergePath = path.join(huskyDir, "post-merge");
-    const postMergeContent = `#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
-
-# Run our unified hooks system for post-merge
-node tools/hooks/hooks-runner.js post-merge
-`;
-    fs.writeFileSync(postMergePath, postMergeContent);
-
-    // Make the post-merge hook executable on Unix
-    if (!isWindows) {
-      execute("chmod", ["+x", postMergePath]);
-    }
-
-    log(`Created post-merge hook at ${postMergePath}`);
-
-    // Create pre-push hook
-    log("Creating pre-push hook...");
-    const prePushPath = path.join(huskyDir, "pre-push");
-    const prePushContent = `#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
-
-# Run our unified hooks system for pre-push
-node tools/hooks/hooks-runner.js pre-push
-`;
-    fs.writeFileSync(prePushPath, prePushContent);
-
-    // Make the pre-push hook executable on Unix
-    if (!isWindows) {
-      execute("chmod", ["+x", prePushPath]);
-    }
-
-    log(`Created pre-push hook at ${prePushPath}`);
-
-    return true;
-  } catch (error) {
-    log(`Failed to create hooks: ${error.message}`, true);
+    log('.NET is not installed or not in PATH. .NET formatting in hooks may not work.', true);
     return false;
   }
 }
@@ -238,17 +174,17 @@ function parseArguments() {
     all: false,
   };
 
-  if (args.includes("--all")) {
+  if (args.includes('--all')) {
     options.all = true;
     options.python = true;
     options.dotnet = true;
   }
 
-  if (args.includes("--python")) {
+  if (args.includes('--python')) {
     options.python = true;
   }
 
-  if (args.includes("--dotnet")) {
+  if (args.includes('--dotnet')) {
     options.dotnet = true;
   }
 
@@ -259,19 +195,21 @@ function parseArguments() {
 async function main() {
   const options = parseArguments();
 
-  log("Setting up unified hooks system...");
+  log('Setting up unified hooks system...');
   if (options.all) {
-    log("Setting up all language environments (Node.js, Python, .NET)");
+    log('Setting up all language environments (Node.js, Python, .NET)');
   } else {
-    log(`Setting up environments: Node.js${options.python ? ", Python" : ""}${options.dotnet ? ", .NET" : ""}`);
+    log(
+      `Setting up environments: Node.js${options.python ? ', Python' : ''}${options.dotnet ? ', .NET' : ''}`,
+    );
   }
 
   // First setup Husky
-  log("Setting up Husky...");
-  const huskyResult = execute("pnpm", ["run", "prepare"]);
+  log('Setting up Husky...');
+  const huskyResult = execute('pnpm', ['run', 'prepare']);
 
   if (!huskyResult.success) {
-    log("Failed to set up Husky. Aborting hooks setup.", true);
+    log('Failed to set up Husky. Aborting hooks setup.', true);
     process.exit(1);
   }
 
@@ -286,10 +224,7 @@ async function main() {
     setupDotNetEnvironment();
   }
 
-  // Create hooks
-  createPreCommitHook();
-
-  log("Unified hooks system setup completed successfully!");
+  log('Unified hooks system setup completed successfully!');
 }
 
 // Run the script

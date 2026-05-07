@@ -1,45 +1,45 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { useApp } from "@/lib/context";
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useApp } from '@/lib/context';
 
-type Mode = "login" | "signup" | "forgot";
+type Mode = 'login' | 'signup' | 'forgot';
 
 export default function AuthForm({
-  initialMode = "login",
+  initialMode = 'login',
   onSuccess,
   onSwitchMode,
-  variant = "page",
+  variant = 'page',
 }: {
   initialMode?: Mode;
   onSuccess?: () => void;
-  onSwitchMode?: (mode: "login" | "signup") => void;
+  onSwitchMode?: (mode: 'login' | 'signup') => void;
   /** 'page': always shows the card border/shadow. 'modal': plain on mobile, card on sm+ */
-  variant?: "page" | "modal";
+  variant?: 'page' | 'modal';
 }) {
   const [mode, setMode] = useState<Mode>(initialMode);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
   const [remember, setRemember] = useState(false);
   const { login, signup } = useApp();
   const router = useRouter();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (mode === "login") {
+    if (mode === 'login') {
       login(email, password);
       if (onSuccess) onSuccess();
-      else router.push("/");
-    } else if (mode === "signup") {
+      else router.push('/');
+    } else if (mode === 'signup') {
       signup(name, email, password);
       if (onSuccess) onSuccess();
-      else router.push("/");
+      else router.push('/');
     } else {
       // Forgot password – mock toast
-      alert("Password reset link sent to " + email);
-      setMode("login");
+      alert('Password reset link sent to ' + email);
+      setMode('login');
     }
   };
 
@@ -47,23 +47,23 @@ export default function AuthForm({
     <div className="mx-auto w-full max-w-md">
       <div
         className={
-          variant === "modal"
-            ? "w-full p-6 sm:rounded-3xl sm:border sm:border-surface-border sm:bg-white sm:p-10 sm:shadow-pop"
-            : "rounded-3xl border border-surface-border bg-white p-8 shadow-pop sm:p-10"
+          variant === 'modal'
+            ? 'w-full p-6 sm:rounded-3xl sm:border sm:border-surface-border sm:bg-white sm:p-10 sm:shadow-pop'
+            : 'rounded-3xl border border-surface-border bg-white p-8 shadow-pop sm:p-10'
         }
       >
         <h2 className="text-center font-display text-2xl font-bold tracking-tight">
-          {mode === "login" && "Welcome back"}
-          {mode === "signup" && "Create your account"}
-          {mode === "forgot" && "Reset your password"}
+          {mode === 'login' && 'Welcome back'}
+          {mode === 'signup' && 'Create your account'}
+          {mode === 'forgot' && 'Reset your password'}
         </h2>
         <p className="mt-2 text-center text-sm text-ink-muted">
-          {mode === "login" && "Sign in to save homes and set alerts"}
-          {mode === "signup" && "Join Cribstop to find your dream home"}
-          {mode === "forgot" && "Enter your email and we'll send a reset link"}
+          {mode === 'login' && 'Sign in to save homes and set alerts'}
+          {mode === 'signup' && 'Join Cribstop to find your dream home'}
+          {mode === 'forgot' && "Enter your email and we'll send a reset link"}
         </p>
 
-        {mode !== "forgot" && (
+        {mode !== 'forgot' && (
           <div className="mt-6 flex flex-col gap-3">
             <button className="btn-secondary gap-2">
               <svg className="h-5 w-5" viewBox="0 0 24 24">
@@ -95,7 +95,7 @@ export default function AuthForm({
           </div>
         )}
 
-        {mode !== "forgot" && (
+        {mode !== 'forgot' && (
           <div className="my-6 flex items-center gap-3">
             <div className="h-px flex-1 bg-surface-border" />
             <span className="text-xs text-ink-subtle">or</span>
@@ -104,7 +104,7 @@ export default function AuthForm({
         )}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          {mode === "signup" && (
+          {mode === 'signup' && (
             <div>
               <label className="mb-1 block text-sm font-medium text-ink-muted">Full Name</label>
               <input
@@ -130,7 +130,7 @@ export default function AuthForm({
             />
           </div>
 
-          {mode !== "forgot" && (
+          {mode !== 'forgot' && (
             <div>
               <label className="mb-1 block text-sm font-medium text-ink-muted">Password</label>
               <input
@@ -144,7 +144,7 @@ export default function AuthForm({
             </div>
           )}
 
-          {mode === "login" && (
+          {mode === 'login' && (
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -157,7 +157,7 @@ export default function AuthForm({
               </label>
               <button
                 type="button"
-                onClick={() => setMode("forgot")}
+                onClick={() => setMode('forgot')}
                 className="text-sm font-medium text-brand hover:underline"
               >
                 Forgot password?
@@ -166,20 +166,20 @@ export default function AuthForm({
           )}
 
           <button type="submit" className="btn-primary mt-2 w-full py-3">
-            {mode === "login" && "Sign In"}
-            {mode === "signup" && "Create Account"}
-            {mode === "forgot" && "Send Reset Link"}
+            {mode === 'login' && 'Sign In'}
+            {mode === 'signup' && 'Create Account'}
+            {mode === 'forgot' && 'Send Reset Link'}
           </button>
         </form>
 
         <p className="mt-6 text-center text-sm text-ink-muted">
-          {mode === "login" && (
+          {mode === 'login' && (
             <>
-              Don&apos;t have an account?{" "}
+              Don&apos;t have an account?{' '}
               <button
                 onClick={() => {
-                  setMode("signup");
-                  onSwitchMode?.("signup");
+                  setMode('signup');
+                  onSwitchMode?.('signup');
                 }}
                 className="font-medium text-brand hover:underline"
               >
@@ -187,13 +187,13 @@ export default function AuthForm({
               </button>
             </>
           )}
-          {mode === "signup" && (
+          {mode === 'signup' && (
             <>
-              Already have an account?{" "}
+              Already have an account?{' '}
               <button
                 onClick={() => {
-                  setMode("login");
-                  onSwitchMode?.("login");
+                  setMode('login');
+                  onSwitchMode?.('login');
                 }}
                 className="font-medium text-brand hover:underline"
               >
@@ -201,11 +201,11 @@ export default function AuthForm({
               </button>
             </>
           )}
-          {mode === "forgot" && (
+          {mode === 'forgot' && (
             <button
               onClick={() => {
-                setMode("login");
-                onSwitchMode?.("login");
+                setMode('login');
+                onSwitchMode?.('login');
               }}
               className="font-medium text-brand hover:underline"
             >

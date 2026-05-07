@@ -50,11 +50,15 @@ All .NET configuration files are located at **workspace root** (auto-discovered 
 - `.editorconfig` - Code style rules (multi-language, includes C# and StyleCop diagnostics)
 - `nuget.config` - NuGet package sources and restore configuration
 
-MSBuild and NuGet automatically discover these files by searching upward from each project directory.
+MSBuild and NuGet automatically discover these files by searching upward from each project
+directory.
 
 ### EditorConfig Behavior
 
-- **Root config applies automatically**: All projects inherit workspace `.editorconfig` rules by default
-- **Project overrides are optional**: Create project-specific `.editorconfig` (with `root = false`) only if you need different rules
-- **Changes take effect immediately**: Modifying root config affects all projects without local overrides
+- **Root config applies automatically**: All projects inherit workspace `.editorconfig` rules by
+  default
+- **Project overrides are optional**: Create project-specific `.editorconfig` (with `root = false`)
+  only if you need different rules
+- **Changes take effect immediately**: Modifying root config affects all projects without local
+  overrides
 ````

@@ -249,12 +249,14 @@ Skaffold's file sync requires compatible Dockerfile. For full hot reload:
 ### Use the cross-platform launcher (preferred)
 
 - Run: `node tools/infra/dev-skaffold.js`
-- Why: avoids Windows `pnpm.cmd` Ctrl+C prompts (like `Terminate batch job (Y/N)?`) while still working on macOS/Linux.
+- Why: avoids Windows `pnpm.cmd` Ctrl+C prompts (like `Terminate batch job (Y/N)?`) while still
+  working on macOS/Linux.
 
 ### Use the cross-platform launcher (preferred)
 
 - Run: `node tools/infra/dev-skaffold.js`
-- Why: avoids Windows `pnpm.cmd` Ctrl+C prompts (like `Terminate batch job (Y/N)?`) while still working on macOS/Linux.
+- Why: avoids Windows `pnpm.cmd` Ctrl+C prompts (like `Terminate batch job (Y/N)?`) while still
+  working on macOS/Linux.
 
 ## Next Steps
 

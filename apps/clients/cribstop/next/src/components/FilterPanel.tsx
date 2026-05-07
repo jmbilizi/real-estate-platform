@@ -1,32 +1,32 @@
-"use client";
+'use client';
 
-import { Amenity, PropertyType, SearchFilters } from "@/lib/types";
-import { useState } from "react";
+import { Amenity, PropertyType, SearchFilters } from '@/lib/types';
+import { useState } from 'react';
 
 const PROPERTY_TYPES: PropertyType[] = [
-  "Single Family",
-  "Condo",
-  "Townhome",
-  "Multi-Family",
-  "Loft",
-  "New Construction",
+  'Single Family',
+  'Condo',
+  'Townhome',
+  'Multi-Family',
+  'Loft',
+  'New Construction',
 ];
 const AMENITIES: Amenity[] = [
-  "Pool",
-  "Garage",
-  "Gym",
-  "Elevator",
-  "Balcony",
-  "Fireplace",
-  "Washer/Dryer",
-  "Pet Friendly",
-  "Waterfront",
-  "Office",
-  "Rooftop",
-  "Garden",
-  "Smart Home",
-  "Solar",
-  "EV Charging",
+  'Pool',
+  'Garage',
+  'Gym',
+  'Elevator',
+  'Balcony',
+  'Fireplace',
+  'Washer/Dryer',
+  'Pet Friendly',
+  'Waterfront',
+  'Office',
+  'Rooftop',
+  'Garden',
+  'Smart Home',
+  'Solar',
+  'EV Charging',
 ];
 
 interface Props {
@@ -47,17 +47,17 @@ export default function FilterPanel({ filters, onChange }: Props) {
     <div className="rounded-2xl border border-surface-border bg-white p-5 shadow-card">
       {/* Listing type — segmented control */}
       <div className="inline-flex w-full rounded-full bg-surface-alt p-1">
-        {(["all", "sale", "rent"] as const).map((t) => {
-          const active = (filters.listingType || "all") === t;
+        {(['all', 'sale', 'rent'] as const).map((t) => {
+          const active = (filters.listingType || 'all') === t;
           return (
             <button
               key={t}
               onClick={() => set({ listingType: t })}
               className={`flex-1 rounded-full px-3 py-1.5 text-sm font-semibold transition ${
-                active ? "bg-white text-ink shadow-sm" : "text-ink-muted hover:text-ink"
+                active ? 'bg-white text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
               }`}
             >
-              {t === "all" ? "All" : t === "sale" ? "Buy" : "Rent"}
+              {t === 'all' ? 'All' : t === 'sale' ? 'Buy' : 'Rent'}
             </button>
           );
         })}
@@ -71,7 +71,7 @@ export default function FilterPanel({ filters, onChange }: Props) {
             type="number"
             className="input-field"
             placeholder="No min"
-            value={filters.minPrice ?? ""}
+            value={filters.minPrice ?? ''}
             onChange={(e) => set({ minPrice: e.target.value ? Number(e.target.value) : undefined })}
           />
         </div>
@@ -81,7 +81,7 @@ export default function FilterPanel({ filters, onChange }: Props) {
             type="number"
             className="input-field"
             placeholder="No max"
-            value={filters.maxPrice ?? ""}
+            value={filters.maxPrice ?? ''}
             onChange={(e) => set({ maxPrice: e.target.value ? Number(e.target.value) : undefined })}
           />
         </div>
@@ -97,10 +97,12 @@ export default function FilterPanel({ filters, onChange }: Props) {
                 key={n}
                 onClick={() => set({ beds: n })}
                 className={`flex-1 rounded-lg py-2 text-xs font-medium transition ${
-                  (filters.beds ?? 0) === n ? "bg-brand text-white" : "bg-surface-alt text-ink-muted hover:text-ink"
+                  (filters.beds ?? 0) === n
+                    ? 'bg-brand text-white'
+                    : 'bg-surface-alt text-ink-muted hover:text-ink'
                 }`}
               >
-                {n === 0 ? "Any" : `${n}+`}
+                {n === 0 ? 'Any' : `${n}+`}
               </button>
             ))}
           </div>
@@ -113,10 +115,12 @@ export default function FilterPanel({ filters, onChange }: Props) {
                 key={n}
                 onClick={() => set({ baths: n })}
                 className={`flex-1 rounded-lg py-2 text-xs font-medium transition ${
-                  (filters.baths ?? 0) === n ? "bg-brand text-white" : "bg-surface-alt text-ink-muted hover:text-ink"
+                  (filters.baths ?? 0) === n
+                    ? 'bg-brand text-white'
+                    : 'bg-surface-alt text-ink-muted hover:text-ink'
                 }`}
               >
-                {n === 0 ? "Any" : `${n}+`}
+                {n === 0 ? 'Any' : `${n}+`}
               </button>
             ))}
           </div>
@@ -128,10 +132,10 @@ export default function FilterPanel({ filters, onChange }: Props) {
         <label className="mb-1 block text-xs font-medium text-ink-muted">Property Type</label>
         <select
           className="input-field"
-          value={filters.propertyType ?? "all"}
+          value={filters.propertyType ?? 'all'}
           onChange={(e) =>
             set({
-              propertyType: e.target.value === "all" ? undefined : (e.target.value as PropertyType),
+              propertyType: e.target.value === 'all' ? undefined : (e.target.value as PropertyType),
             })
           }
         >
@@ -147,18 +151,18 @@ export default function FilterPanel({ filters, onChange }: Props) {
       {/* Toggle filters */}
       <div className="mt-4 flex flex-wrap gap-2">
         {[
-          { key: "openHouse" as const, label: "Open House" },
-          { key: "newConstruction" as const, label: "New Build" },
-          { key: "waterfront" as const, label: "Waterfront" },
-          { key: "petFriendly" as const, label: "Pet Friendly" },
+          { key: 'openHouse' as const, label: 'Open House' },
+          { key: 'newConstruction' as const, label: 'New Build' },
+          { key: 'waterfront' as const, label: 'Waterfront' },
+          { key: 'petFriendly' as const, label: 'Pet Friendly' },
         ].map(({ key, label }) => (
           <button
             key={key}
             onClick={() => set({ [key]: !filters[key] })}
             className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
               filters[key]
-                ? "border-brand bg-brand-50 text-brand-700"
-                : "border-surface-border text-ink-muted hover:border-ink-subtle"
+                ? 'border-brand bg-brand-50 text-brand-700'
+                : 'border-surface-border text-ink-muted hover:border-ink-subtle'
             }`}
           >
             {label}
@@ -167,8 +171,11 @@ export default function FilterPanel({ filters, onChange }: Props) {
       </div>
 
       {/* More / Amenities */}
-      <button onClick={() => setExpanded(!expanded)} className="mt-4 text-sm font-medium text-brand hover:underline">
-        {expanded ? "Show less" : "More filters & amenities"}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="mt-4 text-sm font-medium text-brand hover:underline"
+      >
+        {expanded ? 'Show less' : 'More filters & amenities'}
       </button>
 
       {expanded && (
@@ -181,8 +188,8 @@ export default function FilterPanel({ filters, onChange }: Props) {
                 onClick={() => toggleAmenity(a)}
                 className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
                   filters.amenities?.includes(a)
-                    ? "border-brand bg-brand-50 text-brand-700"
-                    : "border-surface-border text-ink-muted hover:border-ink-subtle"
+                    ? 'border-brand bg-brand-50 text-brand-700'
+                    : 'border-surface-border text-ink-muted hover:border-ink-subtle'
                 }`}
               >
                 {a}
@@ -197,8 +204,10 @@ export default function FilterPanel({ filters, onChange }: Props) {
               type="number"
               className="input-field"
               placeholder="No min"
-              value={filters.minSqft ?? ""}
-              onChange={(e) => set({ minSqft: e.target.value ? Number(e.target.value) : undefined })}
+              value={filters.minSqft ?? ''}
+              onChange={(e) =>
+                set({ minSqft: e.target.value ? Number(e.target.value) : undefined })
+              }
             />
           </div>
         </div>
@@ -209,8 +218,8 @@ export default function FilterPanel({ filters, onChange }: Props) {
         <label className="mb-1 block text-xs font-medium text-ink-muted">Sort By</label>
         <select
           className="input-field"
-          value={filters.sort ?? "recommended"}
-          onChange={(e) => set({ sort: e.target.value as SearchFilters["sort"] })}
+          value={filters.sort ?? 'recommended'}
+          onChange={(e) => set({ sort: e.target.value as SearchFilters['sort'] })}
         >
           <option value="recommended">Recommended</option>
           <option value="newest">Newest</option>

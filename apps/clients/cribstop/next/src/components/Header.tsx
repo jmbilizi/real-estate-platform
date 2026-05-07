@@ -1,12 +1,12 @@
-﻿"use client";
+﻿'use client';
 
-import Link from "next/link";
-import { useApp } from "@/lib/context";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import CompactSearchBar from "./CompactSearchBar";
-import MobileSearchSheet from "./MobileSearchSheet";
-import { Home, KeyRound } from "lucide-react";
+import Link from 'next/link';
+import { useApp } from '@/lib/context';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import CompactSearchBar from './CompactSearchBar';
+import MobileSearchSheet from './MobileSearchSheet';
+import { Home, KeyRound } from 'lucide-react';
 
 export default function Header() {
   const {
@@ -32,26 +32,26 @@ export default function Header() {
   // Sync data-header-expanded attribute so CSS can skip search-section transition
   useEffect(() => {
     if (headerExpanded) {
-      document.documentElement.setAttribute("data-header-expanded", "");
+      document.documentElement.setAttribute('data-header-expanded', '');
     } else {
-      document.documentElement.removeAttribute("data-header-expanded");
+      document.documentElement.removeAttribute('data-header-expanded');
     }
-    window.dispatchEvent(new Event("searchbar:close"));
+    window.dispatchEvent(new Event('searchbar:close'));
   }, [headerExpanded]);
 
   // Escape closes expanded search
   useEffect(() => {
     if (!headerExpanded) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setHeaderExpanded(false);
+      if (e.key === 'Escape') setHeaderExpanded(false);
     };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
   }, [headerExpanded, setHeaderExpanded]);
 
-  const openModal = (mode: "login" | "signup") => {
+  const openModal = (mode: 'login' | 'signup') => {
     const params = new URLSearchParams(window.location.search);
-    params.set("modal", mode);
+    params.set('modal', mode);
     router.push(`${window.location.pathname}?${params.toString()}`);
   };
 
@@ -70,8 +70,8 @@ export default function Header() {
       <header
         className={`sticky top-0 z-50 bg-white overflow-visible transition-[border-color,box-shadow] duration-200 ${
           showBorder
-            ? "border-b border-[rgba(0,0,0,0.08)] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_2px_8px_rgba(0,0,0,0.04)]"
-            : "border-b border-transparent shadow-none"
+            ? 'border-b border-[rgba(0,0,0,0.08)] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_2px_8px_rgba(0,0,0,0.04)]'
+            : 'border-b border-transparent shadow-none'
         }`}
       >
         {/* â”€â”€ Row 1: Logo | Tabs/Pill | Nav â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
@@ -79,11 +79,24 @@ export default function Header() {
           {/* Logo */}
           <Link href="/" className="flex flex-shrink-0 items-center -ml-1">
             <span className="flex items-center gap-0">
-              <svg viewBox="0 0 100 140" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-9 w-9 text-white">
+              <svg
+                viewBox="0 0 100 140"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-9 w-9 text-white"
+              >
                 <g>
                   <circle cx="50" cy="45" r="40" fill="#FF385C" />
                   <circle cx="50" cy="45" r="24" fill="currentColor" />
-                  <line x1="95" y1="45" x2="74" y2="45" stroke="currentColor" strokeWidth="30" strokeLinecap="round" />
+                  <line
+                    x1="95"
+                    y1="45"
+                    x2="74"
+                    y2="45"
+                    stroke="currentColor"
+                    strokeWidth="30"
+                    strokeLinecap="round"
+                  />
                   <polygon points="50,135 35,70 65,70" fill="#FF385C" />
                   <circle cx="50" cy="45" r="24" fill="currentColor" />
                   <polygon points="50,135 35,70 65,70" fill="#FF385C" />
@@ -99,37 +112,40 @@ export default function Header() {
             {/* TABS — hidden by CSS when data-header-pill is set, shown again when expanded */}
             <div
               className="header-tabs absolute inset-0 flex items-stretch justify-center"
-              style={headerExpanded ? { opacity: 1, pointerEvents: "auto" } : undefined}
+              style={headerExpanded ? { opacity: 1, pointerEvents: 'auto' } : undefined}
             >
               <button
-                onClick={() => setListingTab("for-sale")}
+                onClick={() => setListingTab('for-sale')}
                 className="group/tab relative flex items-center justify-center px-2 sm:px-3 focus:outline-none"
               >
                 <span
                   className={`flex items-center gap-1.5 rounded-full px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-semibold transition-colors duration-150 ${
-                    listingTab === "for-sale"
-                      ? "text-ink"
-                      : "text-ink-muted group-hover/tab:text-ink group-hover/tab:bg-surface-soft"
+                    listingTab === 'for-sale'
+                      ? 'text-ink'
+                      : 'text-ink-muted group-hover/tab:text-ink group-hover/tab:bg-surface-soft'
                   }`}
                 >
-                  <Home className="h-4 w-4 sm:h-[18px] sm:w-[18px] flex-shrink-0 text-emerald-500" strokeWidth={1.75} />
+                  <Home
+                    className="h-4 w-4 sm:h-[18px] sm:w-[18px] flex-shrink-0 text-emerald-500"
+                    strokeWidth={1.75}
+                  />
                   <span className="hidden xs:inline">For Sale</span>
                   <span className="xs:hidden">Buy</span>
                 </span>
-                {listingTab === "for-sale" && (
+                {listingTab === 'for-sale' && (
                   <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-brand rounded-full" />
                 )}
               </button>
 
               <button
-                onClick={() => setListingTab("for-rent")}
+                onClick={() => setListingTab('for-rent')}
                 className="group/tab relative flex items-center justify-center px-2 sm:px-3 focus:outline-none"
               >
                 <span
                   className={`flex items-center gap-1.5 rounded-full px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-semibold transition-colors duration-150 ${
-                    listingTab === "for-rent"
-                      ? "text-ink"
-                      : "text-ink-muted group-hover/tab:text-ink group-hover/tab:bg-surface-soft"
+                    listingTab === 'for-rent'
+                      ? 'text-ink'
+                      : 'text-ink-muted group-hover/tab:text-ink group-hover/tab:bg-surface-soft'
                   }`}
                 >
                   <KeyRound
@@ -139,7 +155,7 @@ export default function Header() {
                   <span className="hidden xs:inline">For Rent</span>
                   <span className="xs:hidden">Rent</span>
                 </span>
-                {listingTab === "for-rent" && (
+                {listingTab === 'for-rent' && (
                   <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-brand rounded-full" />
                 )}
               </button>
@@ -148,7 +164,7 @@ export default function Header() {
             {/* COMPACT PILL — shown by CSS when data-header-pill is set on <html> */}
             <div
               className="header-pill absolute inset-0 flex items-center justify-center transition-opacity duration-150"
-              style={headerExpanded ? { opacity: 0, pointerEvents: "none" } : undefined}
+              style={headerExpanded ? { opacity: 0, pointerEvents: 'none' } : undefined}
             >
               <div className="hidden sm:flex items-center justify-center w-full">
                 <div className="w-full max-w-[480px]">
@@ -163,13 +179,21 @@ export default function Header() {
                 className="sm:hidden flex items-center gap-3 rounded-full border border-[rgba(0,0,0,0.08)] bg-white px-3 py-1.5 shadow-[0_1px_2px_rgba(0,0,0,0.08),0_2px_8px_rgba(0,0,0,0.05)] hover:shadow-[0_2px_4px_rgba(0,0,0,0.08),0_6px_14px_rgba(0,0,0,0.08)] transition-shadow"
               >
                 <div className="flex flex-col items-start min-w-0 flex-1">
-                  <span className="text-[13px] font-semibold text-ink leading-tight">Search homes</span>
+                  <span className="text-[13px] font-semibold text-ink leading-tight">
+                    Search homes
+                  </span>
                   <span className="text-[11px] text-ink-muted leading-tight truncate max-w-[140px]">
                     Anywhere · Anytime
                   </span>
                 </div>
                 <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-brand text-white">
-                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <svg
+                    className="h-3.5 w-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2.5}
+                    viewBox="0 0 24 24"
+                  >
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -199,8 +223,18 @@ export default function Header() {
                   onClick={() => setProfileOpen(!profileOpen)}
                   className="flex h-10 items-center gap-2 rounded-full border border-surface-border bg-white pl-3 pr-1 transition hover:shadow-card"
                 >
-                  <svg className="h-4 w-4 text-ink-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                  <svg
+                    className="h-4 w-4 text-ink-muted"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 6h16M4 12h16M4 18h16"
+                    />
                   </svg>
                   <span className="flex h-8 w-8 items-center justify-center rounded-full bg-ink font-semibold text-white">
                     {user.name[0]}
@@ -233,12 +267,15 @@ export default function Header() {
             ) : (
               <>
                 <button
-                  onClick={() => openModal("login")}
+                  onClick={() => openModal('login')}
                   className="hidden rounded-full px-4 py-2 text-sm font-medium text-ink transition hover:bg-surface-alt sm:inline-flex"
                 >
                   Sign in
                 </button>
-                <button onClick={() => openModal("signup")} className="hidden sm:inline-flex btn-primary">
+                <button
+                  onClick={() => openModal('signup')}
+                  className="hidden sm:inline-flex btn-primary"
+                >
                   Sign up
                 </button>
               </>
@@ -252,9 +289,19 @@ export default function Header() {
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 {menuOpen ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 8h16M4 16h16"
+                  />
                 )}
               </svg>
             </button>
@@ -284,7 +331,7 @@ export default function Header() {
               {!user && (
                 <button
                   onClick={() => {
-                    openModal("login");
+                    openModal('login');
                     setMenuOpen(false);
                   }}
                 >

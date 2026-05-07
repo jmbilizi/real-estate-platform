@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import dynamic from "next/dynamic";
-import { Listing } from "@/lib/types";
+import dynamic from 'next/dynamic';
+import { Listing } from '@/lib/types';
 
-const Inner = dynamic(() => import("./SingleListingMapInner"), {
+const Inner = dynamic(() => import('./SingleListingMapInner'), {
   ssr: false,
   loading: () => (
     <div className="flex h-full w-full items-center justify-center bg-surface-soft">
@@ -12,6 +12,12 @@ const Inner = dynamic(() => import("./SingleListingMapInner"), {
   ),
 });
 
-export default function SingleListingMap({ listing, className }: { listing: Listing; className?: string }) {
+export default function SingleListingMap({
+  listing,
+  className,
+}: {
+  listing: Listing;
+  className?: string;
+}) {
   return <Inner listing={listing} className={className} />;
 }

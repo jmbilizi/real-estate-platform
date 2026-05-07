@@ -19,21 +19,21 @@
  *   inferred eslint behavior).
  */
 
-const fs = require("fs");
-const path = require("path");
-const { execSync } = require("child_process");
+const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
 
 function hasFlag(argv, name) {
   return argv.includes(name);
 }
 
 function toPosix(p) {
-  return p.replace(/\\/g, "/");
+  return p.replace(/\\/g, '/');
 }
 
 function writeFilePreservingEncoding(filePath, content) {
   let hasBOM = false;
-  let lineEnding = "\n";
+  let lineEnding = '\n';
 
   if (fs.existsSync(filePath)) {
     const originalBuffer = fs.readFileSync(filePath);
@@ -43,29 +43,29 @@ function writeFilePreservingEncoding(filePath, content) {
       originalBuffer[1] === 0xbb &&
       originalBuffer[2] === 0xbf;
 
-    const originalContent = originalBuffer.toString("utf8");
-    lineEnding = originalContent.includes("\r\n") ? "\r\n" : "\n";
+    const originalContent = originalBuffer.toString('utf8');
+    lineEnding = originalContent.includes('\r\n') ? '\r\n' : '\n';
   } else {
-    lineEnding = content.includes("\r\n") ? "\r\n" : "\n";
+    lineEnding = content.includes('\r\n') ? '\r\n' : '\n';
   }
 
-  if (lineEnding === "\r\n") {
-    content = content.replace(/\r?\n/g, "\r\n");
+  if (lineEnding === '\r\n') {
+    content = content.replace(/\r?\n/g, '\r\n');
   } else {
-    content = content.replace(/\r\n/g, "\n");
+    content = content.replace(/\r\n/g, '\n');
   }
 
   const outputBuffer = hasBOM
-    ? Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(content, "utf8")])
-    : Buffer.from(content, "utf8");
+    ? Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(content, 'utf8')])
+    : Buffer.from(content, 'utf8');
 
   fs.writeFileSync(filePath, outputBuffer);
 }
 
 function runJson(command) {
   const output = execSync(command, {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
   return JSON.parse(output);
 }
@@ -76,26 +76,35 @@ function fileExists(rootDir, relativePath) {
 
 function isNodeProject(projectConfig, projectRootAbs) {
   const tags = projectConfig.tags || [];
-  if (tags.includes("node")) return true;
-  if (fileExists(projectRootAbs, "package.json")) return true;
-  if (fileExists(projectRootAbs, "tsconfig.json")) return true;
+  if (tags.includes('node')) return true;
+  if (fileExists(projectRootAbs, 'package.json')) return true;
+  if (fileExists(projectRootAbs, 'tsconfig.json')) return true;
   return false;
 }
 
 function isEligibleForAutoProjectJson(projectRootRel) {
-  const normalized = toPosix(projectRootRel || "");
+  const normalized = toPosix(projectRootRel || '');
   // Keep this conservative to avoid churning tooling/config folders.
-  return normalized.startsWith("apps/") || normalized.startsWith("libs/");
+  return normalized.startsWith('apps/') || normalized.startsWith('libs/');
 }
 
-function createMinimalNodeProjectJson(projectName, effectiveProjectConfig, projectRootRel, workspaceRoot) {
+function createMinimalNodeProjectJson(
+  projectName,
+  effectiveProjectConfig,
+  projectRootRel,
+  workspaceRoot,
+) {
   const projectRootAbs = path.join(workspaceRoot, projectRootRel);
   const schemaRel = toPosix(
-    path.relative(projectRootAbs, path.join(workspaceRoot, "node_modules/nx/schemas/project-schema.json")),
+    path.relative(
+      projectRootAbs,
+      path.join(workspaceRoot, 'node_modules/nx/schemas/project-schema.json'),
+    ),
   );
 
   const inferredProjectType =
-    effectiveProjectConfig.projectType || (toPosix(projectRootRel).startsWith("apps/") ? "application" : "library");
+    effectiveProjectConfig.projectType ||
+    (toPosix(projectRootRel).startsWith('apps/') ? 'application' : 'library');
 
   return {
     name: projectName,
@@ -107,33 +116,42 @@ function createMinimalNodeProjectJson(projectName, effectiveProjectConfig, proje
   };
 }
 
-function ensureNodeTargets(projectJson, projectName, projectRootRel, projectRootAbs, workspaceRoot) {
+function ensureNodeTargets(
+  projectJson,
+  projectName,
+  projectRootRel,
+  projectRootAbs,
+  workspaceRoot,
+) {
   projectJson.targets = projectJson.targets || {};
 
   const prettierConfigRel = toPosix(
-    path.relative(projectRootAbs, path.join(workspaceRoot, "tools/node/configs/prettier-config.js")),
+    path.relative(
+      projectRootAbs,
+      path.join(workspaceRoot, 'tools/node/configs/prettier-config.js'),
+    ),
   );
   const tsconfigRel = `${toPosix(projectRootRel)}/tsconfig.json`;
 
   // lint
   if (!projectJson.targets.lint) {
     projectJson.targets.lint = {
-      executor: "nx:run-commands",
+      executor: 'nx:run-commands',
       cache: true,
       options: {
-        command: "eslint .",
+        command: 'eslint .',
         cwd: toPosix(projectRootRel),
       },
     };
   }
 
   // type-check
-  if (!projectJson.targets["type-check"] && fileExists(projectRootAbs, "tsconfig.json")) {
-    projectJson.targets["type-check"] = {
-      executor: "nx:run-commands",
+  if (!projectJson.targets['type-check'] && fileExists(projectRootAbs, 'tsconfig.json')) {
+    projectJson.targets['type-check'] = {
+      executor: 'nx:run-commands',
       options: {
         command: `tsc --noEmit -p ${tsconfigRel}`,
-        cwd: ".",
+        cwd: '.',
       },
     };
   }
@@ -141,7 +159,7 @@ function ensureNodeTargets(projectJson, projectName, projectRootRel, projectRoot
   // format
   if (!projectJson.targets.format) {
     projectJson.targets.format = {
-      executor: "nx:run-commands",
+      executor: 'nx:run-commands',
       options: {
         command: `prettier --write --config ${prettierConfigRel} .`,
         cwd: toPosix(projectRootRel),
@@ -150,9 +168,9 @@ function ensureNodeTargets(projectJson, projectName, projectRootRel, projectRoot
   }
 
   // format-check
-  if (!projectJson.targets["format-check"]) {
-    projectJson.targets["format-check"] = {
-      executor: "nx:run-commands",
+  if (!projectJson.targets['format-check']) {
+    projectJson.targets['format-check'] = {
+      executor: 'nx:run-commands',
       options: {
         command: `prettier --check --config ${prettierConfigRel} .`,
         cwd: toPosix(projectRootRel),
@@ -163,10 +181,10 @@ function ensureNodeTargets(projectJson, projectName, projectRootRel, projectRoot
   // test
   if (!projectJson.targets.test) {
     projectJson.targets.test = {
-      executor: "nx:run-commands",
+      executor: 'nx:run-commands',
       cache: true,
       options: {
-        command: "jest --passWithNoTests",
+        command: 'jest --passWithNoTests',
         cwd: toPosix(projectRootRel),
       },
     };
@@ -177,26 +195,26 @@ function ensureContainerBuildTarget(projectJson, hasDockerfile) {
   projectJson.targets = projectJson.targets || {};
 
   if (hasDockerfile) {
-    if (!projectJson.targets["container-build"]) {
-      projectJson.targets["container-build"] = {
-        executor: "nx:run-commands",
+    if (!projectJson.targets['container-build']) {
+      projectJson.targets['container-build'] = {
+        executor: 'nx:run-commands',
         options: {
-          command: "node tools/docker/build-image.js {projectName} --tag={args.tag}",
-          cwd: ".",
+          command: 'node tools/docker/build-image.js {projectName} --tag={args.tag}',
+          cwd: '.',
         },
       };
     }
   } else {
-    if (projectJson.targets["container-build"]) {
-      delete projectJson.targets["container-build"];
+    if (projectJson.targets['container-build']) {
+      delete projectJson.targets['container-build'];
     }
   }
 }
 
 function main() {
   const workspaceRoot = process.cwd();
-  const createMissing = hasFlag(process.argv.slice(2), "--create-missing");
-  const projectNames = runJson("pnpm exec nx show projects --json");
+  const createMissing = hasFlag(process.argv.slice(2), '--create-missing');
+  const projectNames = runJson('pnpm exec nx show projects --json');
 
   const stats = {
     totalProjects: projectNames.length,
@@ -211,7 +229,7 @@ function main() {
     const effective = runJson(`pnpm exec nx show project ${projectName} --json`);
     const projectRootRel = effective.root;
     const projectRootAbs = path.join(workspaceRoot, projectRootRel);
-    const projectJsonPath = path.join(projectRootAbs, "project.json");
+    const projectJsonPath = path.join(projectRootAbs, 'project.json');
 
     const projectJsonExists = fs.existsSync(projectJsonPath);
     const isNode = isNodeProject(effective, projectRootAbs);
@@ -228,13 +246,13 @@ function main() {
 
     stats.eligibleProjects += 1;
 
-    const beforeRaw = projectJsonExists ? fs.readFileSync(projectJsonPath, "utf8") : "";
+    const beforeRaw = projectJsonExists ? fs.readFileSync(projectJsonPath, 'utf8') : '';
     const projectJson = projectJsonExists
       ? JSON.parse(beforeRaw)
       : createMinimalNodeProjectJson(projectName, effective, projectRootRel, workspaceRoot);
 
     // Enforce container-build solely based on Dockerfile presence.
-    const hasDockerfile = fs.existsSync(path.join(projectRootAbs, "Dockerfile"));
+    const hasDockerfile = fs.existsSync(path.join(projectRootAbs, 'Dockerfile'));
     ensureContainerBuildTarget(projectJson, hasDockerfile);
 
     // Node standard targets (only when it makes sense).
@@ -242,8 +260,8 @@ function main() {
       ensureNodeTargets(projectJson, projectName, projectRootRel, projectRootAbs, workspaceRoot);
     }
 
-    const afterRaw = JSON.stringify(projectJson, null, 2) + "\n";
-    if (!projectJsonExists || afterRaw !== beforeRaw.replace(/\r\n/g, "\n")) {
+    const afterRaw = JSON.stringify(projectJson, null, 2) + '\n';
+    if (!projectJsonExists || afterRaw !== beforeRaw.replace(/\r\n/g, '\n')) {
       writeFilePreservingEncoding(projectJsonPath, afterRaw);
       if (!projectJsonExists) {
         stats.createdProjectJson += 1;
@@ -259,7 +277,7 @@ function main() {
       `[nx] Updated standard targets for ${totalChanged} project(s) (created: ${stats.createdProjectJson}, updated: ${stats.updatedProjectJson}).`,
     );
   } else {
-    console.log("[nx] Standard targets already up to date.");
+    console.log('[nx] Standard targets already up to date.');
   }
 
   console.log(

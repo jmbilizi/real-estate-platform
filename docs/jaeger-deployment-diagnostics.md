@@ -32,9 +32,8 @@ kubectl describe pvc jaeger-data-jaeger-0
 
 ### 1. BadgerDB Version Incompatibility
 
-**Symptoms**: `manifest has unsupported version: 4 (we support 8)`
-**Cause**: Upgrading from older Jaeger with incompatible BadgerDB format
-**Solution**:
+**Symptoms**: `manifest has unsupported version: 4 (we support 8)` **Cause**: Upgrading from older
+Jaeger with incompatible BadgerDB format **Solution**:
 
 ```bash
 kubectl delete pod jaeger-0
@@ -44,32 +43,32 @@ kubectl delete pvc jaeger-data-jaeger-0
 
 ### 2. Permission Denied
 
-**Symptoms**: `open /badger/key: permission denied`
-**Cause**: Volume ownership mismatch, initContainer failed
-**Check**: `kubectl logs jaeger-0 -c fix-permissions`
-**Expected**: Should show `chown -R 10001:10001 /badger`
+**Symptoms**: `open /badger/key: permission denied` **Cause**: Volume ownership mismatch,
+initContainer failed **Check**: `kubectl logs jaeger-0 -c fix-permissions` **Expected**: Should show
+`chown -R 10001:10001 /badger`
 
 ### 3. Image Pull Errors
 
-**Symptoms**: `ImagePullBackOff`, `ErrImagePull`
-**Check**: `kubectl get statefulset jaeger -o jsonpath='{.spec.template.spec.containers[0].image}'`
+**Symptoms**: `ImagePullBackOff`, `ErrImagePull` **Check**:
+`kubectl get statefulset jaeger -o jsonpath='{.spec.template.spec.containers[0].image}'`
 **Expected**: `jaegertracing/all-in-one:1.76.0` (not `opentelemetry-all-in-one`)
 
 ### 4. Readiness Probe Timeout
 
-**Symptoms**: Pod running but not ready after 45s+ 60s wait
-**Check**: `kubectl logs jaeger-0 | grep -E 'ready|started|listening|serving'`
-**Analysis**: If app starts slowly, may need to increase readiness initialDelaySeconds
+**Symptoms**: Pod running but not ready after 45s+ 60s wait **Check**:
+`kubectl logs jaeger-0 | grep -E 'ready|started|listening|serving'` **Analysis**: If app starts
+slowly, may need to increase readiness initialDelaySeconds
 
 ### 5. Resource Constraints
 
-**Symptoms**: Pod stuck in Pending state
-**Check**: `kubectl describe pod jaeger-0 | grep -A5 Events`
-**Look for**: `Insufficient memory`, `Insufficient cpu`
+**Symptoms**: Pod stuck in Pending state **Check**:
+`kubectl describe pod jaeger-0 | grep -A5 Events` **Look for**: `Insufficient memory`,
+`Insufficient cpu`
 
 ## GitHub Actions Workflow Diagnostics
 
-When deployment fails in CI/CD, the workflow automatically captures all above diagnostics in the "Wait for workload rollout" step output.
+When deployment fails in CI/CD, the workflow automatically captures all above diagnostics in the
+"Wait for workload rollout" step output.
 
 Review the failed workflow run logs for:
 

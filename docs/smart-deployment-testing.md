@@ -4,7 +4,8 @@ This guide explains how to test the smart deployment functionality in the CI/CD 
 
 ## Overview
 
-The smart deployment system intelligently detects which services need to be deployed based on file changes, reducing deployment time and resource usage.
+The smart deployment system intelligently detects which services need to be deployed based on file
+changes, reducing deployment time and resource usage.
 
 ## Test Scenarios
 
@@ -43,7 +44,8 @@ The smart deployment system intelligently detects which services need to be depl
 - `infra/k8s/hetzner/dev/patches/statefulsets/postgres.statefulset.yaml`
 - `infra/k8s/hetzner/dev/patches/statefulsets/redis.statefulset.yaml`
 
-**Important**: Both files must be in the same environment (dev/test/prod) to trigger parallel deployment.
+**Important**: Both files must be in the same environment (dev/test/prod) to trigger parallel
+deployment.
 
 **Expected Behavior**:
 
@@ -273,7 +275,8 @@ The `detect-infra-changes` job in `.github/workflows/ci.yml` performs:
 - Parallel: ~1 minute (3 services simultaneously)
 - Savings: 66%
 
-**Note**: Parallel deployment is controlled by `deployment_mode.parallel_deployment.enabled` in the config file.
+**Note**: Parallel deployment is controlled by `deployment_mode.parallel_deployment.enabled` in the
+config file.
 
 ## Next Steps
 

@@ -18,7 +18,9 @@ export default function MortgageTeaser({ price }: { price: number }) {
         <p>20% down &middot; 6.8% rate &middot; 30-yr fixed</p>
         <p>Down payment: ${downPayment.toLocaleString()}</p>
       </div>
-      <p className="mt-3 text-xs text-ink-subtle">This is an estimate only. Contact us for personalized rates.</p>
+      <p className="mt-3 text-xs text-ink-subtle">
+        This is an estimate only. Contact us for personalized rates.
+      </p>
     </div>
   );
 }

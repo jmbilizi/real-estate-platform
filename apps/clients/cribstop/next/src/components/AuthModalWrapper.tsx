@@ -1,11 +1,11 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import AuthForm from "./AuthForm";
-import Modal from "./Modal";
+import { useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import AuthForm from './AuthForm';
+import Modal from './Modal';
 
-type Mode = "login" | "signup";
+type Mode = 'login' | 'signup';
 
 export default function AuthModalWrapper({ initialMode }: { initialMode: Mode }) {
   const router = useRouter();
@@ -28,19 +28,19 @@ export default function AuthModalWrapper({ initialMode }: { initialMode: Mode })
 
   const handleClose = () => {
     const params = new URLSearchParams(searchParams.toString());
-    params.delete("modal");
+    params.delete('modal');
     navigate(buildUrl(params));
   };
 
   const handleSuccess = () => {
     const params = new URLSearchParams(searchParams.toString());
-    params.delete("modal");
+    params.delete('modal');
     navigate(buildUrl(params));
   };
 
-  const handleSwitchMode = (mode: "login" | "signup") => {
+  const handleSwitchMode = (mode: 'login' | 'signup') => {
     const params = new URLSearchParams(searchParams.toString());
-    params.set("modal", mode);
+    params.set('modal', mode);
     router.replace(buildUrl(params));
   };
 
@@ -55,7 +55,12 @@ export default function AuthModalWrapper({ initialMode }: { initialMode: Mode })
       noPadding
     >
       <div className="min-h-full flex items-center justify-center sm:block">
-        <AuthForm variant="modal" initialMode={initialMode} onSuccess={handleSuccess} onSwitchMode={handleSwitchMode} />
+        <AuthForm
+          variant="modal"
+          initialMode={initialMode}
+          onSuccess={handleSuccess}
+          onSwitchMode={handleSwitchMode}
+        />
       </div>
     </Modal>
   );

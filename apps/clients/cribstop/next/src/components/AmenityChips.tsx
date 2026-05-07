@@ -1,21 +1,21 @@
-import { Amenity } from "@/lib/types";
+import { Amenity } from '@/lib/types';
 
 const ICONS: Record<Amenity, string> = {
-  Pool: "🏊",
-  Garage: "🚗",
-  Gym: "🏋️",
-  Elevator: "🛗",
-  Balcony: "🌅",
-  Fireplace: "🔥",
-  "Washer/Dryer": "👕",
-  "Pet Friendly": "🐾",
-  Waterfront: "🌊",
-  Office: "💼",
-  Rooftop: "🏙️",
-  Garden: "🌿",
-  "Smart Home": "📱",
-  Solar: "☀️",
-  "EV Charging": "⚡",
+  Pool: '🏊',
+  Garage: '🚗',
+  Gym: '🏋️',
+  Elevator: '🛗',
+  Balcony: '🌅',
+  Fireplace: '🔥',
+  'Washer/Dryer': '👕',
+  'Pet Friendly': '🐾',
+  Waterfront: '🌊',
+  Office: '💼',
+  Rooftop: '🏙️',
+  Garden: '🌿',
+  'Smart Home': '📱',
+  Solar: '☀️',
+  'EV Charging': '⚡',
 };
 
 export default function AmenityChips({ amenities }: { amenities: Amenity[] }) {
@@ -26,7 +26,7 @@ export default function AmenityChips({ amenities }: { amenities: Amenity[] }) {
           key={a}
           className="inline-flex items-center gap-1.5 rounded-full border border-surface-border bg-surface-alt px-3 py-1.5 text-sm"
         >
-          <span>{ICONS[a] ?? "✓"}</span>
+          <span>{ICONS[a] ?? '✓'}</span>
           {a}
         </span>
       ))}

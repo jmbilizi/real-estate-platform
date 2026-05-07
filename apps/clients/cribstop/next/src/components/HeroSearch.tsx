@@ -1,56 +1,56 @@
-"use client";
+'use client';
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 
 const categories = [
-  { label: "All homes", icon: "🏠", params: "" },
-  { label: "For sale", icon: "🪧", params: "listingType=sale" },
-  { label: "For rent", icon: "🔑", params: "listingType=rent" },
-  { label: "Open houses", icon: "🚪", params: "openHouse=true" },
-  { label: "Luxury", icon: "💎", params: "minPrice=1000000" },
-  { label: "New build", icon: "🏗️", params: "newConstruction=true" },
-  { label: "Condos", icon: "🏢", params: "propertyType=Condo" },
-  { label: "Townhomes", icon: "🏘️", params: "propertyType=Townhome" },
-  { label: "Waterfront", icon: "🌊", params: "waterfront=true" },
-  { label: "Pet friendly", icon: "🐾", params: "petFriendly=true" },
-  { label: "Investment", icon: "📈", params: "propertyType=Multi-Family" },
+  { label: 'All homes', icon: '🏠', params: '' },
+  { label: 'For sale', icon: '🪧', params: 'listingType=sale' },
+  { label: 'For rent', icon: '🔑', params: 'listingType=rent' },
+  { label: 'Open houses', icon: '🚪', params: 'openHouse=true' },
+  { label: 'Luxury', icon: '💎', params: 'minPrice=1000000' },
+  { label: 'New build', icon: '🏗️', params: 'newConstruction=true' },
+  { label: 'Condos', icon: '🏢', params: 'propertyType=Condo' },
+  { label: 'Townhomes', icon: '🏘️', params: 'propertyType=Townhome' },
+  { label: 'Waterfront', icon: '🌊', params: 'waterfront=true' },
+  { label: 'Pet friendly', icon: '🐾', params: 'petFriendly=true' },
+  { label: 'Investment', icon: '📈', params: 'propertyType=Multi-Family' },
 ];
 
 const PRICE_RANGES = [
-  { label: "Any price", min: "", max: "" },
-  { label: "Under $500k", min: "", max: "500000" },
-  { label: "$500k – $1M", min: "500000", max: "1000000" },
-  { label: "$1M – $2M", min: "1000000", max: "2000000" },
-  { label: "$2M+", min: "2000000", max: "" },
+  { label: 'Any price', min: '', max: '' },
+  { label: 'Under $500k', min: '', max: '500000' },
+  { label: '$500k – $1M', min: '500000', max: '1000000' },
+  { label: '$1M – $2M', min: '1000000', max: '2000000' },
+  { label: '$2M+', min: '2000000', max: '' },
 ];
 
 const BED_OPTIONS = [
-  { label: "Any beds", value: "" },
-  { label: "1+ bed", value: "1" },
-  { label: "2+ beds", value: "2" },
-  { label: "3+ beds", value: "3" },
-  { label: "4+ beds", value: "4" },
-  { label: "5+ beds", value: "5" },
+  { label: 'Any beds', value: '' },
+  { label: '1+ bed', value: '1' },
+  { label: '2+ beds', value: '2' },
+  { label: '3+ beds', value: '3' },
+  { label: '4+ beds', value: '4' },
+  { label: '5+ beds', value: '5' },
 ];
 
 export default function HeroSearch() {
   const router = useRouter();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState('');
   const [priceIdx, setPriceIdx] = useState(0);
   const [bedsIdx, setBedsIdx] = useState(0);
-  const [mode, setMode] = useState<"buy" | "rent">("buy");
+  const [mode, setMode] = useState<'buy' | 'rent'>('buy');
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const params = new URLSearchParams();
-    if (query) params.set("q", query);
-    params.set("listingType", mode === "buy" ? "sale" : "rent");
+    if (query) params.set('q', query);
+    params.set('listingType', mode === 'buy' ? 'sale' : 'rent');
     const price = PRICE_RANGES[priceIdx];
-    if (price.min) params.set("minPrice", price.min);
-    if (price.max) params.set("maxPrice", price.max);
+    if (price.min) params.set('minPrice', price.min);
+    if (price.max) params.set('maxPrice', price.max);
     const beds = BED_OPTIONS[bedsIdx].value;
-    if (beds) params.set("beds", beds);
+    if (beds) params.set('beds', beds);
     router.push(`/search?${params.toString()}`);
   };
 
@@ -79,23 +79,24 @@ export default function HeroSearch() {
             <span className="text-brand-200"> home, beautifully.</span>
           </h1>
           <p className="mx-auto mt-5 max-w-xl text-base text-white/85 sm:text-lg">
-            Premium homes for sale and rent across the DMV. Search confidently with verified Bright MLS listings.
+            Premium homes for sale and rent across the DMV. Search confidently with verified Bright
+            MLS listings.
           </p>
         </div>
 
         {/* Buy / Rent toggle */}
         <div className="mt-10 flex justify-center">
           <div className="inline-flex rounded-full bg-white/15 p-1 ring-1 ring-white/25 backdrop-blur">
-            {(["buy", "rent"] as const).map((m) => (
+            {(['buy', 'rent'] as const).map((m) => (
               <button
                 key={m}
                 type="button"
                 onClick={() => setMode(m)}
                 className={`rounded-full px-7 py-2 text-sm font-semibold transition ${
-                  mode === m ? "bg-white text-ink shadow" : "text-white/85 hover:text-white"
+                  mode === m ? 'bg-white text-ink shadow' : 'text-white/85 hover:text-white'
                 }`}
               >
-                {m === "buy" ? "Buy" : "Rent"}
+                {m === 'buy' ? 'Buy' : 'Rent'}
               </button>
             ))}
           </div>
@@ -108,7 +109,9 @@ export default function HeroSearch() {
         >
           {/* Where */}
           <label className="group flex-1 cursor-text px-5 py-2 transition hover:bg-surface-alt/50 sm:rounded-full">
-            <span className="block text-[11px] font-bold uppercase tracking-wider text-ink">Where</span>
+            <span className="block text-[11px] font-bold uppercase tracking-wider text-ink">
+              Where
+            </span>
             <input
               type="text"
               value={query}
@@ -121,7 +124,9 @@ export default function HeroSearch() {
           {/* Price */}
           <label className="group flex cursor-pointer items-center px-5 py-2 transition hover:bg-surface-alt/50 sm:rounded-full">
             <div className="flex-1 min-w-[120px]">
-              <span className="block text-[11px] font-bold uppercase tracking-wider text-ink">Price</span>
+              <span className="block text-[11px] font-bold uppercase tracking-wider text-ink">
+                Price
+              </span>
               <select
                 value={priceIdx}
                 onChange={(e) => setPriceIdx(Number(e.target.value))}
@@ -139,7 +144,9 @@ export default function HeroSearch() {
           {/* Beds */}
           <label className="group flex cursor-pointer items-center px-5 py-2 transition hover:bg-surface-alt/50 sm:rounded-full">
             <div className="flex-1 min-w-[100px]">
-              <span className="block text-[11px] font-bold uppercase tracking-wider text-ink">Beds</span>
+              <span className="block text-[11px] font-bold uppercase tracking-wider text-ink">
+                Beds
+              </span>
               <select
                 value={bedsIdx}
                 onChange={(e) => setBedsIdx(Number(e.target.value))}
@@ -160,8 +167,18 @@ export default function HeroSearch() {
               type="submit"
               className="flex w-full items-center justify-center gap-2 rounded-full bg-brand px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 sm:w-auto"
             >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.5}
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
               </svg>
               Search
             </button>
@@ -171,9 +188,9 @@ export default function HeroSearch() {
         {/* Trust strip */}
         <div className="mt-8 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm text-white/85 sm:mt-10">
           {[
-            ["12,400+", "active listings"],
-            ["DC · MD · VA", "coverage"],
-            ["Daily", "Bright MLS updates"],
+            ['12,400+', 'active listings'],
+            ['DC · MD · VA', 'coverage'],
+            ['Daily', 'Bright MLS updates'],
           ].map(([big, small]) => (
             <span key={big} className="flex items-baseline gap-1.5">
               <span className="font-display text-base font-bold text-white">{big}</span>
@@ -191,10 +208,12 @@ export default function HeroSearch() {
               <button
                 key={cat.label}
                 type="button"
-                onClick={() => router.push(`/search${cat.params ? `?${cat.params}` : ""}`)}
+                onClick={() => router.push(`/search${cat.params ? `?${cat.params}` : ''}`)}
                 className="group flex flex-shrink-0 flex-col items-center gap-1 rounded-xl px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-ink-subtle transition hover:bg-surface-alt hover:text-ink"
               >
-                <span className="text-2xl leading-none transition group-hover:scale-110">{cat.icon}</span>
+                <span className="text-2xl leading-none transition group-hover:scale-110">
+                  {cat.icon}
+                </span>
                 <span>{cat.label}</span>
               </button>
             ))}

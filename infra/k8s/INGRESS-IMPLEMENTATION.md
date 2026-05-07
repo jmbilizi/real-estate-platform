@@ -27,7 +27,8 @@ All Kubernetes manifests now live in `infra/k8s/` - infrastructure together in o
 - Base: `infra/k8s/base/ingresses/jaeger.ingress.yaml` (HTTP routing to jaeger-svc)
 - Dev: `infra/k8s/hetzner/dev/patches/ingresses/jaeger.ingress.yaml` (jaeger.dev.localhost)
 - Test: `infra/k8s/hetzner/test/patches/ingresses/jaeger.ingress.yaml` (HTTPS + staging cert)
-- Prod: `infra/k8s/hetzner/prod/patches/ingresses/jaeger.ingress.yaml` (HTTPS + production cert + basic auth)
+- Prod: `infra/k8s/hetzner/prod/patches/ingresses/jaeger.ingress.yaml` (HTTPS + production cert +
+  basic auth)
 
 ### 4. **Hetzner K3s Configuration**
 
@@ -35,7 +36,7 @@ Disabled built-in Traefik in all 3 environments (dev/test/prod):
 
 ```yaml
 k3s_server_args:
-  - "--disable=traefik"
+  - '--disable=traefik'
 ```
 
 ---
@@ -119,7 +120,8 @@ jaeger StatefulSet (Jaeger all-in-one)
 
 **Automatic Installation**: cert-manager is installed during cluster provisioning:
 
-- **Location**: `infra/k8s/hetzner/{env}/cluster/cluster-config.yaml` → `additional_post_k3s_commands`
+- **Location**: `infra/k8s/hetzner/{env}/cluster/cluster-config.yaml` →
+  `additional_post_k3s_commands`
 - **Version**: cert-manager v1.13.3
 - **ClusterIssuer**: `letsencrypt-prod` (ACME HTTP-01 challenge)
 - **Timing**: Runs immediately after K3s installation completes
@@ -133,7 +135,8 @@ jaeger StatefulSet (Jaeger all-in-one)
 3. Creates TLS certificate (valid 90 days, auto-renews 30 days before expiration)
 4. Stores in Kubernetes Secret (referenced by Ingress `tls.secretName`)
 
-**No manual setup required** - certificates provisioned automatically ~2-5 minutes after Ingress deployment.
+**No manual setup required** - certificates provisioned automatically ~2-5 minutes after Ingress
+deployment.
 
 ---
 
@@ -212,22 +215,20 @@ git push origin dev
 
 ## 🔧 Troubleshooting
 
-**Issue**: Nginx Ingress not creating LoadBalancer
-→ **Solution**: Podman/KIND doesn't support LoadBalancer. Use NodePort or kubectl port-forward
+**Issue**: Nginx Ingress not creating LoadBalancer → **Solution**: Podman/KIND doesn't support
+LoadBalancer. Use NodePort or kubectl port-forward
 
-**Issue**: Ingress returns 503 Service Unavailable
-→ **Solution**: Verify jaeger-svc endpoints exist: `kubectl get endpoints jaeger-svc`
+**Issue**: Ingress returns 503 Service Unavailable → **Solution**: Verify jaeger-svc endpoints
+exist: `kubectl get endpoints jaeger-svc`
 
-**Issue**: Certificate not issued (Test/Prod)
-→ **Solution**:
+**Issue**: Certificate not issued (Test/Prod) → **Solution**:
 
 1. Check cert-manager is installed: `kubectl get pods -n cert-manager`
 2. Check certificate status: `kubectl get certificate`
 3. Check challenge status: `kubectl get challenge`
 4. Verify DNS is pointing to the correct IP
 
-**Issue**: Basic auth not working (Prod)
-→ **Solution**:
+**Issue**: Basic auth not working (Prod) → **Solution**:
 
 1. Verify `JAEGER_BASIC_AUTH` secret is set in GitHub
 2. Check if secret was substituted in deployment workflow
@@ -244,6 +245,5 @@ git push origin dev
 
 ---
 
-**Status**: ✅ Ready for deployment
-**TLS Certificates**: ✅ Auto-managed by cert-manager
-**Basic Auth**: ✅ Configured for production
+**Status**: ✅ Ready for deployment **TLS Certificates**: ✅ Auto-managed by cert-manager **Basic
+Auth**: ✅ Configured for production

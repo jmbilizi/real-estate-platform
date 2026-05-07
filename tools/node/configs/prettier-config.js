@@ -13,7 +13,7 @@ module.exports = {
   singleQuote: true,
 
   // Always add trailing commas in multiline (helps with git diffs)
-  trailingComma: "all",
+  trailingComma: 'all',
 
   // Add spaces between brackets in object literals
   bracketSpacing: true,
@@ -22,7 +22,7 @@ module.exports = {
   bracketSameLine: false,
 
   // Include parentheses around a sole arrow function parameter
-  arrowParens: "always",
+  arrowParens: 'always',
 
   // Use tabs instead of spaces
   useTabs: false,
@@ -34,7 +34,7 @@ module.exports = {
   semi: true,
 
   // End of line character
-  endOfLine: "lf",
+  endOfLine: 'lf',
 
   // Enforce consistent quote style in JSX
   jsxSingleQuote: false,
@@ -42,15 +42,15 @@ module.exports = {
   // Configure Prettier to correctly handle different file types
   overrides: [
     {
-      files: ["*.json", "*.yaml", "*.yml"],
+      files: ['*.json', '*.yaml', '*.yml'],
       options: {
         singleQuote: false,
       },
     },
     {
-      files: ["*.md"],
+      files: ['*.md'],
       options: {
-        proseWrap: "always",
+        proseWrap: 'always',
       },
     },
   ],

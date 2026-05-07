@@ -16,42 +16,42 @@ module.exports = {
   collectCoverage: true,
 
   // Directory where Jest should output its coverage files
-  coverageDirectory: "coverage",
+  coverageDirectory: 'coverage',
 
   // Coverage providers to use
-  coverageProvider: "v8",
+  coverageProvider: 'v8',
 
   // File extensions Jest will look for
-  moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
 
   // A list of paths to directories that Jest should use to search for files in
-  roots: ["<rootDir>/src"],
+  roots: ['<rootDir>/src'],
 
   // The test environment to use
-  testEnvironment: "node",
+  testEnvironment: 'node',
 
   // The glob patterns Jest uses to detect test files
-  testMatch: ["**/__tests__/**/*.[jt]s?(x)", "**/?(*.)+(spec|test).[tj]s?(x)"],
+  testMatch: ['**/__tests__/**/*.[jt]s?(x)', '**/?(*.)+(spec|test).[tj]s?(x)'],
 
   // Transform files with ts-jest for TypeScript processing
   transform: {
-    "^.+\\.(ts|tsx)$": "ts-jest",
+    '^.+\\.(ts|tsx)$': 'ts-jest',
   },
 
   // Generate test reports in junit format for CI/CD integration
   reporters: [
-    "default",
+    'default',
     [
-      "jest-junit",
+      'jest-junit',
       {
-        outputDirectory: "test-results",
-        outputName: "jest-junit.xml",
+        outputDirectory: 'test-results',
+        outputName: 'jest-junit.xml',
       },
     ],
   ],
 
   // Configuration for collecting code coverage information
-  coverageReporters: ["text", "lcov", "clover", "html"],
+  coverageReporters: ['text', 'lcov', 'clover', 'html'],
 
   // Fail if coverage is below specified thresholds
   coverageThreshold: {
@@ -64,5 +64,5 @@ module.exports = {
   },
 
   // Makes the test run faster by limiting number of workers to CPU cores-1
-  maxWorkers: "50%",
+  maxWorkers: '50%',
 };

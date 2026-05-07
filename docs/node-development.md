@@ -99,7 +99,8 @@ pnpm exec nx generate @nx/next:app my-web-app --directory=apps
 
 After creating projects, they are automatically configured when you run any nx command:
 
-1. **Auto-tagging**: Projects are tagged based on their executors (`node`, `express`, `next`, `api`, `client`, etc.)
+1. **Auto-tagging**: Projects are tagged based on their executors (`node`, `express`, `next`, `api`,
+   `client`, etc.)
 2. **Centralized configs**: Apply configs manually with `pnpm run node:apply-configs <project-path>`
 3. **Nx integration**: Projects are immediately available for `pnpm run nx:node-*` commands
 
@@ -116,7 +117,8 @@ The monorepo uses centralized configurations for all Node.js projects to ensure 
 
 ### How Configuration Works
 
-1. **New Projects**: When you create a new project using the provided commands, the centralized configurations are automatically applied.
+1. **New Projects**: When you create a new project using the provided commands, the centralized
+   configurations are automatically applied.
 
 2. **Existing Projects**: To apply centralized configurations to an existing project, run:
 
@@ -128,13 +130,15 @@ The monorepo uses centralized configurations for all Node.js projects to ensure 
    ```javascript
    // Example project .eslintrc.js
    module.exports = {
-     extends: ["../../tools/node/configs/eslint/base"],
+     extends: ['../../tools/node/configs/eslint/base'],
    };
    ```
 
 ### Migration from Root Configurations
 
-We are transitioning away from root-level configuration files (`.eslintrc.json`, `.prettierrc`, etc.) to our centralized configuration system. For detailed information about this migration, see the [Node.js Configuration Migration Plan](./node-config-migration.md).
+We are transitioning away from root-level configuration files (`.eslintrc.json`, `.prettierrc`,
+etc.) to our centralized configuration system. For detailed information about this migration, see
+the [Node.js Configuration Migration Plan](./node-config-migration.md).
 
 ## Common Commands
 
@@ -173,7 +177,8 @@ nx format:write --projects=my-project
 nx lint my-project
 ```
 
-> **Note:** Use `nx:workspace-format` to format all files including `scripts/`, `docs/`, `package.json`, etc. Use `nx:node-format` for project-specific formatting only.
+> **Note:** Use `nx:workspace-format` to format all files including `scripts/`, `docs/`,
+> `package.json`, etc. Use `nx:node-format` for project-specific formatting only.
 
 ### Testing
 

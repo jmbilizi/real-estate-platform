@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import dynamic from "next/dynamic";
-import { Listing } from "@/lib/types";
+import dynamic from 'next/dynamic';
+import { Listing } from '@/lib/types';
 
 interface Props {
   listings: Listing[];
@@ -13,7 +13,7 @@ interface Props {
   searchPolygon?: object | null;
 }
 
-const Inner = dynamic(() => import("./ListingsMapInner"), {
+const Inner = dynamic(() => import('./ListingsMapInner'), {
   ssr: false,
   loading: () => (
     <div className="flex h-full w-full items-center justify-center bg-surface-soft">

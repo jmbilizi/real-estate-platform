@@ -134,11 +134,13 @@ UV is not installed. The setup script installs it automatically:
 pnpm run python:env
 ```
 
-Or install manually: `winget install astral-sh.uv` (Windows), `brew install uv` (macOS), `curl -LsSf https://astral.sh/uv/install.sh | sh` (Linux).
+Or install manually: `winget install astral-sh.uv` (Windows), `brew install uv` (macOS),
+`curl -LsSf https://astral.sh/uv/install.sh | sh` (Linux).
 
 ### SSL Certificate Errors
 
-The workspace has `uv.toml` with `native-tls = true` which uses system certificates. If you still see errors, check your corporate proxy settings.
+The workspace has `uv.toml` with `native-tls = true` which uses system certificates. If you still
+see errors, check your corporate proxy settings.
 
 ### .venv Issues
 
@@ -150,4 +152,5 @@ pnpm run python:env
 
 ### Import Path Issues
 
-UV workspace mode handles this automatically. Each project is installed as an editable package in the shared `.venv`, so imports work without path manipulation.
+UV workspace mode handles this automatically. Each project is installed as an editable package in
+the shared `.venv`, so imports work without path manipulation.

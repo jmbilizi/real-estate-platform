@@ -2,7 +2,8 @@
 
 ## Overview
 
-This document describes the current Kubernetes infrastructure implementation using Kustomize-based architecture with GitOps automation and hierarchical deployment control.
+This document describes the current Kubernetes infrastructure implementation using Kustomize-based
+architecture with GitOps automation and hierarchical deployment control.
 
 ## Current Architecture
 
@@ -74,21 +75,25 @@ Pattern: `{service}.{kind}.yaml`
 
 **Base + Overlay Pattern:**
 
-- `base/kustomization.yaml` - Defines all shared resources (Secrets, ConfigMaps, Services, StatefulSets)
-- `hetzner/{env}/kustomization.yaml` - References base (`../../base`) and applies environment-specific patches
+- `base/kustomization.yaml` - Defines all shared resources (Secrets, ConfigMaps, Services,
+  StatefulSets)
+- `hetzner/{env}/kustomization.yaml` - References base (`../../base`) and applies
+  environment-specific patches
 
 **Resources in Base:**
 
 - **PostgreSQL**: postgis/postgis:18-3.4, multi-tenant initialization, 4 database users
 - **Redis**: valkey/valkey:9.0-alpine, ACL-based authentication, 5 service users
-- **Jaeger**: jaegertracing/all-in-one:1.76.0, distributed tracing, OTLP endpoints, pinned for deterministic deployments
+- **Jaeger**: jaegertracing/all-in-one:1.76.0, distributed tracing, OTLP endpoints, pinned for
+  deterministic deployments
 - **Services**: Headless (for StatefulSet DNS) + ClusterIP (for load balancing)
 
 **Minimal Base Philosophy:**
 
 The base layer contains ONLY configuration that is **identical across all environments**:
 
-- ✅ Container images (postgis/postgis:18-3.4, valkey/valkey:9.0-alpine, jaegertracing/all-in-one:1.76.0)
+- ✅ Container images (postgis/postgis:18-3.4, valkey/valkey:9.0-alpine,
+  jaegertracing/all-in-one:1.76.0)
 - ✅ Health probes (pg_isready, redis-cli ping, HTTP GET for Jaeger)
 - ✅ Environment variables (connection strings, ACL passwords, OTLP config)
 - ✅ Volume mounts (/var/lib/postgresql/data, /data for Redis, /badger for Jaeger)
@@ -108,7 +113,8 @@ The base layer contains ONLY configuration that is **identical across all enviro
 - Every environment explicitly declares its resource budget (self-documenting)
 - No accidental inheritance of stale defaults
 - Clear separation: base = what to run, patches = how much resources
-- **PostgreSQL**: Multi-tenant databases (account_service_db, messaging_service_db, property_service_db)
+- **PostgreSQL**: Multi-tenant databases (account_service_db, messaging_service_db,
+  property_service_db)
 - **Redis**: Enterprise ACL mode (admin, pubsub_user, cache_user, ratelimit_user, monitor users)
 
 **Modern Kustomize Syntax:**
@@ -119,7 +125,8 @@ The base layer contains ONLY configuration that is **identical across all enviro
 
 **Why base/kustomization.yaml is required:**
 
-Kustomize overlays must reference a directory containing a `kustomization.yaml`, not individual resource files. This provides:
+Kustomize overlays must reference a directory containing a `kustomization.yaml`, not individual
+resource files. This provides:
 
 - Proper resource ordering (Secrets → ConfigMaps → Services → StatefulSets)
 - Centralized base resource management
@@ -129,9 +136,11 @@ Kustomize overlays must reference a directory containing a `kustomization.yaml`,
 
 **File:** `infra/deploy-control.yaml` (v3.0.0)
 
-**Purpose:** Centralized configuration controlling which environments are enabled for automated deployment.
+**Purpose:** Centralized configuration controlling which environments are enabled for automated
+deployment.
 
-**Architecture Principle:** All environments (dev/test/prod) have **identical YAML structure** with different values. This design ensures:
+**Architecture Principle:** All environments (dev/test/prod) have **identical YAML structure** with
+different values. This design ensures:
 
 - Features can be tested in dev with `enabled: false` before promoting to test/prod
 - Configuration changes can be safely merged across branches
@@ -149,14 +158,17 @@ Kustomize overlays must reference a directory containing a `kustomization.yaml`,
 - `deployment_windows` - Time-based deployment restrictions
 - `services.postgres.*` - Service-specific settings (resources, health checks, rollback)
 
-**Workflow Implementation:** The deploy-k8s-resources.yml workflow now reads and enforces ALL deployment control settings:
+**Workflow Implementation:** The deploy-k8s-resources.yml workflow now reads and enforces ALL
+deployment control settings:
 
 - ✅ `enabled` and `auto_deploy` - Basic deployment gates
 - ✅ `deployment_windows` - Blocks deployment outside allowed days/hours
 - ✅ `services.postgres.*` - Service-level controls (enabled, auto_deploy, require_approval)
 - ✅ `rollback_on_failure` - Automatically reverts failed rollouts
 
-**Health Validation:** Kubernetes native probes (livenessProbe, readinessProbe) in the StatefulSet spec handle health checking. The workflow relies on `kubectl rollout status` which waits for pods to be ready based on these probes.
+**Health Validation:** Kubernetes native probes (livenessProbe, readinessProbe) in the StatefulSet
+spec handle health checking. The workflow relies on `kubectl rollout status` which waits for pods to
+be ready based on these probes.
 
 **Configuration Structure (all environments have same keys, different values):**
 
@@ -202,9 +214,11 @@ environments:
         rollback_on_failure: false # TODO: Enable when workflow implements rollback
 ```
 
-**Key Point:** All environments have the same YAML keys - only the values differ. This allows testing features in dev before promoting to production.
+**Key Point:** All environments have the same YAML keys - only the values differ. This allows
+testing features in dev before promoting to production.
 
-**Architecture Principle:** deploy-control.yaml controls deployment policies (WHEN/HOW), while Kustomize patches control resource specifications (WHAT). This separation ensures:
+**Architecture Principle:** deploy-control.yaml controls deployment policies (WHEN/HOW), while
+Kustomize patches control resource specifications (WHAT). This separation ensures:
 
 - Single source of truth for each concern
 - No duplication or drift between configurations
@@ -272,7 +286,8 @@ environments:
    - Install tools (kubectl, Helm, hetzner-k3s)
    - Setup SSH keys from GitHub Secrets
    - Substitute secrets in config
-   - Create/update cluster with hetzner-k3s (includes **automatic cert-manager installation** via `additional_post_k3s_commands`)
+   - Create/update cluster with hetzner-k3s (includes **automatic cert-manager installation** via
+     `additional_post_k3s_commands`)
    - Wait for cluster readiness (configurable timeout: 5m dev/test, 10m prod)
    - **Verify cert-manager installation** (check pods in cert-manager namespace)
    - **Upload KUBECONFIG** to GitHub Secrets (environment-scoped) using GitHub CLI
@@ -280,11 +295,16 @@ environments:
 
 **Cluster Provisioning Features:**
 
-- **Automatic TLS Certificate Management**: cert-manager v1.13.3 installed on all clusters during provisioning
-- **ClusterIssuer Configuration**: `letsencrypt-prod` ClusterIssuer created automatically (ACME HTTP-01 challenge)
-- **Installation Method**: `additional_post_k3s_commands` in cluster-config.yaml (runs on first master node only, avoids race conditions)
-- **Inline Resource Definition**: ClusterIssuer defined inline using heredoc (no separate manifest files)
-- **Verification**: Waits for cert-manager deployment to be available (180s timeout) before proceeding
+- **Automatic TLS Certificate Management**: cert-manager v1.13.3 installed on all clusters during
+  provisioning
+- **ClusterIssuer Configuration**: `letsencrypt-prod` ClusterIssuer created automatically (ACME
+  HTTP-01 challenge)
+- **Installation Method**: `additional_post_k3s_commands` in cluster-config.yaml (runs on first
+  master node only, avoids race conditions)
+- **Inline Resource Definition**: ClusterIssuer defined inline using heredoc (no separate manifest
+  files)
+- **Verification**: Waits for cert-manager deployment to be available (180s timeout) before
+  proceeding
 
 #### **deploy-k8s-resources.yml**
 
@@ -311,7 +331,8 @@ environments:
   - ✅ Automatic rollback (reverts failed rollouts)
 - Secret Substitution - Uses yq to replace StrongBase64Password with actual secrets in-memory
 - Server-Side Apply - Better field ownership and conflict resolution
-- Rollout Verification - Waits for all workload types (StatefulSets, Deployments, DaemonSets) to reach ready status
+- Rollout Verification - Waits for all workload types (StatefulSets, Deployments, DaemonSets) to
+  reach ready status
 - Resource Verification - Checks all resources after deployment
 
 **Deployment Flow (per environment):**
@@ -328,29 +349,34 @@ environments:
 
 3. **Configure kubectl** using `{ENV}_KUBECONFIG` from GitHub Secrets
 
-4. **Substitute secrets** in `base/secrets/postgres.secret.yaml` and `base/secrets/redis.secret.yaml` using yq (in-memory only)
+4. **Substitute secrets** in `base/secrets/postgres.secret.yaml` and
+   `base/secrets/redis.secret.yaml` using yq (in-memory only)
 
 5. **Build Kustomize manifests:** `kustomize build infra/k8s/hetzner/{env}`
 
 6. **Apply manifests with error-driven immutable field handling:**
    - Try `kubectl apply` first (fail fast)
    - If immutable field error detected:
-     - Extract failed resource name(s) from error message (supports StatefulSets, Deployments, DaemonSets, Services, Jobs)
+     - Extract failed resource name(s) from error message (supports StatefulSets, Deployments,
+       DaemonSets, Services, Jobs)
      - Delete ONLY those resources (`--cascade=orphan` preserves PVCs/Pods for stateful workloads)
      - Retry `kubectl apply`
    - Pattern eliminates false positives (only acts on actual errors)
    - Scales to any number of resources (no hardcoded resource checks)
 
 7. **Wait for workload rollout:** (300s dev/test, 600s prod)
-   - Dynamically discovers all workloads using manifest-based discovery: `yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml`
+   - Dynamically discovers all workloads using manifest-based discovery:
+     `yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml`
    - Checks rollout status for each workload type: `kubectl rollout status {type}/{name}`
-   - Fail-but-continue pattern: checks ALL workload types even if earlier ones fail (better diagnostics)
+   - Fail-but-continue pattern: checks ALL workload types even if earlier ones fail (better
+     diagnostics)
    - Waits for pods to pass readinessProbe checks
    - Ensures all workloads reach desired state
 
 8. **Rollback on failure** (if enabled):
    - Automatically reverts if rollout fails
-   - Attempts rollback for all workload types: `kubectl rollout undo {statefulset,deployment,daemonset}/{name}`
+   - Attempts rollback for all workload types:
+     `kubectl rollout undo {statefulset,deployment,daemonset}/{name}`
    - Continues rollback attempts even if individual rollbacks fail
    - Reports if any rollbacks failed (requires manual intervention)
    - Marks workflow as failed
@@ -363,9 +389,11 @@ environments:
 
 ### 6. Environment-Specific Configurations
 
-**Resource specifications are defined in Kustomize patches** (`infra/k8s/{provider}/{env}/patches/statefulsets/`):
+**Resource specifications are defined in Kustomize patches**
+(`infra/k8s/{provider}/{env}/patches/statefulsets/`):
 
-- **postgres.statefulset.yaml** - Defines replicas, memory requests/limits, CPU requests/limits, pod affinity rules, storage size, and StorageClass (combined patch)
+- **postgres.statefulset.yaml** - Defines replicas, memory requests/limits, CPU requests/limits, pod
+  affinity rules, storage size, and StorageClass (combined patch)
 
 | Environment | Provider | Auto-Deploy | Production Features                                                                               |
 | ----------- | -------- | ----------- | ------------------------------------------------------------------------------------------------- |
@@ -386,19 +414,21 @@ environments:
 
 **Network Configuration (CRITICAL for image pulling):**
 
-All Hetzner clusters require explicit outbound firewall rules. When ANY outbound rule is defined in Hetzner Cloud Firewall, it switches to deny-all mode. K3s requires access to multiple endpoints beyond just registries, so we allow all outbound traffic per K3s documentation recommendations.
+All Hetzner clusters require explicit outbound firewall rules. When ANY outbound rule is defined in
+Hetzner Cloud Firewall, it switches to deny-all mode. K3s requires access to multiple endpoints
+beyond just registries, so we allow all outbound traffic per K3s documentation recommendations.
 
 **Required Configuration** (`cluster-config.yaml`):
 
 ```yaml
 custom_firewall_rules:
-  - description: "Allow all outbound traffic"
+  - description: 'Allow all outbound traffic'
     direction: out
     protocol: tcp
     port: any
     destination_ips:
       - 0.0.0.0/0
-  - description: "Allow all outbound UDP"
+  - description: 'Allow all outbound UDP'
     direction: out
     protocol: udp
     port: any
@@ -424,7 +454,8 @@ embedded_registry_mirror:
 - K3s unable to download required components
 - Manual intervention required to diagnose and fix
 
-**Applied to All Environments:** dev, test, prod cluster configs include these rules to ensure consistent behavior across all deployments.
+**Applied to All Environments:** dev, test, prod cluster configs include these rules to ensure
+consistent behavior across all deployments.
 
 ### PostgreSQL Configuration
 
@@ -452,9 +483,12 @@ embedded_registry_mirror:
 **ACL Users:**
 
 - `admin` - Full access (operations, monitoring, probes)
-- `pubsub_user` - Pub/Sub and messaging keys (`~messaging:*`, `~pubsub:*`) - Used by messaging-service, notification-service, websocket-gateway
-- `cache_user` - Cache and session keys (`~cache:*`, `~session:*`) - Used by property-service, account-service
-- `ratelimit_user` - Rate limiting counters (`~ratelimit:*`) - Used by services implementing rate limiting
+- `pubsub_user` - Pub/Sub and messaging keys (`~messaging:*`, `~pubsub:*`) - Used by
+  messaging-service, notification-service, websocket-gateway
+- `cache_user` - Cache and session keys (`~cache:*`, `~session:*`) - Used by property-service,
+  account-service
+- `ratelimit_user` - Rate limiting counters (`~ratelimit:*`) - Used by services implementing rate
+  limiting
 - `monitor` - Read-only monitoring (Prometheus/Grafana)
 
 **Use Cases:**
@@ -512,8 +546,10 @@ All StatefulSets include Kubernetes health probes for automated recovery:
 **Probe timing rationale:**
 
 - Jaeger uses longer delays due to larger image size and cold-start latency in cloud environments
-- Pinned image versions (e.g., 1.76.0 instead of `:latest`) reduce startup time by eliminating registry checks
-- After `kubectl rollout restart`, workflows wait 60s before checking status to allow pod termination + image load + probe delays
+- Pinned image versions (e.g., 1.76.0 instead of `:latest`) reduce startup time by eliminating
+  registry checks
+- After `kubectl rollout restart`, workflows wait 60s before checking status to allow pod
+  termination + image load + probe delays
 
 ## Deployment Safety
 
@@ -547,7 +583,8 @@ Configure these in GitHub repository settings:
 
 ### Kubeconfig Files (Environment Secrets)
 
-- `KUBECONFIG` - kubectl config (automatically uploaded by hetzner-k8s workflow after cluster creation/update)
+- `KUBECONFIG` - kubectl config (automatically uploaded by hetzner-k8s workflow after cluster
+  creation/update)
   - Scoped to each environment (dev, test, prod)
   - Protected by environment-level access controls
 
@@ -564,12 +601,15 @@ Configure these in GitHub repository settings:
    - Protection rules (required approvals, deployment branches)
    - Better audit trail for sensitive operations
    - Granular access control per environment
-3. **Trade-off**: Requires PAT management (creation, rotation, monitoring) vs convenience of default token.
+3. **Trade-off**: Requires PAT management (creation, rotation, monitoring) vs convenience of default
+   token.
 
 **Implementation**:
 
-- `provision-hetzner-k8s-cluster.yml` uses `gh secret set KUBECONFIG --env {env}` with `INFRA_DEPLOY_TOKEN` PAT
-- `provision-hetzner-k8s-cluster.yml` uses `gh workflow run` with `INFRA_DEPLOY_TOKEN` PAT to trigger deployments
+- `provision-hetzner-k8s-cluster.yml` uses `gh secret set KUBECONFIG --env {env}` with
+  `INFRA_DEPLOY_TOKEN` PAT
+- `provision-hetzner-k8s-cluster.yml` uses `gh workflow run` with `INFRA_DEPLOY_TOKEN` PAT to
+  trigger deployments
 - `deploy-k8s-resources.yml` reads `secrets.KUBECONFIG` from environment scope
 
 ### PostgreSQL Passwords
@@ -689,11 +729,13 @@ kubectl rollout status statefulset/postgres
 - **Health probes** - Automated recovery via Kubernetes livenessProbe/readinessProbe
 - **Rollback capability** - `kubectl rollout undo`
 - **Server-side apply** - Better field ownership and conflict resolution
-- **Error-driven immutability handling** - Graceful StatefulSet recreation on immutable field changes
+- **Error-driven immutability handling** - Graceful StatefulSet recreation on immutable field
+  changes
 
 ### Error-Driven Kubernetes Resource Management
 
-**Problem**: Multiple Kubernetes resource types have immutable fields that cannot be modified after creation:
+**Problem**: Multiple Kubernetes resource types have immutable fields that cannot be modified after
+creation:
 
 - **StatefulSet**: volumeClaimTemplates, selector, podManagementPolicy
 - **Deployment**: selector, strategy (when changing type)
@@ -779,7 +821,8 @@ fi
 
 1. Developer changes PostgreSQL storage from 10Gi to 20Gi in `hetzner/dev/patches/`
 2. Workflow builds manifests and tries `kubectl apply`
-3. kubectl returns: `The StatefulSet "postgres" is invalid: spec: Forbidden: updates to statefulset spec for fields other than...`
+3. kubectl returns:
+   `The StatefulSet "postgres" is invalid: spec: Forbidden: updates to statefulset spec for fields other than...`
 4. Workflow detects immutable field error for StatefulSet resource type
 5. Workflow extracts "postgres" from error message
 6. Workflow deletes ONLY postgres StatefulSet with `--cascade=orphan` (redis-0 keeps running)
@@ -860,6 +903,8 @@ This Kubernetes infrastructure provides:
 - **Environment-specific configs** - Dev/test/prod with appropriate resources
 - **Safe deployment practices** - Manual approval for prod, rollout verification, server-side apply
 - **Clear file structure** - Deterministic naming, provider/environment hierarchy
-- **Production-ready operations** - Idempotent workflows, automated rollback, cluster readiness checks
+- **Production-ready operations** - Idempotent workflows, automated rollback, cluster readiness
+  checks
 
-The infrastructure is ready for deployment, with dev environment configured for auto-deployment and test/prod requiring manual approval.
+The infrastructure is ready for deployment, with dev environment configured for auto-deployment and
+test/prod requiring manual approval.

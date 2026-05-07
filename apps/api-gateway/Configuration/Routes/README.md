@@ -32,5 +32,5 @@ dotnet run
 
 ## Current State
 
-This folder is intentionally EMPTY. Routes are in `Templates/` folder as references.
-When services are built, copy their route definitions here.
+This folder is intentionally EMPTY. Routes are in `Templates/` folder as references. When services
+are built, copy their route definitions here.

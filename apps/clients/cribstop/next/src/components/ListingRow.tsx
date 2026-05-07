@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import ListingCard from "./ListingCard";
-import type { Listing } from "@/lib/types";
+import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import ListingCard from './ListingCard';
+import type { Listing } from '@/lib/types';
 
 interface Props {
   title: string;
@@ -35,19 +35,19 @@ export default function ListingRow({ title, subtitle, href, listings, max = 4 }:
     const el = scrollerRef.current;
     if (!el) return;
     checkScroll();
-    el.addEventListener("scroll", checkScroll);
-    window.addEventListener("resize", checkScroll);
+    el.addEventListener('scroll', checkScroll);
+    window.addEventListener('resize', checkScroll);
     return () => {
-      el.removeEventListener("scroll", checkScroll);
-      window.removeEventListener("resize", checkScroll);
+      el.removeEventListener('scroll', checkScroll);
+      window.removeEventListener('resize', checkScroll);
     };
   }, []);
 
-  const scroll = (dir: "left" | "right") => {
+  const scroll = (dir: 'left' | 'right') => {
     const el = scrollerRef.current;
     if (!el) return;
     const amount = el.clientWidth * 0.85;
-    el.scrollBy({ left: dir === "left" ? -amount : amount, behavior: "smooth" });
+    el.scrollBy({ left: dir === 'left' ? -amount : amount, behavior: 'smooth' });
     // Wait for scroll to finish, then check
     setTimeout(checkScroll, 350);
   };
@@ -65,7 +65,13 @@ export default function ListingRow({ title, subtitle, href, listings, max = 4 }:
                 aria-label="See all"
                 prefetch
               >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                  viewBox="0 0 24 24"
+                >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                 </svg>
               </Link>
@@ -74,23 +80,35 @@ export default function ListingRow({ title, subtitle, href, listings, max = 4 }:
           <div className="hidden items-center gap-2 sm:flex">
             <button
               type="button"
-              onClick={() => scroll("left")}
+              onClick={() => scroll('left')}
               aria-label="Scroll left"
-              className={`flex h-9 w-9 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition hover:shadow-card ${atStart ? "opacity-50 cursor-default" : "hover:bg-surface-alt"}`}
+              className={`flex h-9 w-9 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition hover:shadow-card ${atStart ? 'opacity-50 cursor-default' : 'hover:bg-surface-alt'}`}
               disabled={atStart}
             >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.5}
+                viewBox="0 0 24 24"
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
               </svg>
             </button>
             <button
               type="button"
-              onClick={() => scroll("right")}
+              onClick={() => scroll('right')}
               aria-label="Scroll right"
-              className={`flex h-9 w-9 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition hover:shadow-card ${atEnd ? "opacity-50 cursor-default" : "hover:bg-surface-alt"}`}
+              className={`flex h-9 w-9 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition hover:shadow-card ${atEnd ? 'opacity-50 cursor-default' : 'hover:bg-surface-alt'}`}
               disabled={atEnd}
             >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.5}
+                viewBox="0 0 24 24"
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
               </svg>
             </button>
@@ -99,7 +117,10 @@ export default function ListingRow({ title, subtitle, href, listings, max = 4 }:
         {subtitle && <p className="text-sm text-ink-muted">{subtitle}</p>}
       </div>
 
-      <div ref={scrollerRef} className="mt-4 flex snap-x snap-mandatory gap-5 overflow-x-auto pb-3 scrollbar-none">
+      <div
+        ref={scrollerRef}
+        className="mt-4 flex snap-x snap-mandatory gap-5 overflow-x-auto pb-3 scrollbar-none"
+      >
         {visible.map((l, i) => {
           // If this is the last card and See all should be shown, render See all tile
           if (showSeeAll && i === max) {
@@ -114,7 +135,7 @@ export default function ListingRow({ title, subtitle, href, listings, max = 4 }:
                   {/* Airbnb-style stacked preview: 3 images, visually overlapped, center stack */}
                   {[0, 1, 2].map((offset) => {
                     const card = visible[offset] || listings[offset];
-                    const img = card?.imageUrls?.[0] || "";
+                    const img = card?.imageUrls?.[0] || '';
                     // Center the middle card, overlap left/right
                     const base = 32; // px size for overlap
                     const positions = [
@@ -128,10 +149,10 @@ export default function ListingRow({ title, subtitle, href, listings, max = 4 }:
                         key={offset}
                         className="absolute rounded-xl border-2 border-white shadow-card bg-white overflow-hidden"
                         style={{
-                          left: "50%",
-                          top: "50%",
-                          width: "56px",
-                          height: "56px",
+                          left: '50%',
+                          top: '50%',
+                          width: '56px',
+                          height: '56px',
                           zIndex: pos.z,
                           transform: `translate(-50%, -50%) translate(${pos.x}px, ${pos.y}px) rotate(${pos.rot}deg)`,
                         }}
@@ -143,7 +164,9 @@ export default function ListingRow({ title, subtitle, href, listings, max = 4 }:
                   })}
                 </div>
                 <div>
-                  <p className="font-display text-base font-bold text-ink group-hover:underline">See all</p>
+                  <p className="font-display text-base font-bold text-ink group-hover:underline">
+                    See all
+                  </p>
                 </div>
               </Link>
             );

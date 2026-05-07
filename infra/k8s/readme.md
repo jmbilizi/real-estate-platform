@@ -2,7 +2,8 @@
 
 ## 📚 Documentation Overview
 
-This directory contains comprehensive documentation for the Kubernetes infrastructure, including GitOps workflows, deployment procedures, and operational guides.
+This directory contains comprehensive documentation for the Kubernetes infrastructure, including
+GitOps workflows, deployment procedures, and operational guides.
 
 ## 🗺️ Documentation Map
 
@@ -65,9 +66,11 @@ This directory contains comprehensive documentation for the Kubernetes infrastru
    - Environment isolation
    - Performance: 60-70% faster for single-service changes
    - **Who should read**: DevOps engineers, developers
-   - **When to read**: When deploying changes, understanding CI/CD behavior, optimizing deployment workflows
+   - **When to read**: When deploying changes, understanding CI/CD behavior, optimizing deployment
+     workflows
 
-7. **[../smart-deployment-config.yaml](../smart-deployment-config.yaml)** - Service deployment mapping
+7. **[../smart-deployment-config.yaml](../smart-deployment-config.yaml)** - Service deployment
+   mapping
    - Central configuration for service-to-file mappings
    - Service definitions (postgres, redis, jaeger, future apps)
    - Global triggers and ignored paths
@@ -78,12 +81,16 @@ This directory contains comprehensive documentation for the Kubernetes infrastru
 
 8. **[../deploy-control.yaml](../deploy-control.yaml)** - Deployment control
    - **Most deployment controls are actively enforced by workflows**
-   - Environment gates: `enabled`, `auto_deploy` (enforced), `require_manual_approval` (not yet enforced)
+   - Environment gates: `enabled`, `auto_deploy` (enforced), `require_manual_approval` (not yet
+     enforced)
    - Deployment windows: Time/day-based restrictions (enforced)
-   - Service controls: Per-service enable/disable (enforced), approval requirements (not yet enforced)
+   - Service controls: Per-service enable/disable (enforced), approval requirements (not yet
+     enforced)
    - Rollback: Automatic revert on rollout failure (enforced)
-   - **Manual approval**: Configure via GitHub Environments (Settings → Environments → {env} → Required reviewers)
-   - **Health validation handled by Kubernetes probes** (livenessProbe, readinessProbe in StatefulSet)
+   - **Manual approval**: Configure via GitHub Environments (Settings → Environments → {env} →
+     Required reviewers)
+   - **Health validation handled by Kubernetes probes** (livenessProbe, readinessProbe in
+     StatefulSet)
    - **All environments have identical structure** (different values)
    - **Who should read**: DevOps engineers, release managers
    - **When to read**: When configuring deployment policies or troubleshooting deployments
@@ -95,7 +102,8 @@ This directory contains comprehensive documentation for the Kubernetes infrastru
 
 ## 📂 Directory Structure
 
-**Multi-Provider Support**: Any directory under `k8s/` (except `base`) is automatically treated as a cloud provider.
+**Multi-Provider Support**: Any directory under `k8s/` (except `base`) is automatically treated as a
+cloud provider.
 
 ```
 infra/
@@ -239,8 +247,10 @@ Configure in: Repository Settings → Secrets and variables → Actions
 
 ### Infrastructure Deployment
 
-- `INFRA_DEPLOY_TOKEN` - Personal Access Token (PAT) with `repo` scope for uploading KUBECONFIG to environment secrets and triggering workflows
-  - **Required**: The default `GITHUB_TOKEN` lacks write permission to the secrets API and cannot trigger workflows
+- `INFRA_DEPLOY_TOKEN` - Personal Access Token (PAT) with `repo` scope for uploading KUBECONFIG to
+  environment secrets and triggering workflows
+  - **Required**: The default `GITHUB_TOKEN` lacks write permission to the secrets API and cannot
+    trigger workflows
   - **Scope**: `repo` (Full control of private repositories)
   - **Create**: Settings → Developer settings → Personal access tokens → Fine-grained tokens
   - **Expiration**: Set appropriate expiration and rotation policy
@@ -252,19 +262,23 @@ Configure in: Repository Settings → Secrets and variables → Actions
   - Test environment: Scoped to `environment: test`
   - Prod environment: Scoped to `environment: prod`
 
-**Security**: Environment secrets are scoped to specific environments and can have protection rules (approvals, branch restrictions).
+**Security**: Environment secrets are scoped to specific environments and can have protection rules
+(approvals, branch restrictions).
 
 ### PostgreSQL Passwords (per environment)
 
-**All environments (dev, test, prod):** `POSTGRES_SA_PASSWORD`, `ACCOUNT_SERVICE_DB_USER_PASSWORD`, `MESSAGING_SERVICE_DB_USER_PASSWORD`, `PROPERTY_SERVICE_DB_USER_PASSWORD`
+**All environments (dev, test, prod):** `POSTGRES_SA_PASSWORD`, `ACCOUNT_SERVICE_DB_USER_PASSWORD`,
+`MESSAGING_SERVICE_DB_USER_PASSWORD`, `PROPERTY_SERVICE_DB_USER_PASSWORD`
 
 ### Redis ACL User Passwords (per environment)
 
-**All environments (dev, test, prod):** `REDIS_ADMIN_PASSWORD`, `REDIS_PUBSUB_PASSWORD`, `REDIS_CACHE_PASSWORD`, `REDIS_RATELIMIT_PASSWORD`, `REDIS_MONITOR_PASSWORD`
+**All environments (dev, test, prod):** `REDIS_ADMIN_PASSWORD`, `REDIS_PUBSUB_PASSWORD`,
+`REDIS_CACHE_PASSWORD`, `REDIS_RATELIMIT_PASSWORD`, `REDIS_MONITOR_PASSWORD`
 
 **Note:** Each environment has its own set of these secrets (scoped to the environment).
 
-**Redis ACL Info:** See `redis-acl-guide.md` for user permissions and application connection examples.
+**Redis ACL Info:** See `redis-acl-guide.md` for user permissions and application connection
+examples.
 
 ### Jaeger Basic Auth (per environment)
 
@@ -282,7 +296,8 @@ Configure in: Repository Settings → Secrets and variables → Actions
 **Examples:**
 
 - Dev: `jaeger.dev.yoursite.com`, `api.dev.yoursite.com` (future), `app.dev.yoursite.com` (future)
-- Test: `jaeger.test.yoursite.com`, `api.test.yoursite.com` (future), `app.test.yoursite.com` (future)
+- Test: `jaeger.test.yoursite.com`, `api.test.yoursite.com` (future), `app.test.yoursite.com`
+  (future)
 - Prod: `jaeger.yoursite.com`, `api.yoursite.com` (future), `yoursite.com` (future)
 
 **Note:** These are substituted into Ingress manifest files during deployment (not K8s Secrets).
@@ -299,7 +314,8 @@ Configure in: Repository Settings → Secrets and variables → Actions
 ### Local Development with Podman
 
 - **Podman Desktop**: https://podman-desktop.io/
-  - **Automated setup**: `pnpm run infra:local:cluster:setup` (installs Podman Desktop, creates cluster)
+  - **Automated setup**: `pnpm run infra:local:cluster:setup` (installs Podman Desktop, creates
+    cluster)
   - **Manual install**: Download from https://podman-desktop.io/downloads
   - Includes: Podman CLI, kubectl, local Kubernetes cluster
   - StorageClass: `local-path` (automatically created)
@@ -327,9 +343,11 @@ Configure in: Repository Settings → Secrets and variables → Actions
 | **Test**    | hetzner  | ❌ No       | Integration testing |
 | **Prod**    | hetzner  | ❌ No       | Production workload |
 
-**Resource Specifications**: See environment-specific patches in `{provider}/{env}/patches/statefulsets/`:
+**Resource Specifications**: See environment-specific patches in
+`{provider}/{env}/patches/statefulsets/`:
 
-- `postgres.statefulset.yaml` - Combined patch with replicas, memory, CPU limits, storage size, and StorageClass
+- `postgres.statefulset.yaml` - Combined patch with replicas, memory, CPU limits, storage size, and
+  StorageClass
 
 ## 🔍 Quick Lookups
 
@@ -490,6 +508,5 @@ Before declaring setup complete:
 
 ---
 
-**Last Updated**: 2024
-**Maintained By**: Infrastructure Team
-**Questions?**: See "Support" section above
+**Last Updated**: 2024 **Maintained By**: Infrastructure Team **Questions?**: See "Support" section
+above

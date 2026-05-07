@@ -84,20 +84,27 @@ export default function Footer() {
 
         {/* MLS Compliance Disclosures */}
         <div className="mt-10 rounded-2xl border border-surface-border bg-white p-6">
-          <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-muted">MLS Disclosure</h5>
+          <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-muted">
+            MLS Disclosure
+          </h5>
           <div className="space-y-1.5 text-xs leading-relaxed text-ink-muted">
-            <p>Listing information is provided by Bright MLS and is deemed reliable but not guaranteed.</p>
             <p>
-              The information provided is for personal, non-commercial use and may not be used for any purpose other
-              than identifying prospective properties consumers may be interested in purchasing or renting.
+              Listing information is provided by Bright MLS and is deemed reliable but not
+              guaranteed.
             </p>
             <p>
-              Some properties which appear for sale or rent on this website may no longer be available because they are
-              under contract, have closed, or are no longer being offered.
+              The information provided is for personal, non-commercial use and may not be used for
+              any purpose other than identifying prospective properties consumers may be interested
+              in purchasing or renting.
             </p>
             <p>
-              All listing data is courtesy of the listing broker and Bright MLS. Data last updated: April 21, 2026 at
-              12:00 PM ET.
+              Some properties which appear for sale or rent on this website may no longer be
+              available because they are under contract, have closed, or are no longer being
+              offered.
+            </p>
+            <p>
+              All listing data is courtesy of the listing broker and Bright MLS. Data last updated:
+              April 21, 2026 at 12:00 PM ET.
             </p>
             <p className="font-medium text-ink">Brokered by Real Broker LLC.</p>
           </div>
@@ -105,7 +112,10 @@ export default function Footer() {
 
         {/* Bottom bar */}
         <div className="mt-8 flex flex-col items-center justify-between gap-4 border-t border-surface-border pt-6 text-xs text-ink-muted sm:flex-row">
-          <p>&copy; {new Date().getFullYear()} Cribstop.com &middot; Real Broker LLC. All rights reserved.</p>
+          <p>
+            &copy; {new Date().getFullYear()} Cribstop.com &middot; Real Broker LLC. All rights
+            reserved.
+          </p>
           <p>
             <a
               href="https://www.hud.gov/program_offices/fair_housing_equal_opp"

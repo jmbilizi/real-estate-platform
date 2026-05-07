@@ -17,20 +17,20 @@
  * CI/CD can later use GHCR (ghcr.io/...) with the same build/push logic.
  */
 
-const { spawnSync } = require("child_process");
-const path = require("path");
-const fs = require("fs");
+const { spawnSync } = require('child_process');
+const path = require('path');
+const fs = require('fs');
 
-const { applyLocalRetention } = require("./registry-retention");
+const { applyLocalRetention } = require('./registry-retention');
 
-const workspaceRoot = path.resolve(__dirname, "../..");
+const workspaceRoot = path.resolve(__dirname, '../..');
 
 function run(cmd, args, opts = {}) {
   const result = spawnSync(cmd, args, {
     cwd: workspaceRoot,
-    stdio: opts.stdio ?? "inherit",
-    shell: process.platform === "win32",
-    encoding: "utf-8",
+    stdio: opts.stdio ?? 'inherit',
+    shell: process.platform === 'win32',
+    encoding: 'utf-8',
   });
   return result.status ?? 1;
 }
@@ -50,8 +50,8 @@ function must(status, message) {
 function extractProjectName(image) {
   // Remove tag first (everything after last ':' that's not part of registry port)
   let imageWithoutTag = image;
-  const lastColonIndex = image.lastIndexOf(":");
-  const lastSlashIndex = image.lastIndexOf("/");
+  const lastColonIndex = image.lastIndexOf(':');
+  const lastSlashIndex = image.lastIndexOf('/');
 
   // If colon is after last slash, it's a tag (not a registry port)
   if (lastColonIndex > lastSlashIndex) {
@@ -59,7 +59,7 @@ function extractProjectName(image) {
   }
 
   // Extract last segment (project name)
-  const segments = imageWithoutTag.split("/");
+  const segments = imageWithoutTag.split('/');
   return segments[segments.length - 1];
 }
 
@@ -69,9 +69,9 @@ function extractProjectName(image) {
  * when the image name differs from the filesystem directory name.
  */
 function loadImagePathOverrides() {
-  const mapPath = path.join(workspaceRoot, "tools/docker/image-name-map.json");
+  const mapPath = path.join(workspaceRoot, 'tools/docker/image-name-map.json');
   if (!fs.existsSync(mapPath)) return {};
-  const map = JSON.parse(fs.readFileSync(mapPath, "utf-8"));
+  const map = JSON.parse(fs.readFileSync(mapPath, 'utf-8'));
   // Invert: imageName → dockerfilePath (skaffold-build receives imageName, needs directory)
   const overrides = {};
   for (const [, entry] of Object.entries(map)) {
@@ -96,7 +96,8 @@ function detectDockerfile(projectName) {
       return overridePath;
     }
     throw new Error(
-      `Dockerfile not found at override path: ${overridePath}\n` + `Check tools/docker/image-name-map.json`,
+      `Dockerfile not found at override path: ${overridePath}\n` +
+        `Check tools/docker/image-name-map.json`,
     );
   }
 
@@ -118,7 +119,7 @@ function detectDockerfile(projectName) {
   throw new Error(
     `Dockerfile not found for project: ${projectName}\n` +
       `Searched:\n` +
-      searchPatterns.map((p) => `  - ${p}`).join("\n"),
+      searchPatterns.map((p) => `  - ${p}`).join('\n'),
   );
 }
 
@@ -132,50 +133,52 @@ function buildImage(image) {
   console.log(`Found Dockerfile: ${dockerfilePath}`);
 
   const args = [
-    "build",
-    "-f",
+    'build',
+    '-f',
     dockerfilePath,
-    "--build-arg",
-    "BUILD_CONFIGURATION=Release",
-    "--build-arg",
-    "COPY_CERTS=true", // Local dev needs enterprise certs
-    "-t",
+    '--build-arg',
+    'BUILD_CONFIGURATION=Release',
+    '--build-arg',
+    'COPY_CERTS=true', // Local dev needs enterprise certs
+    '-t',
     image,
-    ".",
+    '.',
   ];
-  const status = run("podman", args);
-  must(status, "podman build failed");
+  const status = run('podman', args);
+  must(status, 'podman build failed');
 }
 
 function pushImage(image) {
   // Local dev registry is plain HTTP (no TLS). Podman defaults to HTTPS unless told otherwise.
   // Keep TLS verification enabled for real registries (e.g., GHCR).
   const isLocalHttpRegistry =
-    image.startsWith("localhost:5001/") || image.startsWith("127.0.0.1:5001/") || image.startsWith("localhost/");
+    image.startsWith('localhost:5001/') ||
+    image.startsWith('127.0.0.1:5001/') ||
+    image.startsWith('localhost/');
 
-  const args = ["push"];
+  const args = ['push'];
   if (isLocalHttpRegistry) {
-    args.push("--tls-verify=false");
+    args.push('--tls-verify=false');
   }
   args.push(image);
 
-  const status = run("podman", args);
-  must(status, "podman push failed");
+  const status = run('podman', args);
+  must(status, 'podman push failed');
 }
 
 function cleanupOnFailure(image) {
   // Best-effort cleanup to avoid leaking disk space during failing build loops.
-  run("podman", ["rmi", "-f", image], { stdio: ["ignore", "ignore", "ignore"] });
-  run("podman", ["image", "prune", "-f"], { stdio: ["ignore", "ignore", "ignore"] });
+  run('podman', ['rmi', '-f', image], { stdio: ['ignore', 'ignore', 'ignore'] });
+  run('podman', ['image', 'prune', '-f'], { stdio: ['ignore', 'ignore', 'ignore'] });
 }
 
 async function main() {
   const image = process.env.IMAGE;
   if (!image) {
-    throw new Error("Skaffold did not provide IMAGE env var");
+    throw new Error('Skaffold did not provide IMAGE env var');
   }
 
-  const pushImageRequested = String(process.env.PUSH_IMAGE || "").toLowerCase() === "true";
+  const pushImageRequested = String(process.env.PUSH_IMAGE || '').toLowerCase() === 'true';
 
   try {
     buildImage(image);
@@ -183,7 +186,7 @@ async function main() {
     if (pushImageRequested) {
       pushImage(image);
 
-      const keepLast = Number(process.env.KIND_LOCAL_REGISTRY_KEEP_LAST || "3");
+      const keepLast = Number(process.env.KIND_LOCAL_REGISTRY_KEEP_LAST || '3');
       await applyLocalRetention({ image, keepLast }).catch(() => {
         // Never fail the build because retention couldn't run.
       });

@@ -14,7 +14,7 @@
  *   node tools/nx/run-many-with-target.js --target=container-build --projects=tag:service --tag=dev
  */
 
-const { execSync, spawnSync } = require("child_process");
+const { execSync, spawnSync } = require('child_process');
 
 function readArgValue(argv, name) {
   const eqPrefix = `--${name}=`;
@@ -44,8 +44,8 @@ function stripArg(argv, name) {
 
 function runNxJson(command) {
   const output = execSync(command, {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
   return JSON.parse(output);
 }
@@ -57,12 +57,12 @@ function intersect(a, b) {
 
 function main() {
   const argv = process.argv.slice(2);
-  const target = readArgValue(argv, "target");
-  const projectsFilter = readArgValue(argv, "projects");
-  const listOnly = argv.includes("--list") || argv.includes("--list-only");
+  const target = readArgValue(argv, 'target');
+  const projectsFilter = readArgValue(argv, 'projects');
+  const listOnly = argv.includes('--list') || argv.includes('--list-only');
 
   if (!target) {
-    console.error("Missing required argument: --target=<targetName>");
+    console.error('Missing required argument: --target=<targetName>');
     process.exit(1);
   }
 
@@ -70,7 +70,7 @@ function main() {
   try {
     projectsWithTarget = runNxJson(`pnpm exec nx show projects --withTarget=${target} --json`);
   } catch (e) {
-    const stderr = (e && (e.stderr || e.message)) || "";
+    const stderr = (e && (e.stderr || e.message)) || '';
     console.error(`[nx] Failed to list projects with target \"${target}\"`);
     if (stderr) console.error(String(stderr));
     process.exit(1);
@@ -80,9 +80,11 @@ function main() {
   if (projectsFilter) {
     let filteredProjects;
     try {
-      filteredProjects = runNxJson(`pnpm exec nx show projects --projects=${projectsFilter} --json`);
+      filteredProjects = runNxJson(
+        `pnpm exec nx show projects --projects=${projectsFilter} --json`,
+      );
     } catch (e) {
-      const stderr = (e && (e.stderr || e.message)) || "";
+      const stderr = (e && (e.stderr || e.message)) || '';
       console.error(`[nx] Failed to list projects for filter: --projects=${projectsFilter}`);
       if (stderr) console.error(String(stderr));
       process.exit(1);
@@ -91,25 +93,31 @@ function main() {
   }
 
   if (!finalProjects || finalProjects.length === 0) {
-    const filterMsg = projectsFilter ? ` (filter: ${projectsFilter})` : "";
+    const filterMsg = projectsFilter ? ` (filter: ${projectsFilter})` : '';
     console.log(`[nx] No projects have target \"${target}\"${filterMsg}. Skipping.`);
     process.exit(0);
   }
 
   if (listOnly) {
     // Newline-separated list to match `nx show projects` default output
-    console.log(finalProjects.join("\n"));
+    console.log(finalProjects.join('\n'));
     process.exit(0);
   }
 
-  let passThrough = stripArg(argv, "target");
-  passThrough = stripArg(passThrough, "projects");
-  passThrough = passThrough.filter((x) => x !== "--list" && x !== "--list-only");
+  let passThrough = stripArg(argv, 'target');
+  passThrough = stripArg(passThrough, 'projects');
+  passThrough = passThrough.filter((x) => x !== '--list' && x !== '--list-only');
 
-  const nxArgs = ["nx", "run-many", `--target=${target}`, `--projects=${finalProjects.join(",")}`, ...passThrough];
+  const nxArgs = [
+    'nx',
+    'run-many',
+    `--target=${target}`,
+    `--projects=${finalProjects.join(',')}`,
+    ...passThrough,
+  ];
 
-  const result = spawnSync("pnpm", ["exec", ...nxArgs], {
-    stdio: "inherit",
+  const result = spawnSync('pnpm', ['exec', ...nxArgs], {
+    stdio: 'inherit',
     shell: true,
   });
 

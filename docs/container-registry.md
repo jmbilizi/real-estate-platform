@@ -2,7 +2,9 @@
 
 ## Overview
 
-This workspace uses **GitHub Container Registry (GHCR)** for storing Docker images built from services in the monorepo. Images are built automatically via GitHub Actions using Nx affected detection to only build changed services.
+This workspace uses **GitHub Container Registry (GHCR)** for storing Docker images built from
+services in the monorepo. Images are built automatically via GitHub Actions using Nx affected
+detection to only build changed services.
 
 ## Architecture
 
@@ -66,8 +68,10 @@ Push → CI (quality checks) → Build-Push-Images (ALL services) → Deploy
 
 **Global Triggers:**
 
-- **Build workflow changes** (`.github/workflows/build-push-images.yml`, `.github/actions/build-push-image/`): Rebuilds ALL services to validate workflow integrity
-- Similar to deploy workflow, ensures changes to build infrastructure are tested against all services
+- **Build workflow changes** (`.github/workflows/build-push-images.yml`,
+  `.github/actions/build-push-image/`): Rebuilds ALL services to validate workflow integrity
+- Similar to deploy workflow, ensures changes to build infrastructure are tested against all
+  services
 
 **Key Benefits:**
 
@@ -111,7 +115,8 @@ pnpm exec nx affected --target=container-build
 
 ### Certificate Handling
 
-Dockerfiles use **conditional certificate installation** to support both local dev (with corporate proxies) and CI/CD (without):
+Dockerfiles use **conditional certificate installation** to support both local dev (with corporate
+proxies) and CI/CD (without):
 
 ```dockerfile
 ARG COPY_CERTS=false
@@ -198,7 +203,8 @@ Reusable action for building and pushing a single container image.
 
 ### Image References (Template Pattern)
 
-**IMPORTANT**: Deployment manifests use placeholders that are substituted **automatically during deployment**. This makes the infrastructure template-friendly and fork-compatible.
+**IMPORTANT**: Deployment manifests use placeholders that are substituted **automatically during
+deployment**. This makes the infrastructure template-friendly and fork-compatible.
 
 **Placeholders:**
 
@@ -220,7 +226,8 @@ image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/api-gateway:latest
 **Substitution happens in CI/CD:**
 
 - `.github/actions/deploy-k8s-resources/action.yml` substitutes placeholders after Kustomize build
-- Uses GitHub context variables: `${{ github.repository_owner }}`, `${{ github.event.repository.name }}`
+- Uses GitHub context variables: `${{ github.repository_owner }}`,
+  `${{ github.event.repository.name }}`
 - **Tags are NOT substituted** - they're already defined correctly in each environment patch
 - Same pattern as secret substitution (in-memory replacement)
 

@@ -15,49 +15,49 @@
  *   Or manually: node scripts/pre-commit.js
  */
 
-const { execSync } = require("child_process");
-const path = require("path");
-const fs = require("fs");
+const { execSync } = require('child_process');
+const path = require('path');
+const fs = require('fs');
 
 // ANSI color codes
 const colors = {
-  reset: "\x1b[0m",
-  bright: "\x1b[1m",
-  red: "\x1b[31m",
-  green: "\x1b[32m",
-  yellow: "\x1b[33m",
-  blue: "\x1b[34m",
-  cyan: "\x1b[36m",
+  reset: '\x1b[0m',
+  bright: '\x1b[1m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  cyan: '\x1b[36m',
 };
 
-function log(message, color = "reset") {
+function log(message, color = 'reset') {
   console.log(`${colors[color]}${message}${colors.reset}`);
 }
 
 function logStep(step) {
-  log(`\n${"=".repeat(80)}`, "cyan");
-  log(`  ${step}`, "bright");
-  log("=".repeat(80), "cyan");
+  log(`\n${'='.repeat(80)}`, 'cyan');
+  log(`  ${step}`, 'bright');
+  log('='.repeat(80), 'cyan');
 }
 
 function logSuccess(message) {
-  log(`✓ ${message}`, "green");
+  log(`✓ ${message}`, 'green');
 }
 
 function logError(message) {
-  log(`✗ ${message}`, "red");
+  log(`✗ ${message}`, 'red');
 }
 
 function logWarning(message) {
-  log(`⚠ ${message}`, "yellow");
+  log(`⚠ ${message}`, 'yellow');
 }
 
 function run(command, options = {}) {
   try {
     const result = execSync(command, {
-      cwd: path.resolve(__dirname, ".."),
-      stdio: options.silent ? "pipe" : "inherit",
-      encoding: "utf-8",
+      cwd: path.resolve(__dirname, '..'),
+      stdio: options.silent ? 'pipe' : 'inherit',
+      encoding: 'utf-8',
       ...options,
     });
     return { success: true, output: result };
@@ -66,15 +66,28 @@ function run(command, options = {}) {
   }
 }
 
+// Get list of staged files
+function getStagedFiles() {
+  try {
+    const result = run('git diff --cached --name-only', { silent: true });
+    return result.success ? result.output.trim().split('\n').filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
 // Check if there are affected Python projects
 function hasPythonProjectsAffected(isAffected, base) {
   try {
+    // Always check staged files first - most accurate signal
+    const staged = getStagedFiles();
+    const hasPythonFiles = staged.some((f) => /\.(py|pyx|pxd|pxi|pyi|ipynb)$/.test(f));
+    if (hasPythonFiles) return true;
+    if (staged.length === 0) return false; // nothing staged, skip
+
     if (!isAffected || !base) {
-      // On base branch, check if any Python projects exist
-      const result = run("pnpm exec nx show projects --projects=tag:runtime:python", {
-        silent: true,
-      });
-      return result.success && result.output && result.output.trim().length > 0;
+      // On base branch with no Python files staged - skip
+      return false;
     }
 
     // On feature branch, check for affected Python projects
@@ -94,12 +107,15 @@ function hasPythonProjectsAffected(isAffected, base) {
 // Check if there are affected .NET projects
 function hasDotNetProjectsAffected(isAffected, base) {
   try {
+    // Always check staged files first
+    const staged = getStagedFiles();
+    const hasDotNetFiles = staged.some((f) => /\.(cs|vb|csproj|sln|fsproj)$/.test(f));
+    if (hasDotNetFiles) return true;
+    if (staged.length === 0) return false;
+
     if (!isAffected || !base) {
-      // On base branch, check if any .NET projects exist
-      const result = run("pnpm exec nx show projects --projects=tag:runtime:dotnet", {
-        silent: true,
-      });
-      return result.success && result.output && result.output.trim().length > 0;
+      // On base branch with no .NET files staged - skip
+      return false;
     }
 
     // On feature branch, check for affected .NET projects
@@ -118,11 +134,11 @@ function hasDotNetProjectsAffected(isAffected, base) {
 
 // Setup Python virtual environment if needed
 function setupPythonEnvironment() {
-  const rootDir = path.resolve(__dirname, "..");
-  const venvPath = path.join(rootDir, ".venv");
-  const isWindows = process.platform === "win32";
-  const pythonBinPath = path.join(venvPath, isWindows ? "Scripts" : "bin");
-  const pythonExecutable = path.join(pythonBinPath, isWindows ? "python.exe" : "python");
+  const rootDir = path.resolve(__dirname, '..');
+  const venvPath = path.join(rootDir, '.venv');
+  const isWindows = process.platform === 'win32';
+  const pythonBinPath = path.join(venvPath, isWindows ? 'Scripts' : 'bin');
+  const pythonExecutable = path.join(pythonBinPath, isWindows ? 'python.exe' : 'python');
 
   // Check if UV workspace venv already exists and is valid
   if (fs.existsSync(venvPath) && fs.existsSync(pythonExecutable)) {
@@ -133,17 +149,17 @@ function setupPythonEnvironment() {
   }
 
   // Virtual environment doesn't exist - create it via uv sync
-  log("Python virtual environment not found. Running uv sync...", "yellow");
+  log('Python virtual environment not found. Running uv sync...', 'yellow');
 
   try {
-    run("uv sync", { silent: false });
+    run('uv sync', { silent: false });
 
     if (!fs.existsSync(pythonExecutable)) {
-      logError("Failed to create Python virtual environment via uv sync.");
+      logError('Failed to create Python virtual environment via uv sync.');
       return false;
     }
 
-    logSuccess("Python virtual environment created successfully via UV");
+    logSuccess('Python virtual environment created successfully via UV');
 
     process.env.PYTHON_ENV = pythonBinPath;
     process.env.VIRTUAL_ENV = venvPath;
@@ -159,33 +175,33 @@ function setupPythonEnvironment() {
 // Detect current branch and determine validation mode
 function detectValidationMode() {
   try {
-    const currentBranch = execSync("git rev-parse --abbrev-ref HEAD", {
-      encoding: "utf8",
-      cwd: path.resolve(__dirname, ".."),
+    const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', {
+      encoding: 'utf8',
+      cwd: path.resolve(__dirname, '..'),
     }).trim();
 
-    log(`Current branch: ${currentBranch}`, "cyan");
+    log(`Current branch: ${currentBranch}`, 'cyan');
 
     // If on base branches (main/dev/test), run ALL checks
-    if (["main", "dev", "test"].includes(currentBranch)) {
-      log("On base branch - checking ALL projects", "yellow");
+    if (['main', 'dev', 'test'].includes(currentBranch)) {
+      log('On base branch - checking ALL projects', 'yellow');
       return { isAffected: false, base: null, currentBranch };
     }
 
     // On feature branch - run AFFECTED checks
-    log("On feature branch - checking AFFECTED projects only", "yellow");
+    log('On feature branch - checking AFFECTED projects only', 'yellow');
 
     // Try to find the upstream tracking branch
     let base = null;
     try {
-      const upstream = execSync("git rev-parse --abbrev-ref --symbolic-full-name @{u}", {
-        encoding: "utf8",
-        cwd: path.resolve(__dirname, ".."),
+      const upstream = execSync('git rev-parse --abbrev-ref --symbolic-full-name @{u}', {
+        encoding: 'utf8',
+        cwd: path.resolve(__dirname, '..'),
       }).trim();
 
-      if (upstream && upstream !== "@{u}") {
+      if (upstream && upstream !== '@{u}') {
         base = upstream;
-        log(`Comparing against upstream: ${base}`, "cyan");
+        log(`Comparing against upstream: ${base}`, 'cyan');
         return { isAffected: true, base, currentBranch };
       }
     } catch (e) {
@@ -193,48 +209,47 @@ function detectValidationMode() {
     }
 
     // Fall back to detecting which main branch exists
-    const branches = execSync("git branch -r", {
-      encoding: "utf8",
-      cwd: path.resolve(__dirname, ".."),
+    const branches = execSync('git branch -r', {
+      encoding: 'utf8',
+      cwd: path.resolve(__dirname, '..'),
     });
 
-    if (branches.includes("origin/dev")) {
-      base = "origin/dev";
-    } else if (branches.includes("origin/test")) {
-      base = "origin/test";
-    } else if (branches.includes("origin/main")) {
-      base = "origin/main";
+    if (branches.includes('origin/dev')) {
+      base = 'origin/dev';
+    } else if (branches.includes('origin/test')) {
+      base = 'origin/test';
+    } else if (branches.includes('origin/main')) {
+      base = 'origin/main';
     } else {
-      base = "origin/main";
+      base = 'origin/main';
     }
 
-    log(`Comparing against: ${base}`, "cyan");
+    log(`Comparing against: ${base}`, 'cyan');
     return { isAffected: true, base, currentBranch };
   } catch (error) {
-    logWarning("Could not detect branch, defaulting to full checks");
-    return { isAffected: false, base: null, currentBranch: "unknown" };
+    logWarning('Could not detect branch, defaulting to full checks');
+    return { isAffected: false, base: null, currentBranch: 'unknown' };
   }
 }
 
 function checkNodeProjects(isAffected, base) {
-  logStep("Quick Check: Node.js/TypeScript");
+  logStep('Quick Check: Node.js/TypeScript');
 
-  const affectedFlag = isAffected && base ? `--base=${base} --head=HEAD` : "";
+  const affectedFlag = isAffected && base ? `--base=${base} --head=HEAD` : '';
 
   // 1. Format check (MUST PASS to continue)
-  log("\n1. Checking code formatting...", "blue");
-  const formatCmd =
-    isAffected && base ? `pnpm exec nx format:check --base=${base} --head=HEAD` : `pnpm run nx:workspace-format-check`;
+  log('\n1. Checking code formatting...', 'blue');
+  const formatCmd = `pnpm run nx:workspace-format-check`;
 
   const formatResult = run(formatCmd);
   if (!formatResult.success) {
     logError('Formatting failed - run "pnpm run nx:workspace-format" to fix');
     return false; // Exit early
   }
-  logSuccess("Formatting passed");
+  logSuccess('Formatting passed');
 
   // 2. Lint (MUST PASS to continue)
-  log("\n2. Linting code...", "blue");
+  log('\n2. Linting code...', 'blue');
   const lintCmd =
     isAffected && base
       ? `pnpm exec nx affected --base=${base} --head=HEAD --target=lint --projects=tag:runtime:node`
@@ -242,13 +257,13 @@ function checkNodeProjects(isAffected, base) {
 
   const lintResult = run(lintCmd);
   if (!lintResult.success) {
-    logError("Linting failed");
+    logError('Linting failed');
     return false; // Exit early
   }
-  logSuccess("Linting passed");
+  logSuccess('Linting passed');
 
   // 3. Type check (MUST PASS to continue)
-  log("\n3. Type checking...", "blue");
+  log('\n3. Type checking...', 'blue');
   const typeCmd =
     isAffected && base
       ? `pnpm exec nx affected --base=${base} --head=HEAD --target=type-check --projects=tag:runtime:node`
@@ -256,32 +271,36 @@ function checkNodeProjects(isAffected, base) {
 
   const typeResult = run(typeCmd);
   if (!typeResult.success) {
-    logError("Type checking failed");
+    logError('Type checking failed');
     return false; // Exit early
   }
-  logSuccess("Type checking passed");
+  logSuccess('Type checking passed');
 
   return true; // All checks passed
 }
 
 function checkPythonProjects(isAffected, base) {
-  logStep("Quick Check: Python");
+  logStep('Quick Check: Python');
 
   // Check if UV workspace venv is set up
-  const rootDir = path.resolve(__dirname, "..");
-  const venvPath = path.join(rootDir, ".venv");
-  const isWindows = process.platform === "win32";
-  const pythonExe = path.join(venvPath, isWindows ? "Scripts" : "bin", isWindows ? "python.exe" : "python");
+  const rootDir = path.resolve(__dirname, '..');
+  const venvPath = path.join(rootDir, '.venv');
+  const isWindows = process.platform === 'win32';
+  const pythonExe = path.join(
+    venvPath,
+    isWindows ? 'Scripts' : 'bin',
+    isWindows ? 'python.exe' : 'python',
+  );
   if (!fs.existsSync(venvPath) || !fs.existsSync(pythonExe)) {
-    logWarning("Python environment not set up - skipping Python checks");
+    logWarning('Python environment not set up - skipping Python checks');
     logWarning('Run "pnpm run python:env" (uv sync) to set up Python environment');
     return true; // Don't fail if Python isn't set up
   }
 
-  const affectedFlag = isAffected && base ? `--base=${base} --head=HEAD` : "";
+  const affectedFlag = isAffected && base ? `--base=${base} --head=HEAD` : '';
 
   // 1. Format check (MUST PASS to continue)
-  log("\n1. Checking code formatting (Black)...", "blue");
+  log('\n1. Checking code formatting (Black)...', 'blue');
   const formatCmd =
     isAffected && base
       ? `pnpm exec nx affected --base=${base} --head=HEAD --target=format-check --projects=tag:runtime:python`
@@ -292,10 +311,10 @@ function checkPythonProjects(isAffected, base) {
     logError('Formatting failed - run "pnpm run nx:python-format" to fix');
     return false; // Exit early
   }
-  logSuccess("Formatting passed");
+  logSuccess('Formatting passed');
 
   // 2. Lint (Flake8) (MUST PASS to continue)
-  log("\n2. Linting code (Flake8)...", "blue");
+  log('\n2. Linting code (Flake8)...', 'blue');
   const lintCmd =
     isAffected && base
       ? `pnpm exec nx affected --base=${base} --head=HEAD --target=lint --projects=tag:runtime:python`
@@ -303,13 +322,13 @@ function checkPythonProjects(isAffected, base) {
 
   const lintResult = run(lintCmd);
   if (!lintResult.success) {
-    logError("Linting failed");
+    logError('Linting failed');
     return false; // Exit early
   }
-  logSuccess("Linting passed");
+  logSuccess('Linting passed');
 
   // 3. Type check (mypy) (MUST PASS to continue)
-  log("\n3. Type checking (mypy)...", "blue");
+  log('\n3. Type checking (mypy)...', 'blue');
   const typeCmd =
     isAffected && base
       ? `pnpm exec nx affected --base=${base} --head=HEAD --target=type-check --projects=tag:runtime:python`
@@ -317,38 +336,38 @@ function checkPythonProjects(isAffected, base) {
 
   const typeResult = run(typeCmd);
   if (!typeResult.success) {
-    logError("Type checking failed");
+    logError('Type checking failed');
     return false; // Exit early
   }
-  logSuccess("Type checking passed");
+  logSuccess('Type checking passed');
 
   return true; // All checks passed
 }
 
 function checkDotNetProjects(isAffected, base) {
-  logStep("Quick Check: .NET");
+  logStep('Quick Check: .NET');
 
   // Check if .NET SDK is available
-  const dotnetCheck = run("dotnet --version", { silent: true });
+  const dotnetCheck = run('dotnet --version', { silent: true });
   if (!dotnetCheck.success) {
-    logWarning(".NET SDK not found - skipping .NET checks");
-    logWarning("Install .NET SDK 8.0 or higher");
+    logWarning('.NET SDK not found - skipping .NET checks');
+    logWarning('Install .NET SDK 8.0 or higher');
     return true; // Don't fail if .NET isn't installed
   }
 
-  const affectedFlag = isAffected && base ? `--base=${base} --head=HEAD` : "";
+  const affectedFlag = isAffected && base ? `--base=${base} --head=HEAD` : '';
 
   // 0. Restore packages to catch version issues early (NU1604, transitive deps)
-  log("\n0. Restoring NuGet packages...", "blue");
-  const restoreResult = run("dotnet restore", { silent: true });
+  log('\n0. Restoring NuGet packages...', 'blue');
+  const restoreResult = run('dotnet restore', { silent: true });
   if (!restoreResult.success) {
-    logError("Package restore failed - check for package version conflicts");
+    logError('Package restore failed - check for package version conflicts');
     return false; // Exit early
   }
-  logSuccess("Package restore completed");
+  logSuccess('Package restore completed');
 
   // 1. Format check (MUST PASS to continue)
-  log("\n1. Checking code formatting (dotnet format)...", "blue");
+  log('\n1. Checking code formatting (dotnet format)...', 'blue');
   const formatCmd =
     isAffected && base
       ? `pnpm exec nx affected --base=${base} --head=HEAD --target=format-check --projects=tag:runtime:dotnet`
@@ -359,10 +378,10 @@ function checkDotNetProjects(isAffected, base) {
     logError('Formatting failed - run "pnpm run nx:dotnet-format" to fix');
     return false; // Exit early
   }
-  logSuccess("Formatting passed");
+  logSuccess('Formatting passed');
 
   // 2. Lint (StyleCop) (MUST PASS to continue)
-  log("\n2. Linting code (StyleCop)...", "blue");
+  log('\n2. Linting code (StyleCop)...', 'blue');
   const lintCmd =
     isAffected && base
       ? `pnpm exec nx affected --base=${base} --head=HEAD --target=lint --projects=tag:runtime:dotnet`
@@ -370,13 +389,13 @@ function checkDotNetProjects(isAffected, base) {
 
   const lintResult = run(lintCmd);
   if (!lintResult.success) {
-    logError("Linting failed");
+    logError('Linting failed');
     return false; // Exit early
   }
-  logSuccess("Linting passed");
+  logSuccess('Linting passed');
 
   // 3. Type check (MUST PASS to continue)
-  log("\n3. Type checking (dotnet build)...", "blue");
+  log('\n3. Type checking (dotnet build)...', 'blue');
   const typeCmd =
     isAffected && base
       ? `pnpm exec nx affected --base=${base} --head=HEAD --target=type-check --projects=tag:runtime:dotnet`
@@ -384,10 +403,10 @@ function checkDotNetProjects(isAffected, base) {
 
   const typeResult = run(typeCmd);
   if (!typeResult.success) {
-    logError("Type checking failed");
+    logError('Type checking failed');
     return false; // Exit early
   }
-  logSuccess("Type checking passed");
+  logSuccess('Type checking passed');
 
   return true; // All checks passed
 }
@@ -396,11 +415,12 @@ function checkDotNetProjects(isAffected, base) {
 function hasInfraFilesChanged() {
   try {
     // Check if any infra/k8s files are staged
-    const result = run("git diff --cached --name-only", { silent: true });
+    const result = run('git diff --cached --name-only', { silent: true });
     if (result.success && result.output) {
-      const changedFiles = result.output.split("\n").filter(Boolean);
+      const changedFiles = result.output.split('\n').filter(Boolean);
       return changedFiles.some(
-        (file) => file.startsWith("infra/k8s/") && (file.endsWith(".yaml") || file.endsWith(".yml")),
+        (file) =>
+          file.startsWith('infra/k8s/') && (file.endsWith('.yaml') || file.endsWith('.yml')),
       );
     }
     return false;
@@ -413,102 +433,104 @@ function hasInfraFilesChanged() {
 // Validate infrastructure (Kustomize) files
 function checkInfrastructure() {
   if (!hasInfraFilesChanged()) {
-    log("\nℹ No infrastructure files changed - skipping Kustomize validation", "cyan");
+    log('\nℹ No infrastructure files changed - skipping Kustomize validation', 'cyan');
     return true;
   }
 
-  logStep("Validating Infrastructure (Kustomize)");
+  logStep('Validating Infrastructure (Kustomize)');
 
   // Check if Kustomize is installed
-  const kustomizeCheck = run("kustomize version", { silent: true });
+  const kustomizeCheck = run('kustomize version', { silent: true });
   if (!kustomizeCheck.success) {
-    logWarning("Kustomize not installed - skipping validation");
-    logWarning("Install: pnpm run infra:setup");
-    logWarning("Or install manually: https://kubectl.docs.kubernetes.io/installation/kustomize/");
+    logWarning('Kustomize not installed - skipping validation');
+    logWarning('Install: pnpm run infra:setup');
+    logWarning('Or install manually: https://kubectl.docs.kubernetes.io/installation/kustomize/');
     return true; // Don't fail if Kustomize not installed (optional tool)
   }
 
-  log("\n🏗️  Validating Kustomize manifests...", "blue");
+  log('\n🏗️  Validating Kustomize manifests...', 'blue');
 
   // Validate ingress annotations first (fast check)
-  const annotationCheck = run("node tools/infra/validate-ingress-annotations.js", { silent: false });
+  const annotationCheck = run('node tools/infra/validate-ingress-annotations.js', {
+    silent: false,
+  });
   if (!annotationCheck.success) {
-    logError("Ingress annotation validation failed");
+    logError('Ingress annotation validation failed');
     return false;
   }
 
-  const result = run("pnpm run infra:validate");
+  const result = run('pnpm run infra:validate');
   if (!result.success) {
-    logError("Kustomize validation failed");
-    logError("Fix the errors above or run: pnpm run infra:validate");
+    logError('Kustomize validation failed');
+    logError('Fix the errors above or run: pnpm run infra:validate');
     return false;
   }
 
-  logSuccess("Kustomize validation passed");
+  logSuccess('Kustomize validation passed');
   return true;
 }
 
 function main() {
-  log("\n⚡ Pre-Commit Quick Checks", "bright");
-  log("=".repeat(80), "cyan");
-  log("Running: Format + Lint + Type Check (fast, no tests/builds)\n", "yellow");
+  log('\n⚡ Pre-Commit Quick Checks', 'bright');
+  log('='.repeat(80), 'cyan');
+  log('Running: Format + Lint + Type Check (fast, no tests/builds)\n', 'yellow');
 
   // Early exit if no projects exist (empty workspace)
-  const projectCheck = run("pnpm exec nx show projects", { silent: true });
+  const projectCheck = run('pnpm exec nx show projects', { silent: true });
   if (!projectCheck.output || projectCheck.output.trim().length === 0) {
-    log("\nℹ No projects in workspace - skipping all checks", "cyan");
-    logSuccess("\n✅ Commit allowed (empty workspace)\n");
+    log('\nℹ No projects in workspace - skipping all checks', 'cyan');
+    logSuccess('\n✅ Commit allowed (empty workspace)\n');
     process.exit(0);
   }
 
   // Check if --skip-reset flag is present
-  const skipReset = process.argv.includes("--skip-reset");
+  const skipReset = process.argv.includes('--skip-reset');
 
   // Run nx:reset once at the start (unless skipped by git hooks)
   if (!skipReset) {
-    logStep("Preparing NX Workspace");
-    log("Running nx:reset to ensure clean state...", "cyan");
-    const resetResult = run("pnpm run nx:reset");
+    logStep('Preparing NX Workspace');
+    log('Running nx:reset to ensure clean state...', 'cyan');
+    const resetResult = run('pnpm run nx:reset');
     if (!resetResult.success) {
-      logWarning("nx:reset had warnings but continuing...");
+      logWarning('nx:reset had warnings but continuing...');
     } else {
-      logSuccess("NX workspace ready");
+      logSuccess('NX workspace ready');
     }
 
     // Format any files modified by nx:reset (e.g., .nx/project-graph.json)
-    log("Formatting workspace files...", "cyan");
-    const formatResetResult = run("pnpm exec nx format:write");
+    log('Formatting workspace files...', 'cyan');
+    const formatResetResult = run('pnpm exec nx format:write');
     if (!formatResetResult.success) {
-      logWarning("Format after reset had warnings but continuing...");
+      logWarning('Format after reset had warnings but continuing...');
     }
 
     // Re-stage any staged files that were modified by nx:reset
-    log("Re-staging modified files...", "cyan");
-    const reStageResult = run("git add --renormalize -u", { silent: true });
+    log('Re-staging modified files...', 'cyan');
+    const reStageResult = run('git add --renormalize -u', { silent: true });
     if (reStageResult.success) {
-      logSuccess("Modified files re-staged (with line ending normalization)");
+      logSuccess('Modified files re-staged (with line ending normalization)');
     }
   } else {
-    log("Skipping nx:reset (running in git hook mode)\n", "cyan");
+    log('Skipping nx:reset (running in git hook mode)\n', 'cyan');
   }
 
   const { isAffected, base, currentBranch } = detectValidationMode();
 
   if (isAffected && base) {
-    log(`Mode: Affected projects only (${currentBranch} → ${base})\n`, "cyan");
+    log(`Mode: Affected projects only (${currentBranch} → ${base})\n`, 'cyan');
   } else {
-    log(`Mode: All projects (on base branch: ${currentBranch})\n`, "cyan");
+    log(`Mode: All projects (on base branch: ${currentBranch})\n`, 'cyan');
   }
 
   // Setup Python environment only if Python projects are affected
   if (hasPythonProjectsAffected(isAffected, base)) {
-    logStep("Environment Setup");
-    log("Python projects affected - setting up Python environment...", "cyan");
+    logStep('Environment Setup');
+    log('Python projects affected - setting up Python environment...', 'cyan');
     const pythonEnvReady = setupPythonEnvironment();
     if (pythonEnvReady) {
-      logSuccess("Python environment ready");
+      logSuccess('Python environment ready');
     } else {
-      logWarning("Python environment setup incomplete - Python checks may fail");
+      logWarning('Python environment setup incomplete - Python checks may fail');
     }
   }
 
@@ -524,7 +546,7 @@ function main() {
     const pythonResult = checkPythonProjects(isAffected, base);
     allPassed = allPassed && pythonResult;
   } else {
-    log("\nℹ No Python projects affected - skipping Python checks", "cyan");
+    log('\nℹ No Python projects affected - skipping Python checks', 'cyan');
   }
 
   // Only check .NET if .NET projects are affected
@@ -532,7 +554,7 @@ function main() {
     const dotnetResult = checkDotNetProjects(isAffected, base);
     allPassed = allPassed && dotnetResult;
   } else {
-    log("\nℹ No .NET projects affected - skipping .NET checks", "cyan");
+    log('\nℹ No .NET projects affected - skipping .NET checks', 'cyan');
   }
 
   // Check infrastructure files (Kustomize) if changed
@@ -540,18 +562,18 @@ function main() {
   allPassed = allPassed && infraResult;
 
   // Final summary
-  logStep("Summary");
+  logStep('Summary');
   if (allPassed) {
-    logSuccess("\n✅ Quick checks passed!");
+    logSuccess('\n✅ Quick checks passed!');
     logSuccess("Commit is allowed. Run 'pnpm run check' before pushing for full validation.\n");
     process.exit(0);
   } else {
-    logError("\n❌ Quick checks failed.");
-    logError("Please fix the issues above before committing.\n");
-    logError("💡 Tip: Run format commands to auto-fix formatting issues:");
-    logError("  - Node: pnpm run nx:node-format");
-    logError("  - Python: pnpm run nx:python-format");
-    logError("  - .NET: pnpm run nx:dotnet-format\n");
+    logError('\n❌ Quick checks failed.');
+    logError('Please fix the issues above before committing.\n');
+    logError('💡 Tip: Run format commands to auto-fix formatting issues:');
+    logError('  - Node: pnpm run nx:node-format');
+    logError('  - Python: pnpm run nx:python-format');
+    logError('  - .NET: pnpm run nx:dotnet-format\n');
     process.exit(1);
   }
 }

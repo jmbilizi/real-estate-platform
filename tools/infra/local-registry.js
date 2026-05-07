@@ -14,9 +14,9 @@
  * - Volume: kind-registry-data
  */
 
-const { spawnSync } = require("child_process");
+const { spawnSync } = require('child_process');
 
-const { getLocalRegistryConfig } = require("./registry-settings");
+const { getLocalRegistryConfig } = require('./registry-settings');
 
 const registryConfig = getLocalRegistryConfig();
 const REGISTRY_NAME = registryConfig.name;
@@ -27,15 +27,15 @@ const KIND_NETWORK = registryConfig.kindNetwork;
 
 function run(cmd, args, opts = {}) {
   const result = spawnSync(cmd, args, {
-    stdio: opts.stdio ?? ["ignore", "pipe", "pipe"],
-    shell: process.platform === "win32",
-    encoding: "utf-8",
+    stdio: opts.stdio ?? ['ignore', 'pipe', 'pipe'],
+    shell: process.platform === 'win32',
+    encoding: 'utf-8',
   });
 
   return {
     status: result.status ?? 1,
-    stdout: (result.stdout || "").toString(),
-    stderr: (result.stderr || "").toString(),
+    stdout: (result.stdout || '').toString(),
+    stderr: (result.stderr || '').toString(),
   };
 }
 
@@ -47,17 +47,17 @@ function mustOk(res, message) {
 }
 
 function containerExists() {
-  const res = run("podman", ["container", "exists", REGISTRY_NAME]);
+  const res = run('podman', ['container', 'exists', REGISTRY_NAME]);
   return res.status === 0;
 }
 
 function volumeExists() {
-  const res = run("podman", ["volume", "exists", REGISTRY_VOLUME]);
+  const res = run('podman', ['volume', 'exists', REGISTRY_VOLUME]);
   return res.status === 0;
 }
 
 function getContainerState() {
-  const res = run("podman", ["inspect", "-f", "{{.State.Status}}", REGISTRY_NAME]);
+  const res = run('podman', ['inspect', '-f', '{{.State.Status}}', REGISTRY_NAME]);
   if (res.status !== 0) {
     return null;
   }
@@ -65,7 +65,7 @@ function getContainerState() {
 }
 
 function containerHasDeleteEnabled() {
-  const res = run("podman", ["inspect", "-f", "{{json .Config.Env}}", REGISTRY_NAME]);
+  const res = run('podman', ['inspect', '-f', '{{json .Config.Env}}', REGISTRY_NAME]);
   if (res.status !== 0 || !res.stdout.trim()) {
     return false;
   }
@@ -73,7 +73,8 @@ function containerHasDeleteEnabled() {
   try {
     const envList = JSON.parse(res.stdout.trim());
     return (
-      Array.isArray(envList) && envList.some((e) => String(e).toUpperCase() === "REGISTRY_STORAGE_DELETE_ENABLED=TRUE")
+      Array.isArray(envList) &&
+      envList.some((e) => String(e).toUpperCase() === 'REGISTRY_STORAGE_DELETE_ENABLED=TRUE')
     );
   } catch {
     return false;
@@ -84,8 +85,8 @@ function ensureVolume() {
   if (volumeExists()) {
     return;
   }
-  const res = run("podman", ["volume", "create", REGISTRY_VOLUME], { stdio: "inherit" });
-  mustOk(res, "Failed to create registry volume");
+  const res = run('podman', ['volume', 'create', REGISTRY_VOLUME], { stdio: 'inherit' });
+  mustOk(res, 'Failed to create registry volume');
 }
 
 function ensureContainer() {
@@ -93,8 +94,10 @@ function ensureContainer() {
     // If we created the registry before delete support was enabled, recreate it (preserving the volume).
     // This unlocks pruning/garbage-collection workflows to keep disk usage bounded.
     if (!containerHasDeleteEnabled()) {
-      console.log("Registry container exists but delete is not enabled; recreating container (volume preserved)...");
-      run("podman", ["rm", "-f", REGISTRY_NAME], { stdio: "inherit" });
+      console.log(
+        'Registry container exists but delete is not enabled; recreating container (volume preserved)...',
+      );
+      run('podman', ['rm', '-f', REGISTRY_NAME], { stdio: 'inherit' });
     } else {
       return;
     }
@@ -103,38 +106,38 @@ function ensureContainer() {
   ensureVolume();
 
   const res = run(
-    "podman",
+    'podman',
     [
-      "run",
-      "-d",
-      "--name",
+      'run',
+      '-d',
+      '--name',
       REGISTRY_NAME,
-      "--restart=always",
-      "-e",
-      "REGISTRY_STORAGE_DELETE_ENABLED=true",
-      "-p",
+      '--restart=always',
+      '-e',
+      'REGISTRY_STORAGE_DELETE_ENABLED=true',
+      '-p',
       `${REGISTRY_PORT}:5000`,
-      "-v",
+      '-v',
       `${REGISTRY_VOLUME}:/var/lib/registry`,
       REGISTRY_IMAGE,
     ],
-    { stdio: "inherit" },
+    { stdio: 'inherit' },
   );
-  mustOk(res, "Failed to create registry container");
+  mustOk(res, 'Failed to create registry container');
 }
 
 function ensureRunning() {
   ensureContainer();
   const state = getContainerState();
-  if (state === "running") {
+  if (state === 'running') {
     return;
   }
-  const res = run("podman", ["start", REGISTRY_NAME], { stdio: "inherit" });
-  mustOk(res, "Failed to start registry container");
+  const res = run('podman', ['start', REGISTRY_NAME], { stdio: 'inherit' });
+  mustOk(res, 'Failed to start registry container');
 }
 
 function networkExists() {
-  const res = run("podman", ["network", "inspect", KIND_NETWORK]);
+  const res = run('podman', ['network', 'inspect', KIND_NETWORK]);
   return res.status === 0;
 }
 
@@ -145,14 +148,14 @@ function connectToKindNetwork() {
   }
 
   // Idempotent connect.
-  const res = run("podman", ["network", "connect", KIND_NETWORK, REGISTRY_NAME]);
+  const res = run('podman', ['network', 'connect', KIND_NETWORK, REGISTRY_NAME]);
   if (res.status === 0) {
     return;
   }
 
   // Ignore "already exists" kinds of errors.
-  const msg = (res.stderr || res.stdout || "").toLowerCase();
-  if (msg.includes("already") || msg.includes("exists")) {
+  const msg = (res.stderr || res.stdout || '').toLowerCase();
+  if (msg.includes('already') || msg.includes('exists')) {
     return;
   }
 
@@ -169,62 +172,62 @@ function status() {
   }
 
   const state = getContainerState();
-  console.log(`Registry: ${REGISTRY_NAME} (${state || "unknown"})`);
+  console.log(`Registry: ${REGISTRY_NAME} (${state || 'unknown'})`);
   console.log(`Host: localhost:${REGISTRY_PORT}`);
   console.log(`Volume: ${REGISTRY_VOLUME}`);
 
-  const ports = run("podman", ["port", REGISTRY_NAME]);
+  const ports = run('podman', ['port', REGISTRY_NAME]);
   if (ports.status === 0 && ports.stdout.trim()) {
-    console.log("Ports:");
+    console.log('Ports:');
     process.stdout.write(ports.stdout);
   }
 }
 
 function removeRegistry({ removeVolume }) {
   if (containerExists()) {
-    run("podman", ["rm", "-f", REGISTRY_NAME], { stdio: "inherit" });
+    run('podman', ['rm', '-f', REGISTRY_NAME], { stdio: 'inherit' });
   }
 
   if (removeVolume) {
     if (volumeExists()) {
-      run("podman", ["volume", "rm", "-f", REGISTRY_VOLUME], { stdio: "inherit" });
+      run('podman', ['volume', 'rm', '-f', REGISTRY_VOLUME], { stdio: 'inherit' });
     }
   }
 }
 
 function usage() {
-  console.log("Usage: node tools/infra/local-registry.js <ensure|status|delete>");
-  console.log("\nCommands:");
-  console.log("  ensure   Create/start registry (persistent)");
-  console.log("  status   Show registry state");
-  console.log("  delete   Delete registry container + volume");
-  console.log("\nEnv overrides:");
+  console.log('Usage: node tools/infra/local-registry.js <ensure|status|delete>');
+  console.log('\nCommands:');
+  console.log('  ensure   Create/start registry (persistent)');
+  console.log('  status   Show registry state');
+  console.log('  delete   Delete registry container + volume');
+  console.log('\nEnv overrides:');
   console.log(
-    "  KIND_LOCAL_REGISTRY_NAME, KIND_LOCAL_REGISTRY_PORT, KIND_LOCAL_REGISTRY_IMAGE, KIND_LOCAL_REGISTRY_VOLUME",
+    '  KIND_LOCAL_REGISTRY_NAME, KIND_LOCAL_REGISTRY_PORT, KIND_LOCAL_REGISTRY_IMAGE, KIND_LOCAL_REGISTRY_VOLUME',
   );
 }
 
 async function main() {
   const [command] = process.argv.slice(2);
 
-  if (!command || command === "-h" || command === "--help") {
+  if (!command || command === '-h' || command === '--help') {
     usage();
     process.exit(command ? 0 : 1);
   }
 
-  if (command === "ensure") {
+  if (command === 'ensure') {
     ensureRunning();
     connectToKindNetwork();
     status();
     return;
   }
 
-  if (command === "status") {
+  if (command === 'status') {
     status();
     return;
   }
 
-  if (command === "delete") {
+  if (command === 'delete') {
     removeRegistry({ removeVolume: true });
     return;
   }

@@ -8,7 +8,11 @@
 
 ## 1. Purpose and Vision
 
-Build a scalable, modular platform combining verified real estate listings, dynamic landlord and renter communication, and interactive community social media—all unified by centralized media management and a consistent property hierarchy. The platform targets landlords managing multiple communities and properties of varying composition and engages renters through rich, real-time communication and community features.
+Build a scalable, modular platform combining verified real estate listings, dynamic landlord and
+renter communication, and interactive community social media—all unified by centralized media
+management and a consistent property hierarchy. The platform targets landlords managing multiple
+communities and properties of varying composition and engages renters through rich, real-time
+communication and community features.
 
 ---
 
@@ -74,7 +78,8 @@ Monitoring (External - Secured):
 - **Unit:** Subdivision of a property (e.g., apartment unit); optional for single-family homes.
 - **Listing:** Rental or sale offer linked to a `property_id` and optionally to a `unit_id`.
 
-Supports flexible composition: townhomes or single-family homes (property only), or multi-unit buildings.
+Supports flexible composition: townhomes or single-family homes (property only), or multi-unit
+buildings.
 
 ---
 
@@ -107,7 +112,8 @@ All keys as UUIDs for scale.
 - Real-time message delivery via WebSockets with Redis Pub/Sub for scalability.
 - Read and delivery receipts stored per recipient accurately.
 - Soft delete support on both sender and receiver sides.
-- Multiple attachments per message handled asynchronously, stored in S3 referenced by `message_attachments`.
+- Multiple attachments per message handled asynchronously, stored in S3 referenced by
+  `message_attachments`.
 
 ---
 
@@ -124,7 +130,8 @@ All keys as UUIDs for scale.
 
 - Unified media store on AWS S3 with versioning and lifecycle policies.
 - All media uploads done via presigned URLs.
-- Metadata stored in platform-wide `media_files` table linking to chats, listings, posts, user profiles.
+- Metadata stored in platform-wide `media_files` table linking to chats, listings, posts, user
+  profiles.
 - Enforced security with IAM roles, encryption, and transient access links.
 
 ---
@@ -132,8 +139,10 @@ All keys as UUIDs for scale.
 ## 7. API and Integration Contracts
 
 - Account service manages users, roles, and JWT tokens.
-- Listings service provides CRUD for communities, properties, units, listings with hierarchical queries.
-- Messaging service exposes REST and WebSocket endpoints for chat lifecycle, message CRUD, and delivery management.
+- Listings service provides CRUD for communities, properties, units, listings with hierarchical
+  queries.
+- Messaging service exposes REST and WebSocket endpoints for chat lifecycle, message CRUD, and
+  delivery management.
 - Social media service handles posts, comments, events REST APIs with filtering by scope.
 - Media upload service generates presigned URLs and links metadata.
 
@@ -164,17 +173,22 @@ All keys as UUIDs for scale.
 
 ## 10. AI Agent Deliverables for Implementation
 
-- Autogenerate database schema migration scripts with new UUID keys, enums, indices, and constraints.
-- Scaffold backend REST and WebSocket APIs for Messaging, Listings, Social feeds with exact parameter and response shape.
+- Autogenerate database schema migration scripts with new UUID keys, enums, indices, and
+  constraints.
+- Scaffold backend REST and WebSocket APIs for Messaging, Listings, Social feeds with exact
+  parameter and response shape.
 - Setup presigned URL generation for media upload and link attachments consistently.
 - Build shared TypeScript models with validation logic reflecting messaging content rules.
 - Automate Nx build and integration testing pipelines, focusing on dependencies and side effects.
-- Provide documentation on hierarchical data usage for Community → Property → Unit → Listing → Messaging scoping.
+- Provide documentation on hierarchical data usage for Community → Property → Unit → Listing →
+  Messaging scoping.
 - Configure OpenTelemetry auto-instrumentation for all services with zero-code-change integration.
 - Deploy Jaeger as optional observability sidecar (services function independently if unavailable).
 
 ---
 
-This comprehensive PRD integrates all previously discussed architectural, database, and functional improvements into a clear roadmap for AI‑augmented development and deployment.
+This comprehensive PRD integrates all previously discussed architectural, database, and functional
+improvements into a clear roadmap for AI‑augmented development and deployment.
 
-If you want, detailed implementation stories or a code generation prompt can be created next as fine-grained increments.
+If you want, detailed implementation stories or a code generation prompt can be created next as
+fine-grained increments.

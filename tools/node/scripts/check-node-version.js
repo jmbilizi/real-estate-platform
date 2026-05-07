@@ -6,37 +6,37 @@
  * and compares it with the current running Node.js version.
  */
 
-const fs = require("fs");
-const path = require("path");
-const { execSync } = require("child_process");
+const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
 
 // Colors for terminal output
 const colors = {
-  reset: "\x1b[0m",
-  red: "\x1b[31m",
-  green: "\x1b[32m",
-  yellow: "\x1b[33m",
-  blue: "\x1b[34m",
-  bold: "\x1b[1m",
+  reset: '\x1b[0m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  bold: '\x1b[1m',
 };
 
 // Get the repository root directory
-const rootDir = path.resolve(__dirname, "../../../");
+const rootDir = path.resolve(__dirname, '../../../');
 
 /**
  * Get the required Node.js version from .nvmrc or .node-version files
  * @returns {string} The required Node.js version
  */
 function getRequiredNodeVersion() {
-  const nvmrcPath = path.join(rootDir, ".nvmrc");
-  const nodeVersionPath = path.join(rootDir, ".node-version");
+  const nvmrcPath = path.join(rootDir, '.nvmrc');
+  const nodeVersionPath = path.join(rootDir, '.node-version');
 
   let requiredVersion;
 
   if (fs.existsSync(nvmrcPath)) {
-    requiredVersion = fs.readFileSync(nvmrcPath, "utf8").trim();
+    requiredVersion = fs.readFileSync(nvmrcPath, 'utf8').trim();
   } else if (fs.existsSync(nodeVersionPath)) {
-    requiredVersion = fs.readFileSync(nodeVersionPath, "utf8").trim();
+    requiredVersion = fs.readFileSync(nodeVersionPath, 'utf8').trim();
   }
 
   if (!requiredVersion) {
@@ -68,8 +68,8 @@ function isVersionCompatible(current, required) {
   }
 
   // Parse versions for component-wise comparison
-  const currentParts = current.split(".").map(Number);
-  const requiredParts = required.split(".").map(Number);
+  const currentParts = current.split('.').map(Number);
+  const requiredParts = required.split('.').map(Number);
 
   // Major version must match
   if (currentParts[0] !== requiredParts[0]) {
@@ -95,7 +95,9 @@ function printInstallationInstructions(requiredVersion) {
   console.log(`3. Run: ${colors.blue}nvm use ${requiredVersion}${colors.reset}`);
 
   console.log(`\n${colors.bold}Manual Installation:${colors.reset}`);
-  console.log(`1. Download Node.js ${requiredVersion} from: https://nodejs.org/download/release/v${requiredVersion}/`);
+  console.log(
+    `1. Download Node.js ${requiredVersion} from: https://nodejs.org/download/release/v${requiredVersion}/`,
+  );
   console.log(`2. Follow the installation instructions for your platform\n`);
 }
 
@@ -128,7 +130,7 @@ function checkNodeVersion() {
       `${colors.yellow}Warning: Continuing with an incompatible Node.js version may cause issues.${colors.reset}`,
     );
 
-    if (process.env.NODE_FORCE_VERSION_CHECK === "strict") {
+    if (process.env.NODE_FORCE_VERSION_CHECK === 'strict') {
       console.log(`${colors.red}Strict version checking is enabled. Exiting.${colors.reset}`);
       process.exit(1);
     }

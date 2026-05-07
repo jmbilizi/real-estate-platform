@@ -13,7 +13,8 @@ pnpm exec nx g @nxlv/python:uv-project my-service --directory=apps/services
 pnpm run nx:reset
 ```
 
-That's it! UV auto-downloads the correct Python version from `.python-version` if it's not already installed.
+That's it! UV auto-downloads the correct Python version from `.python-version` if it's not already
+installed.
 
 ## Architecture
 
@@ -112,14 +113,17 @@ pnpm exec nx g @nxlv/python:uv-project my-utils --directory=libs --projectType=l
 pnpm run nx:reset
 ```
 
-**Auto-tagging**: Projects are automatically tagged with `python`, enabling commands like `pnpm run nx:python-test`.
+**Auto-tagging**: Projects are automatically tagged with `python`, enabling commands like
+`pnpm run nx:python-test`.
 
 ## Environment Setup Details
 
 ### What `pnpm run python:env` Does
 
-1. **Checks for UV** — installs it automatically if missing (Windows: PowerShell installer / winget, macOS: brew, Linux: curl)
-2. **Runs `uv sync`** — creates `.venv`, downloads Python if needed (from `.python-version`), installs all packages from `uv.lock`
+1. **Checks for UV** — installs it automatically if missing (Windows: PowerShell installer / winget,
+   macOS: brew, Linux: curl)
+2. **Runs `uv sync`** — creates `.venv`, downloads Python if needed (from `.python-version`),
+   installs all packages from `uv.lock`
 3. **Verifies tools** — confirms black, flake8, mypy, pytest, ruff are working
 
 ### Check Environment Status
@@ -191,7 +195,8 @@ pnpm run python:env    # Recreate
 
 ### Import Errors
 
-UV workspace mode installs each project as an editable package. Imports should work automatically. If not, run `uv sync` to re-link.
+UV workspace mode installs each project as an editable package. Imports should work automatically.
+If not, run `uv sync` to re-link.
 
 ## Additional References
 

@@ -4,13 +4,16 @@
 
 ### Network Configuration for Image Pulling
 
-All Hetzner cluster configs allow all outbound traffic to ensure K3s can access required infrastructure:
+All Hetzner cluster configs allow all outbound traffic to ensure K3s can access required
+infrastructure:
 
 - **All TCP outbound** (registries, GitHub releases, package repos)
 - **All UDP outbound** (DNS, other services)
 - **Registry Mirror**: Enabled for P2P image distribution between nodes
 
-**CRITICAL**: Hetzner Cloud firewalls switch to deny-all when ANY outbound rule is defined. K3s requires access to multiple endpoints (not just registries), so we allow all outbound traffic per K3s recommendations.
+**CRITICAL**: Hetzner Cloud firewalls switch to deny-all when ANY outbound rule is defined. K3s
+requires access to multiple endpoints (not just registries), so we allow all outbound traffic per
+K3s recommendations.
 
 If you experience image pull failures:
 
@@ -60,19 +63,24 @@ environments:
 **Workflows and Triggers:**
 
 1. **Resource changes** (`base/**` or `hetzner/**/patches/**`):
-   - Push to dev/test/main → CI runs (quality checks) → If passes → CI triggers deploy-k8s-resources.yml via `gh workflow run`
+   - Push to dev/test/main → CI runs (quality checks) → If passes → CI triggers
+     deploy-k8s-resources.yml via `gh workflow run`
    - ONLY Deploy workflow appears in Actions
 
 2. **Cluster provisioning** (`hetzner/**/cluster/**`):
-   - Push to dev/test/main → CI runs (quality checks) → If passes → CI triggers provision-hetzner-k8s-cluster.yml via `gh workflow run` → Creates/updates cluster → Calls deploy-k8s-resources.yml via workflow_call → Deploy runs
+   - Push to dev/test/main → CI runs (quality checks) → If passes → CI triggers
+     provision-hetzner-k8s-cluster.yml via `gh workflow run` → Creates/updates cluster → Calls
+     deploy-k8s-resources.yml via workflow_call → Deploy runs
    - ONLY Provision workflow appears in Actions (then Deploy)
 
 3. **Both cluster + resource changes**:
-   - Push to dev/test/main → CI runs → CI triggers ONLY provision-hetzner (cluster precedence logic) → Provision runs → Calls deploy via workflow_call
+   - Push to dev/test/main → CI runs → CI triggers ONLY provision-hetzner (cluster precedence logic)
+     → Provision runs → Calls deploy via workflow_call
    - ONLY Provision workflow appears (then Deploy)
 
 4. **Unrelated files** (README.md, src/, docs/):
-   - Push to dev/test/main → CI runs (quality checks) → No infrastructure changes detected → No provision/deploy triggered
+   - Push to dev/test/main → CI runs (quality checks) → No infrastructure changes detected → No
+     provision/deploy triggered
    - ONLY CI workflow appears
 
 **Manual Triggers:**
@@ -91,7 +99,8 @@ gh workflow run provision-hetzner-k8s-cluster.yml -f environment=dev
 **CRITICAL**:
 
 - CI detects changes AFTER quality checks pass, then explicitly triggers ONLY relevant workflows
-- Cluster precedence logic: if both cluster+deploy change, only provision triggers (deploy follows via workflow_call)
+- Cluster precedence logic: if both cluster+deploy change, only provision triggers (deploy follows
+  via workflow_call)
 - Workflows ONLY appear in Actions UI when they have work to do (clean UI)
 
 ### Check Deployment Status
@@ -184,9 +193,12 @@ curl -I http://api.dev.yoursite.com
 curl -I https://api.dev.yoursite.com
 ```
 
-**TLS Certificate Automation** (cert-manager is automatically installed during cluster provisioning):
+**TLS Certificate Automation** (cert-manager is automatically installed during cluster
+provisioning):
 
-**Installation**: cert-manager v1.13.3 + `letsencrypt-prod` ClusterIssuer installed via `additional_post_k3s_commands` in cluster-config.yaml (all environments: dev/test/prod). No manual setup required.
+**Installation**: cert-manager v1.13.3 + `letsencrypt-prod` ClusterIssuer installed via
+`additional_post_k3s_commands` in cluster-config.yaml (all environments: dev/test/prod). No manual
+setup required.
 
 **Automatic Certificate Issuance**:
 
@@ -218,7 +230,8 @@ kubectl logs -n cert-manager deployment/cert-manager
 
 - **DNS not resolving**: Wait longer (up to 60 min), or check DNS provider
 - **Certificate pending**: Ensure DNS points to correct IP, check HTTP-01 challenge accessible
-- **Invalid certificate**: Using staging issuer (test env) - expected, provides valid chain but not trusted
+- **Invalid certificate**: Using staging issuer (test env) - expected, provides valid chain but not
+  trusted
 - **Rate limits**: Let's Encrypt has limits (50 certs/week/domain) - use staging for testing
 
 ## Common Workflows
@@ -449,7 +462,8 @@ and 'minReadySeconds' are forbidden
 
 **Workflow Solution (Error-Driven Approach)**:
 
-The GitHub Actions workflow and local kubectl script use an error-driven pattern to handle immutable field changes across **all resource types**:
+The GitHub Actions workflow and local kubectl script use an error-driven pattern to handle immutable
+field changes across **all resource types**:
 
 ```bash
 # 1. Try to apply normally first (fail fast)
@@ -530,9 +544,8 @@ kubectl get pods -l app=postgres -w
 - `--cascade=orphan` for StatefulSet/Deployment/DaemonSet preserves Pods and PVCs
 - Services don't need `--cascade=orphan` (stateless)
 - Jobs should complete/fail before modification
-- No data loss - PVCs persist across StatefulSet recreation
-  kubectl rollout status statefulset/postgres
-  kubectl describe statefulset postgres | grep "Image:"
+- No data loss - PVCs persist across StatefulSet recreation kubectl rollout status
+  statefulset/postgres kubectl describe statefulset postgres | grep "Image:"
 
 ````
 

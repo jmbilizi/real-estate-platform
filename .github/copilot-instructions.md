@@ -2,13 +2,19 @@
 
 ## Architecture Overview
 
-This is an **Nx-powered polyglot monorepo** supporting Node.js/TypeScript, Python, and .NET projects with unified workflows, Git hooks, and CI/CD. The workspace uses **plugin-based inference** where Nx automatically detects projects and generates targets without manual configuration.
+This is an **Nx-powered polyglot monorepo** supporting Node.js/TypeScript, Python, and .NET projects
+with unified workflows, Git hooks, and CI/CD. The workspace uses **plugin-based inference** where Nx
+automatically detects projects and generates targets without manual configuration.
 
 **Key Structural Decisions:**
 
-- **Empty `apps/` and `libs/`**: Projects are created on-demand using Nx generators or standard tooling
-- **Auto-tagging system**: All projects tagged with namespaced dimensions (`runtime:node`, `type:service`, `platform:web`, `scope:`, `framework:`, `devteam:`) — auto-detected and manual placeholders
-- **Unified Git hooks**: Two-tier validation (pre-commit: fast checks, pre-push: full suite) with intelligent language detection
+- **Empty `apps/` and `libs/`**: Projects are created on-demand using Nx generators or standard
+  tooling
+- **Auto-tagging system**: All projects tagged with namespaced dimensions (`runtime:node`,
+  `type:service`, `platform:web`, `scope:`, `framework:`, `devteam:`) — auto-detected and manual
+  placeholders
+- **Unified Git hooks**: Two-tier validation (pre-commit: fast checks, pre-push: full suite) with
+  intelligent language detection
 - **Centralized configs**: All language-specific configurations in `tools/{language}/configs/`
 
 ## Cross-Platform First (CRITICAL)
@@ -16,9 +22,11 @@ This is an **Nx-powered polyglot monorepo** supporting Node.js/TypeScript, Pytho
 This repo must remain usable on **Windows, macOS, and Linux**.
 
 - Prefer **Node.js scripts** (in `tools/`) for automation over OS-specific shell/batch scripts.
-- Avoid Windows-only constructs (e.g., `.bat`-only workflows) unless there is an equivalent cross-platform path.
+- Avoid Windows-only constructs (e.g., `.bat`-only workflows) unless there is an equivalent
+  cross-platform path.
 - Do not assume `bash`, `sed`, `grep`, or GNU tool availability.
-- If a workflow behaves differently on Windows due to `pnpm.cmd` Ctrl+C behavior, provide a **cross-platform Node launcher** that can be run directly via `node`.
+- If a workflow behaves differently on Windows due to `pnpm.cmd` Ctrl+C behavior, provide a
+  **cross-platform Node launcher** that can be run directly via `node`.
 
 ## Critical Workflows
 
@@ -73,7 +81,8 @@ pnpm exec nx build my-service       # Build specific project
 pnpm exec nx affected --target=test
 ```
 
-**CRITICAL**: The `safe-run-many.js` wrapper handles "no projects found" gracefully. Commands won't fail in CI if no projects of that type exist yet.
+**CRITICAL**: The `safe-run-many.js` wrapper handles "no projects found" gracefully. Commands won't
+fail in CI if no projects of that type exist yet.
 
 ### Nx Reset vs Repair
 
@@ -90,7 +99,8 @@ pnpm exec nx affected --target=test
 - Individual development commands (`nx build`, `nx test`) - Nx manages cache automatically
 - Rapid iteration - reset adds ~5-10s overhead
 
-**Pattern in scripts**: Manual validation commands (`pnpm run pre-commit`, `pnpm run pre-push`) run reset once at start; git hooks skip it entirely.
+**Pattern in scripts**: Manual validation commands (`pnpm run pre-commit`, `pnpm run pre-push`) run
+reset once at start; git hooks skip it entirely.
 
 ## Git Hooks & Validation
 
@@ -114,9 +124,13 @@ pnpm exec nx affected --target=test
 - Uses `--skip-reset` flag (no workspace file modifications)
 - **Performance**: Exits immediately if no projects exist (avoids expensive nx operations)
 
-**Why `--skip-reset` in hooks**: Git operations must not modify workspace files (prevents unstaged changes after commit). Manual commands (`pnpm run pre-commit`, `pnpm run pre-push`) DO run reset for clean state validation.
+**Why `--skip-reset` in hooks**: Git operations must not modify workspace files (prevents unstaged
+changes after commit). Manual commands (`pnpm run pre-commit`, `pnpm run pre-push`) DO run reset for
+clean state validation.
 
-**Performance Optimization**: Both hooks check if any projects exist before running expensive operations. On empty workspaces (no projects in `apps/` or `libs/`), they exit in <1 second instead of running nx:reset and empty checks.
+**Performance Optimization**: Both hooks check if any projects exist before running expensive
+operations. On empty workspaces (no projects in `apps/` or `libs/`), they exit in <1 second instead
+of running nx:reset and empty checks.
 
 ### Infrastructure Validation
 
@@ -148,15 +162,18 @@ if (hasPythonProjectsAffected(isAffected, base)) {
   setupPythonEnvironment();
   checkPythonProjects(isAffected, base);
 } else {
-  log("No Python projects affected - skipping Python checks");
+  log('No Python projects affected - skipping Python checks');
 }
 ```
 
-**Pattern**: Check for affected projects first, setup environment only if needed, run checks conditionally.
+**Pattern**: Check for affected projects first, setup environment only if needed, run checks
+conditionally.
 
 ## Python Environment Management
 
-**UV workspace mode**: Single `.venv` at workspace root, managed by UV. Each project has its own `pyproject.toml` (like `package.json`), but all packages install into the shared `.venv` (like `node_modules/`). Single `uv.lock` lockfile at root.
+**UV workspace mode**: Single `.venv` at workspace root, managed by UV. Each project has its own
+`pyproject.toml` (like `package.json`), but all packages install into the shared `.venv` (like
+`node_modules/`). Single `uv.lock` lockfile at root.
 
 ```bash
 # One-time setup (installs UV if missing + creates .venv + installs all packages)
@@ -172,10 +189,12 @@ pnpm run python:env -- --check
 **What `python:env` does automatically:**
 
 1. Checks for UV installation — installs it if missing (cross-platform: PowerShell/winget/brew/curl)
-2. Runs `uv sync` — creates `.venv`, auto-downloads Python from `.python-version` if needed, installs all packages from `uv.lock`
+2. Runs `uv sync` — creates `.venv`, auto-downloads Python from `.python-version` if needed,
+   installs all packages from `uv.lock`
 3. Verifies key tools are available (black, flake8, mypy, pytest, ruff)
 
-**UV handles Python installation**: No need to pre-install Python. UV reads `.python-version` (pinned to 3.11) and auto-downloads the correct version.
+**UV handles Python installation**: No need to pre-install Python. UV reads `.python-version`
+(pinned to 3.11) and auto-downloads the correct version.
 
 **Running tools**: Use `uv run` instead of activating the venv:
 
@@ -195,11 +214,13 @@ uv add --project apps/services/my-service fastapi "uvicorn[standard]"
 uv add --dev ruff
 ```
 
-**CRITICAL**: Python venv is auto-created by git hooks if Python projects are affected. Don't force users to set it up manually unless they're actively developing Python code.
+**CRITICAL**: Python venv is auto-created by git hooks if Python projects are affected. Don't force
+users to set it up manually unless they're actively developing Python code.
 
 ## .NET Project Management
 
-**.NET uses explicit project.json configuration** - no Nx generators or auto-inference. The `@nx/dotnet` plugin provides:
+**.NET uses explicit project.json configuration** - no Nx generators or auto-inference. The
+`@nx/dotnet` plugin provides:
 
 1. Dependency graph analysis for `.csproj` files
 2. Detects `<ProjectReference>` relationships
@@ -223,7 +244,8 @@ pnpm run nx:reset
 
 - `build` - All projects
 - `serve` - Application projects only (not libraries or tests)
-- `test` - Test projects only (xunit, nunit, mstest) **or** non-test projects with a companion `Tests/` subfolder
+- `test` - Test projects only (xunit, nunit, mstest) **or** non-test projects with a companion
+  `Tests/` subfolder
 - `lint` - All projects (dotnet format analyzers)
 - `format` - All projects (dotnet format)
 - `format-check` - All projects (dotnet format --verify-no-changes)
@@ -279,7 +301,8 @@ pnpm run nx:reset
 
 ## Auto-Tagging System
 
-**Namespaced tag taxonomy** with 6 dimensions. `tools/nx/auto-tag-projects.js` runs on every `nx:reset`.
+**Namespaced tag taxonomy** with 6 dimensions. `tools/nx/auto-tag-projects.js` runs on every
+`nx:reset`.
 
 **Auto-detected dimensions** (set or corrected on every run):
 
@@ -306,11 +329,13 @@ pnpm exec nx run-many --target=test --projects=tag:type:client   # All client ap
 pnpm exec nx run-many --target=lint --projects=tag:scope:shared   # All shared-scope projects
 ```
 
-**CRITICAL**: If `--projects=tag:runtime:*` commands don't find your new project, run `pnpm run nx:tag-projects` (or `pnpm run nx:reset` which includes it).
+**CRITICAL**: If `--projects=tag:runtime:*` commands don't find your new project, run
+`pnpm run nx:tag-projects` (or `pnpm run nx:reset` which includes it).
 
 ## CI/CD Pipeline
 
-**Architecture**: CI-first workflow with explicit change detection and selective workflow triggering.
+**Architecture**: CI-first workflow with explicit change detection and selective workflow
+triggering.
 
 **Workflow Orchestration:**
 
@@ -355,26 +380,33 @@ jobs:
   # 4. Trigger deploy ONLY if deploy files changed (and cluster didn't change)
   trigger-deploy:
     needs: [detect-infra-changes]
-    if: needs.detect-infra-changes.outputs.deploy-changed == 'true' && needs.detect-infra-changes.outputs.cluster-changed != 'true'
+    if:
+      needs.detect-infra-changes.outputs.deploy-changed == 'true' &&
+      needs.detect-infra-changes.outputs.cluster-changed != 'true'
     # Uses gh workflow run to trigger deploy-k8s-resources.yml
 ```
 
 **Deployment Scenarios:**
 
 1. **Cluster files change** (infra/k8s/hetzner/\*/cluster/, provision workflow, provision action):
-   - Flow: CI (quality checks) → detect-infra-changes (cluster=true) → trigger-provision → Provision runs → Provision triggers Deploy
+   - Flow: CI (quality checks) → detect-infra-changes (cluster=true) → trigger-provision → Provision
+     runs → Provision triggers Deploy
    - Result: ONLY Provision workflow appears in Actions (then Deploy when Provision completes)
    - Why: CI detects cluster changes and ONLY triggers provision workflow
 
-2. **Deploy files change** (infra/k8s/base/, deploy-control.yaml, patches/, deploy workflow, deploy action):
-   - Flow: CI (quality checks) → detect-infra-changes (deploy=true, cluster=false) → trigger-deploy → Deploy runs
+2. **Deploy files change** (infra/k8s/base/, deploy-control.yaml, patches/, deploy workflow, deploy
+   action):
+   - Flow: CI (quality checks) → detect-infra-changes (deploy=true, cluster=false) → trigger-deploy
+     → Deploy runs
    - Result: ONLY Deploy workflow appears in Actions
    - Why: CI detects deploy changes and ONLY triggers deploy workflow
 
 3. **Both cluster + deploy files change**:
-   - Flow: CI → detect-infra-changes (cluster=true, deploy=true) → trigger-provision ONLY → Provision → Deploy
+   - Flow: CI → detect-infra-changes (cluster=true, deploy=true) → trigger-provision ONLY →
+     Provision → Deploy
    - Result: ONLY Provision workflow appears (then Deploy)
-   - Why: Cluster changes take precedence; trigger-deploy condition excludes when cluster-changed=true
+   - Why: Cluster changes take precedence; trigger-deploy condition excludes when
+     cluster-changed=true
 
 4. **Unrelated files change** (README.md, src/, docs/):
    - Flow: CI (quality checks) → detect-infra-changes (cluster=false, deploy=false) → NO triggers
@@ -394,7 +426,8 @@ jobs:
 - **Explicit triggering**: CI uses `gh workflow run` to trigger provision/deploy ONLY when needed
 - **No unnecessary workflows**: Workflows only appear when they have work to do
 - **CI always enforced**: Quality checks MUST pass before any infrastructure operations
-- **Cluster takes precedence**: If both cluster and deploy change, only provision is triggered (provision will trigger deploy)
+- **Cluster takes precedence**: If both cluster and deploy change, only provision is triggered
+  (provision will trigger deploy)
 - **Security-first**: Prevents deploying untested code; CI gates all infrastructure workflows
 
 **Affected vs Full Suite:**
@@ -402,7 +435,8 @@ jobs:
 - **Pull Requests**: Uses `nx affected --base=origin/${{ github.base_ref }}` (50-90% faster)
 - **Push to main/dev/test**: Runs full suite on all projects
 
-**Why this matters**: PRs targeting different branches (dev/test/main) automatically compare against the correct base. Local `pre-push` hook mimics this behavior.
+**Why this matters**: PRs targeting different branches (dev/test/main) automatically compare against
+the correct base. Local `pre-push` hook mimics this behavior.
 
 **Concurrency control:**
 
@@ -452,7 +486,8 @@ Automatically cancels outdated runs when new commits pushed.
 * text=auto eol=lf
 ```
 
-**CRITICAL**: `auto-tag-projects.js` and `setup-dotnet-projects.js` preserve original BOM and line endings when modifying JSON files. If you modify these scripts, maintain this behavior.
+**CRITICAL**: `auto-tag-projects.js` and `setup-dotnet-projects.js` preserve original BOM and line
+endings when modifying JSON files. If you modify these scripts, maintain this behavior.
 
 ### Formatting Commands
 
@@ -471,31 +506,32 @@ pnpm run nx:python-format    # Format Python projects
 pnpm run nx:dotnet-format    # Format .NET projects
 ```
 
-**When to use which**: Use workspace format for repo-wide changes (pre-commit/pre-push). Use project format during development of specific projects.
+**When to use which**: Use workspace format for repo-wide changes (pre-commit/pre-push). Use project
+format during development of specific projects.
 
 ## Common Pitfalls & Solutions
 
-**"No projects found for tag:runtime:python"**
-→ Run `pnpm run nx:reset` to auto-tag projects
+**"No projects found for tag:runtime:python"** → Run `pnpm run nx:reset` to auto-tag projects
 
 **".NET project not detected by Nx"**  
 → Run `pnpm run nx:reset` to sync solution file and generate project.json
 
-**"Python environment not set up" in git hooks**
-→ Hooks auto-create it via `uv sync`. If manual setup needed: `pnpm run python:env`
+**"Python environment not set up" in git hooks** → Hooks auto-create it via `uv sync`. If manual
+setup needed: `pnpm run python:env`
 
-**"Git hook modifying files during commit"**
-→ By design, hooks use `--skip-reset`. Manual commands (`pnpm run pre-commit`) DO reset for clean validation
+**"Git hook modifying files during commit"** → By design, hooks use `--skip-reset`. Manual commands
+(`pnpm run pre-commit`) DO reset for clean validation
 
-**"Affected commands not working"**
-→ Ensure `fetch-depth: 0` in CI checkout. Locally, set upstream: `git push -u origin feature-branch`
+**"Affected commands not working"** → Ensure `fetch-depth: 0` in CI checkout. Locally, set upstream:
+`git push -u origin feature-branch`
 
-**"NU1604 warning in .NET restore"**
-→ Add explicit `<PackageReference>` with version to .csproj (transitive dependency conflict)
+**"NU1604 warning in .NET restore"** → Add explicit `<PackageReference>` with version to .csproj
+(transitive dependency conflict)
 
 ## Integration Patterns
 
-**Cross-language communication**: Not yet implemented (apps/ and libs/ are empty). When implemented, expect:
+**Cross-language communication**: Not yet implemented (apps/ and libs/ are empty). When implemented,
+expect:
 
 - Node.js/TypeScript services exposing REST APIs
 - Python FastAPI services for ML/data processing
@@ -508,7 +544,8 @@ pnpm run nx:dotnet-format    # Format .NET projects
 - `pyproject.toml` dependencies (Python: UV workspace members)
 - `<ProjectReference>` elements (.NET)
 
-**Testing integration points**: Not applicable yet (no projects). When implemented, use contract testing (Pact) or integration tests in dedicated test projects.
+**Testing integration points**: Not applicable yet (no projects). When implemented, use contract
+testing (Pact) or integration tests in dedicated test projects.
 
 ## Quick Reference
 
@@ -552,9 +589,11 @@ pnpm exec nx graph                 # Visualize project dependencies
 
 ### Architecture Overview
 
-**Centralized k8s management** - ALL Kubernetes manifests (infrastructure + applications) live in `infra/k8s/` for consistent environment management. No scattered k8s folders in `apps/`.
+**Centralized k8s management** - ALL Kubernetes manifests (infrastructure + applications) live in
+`infra/k8s/` for consistent environment management. No scattered k8s folders in `apps/`.
 
-**Kustomize-based GitOps deployment** with hierarchical control flags and in-memory secret substitution. Infrastructure code in `infra/`:
+**Kustomize-based GitOps deployment** with hierarchical control flags and in-memory secret
+substitution. Infrastructure code in `infra/`:
 
 - `k8s/base/` - Cloud-agnostic definitions for:
   - **Infrastructure**: PostgreSQL, Redis/Valkey, Jaeger (StatefulSets)
@@ -562,9 +601,11 @@ pnpm exec nx graph                 # Visualize project dependencies
   - **Applications**: API Gateway (future), microservices (future), webapp (future)
 - `k8s/hetzner/{env}/` - Provider-specific overlays (dev/test/prod)
 - `k8s/podman/local/` - Local development overlays
-- `deploy-control.yaml` - Centralized deployment flags (master kill switch, time windows, rollback policies)
+- `deploy-control.yaml` - Centralized deployment flags (master kill switch, time windows, rollback
+  policies)
 
-**Key Principle**: Infrastructure and applications deploy together via single workflow (`deploy-k8s-resources.yml`). No separate app deployment workflows.
+**Key Principle**: Infrastructure and applications deploy together via single workflow
+(`deploy-k8s-resources.yml`). No separate app deployment workflows.
 
 **Deployed Infrastructure**:
 
@@ -589,7 +630,8 @@ pnpm exec nx graph                 # Visualize project dependencies
 - yoursite.com → Web App (future)
 - jaeger.yoursite.com → Jaeger UI (monitoring)
 
-**Critical Pattern**: **NO secretGenerator, NO secrets.env files**. Secrets use placeholder values (`StrongBase64Password`) in Git, substituted in-memory during CI/CD using `yq`.
+**Critical Pattern**: **NO secretGenerator, NO secrets.env files**. Secrets use placeholder values
+(`StrongBase64Password`) in Git, substituted in-memory during CI/CD using `yq`.
 
 ### Secret Management
 
@@ -624,7 +666,9 @@ mv /tmp/postgres.secret.processed.yaml infra/k8s/base/secrets/postgres.secret.ya
 - ✅ No `.gitignore` complexity or accidental commits
 - ✅ Same pattern as Hetzner cluster provisioning (consistency)
 
-**CRITICAL**: All 3 deployment jobs (dev/test/prod) must use **identical secret field names** and **identical temp file naming** (`/tmp/postgres.secret.processed.yaml`). This was a source of bugs - always verify consistency across all environments.
+**CRITICAL**: All 3 deployment jobs (dev/test/prod) must use **identical secret field names** and
+**identical temp file naming** (`/tmp/postgres.secret.processed.yaml`). This was a source of bugs -
+always verify consistency across all environments.
 
 ### Deployment Control System
 
@@ -642,8 +686,8 @@ environments:
     auto_deploy: true # Auto-deploy on push
     deployment_windows:
       enabled: false # Time-based restrictions
-      allowed_days: ["Mon", "Tue", "Wed", "Thu", "Fri"]
-      allowed_hours: "09:00-17:00"
+      allowed_days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
+      allowed_hours: '09:00-17:00'
 
     services:
       postgres:
@@ -654,7 +698,7 @@ environments:
 # Deployment strategies (resource-type level)
 deployment_strategies:
   statefulset:
-    timeout: "10m" # Configurable rollout timeout
+    timeout: '10m' # Configurable rollout timeout
     rollback_on_failure: true # Strategy-level rollback
 ```
 
@@ -667,11 +711,13 @@ deployment_strategies:
 - `statefulset_timeout` (overrides hardcoded timeouts)
 - `require_manual_approval` (parsed but not yet enforced - GitHub Environments handle this)
 
-**Workflow integration**: Each deployment job parses `deploy-control.yaml` and exits early if any check fails (before credentials are loaded).
+**Workflow integration**: Each deployment job parses `deploy-control.yaml` and exits early if any
+check fails (before credentials are loaded).
 
 ### Kustomize Structure
 
-**Minimal Base Architecture**: Base contains ONLY configuration identical across all environments. Environment-specific resources are defined entirely in patches.
+**Minimal Base Architecture**: Base contains ONLY configuration identical across all environments.
+Environment-specific resources are defined entirely in patches.
 
 **What goes in base:**
 
@@ -705,7 +751,8 @@ infra/k8s/
     └── prod/                                  # Production-grade resources, replicas, HA
 ```
 
-**File naming convention**: `{service}.{kind}.yaml` (e.g., `postgres.statefulset.yaml`, `postgres.configmap.yaml`, `redis.configmap.yaml`)
+**File naming convention**: `{service}.{kind}.yaml` (e.g., `postgres.statefulset.yaml`,
+`postgres.configmap.yaml`, `redis.configmap.yaml`)
 
 **Resource ordering** in kustomization.yaml (CRITICAL):
 
@@ -714,9 +761,11 @@ infra/k8s/
 3. Services (must exist before StatefulSet for stable DNS)
 4. StatefulSets
 
-**Strategic merge behavior**: When base omits resources/storage, patches ADD complete sections (not merge/replace fields).
+**Strategic merge behavior**: When base omits resources/storage, patches ADD complete sections (not
+merge/replace fields).
 
-**CRITICAL - Environment Variable Pattern**: Kustomize replaces the entire `env:` array when patches define it. To preserve base variables:
+**CRITICAL - Environment Variable Pattern**: Kustomize replaces the entire `env:` array when patches
+define it. To preserve base variables:
 
 - **Base**: Define all common environment variables (OTLP settings, sampling config, storage type)
 - **Patches**: Define ONLY environment-specific variables (retention periods, resource limits)
@@ -749,7 +798,8 @@ kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins | kubectl diff -f -
 
 - `push` to branches (dev/test/main) + path filters (excludes cluster configs)
 - `pull_request` (validation only - no deployment)
-- `workflow_dispatch` (manual deployment with environment selection; also invoked by provisioning after CI completes)
+- `workflow_dispatch` (manual deployment with environment selection; also invoked by provisioning
+  after CI completes)
 - `workflow_call` (available for reuse by other workflows if needed)
 
 **Job structure** (identical for all 3 environments):
@@ -759,18 +809,27 @@ kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins | kubectl diff -f -
 3. Set up kubeconfig (from GitHub Secrets)
 4. **Substitute secrets** in postgres.secret.yaml and redis.secret.yaml (in-memory)
 5. Build Kustomize manifests
-6. **Error-driven apply**: Try `kubectl apply` → On immutable field error → Extract failed resource names → Delete with `--cascade=orphan` → Retry
+6. **Error-driven apply**: Try `kubectl apply` → On immutable field error → Extract failed resource
+   names → Delete with `--cascade=orphan` → Retry
 7. **Wait for workload rollout** with configurable timeout:
    - Dynamically discovers all workloads: StatefulSets, Deployments, DaemonSets
-   - Uses manifest-based discovery: `yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml`
+   - Uses manifest-based discovery:
+     `yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml`
    - Checks rollout status for each: `kubectl rollout status {type}/{name}`
-   - Fail-but-continue pattern: checks ALL workload types even if earlier ones fail (better diagnostics)
+   - Fail-but-continue pattern: checks ALL workload types even if earlier ones fail (better
+     diagnostics)
 8. **Rollback on failure** (if enabled):
    - Attempts rollback for ALL workload types (StatefulSets, Deployments, DaemonSets)
    - Continues rollback attempts even if individual rollbacks fail
    - Reports any failures requiring manual intervention
 
-**Kubernetes Immutable Field Handling**: Uses error-driven pattern to handle immutable fields across **5 resource types** (StatefulSet, Deployment, Service, DaemonSet, Job). Instead of preemptive checks, lets kubectl fail first, then parses stderr to identify resource type and extract specific resource names, deletes only those affected resources. Uses `--cascade=orphan` for stateful resources (preserves PVCs/Pods). This eliminates false positives and scales to any number of resources. Applied to all deployment targets: GitHub Actions (dev L312, test L636, prod L983) and local (Skaffold + scripts in tools/infra).
+**Kubernetes Immutable Field Handling**: Uses error-driven pattern to handle immutable fields across
+**5 resource types** (StatefulSet, Deployment, Service, DaemonSet, Job). Instead of preemptive
+checks, lets kubectl fail first, then parses stderr to identify resource type and extract specific
+resource names, deletes only those affected resources. Uses `--cascade=orphan` for stateful
+resources (preserves PVCs/Pods). This eliminates false positives and scales to any number of
+resources. Applied to all deployment targets: GitHub Actions (dev L312, test L636, prod L983) and
+local (Skaffold + scripts in tools/infra).
 
 **Workload Discovery Pattern**: All workload operations use manifest-based discovery:
 
@@ -780,7 +839,8 @@ DEPLOYMENTS=$(yq -N e 'select(.kind == "Deployment") | .metadata.name' manifests
 DAEMONSETS=$(yq -N e 'select(.kind == "DaemonSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
 ```
 
-This pattern ensures the workflow uses a single source of truth (manifests.yaml), eliminating kubectl API calls and improving consistency across rollout/rollback operations.
+This pattern ensures the workflow uses a single source of truth (manifests.yaml), eliminating
+kubectl API calls and improving consistency across rollout/rollback operations.
 
 **Rollback logic** (combined OR):
 
@@ -793,13 +853,17 @@ if: |
   steps.rollout.outputs.rollout_success != 'true'
 ```
 
-**Why OR logic**: Allows flexible control (disable at service level for manual investigation, or disable at strategy level to prevent all automatic rollbacks).
+**Why OR logic**: Allows flexible control (disable at service level for manual investigation, or
+disable at strategy level to prevent all automatic rollbacks).
 
 ### Cluster Provisioning Workflow
 
-**provision-hetzner-k8s-cluster.yml** provisions K3s clusters on Hetzner Cloud using the **provision-hetzner-k8s-cluster** composite action:
+**provision-hetzner-k8s-cluster.yml** provisions K3s clusters on Hetzner Cloud using the
+**provision-hetzner-k8s-cluster** composite action:
 
-**Architecture:** 3 deployment jobs (update-dev-cluster, update-test-cluster, update-prod-cluster) call a shared composite action (`.github/actions/provision-hetzner-k8s-cluster`) with environment-specific parameters. This eliminates ~295 lines of duplication across the 3 jobs.
+**Architecture:** 3 deployment jobs (update-dev-cluster, update-test-cluster, update-prod-cluster)
+call a shared composite action (`.github/actions/provision-hetzner-k8s-cluster`) with
+environment-specific parameters. This eliminates ~295 lines of duplication across the 3 jobs.
 
 **Workflow sequence**:
 
@@ -816,20 +880,32 @@ if: |
    - **Upload KUBECONFIG** to GitHub environment secrets using GitHub CLI with PAT
    - **Trigger deploy-k8s-resources.yml** via workflow_dispatch (passes environment parameter)
 
-**TLS Certificate Management**: cert-manager v1.13.3 + `letsencrypt-prod` ClusterIssuer installed automatically during cluster provisioning via `additional_post_k3s_commands` in cluster-config.yaml. Installation runs on first master node only (prevents race conditions), waits for deployment readiness (180s timeout), creates ClusterIssuer inline using heredoc (no separate manifest files). Certificates automatically provisioned when Ingress resources deployed (~2-5 min via ACME HTTP-01 challenge).
+**TLS Certificate Management**: cert-manager v1.13.3 + `letsencrypt-prod` ClusterIssuer installed
+automatically during cluster provisioning via `additional_post_k3s_commands` in cluster-config.yaml.
+Installation runs on first master node only (prevents race conditions), waits for deployment
+readiness (180s timeout), creates ClusterIssuer inline using heredoc (no separate manifest files).
+Certificates automatically provisioned when Ingress resources deployed (~2-5 min via ACME HTTP-01
+challenge).
 
 **CRITICAL**: Path filters prevent race conditions:
 
-- `provision-hetzner-k8s-cluster.yml` triggers on `infra/k8s/hetzner/*/cluster/*.yaml` AND `.github/actions/provision-hetzner-k8s-cluster/**` changes
+- `provision-hetzner-k8s-cluster.yml` triggers on `infra/k8s/hetzner/*/cluster/*.yaml` AND
+  `.github/actions/provision-hetzner-k8s-cluster/**` changes
 - `deploy-k8s-resources.yml` **excludes** cluster configs via `!infra/k8s/hetzner/**/cluster/**`
 - This ensures cluster creation completes BEFORE resource deployment starts
 
-**KUBECONFIG Upload Strategy**: Uses environment-scoped secrets with Personal Access Token (PAT). The default `github.token` has limited permissions:
+**KUBECONFIG Upload Strategy**: Uses environment-scoped secrets with Personal Access Token (PAT).
+The default `github.token` has limited permissions:
 
 - **Read-only** access to the secrets API (cannot write secrets)
 - **No** `actions:write` permission (cannot trigger workflows)
 
-Both operations return `HTTP 403: Resource not accessible by integration`. Solution requires `INFRA_DEPLOY_TOKEN` (PAT with `repo` scope) stored as repository secret. Implementation: `gh secret set KUBECONFIG --env {env}` and `gh workflow run deploy-k8s-resources.yml` both use PAT authentication. Environment secrets provide better security (scoped access, protection rules, audit trail) compared to repository secrets with prefixes. GitHub CLI handles libsodium encryption automatically.
+Both operations return `HTTP 403: Resource not accessible by integration`. Solution requires
+`INFRA_DEPLOY_TOKEN` (PAT with `repo` scope) stored as repository secret. Implementation:
+`gh secret set KUBECONFIG --env {env}` and `gh workflow run deploy-k8s-resources.yml` both use PAT
+authentication. Environment secrets provide better security (scoped access, protection rules, audit
+trail) compared to repository secrets with prefixes. GitHub CLI handles libsodium encryption
+automatically.
 
 ### Validation Workflows
 
@@ -841,7 +917,8 @@ Both operations return `HTTP 403: Resource not accessible by integration`. Solut
 - **Uses placeholder values** - local builds will show `StrongBase64Password`
 - Fast feedback (~30 seconds)
 
-**CRITICAL**: Validation uses templates directly (no secret substitution). This is intentional - validates YAML structure, not secret values.
+**CRITICAL**: Validation uses templates directly (no secret substitution). This is intentional -
+validates YAML structure, not secret values.
 
 ### Resource References
 
@@ -884,28 +961,33 @@ grep -r "ACCOUNT_SERVICE_DB_USER_PASSWORD" .github/workflows/ infra/k8s/base/
 
 ### Common Infrastructure Pitfalls
 
-**"Prod deployment fails with 'field does not exist' error"**
-→ Secret field names mismatch between workflow and secret template. All 3 jobs must use identical field names.
+**"Prod deployment fails with 'field does not exist' error"** → Secret field names mismatch between
+workflow and secret template. All 3 jobs must use identical field names.
 
-**"Secret shows StrongBase64Password in deployed pods"**
-→ Workflow secret substitution failed. Check GitHub Secrets are configured for the environment. Verify yq pipeline completed successfully.
+**"Secret shows StrongBase64Password in deployed pods"** → Workflow secret substitution failed.
+Check GitHub Secrets are configured for the environment. Verify yq pipeline completed successfully.
 
-**"StatefulSet stuck in pending - PVC not binding"**
-→ StorageClass `hcloud-volumes` not available. Hetzner CSI driver creates this automatically. Verify CSI driver is running: `kubectl get pods -n kube-system -l app=hcloud-csi-controller`
+**"StatefulSet stuck in pending - PVC not binding"** → StorageClass `hcloud-volumes` not available.
+Hetzner CSI driver creates this automatically. Verify CSI driver is running:
+`kubectl get pods -n kube-system -l app=hcloud-csi-controller`
 
-**"Kustomize build fails with 'resource not found'"**
-→ Check resource ordering in kustomization.yaml. Secrets must come before resources that reference them.
+**"Kustomize build fails with 'resource not found'"** → Check resource ordering in
+kustomization.yaml. Secrets must come before resources that reference them.
 
-**"Deployment control flags not working"**
-→ Workflow reads flags but may not enforce all (see `deploy-control.yaml` metadata section for enforcement status).
+**"Deployment control flags not working"** → Workflow reads flags but may not enforce all (see
+`deploy-control.yaml` metadata section for enforcement status).
 
-**"Rollback not triggering on failure"**
-→ Check BOTH `rollback_on_failure` (service level) AND `statefulset_rollback` (strategy level). Either can trigger rollback (OR logic).
+**"Rollback not triggering on failure"** → Check BOTH `rollback_on_failure` (service level) AND
+`statefulset_rollback` (strategy level). Either can trigger rollback (OR logic).
 
-**"Resource updates failing with immutable field errors"**
-→ Immutable fields changed on StatefulSet/Deployment/Service/DaemonSet/Job. Workflow automatically detects error type, extracts resource names, deletes with appropriate flags (`--cascade=orphan` for stateful resources), and retries. Supports 5 resource types. For local testing, use `node tools/infra/run-skaffold.js run --port-forward --tail`.
+**"Resource updates failing with immutable field errors"** → Immutable fields changed on
+StatefulSet/Deployment/Service/DaemonSet/Job. Workflow automatically detects error type, extracts
+resource names, deletes with appropriate flags (`--cascade=orphan` for stateful resources), and
+retries. Supports 5 resource types. For local testing, use
+`node tools/infra/run-skaffold.js run --port-forward --tail`.
 
-For the watch loop on Windows, prefer `node tools/infra/dev-skaffold.js` (avoids `pnpm.cmd` Ctrl+C prompts).
+For the watch loop on Windows, prefer `node tools/infra/dev-skaffold.js` (avoids `pnpm.cmd` Ctrl+C
+prompts).
 
 ### Infrastructure Documentation
 
@@ -939,12 +1021,12 @@ For the watch loop on Windows, prefer `node tools/infra/dev-skaffold.js` (avoids
 
 ```typescript
 // Auto-instrumentation (Node.js) - runs before app starts
-import { NodeSDK } from "@opentelemetry/sdk-node";
-import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 
 const sdk = new NodeSDK({
   traceExporter: new OTLPTraceExporter({
-    url: "http://jaeger-svc:4318/v1/traces",
+    url: 'http://jaeger-svc:4318/v1/traces',
   }),
   instrumentations: [getNodeAutoInstrumentations()],
 });
@@ -968,7 +1050,8 @@ sdk.start();
 
 ### Infrastructure Scripts (ALWAYS USE THESE)
 
-**CRITICAL**: The Node scripts under `tools/infra/` are the source of truth for infrastructure operations. `pnpm run ...` scripts are convenience aliases.
+**CRITICAL**: The Node scripts under `tools/infra/` are the source of truth for infrastructure
+operations. `pnpm run ...` scripts are convenience aliases.
 
 **Local Cluster Management**:
 
@@ -1070,12 +1153,16 @@ kubectl rollout status statefulset/postgres -w
 - **Node.js 20.19.5**: Runtime (LTS, pinned in `.nvmrc`)
 - **Python 3.11**: Runtime (pinned in `.python-version`, auto-downloaded by UV)
 - **.NET SDK 8.0**: Runtime (pinned in `tools/dotnet/configs/global.json`)
-- **GitHub Actions**: CI/CD platform (`.github/workflows/ci.yml`, `.github/workflows/deploy-k8s-resources.yml`, `.github/workflows/provision-hetzner-k8s-cluster.yml`)
+- **GitHub Actions**: CI/CD platform (`.github/workflows/ci.yml`,
+  `.github/workflows/deploy-k8s-resources.yml`,
+  `.github/workflows/provision-hetzner-k8s-cluster.yml`)
 - **Kustomize**: Kubernetes manifest templating (required for local testing and workflows)
 - **kubectl**: Kubernetes CLI (workflows use version from GitHub Actions runner)
 - **yq**: YAML processor for secret substitution and config parsing (installed in workflows)
-- **hetzner-k3s**: K3s cluster provisioning CLI (v2.4.1, installed by provision-hetzner-k8s-cluster action)
+- **hetzner-k3s**: K3s cluster provisioning CLI (v2.4.1, installed by provision-hetzner-k8s-cluster
+  action)
 
 - **UV**: Python package manager and workspace tool (auto-installed by `python:env` script)
 
-**Version management**: `.nvmrc` (Node), `global.json` (.NET), `.python-version` (Python 3.11, auto-downloaded by UV)
+**Version management**: `.nvmrc` (Node), `global.json` (.NET), `.python-version` (Python 3.11,
+auto-downloaded by UV)

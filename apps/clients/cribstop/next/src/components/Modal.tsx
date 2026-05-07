@@ -1,4 +1,4 @@
-import React, { ReactNode, useEffect, useRef, useState } from "react";
+import React, { ReactNode, useEffect, useRef, useState } from 'react';
 
 // Module-level: survives React Strict Mode unmount/remount cycles (unlike useRef)
 let scheduledScrollUnlock: ReturnType<typeof setTimeout> | null = null;
@@ -10,16 +10,16 @@ function lockScroll() {
     scheduledScrollUnlock = null;
   }
   // Only measure when the scrollbar is still visible (skip on Strict Mode re-mount)
-  if (document.documentElement.style.overflow !== "hidden") {
+  if (document.documentElement.style.overflow !== 'hidden') {
     const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
     document.documentElement.style.paddingRight = `${scrollbarWidth}px`;
-    document.documentElement.style.overflow = "hidden";
+    document.documentElement.style.overflow = 'hidden';
   }
 }
 
 function unlockScroll() {
-  document.documentElement.style.paddingRight = "";
-  document.documentElement.style.overflow = "";
+  document.documentElement.style.paddingRight = '';
+  document.documentElement.style.overflow = '';
 }
 
 function deferUnlockScroll() {
@@ -31,7 +31,7 @@ function deferUnlockScroll() {
   }, 0);
 }
 
-type MobileStyle = "center" | "bottom-sheet" | "full-screen";
+type MobileStyle = 'center' | 'bottom-sheet' | 'full-screen';
 
 interface ModalProps {
   open: boolean;
@@ -64,7 +64,7 @@ export default function Modal({
   footer,
   widthClass,
   heightClass,
-  mobileStyle = "center",
+  mobileStyle = 'center',
   cardClassName,
   showCloseButton,
   noPadding,
@@ -88,13 +88,13 @@ export default function Modal({
       setMounted(true);
       const raf = requestAnimationFrame(() => setVisible(true));
       const handleKey = (e: KeyboardEvent) => {
-        if (e.key === "Escape") onCloseRef.current();
+        if (e.key === 'Escape') onCloseRef.current();
       };
-      window.addEventListener("keydown", handleKey);
+      window.addEventListener('keydown', handleKey);
 
       return () => {
         cancelAnimationFrame(raf);
-        window.removeEventListener("keydown", handleKey);
+        window.removeEventListener('keydown', handleKey);
         // Defer unlock — Strict Mode re-mount will cancel it via lockScroll() before it fires
         deferUnlockScroll();
       };
@@ -123,32 +123,34 @@ export default function Modal({
   if (!mounted) return null;
 
   // Backdrop alignment
-  const backdropAlign = mobileStyle === "center" ? "items-center" : "items-end sm:items-center";
+  const backdropAlign = mobileStyle === 'center' ? 'items-center' : 'items-end sm:items-center';
 
   // Card shape & size per mobileStyle
   const cardMobile =
-    mobileStyle === "full-screen"
-      ? "h-screen rounded-none sm:h-auto sm:rounded-2xl"
-      : mobileStyle === "bottom-sheet"
-        ? "rounded-t-2xl rounded-b-none sm:rounded-2xl max-h-[85vh] sm:max-h-none"
-        : "rounded-2xl";
+    mobileStyle === 'full-screen'
+      ? 'h-screen rounded-none sm:h-auto sm:rounded-2xl'
+      : mobileStyle === 'bottom-sheet'
+        ? 'rounded-t-2xl rounded-b-none sm:rounded-2xl max-h-[85vh] sm:max-h-none'
+        : 'rounded-2xl';
 
   // Slide-in animation per mobileStyle (desktop always fades in via backdrop)
   const slideFrom =
-    mobileStyle === "center"
-      ? "" // no slide on mobile for center
-      : "translate-y-full sm:translate-y-0 sm:scale-95 sm:opacity-0";
-  const slideTo = mobileStyle === "center" ? "" : "translate-y-0 sm:scale-100 sm:opacity-100";
+    mobileStyle === 'center'
+      ? '' // no slide on mobile for center
+      : 'translate-y-full sm:translate-y-0 sm:scale-95 sm:opacity-0';
+  const slideTo = mobileStyle === 'center' ? '' : 'translate-y-0 sm:scale-100 sm:opacity-100';
 
   return (
-    <div className={`fixed inset-0 z-50 flex justify-center overflow-hidden bg-black/30 ${backdropAlign}`}>
+    <div
+      className={`fixed inset-0 z-50 flex justify-center overflow-hidden bg-black/30 ${backdropAlign}`}
+    >
       <div
         className={`relative w-full flex flex-col
           transition-[transform,opacity] duration-300 ease-out
-          ${cardClassName ?? "bg-white shadow-xl"}
+          ${cardClassName ?? 'bg-white shadow-xl'}
           ${cardMobile}
-          ${widthClass ?? "max-w-md sm:max-w-lg"}
-          ${mobileStyle !== "full-screen" && mobileStyle !== "bottom-sheet" ? (heightClass ?? "max-h-[90vh]") : (heightClass ?? "")}
+          ${widthClass ?? 'max-w-md sm:max-w-lg'}
+          ${mobileStyle !== 'full-screen' && mobileStyle !== 'bottom-sheet' ? (heightClass ?? 'max-h-[90vh]') : (heightClass ?? '')}
           ${visible ? slideTo : slideFrom}`}
       >
         {!title && showCloseButton && (
@@ -199,7 +201,7 @@ export default function Modal({
           </div>
         )}
         <div
-          className={`flex-1 overflow-y-auto ${mobileStyle === "full-screen" ? "scrollbar-invisible" : ""} ${noPadding ? "" : "px-6 py-4"}`}
+          className={`flex-1 overflow-y-auto ${mobileStyle === 'full-screen' ? 'scrollbar-invisible' : ''} ${noPadding ? '' : 'px-6 py-4'}`}
         >
           {children}
         </div>

@@ -14,17 +14,17 @@
  * This is intentionally conservative: it does NOT delete arbitrary Podman volumes.
  */
 
-const { spawnSync } = require("child_process");
-const path = require("path");
+const { spawnSync } = require('child_process');
+const path = require('path');
 
-const workspaceRoot = path.resolve(__dirname, "../..");
+const workspaceRoot = path.resolve(__dirname, '../..');
 
 function run(cmd, args, opts = {}) {
   const result = spawnSync(cmd, args, {
     cwd: workspaceRoot,
-    stdio: opts.stdio ?? "inherit",
-    shell: process.platform === "win32",
-    encoding: "utf-8",
+    stdio: opts.stdio ?? 'inherit',
+    shell: process.platform === 'win32',
+    encoding: 'utf-8',
   });
 
   return result.status ?? 1;
@@ -45,44 +45,51 @@ function warn(message) {
 async function main() {
   const argv = process.argv.slice(2);
 
-  const skipSkaffoldDelete = hasFlag(argv, "--skip-skaffold-delete");
-  const skipRegistryReset = hasFlag(argv, "--skip-registry-reset");
-  const skipRegistryEnsure = hasFlag(argv, "--no-ensure-registry") || hasFlag(argv, "--skip-registry-ensure");
-  const skipPodmanPrune = hasFlag(argv, "--skip-podman-prune");
+  const skipSkaffoldDelete = hasFlag(argv, '--skip-skaffold-delete');
+  const skipRegistryReset = hasFlag(argv, '--skip-registry-reset');
+  const skipRegistryEnsure =
+    hasFlag(argv, '--no-ensure-registry') || hasFlag(argv, '--skip-registry-ensure');
+  const skipPodmanPrune = hasFlag(argv, '--skip-podman-prune');
 
   if (!skipSkaffoldDelete) {
-    logStep("Deleting k8s resources (skaffold delete)");
-    const status = run("node", ["tools/infra/run-skaffold.js", "delete"], { stdio: "inherit" });
+    logStep('Deleting k8s resources (skaffold delete)');
+    const status = run('node', ['tools/infra/run-skaffold.js', 'delete'], { stdio: 'inherit' });
     if (status !== 0) {
-      warn("skaffold delete failed (continuing cleanup anyway)");
+      warn('skaffold delete failed (continuing cleanup anyway)');
     }
   }
 
   if (!skipRegistryReset) {
-    logStep("Resetting local registry (delete container + volume)");
-    const delStatus = run("node", ["tools/infra/local-registry.js", "delete"], { stdio: "inherit" });
+    logStep('Resetting local registry (delete container + volume)');
+    const delStatus = run('node', ['tools/infra/local-registry.js', 'delete'], {
+      stdio: 'inherit',
+    });
     if (delStatus !== 0) {
-      warn("local registry delete failed (continuing cleanup anyway)");
+      warn('local registry delete failed (continuing cleanup anyway)');
     }
 
     if (!skipRegistryEnsure) {
-      logStep("Recreating empty local registry");
-      const ensureStatus = run("node", ["tools/infra/local-registry.js", "ensure"], { stdio: "inherit" });
+      logStep('Recreating empty local registry');
+      const ensureStatus = run('node', ['tools/infra/local-registry.js', 'ensure'], {
+        stdio: 'inherit',
+      });
       if (ensureStatus !== 0) {
-        warn("local registry ensure failed (you may need to run `pnpm run infra:local:registry:ensure` manually)");
+        warn(
+          'local registry ensure failed (you may need to run `pnpm run infra:local:registry:ensure` manually)',
+        );
       }
     }
   }
 
   if (!skipPodmanPrune) {
-    logStep("Pruning Podman images/cache (best-effort)");
+    logStep('Pruning Podman images/cache (best-effort)');
     // These are safe defaults for reclaiming space without deleting arbitrary named volumes.
-    run("podman", ["image", "prune", "-f"], { stdio: "inherit" });
-    run("podman", ["system", "prune", "-f"], { stdio: "inherit" });
+    run('podman', ['image', 'prune', '-f'], { stdio: 'inherit' });
+    run('podman', ['system', 'prune', '-f'], { stdio: 'inherit' });
   }
 
-  logStep("Done");
-  process.stdout.write("Disk cleanup complete. Next: `node tools/infra/dev-skaffold.js`\n");
+  logStep('Done');
+  process.stdout.write('Disk cleanup complete. Next: `node tools/infra/dev-skaffold.js`\n');
 }
 
 main().catch((e) => {

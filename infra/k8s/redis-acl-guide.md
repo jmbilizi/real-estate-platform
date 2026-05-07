@@ -2,7 +2,8 @@
 
 ## Overview
 
-This deployment uses **ACL-based authentication** (Access Control Lists) for enterprise-grade security, audit trails, and compliance. Unlike simple password authentication, ACL provides:
+This deployment uses **ACL-based authentication** (Access Control Lists) for enterprise-grade
+security, audit trails, and compliance. Unlike simple password authentication, ACL provides:
 
 - **User-based access control** - Each service gets its own username/password
 - **Audit trails** - Know WHO accessed data, not just WHAT
@@ -65,31 +66,31 @@ This deployment uses **ACL-based authentication** (Access Control Lists) for ent
 ### Node.js (ioredis)
 
 ```javascript
-const Redis = require("ioredis");
+const Redis = require('ioredis');
 
 // Pub/Sub User
 const messagingClient = new Redis({
-  host: "redis-svc.default.svc.cluster.local",
+  host: 'redis-svc.default.svc.cluster.local',
   port: 6379,
-  username: "pubsub_user",
+  username: 'pubsub_user',
   password: process.env.REDIS_PUBSUB_PASSWORD,
   db: 0,
 });
 
 // Cache User
 const cacheClient = new Redis({
-  host: "redis-svc.default.svc.cluster.local",
+  host: 'redis-svc.default.svc.cluster.local',
   port: 6379,
-  username: "cache_user",
+  username: 'cache_user',
   password: process.env.REDIS_CACHE_PASSWORD,
   db: 0,
 });
 
 // Rate Limiting
 const rateLimitClient = new Redis({
-  host: "redis-svc.default.svc.cluster.local",
+  host: 'redis-svc.default.svc.cluster.local',
   port: 6379,
-  username: "ratelimit_user",
+  username: 'ratelimit_user',
   password: process.env.REDIS_RATELIMIT_PASSWORD,
   db: 0,
 });
