@@ -501,10 +501,21 @@ function checkInfrastructure() {
   // Check if Kustomize is installed
   const kustomizeCheck = run('kustomize version', { silent: true });
   if (!kustomizeCheck.success) {
-    logWarning('Kustomize not installed - skipping validation');
-    logWarning('Install: pnpm run infra:setup');
-    logWarning('Or install manually: https://kubectl.docs.kubernetes.io/installation/kustomize/');
-    return true; // Don't fail if Kustomize not installed (optional tool)
+    logWarning('Kustomize not installed - attempting auto-install via infra:setup...');
+    const installResult = run('pnpm run infra:setup', { silent: false });
+    if (!installResult.success) {
+      logError('Failed to install Kustomize automatically');
+      logError('Run manually: pnpm run infra:setup');
+      return false;
+    }
+    // Verify install succeeded
+    const recheck = run('kustomize version', { silent: true });
+    if (!recheck.success) {
+      logError('Kustomize still not available after install attempt');
+      logError('Run manually: pnpm run infra:setup');
+      return false;
+    }
+    logSuccess('Kustomize installed successfully');
   }
 
   log('\n🏗️  Validating Kustomize manifests...', 'blue');

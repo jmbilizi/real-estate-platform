@@ -407,9 +407,83 @@ jobs:
             coverage/
             test-results/
           retention-days: 7
+
+  # Validate Kustomize manifests for all environments when infra files change.
+  # Runs in parallel with language jobs. Blocks detect-infra-changes (and therefore
+  # deployment) if any environment fails to build.
+  validate-infra:
+    needs: setup-base
+    runs-on: ubuntu-latest
+    outputs:
+      infra-changed: ${{ steps.detect.outputs.infra-changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect infra file changes
+        id: detect
+        shell: bash
+        run: |
+          # First push / workflow_call → always validate
+          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ] || [ "${{ github.event_name }}" = "workflow_call" ]; then
+            echo "infra-changed=true" >> $GITHUB_OUTPUT
+            echo "ℹ️  First push or workflow_call — running full infra validation"
+            exit 0
+          fi
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="origin/${{ github.base_ref }}"
+          else
+            BASE="${{ github.event.before }}"
+          fi
+
+          if git diff --name-only "$BASE" "${{ github.sha }}" | grep -qE '^infra/k8s/.*\.(yaml|yml)$|^infra/deploy-control\.yaml$|^infra/smart-deployment-config\.yaml$'; then
+            echo "infra-changed=true" >> $GITHUB_OUTPUT
+            echo "✅ Infrastructure files changed — running Kustomize validation"
+          else
+            echo "infra-changed=false" >> $GITHUB_OUTPUT
+            echo "ℹ️  No infrastructure files changed — skipping Kustomize validation"
+          fi
+
+      - name: Install kustomize
+        if: steps.detect.outputs.infra-changed == 'true'
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+          kustomize version
+
+      - name: Validate Hetzner dev
+        if: steps.detect.outputs.infra-changed == 'true'
+        run: |
+          echo "▶ kustomize build infra/k8s/hetzner/dev"
+          kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins > /dev/null
+          echo "✅ hetzner/dev passed"
+
+      - name: Validate Hetzner test
+        if: steps.detect.outputs.infra-changed == 'true'
+        run: |
+          echo "▶ kustomize build infra/k8s/hetzner/test"
+          kustomize build infra/k8s/hetzner/test --enable-alpha-plugins > /dev/null
+          echo "✅ hetzner/test passed"
+
+      - name: Validate Hetzner prod
+        if: steps.detect.outputs.infra-changed == 'true'
+        run: |
+          echo "▶ kustomize build infra/k8s/hetzner/prod"
+          kustomize build infra/k8s/hetzner/prod --enable-alpha-plugins > /dev/null
+          echo "✅ hetzner/prod passed"
+
+      - name: Validate Podman local
+        if: steps.detect.outputs.infra-changed == 'true'
+        run: |
+          echo "▶ kustomize build infra/k8s/podman/local"
+          kustomize build infra/k8s/podman/local --enable-alpha-plugins > /dev/null
+          echo "✅ podman/local passed"
+
   # Detect which infrastructure workflows need to be triggered
   detect-infra-changes:
-    needs: [node, python, dotnet] # Wait for all quality checks to pass
+    needs: [node, python, dotnet, validate-infra] # Wait for all quality checks to pass
     if: |
       always() &&
       github.event_name == 'push' &&

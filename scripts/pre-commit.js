@@ -442,10 +442,21 @@ function checkInfrastructure() {
   // Check if Kustomize is installed
   const kustomizeCheck = run('kustomize version', { silent: true });
   if (!kustomizeCheck.success) {
-    logWarning('Kustomize not installed - skipping validation');
-    logWarning('Install: pnpm run infra:setup');
-    logWarning('Or install manually: https://kubectl.docs.kubernetes.io/installation/kustomize/');
-    return true; // Don't fail if Kustomize not installed (optional tool)
+    logWarning('Kustomize not installed - attempting auto-install via infra:setup...');
+    const installResult = run('pnpm run infra:setup', { silent: false });
+    if (!installResult.success) {
+      logError('Failed to install Kustomize automatically');
+      logError('Run manually: pnpm run infra:setup');
+      return false;
+    }
+    // Verify install succeeded
+    const recheck = run('kustomize version', { silent: true });
+    if (!recheck.success) {
+      logError('Kustomize still not available after install attempt');
+      logError('Run manually: pnpm run infra:setup');
+      return false;
+    }
+    logSuccess('Kustomize installed successfully');
   }
 
   log('\n🏗️  Validating Kustomize manifests...', 'blue');
@@ -486,6 +497,16 @@ function main() {
   // Check if --skip-reset flag is present
   const skipReset = process.argv.includes('--skip-reset');
 
+  // Capture the exact set of staged files BEFORE nx:reset can modify anything.
+  // Used below to re-stage only those files (not all modified tracked files).
+  const originalStagedResult = run('git diff --cached --name-only', { silent: true });
+  const originalStagedFiles = originalStagedResult.success
+    ? originalStagedResult.output
+        .split('\n')
+        .map((f) => f.trim())
+        .filter(Boolean)
+    : [];
+
   // Run nx:reset once at the start (unless skipped by git hooks)
   if (!skipReset) {
     logStep('Preparing NX Workspace');
@@ -504,11 +525,18 @@ function main() {
       logWarning('Format after reset had warnings but continuing...');
     }
 
-    // Re-stage any staged files that were modified by nx:reset
+    // Re-stage ONLY the files that were originally staged (not all modified tracked files).
+    // Using `git add --renormalize -u` would sweep in every modified tracked file,
+    // accidentally bundling unstaged work into the commit.
     log('Re-staging modified files...', 'cyan');
-    const reStageResult = run('git add --renormalize -u', { silent: true });
-    if (reStageResult.success) {
-      logSuccess('Modified files re-staged (with line ending normalization)');
+    if (originalStagedFiles.length > 0) {
+      const reStageResult = run(
+        `git add --renormalize -- ${originalStagedFiles.map((f) => `"${f}"`).join(' ')}`,
+        { silent: true },
+      );
+      if (reStageResult.success) {
+        logSuccess('Modified files re-staged (with line ending normalization)');
+      }
     }
   } else {
     log('Skipping nx:reset (running in git hook mode)\n', 'cyan');
