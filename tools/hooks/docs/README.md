@@ -1,153 +1,98 @@
-# Unified Git Hooks System
+# Git Hooks System
 
-This document describes the unified Git hooks system used in the Polyglot monorepo.
+This document describes the Git hooks system used in the Polyglot monorepo.
 
 ## Overview
 
-The unified hooks system centralizes Git hook management across all languages and frameworks in the
-monorepo, including:
+The hooks system provides two-tier validation before commits and pushes:
 
-- JavaScript/TypeScript
-- Python
-- .NET/C#
-- SQL
-- YAML/XML
+- **Pre-commit**: Fast checks (format + lint + type) — ~5-15s
+- **Pre-push**: Full suite (format + lint + type + test + build) — ~30s-2min
 
-Instead of having separate hook systems for each language, this approach:
+**Key principle**: Checks are language-scoped based on **what files are staged/changed** — not what
+projects exist. A developer committing only `.tsx` files will never trigger Python or .NET setup.
 
-1. Detects which types of files are being changed
-2. Sets up the appropriate environment for those languages
-3. Runs the appropriate linters, formatters, and checks
-4. Ensures consistent behavior across all languages
+## Hooks
 
-## Hooks Available
+### Pre-Commit (`.husky/pre-commit` → `scripts/pre-commit.js`)
 
-The system provides the following hooks:
+Runs on every `git commit`:
 
-### Pre-Commit Hook
+- Runs `nx:reset` to ensure clean Nx state
+- Inspects **staged files** to determine which languages are involved
+- Runs format + lint + type-check only for affected languages:
+  - **Node.js/TypeScript**: always checked (formatting is workspace-wide)
+  - **Python**: only if `.py`, `.pyx`, `.ipynb` etc. files are staged
+  - **.NET**: only if `.cs`, `.vb`, `.csproj` etc. files are staged
+- Re-stages files modified during the hook (line ending normalization)
+- Blocks commit on failure
 
-Runs whenever you create a commit:
+### Pre-Push (`.husky/pre-push` → `scripts/pre-push.js`)
 
-- Runs `nx:reset` to ensure clean state and synchronized solution files
-- Detects which file types are being staged
-- Sets up language-specific environments as needed
-- Runs appropriate linters and formatters for staged files
-- Automatically re-stages files modified during the hook (e.g., cleaned solution files)
-- Normalizes line endings according to `.gitattributes`
-- Prevents commits with failing checks
+Runs on every `git push`:
 
-### Post-Merge Hook
+- Inspects **files changed in the push range** to determine which languages are involved
+- Runs format + lint + type + test + build for affected languages
+- On feature branches: checks only affected projects
+- On base branches (main/dev/test): checks all projects of each affected language
 
-Runs after merging changes from another branch:
+### Post-Merge (`.husky/post-merge`)
 
-- Detects changes to dependency files
-- Automatically installs updated dependencies
-- Handles package.json, requirements.txt, and .csproj changes
+Runs after `git merge` or `git pull`:
 
-### Pre-Push Hook
-
-Runs before pushing commits to a remote repository:
-
-- Runs tests for the affected language stacks
-- Prevents pushing if tests fail
+- Installs updated Node.js dependencies if `package.json` or `pnpm-lock.yaml` changed
 
 ## Setup
 
-To set up or update the Git hooks, run:
+Hook files are committed in `.husky/` and activate automatically when you run `pnpm install` (Husky
+is configured via the `prepare` script).
+
+To install prerequisites (Husky + Node.js deps):
 
 ```bash
 pnpm run hooks:setup
 ```
 
-This script will:
-
-1. Install and configure Husky
-2. Set up appropriate pre-commit, post-merge, and pre-push hooks
-3. Configure language-specific environments as needed (Python, Node.js, .NET)
-
-## Integration with Python
-
-If you're using the Python tooling in this monorepo, you can also set up the hooks by running:
+For language-specific tooling the hooks depend on:
 
 ```bash
-pnpm run py:setup
+pnpm run python:env    # Python (UV + venv) — only needed if working on Python projects
+pnpm run dotnet:env    # .NET SDK — only needed if working on .NET projects
 ```
-
-This will set up the Python environment and also configure the unified hooks system.
 
 ## Architecture
 
-The hooks system consists of two main components:
+| File                         | Purpose                                       |
+| ---------------------------- | --------------------------------------------- |
+| `.husky/pre-commit`          | Entry point — calls `scripts/pre-commit.js`   |
+| `.husky/pre-push`            | Entry point — calls `scripts/pre-push.js`     |
+| `scripts/pre-commit.js`      | Full pre-commit logic with language detection |
+| `scripts/pre-push.js`        | Full pre-push logic with language detection   |
+| `tools/hooks/setup-hooks.js` | Installs Husky + Node.js prerequisites        |
 
-1. **setup-hooks.js**: Sets up the Husky hooks and configures the necessary environments
-2. **hooks-runner.js**: A central script that runs when Git hooks are triggered
+## Formatting
 
-The hooks-runner.js script:
+Workspace-wide formatting uses Prettier directly (no Nx project graph required):
 
-1. Detects what types of files are being modified
-2. Sets up the appropriate language environments
-3. Runs the necessary checks, tests, or installation tasks
+```bash
+pnpm run nx:workspace-format        # Fix all formatting
+pnpm run nx:workspace-format-check  # Check all formatting
+```
 
-## Customization
-
-If you need to add custom behavior to the hooks, modify the hooks-runner.js file. The script is
-organized by hook type (pre-commit, post-merge, pre-push) and has language-specific sections.
+Config is in `.prettierrc.js` (re-exports `tools/node/configs/prettier-config.js`).
 
 ## Troubleshooting
 
-If you encounter issues with the hooks:
+**Hook not running after clone**: Run `pnpm install` — it activates Husky automatically via the
+`prepare` script.
 
-1. Make sure you have all the necessary dependencies installed
-2. Try running `pnpm run hooks:setup` to reconfigure the hooks
-3. Check that the language-specific tools are properly installed
-4. Examine the output of the failing hook for specific error messages
+**Python setup failing**: Only run `pnpm run python:env` if you are working on Python projects. The
+hook will skip Python checks if no Python files are staged.
 
-The hooks system is automatically set up when you run:
+**.NET check failing with "SDK not found"**: Run `pnpm run dotnet:env`. If you are not working on
+.NET files, the hook skips .NET checks automatically.
 
-```bash
-pnpm run hooks:setup
-```
-
-This will:
-
-1. Install Husky for Git hook integration
-2. Create the hook scripts in the .husky directory
-3. Configure language-specific environments
-
-## Manual Activation
-
-If hooks are not running properly, you can manually set them up:
-
-```bash
-# Reinstall Husky
-pnpm run prepare
-
-# Set up the hooks system
-pnpm run hooks:setup
-```
-
-## How It Works
-
-The system uses:
-
-1. **Husky**: To integrate with Git hooks
-2. **hooks-runner.js**: A central script that orchestrates hook execution
-3. **lint-staged**: For efficient linting of staged files
-4. **Language-specific tools**: Each configured to work within the hooks system
-
-## Extending the System
-
-To add support for a new language or framework:
-
-1. Update the file pattern detection in `hooks-runner.js`
-2. Add linting/formatting configuration to `lint-staged` in package.json
-3. If needed, add language-specific environment setup
-
-## Troubleshooting
-
-If hooks are failing or not running:
-
-1. Ensure Husky is properly installed (`pnpm run prepare`)
-2. Check that the hook scripts exist in the `.husky` directory
-3. Verify language-specific tools are installed
-4. Run `pnpm run hooks:setup` to recreate the hook configuration
+**Hook bypassed accidentally**: CI enforces the same checks — code that bypasses local hooks will
+still be caught before merging. 2. Check that the hook scripts exist in the `.husky` directory 3.
+Verify language-specific tools are installed 4. Run `pnpm run hooks:setup` to recreate the hook
+configuration

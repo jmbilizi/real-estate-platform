@@ -154,11 +154,15 @@ of running nx:reset and empty checks.
 
 ### Intelligent Language Detection
 
-Both hooks automatically detect affected languages and skip setup/checks for unaffected ones:
+Both hooks detect affected languages based on **file extensions of staged/changed files** — not what
+projects exist in the repo. A developer committing only `.tsx` files will never trigger Python or
+.NET setup.
 
 ```javascript
-// Example from pre-commit.js
-if (hasPythonProjectsAffected(isAffected, base)) {
+// pre-commit.js: checks staged files
+const staged = getStagedFiles(); // git diff --cached --name-only
+const hasPythonFiles = staged.some((f) => /\.(py|pyx|ipynb)$/.test(f));
+if (hasPythonFiles) {
   setupPythonEnvironment();
   checkPythonProjects(isAffected, base);
 } else {
@@ -166,8 +170,12 @@ if (hasPythonProjectsAffected(isAffected, base)) {
 }
 ```
 
-**Pattern**: Check for affected projects first, setup environment only if needed, run checks
-conditionally.
+**Pattern**: Check file extensions of staged/changed files first, setup environment only if needed,
+run checks conditionally. This means:
+
+- Python devs don't need .NET SDK installed
+- .NET devs don't need Python/UV installed
+- Node/Next.js devs only need Node.js
 
 ## Python Environment Management
 
@@ -491,7 +499,7 @@ endings when modifying JSON files. If you modify these scripts, maintain this be
 
 ### Formatting Commands
 
-**Workspace-level** (includes repo files like `package.json`, `docs/`, `scripts/`):
+**Workspace-level** (uses Prettier directly via `.prettierrc.js` — no .NET SDK required):
 
 ```bash
 pnpm run nx:workspace-format        # Format all files
@@ -505,6 +513,9 @@ pnpm run nx:node-format      # Format Node.js projects
 pnpm run nx:python-format    # Format Python projects
 pnpm run nx:dotnet-format    # Format .NET projects
 ```
+
+**Prettier config**: Root `.prettierrc.js` re-exports `tools/node/configs/prettier-config.js`. All
+tools (IDEs, lint-staged, workspace format scripts, CI) use the same config automatically.
 
 **When to use which**: Use workspace format for repo-wide changes (pre-commit/pre-push). Use project
 format during development of specific projects.
