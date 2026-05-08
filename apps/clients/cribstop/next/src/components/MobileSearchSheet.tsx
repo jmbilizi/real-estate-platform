@@ -137,7 +137,7 @@ export default function MobileSearchSheet({ onClose }: { onClose: () => void }) 
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // When state

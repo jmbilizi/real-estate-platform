@@ -11,7 +11,13 @@ export const metadata: Metadata = {
   description: 'Browse homes for sale and rent in the DMV area. Powered by Real Broker LLC.',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+  modal,
+}: {
+  children: React.ReactNode;
+  modal: React.ReactNode;
+}) {
   return (
     <html lang="en">
       <body className="flex min-h-screen flex-col">
@@ -22,6 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Suspense fallback={null}>
             <AuthModalListener />
           </Suspense>
+          {modal}
         </AppProvider>
       </body>
     </html>

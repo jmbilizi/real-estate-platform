@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { DropdownContainer } from 'shared-next/src/components';
+import { DropdownContainer } from '@/components/DropdownContainer';
 import type { SearchFilters } from '@/lib/types';
 
 const SORT_OPTIONS: { value: SearchFilters['sort']; label: string }[] = [
