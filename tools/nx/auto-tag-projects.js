@@ -243,6 +243,13 @@ function detectPlatform(projectConfig, runtime, type) {
 
   // Web — Next.js
   if (executors.includes('@nx/next') || commands.includes('next ')) return 'web';
+  // Web — Next.js project detected via config file (when using nx:run-commands)
+  const projectRootAbs = path.join(process.cwd(), projectConfig.root || '');
+  if (
+    fs.existsSync(path.join(projectRootAbs, 'next.config.js')) ||
+    fs.existsSync(path.join(projectRootAbs, 'next.config.ts'))
+  )
+    return 'web';
 
   // Mobile — Expo
   if (executors.includes('@nx/expo') || commands.includes('expo ')) return 'mobile';

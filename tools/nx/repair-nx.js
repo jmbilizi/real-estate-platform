@@ -185,6 +185,19 @@ if (!fs.existsSync(nxDir)) {
   console.log('✅ Created .nx directory');
 }
 
+// Pre-clean workspace-data so `nx reset` never hits ENOTEMPTY / EPERM on Windows.
+// The Nx daemon can leave this directory in a locked or non-empty state that
+// prevents `nx reset` from deleting it. Removing it here (before nx reset runs)
+// is safe — nx reset recreates it from scratch anyway.
+const workspaceDataDir = path.join(nxDir, 'workspace-data');
+if (fs.existsSync(workspaceDataDir)) {
+  try {
+    fs.rmSync(workspaceDataDir, { recursive: true, force: true });
+  } catch {
+    // Ignore — if still locked, nx reset will attempt its own cleanup
+  }
+}
+
 // Create a minimal project-graph.json to ensure nx can run without projects
 const projectGraphPath = path.join(nxDir, 'project-graph.json');
 const minimalProjectGraph = {

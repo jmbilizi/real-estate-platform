@@ -10,6 +10,7 @@
  *
  * Current behavior (intentionally conservative):
  * - Node projects: ensure `lint`, `type-check`, `format`, `format-check`, `test` exist.
+ *   Also adds `build` and `serve` sourced from package.json scripts (if present).
  *   (Adds missing targets only; does not override existing ones.)
  * - All projects: add/remove `container-build` based on Dockerfile presence.
  *
@@ -111,8 +112,8 @@ function createMinimalNodeProjectJson(
     $schema: schemaRel,
     sourceRoot: toPosix(projectRootRel),
     projectType: inferredProjectType,
-    tags: Array.isArray(effectiveProjectConfig.tags) ? effectiveProjectConfig.tags : [],
     targets: {},
+    tags: Array.isArray(effectiveProjectConfig.tags) ? effectiveProjectConfig.tags : [],
   };
 }
 
@@ -125,22 +126,16 @@ function ensureNodeTargets(
 ) {
   projectJson.targets = projectJson.targets || {};
 
-  const prettierConfigRel = toPosix(
-    path.relative(
-      projectRootAbs,
-      path.join(workspaceRoot, 'tools/node/configs/prettier-config.js'),
-    ),
-  );
   const tsconfigRel = `${toPosix(projectRootRel)}/tsconfig.json`;
 
-  // lint
+  // lint — use centralized ESLint config (consistent with lint-staged)
   if (!projectJson.targets.lint) {
     projectJson.targets.lint = {
       executor: 'nx:run-commands',
       cache: true,
       options: {
-        command: 'eslint .',
-        cwd: toPosix(projectRootRel),
+        command: `eslint --config tools/node/configs/eslint.config.js ${toPosix(projectRootRel)}`,
+        cwd: '.',
       },
     };
   }
@@ -149,6 +144,7 @@ function ensureNodeTargets(
   if (!projectJson.targets['type-check'] && fileExists(projectRootAbs, 'tsconfig.json')) {
     projectJson.targets['type-check'] = {
       executor: 'nx:run-commands',
+      cache: true,
       options: {
         command: `tsc --noEmit -p ${tsconfigRel}`,
         cwd: '.',
@@ -156,12 +152,12 @@ function ensureNodeTargets(
     };
   }
 
-  // format
+  // format — root .prettierrc.js is auto-discovered; no --config needed
   if (!projectJson.targets.format) {
     projectJson.targets.format = {
       executor: 'nx:run-commands',
       options: {
-        command: `prettier --write --config ${prettierConfigRel} .`,
+        command: 'prettier --write .',
         cwd: toPosix(projectRootRel),
       },
     };
@@ -172,10 +168,42 @@ function ensureNodeTargets(
     projectJson.targets['format-check'] = {
       executor: 'nx:run-commands',
       options: {
-        command: `prettier --check --config ${prettierConfigRel} .`,
+        command: 'prettier --check .',
         cwd: toPosix(projectRootRel),
       },
     };
+  }
+
+  // build + serve — sourced from package.json scripts if present
+  const pkgJsonPath = path.join(projectRootAbs, 'package.json');
+  if (fs.existsSync(pkgJsonPath)) {
+    let pkg;
+    try {
+      pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
+    } catch {}
+    if (pkg && pkg.scripts) {
+      if (!projectJson.targets.build && pkg.scripts.build) {
+        projectJson.targets.build = {
+          executor: 'nx:run-commands',
+          cache: true,
+          options: {
+            command: pkg.scripts.build,
+            cwd: toPosix(projectRootRel),
+          },
+        };
+      }
+      // prefer 'dev' over 'start' as the serve command
+      const serveScript = pkg.scripts.dev || pkg.scripts.start;
+      if (!projectJson.targets.serve && serveScript) {
+        projectJson.targets.serve = {
+          executor: 'nx:run-commands',
+          options: {
+            command: serveScript,
+            cwd: toPosix(projectRootRel),
+          },
+        };
+      }
+    }
   }
 
   // test
