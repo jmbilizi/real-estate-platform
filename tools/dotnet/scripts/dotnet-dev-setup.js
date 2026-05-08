@@ -38,7 +38,7 @@ if (args.includes('--help') || args.includes('-h')) {
 }
 
 // Configuration
-const requiredDotNetVersion = '10.0.102'; // The required .NET SDK version
+const requiredDotNetMajor = '10'; // Required .NET SDK major version
 
 // Determine if we're running on Windows
 const isWindows = os.platform() === 'win32';
@@ -142,81 +142,50 @@ function installDotNetSdk() {
   }
 
   // Determine the correct installer URL based on OS
-  let installerUrl, installerPath;
-  const majorVersion = requiredDotNetVersion.split('.')[0];
+  let installerPath;
+  // Use the official dotnet-install script which always fetches the latest patch for the channel
+  const channel = `${requiredDotNetMajor}.0`;
 
   if (isWindows) {
-    // Windows installer
-    installerUrl = `https://dotnet.microsoft.com/download/dotnet/${majorVersion}.0/dotnet-sdk-${requiredDotNetVersion}-win-x64.exe`;
-    installerPath = path.join(tempDir, 'dotnet-installer.exe');
-  } else if (os.platform() === 'darwin') {
-    // macOS installer
-    installerUrl = `https://dotnet.microsoft.com/download/dotnet/${majorVersion}.0/dotnet-sdk-${requiredDotNetVersion}-osx-x64.pkg`;
-    installerPath = path.join(tempDir, 'dotnet-installer.pkg');
-  } else {
-    console.log('Automatic installation is only supported on Windows and macOS.');
-    console.log('Please install manually following the instructions at:');
-    console.log(`https://dotnet.microsoft.com/download/dotnet/${majorVersion}.0`);
-    return false;
-  }
-
-  // Download the installer
-  if (!downloadFile(installerUrl, installerPath)) {
-    console.error('Failed to download .NET SDK installer.');
-    return false;
-  }
-
-  // Run the installer
-  console.log('Running .NET SDK installer...');
-  try {
-    if (isWindows) {
-      // Windows: run the installer silently
-      execSync(`"${installerPath}" /install /quiet /norestart`, {
-        stdio: 'inherit',
-      });
-
-      // Set PATH environment variable to include .NET
-      const dotnetPath = 'C:\\Program Files\\dotnet';
-      const currentPath = process.env.PATH || '';
-
-      if (!currentPath.includes(dotnetPath)) {
-        // Add to current process PATH
-        process.env.PATH = `${dotnetPath};${currentPath}`;
-
-        // Also attempt to permanently add to user PATH
-        try {
-          execSync(
-            `powershell -Command "[Environment]::SetEnvironmentVariable('PATH', [Environment]::GetEnvironmentVariable('PATH', 'User') + ';${dotnetPath}', 'User')"`,
-            { stdio: 'inherit' },
-          );
-          console.log('Added .NET SDK to your PATH environment variable.');
-        } catch (error) {
-          console.warn('Could not automatically update PATH environment variable.');
-          console.warn('You may need to add .NET SDK to your PATH manually.');
-        }
-      }
-    } else if (os.platform() === 'darwin') {
-      // macOS: use installer command
-      execSync(`sudo installer -pkg "${installerPath}" -target /`, {
-        stdio: 'inherit',
-      });
-    }
-
-    console.log('.NET SDK installation completed.');
-
-    // Clean up
+    installerPath = path.join(tempDir, 'dotnet-install.ps1');
+    const downloaded = downloadFile('https://dot.net/v1/dotnet-install.ps1', installerPath);
+    if (!downloaded) return false;
     try {
-      fs.unlinkSync(installerPath);
+      execSync(
+        `powershell -ExecutionPolicy Bypass -File "${installerPath}" -Channel ${channel} -InstallDir "$env:ProgramFiles\\dotnet"`,
+        { stdio: 'inherit' },
+      );
     } catch (error) {
-      // Ignore cleanup errors
+      console.error(`Installation failed: ${error.message}`);
+      return false;
     }
-
-    return true;
-  } catch (error) {
-    console.error(`Installation failed: ${error.message}`);
-    console.log('Please try installing .NET SDK manually.');
+  } else if (os.platform() === 'darwin' || os.platform() === 'linux') {
+    installerPath = path.join(tempDir, 'dotnet-install.sh');
+    const downloaded = downloadFile('https://dot.net/v1/dotnet-install.sh', installerPath);
+    if (!downloaded) return false;
+    try {
+      execSync(`bash "${installerPath}" --channel ${channel}`, { stdio: 'inherit' });
+    } catch (error) {
+      console.error(`Installation failed: ${error.message}`);
+      return false;
+    }
+  } else {
+    console.log('Automatic installation is not supported on this platform.');
+    console.log(
+      `Please install .NET ${requiredDotNetMajor} SDK manually: https://dotnet.microsoft.com/download/dotnet/${channel}`,
+    );
     return false;
   }
+
+  // Clean up installer script
+  try {
+    fs.unlinkSync(installerPath);
+  } catch (error) {
+    // Ignore cleanup errors
+  }
+
+  console.log(`.NET ${requiredDotNetMajor} SDK installation completed.`);
+  return true;
 }
 
 // Function to list installed .NET SDKs
@@ -307,23 +276,15 @@ async function setupDotNetEnvironment() {
     console.log(`Found .NET SDK version: ${dotnetVersion}`);
 
     // Check against required version - stricter check for major.minor version match
-    const installedMajorMinor = dotnetVersion.split('.').slice(0, 2).join('.');
-    const requiredMajorMinor = requiredDotNetVersion.split('.').slice(0, 2).join('.');
+    const installedMajor = dotnetVersion.split('.')[0];
 
-    if (dotnetVersion && installedMajorMinor !== requiredMajorMinor) {
+    if (installedMajor !== requiredDotNetMajor) {
       console.warn(
-        `\nWARNING: Installed .NET SDK version (${dotnetVersion}) does not match the required version (${requiredDotNetVersion}).`,
+        `\nWARNING: Installed .NET SDK version (${dotnetVersion}) is not .NET ${requiredDotNetMajor}.x.`,
       );
 
-      // List all installed SDKs to see if the required one is available
-      const installedSdks = listInstalledDotNetSdks();
-      const hasRequiredSdk = installedSdks.some((sdk) => sdk.startsWith(requiredMajorMinor));
-
-      if (hasRequiredSdk) {
-        console.warn('You have the required SDK installed, but it is not the default version.');
-        console.warn('You can specify which version to use with global.json in your project.');
-      } else if (AUTO_INSTALL_ENABLED) {
-        console.log(`\nAttempting to install required .NET SDK version: ${requiredDotNetVersion}`);
+      if (AUTO_INSTALL_ENABLED) {
+        console.log(`\nAttempting to install latest .NET ${requiredDotNetMajor} SDK...`);
         const installSuccess = installDotNetSdk();
 
         if (!installSuccess) {
@@ -332,7 +293,6 @@ async function setupDotNetEnvironment() {
             'Continuing with the current version, but you may encounter compatibility issues.',
           );
         } else {
-          // Re-check the version after installation
           try {
             const newVersion = execSync('dotnet --version', { stdio: 'pipe' }).toString().trim();
             console.log(`Now using .NET SDK version: ${newVersion}`);
@@ -341,8 +301,12 @@ async function setupDotNetEnvironment() {
           }
         }
       } else {
-        console.warn('Consider installing the exact version specified for best compatibility.');
+        console.warn(
+          `Please install .NET ${requiredDotNetMajor} SDK: https://dotnet.microsoft.com/download/dotnet/${requiredDotNetMajor}.0`,
+        );
       }
+    } else {
+      console.log(`✓ .NET ${requiredDotNetMajor}.x SDK found (${dotnetVersion})`);
     }
   } catch (error) {
     console.error('ERROR: .NET SDK is not installed or not in PATH.');

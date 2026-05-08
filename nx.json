@@ -33,6 +33,16 @@
         "serveTargetName": "serve",
         "typecheckTargetName": "type-check"
       }
+    },
+    {
+      "plugin": "@nx/dotnet",
+      "options": {
+        "lintTargetName": "lint",
+        "formatTargetName": "format",
+        "testTargetName": "test",
+        "buildTargetName": "build",
+        "serveTargetName": "serve"
+      }
     }
   ],
   "projects": {},
