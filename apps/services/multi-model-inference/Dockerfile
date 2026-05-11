@@ -44,7 +44,15 @@ RUN pip install --no-cache-dir .
 # Pre-download the ML model during build so the container starts offline.
 # fastembed caches to /opt/models; at runtime it finds the files and skips
 # the network call to HuggingFace entirely.
-RUN python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='BAAI/bge-small-en-v1.5', cache_dir='/opt/models')"
+# Set PRE_DOWNLOAD_MODEL=false for local dev when HuggingFace is unreachable
+# (e.g. behind a corporate proxy). The model will be downloaded at first startup instead.
+ARG PRE_DOWNLOAD_MODEL=true
+RUN if [ "$PRE_DOWNLOAD_MODEL" = "true" ]; then \
+      python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='BAAI/bge-small-en-v1.5', cache_dir='/opt/models')"; \
+    else \
+      echo "Skipping model pre-download (PRE_DOWNLOAD_MODEL=false) - model will download at first startup"; \
+      mkdir -p /opt/models; \
+    fi
 
 # Runtime stage - minimal image
 ARG PYTHON_VERSION
