@@ -90,3 +90,4 @@ jobs:
           JAEGER_DOMAIN: ${{ secrets.JAEGER_DOMAIN }}
           JAEGER_BASIC_AUTH: ${{ secrets.JAEGER_BASIC_AUTH }}
           API_GATEWAY_DOMAIN: ${{ secrets.API_GATEWAY_DOMAIN }}
+          CRIBSTOP_DOMAIN: ${{ secrets.CRIBSTOP_DOMAIN }}

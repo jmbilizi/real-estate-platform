@@ -101,6 +101,12 @@ runs:
           echo "   ✅ API_GATEWAY_DOMAIN is set (value redacted for security)"
           echo "   📝 Domain length: ${#API_GATEWAY_DOMAIN} characters"
         fi
+        if [ -z "$CRIBSTOP_DOMAIN" ]; then
+          echo "   ⚠️  CRIBSTOP_DOMAIN is not set (skipping cribstop-web ingress substitution)"
+        else
+          echo "   ✅ CRIBSTOP_DOMAIN is set (value redacted for security)"
+          echo "   📝 Domain length: ${#CRIBSTOP_DOMAIN} characters"
+        fi
 
         # Jaeger ingress
         if [ -f "${{ inputs.kustomizePath }}/patches/ingresses/jaeger.ingress.yaml" ]; then
@@ -142,6 +148,26 @@ runs:
           fi
         else
           echo "   ⚠️  API Gateway ingress file not found at: ${{ inputs.kustomizePath }}/patches/ingresses/api-gateway.ingress.yaml"
+        fi
+
+        # Cribstop web ingress
+        if [ -f "${{ inputs.kustomizePath }}/patches/ingresses/cribstop-web.ingress.yaml" ] && [ -n "$CRIBSTOP_DOMAIN" ]; then
+          echo "   📄 Before substitution:"
+          grep -E "host:|CRIBSTOP_DOMAIN" "${{ inputs.kustomizePath }}/patches/ingresses/cribstop-web.ingress.yaml" || true
+          
+          sed -i "s/CRIBSTOP_DOMAIN_PLACEHOLDER/${CRIBSTOP_DOMAIN}/g" \
+            "${{ inputs.kustomizePath }}/patches/ingresses/cribstop-web.ingress.yaml"
+          
+          echo "   📄 After substitution:"
+          grep -E "host:" "${{ inputs.kustomizePath }}/patches/ingresses/cribstop-web.ingress.yaml" || true
+          
+          if grep -q "CRIBSTOP_DOMAIN_PLACEHOLDER" "${{ inputs.kustomizePath }}/patches/ingresses/cribstop-web.ingress.yaml"; then
+            echo "   ❌ WARNING: CRIBSTOP_DOMAIN_PLACEHOLDER still present after substitution!"
+          else
+            echo "   ✅ Substitution completed"
+          fi
+        else
+          echo "   ⚠️  Cribstop web ingress not found or CRIBSTOP_DOMAIN not set — skipping"
         fi
 
     - name: Build manifests

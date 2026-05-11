@@ -119,6 +119,12 @@ services:
       # Environment patches
       - infra/k8s/podman/local/patches/deployments/cribstop-web.deployment.yaml
       - infra/k8s/podman/local/patches/ingresses/cribstop-web.ingress.yaml
+      - infra/k8s/hetzner/dev/patches/deployments/cribstop-web.deployment.yaml
+      - infra/k8s/hetzner/dev/patches/ingresses/cribstop-web.ingress.yaml
+      - infra/k8s/hetzner/test/patches/deployments/cribstop-web.deployment.yaml
+      - infra/k8s/hetzner/test/patches/ingresses/cribstop-web.ingress.yaml
+      - infra/k8s/hetzner/prod/patches/deployments/cribstop-web.deployment.yaml
+      - infra/k8s/hetzner/prod/patches/ingresses/cribstop-web.ingress.yaml
     kubectl_labels:
       app: cribstop-web
 

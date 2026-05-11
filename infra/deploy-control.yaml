@@ -66,6 +66,12 @@ environments:
         require_approval: false # No approval needed
         rollback_on_failure: false # Disabled in dev for manual investigation
 
+      cribstop-web:
+        enabled: true
+        auto_deploy: true # Auto-deploy in dev
+        require_approval: false # No approval needed
+        rollback_on_failure: false # Disabled in dev for manual investigation
+
   # ────────────────────────────────────────────────────────────────────────────
   # TEST/STAGING ENVIRONMENT
   # Moderate controls - test safety features before production
@@ -108,8 +114,11 @@ environments:
         require_approval: false # Optional approval
         rollback_on_failure: false # Disabled for manual validation
 
-  # ────────────────────────────────────────────────────────────────────────────
-  # PRODUCTION ENVIRONMENT
+      cribstop-web:
+        enabled: false # Not yet deployed to test
+        auto_deploy: false # Manual deployment in test
+        require_approval: false # Optional approval
+        rollback_on_failure: false # Disabled for manual validation
   # Strictest controls - all safety features enabled when workflows support them
   # ────────────────────────────────────────────────────────────────────────────
   prod:
@@ -150,8 +159,11 @@ environments:
         require_approval: true # Always require approval
         rollback_on_failure: false # Manual review recommended for production
 
-# =============================================================================
-# DEPLOYMENT STRATEGIES
+      cribstop-web:
+        enabled: false # Not yet deployed to production
+        auto_deploy: false # Manual deployment only
+        require_approval: true # Always require approval
+        rollback_on_failure: false # Manual review recommended for production
 # Defines how different resource types should be deployed
 # All StatefulSet settings are actively enforced by deployment workflows:
 #  - timeout: Controls kubectl rollout status timeout (overrides hardcoded values)
