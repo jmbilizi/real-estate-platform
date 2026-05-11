@@ -3,5 +3,9 @@
   "multi-model-inference": {
     "imageName": "inference-service",
     "dockerfilePath": "apps/services/multi-model-inference"
+  },
+  "cribstop-next": {
+    "imageName": "cribstop-web",
+    "dockerfilePath": "apps/clients/cribstop/next"
   }
 }

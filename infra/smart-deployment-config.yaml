@@ -108,6 +108,20 @@ services:
     kubectl_labels:
       app: inference
 
+  cribstop-web:
+    type: application
+    description: "Cribstop Next.js web client"
+    resources:
+      # Base resources (provider/environment-agnostic)
+      - infra/k8s/base/deployments/cribstop-web.deployment.yaml
+      - infra/k8s/base/services/cribstop-web.service.yaml
+      - infra/k8s/base/ingresses/cribstop-web.ingress.yaml
+      # Environment patches
+      - infra/k8s/podman/local/patches/deployments/cribstop-web.deployment.yaml
+      - infra/k8s/podman/local/patches/ingresses/cribstop-web.ingress.yaml
+    kubectl_labels:
+      app: cribstop-web
+
 # =============================================================================
 # DEPLOYMENT SETTINGS
 # =============================================================================

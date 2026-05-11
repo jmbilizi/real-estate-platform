@@ -21,10 +21,12 @@ patches:
   ## Deployments (stateless applications)
   - path: patches/deployments/api-gateway.deployment.yaml
   - path: patches/deployments/inference.deployment.yaml
+  - path: patches/deployments/cribstop-web.deployment.yaml
 
   ## Ingress rules (local routing via *.localhost)
   - path: patches/ingresses/jaeger.ingress.yaml
   - path: patches/ingresses/api-gateway.ingress.yaml
+  - path: patches/ingresses/cribstop-web.ingress.yaml
 
 # Common labels for all resources
 labels:

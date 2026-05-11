@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cribstop-web
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: cribstop.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: cribstop-web-svc
+                port:
+                  number: 3000

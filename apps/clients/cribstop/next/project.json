@@ -1,0 +1,77 @@
+{
+  "name": "cribstop-next",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/clients/cribstop/next",
+  "projectType": "application",
+  "targets": {
+    "lint": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "command": "eslint --config tools/node/configs/eslint.config.js apps/clients/cribstop/next",
+        "cwd": "."
+      }
+    },
+    "type-check": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "command": "tsc --noEmit -p apps/clients/cribstop/next/tsconfig.json",
+        "cwd": "."
+      }
+    },
+    "format": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "prettier --write .",
+        "cwd": "apps/clients/cribstop/next"
+      }
+    },
+    "format-check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "prettier --check .",
+        "cwd": "apps/clients/cribstop/next"
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "command": "next build",
+        "cwd": "apps/clients/cribstop/next"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "next dev -p 3000",
+        "cwd": "apps/clients/cribstop/next"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "command": "jest --passWithNoTests",
+        "cwd": "apps/clients/cribstop/next"
+      }
+    },
+    "container-build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node tools/docker/build-image.js {projectName} --tag={args.tag}",
+        "cwd": "."
+      }
+    }
+  },
+  "tags": [
+    "runtime:node",
+    "type:client",
+    "platform:web",
+    "framework:unassigned",
+    "scope:unassigned",
+    "devteam:unassigned",
+    "npm:private"
+  ]
+}

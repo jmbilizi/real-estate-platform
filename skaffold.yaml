@@ -36,6 +36,17 @@ build:
           paths:
             - apps/services/multi-model-inference/**
 
+    - image: cribstop-web
+      context: .
+      custom:
+        buildCommand: node tools/infra/skaffold-build.js
+        dependencies:
+          paths:
+            - apps/clients/cribstop/next/**
+            - package.json
+            - pnpm-lock.yaml
+            - pnpm-workspace.yaml
+
   local:
     # IMPORTANT: This must be true for the Podman+Kind workflow.
     # - The cluster pulls from the local registry (localhost:5001)
@@ -76,5 +87,10 @@ portForward:
     namespace: default
     port: 16686
     localPort: 16686
+  - resourceType: service
+    resourceName: cribstop-web-svc
+    namespace: default
+    port: 3000
+    localPort: 3000
 
 profiles: []

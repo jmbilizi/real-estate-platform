@@ -1,0 +1,31 @@
+# yaml-language-server: disable
+# Cribstop Web Deployment Patch for Podman Local Environment
+# Minimal resources for local development
+# Environment: Development
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cribstop-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cribstop-web
+  template:
+    spec:
+      containers:
+        - name: nextjs
+          # Skaffold manages image name - use 'cribstop-web' to match skaffold.yaml
+          image: cribstop-web
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+          env:
+            - name: NODE_ENV
+              value: "development"
