@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cribstop-web
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod # TLS cert for test
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - CRIBSTOP_DOMAIN_PLACEHOLDER
+      secretName: cribstop-web-test-tls
+  rules:
+    - host: CRIBSTOP_DOMAIN_PLACEHOLDER
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: cribstop-web-svc
+                port:
+                  number: 3000

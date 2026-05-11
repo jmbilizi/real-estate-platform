@@ -1,0 +1,32 @@
+# yaml-language-server: disable
+# Cribstop Deployment Patch for Hetzner Dev Environment
+# Low resources for development cluster
+# Environment: Development
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cribstop-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cribstop-web
+  template:
+    spec:
+      containers:
+        - name: nextjs
+          # Format: ghcr.io/<owner>/<repo>/cribstop-web:dev
+          # Placeholders: GITHUB_REPOSITORY_OWNER, GITHUB_REPOSITORY_NAME
+          image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/cribstop-web:dev
+          imagePullPolicy: Always # Always pull latest dev image
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "250m"
+          env:
+            - name: NODE_ENV
+              value: "development"

@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cribstop-web
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod # Production cert
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - CRIBSTOP_DOMAIN_PLACEHOLDER
+      secretName: cribstop-web-tls
+  rules:
+    - host: CRIBSTOP_DOMAIN_PLACEHOLDER
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: cribstop-web-svc
+                port:
+                  number: 3000
