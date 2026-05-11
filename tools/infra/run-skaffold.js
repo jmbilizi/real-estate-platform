@@ -3,6 +3,7 @@
 const { spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const yaml = require('js-yaml');
 
 const workspaceRoot = path.resolve(__dirname, '../..');
@@ -200,9 +201,111 @@ function ensureLocalKubeContext() {
 
 ensureLocalKubeContext();
 
+/**
+ * Ensure the local Podman registry is running before Skaffold starts.
+ * Without this, Skaffold hangs indefinitely at "Checking cache..." because it tries
+ * to reach localhost:5001 to check for cached images and never gets a response.
+ * After starting/recreating the registry we poll /v2/ until it responds so we
+ * don't hand off to Skaffold while the container is still initialising.
+ */
+function ensureLocalRegistry() {
+  const command = args[0];
+  const commandsThatPushImages = new Set(['dev', 'debug', 'run', 'build']);
+  if (!commandsThatPushImages.has(command)) {
+    return;
+  }
+
+  // Only relevant when targeting the local registry.
+  const usesLocalRepo =
+    args.includes('localhost:5001') ||
+    args.some((a) => a.includes('localhost:5001')) ||
+    !args.some((a) => a.startsWith('--default-repo'));
+
+  if (!usesLocalRepo) {
+    return;
+  }
+
+  console.log('Ensuring local registry is running...');
+  const result = spawnSync(
+    process.execPath,
+    [path.join(__dirname, 'local-registry.js'), 'ensure'],
+    { cwd: workspaceRoot, stdio: 'inherit', shell: false },
+  );
+  if (result.status !== 0) {
+    console.error(
+      'ERROR: Failed to start local registry. Run: pnpm run infra:local:registry:ensure',
+    );
+    process.exit(1);
+  }
+
+  // Poll the registry API until it responds. After a container restart there is
+  // a brief window where the port is bound but the HTTP server is not yet ready,
+  // which causes Skaffold's cache check to hang indefinitely.
+  const maxWaitMs = 15000;
+  const intervalMs = 500;
+  const deadline = Date.now() + maxWaitMs;
+  let ready = false;
+  process.stdout.write('Waiting for registry to be ready...');
+  while (!ready && Date.now() < deadline) {
+    const poll = spawnSync(
+      process.execPath,
+      [
+        '-e',
+        "require('http').get('http://localhost:5001/v2/',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
+      ],
+      { stdio: 'ignore', shell: false, timeout: intervalMs },
+    );
+    if (poll.status === 0) {
+      ready = true;
+    }
+  }
+  console.log(ready ? ' ready.' : ' timed out (continuing anyway).');
+}
+
+ensureLocalRegistry();
+
+/**
+ * Point Skaffold at Podman's socket so it doesn't hang looking for Docker.
+ * On Windows, Podman exposes a named pipe; on Linux/macOS, a Unix socket.
+ * Only set if DOCKER_HOST isn't already overridden by the user.
+ */
+function resolvePodmanDockerHost() {
+  if (process.env.DOCKER_HOST) return process.env.DOCKER_HOST;
+
+  if (process.platform === 'win32') {
+    // Podman machine on Windows exposes a named pipe
+    return 'npipe:////./pipe/podman-machine-default';
+  }
+
+  if (process.platform === 'darwin') {
+    // Podman machine on macOS exposes a Unix socket under ~/.local/share/containers/podman
+    const macSocket = path.join(
+      os.homedir(),
+      '.local/share/containers/podman/machine/podman-machine-default/podman.sock',
+    );
+    if (fs.existsSync(macSocket)) return `unix://${macSocket}`;
+    // Fallback: rootless socket via XDG_RUNTIME_DIR
+    const xdgRuntime = process.env.XDG_RUNTIME_DIR || `/var/folders`;
+    const xdgSocket = `${xdgRuntime}/podman/podman.sock`;
+    if (fs.existsSync(xdgSocket)) return `unix://${xdgSocket}`;
+    return undefined;
+  }
+
+  // Linux: rootless (per-user) first, then rootful
+  const uid = process.getuid?.() ?? 1000;
+  const candidates = [`/run/user/${uid}/podman/podman.sock`, '/run/podman/podman.sock'];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return `unix://${p}`;
+  }
+  return undefined;
+}
+
+const podmanDockerHost = resolvePodmanDockerHost();
+
 const env = {
   ...process.env,
   PATH: `${toolsBinDir}${path.delimiter}${process.env.PATH || ''}`,
+  ...(podmanDockerHost ? { DOCKER_HOST: podmanDockerHost } : {}),
 };
 
 const result = spawnSync('skaffold', args, {

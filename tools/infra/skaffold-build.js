@@ -140,6 +140,8 @@ function buildImage(image) {
     'BUILD_CONFIGURATION=Release',
     '--build-arg',
     'COPY_CERTS=true', // Local dev needs enterprise certs
+    '--build-arg',
+    'PRE_DOWNLOAD_MODEL=false', // HuggingFace may be unreachable behind corporate proxy; download at runtime
     '-t',
     image,
     '.',
