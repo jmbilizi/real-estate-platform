@@ -26,6 +26,7 @@
     "@swc/core": "~1.7.26",
     "@swc/helpers": "~0.5.11",
     "@types/jest": "^30.0.0",
+    "@types/node": "^22.10.0",
     "@typescript-eslint/eslint-plugin": "^8.41.0",
     "@typescript-eslint/parser": "^8.41.0",
     "baseline-browser-mapping": "^2.10.8",
@@ -181,5 +182,8 @@
     "*.{xml,csproj,sqlproj}": [
       "pnpm exec prettify-xml"
     ]
+  },
+  "dependencies": {
+    "nextjs-toploader": "^3.9.17"
   }
 }

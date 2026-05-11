@@ -5,3 +5,9 @@ packages:
   # - "libs/expo-next"
   # - "libs/next"
   # - "libs/expo"
+
+catalog:
+  # Web CSS pipeline — shared across all Next.js/web apps
+  tailwindcss: "^3.4.17"
+  autoprefixer: "^10.4.20"
+  postcss: "^8.4.49"

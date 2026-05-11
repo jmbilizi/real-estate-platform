@@ -4,6 +4,18 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+catalogs:
+  default:
+    autoprefixer:
+      specifier: ^10.4.20
+      version: 10.4.21
+    postcss:
+      specifier: ^8.4.49
+      version: 8.5.6
+    tailwindcss:
+      specifier: ^3.4.17
+      version: 3.4.19
+
 importers:
 
   .:
@@ -57,6 +69,9 @@ importers:
       '@types/jest':
         specifier: ^30.0.0
         version: 30.0.0
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.17
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.41.0
         version: 8.46.2(@typescript-eslint/parser@8.46.2(eslint@9.38.0(jiti@1.21.7))(typescript@5.9.3))(eslint@9.38.0(jiti@1.21.7))(typescript@5.9.3)
@@ -151,9 +166,6 @@ importers:
       '@types/leaflet':
         specifier: ^1.9.21
         version: 1.9.21
-      '@types/node':
-        specifier: ^22.10.0
-        version: 22.19.17
       '@types/react':
         specifier: ^19.0.0
         version: 19.2.14
@@ -161,13 +173,13 @@ importers:
         specifier: ^19.0.0
         version: 19.2.3(@types/react@19.2.14)
       autoprefixer:
-        specifier: ^10.4.20
+        specifier: 'catalog:'
         version: 10.4.21(postcss@8.5.6)
       postcss:
-        specifier: ^8.4.49
+        specifier: 'catalog:'
         version: 8.5.6
       tailwindcss:
-        specifier: ^3.4.17
+        specifier: 'catalog:'
         version: 3.4.19(yaml@2.8.1)
 
 packages:
