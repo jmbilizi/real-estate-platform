@@ -1,13 +1,6 @@
 'use client';
 
-import React, {
-  createContext,
-  ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-} from 'react';
+import React, { createContext, ReactNode, useCallback, useContext, useState } from 'react';
 
 interface User {
   name: string;
@@ -43,6 +36,16 @@ interface AppContextValue {
   setSearchSuggestion: (v: any | null) => void;
   searchMoveInDate: string;
   setSearchMoveInDate: (v: string) => void;
+  searchDateRange: {
+    start: string;
+    end: string;
+    flexibility: 'exact' | '1' | '3' | '7' | '14' | '30' | '60' | '90' | '180' | '365' | '730';
+  };
+  setSearchDateRange: (v: {
+    start: string;
+    end: string;
+    flexibility: 'exact' | '1' | '3' | '7' | '14' | '30' | '60' | '90' | '180' | '365' | '730';
+  }) => void;
   searchOccupants: { adults: number; children: number; infants: number; pets: number };
   setSearchOccupants: (v: {
     adults: number;
@@ -62,13 +65,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [listingTab, setListingTab] = useState<'for-sale' | 'for-rent'>('for-sale');
-  // Default false — pages with SearchSection manage this; pages without call useShowHeaderPill()
+  // Default false — ScrollSentinel manages this for all pages
   const [showHeaderPill, setShowHeaderPill] = useState(false);
   const [headerExpanded, setHeaderExpanded] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [searchLocation, setSearchLocation] = useState('');
   const [searchSuggestion, setSearchSuggestion] = useState<any | null>(null);
   const [searchMoveInDate, setSearchMoveInDate] = useState('');
+  const [searchDateRange, setSearchDateRange] = useState<{
+    start: string;
+    end: string;
+    flexibility: 'exact' | '1' | '3' | '7' | '14' | '30' | '60' | '90' | '180' | '365' | '730';
+  }>({ start: '', end: '', flexibility: 'exact' });
   const [searchOccupants, setSearchOccupants] = useState({
     adults: 0,
     children: 0,
@@ -126,6 +134,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setSearchSuggestion,
         searchMoveInDate,
         setSearchMoveInDate,
+        searchDateRange,
+        setSearchDateRange,
         searchOccupants,
         setSearchOccupants,
         searchPriceIdx,
@@ -143,17 +153,4 @@ export function useApp() {
   const ctx = useContext(AppContext);
   if (!ctx) throw new Error('useApp must be used within AppProvider');
   return ctx;
-}
-
-/** Call this in any page that has no SearchSection but needs the compact header pill. */
-export function useShowHeaderPill() {
-  const { setShowHeaderPill } = useApp();
-  useEffect(() => {
-    document.documentElement.setAttribute('data-header-pill', '');
-    setShowHeaderPill(true);
-    return () => {
-      document.documentElement.removeAttribute('data-header-pill');
-      setShowHeaderPill(false);
-    };
-  }, [setShowHeaderPill]);
 }

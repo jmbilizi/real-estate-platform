@@ -40,7 +40,7 @@ export default function SingleListingMapInner({
   });
 
   return (
-    <div className={className}>
+    <div className={`isolate ${className ?? ''}`}>
       <MapContainer
         center={[listing.latitude, listing.longitude]}
         zoom={14}

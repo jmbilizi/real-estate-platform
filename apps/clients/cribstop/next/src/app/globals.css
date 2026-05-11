@@ -54,6 +54,53 @@ body {
   }
 }
 
+/* SiteHeader wrapper: no border/shadow at top (search bar is in page flow below it).
+   Transition is ONLY on the pill-active state so the border fades in smoothly when
+   scrolling down, but disappears instantly when scrolling back — preventing the
+   double-line flash where header border and search-bar border overlap. */
+.site-header-wrapper {
+  border-bottom: 1px solid transparent;
+  box-shadow: none;
+}
+:root[data-header-pill] .site-header-wrapper {
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 2px 8px rgba(0, 0, 0, 0.04);
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+/* When expanded, the expanded bar provides the visual divider — hide the header border */
+:root[data-header-pill][data-header-expanded] .site-header-wrapper {
+  border-bottom-color: transparent;
+  box-shadow: none;
+}
+
+/* Expanded bar: absolutely positioned so it overlays page content (no layout shift
+   when toggling). Hidden by default, shown only when data-header-expanded is set. */
+.site-header-expanded {
+  display: none;
+  position: absolute;
+  /* top: 100% resolves to the padding-box height (64px), but the sentinel starts
+     after the full border-box (65px). Add 1px to align with the sentinel. */
+  top: calc(100% + 1px);
+  left: 0;
+  right: 0;
+  /* z-index: 50 ensures this paints above the z-[49] backdrop div rendered inside
+     the same site-header-wrapper stacking context — without it, the backdrop
+     intercepts all pointer events on the expanded search bar. */
+  z-index: 50;
+}
+html[data-header-pill][data-header-expanded] .site-header-expanded {
+  display: block;
+  background: white;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
 /* Leaflet overrides */
 .leaflet-container {
   font-family: inherit;
@@ -72,6 +119,35 @@ body {
 }
 .search-panel-enter {
   animation: searchPanelIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Where field shake — shown when search is attempted without a valid location */
+@keyframes whereShake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  15% {
+    transform: translateX(-6px);
+  }
+  30% {
+    transform: translateX(5px);
+  }
+  45% {
+    transform: translateX(-4px);
+  }
+  60% {
+    transform: translateX(3px);
+  }
+  75% {
+    transform: translateX(-2px);
+  }
+  90% {
+    transform: translateX(1px);
+  }
+}
+.where-shake {
+  animation: whereShake 0.55s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
 }
 
 /* Expanded header search bar slide-down animation */
@@ -136,53 +212,60 @@ body {
 }
 
 /* ── Header tabs ↔ pill smooth swap via data attribute ──────────────────────
-   data-header-pill is set synchronously on <html> by the scroll handler so
-   CSS transitions fire in the same paint flush — no React re-render lag.    */
+   Transitions are ONLY on the pill-active state: fade IN when scrolling down,
+   instant swap when scrolling back — prevents ghost overlap of both elements. */
 
-/* Tabs: visible by default, fade out when scrolled */
+/* Tabs: visible by default, instant restore; fade OUT when scrolled */
 .header-tabs {
   opacity: 1;
   pointer-events: auto;
-  transition: opacity 200ms ease;
 }
 :root[data-header-pill] .header-tabs {
   opacity: 0;
   pointer-events: none;
+  transition: opacity 200ms ease;
 }
 
-/* Pill: hidden by default, fade in when scrolled */
+/* Pill: hidden by default, instant hide; fade IN when scrolled */
 .header-pill {
   opacity: 0;
   pointer-events: none;
-  transition: opacity 200ms ease;
 }
 :root[data-header-pill] .header-pill {
   opacity: 1;
   pointer-events: auto;
+  transition: opacity 200ms ease;
 }
 
 /* In-page search section: fade out, then collapse height after fade completes */
 .search-section {
   opacity: 1;
-  transition: none; /* no fade-in — only the data-header-pill rule animates (fade-out direction) */
-}
-:root[data-header-pill] .search-section {
-  opacity: 0;
-  height: 0;
-  overflow: hidden;
-  pointer-events: none;
-  /* opacity fades first (180ms), then height collapses instantly (0s delay = 180ms) */
-  transition:
-    opacity 180ms ease,
-    height 0s 180ms,
-    overflow 0s 180ms;
-}
-/* When Row 2 is open: keep SearchSection fully collapsed, no transition.
-   It snaps back to full height (invisible, opacity 0→1) only after Row 2 unmounts. */
-:root[data-header-expanded] .search-section {
-  opacity: 0;
-  height: 0;
-  overflow: hidden;
-  pointer-events: none;
   transition: none;
+}
+/* Mobile only: collapse the in-page search section when scrolled */
+@media (max-width: 639px) {
+  :root[data-header-pill] .search-section {
+    opacity: 0;
+    height: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transition:
+      opacity 180ms ease,
+      height 0s 180ms,
+      overflow 0s 180ms;
+  }
+  :root[data-header-expanded] .search-section {
+    opacity: 0;
+    height: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transition: none;
+  }
+}
+/* Desktop: SearchSection is just the scroll sentinel — no visual effect needed */
+@media (min-width: 640px) {
+  :root[data-header-pill] .search-section {
+    opacity: 1;
+    pointer-events: none;
+  }
 }

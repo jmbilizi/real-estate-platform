@@ -1,4 +1,5 @@
 export type ListingType = 'sale' | 'rent' | 'sold';
+export type ListingSource = 'brightMLS' | 'internal' | 'other';
 export type PropertyType =
   | 'Single Family'
   | 'Condo'
@@ -36,6 +37,7 @@ export interface Listing {
   price: number;
   status: 'Active' | 'Pending' | 'Coming Soon' | 'Sold';
   listingType: ListingType;
+  source: ListingSource;
   propertyType: PropertyType;
   beds: number;
   baths: number;
@@ -47,6 +49,8 @@ export interface Listing {
   brokerPhone: string;
   brokerEmail: string;
   officeName: string;
+  officeBrokerLeadPhone?: string;
+  officeBrokerLeadMail?: string;
   lastUpdated: string;
   description: string;
   amenities: Amenity[];

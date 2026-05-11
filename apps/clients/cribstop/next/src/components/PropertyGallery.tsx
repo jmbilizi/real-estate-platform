@@ -40,7 +40,7 @@ export default function PropertyGallery({ images, title }: { images: string[]; t
             setActiveIdx(0);
             setOpen(true);
           }}
-          className="relative block aspect-[4/3] w-full overflow-hidden rounded-2xl bg-surface-soft md:hidden"
+          className="relative block aspect-video w-full overflow-hidden rounded-2xl bg-surface-soft md:hidden"
         >
           {}
           <img src={tiles[0]} alt={title} className="h-full w-full object-cover" />
@@ -50,7 +50,7 @@ export default function PropertyGallery({ images, title }: { images: string[]; t
         </button>
 
         {/* Desktop: mosaic grid */}
-        <div className="hidden md:grid md:aspect-[2/1] md:grid-cols-4 md:grid-rows-2 md:gap-2 md:overflow-hidden md:rounded-2xl">
+        <div className="hidden md:grid md:h-[480px] md:grid-cols-4 md:grid-rows-2 md:gap-2 md:overflow-hidden md:rounded-2xl">
           <button
             type="button"
             onClick={() => {

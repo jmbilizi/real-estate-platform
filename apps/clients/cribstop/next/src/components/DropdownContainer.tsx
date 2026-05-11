@@ -19,10 +19,10 @@ export function DropdownContainer({
 }: DropdownContainerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Calculate position based on trigger
+  // Calculate position based on trigger (fixed positioning uses viewport coordinates)
   const rect = triggerRef.current?.getBoundingClientRect();
-  const top = rect ? rect.bottom + window.scrollY + 6 : 0;
-  const left = rect ? rect.left + window.scrollX : 0;
+  const top = rect ? rect.bottom + 6 : 0;
+  const left = rect ? rect.left : 0;
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -49,7 +49,7 @@ export function DropdownContainer({
   return (
     <div
       ref={containerRef}
-      style={{ position: 'absolute', top, left, zIndex: 50, ...style }}
+      style={{ position: 'fixed', top, left, zIndex: 50, ...style }}
       className="bg-white rounded-2xl shadow-xl border border-surface-border overflow-hidden"
     >
       {children}

@@ -78,7 +78,7 @@ export default function NeighborhoodRow({ title, subtitle, href, neighborhoods, 
               </Link>
             )}
           </div>
-          <div className="hidden items-center gap-2 sm:flex">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => scroll('left')}

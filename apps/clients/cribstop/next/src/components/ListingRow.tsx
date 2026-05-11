@@ -77,7 +77,7 @@ export default function ListingRow({ title, subtitle, href, listings, max = 4 }:
               </Link>
             )}
           </div>
-          <div className="hidden items-center gap-2 sm:flex">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => scroll('left')}

@@ -1,13 +1,20 @@
 'use client';
 
-import { useApp, useShowHeaderPill } from '@/lib/context';
+import { useApp } from '@/lib/context';
 import ListingCard from '@/components/ListingCard';
 import listings from '@/lib/listings';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export default function FavoritesPage() {
-  useShowHeaderPill();
   const { user, savedIds } = useApp();
+  const router = useRouter();
+
+  const openModal = (mode: 'login' | 'signup') => {
+    const params = new URLSearchParams(window.location.search);
+    params.set('modal', mode);
+    router.push(`${window.location.pathname}?${params.toString()}`);
+  };
 
   if (!user) {
     return (
@@ -24,12 +31,12 @@ export default function FavoritesPage() {
           Save listings, get price alerts, and pick up where you left off — on any device.
         </p>
         <div className="mt-6 flex items-center justify-center gap-2">
-          <Link href="/login" className="btn-primary">
+          <button onClick={() => openModal('login')} className="btn-primary">
             Sign in
-          </Link>
-          <Link href="/signup" className="btn-secondary">
+          </button>
+          <button onClick={() => openModal('signup')} className="btn-secondary">
             Create account
-          </Link>
+          </button>
         </div>
       </div>
     );

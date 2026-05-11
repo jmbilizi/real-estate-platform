@@ -1,8 +1,6 @@
 'use client';
-import { useShowHeaderPill } from '@/lib/context';
 
 export default function AboutPage() {
-  useShowHeaderPill();
   return (
     <div className="mx-auto max-w-4xl px-4 py-16 sm:px-6 lg:px-8">
       <h1 className="font-display text-3xl font-extrabold sm:text-4xl">About Cribstop.com</h1>

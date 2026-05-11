@@ -3,7 +3,6 @@
 import { Suspense, useEffect, useState } from 'react';
 import ListingCard from '@/components/ListingCard';
 import ListingsMap from '@/components/ListingsMap';
-import SearchSection from '@/components/SearchSection';
 import listings from '@/lib/listings';
 import { useApp } from '@/lib/context';
 
@@ -33,10 +32,9 @@ function parseFiltersFromUrl(): SearchFilters {
 function SearchContent() {
   const {
     savedIds,
-    listingTab,
-    setListingTab,
     searchLocation: location,
     setSearchLocation: setLocation,
+    setSearchSuggestion,
   } = useApp();
   // Sync context location from URL on mount and navigation
   useEffect(() => {
@@ -44,7 +42,15 @@ function SearchContent() {
       const updateFromUrl = () => {
         const params = new URLSearchParams(window.location.search);
         const q = params.get('q') || '';
+        const lat = params.get('lat');
+        const lon = params.get('lon');
         setLocation(q);
+        // Restore the suggestion object so CompactSearchBar can search again without re-typing
+        if (q && lat && lon) {
+          setSearchSuggestion({ display_name: q, lat, lon });
+        } else if (!q) {
+          setSearchSuggestion(null);
+        }
         setFilters(parseFiltersFromUrl());
       };
       updateFromUrl();
@@ -65,10 +71,8 @@ function SearchContent() {
   // Boundary polygon GeoJSON for the searched area
   const [searchPolygon, setSearchPolygon] = useState<object | null>(null);
 
-  // Filters state — lazy-init from URL
-  const [filters, setFilters] = useState<SearchFilters>(() =>
-    typeof window !== 'undefined' ? parseFiltersFromUrl() : {},
-  );
+  // Filters state — initialized empty; useEffect above populates from URL after mount
+  const [filters, setFilters] = useState<SearchFilters>({});
   // Two-phase geocode:
   //   Phase 1 — no polygon, ~300 bytes → sets map center immediately so tiles load fast
   //   Phase 2 — same query with polygon_geojson + aggressive simplification (~5-15 KB)
@@ -159,29 +163,8 @@ function SearchContent() {
 
   return (
     <div className="flex flex-col">
-      {/* Mobile tab strip — desktop uses header tabs */}
-      <div className="md:hidden flex border-b border-surface-border bg-white">
-        {(['for-sale', 'for-rent'] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setListingTab(tab)}
-            className={`relative flex-1 py-3 text-sm font-semibold transition-colors duration-150 focus:outline-none ${
-              listingTab === tab ? 'text-ink' : 'text-ink-muted'
-            }`}
-          >
-            {tab === 'for-sale' ? 'For Sale' : 'For Rent'}
-            {listingTab === tab && (
-              <span className="absolute bottom-0 left-1/2 h-[2px] w-12 -translate-x-1/2 rounded-full bg-ink" />
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Search bar — coordinates header tabs↔pill via AppContext */}
-      <SearchSection />
-
       {/* Toolbar */}
-      <div className="border-b border-surface-border bg-white">
+      <div className="sticky top-[65px] z-20 bg-white border-b border-surface-border">
         <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 sm:px-10 lg:px-20">
           <div>
             <h1 className="font-display text-lg font-extrabold tracking-tight sm:text-xl">
@@ -232,6 +215,7 @@ function SearchContent() {
               value={filters.sort || 'recommended'}
               onChange={(v) => {
                 if (!v) return;
+                setFilters((prev) => ({ ...prev, sort: v }));
                 const params = new URLSearchParams(window.location.search);
                 params.set('sort', String(v));
                 window.history.pushState(
@@ -258,82 +242,109 @@ function SearchContent() {
         resultCount={filtered.length}
       />
 
-      {/* Body: results scroll with window; map is sticky on desktop */}
-      <div className="flex flex-col md:flex-row px-6 sm:px-10 lg:px-20">
-        {/* Results column — normal flow, scrolls with window */}
-        <div className="w-full md:w-1/2 py-6 md:pr-6">
-          {pagedResults.length === 0 ? (
-            <EmptyState onClear={() => window.location.reload()} />
-          ) : (
-            <>
-              <div className="grid gap-8 gap-y-12 grid-cols-1 sm:grid-cols-2">
-                {pagedResults.map((l) => (
-                  <div
-                    key={l.id}
-                    onMouseEnter={() => setHoveredId(l.id)}
-                    onMouseLeave={() => setHoveredId(null)}
-                  >
-                    <ListingCard listing={l} />
-                  </div>
-                ))}
-              </div>
-              {pageCount > 1 && (
-                <div className="flex justify-center mt-10">
-                  <nav className="inline-flex items-center gap-1 rounded-full bg-white/90 px-4 py-2 shadow-lg border border-surface-border">
-                    <button
-                      className="px-3 py-1.5 rounded-full font-semibold text-ink-muted hover:text-ink disabled:opacity-40"
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
-                      disabled={page === 1}
-                      aria-label="Previous page"
-                    >
-                      &lt;
-                    </button>
-                    {Array.from({ length: pageCount }, (_, i) => i + 1).map((p) =>
-                      p === 1 || p === pageCount || Math.abs(p - page) <= 2 ? (
-                        <button
-                          key={p}
-                          className={`px-3 py-1.5 rounded-full font-semibold transition ${
-                            p === page
-                              ? 'bg-ink text-white shadow'
-                              : 'text-ink-muted hover:text-ink'
-                          }`}
-                          onClick={() => setPage(p)}
-                          aria-current={p === page ? 'page' : undefined}
-                        >
-                          {p}
-                        </button>
-                      ) : (p === page - 3 || p === page + 3) && pageCount > 7 ? (
-                        <span key={p} className="px-2 text-ink-muted">
-                          …
-                        </span>
-                      ) : null,
-                    )}
-                    <button
-                      className="px-3 py-1.5 rounded-full font-semibold text-ink-muted hover:text-ink disabled:opacity-40"
-                      onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-                      disabled={page === pageCount}
-                      aria-label="Next page"
-                    >
-                      &gt;
-                    </button>
-                  </nav>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Map column — sticky so it stays in view as results scroll */}
-        <div className="w-full md:w-1/2 h-64 md:h-auto md:pl-6 mb-6 md:mb-0">
-          <div className="md:sticky md:top-16 h-full md:h-[calc(100vh-4rem)] md:py-6">
+      {/* Body: Airbnb-style split layout.
+           Desktop  — map fills right half edge-to-edge, full viewport height.
+           Mobile   — map is sticky behind property cards; white rounded card
+                      slides up over the map as the user scrolls (Airbnb feel).
+           Technique: on mobile the map column is `position:absolute` spanning
+           the full parent height, which gives `position:sticky` a tall enough
+           parent to remain pinned while cards scroll over it. */}
+      <div className="relative flex flex-col md:flex-row">
+        {/* ── Map column ────────────────────────────────────────────────────
+            Mobile  : absolute, fills parent so sticky has room to hold.
+            Desktop : normal right-half column, edge-to-edge (no padding). ── */}
+        <div
+          className="absolute inset-0 z-0
+                     md:relative md:inset-auto md:order-last md:w-[52%]"
+        >
+          <div className="sticky top-[133px] h-[45vh] md:h-[calc(100vh-133px)] md:py-6 md:pl-3 md:pr-10 lg:pl-5 lg:pr-20">
             <ListingsMap
               listings={pagedResults}
               savedIds={savedIds}
               activeId={hoveredId}
-              className="h-full w-full rounded-2xl"
+              className="h-full w-full md:rounded-2xl"
               searchCenter={searchCenter}
               searchPolygon={searchPolygon}
             />
+          </div>
+        </div>
+
+        {/* ── Properties column ─────────────────────────────────────────────
+            Mobile  : margin-top pushes it just below the map with a 2 rem
+                      overlap; rounded white sheet slides over map on scroll.
+            Desktop : left half, horizontal padding mirrors the toolbar. ── */}
+        <div
+          className="relative z-10 mt-[calc(45vh-2rem)]
+                     rounded-t-3xl bg-white shadow-[0_-8px_30px_rgba(0,0,0,0.10)]
+                     md:order-first md:w-[48%] md:mt-0 md:rounded-none
+                     md:shadow-none md:z-auto
+                     md:py-6 md:pl-10 md:pr-3 lg:pl-20 lg:pr-5"
+        >
+          {/* Drag handle — visible on mobile only */}
+          <div className="flex justify-center pt-3 pb-1 md:hidden" aria-hidden="true">
+            <div className="h-1 w-10 rounded-full bg-gray-300" />
+          </div>
+
+          <div className="px-5 pb-10 md:px-0 md:pb-0">
+            {pagedResults.length === 0 ? (
+              <EmptyState onClear={() => window.location.reload()} />
+            ) : (
+              <>
+                <div className="grid gap-8 gap-y-12 grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3">
+                  {pagedResults.map((l) => (
+                    <div
+                      key={l.id}
+                      onMouseEnter={() => setHoveredId(l.id)}
+                      onMouseLeave={() => setHoveredId(null)}
+                    >
+                      <ListingCard listing={l} />
+                    </div>
+                  ))}
+                </div>
+                {pageCount > 1 && (
+                  <div className="flex justify-center mt-10">
+                    <nav className="inline-flex items-center gap-1 rounded-full bg-white/90 px-4 py-2 shadow-lg border border-surface-border">
+                      <button
+                        className="px-3 py-1.5 rounded-full font-semibold text-ink-muted hover:text-ink disabled:opacity-40"
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        disabled={page === 1}
+                        aria-label="Previous page"
+                      >
+                        &lt;
+                      </button>
+                      {Array.from({ length: pageCount }, (_, i) => i + 1).map((p) =>
+                        p === 1 || p === pageCount || Math.abs(p - page) <= 2 ? (
+                          <button
+                            key={p}
+                            className={`px-3 py-1.5 rounded-full font-semibold transition ${
+                              p === page
+                                ? 'bg-ink text-white shadow'
+                                : 'text-ink-muted hover:text-ink'
+                            }`}
+                            onClick={() => setPage(p)}
+                            aria-current={p === page ? 'page' : undefined}
+                          >
+                            {p}
+                          </button>
+                        ) : (p === page - 3 || p === page + 3) && pageCount > 7 ? (
+                          <span key={p} className="px-2 text-ink-muted">
+                            …
+                          </span>
+                        ) : null,
+                      )}
+                      <button
+                        className="px-3 py-1.5 rounded-full font-semibold text-ink-muted hover:text-ink disabled:opacity-40"
+                        onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                        disabled={page === pageCount}
+                        aria-label="Next page"
+                      >
+                        &gt;
+                      </button>
+                    </nav>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>

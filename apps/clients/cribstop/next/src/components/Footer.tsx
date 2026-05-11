@@ -1,4 +1,20 @@
+import listings from '@/lib/listings';
+
 export default function Footer() {
+  const lastUpdated = listings.reduce(
+    (max, l) => (l.lastUpdated > max ? l.lastUpdated : max),
+    listings[0].lastUpdated,
+  );
+  const lastUpdatedFormatted = new Date(lastUpdated).toLocaleString('en-US', {
+    timeZone: 'America/New_York',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  });
+
   return (
     <footer className="border-t border-surface-border bg-surface-alt">
       <div className="px-6 py-10 sm:px-10 lg:px-20">
@@ -84,29 +100,39 @@ export default function Footer() {
 
         {/* MLS Compliance Disclosures */}
         <div className="mt-10 rounded-2xl border border-surface-border bg-white p-6">
-          <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-muted">
+          <h5 className="mb-3 text-xs font-semibold uppercase tracking-wider text-ink-muted">
             MLS Disclosure
           </h5>
-          <div className="space-y-1.5 text-xs leading-relaxed text-ink-muted">
+          <div className="space-y-2 text-xs leading-relaxed text-ink-muted">
             <p>
-              Listing information is provided by Bright MLS and is deemed reliable but not
-              guaranteed.
+              The data relating to real estate for sale on this website appears in part through the
+              BRIGHT Internet Data Exchange program, a voluntary cooperative exchange of property
+              listing data between licensed real estate brokerage firms in which Real Broker LLC
+              participates, and is provided by BRIGHT through a licensing agreement.
             </p>
             <p>
-              The information provided is for personal, non-commercial use and may not be used for
-              any purpose other than identifying prospective properties consumers may be interested
-              in purchasing or renting.
+              Information Deemed Reliable But Not Guaranteed. The information provided by this
+              website is for the personal, non-commercial use of consumers and may not be used for
+              any purpose other than to identify prospective properties consumers may be interested
+              in purchasing.
             </p>
             <p>
-              Some properties which appear for sale or rent on this website may no longer be
-              available because they are under contract, have closed, or are no longer being
-              offered.
+              Some properties which appear for sale on this website may no longer be available
+              because they are under contract, have Closed or are no longer being offered for sale.
             </p>
             <p>
-              All listing data is courtesy of the listing broker and Bright MLS. Data last updated:
-              April 21, 2026 at 12:00 PM ET.
+              Some real estate firms do not participate in IDX and their listings do not appear on
+              this website. Some properties listed with participating firms do not appear on this
+              website at the request of the seller.
             </p>
-            <p className="font-medium text-ink">Brokered by Real Broker LLC.</p>
+            <p>Data last updated: {lastUpdatedFormatted}.</p>
+            <p className="font-medium text-ink">
+              Brokered by Real Broker LLC &middot; Licensed in MD, DC, and VA.
+            </p>
+            <p className="pt-1 text-ink-subtle">
+              &copy;{new Date().getFullYear()} Bright, All Rights Reserved. Bright MLS is the source
+              of this listing data and is not a real estate broker.
+            </p>
           </div>
         </div>
 

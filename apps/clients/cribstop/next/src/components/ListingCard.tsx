@@ -88,6 +88,9 @@ export default function ListingCard({ listing }: { listing: Listing }) {
           </span>
           {listing.listingType === 'rent' && <span className="text-ink-muted"> /month</span>}
         </p>
+        <p className="mt-0.5 truncate text-[11px] text-ink-subtle">
+          Listing courtesy of {listing.officeName}
+        </p>
       </div>
     </Link>
   );

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import Link from 'next/link';
 import { useApp } from '@/lib/context';
@@ -6,9 +6,11 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import CompactSearchBar from './CompactSearchBar';
 import MobileSearchSheet from './MobileSearchSheet';
+import MobileSearchPill from './MobileSearchPill';
 import { Home, KeyRound } from 'lucide-react';
+import AppsDropdown from './AppsDropdown';
 
-export default function Header() {
+export default function NavBar() {
   const {
     user,
     logout,
@@ -20,11 +22,10 @@ export default function Header() {
     mobileSearchOpen,
     setMobileSearchOpen,
   } = useApp();
-  const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const router = useRouter();
 
-  // Collapse expanded search when SearchSection scrolls back into view
+  // Collapse expanded search when ScrollSentinel scrolls back into view
   useEffect(() => {
     if (!showHeaderPill) setHeaderExpanded(false);
   }, [showHeaderPill, setHeaderExpanded]);
@@ -38,6 +39,17 @@ export default function Header() {
     }
     window.dispatchEvent(new Event('searchbar:close'));
   }, [headerExpanded]);
+
+  // Collapse expanded search when user scrolls down while it's open
+  useEffect(() => {
+    if (!headerExpanded) return;
+    const startY = window.scrollY;
+    const handleScroll = () => {
+      if (window.scrollY > startY + 40) setHeaderExpanded(false);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [headerExpanded, setHeaderExpanded]);
 
   // Escape closes expanded search
   useEffect(() => {
@@ -55,26 +67,27 @@ export default function Header() {
     router.push(`${window.location.pathname}?${params.toString()}`);
   };
 
-  const showBorder = showHeaderPill && !headerExpanded;
-
   return (
     <>
       {/* Mobile full-screen search sheet */}
       {mobileSearchOpen && <MobileSearchSheet onClose={() => setMobileSearchOpen(false)} />}
 
-      {/* Click-catcher at z-[49]: below header stacking context (z-50) → panels still receive clicks; page content click = close */}
+      {/* Click-catcher: below SiteHeader stacking context → panels still receive clicks; page content click = close */}
       {headerExpanded && showHeaderPill && (
         <div className="fixed inset-0 z-[49]" onClick={() => setHeaderExpanded(false)} />
       )}
 
-      <header
-        className={`sticky top-0 z-50 bg-white overflow-visible transition-[border-color,box-shadow] duration-200 ${
-          showBorder
-            ? 'border-b border-[rgba(0,0,0,0.08)] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_2px_8px_rgba(0,0,0,0.04)]'
-            : 'border-b border-transparent shadow-none'
-        }`}
-      >
-        {/* â”€â”€ Row 1: Logo | Tabs/Pill | Nav â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <header className="relative bg-white overflow-visible">
+        {/* ── Mobile full-width pill overlay (only on mobile, only when scrolled) ── */}
+        {showHeaderPill && !headerExpanded && (
+          <div
+            className="sm:hidden absolute inset-0 z-10 bg-white flex items-center px-3"
+            style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08)' }}
+          >
+            <MobileSearchPill />
+          </div>
+        )}
+        {/* ── Logo | Tabs/Pill | Nav ── */}
         <div className="relative grid grid-cols-[auto_1fr_auto] h-16 items-center gap-2 px-3 sm:px-4 lg:px-6">
           {/* Logo */}
           <Link href="/" className="flex flex-shrink-0 items-center -ml-1">
@@ -110,8 +123,9 @@ export default function Header() {
           {/* ── Center: tabs / compact pill — absolutely centered on the page ── */}
           <div className="absolute left-1/2 -translate-x-1/2 w-[520px] max-w-[calc(100vw-160px)] h-16 flex items-center justify-center">
             {/* TABS — hidden by CSS when data-header-pill is set, shown again when expanded */}
+            {/* Hidden on mobile (sm:hidden) — tabs appear inside MobileSearchSheet instead */}
             <div
-              className="header-tabs absolute inset-0 flex items-stretch justify-center"
+              className="header-tabs absolute inset-0 hidden sm:flex items-stretch justify-center"
               style={headerExpanded ? { opacity: 1, pointerEvents: 'auto' } : undefined}
             >
               <button
@@ -130,7 +144,7 @@ export default function Header() {
                     strokeWidth={1.75}
                   />
                   <span className="hidden xs:inline">For Sale</span>
-                  <span className="xs:hidden">Buy</span>
+                  <span className="xs:hidden">For Sale</span>
                 </span>
                 {listingTab === 'for-sale' && (
                   <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-brand rounded-full" />
@@ -153,7 +167,7 @@ export default function Header() {
                     strokeWidth={1.75}
                   />
                   <span className="hidden xs:inline">For Rent</span>
-                  <span className="xs:hidden">Rent</span>
+                  <span className="xs:hidden">For Rent</span>
                 </span>
                 {listingTab === 'for-rent' && (
                   <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-brand rounded-full" />
@@ -163,7 +177,7 @@ export default function Header() {
 
             {/* COMPACT PILL — shown by CSS when data-header-pill is set on <html> */}
             <div
-              className="header-pill absolute inset-0 flex items-center justify-center transition-opacity duration-150"
+              className="header-pill absolute inset-0 flex items-center justify-center"
               style={headerExpanded ? { opacity: 0, pointerEvents: 'none' } : undefined}
             >
               <div className="hidden sm:flex items-center justify-center w-full">
@@ -172,51 +186,17 @@ export default function Header() {
                 </div>
               </div>
 
-              {/* Mobile: simplified 2-line pill */}
-              <button
-                onClick={() => setMobileSearchOpen(true)}
-                aria-label="Search"
-                className="sm:hidden flex items-center gap-3 rounded-full border border-[rgba(0,0,0,0.08)] bg-white px-3 py-1.5 shadow-[0_1px_2px_rgba(0,0,0,0.08),0_2px_8px_rgba(0,0,0,0.05)] hover:shadow-[0_2px_4px_rgba(0,0,0,0.08),0_6px_14px_rgba(0,0,0,0.08)] transition-shadow"
-              >
-                <div className="flex flex-col items-start min-w-0 flex-1">
-                  <span className="text-[13px] font-semibold text-ink leading-tight">
-                    Search homes
-                  </span>
-                  <span className="text-[11px] text-ink-muted leading-tight truncate max-w-[140px]">
-                    Anywhere · Anytime
-                  </span>
-                </div>
-                <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-brand text-white">
-                  <svg
-                    className="h-3.5 w-3.5"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2.5}
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                    />
-                  </svg>
-                </span>
-              </button>
+              {/* Mobile pill: handled by the full-width overlay above */}
+              <div className="hidden" />
             </div>
           </div>
           {/* Empty grid cell placeholder for col 2 */}
           <div />
 
           {/* Right nav */}
-          <div className="flex items-center gap-1 sm:gap-2">
-            <Link
-              href="/favorites"
-              className="hidden h-10 w-10 items-center justify-center rounded-full text-ink-muted transition hover:bg-surface-alt hover:text-ink md:flex"
-              aria-label="Saved"
-            >
-              <HeartIcon className="h-5 w-5" />
-            </Link>
-
+          <div
+            className={`relative z-20 flex items-center gap-1 ${showHeaderPill ? 'hidden sm:flex' : 'flex'}`}
+          >
             {user ? (
               <div className="relative">
                 <button
@@ -265,82 +245,28 @@ export default function Header() {
                 )}
               </div>
             ) : (
-              <>
-                <button
-                  onClick={() => openModal('login')}
-                  className="hidden rounded-full px-4 py-2 text-sm font-medium text-ink transition hover:bg-surface-alt sm:inline-flex"
-                >
-                  Sign in
-                </button>
-                <button
-                  onClick={() => openModal('signup')}
-                  className="hidden sm:inline-flex btn-primary"
-                >
-                  Sign up
-                </button>
-              </>
+              <button
+                onClick={() => openModal('login')}
+                className="flex h-10 items-center rounded-full text-sm font-medium text-ink transition hover:text-brand active:text-brand"
+              >
+                Sign in/up
+              </button>
             )}
 
-            {/* Hamburger (mobile) */}
-            <button
-              className="flex h-10 w-10 items-center justify-center rounded-full text-ink-muted hover:bg-surface-alt"
-              onClick={() => setMenuOpen(!menuOpen)}
-              aria-label="Menu"
+            <Link
+              href="/favorites"
+              className="flex h-10 w-10 items-center justify-center rounded-full text-ink transition hover:text-brand active:text-brand"
+              aria-label="Saved"
             >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                {menuOpen ? (
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                ) : (
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 8h16M4 16h16"
-                  />
-                )}
-              </svg>
-            </button>
+              <HeartIcon className="h-5 w-5" />
+            </Link>
+
+            {/* Apps waffle — rightmost, styled like btn-primary */}
+            <AppsDropdown />
           </div>
         </div>
 
-        {/* ── Row 2: absolutely positioned so header height never changes (no layout shift) ── */}
-        {showHeaderPill && headerExpanded && (
-          <div className="search-bar-slide-down absolute top-[calc(100%_+_1px)] left-0 right-0 z-50 bg-white border-b border-surface-border overflow-visible">
-            <CompactSearchBar onDone={() => setHeaderExpanded(false)} />
-          </div>
-        )}
-
-        {/* Mobile menu drawer */}
-        {menuOpen && (
-          <nav className="border-t border-surface-border bg-white px-4 py-4">
-            <div className="flex flex-col gap-3 text-sm font-medium">
-              <Link href="/search?listingType=sale" onClick={() => setMenuOpen(false)}>
-                Buy
-              </Link>
-              <Link href="/search?listingType=rent" onClick={() => setMenuOpen(false)}>
-                Rent
-              </Link>
-              <Link href="/favorites" onClick={() => setMenuOpen(false)}>
-                Saved Homes
-              </Link>
-              {!user && (
-                <button
-                  onClick={() => {
-                    openModal('login');
-                    setMenuOpen(false);
-                  }}
-                >
-                  Sign In
-                </button>
-              )}
-            </div>
-          </nav>
-        )}
+        {/* Mobile menu — now handled by AppsDropdown panel */}
       </header>
     </>
   );

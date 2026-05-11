@@ -1,5 +1,4 @@
 'use client';
-import SearchSection from '@/components/SearchSection';
 import ListingRow from '@/components/ListingRow';
 import NeighborhoodRow from '@/components/NeighborhoodRow';
 import listings from '@/lib/listings';
@@ -78,10 +77,6 @@ export default function HomePageContent() {
 
   return (
     <>
-      {/* Tab strip now lives in the Header for all screen sizes */}
-      {/* Search bar — coordinates header tabs↔pill via AppContext */}
-      <SearchSection />
-
       <ListingRow
         title={listingTab === 'for-sale' ? 'Featured homes for sale' : 'Featured homes for rent'}
         subtitle={

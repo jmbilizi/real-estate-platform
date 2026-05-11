@@ -77,10 +77,13 @@ export default function FilterModal({ isOpen, onClose, filters, onChange, result
       <div className="relative z-10 flex flex-col w-full sm:w-[95vw] sm:max-w-2xl max-h-[92dvh] rounded-t-3xl sm:rounded-2xl bg-white shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-surface-border shrink-0">
+          {/* Spacer to keep title centered */}
+          <div className="h-8 w-8" />
+          <h2 className="font-semibold text-[15px] text-ink">Filters</h2>
           <button
             onClick={onClose}
             aria-label="Close filters"
-            className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-surface-alt transition"
+            className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-surface-alt transition shrink-0"
           >
             <svg
               className="h-4 w-4 text-ink"
@@ -92,9 +95,6 @@ export default function FilterModal({ isOpen, onClose, filters, onChange, result
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
-          <h2 className="font-semibold text-[15px] text-ink">Filters</h2>
-          {/* Spacer to balance the close button */}
-          <div className="h-8 w-8" />
         </div>
 
         {/* Scrollable body */}

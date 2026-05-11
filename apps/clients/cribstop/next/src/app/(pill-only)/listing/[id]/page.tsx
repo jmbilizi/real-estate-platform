@@ -5,13 +5,12 @@ import listings from '@/lib/listings';
 import PropertyGallery from '@/components/PropertyGallery';
 import AmenityChips from '@/components/AmenityChips';
 import MortgageTeaser from '@/components/MortgageTeaser';
-import ListingCard from '@/components/ListingCard';
+import ListingRow from '@/components/ListingRow';
 import SingleListingMap from '@/components/SingleListingMap';
 import { formatDate, formatNumber, formatPrice } from '@/lib/format';
-import { useApp, useShowHeaderPill } from '@/lib/context';
+import { useApp } from '@/lib/context';
 
 export default function ListingDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  useShowHeaderPill();
   const { id } = use(params);
   const listing = listings.find((l) => l.id === id);
   const { toggleSave, isSaved } = useApp();
@@ -30,11 +29,12 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
 
   const similar = listings
     .filter((l) => l.id !== listing.id && l.propertyType === listing.propertyType)
-    .slice(0, 4);
+    .slice(0, 12);
+  const similarHref = `/search?type=${listing.listingType}&q=${encodeURIComponent(`${listing.propertyType} ${listing.city}`)}`;
   const saved = isSaved(listing.id);
 
   return (
-    <div className="px-6 py-6 sm:px-10 lg:px-20 lg:py-8">
+    <div className="px-6 pt-6 pb-28 sm:px-10 lg:px-20 lg:pt-8 lg:pb-8">
       {/* Breadcrumb */}
       <nav className="mb-4 flex items-center gap-1.5 text-xs text-ink-muted">
         <a href="/" className="hover:text-ink">
@@ -180,18 +180,6 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
               available.
             </p>
           </div>
-
-          {/* Similar homes */}
-          {similar.length > 0 && (
-            <div className="mt-12">
-              <h2 className="font-display text-xl font-bold tracking-tight">Similar Homes</h2>
-              <div className="mt-5 grid gap-6 sm:grid-cols-2">
-                {similar.map((l) => (
-                  <ListingCard key={l.id} listing={l} />
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Sidebar */}
@@ -233,6 +221,34 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
                 </svg>
                 {listing.brokerEmail}
               </p>
+              {listing.officeBrokerLeadPhone && (
+                <p className="flex items-center gap-2 text-ink-muted">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                    />
+                  </svg>
+                  <span className="text-ink-subtle">Office:</span>&nbsp;
+                  {listing.officeBrokerLeadPhone}
+                </p>
+              )}
+              {listing.officeBrokerLeadMail && (
+                <p className="flex items-center gap-2 text-ink-muted">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                    />
+                  </svg>
+                  <span className="text-ink-subtle">Office:</span>&nbsp;
+                  {listing.officeBrokerLeadMail}
+                </p>
+              )}
             </div>
             <button className="btn-primary mt-5 w-full">Schedule a Tour</button>
             <button className="btn-secondary mt-2 w-full">Message Agent</button>
@@ -259,6 +275,29 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
           {/* Mortgage */}
           {listing.listingType === 'sale' && <MortgageTeaser price={listing.price} />}
         </aside>
+      </div>
+
+      {/* Similar homes — full-bleed carousel matching homepage rows */}
+      {similar.length > 0 && (
+        <div className="-mx-6 mt-4 sm:-mx-10 lg:-mx-20">
+          <ListingRow title="Similar Homes" listings={similar} max={6} href={similarHref} />
+        </div>
+      )}
+
+      {/* Mobile sticky CTA bar — hidden on desktop where sidebar is always visible */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-surface-border bg-white/95 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] backdrop-blur-sm lg:hidden">
+        <div className="flex items-center justify-between gap-3 px-4 py-3">
+          <div className="min-w-0">
+            <p className="font-display text-lg font-extrabold leading-tight text-ink">
+              {formatPrice(listing.price, listing.listingType).split('/')[0]}
+            </p>
+            {listing.listingType === 'rent' && <p className="text-xs text-ink-muted">/month</p>}
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <button className="btn-secondary py-2 text-sm">Message</button>
+            <button className="btn-primary py-2 text-sm">Schedule Tour</button>
+          </div>
+        </div>
       </div>
     </div>
   );

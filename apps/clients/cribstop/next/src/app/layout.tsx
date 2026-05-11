@@ -1,8 +1,9 @@
 import './globals.css';
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
+import NextTopLoader from 'nextjs-toploader';
 import { AppProvider } from '@/lib/context';
-import Header from '@/components/Header';
+import SiteHeader from '@/components/SiteHeader';
 import Footer from '@/components/Footer';
 import AuthModalListener from '@/components/AuthModalListener';
 
@@ -21,8 +22,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="flex min-h-screen flex-col">
+        <NextTopLoader color="#FF385C" showSpinner={false} height={3} />
         <AppProvider>
-          <Header />
+          <SiteHeader />
           <main className="flex-1">{children}</main>
           <Footer />
           <Suspense fallback={null}>
