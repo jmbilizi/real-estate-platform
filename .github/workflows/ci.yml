@@ -554,7 +554,10 @@ jobs:
   # Trigger cluster provisioning workflow if cluster configs changed
   trigger-provision:
     needs: [detect-infra-changes]
-    if: needs.detect-infra-changes.outputs.cluster-changed == 'true'
+    if: |
+      always() &&
+      needs.detect-infra-changes.result == 'success' &&
+      needs.detect-infra-changes.outputs.cluster-changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Determine environment from branch
@@ -584,7 +587,10 @@ jobs:
   # Uses workflow_call (not workflow_dispatch) so no PAT is needed.
   trigger-image-build:
     needs: [detect-infra-changes]
-    if: needs.detect-infra-changes.outputs.images-changed == 'true'
+    if: |
+      always() &&
+      needs.detect-infra-changes.result == 'success' &&
+      needs.detect-infra-changes.outputs.images-changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Determine environment from branch
@@ -620,6 +626,8 @@ jobs:
   trigger-deploy:
     needs: [detect-infra-changes]
     if: |
+      always() &&
+      needs.detect-infra-changes.result == 'success' &&
       needs.detect-infra-changes.outputs.deploy-changed == 'true' &&
       needs.detect-infra-changes.outputs.cluster-changed != 'true' &&
       needs.detect-infra-changes.outputs.images-changed != 'true'
