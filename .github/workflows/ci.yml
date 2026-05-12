@@ -503,56 +503,102 @@ jobs:
         with:
           fetch-depth: 0 # Full history for accurate multi-commit diff
 
-      - name: Detect infrastructure changes
+      # Detect first push (github.event.before is all zeros) — dorny/paths-filter
+      # cannot diff against a non-existent base, so we skip it and treat everything as changed.
+      - name: Detect first push
+        id: first-push
+        shell: bash
+        run: |
+          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ] || [ "${{ github.event_name }}" = "workflow_call" ]; then
+            echo "is_first=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_first=false" >> $GITHUB_OUTPUT
+          fi
+
+      # Use dorny/paths-filter (same library as detect-languages) for reliable
+      # file-change detection across multi-commit pushes. The custom bash approach
+      # silently produces empty diffs in certain edge cases (git cat-file failure,
+      # detached HEAD, etc.), causing all trigger jobs to be incorrectly skipped.
+      - name: Detect file changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        if: steps.first-push.outputs.is_first == 'false'
+        with:
+          base: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+          ref: ${{ github.sha }}
+          filters: |
+            cluster:
+              - 'infra/k8s/hetzner/**/cluster/**'
+              - '.github/workflows/provision-hetzner-k8s-cluster.yml'
+              - '.github/actions/provision-hetzner-k8s-cluster/**'
+            deploy:
+              - 'infra/k8s/base/**'
+              - 'infra/deploy-control.yaml'
+              - 'infra/smart-deployment-config.yaml'
+              - 'infra/k8s/hetzner/**/patches/**'
+              - '.github/workflows/deploy-k8s-resources.yml'
+              - '.github/actions/deploy-k8s-resources/**'
+              - '.github/actions/load-deploy-control/**'
+              - '.github/workflows/ci.yml'
+            images:
+              - 'apps/**/Dockerfile'
+              - 'apps/**/*.cs'
+              - 'apps/**/*.ts'
+              - 'apps/**/*.py'
+              - 'apps/**/*.js'
+              - 'apps/**/*.csproj'
+              - 'apps/**/package.json'
+              - 'apps/**/pyproject.toml'
+              - 'apps/**/requirements.txt'
+              - 'apps/api-gateway/Configuration/**/*.json'
+              - 'libs/**'
+              - 'tools/docker/**'
+              - '.github/workflows/build-push-images.yml'
+              - '.github/actions/build-push-image/**'
+              - 'pnpm-lock.yaml'
+              - 'uv.lock'
+              - 'pyproject.toml'
+              - 'Directory.Build.props'
+              - 'Directory.Build.targets'
+              - 'Directory.Packages.props'
+              - 'nuget.config'
+              - 'global.json'
+              - 'infra/k8s/base/deployments/**'
+              - 'infra/k8s/hetzner/**/patches/deployments/**'
+
+      - name: Set outputs and extract manifest services
         id: detect
         shell: bash
         run: |
-          # Get changed files across ALL pushed commits (not just the last one).
-          # github.event.before = SHA the branch pointed to before this push.
-          # github.sha          = SHA the branch points to after this push.
-          # This correctly handles single-commit and multi-commit pushes alike.
-          BEFORE="${{ github.event.before }}"
-          if [ "$BEFORE" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE" 2>/dev/null; then
-            FILES=$(git diff --name-only "$BEFORE" "${{ github.sha }}")
+          is_first="${{ steps.first-push.outputs.is_first }}"
+
+          if [ "$is_first" = "true" ]; then
+            # First push — treat everything as changed so full validation runs
+            cluster=true; deploy=true; images=true
+            echo "ℹ️  First push or workflow_call — treating all flags as changed"
           else
-            # First push to branch or force-push that rewrote the base — fall back to parent
-            FILES=$(git diff --name-only HEAD^ HEAD)
+            cluster="${{ steps.filter.outputs.cluster }}"
+            deploy="${{ steps.filter.outputs.deploy }}"
+            images="${{ steps.filter.outputs.images }}"
           fi
 
-          echo "Changed files:"
-          echo "$FILES"
+          [ "$cluster" = "true" ] && echo "✅ Cluster configuration changes detected"
+          [ "$deploy" = "true" ] && echo "✅ Deploy resource changes detected"
+          [ "$images" = "true" ] && echo "✅ Container image changes detected"
 
-          cluster=false
-          deploy=false
-          images=false
+          # Extract targeted service names from changed deployment manifests.
+          # Uses git diff directly (scope is narrow: only .deployment.yaml files).
           manifest_services=""
-
-          # Check for cluster configuration changes
-          if echo "$FILES" | grep -E -q '^infra/k8s/hetzner/.*/cluster/|^\.github/workflows/provision-hetzner-k8s-cluster\.yml|^\.github/actions/provision-hetzner-k8s-cluster/'; then
-            cluster=true
-            echo "✅ Cluster configuration changes detected"
+          if [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ] && git cat-file -e "${{ github.event.before }}" 2>/dev/null; then
+            DEPLOY_FILES=$(git diff --name-only "${{ github.event.before }}" HEAD | grep -E '^infra/k8s/(base|hetzner/.*/patches)/deployments/.*\.deployment\.yaml$' || true)
+          else
+            DEPLOY_FILES=$(git diff --name-only HEAD^ HEAD | grep -E '^infra/k8s/(base|hetzner/.*/patches)/deployments/.*\.deployment\.yaml$' || true)
           fi
-
-          # Check for deploy resource changes (excluding cluster paths)
-          if echo "$FILES" | grep -E -q '^infra/k8s/base/|^infra/deploy-control\.yaml|^infra/smart-deployment-config\.yaml|^infra/k8s/hetzner/.*/patches/|^\.github/workflows/deploy-k8s-resources\.yml|^\.github/actions/deploy-k8s-resources/|^\.github/actions/load-deploy-control/|^\.github/workflows/ci\.yml'; then
-            deploy=true
-            echo "✅ Deploy resource changes detected"
-          fi
-
-          # Extract targeted service names from changed deployment manifests
-          DEPLOY_FILES=$(echo "$FILES" | grep -E '^infra/k8s/(base|hetzner/.*/patches)/deployments/.*\.deployment\.yaml$' || true)
           if [ -n "$DEPLOY_FILES" ]; then
             manifest_services=$(echo "$DEPLOY_FILES" | sed 's|.*/||; s|\.deployment\.yaml$||' | sort -u | paste -sd ',' -)
             echo "✅ Deployment manifest services detected: $manifest_services"
           fi
 
-          # Check for container image changes (Dockerfile, source code, build scripts, or deployment-manifest changes)
-          if echo "$FILES" | grep -E -q '^apps/.*/Dockerfile|^apps/.*\.(cs|ts|py|js)$|^apps/.*\.csproj$|^apps/.*/package\.json$|^apps/.*/pyproject\.toml$|^apps/.*/requirements\.txt$|^apps/api-gateway/Configuration/.*\.(json)$|^libs/|^tools/docker/|^\.github/workflows/build-push-images\.yml|^\.github/actions/build-push-image/|^pnpm-lock\.yaml$|^uv\.lock$|^pyproject\.toml$|^Directory\.Build\.(props|targets)$|^Directory\.Packages\.props$|^nuget\.config$|^global\.json$|^infra/k8s/base/deployments/|^infra/k8s/hetzner/.*/patches/deployments/'; then
-            images=true
-            echo "✅ Container image changes detected"
-          fi
-
-          # Determine environment based on branch
           BRANCH="${{ github.ref_name }}"
 
           echo "cluster-changed=$cluster" >> $GITHUB_OUTPUT
