@@ -1206,11 +1206,13 @@ export default function CompactSearchBar({
 
   function occupantSummary(occ: {
     adults: number;
+    seniors: number;
+    teens: number;
     children: number;
     infants: number;
     pets: number;
   }): string {
-    const total = occ.adults + occ.children;
+    const total = occ.adults + occ.seniors + occ.teens + occ.children;
     if (total === 0 && occ.infants === 0 && occ.pets === 0) return '';
     const parts: string[] = [];
     if (total > 0) parts.push(`${total} occupant${total !== 1 ? 's' : ''}`);
@@ -1322,7 +1324,7 @@ export default function CompactSearchBar({
       setSuggestions([]);
       setDateRange({ start: '', end: '', flexibility: 'exact' });
       setRangePickStep('start');
-      setOccupants({ adults: 0, children: 0, infants: 0, pets: 0 });
+      setOccupants({ adults: 0, seniors: 0, teens: 0, children: 0, infants: 0, pets: 0 });
       setDescription('');
       setActivePanel('where');
     };
@@ -1340,7 +1342,7 @@ export default function CompactSearchBar({
       if (dateRange.start) params.set('moveIn', dateRange.start);
       if (dateRange.end && dateRange.end !== dateRange.start)
         params.set('moveInEnd', dateRange.end);
-      const total = occupants.adults + occupants.children;
+      const total = occupants.adults + occupants.seniors + occupants.teens + occupants.children;
       if (total > 0) params.set('guests', String(total));
       router.push(`/search?${params.toString()}`);
       onClose?.();
@@ -1766,7 +1768,9 @@ export default function CompactSearchBar({
                 <div className="mt-3 space-y-4">
                   {(
                     [
-                      { key: 'adults', label: 'Adults', sub: 'Ages 13+' },
+                      { key: 'adults', label: 'Adults', sub: 'Ages 18–54' },
+                      { key: 'seniors', label: 'Seniors', sub: 'Ages 55+' },
+                      { key: 'teens', label: 'Teens', sub: 'Ages 13–17' },
                       { key: 'children', label: 'Children', sub: 'Ages 2–12' },
                       { key: 'infants', label: 'Infants', sub: 'Under 2' },
                       { key: 'pets', label: 'Pets', sub: 'Bringing a service animal?' },
@@ -2385,57 +2389,67 @@ export default function CompactSearchBar({
         {/* WHO panel */}
         {activePanel === 'who' && (
           <div
-            className="search-panel-enter absolute z-[200] bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-surface-border p-5 w-full sm:w-[340px] sm:right-16"
+            className="search-panel-enter absolute left-0 right-0 z-[200] bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-surface-border"
             style={{ top: 'calc(100% + 6px)' }}
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <p className="text-[13px] text-ink-muted mb-2">How many people will live here?</p>
-            {(
-              [
-                { key: 'adults', label: 'Adults', desc: '18 or above' },
-                { key: 'children', label: 'Children', desc: 'Ages 2?17' },
-                { key: 'infants', label: 'Infants', desc: 'Under 2' },
-                { key: 'pets', label: 'Pets', desc: 'Bringing pets?' },
-              ] as const
-            ).map(({ key, label, desc }, i, arr) => (
-              <div
-                key={key}
-                className={`flex items-center justify-between py-4 ${i < arr.length - 1 ? 'border-b border-surface-border' : ''}`}
-              >
-                <div>
-                  <div className="font-semibold text-[15px]">{label}</div>
-                  <div className="text-[13px] text-ink-muted">{desc}</div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    disabled={occupants[key] === 0}
-                    onClick={() =>
-                      setOccupants({ ...occupants, [key]: Math.max(0, occupants[key] - 1) })
-                    }
-                    className={`h-8 w-8 rounded-full border flex items-center justify-center text-lg transition-colors ${occupants[key] === 0 ? 'border-[rgba(0,0,0,0.12)] text-[rgba(0,0,0,0.2)] cursor-default' : 'border-[rgba(0,0,0,0.4)] text-ink hover:border-ink'}`}
+            <div className="p-5">
+              <p className="text-[13px] text-ink-muted mb-4">How many people will live here?</p>
+              <div className="grid grid-cols-2 gap-x-8">
+                {(
+                  [
+                    { key: 'seniors', label: 'Seniors', desc: 'Ages 55+' },
+                    { key: 'adults', label: 'Adults', desc: 'Ages 18–54' },
+                    { key: 'teens', label: 'Teens', desc: 'Ages 13–17' },
+                    { key: 'children', label: 'Children', desc: 'Ages 2–12' },
+                    { key: 'infants', label: 'Infants', desc: 'Under 2' },
+                    { key: 'pets', label: 'Pets', desc: 'Bringing pets?' },
+                  ] as const
+                ).map(({ key, label, desc }, i) => (
+                  <div
+                    key={key}
+                    className={`flex items-center justify-between py-4 ${
+                      i < 4 ? 'border-b border-surface-border' : ''
+                    }`}
                   >
-                    -
-                  </button>
-                  <span className="w-4 text-center text-[15px] font-medium">{occupants[key]}</span>
-                  <button
-                    type="button"
-                    onClick={() => setOccupants({ ...occupants, [key]: occupants[key] + 1 })}
-                    className="h-8 w-8 rounded-full border border-[rgba(0,0,0,0.4)] flex items-center justify-center text-lg hover:border-ink transition-colors"
-                  >
-                    +
-                  </button>
-                </div>
+                    <div>
+                      <div className="font-semibold text-[15px]">{label}</div>
+                      <div className="text-[13px] text-ink-muted">{desc}</div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        disabled={occupants[key] === 0}
+                        onClick={() =>
+                          setOccupants({ ...occupants, [key]: Math.max(0, occupants[key] - 1) })
+                        }
+                        className={`h-8 w-8 rounded-full border flex items-center justify-center text-lg transition-colors ${occupants[key] === 0 ? 'border-[rgba(0,0,0,0.12)] text-[rgba(0,0,0,0.2)] cursor-default' : 'border-[rgba(0,0,0,0.4)] text-ink hover:border-ink'}`}
+                      >
+                        -
+                      </button>
+                      <span className="w-4 text-center text-[15px] font-medium">
+                        {occupants[key]}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setOccupants({ ...occupants, [key]: occupants[key] + 1 })}
+                        className="h-8 w-8 rounded-full border border-[rgba(0,0,0,0.4)] flex items-center justify-center text-lg hover:border-ink transition-colors"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-            <div className="mt-4 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setActivePanel(null)}
-                className="rounded-full bg-ink text-white px-6 py-2 text-sm font-semibold hover:bg-ink/90"
-              >
-                Done
-              </button>
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setActivePanel(null)}
+                  className="rounded-full bg-ink text-white px-6 py-2 text-sm font-semibold hover:bg-ink/90"
+                >
+                  Done
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -3098,64 +3112,72 @@ export default function CompactSearchBar({
           {/* -- PANEL: WHO (occupant steppers) ------------------------------ */}
           {activePanel === 'who' && (
             <div
-              className="search-panel-enter absolute left-0 right-0 sm:left-auto sm:right-16 sm:w-[360px] z-50 bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-surface-border p-6"
-              style={{ top: 'calc(100% + 6px)', right: '64px' }}
+              className="search-panel-enter absolute left-0 right-0 z-50 bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-surface-border"
+              style={{ top: 'calc(100% + 6px)' }}
               onMouseDown={(e) => e.stopPropagation()}
             >
-              <p className="text-[13px] text-ink-muted mb-2">How many people will live here?</p>
-              {(
-                [
-                  { key: 'adults' as const, label: 'Adults', desc: '18 or above' },
-                  { key: 'children' as const, label: 'Children', desc: 'Ages 2?17' },
-                  { key: 'infants' as const, label: 'Infants', desc: 'Under 2' },
-                  { key: 'pets' as const, label: 'Pets', desc: 'Bringing pets?' },
-                ] as const
-              ).map(({ key, label, desc }, i, arr) => (
-                <div
-                  key={key}
-                  className={`flex items-center justify-between py-4 ${i < arr.length - 1 ? 'border-b border-surface-border' : ''}`}
-                >
-                  <div>
-                    <div className="font-semibold text-[15px] text-ink">{label}</div>
-                    <div className="text-[13px] text-ink-muted">{desc}</div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      disabled={occupants[key] === 0}
-                      onClick={() =>
-                        setOccupants({ ...occupants, [key]: Math.max(0, occupants[key] - 1) })
-                      }
-                      className={`h-8 w-8 rounded-full border flex items-center justify-center text-lg transition-colors
-                        ${
-                          occupants[key] === 0
-                            ? 'border-[rgba(0,0,0,0.12)] text-[rgba(0,0,0,0.2)] cursor-default'
-                            : 'border-[rgba(0,0,0,0.4)] text-ink hover:border-ink cursor-pointer'
-                        }`}
+              <div className="p-6">
+                <p className="text-[13px] text-ink-muted mb-4">How many people will live here?</p>
+                <div className="grid grid-cols-2 gap-x-8">
+                  {(
+                    [
+                      { key: 'seniors' as const, label: 'Seniors', desc: 'Ages 55+' },
+                      { key: 'adults' as const, label: 'Adults', desc: 'Ages 18–54' },
+                      { key: 'teens' as const, label: 'Teens', desc: 'Ages 13–17' },
+                      { key: 'children' as const, label: 'Children', desc: 'Ages 2–12' },
+                      { key: 'infants' as const, label: 'Infants', desc: 'Under 2' },
+                      { key: 'pets' as const, label: 'Pets', desc: 'Bringing pets?' },
+                    ] as const
+                  ).map(({ key, label, desc }, i) => (
+                    <div
+                      key={key}
+                      className={`flex items-center justify-between py-4 ${
+                        i < 4 ? 'border-b border-surface-border' : ''
+                      }`}
                     >
-                      -
-                    </button>
-                    <span className="w-4 text-center text-[15px] font-medium text-ink">
-                      {occupants[key]}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setOccupants({ ...occupants, [key]: occupants[key] + 1 })}
-                      className="h-8 w-8 rounded-full border border-[rgba(0,0,0,0.4)] text-ink flex items-center justify-center text-lg hover:border-ink transition-colors cursor-pointer"
-                    >
-                      +
-                    </button>
-                  </div>
+                      <div>
+                        <div className="font-semibold text-[15px] text-ink">{label}</div>
+                        <div className="text-[13px] text-ink-muted">{desc}</div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          disabled={occupants[key] === 0}
+                          onClick={() =>
+                            setOccupants({ ...occupants, [key]: Math.max(0, occupants[key] - 1) })
+                          }
+                          className={`h-8 w-8 rounded-full border flex items-center justify-center text-lg transition-colors
+                            ${
+                              occupants[key] === 0
+                                ? 'border-[rgba(0,0,0,0.12)] text-[rgba(0,0,0,0.2)] cursor-default'
+                                : 'border-[rgba(0,0,0,0.4)] text-ink hover:border-ink cursor-pointer'
+                            }`}
+                        >
+                          -
+                        </button>
+                        <span className="w-4 text-center text-[15px] font-medium text-ink">
+                          {occupants[key]}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setOccupants({ ...occupants, [key]: occupants[key] + 1 })}
+                          className="h-8 w-8 rounded-full border border-[rgba(0,0,0,0.4)] text-ink flex items-center justify-center text-lg hover:border-ink transition-colors cursor-pointer"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-              <div className="mt-4 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setActivePanel(null)}
-                  className="rounded-full bg-ink text-white px-6 py-2 text-sm font-semibold hover:bg-ink/90 transition-colors"
-                >
-                  Done
-                </button>
+                <div className="mt-4 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setActivePanel(null)}
+                    className="rounded-full bg-ink text-white px-6 py-2 text-sm font-semibold hover:bg-ink/90 transition-colors"
+                  >
+                    Done
+                  </button>
+                </div>
               </div>
             </div>
           )}

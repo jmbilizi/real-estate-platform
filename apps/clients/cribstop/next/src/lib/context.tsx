@@ -46,9 +46,18 @@ interface AppContextValue {
     end: string;
     flexibility: 'exact' | '1' | '3' | '7' | '14' | '30' | '60' | '90' | '180' | '365' | '730';
   }) => void;
-  searchOccupants: { adults: number; children: number; infants: number; pets: number };
+  searchOccupants: {
+    adults: number;
+    seniors: number;
+    teens: number;
+    children: number;
+    infants: number;
+    pets: number;
+  };
   setSearchOccupants: (v: {
     adults: number;
+    seniors: number;
+    teens: number;
     children: number;
     infants: number;
     pets: number;
@@ -79,6 +88,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }>({ start: '', end: '', flexibility: 'exact' });
   const [searchOccupants, setSearchOccupants] = useState({
     adults: 0,
+    seniors: 0,
+    teens: 0,
     children: 0,
     infants: 0,
     pets: 0,
