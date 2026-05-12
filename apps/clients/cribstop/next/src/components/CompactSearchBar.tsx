@@ -2398,7 +2398,7 @@ export default function CompactSearchBar({
               <div className="grid grid-cols-2 gap-x-8">
                 {(
                   [
-                    { key: 'seniors', label: 'Older adults', desc: '55+' },
+                    { key: 'seniors', label: 'Older adults', desc: 'Ages 55+' },
                     { key: 'adults', label: 'Adults', desc: 'Ages 18–54' },
                     { key: 'teens', label: 'Teens', desc: 'Ages 13–17' },
                     { key: 'children', label: 'Children', desc: 'Ages 2–12' },
