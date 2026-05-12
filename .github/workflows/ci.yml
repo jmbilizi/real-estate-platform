@@ -548,6 +548,8 @@ jobs:
               - 'apps/**/*.py'
               - 'apps/**/*.js'
               - 'apps/**/*.jsx'
+              - 'apps/**/*.css'
+              - 'apps/**/*.scss'
               - 'apps/**/*.csproj'
               - 'apps/**/package.json'
               - 'apps/**/pyproject.toml'
@@ -629,7 +631,7 @@ jobs:
 
       - name: Trigger cluster provisioning
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
         run: |
           echo "🚀 Triggering cluster provisioning for ${{ steps.env.outputs.environment }} environment..."
           gh workflow run provision-hetzner-k8s-cluster.yml \
@@ -658,7 +660,7 @@ jobs:
 
       - name: Trigger image build
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
         run: |
           echo "🐳 Triggering container image build for ${{ steps.env.outputs.environment }} environment..."
           MANIFEST_SERVICES="${{ needs.detect-infra-changes.outputs.manifest_services }}"
@@ -812,7 +814,7 @@ jobs:
       - name: Trigger resource deployment
         if: steps.detect-services.outputs.deploy_strategy != 'none'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
         run: |
           STRATEGY="${{ steps.detect-services.outputs.deploy_strategy }}"
           SERVICES="${{ steps.detect-services.outputs.services }}"
