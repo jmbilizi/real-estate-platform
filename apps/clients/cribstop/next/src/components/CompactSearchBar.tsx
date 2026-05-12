@@ -2386,7 +2386,7 @@ export default function CompactSearchBar({
           />
         )}
 
-        {/* WHO panel — occupant stepper grid */}
+        {/* WHO panel — occupant stepper grid (6 categories) */}
         {activePanel === 'who' && (
           <div
             className="search-panel-enter absolute left-0 right-0 z-[200] bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-surface-border"
