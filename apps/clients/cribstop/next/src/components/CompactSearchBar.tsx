@@ -1769,7 +1769,7 @@ export default function CompactSearchBar({
                   {(
                     [
                       { key: 'adults', label: 'Adults', sub: 'Ages 18–54' },
-                      { key: 'seniors', label: 'Older adults', sub: 'Ages 55+' },
+                      { key: 'seniors', label: 'Older adults', sub: '55+' },
                       { key: 'teens', label: 'Teens', sub: 'Ages 13–17' },
                       { key: 'children', label: 'Children', sub: 'Ages 2–12' },
                       { key: 'infants', label: 'Infants', sub: 'Under 2' },
@@ -2398,7 +2398,7 @@ export default function CompactSearchBar({
               <div className="grid grid-cols-2 gap-x-8">
                 {(
                   [
-                    { key: 'seniors', label: 'Older adults', desc: 'Ages 55+' },
+                    { key: 'seniors', label: 'Older adults', desc: '55+' },
                     { key: 'adults', label: 'Adults', desc: 'Ages 18–54' },
                     { key: 'teens', label: 'Teens', desc: 'Ages 13–17' },
                     { key: 'children', label: 'Children', desc: 'Ages 2–12' },
@@ -3121,7 +3121,7 @@ export default function CompactSearchBar({
                 <div className="grid grid-cols-2 gap-x-8">
                   {(
                     [
-                      { key: 'seniors' as const, label: 'Older adults', desc: 'Ages 55+' },
+                      { key: 'seniors' as const, label: 'Older adults', desc: '55+' },
                       { key: 'adults' as const, label: 'Adults', desc: 'Ages 18–54' },
                       { key: 'teens' as const, label: 'Teens', desc: 'Ages 13–17' },
                       { key: 'children' as const, label: 'Children', desc: 'Ages 2–12' },
