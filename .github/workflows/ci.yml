@@ -25,10 +25,9 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  # Do NOT cancel in-progress runs. Cancelling CI before it reaches detect-infra-changes
-  # means image builds and deploys are never triggered for intermediate commits.
-  # Runs queue up and execute in order instead.
-  cancel-in-progress: false
+  # Cancel in-progress runs when a new push arrives. The latest commit builds;
+  # intermediate commits are dropped. This prevents job queue exhaustion.
+  cancel-in-progress: true
 
 jobs:
   setup-base:
