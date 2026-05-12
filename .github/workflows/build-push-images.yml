@@ -27,6 +27,11 @@ on:
         required: false
         type: boolean
         default: true
+      before_sha:
+        description: "SHA before the push (github.event.before). Used for accurate affected detection across multi-commit pushes."
+        required: false
+        type: string
+        default: ""
   # Manual trigger
   workflow_dispatch:
     inputs:
@@ -51,6 +56,10 @@ on:
         required: false
         type: boolean
         default: true
+      before_sha:
+        description: "SHA before the push (github.event.before). Used for accurate affected detection across multi-commit pushes."
+        required: false
+        default: ""
   # Validate on PRs (build only, no push)
   pull_request:
     branches:
@@ -213,10 +222,14 @@ jobs:
               PROJECTS=$(pnpm exec nx show projects --withTarget=container-build)
               echo "🔍 DEBUG: All projects result: '$PROJECTS'"
             elif [ "${{ inputs.projects }}" = "affected" ]; then
-              # Determine base for affected detection
-              # For CI-triggered workflow_dispatch (and workflow_call), compare against the last commit.
-              # Manual workflow_dispatch runs can use 'projects=all' or an explicit project list.
-              BASE="HEAD~1"
+              # Determine base for affected detection.
+              # Prefer before_sha (the full push range) passed from CI so multi-commit pushes
+              # are handled correctly. Fall back to HEAD~1 for manual workflow_dispatch runs.
+              if [ -n "${{ inputs.before_sha }}" ] && git cat-file -e "${{ inputs.before_sha }}" 2>/dev/null; then
+                BASE="${{ inputs.before_sha }}"
+              else
+                BASE="HEAD~1"
+              fi
               echo "🔍 DEBUG: Using base: $BASE"
               echo "🔍 DEBUG: Running: pnpm exec nx show projects --affected --base=$BASE --withTarget=container-build"
               PROJECTS=$(pnpm exec nx show projects --affected --base=$BASE --withTarget=container-build)

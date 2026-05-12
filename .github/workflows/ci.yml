@@ -24,7 +24,10 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Do NOT cancel in-progress runs. Cancelling CI before it reaches detect-infra-changes
+  # means image builds and deploys are never triggered for intermediate commits.
+  # Runs queue up and execute in order instead.
+  cancel-in-progress: false
 
 jobs:
   setup-base:
@@ -618,7 +621,8 @@ jobs:
             --field environment=${{ steps.env.outputs.environment }} \
             --field projects=affected \
             --field additional_projects="$MANIFEST_SERVICES" \
-            --field push=true
+            --field push=true \
+            --field before_sha=${{ github.event.before }}
           echo "✅ Image build workflow triggered"
 
   # Trigger deploy workflow if ONLY deploy resources changed (not images)
