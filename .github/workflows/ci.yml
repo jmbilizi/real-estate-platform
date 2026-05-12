@@ -21,6 +21,7 @@ permissions:
   actions: write # Required to trigger provision/deploy/build-images workflows
   contents: read
   packages: write # Required for container image pushes
+  security-events: write # Required for Trivy scan upload in build-push-images
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -498,6 +499,7 @@ jobs:
       images-changed: ${{ steps.detect.outputs.images-changed }}
       manifest_services: ${{ steps.detect.outputs.manifest_services }}
       branch: ${{ steps.detect.outputs.branch }}
+      environment: ${{ steps.detect.outputs.environment }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -604,12 +606,16 @@ jobs:
           fi
 
           BRANCH="${{ github.ref_name }}"
+          if [ "$BRANCH" = "main" ]; then ENV="prod"
+          elif [ "$BRANCH" = "test" ]; then ENV="test"
+          else ENV="dev"; fi
 
           echo "cluster-changed=$cluster" >> $GITHUB_OUTPUT
           echo "deploy-changed=$deploy" >> $GITHUB_OUTPUT
           echo "images-changed=$images" >> $GITHUB_OUTPUT
           echo "manifest_services=$manifest_services" >> $GITHUB_OUTPUT
           echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
 
   # Trigger cluster provisioning workflow if cluster configs changed
   trigger-provision:
@@ -640,40 +646,19 @@ jobs:
             --field environment=${{ steps.env.outputs.environment }}
           echo "✅ Cluster provisioning workflow triggered"
 
-  # Trigger container image build workflow if source code changed
+  # Build container images when source code changed.
+  # Uses workflow_call (not workflow_dispatch) so no PAT is needed.
   trigger-image-build:
     needs: [detect-infra-changes]
     if: needs.detect-infra-changes.outputs.images-changed == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Determine environment from branch
-        id: env
-        run: |
-          BRANCH="${{ needs.detect-infra-changes.outputs.branch }}"
-          if [ "$BRANCH" = "main" ]; then
-            echo "environment=prod" >> $GITHUB_OUTPUT
-          elif [ "$BRANCH" = "test" ]; then
-            echo "environment=test" >> $GITHUB_OUTPUT
-          else
-            echo "environment=dev" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Trigger image build
-        env:
-          GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
-        run: |
-          echo "🐳 Triggering container image build for ${{ steps.env.outputs.environment }} environment..."
-          MANIFEST_SERVICES="${{ needs.detect-infra-changes.outputs.manifest_services }}"
-
-          gh workflow run build-push-images.yml \
-            --repo ${{ github.repository }} \
-            --ref ${{ github.ref }} \
-            --field environment=${{ steps.env.outputs.environment }} \
-            --field projects=affected \
-            --field additional_projects="$MANIFEST_SERVICES" \
-            --field push=true \
-            --field before_sha=${{ github.event.before }}
-          echo "✅ Image build workflow triggered"
+    uses: ./.github/workflows/build-push-images.yml
+    with:
+      environment: ${{ needs.detect-infra-changes.outputs.environment }}
+      projects: "affected"
+      additional_projects: ${{ needs.detect-infra-changes.outputs.manifest_services }}
+      push: true
+      before_sha: ${{ github.event.before }}
+    secrets: inherit
 
   # Trigger deploy workflow if ONLY deploy resources changed (not images)
   # If images also changed, build-push-images workflow will trigger deploy after images are ready
