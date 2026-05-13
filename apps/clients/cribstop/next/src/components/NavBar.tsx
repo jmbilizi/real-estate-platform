@@ -92,7 +92,7 @@ export default function NavBar() {
           {/* Logo */}
           <Link href="/" className="flex flex-shrink-0 items-center -ml-1">
             <span className="flex items-center gap-0">
-              <svg
+              {/* <svg
                 viewBox="0 0 100 140"
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
@@ -114,9 +114,17 @@ export default function NavBar() {
                   <circle cx="50" cy="45" r="24" fill="currentColor" />
                   <polygon points="50,135 35,70 65,70" fill="#FF385C" />
                 </g>
-              </svg>
-              <span className="font-display text-lg font-bold">CRIB</span>
-              <span className="font-display text-lg font-bold text-brand">STOP</span>
+              </svg> */}
+
+              <span className="flex flex-col">
+                <span className="font-display text-xl font-bold leading-tight">
+                  Real Broker, LLC
+                </span>
+                <span className="flex gap-1">
+                  <p className="font-display text-xs leading-tight">CRIB</p>
+                  <p className="font-display text-xs text-brand leading-tight">STOP</p>
+                </span>
+              </span>
             </span>
           </Link>
 
