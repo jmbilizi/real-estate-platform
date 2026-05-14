@@ -116,6 +116,9 @@ export default function NavBar() {
                 </g>
               </svg> */}
 
+              {/* <span className="font-display text-lg font-bold">CRIB</span>
+              <span className="font-display text-lg font-bold text-brand">STOP</span> */}
+
               <span className="flex flex-col">
                 <span className="font-display text-xl font-bold leading-tight">
                   Real Broker, LLC
