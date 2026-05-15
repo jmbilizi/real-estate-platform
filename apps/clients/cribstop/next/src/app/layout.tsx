@@ -6,10 +6,11 @@ import { AppProvider } from '@/lib/context';
 import SiteHeader from '@/components/SiteHeader';
 import Footer from '@/components/Footer';
 import AuthModalListener from '@/components/AuthModalListener';
+import { BRAND } from '@/lib/brand';
 
 export const metadata: Metadata = {
-  title: 'Cribstop.com – Find Your Next Home',
-  description: 'Browse homes for sale and rent in the DMV area. Powered by Real Broker LLC.',
+  title: `${BRAND.brokerage} — ${BRAND.titleSuffix}`,
+  description: BRAND.metaDescription,
 };
 
 export default function RootLayout({

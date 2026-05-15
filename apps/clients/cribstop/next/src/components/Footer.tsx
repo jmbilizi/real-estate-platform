@@ -1,4 +1,5 @@
 import listings from '@/lib/listings';
+import { BRAND } from '@/lib/brand';
 
 export default function Footer() {
   const lastUpdated = listings.reduce(
@@ -48,7 +49,7 @@ export default function Footer() {
           <div>
             <h4 className="mb-3 text-sm font-semibold text-ink">Company</h4>
             <ul className="space-y-2 text-sm text-ink-muted">
-              <li>Real Broker LLC</li>
+              <li>{BRAND.brokerageShort}</li>
               <li>
                 <a href="/about" className="hover:text-ink">
                   About Us
@@ -127,7 +128,7 @@ export default function Footer() {
             </p>
             <p>Data last updated: {lastUpdatedFormatted}.</p>
             <p className="font-medium text-ink">
-              Brokered by Real Broker LLC &middot; Licensed in MD, DC, and VA.
+              Brokered by {BRAND.brokerageShort} &middot; Licensed in {BRAND.licensedStates}.
             </p>
             <p className="pt-1 text-ink-subtle">
               &copy;{new Date().getFullYear()} Bright, All Rights Reserved. Bright MLS is the source
@@ -139,8 +140,8 @@ export default function Footer() {
         {/* Bottom bar */}
         <div className="mt-8 flex flex-col items-center justify-between gap-4 border-t border-surface-border pt-6 text-xs text-ink-muted sm:flex-row">
           <p>
-            &copy; {new Date().getFullYear()} Cribstop.com &middot; Real Broker LLC. All rights
-            reserved.
+            &copy; {new Date().getFullYear()} {BRAND.brokerageShort}. All rights reserved. |{' '}
+            {BRAND.siteDomain}
           </p>
           <p>
             <a

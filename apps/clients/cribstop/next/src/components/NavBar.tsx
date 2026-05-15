@@ -9,6 +9,7 @@ import MobileSearchSheet from './MobileSearchSheet';
 import MobileSearchPill from './MobileSearchPill';
 import { Home, KeyRound } from 'lucide-react';
 import AppsDropdown from './AppsDropdown';
+import { BRAND } from '@/lib/brand';
 
 export default function NavBar() {
   const {
@@ -121,9 +122,9 @@ export default function NavBar() {
 
               <span className="flex flex-col">
                 <span className="font-display text-xl font-bold leading-tight">
-                  Real Broker, LLC
+                  {BRAND.brokerage}
                 </span>
-                <span className="flex gap-1">
+                <span className="flex gap-1 mt-1">
                   <p className="font-display text-xs leading-tight">CRIB</p>
                   <p className="font-display text-xs text-brand leading-tight">STOP</p>
                 </span>

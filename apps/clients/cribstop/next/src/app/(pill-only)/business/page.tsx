@@ -1,3 +1,5 @@
+import { BRAND } from '@/lib/brand';
+
 export default function BusinessPage() {
   return (
     <div className="mx-auto max-w-4xl px-4 py-16 sm:px-6 lg:px-8">
@@ -35,9 +37,9 @@ export default function BusinessPage() {
       <div className="mt-12 rounded-2xl border border-surface-border bg-white p-6 shadow-card">
         <h2 className="font-display text-xl font-bold">One directory. Every real estate pro.</h2>
         <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-          Cribstop Business connects buyers, sellers, and homeowners with vetted professionals
-          across every category — all in one place, with transparent profiles, reviews, and direct
-          contact.
+          {BRAND.siteName} Business connects buyers, sellers, and homeowners with vetted
+          professionals across every category — all in one place, with transparent profiles,
+          reviews, and direct contact.
         </p>
         <div className="mt-5 grid gap-4 sm:grid-cols-3">
           {HOW_IT_WORKS.map((item) => (
@@ -84,8 +86,8 @@ export default function BusinessPage() {
       <div className="mt-14 rounded-2xl border border-surface-border bg-surface-alt px-6 py-8 text-center">
         <h2 className="font-display text-xl font-bold">Own a real estate business?</h2>
         <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-          Create a free business profile on Cribstop and get discovered by buyers, sellers, and
-          homeowners in your area. Agents, agencies, inspectors, movers, and contractors are all
+          Create a free business profile on {BRAND.siteName} and get discovered by buyers, sellers,
+          and homeowners in your area. Agents, agencies, inspectors, movers, and contractors are all
           welcome.
         </p>
         <button
@@ -143,7 +145,9 @@ const HOW_IT_WORKS = [
   {
     title: 'Connect',
     description:
-      'Message directly, request a quote, or book a consultation — all without leaving Cribstop.',
+      'Message directly, request a quote, or book a consultation — all without leaving ' +
+      BRAND.siteName +
+      '.',
     icon: (
       <svg
         className="h-5 w-5"

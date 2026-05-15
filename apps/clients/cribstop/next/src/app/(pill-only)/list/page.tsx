@@ -1,3 +1,5 @@
+import { BRAND } from '@/lib/brand';
+
 export default function ListPage() {
   return (
     <div className="mx-auto max-w-4xl px-4 py-16 sm:px-6 lg:px-8">
@@ -18,8 +20,8 @@ export default function ListPage() {
 
       <p className="mt-4 text-lg leading-relaxed text-ink-muted">
         Whether you&apos;re an agent ready to post a new listing, a homeowner selling independently,
-        or someone claiming an existing property — Cribstop makes it simple to get your home in
-        front of the right buyers.
+        or someone claiming an existing property — {BRAND.siteName} makes it simple to get your home
+        in front of the right buyers.
       </p>
 
       <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-amber-50 px-4 py-1.5 text-sm font-medium text-amber-700 ring-1 ring-amber-200">
@@ -74,8 +76,8 @@ export default function ListPage() {
       <div className="mt-14 rounded-2xl border border-surface-border bg-surface-alt px-6 py-8 text-center">
         <h2 className="font-display text-xl font-bold">Ready to list when you are</h2>
         <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-          Join the waitlist and be the first to access Cribstop&apos;s listing tools when they
-          launch. Agents, homeowners, and property managers are all welcome.
+          Join the waitlist and be the first to access {BRAND.siteName}&apos;s listing tools when
+          they launch. Agents, homeowners, and property managers are all welcome.
         </p>
         <button
           disabled
@@ -144,7 +146,9 @@ const LISTING_OPTIONS = [
   {
     title: 'Claim a Listing',
     description:
-      'Already have a property showing on Cribstop from an MLS feed? Claim ownership to add photos, respond to inquiries, and keep details up to date.',
+      'Already have a property showing on ' +
+      BRAND.siteName +
+      ' from an MLS feed? Claim ownership to add photos, respond to inquiries, and keep details up to date.',
     features: [
       'Verify ownership with a simple process',
       'Enhance your listing with extra details',
@@ -209,7 +213,9 @@ const STEPS = [
   {
     title: 'Publish and get discovered',
     description:
-      'Your listing goes live on Cribstop and is indexed for search. Buyers find you through search, map, and saved alerts.',
+      'Your listing goes live on ' +
+      BRAND.siteName +
+      ' and is indexed for search. Buyers find you through search, map, and saved alerts.',
   },
   {
     title: 'Manage leads and showings',

@@ -185,7 +185,7 @@ const APPS: AppTile[] = [
 ];
 
 /**
- * AppsDropdown — waffle menu for Cribstop apps.
+ * AppsDropdown — waffle menu for site apps.
  *
  * The trigger is a 3×3 dot-grid icon.
  * Clicking it opens a SlidePanel sliding in from the top-right containing
@@ -201,7 +201,7 @@ export default function AppsDropdown() {
       {/* Waffle / apps icon button */}
       <button
         onClick={() => setOpen((v) => !v)}
-        aria-label="Cribstop apps"
+        aria-label="Site apps"
         aria-expanded={open}
         aria-haspopup="dialog"
         className={[

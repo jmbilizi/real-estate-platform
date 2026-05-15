@@ -59,7 +59,7 @@ export default function AuthForm({
         </h2>
         <p className="mt-2 text-center text-sm text-ink-muted">
           {mode === 'login' && 'Sign in to save homes and set alerts'}
-          {mode === 'signup' && 'Join Cribstop to find your dream home'}
+          {mode === 'signup' && 'Join us to find your dream home'}
           {mode === 'forgot' && "Enter your email and we'll send a reset link"}
         </p>
 

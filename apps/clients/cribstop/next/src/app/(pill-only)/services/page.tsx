@@ -1,3 +1,5 @@
+import { BRAND } from '@/lib/brand';
+
 export default function ServicesPage() {
   return (
     <div className="mx-auto max-w-4xl px-4 py-16 sm:px-6 lg:px-8">
@@ -17,12 +19,15 @@ export default function ServicesPage() {
             />
           </svg>
         </span>
-        <h1 className="font-display text-3xl font-extrabold sm:text-4xl">Cribstop Services</h1>
+        <h1 className="font-display text-3xl font-extrabold sm:text-4xl">
+          {BRAND.siteName} Services
+        </h1>
       </div>
 
       <p className="mt-4 text-lg leading-relaxed text-ink-muted">
-        Your home journey doesn&apos;t end at the closing table. Cribstop Services connects you with
-        trusted professionals for every step — from your first showing to your last renovation.
+        Your home journey doesn&apos;t end at the closing table. {BRAND.siteName} Services connects
+        you with trusted professionals for every step — from your first showing to your last
+        renovation.
       </p>
 
       <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-amber-50 px-4 py-1.5 text-sm font-medium text-amber-700 ring-1 ring-amber-200">
@@ -60,8 +65,8 @@ export default function ServicesPage() {
         <h2 className="font-display text-xl font-bold">Are you a service provider?</h2>
         <p className="mt-2 text-sm leading-relaxed text-ink-muted">
           Join our network of trusted professionals. Whether you&apos;re a licensed agent, a home
-          inspector, or a moving company, Cribstop Services will connect you directly with buyers,
-          sellers, and homeowners in your market.
+          inspector, or a moving company, {BRAND.siteName} Services will connect you directly with
+          buyers, sellers, and homeowners in your market.
         </p>
         <button
           disabled
@@ -149,7 +154,9 @@ const SERVICE_CATEGORIES = [
   {
     title: 'Movers & Logistics',
     description:
-      'Moving is stressful. Cribstop Services will connect you with vetted movers, storage facilities, and logistics partners — locally and long-distance.',
+      'Moving is stressful. ' +
+      BRAND.siteName +
+      ' Services will connect you with vetted movers, storage facilities, and logistics partners — locally and long-distance.',
     examples: ['Local moves', 'Long-distance relocation', 'Packing & unpacking services'],
     icon: (
       <svg
@@ -191,7 +198,9 @@ const SERVICE_CATEGORIES = [
   {
     title: 'Mortgage & Finance',
     description:
-      'Get pre-approved fast. Cribstop will connect you with lenders, mortgage brokers, and financial advisors who specialize in real estate.',
+      'Get pre-approved fast. ' +
+      BRAND.siteName +
+      ' will connect you with lenders, mortgage brokers, and financial advisors who specialize in real estate.',
     examples: ['Pre-approval in minutes', 'Rate comparison', 'First-time buyer programs'],
     icon: (
       <svg

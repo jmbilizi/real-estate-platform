@@ -4,6 +4,7 @@ import NeighborhoodRow from '@/components/NeighborhoodRow';
 import listings from '@/lib/listings';
 import Link from 'next/link';
 import { useApp } from '@/lib/context';
+import { BRAND } from '@/lib/brand';
 
 const NEIGHBORHOODS = [
   {
@@ -156,9 +157,9 @@ export default function HomePageContent() {
                 Trusted by buyers, sellers, and renters across the DMV.
               </h2>
               <p className="mt-4 text-base leading-relaxed text-ink/80">
-                Cribstop is powered by Real Broker LLC — one of the fastest-growing brokerages in
-                the country. Our agents combine deep local expertise with modern technology to
-                deliver a smooth, transparent experience.
+                {BRAND.siteName} is powered by {BRAND.brokerageShort} — one of the fastest-growing
+                brokerages in the country. Our agents combine deep local expertise with modern
+                technology to deliver a smooth, transparent experience.
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
                 <Link
