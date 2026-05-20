@@ -89,13 +89,13 @@ export default function ScrollSentinel({ alwaysPill = false }: { alwaysPill?: bo
     <div ref={ref} className="search-section w-full relative">
       {/* Desktop: full search bar in page flow — scrolls away naturally, triggers compact pill */}
       {!alwaysPill && (
-        <div className="hidden sm:block bg-white">
+        <div className="hidden md:block bg-white">
           <CompactSearchBar />
         </div>
       )}
 
       {/* Mobile only: search pill — shared component so pre/post-scroll always match */}
-      <div className="sm:hidden px-4 py-3 bg-white flex">
+      <div className="md:hidden px-4 py-3 bg-white flex">
         <MobileSearchPill />
       </div>
       {/* Gradient fade divider — inside search-section (z-[1]) so it paints above page content */}

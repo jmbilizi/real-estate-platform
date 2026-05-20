@@ -4,9 +4,9 @@ import type { SearchFilters } from '@/lib/types';
 
 const SORT_OPTIONS: { value: SearchFilters['sort']; label: string }[] = [
   { value: 'recommended', label: 'Recommended' },
+  { value: 'price-desc', label: 'Highest price' },
+  { value: 'price-asc', label: 'Lowest price' },
   { value: 'newest', label: 'Newest' },
-  { value: 'price-asc', label: 'Price: Low → High' },
-  { value: 'price-desc', label: 'Price: High → Low' },
 ];
 
 export default function SortDropdown({
@@ -17,53 +17,76 @@ export default function SortDropdown({
   onChange: (v: SearchFilters['sort']) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
   return (
     <>
-      <button
-        ref={buttonRef}
-        type="button"
-        className="bg-white shadow-md rounded-full px-3 py-1.5 text-sm font-semibold border border-surface-border transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 cursor-pointer flex items-center gap-1 text-red-500"
-        onClick={() => setOpen((v) => !v)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-      >
-        {SORT_OPTIONS.find((o) => o.value === value)?.label}
-        <span className="ml-1 text-ink-muted">
-          <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-            <path
-              d="M6 9l6 6 6-6"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+      <div ref={wrapperRef}>
+        <button
+          type="button"
+          className="bg-transparent px-0 py-0.5 text-sm font-semibold transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 cursor-pointer text-red-500 flex items-center gap-1.5"
+          onClick={() => setOpen((v) => !v)}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+        >
+          <svg
+            width="20"
+            height="22"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="shrink-0 text-ink-muted self-center"
+            aria-hidden="true"
+          >
+            <path d="m3 18 4 4 4-4" />
+            <path d="M7 22V2" />
+            <path d="m21 6-4-4-4 4" />
+            <path d="M17 2v20" />
           </svg>
-        </span>
-      </button>
+          <span className="border-b border-ink">
+            {SORT_OPTIONS.find((o) => o.value === value)?.label}
+          </span>
+        </button>
+      </div>
       {open && (
         <DropdownContainer
           onClose={() => setOpen(false)}
           belowTrigger
-          triggerRef={buttonRef}
-          style={{ minWidth: buttonRef.current?.offsetWidth || 180 }}
+          alignRight
+          triggerRef={wrapperRef}
+          style={{ minWidth: wrapperRef.current?.offsetWidth || 180 }}
         >
-          <ul className="py-1" role="listbox">
+          <ul className="py-2" role="listbox">
             {SORT_OPTIONS.map((option) => (
               <li
                 key={option.value}
                 role="option"
                 aria-selected={option.value === value}
-                className={`px-4 py-1.5 text-sm cursor-pointer transition 
-                  ${option.value === value ? 'bg-gray-100 font-bold text-red-500' : 'bg-white text-ink'}
-                  hover:bg-gray-50`}
+                className={`flex items-center justify-between px-5 py-3 text-sm cursor-pointer transition text-ink hover:bg-gray-50 ${option.value === value ? 'bg-gray-100 font-semibold' : ''}`}
                 onClick={() => {
                   onChange(option.value);
                   setOpen(false);
                 }}
               >
-                {option.label}
+                <span>{option.label}</span>
+                {option.value === value && (
+                  <svg
+                    width="16"
+                    height="16"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-ink ml-4 shrink-0"
+                  >
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                )}
               </li>
             ))}
           </ul>

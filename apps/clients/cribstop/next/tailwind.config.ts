@@ -1,9 +1,19 @@
 import type { Config } from 'tailwindcss';
 
+// Layout breakpoint — single source of truth for nav/search-bar ↔ desktop transition
+// and map+grid column split. Keep this in sync with globals.css `--layout-break`.
+const LAYOUT_BREAK = '768px';
+
 const config: Config = {
   content: ['./src/**/*.{ts,tsx}'],
   theme: {
     extend: {
+      screens: {
+        // Semantic alias: use `layout:` prefix instead of `md:` for the layout split.
+        // Both resolve to the same value so they're interchangeable, but `layout:`
+        // makes the intent explicit and ties back to LAYOUT_BREAK above.
+        layout: LAYOUT_BREAK,
+      },
       colors: {
         // Primary: warm coral/rose (modern, premium real-estate feel)
         brand: {

@@ -243,7 +243,8 @@ html[data-header-pill][data-header-expanded] .site-header-expanded {
   transition: none;
 }
 /* Mobile only: collapse the in-page search section when scrolled */
-@media (max-width: 639px) {
+/* Layout breakpoint: 768px — matches Tailwind `md` / `layout:` and LAYOUT_BREAK in tailwind.config.ts */
+@media (max-width: 767px) {
   :root[data-header-pill] .search-section {
     opacity: 0;
     height: 0;
@@ -263,7 +264,7 @@ html[data-header-pill][data-header-expanded] .site-header-expanded {
   }
 }
 /* Desktop: SearchSection is just the scroll sentinel — no visual effect needed */
-@media (min-width: 640px) {
+@media (min-width: 768px) {
   :root[data-header-pill] .search-section {
     opacity: 1;
     pointer-events: none;

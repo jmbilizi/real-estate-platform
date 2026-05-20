@@ -82,14 +82,14 @@ export default function NavBar() {
         {/* ── Mobile full-width pill overlay (only on mobile, only when scrolled) ── */}
         {showHeaderPill && !headerExpanded && (
           <div
-            className="sm:hidden absolute inset-0 z-10 bg-white flex items-center px-3"
+            className="md:hidden absolute inset-0 z-10 bg-white flex items-center px-3"
             style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08)' }}
           >
             <MobileSearchPill />
           </div>
         )}
         {/* ── Logo | Tabs/Pill | Nav ── */}
-        <div className="relative grid grid-cols-[auto_1fr_auto] h-16 items-center gap-2 px-3 sm:px-4 lg:px-6">
+        <div className="relative grid grid-cols-[auto_1fr_auto] h-16 items-center gap-2 px-3 md:px-4 lg:px-6">
           {/* Logo */}
           <Link href="/" className="flex flex-shrink-0 items-center -ml-1">
             <span className="flex items-center gap-0">
@@ -137,22 +137,22 @@ export default function NavBar() {
             {/* TABS — hidden by CSS when data-header-pill is set, shown again when expanded */}
             {/* Hidden on mobile (sm:hidden) — tabs appear inside MobileSearchSheet instead */}
             <div
-              className="header-tabs absolute inset-0 hidden sm:flex items-stretch justify-center"
+              className="header-tabs absolute inset-0 hidden md:flex items-stretch justify-center"
               style={headerExpanded ? { opacity: 1, pointerEvents: 'auto' } : undefined}
             >
               <button
                 onClick={() => setListingTab('for-sale')}
-                className="group/tab relative flex items-center justify-center px-2 sm:px-3 focus:outline-none"
+                className="group/tab relative flex items-center justify-center px-2 md:px-3 focus:outline-none"
               >
                 <span
-                  className={`flex items-center gap-1.5 rounded-full px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-semibold transition-colors duration-150 ${
+                  className={`flex items-center gap-1.5 rounded-full px-2 md:px-3 py-1.5 text-xs md:text-sm font-semibold transition-colors duration-150 ${
                     listingTab === 'for-sale'
                       ? 'text-ink'
                       : 'text-ink-muted group-hover/tab:text-ink group-hover/tab:bg-surface-soft'
                   }`}
                 >
                   <Home
-                    className="h-4 w-4 sm:h-[18px] sm:w-[18px] flex-shrink-0 text-emerald-500"
+                    className="h-4 w-4 md:h-[18px] md:w-[18px] flex-shrink-0 text-emerald-500"
                     strokeWidth={1.75}
                   />
                   <span className="hidden xs:inline">For Sale</span>
@@ -165,17 +165,17 @@ export default function NavBar() {
 
               <button
                 onClick={() => setListingTab('for-rent')}
-                className="group/tab relative flex items-center justify-center px-2 sm:px-3 focus:outline-none"
+                className="group/tab relative flex items-center justify-center px-2 md:px-3 focus:outline-none"
               >
                 <span
-                  className={`flex items-center gap-1.5 rounded-full px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-semibold transition-colors duration-150 ${
+                  className={`flex items-center gap-1.5 rounded-full px-2 md:px-3 py-1.5 text-xs md:text-sm font-semibold transition-colors duration-150 ${
                     listingTab === 'for-rent'
                       ? 'text-ink'
                       : 'text-ink-muted group-hover/tab:text-ink group-hover/tab:bg-surface-soft'
                   }`}
                 >
                   <KeyRound
-                    className="h-4 w-4 sm:h-[18px] sm:w-[18px] flex-shrink-0 text-violet-500"
+                    className="h-4 w-4 md:h-[18px] md:w-[18px] flex-shrink-0 text-violet-500"
                     strokeWidth={1.75}
                   />
                   <span className="hidden xs:inline">For Rent</span>
@@ -192,7 +192,7 @@ export default function NavBar() {
               className="header-pill absolute inset-0 flex items-center justify-center"
               style={headerExpanded ? { opacity: 0, pointerEvents: 'none' } : undefined}
             >
-              <div className="hidden sm:flex items-center justify-center w-full">
+              <div className="hidden md:flex items-center justify-center w-full">
                 <div className="w-full max-w-[480px]">
                   <CompactSearchBar headerMode onPillClick={() => setHeaderExpanded(true)} />
                 </div>
@@ -207,7 +207,7 @@ export default function NavBar() {
 
           {/* Right nav */}
           <div
-            className={`relative z-20 flex items-center gap-1 ${showHeaderPill ? 'hidden sm:flex' : 'flex'}`}
+            className={`relative z-20 flex items-center gap-1 ${showHeaderPill ? 'hidden md:flex' : 'flex'}`}
           >
             {user ? (
               <div className="relative">

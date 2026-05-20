@@ -5,6 +5,7 @@ import React, { useEffect, useRef } from 'react';
 interface DropdownContainerProps {
   onClose: () => void;
   belowTrigger?: boolean;
+  alignRight?: boolean;
   triggerRef: React.RefObject<HTMLElement | null>;
   style?: React.CSSProperties;
   children: React.ReactNode;
@@ -13,6 +14,7 @@ interface DropdownContainerProps {
 export function DropdownContainer({
   onClose,
   belowTrigger: _belowTrigger,
+  alignRight,
   triggerRef,
   style,
   children,
@@ -22,7 +24,8 @@ export function DropdownContainer({
   // Calculate position based on trigger (fixed positioning uses viewport coordinates)
   const rect = triggerRef.current?.getBoundingClientRect();
   const top = rect ? rect.bottom + 6 : 0;
-  const left = rect ? rect.left : 0;
+  const left = !alignRight && rect ? rect.left : undefined;
+  const right = alignRight && rect ? document.documentElement.clientWidth - rect.right : undefined;
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -49,7 +52,7 @@ export function DropdownContainer({
   return (
     <div
       ref={containerRef}
-      style={{ position: 'fixed', top, left, zIndex: 50, ...style }}
+      style={{ position: 'fixed', top, left, right, zIndex: 50, ...style }}
       className="bg-white rounded-2xl shadow-xl border border-surface-border overflow-hidden"
     >
       {children}

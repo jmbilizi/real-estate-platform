@@ -215,7 +215,6 @@ export default function FilterPanel({ filters, onChange }: Props) {
 
       {/* Sort */}
       <div className="mt-4 border-t border-surface-border pt-4">
-        <label className="mb-1 block text-xs font-medium text-ink-muted">Sort By</label>
         <select
           className="input-field"
           value={filters.sort ?? 'recommended'}

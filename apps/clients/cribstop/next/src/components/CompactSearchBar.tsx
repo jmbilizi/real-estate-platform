@@ -2147,14 +2147,14 @@ export default function CompactSearchBar({
             </span>
           </button>
           <div
-            className={`hidden sm:block h-6 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)] transition-opacity ${activePanel === 'who' || activePanel === 'what' ? 'opacity-0' : ''}`}
+            className={`hidden md:block h-6 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)] transition-opacity ${activePanel === 'who' || activePanel === 'what' ? 'opacity-0' : ''}`}
           />
-          {/* WHAT — hidden on mobile, visible sm+ */}
+          {/* WHAT — hidden on mobile, visible md+ */}
           <button
             ref={whatRef}
             type="button"
             onClick={() => setActivePanel('what')}
-            className={`hidden sm:flex relative z-[1] flex-1 min-w-0 flex-col justify-center text-left px-2 sm:px-3 py-2.5 sm:py-3.5 rounded-full transition-colors duration-150 focus:outline-none ${
+            className={`hidden md:flex relative z-[1] flex-1 min-w-0 flex-col justify-center text-left px-2 md:px-3 py-2.5 md:py-3.5 rounded-full transition-colors duration-150 focus:outline-none ${
               activePanel && activePanel !== 'what'
                 ? 'hover:bg-[rgba(0,0,0,0.06)]'
                 : !activePanel

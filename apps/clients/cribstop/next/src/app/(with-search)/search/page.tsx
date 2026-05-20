@@ -163,73 +163,6 @@ function SearchContent() {
 
   return (
     <div className="flex flex-col">
-      {/* Toolbar */}
-      <div className="sticky top-[65px] z-20 bg-white border-b border-surface-border">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 sm:px-10 lg:px-20">
-          <div>
-            <h1 className="font-display text-lg font-extrabold tracking-tight sm:text-xl">
-              {heading}
-            </h1>
-            <p className="text-xs text-ink-muted">
-              <span className="font-semibold text-ink">{filtered.length}</span> home
-              {filtered.length !== 1 ? 's' : ''} · DC · MD · VA
-            </p>
-          </div>
-          <div className="ml-auto flex items-center gap-2 relative">
-            {/* Filters pill button — Airbnb style */}
-            <button
-              onClick={() => setFilterOpen(true)}
-              className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition hover:shadow-sm active:scale-[0.98] ${
-                countActiveFilters(filters) > 0
-                  ? 'border-ink bg-ink/5 text-ink'
-                  : 'border-surface-border bg-white text-ink hover:border-ink/40'
-              }`}
-              aria-label="Open filters"
-            >
-              <svg
-                className="h-4 w-4 flex-shrink-0"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-                viewBox="0 0 24 24"
-              >
-                <circle cx="17" cy="7" r="2" />
-                <circle cx="7" cy="12" r="2" />
-                <circle cx="17" cy="17" r="2" />
-                <line x1="3" y1="7" x2="15" y2="7" />
-                <line x1="9" y1="12" x2="21" y2="12" />
-                <line x1="3" y1="17" x2="15" y2="17" />
-              </svg>
-              Filters
-              {countActiveFilters(filters) > 0 && (
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-ink text-[11px] font-bold text-white">
-                  {countActiveFilters(filters)}
-                </span>
-              )}
-            </button>
-
-            <label htmlFor="sort" className="text-xs font-medium text-ink-muted">
-              Sort By
-            </label>
-            <SortDropdown
-              value={filters.sort || 'recommended'}
-              onChange={(v) => {
-                if (!v) return;
-                setFilters((prev) => ({ ...prev, sort: v }));
-                const params = new URLSearchParams(window.location.search);
-                params.set('sort', String(v));
-                window.history.pushState(
-                  {},
-                  '',
-                  `${window.location.pathname}?${params.toString()}`,
-                );
-                setPage(1);
-              }}
-            />
-          </div>
-        </div>
-      </div>
-
       {/* Filter modal */}
       <FilterModal
         isOpen={filterOpen}
@@ -257,7 +190,7 @@ function SearchContent() {
           className="absolute inset-0 z-0
                      md:relative md:inset-auto md:order-last md:w-[52%]"
         >
-          <div className="sticky top-[133px] h-[45vh] md:h-[calc(100vh-133px)] md:py-6 md:pl-3 md:pr-10 lg:pl-5 lg:pr-20">
+          <div className="sticky top-[65px] h-[45vh] md:h-[calc(100vh-65px)] md:py-6 md:pl-3 md:pr-10 lg:pl-5 lg:pr-20">
             <ListingsMap
               listings={pagedResults}
               savedIds={savedIds}
@@ -278,11 +211,67 @@ function SearchContent() {
                      rounded-t-3xl bg-white shadow-[0_-8px_30px_rgba(0,0,0,0.10)]
                      md:order-first md:w-[48%] md:mt-0 md:rounded-none
                      md:shadow-none md:z-auto
-                     md:py-6 md:pl-10 md:pr-3 lg:pl-20 lg:pr-5"
+                     md:pb-6 md:pl-10 md:pr-3 lg:pl-20 lg:pr-5"
         >
           {/* Drag handle — visible on mobile only */}
           <div className="flex justify-center pt-3 pb-1 md:hidden" aria-hidden="true">
             <div className="h-1 w-10 rounded-full bg-gray-300" />
+          </div>
+
+          {/* Slim sticky bar */}
+          <div className="sticky top-[65px] z-20 bg-white flex items-center justify-between gap-3 px-5 py-2 md:px-0 border-b border-surface-border mb-6">
+            <p className="text-sm text-ink-muted">
+              <span className="font-semibold text-ink">{filtered.length.toLocaleString()}</span>{' '}
+              results
+            </p>
+            <div className="flex items-center gap-4 relative">
+              <button
+                onClick={() => setFilterOpen(true)}
+                className="bg-transparent px-0 py-0.5 text-sm font-semibold transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 cursor-pointer text-ink flex items-center gap-1.5"
+                aria-label="Open filters"
+              >
+                <svg
+                  width="18"
+                  height="20"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  viewBox="0 0 24 24"
+                  className="shrink-0 text-ink-muted self-center"
+                  aria-hidden="true"
+                >
+                  <circle cx="17" cy="5" r="2" />
+                  <circle cx="7" cy="12" r="2" />
+                  <circle cx="17" cy="19" r="2" />
+                  <line x1="3" y1="5" x2="15" y2="5" />
+                  <line x1="9" y1="12" x2="21" y2="12" />
+                  <line x1="3" y1="19" x2="15" y2="19" />
+                </svg>
+                Filters
+                {countActiveFilters(filters) > 0 && (
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-ink text-[11px] font-bold text-white">
+                    {countActiveFilters(filters)}
+                  </span>
+                )}
+              </button>
+              <SortDropdown
+                value={filters.sort || 'recommended'}
+                onChange={(v) => {
+                  if (!v) return;
+                  setFilters((prev) => ({ ...prev, sort: v }));
+                  const params = new URLSearchParams(window.location.search);
+                  params.set('sort', String(v));
+                  window.history.pushState(
+                    {},
+                    '',
+                    `${window.location.pathname}?${params.toString()}`,
+                  );
+                  setPage(1);
+                }}
+              />
+            </div>
           </div>
 
           <div className="px-5 pb-10 md:px-0 md:pb-0">
