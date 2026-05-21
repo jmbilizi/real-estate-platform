@@ -126,47 +126,53 @@ export default function PropertyGallery({ images, title }: { images: string[]; t
             </p>
             <span className="w-16" />
           </div>
-          <div className="relative flex flex-1 items-center justify-center px-4 pb-6">
+          <div className="relative flex flex-1 items-center justify-center px-4 py-4 min-h-0">
             {}
             <img
               src={images[activeIdx]}
               alt={`${title} – photo ${activeIdx + 1}`}
               className="max-h-full max-w-full rounded-xl object-contain"
             />
-            {images.length > 1 && (
-              <>
-                <button
-                  onClick={() => setActiveIdx((p) => (p === 0 ? images.length - 1 : p - 1))}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-white p-3 text-ink shadow-pop transition hover:scale-105"
-                  aria-label="Previous"
-                >
-                  <svg
-                    className="h-5 w-5"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2.5}
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => setActiveIdx((p) => (p === images.length - 1 ? 0 : p + 1))}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-white p-3 text-ink shadow-pop transition hover:scale-105"
-                  aria-label="Next"
-                >
-                  <svg
-                    className="h-5 w-5"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2.5}
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-              </>
-            )}
+          </div>
+          {/* Bottom bar — mirrors top bar height, houses prev/next arrows */}
+          <div className="flex items-center justify-between px-4 py-3 text-white">
+            <button
+              onClick={() => setActiveIdx((p) => (p === 0 ? images.length - 1 : p - 1))}
+              disabled={images.length <= 1}
+              className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium hover:bg-white/10 disabled:opacity-30"
+              aria-label="Previous"
+            >
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.5}
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+              Prev
+            </button>
+            <p className="text-sm font-medium tabular-nums">
+              {activeIdx + 1} / {images.length}
+            </p>
+            <button
+              onClick={() => setActiveIdx((p) => (p === images.length - 1 ? 0 : p + 1))}
+              disabled={images.length <= 1}
+              className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium hover:bg-white/10 disabled:opacity-30"
+              aria-label="Next"
+            >
+              Next
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.5}
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
           </div>
         </div>
       )}

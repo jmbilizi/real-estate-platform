@@ -6,7 +6,7 @@ import ScrollSentinel from '@/components/ScrollSentinel';
 export default function PillOnlyLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      <ScrollSentinel />
+      <ScrollSentinel alwaysPill />
       {children}
     </>
   );

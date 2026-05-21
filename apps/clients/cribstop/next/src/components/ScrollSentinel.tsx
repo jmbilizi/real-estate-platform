@@ -94,15 +94,19 @@ export default function ScrollSentinel({ alwaysPill = false }: { alwaysPill?: bo
         </div>
       )}
 
-      {/* Mobile only: search pill — shared component so pre/post-scroll always match */}
-      <div className="md:hidden px-4 py-3 bg-white flex">
-        <MobileSearchPill />
-      </div>
-      {/* Gradient fade divider — inside search-section (z-[1]) so it paints above page content */}
-      <div
-        className="h-3 pointer-events-none"
-        style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.07), transparent)' }}
-      />
+      {/* Mobile only: search pill — hidden in alwaysPill mode (header already shows it) */}
+      {!alwaysPill && (
+        <div className="md:hidden px-4 py-3 bg-white flex">
+          <MobileSearchPill />
+        </div>
+      )}
+      {/* Gradient fade divider */}
+      {!alwaysPill && (
+        <div
+          className="h-3 pointer-events-none"
+          style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.07), transparent)' }}
+        />
+      )}
     </div>
   );
 }

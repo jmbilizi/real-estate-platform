@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { CustomMapControls } from '@/components/CustomMapControls';
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -9,9 +10,12 @@ import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { createRoot, type Root } from 'react-dom/client';
-import Link from 'next/link';
 import { Listing } from '@/lib/types';
 import { formatPrice } from '@/lib/format';
+
+// Module-level callback set by ListingsMapInner so MarkerPopup
+// (rendered in a separate createRoot) can still trigger modal navigation.
+let _openListing: ((id: string) => void) | null = null;
 
 const PILL_W = 70;
 const PILL_H = 30;
@@ -188,10 +192,10 @@ function ClusteredMarkers({
 
 function MarkerPopup({ listing }: { listing: Listing }) {
   return (
-    <Link
-      href={`/listing/${listing.id}`}
-      className="block !p-0"
+    <div
+      onClick={() => _openListing?.(listing.id)}
       style={{
+        cursor: 'pointer',
         textDecoration: 'none',
         color: 'inherit',
         borderRadius: 18,
@@ -249,7 +253,7 @@ function MarkerPopup({ listing }: { listing: Listing }) {
           {formatPrice(listing.price, listing.listingType)}
         </p>
       </div>
-    </Link>
+    </div>
   );
 }
 
@@ -393,6 +397,20 @@ export default function ListingsMapInner({
   searchCenter,
   searchPolygon,
 }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Keep the module-level callback up to date so MarkerPopup popups
+  // (rendered in separate React roots) can open the listing modal.
+  useEffect(() => {
+    _openListing = (id: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('listing', id);
+      router.push(`${pathname}?${params.toString()}`);
+    };
+  }, [router, pathname, searchParams]);
+
   const center = useMemo<[number, number]>(() => {
     if (searchCenter) return searchCenter;
     if (listings.length) {

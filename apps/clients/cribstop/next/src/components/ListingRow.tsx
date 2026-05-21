@@ -12,9 +12,18 @@ interface Props {
   listings: Listing[];
   /** Max number of listing cards to render before the "See all" tile. Defaults to 4. */
   max?: number;
+  /** Override the section's outer padding class. Defaults to "px-6 pt-6 sm:px-10 lg:px-20" */
+  sectionClassName?: string;
 }
 
-export default function ListingRow({ title, subtitle, href, listings, max = 4 }: Props) {
+export default function ListingRow({
+  title,
+  subtitle,
+  href,
+  listings,
+  max = 4,
+  sectionClassName,
+}: Props) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   // Show max+1 cards so See all is always after scroll
   const showSeeAll = listings.length > max;
@@ -53,7 +62,7 @@ export default function ListingRow({ title, subtitle, href, listings, max = 4 }:
   };
 
   return (
-    <section className="px-6 pt-6 sm:px-10 lg:px-20">
+    <section className={sectionClassName ?? 'px-6 pt-6 sm:px-10 lg:px-20'}>
       <div className="flex flex-col gap-1 pb-1">
         <div className="flex items-center gap-2 justify-between">
           <div className="flex items-center gap-2">

@@ -54,6 +54,10 @@ interface ModalProps {
   showCloseButton?: boolean;
   /** Remove default px-6 py-4 padding from the content area */
   noPadding?: boolean;
+  /** Remove bottom border radius (useful for large modals where a flat bottom looks cleaner) */
+  squareBottom?: boolean;
+  /** Disable scrolling on the content div — let children manage their own scroll */
+  noScroll?: boolean;
 }
 
 export default function Modal({
@@ -68,6 +72,8 @@ export default function Modal({
   cardClassName,
   showCloseButton,
   noPadding,
+  squareBottom,
+  noScroll,
 }: ModalProps) {
   // mounted: controls DOM presence; visible: drives CSS transition
   const [mounted, setMounted] = useState(false);
@@ -149,6 +155,7 @@ export default function Modal({
           transition-[transform,opacity] duration-300 ease-out
           ${cardClassName ?? 'bg-white shadow-xl'}
           ${cardMobile}
+          ${squareBottom ? 'sm:rounded-b-none' : ''}
           ${widthClass ?? 'max-w-md sm:max-w-lg'}
           ${mobileStyle !== 'full-screen' && mobileStyle !== 'bottom-sheet' ? (heightClass ?? 'max-h-[90vh]') : (heightClass ?? '')}
           ${visible ? slideTo : slideFrom}`}
@@ -156,7 +163,7 @@ export default function Modal({
         {!title && showCloseButton && (
           <button
             onClick={onClose}
-            className="absolute right-4 top-4 z-10 flex items-center justify-center w-9 h-9 rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ink/30"
+            className="absolute right-4 top-4 z-20 flex items-center justify-center w-9 h-9 rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ink/30"
             aria-label="Close"
           >
             <svg
@@ -201,7 +208,11 @@ export default function Modal({
           </div>
         )}
         <div
-          className={`flex-1 overflow-y-auto ${mobileStyle === 'full-screen' ? 'scrollbar-invisible' : ''} ${noPadding ? '' : 'px-6 py-4'}`}
+          className={
+            noScroll
+              ? `flex-1 min-h-0 flex flex-col overflow-hidden${noPadding ? '' : ' px-6 py-4'}`
+              : `flex-1 overflow-y-auto ${mobileStyle === 'full-screen' ? 'scrollbar-invisible' : ''} ${noPadding ? '' : 'px-6 py-4'}`
+          }
         >
           {children}
         </div>

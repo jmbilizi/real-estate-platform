@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { Listing } from '@/lib/types';
 import { formatPrice } from '@/lib/format';
 import { useApp } from '@/lib/context';
@@ -8,6 +8,15 @@ import { useApp } from '@/lib/context';
 export default function ListingCard({ listing }: { listing: Listing }) {
   const { toggleSave, isSaved } = useApp();
   const saved = isSaved(listing.id);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const openModal = () => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('listing', listing.id);
+    router.push(`${pathname}?${params.toString()}`);
+  };
 
   const badge = listing.openHouse
     ? { label: 'Open house', tone: 'bg-white/95 text-ink' }
@@ -20,7 +29,7 @@ export default function ListingCard({ listing }: { listing: Listing }) {
           : null;
 
   return (
-    <Link href={`/listing/${listing.id}`} className="group block" prefetch>
+    <div className="group block cursor-pointer" onClick={openModal}>
       {/* Image */}
       <div className="relative aspect-square overflow-hidden rounded-2xl bg-surface-soft">
         {}
@@ -92,6 +101,6 @@ export default function ListingCard({ listing }: { listing: Listing }) {
           Listing courtesy of {listing.officeName}
         </p>
       </div>
-    </Link>
+    </div>
   );
 }
