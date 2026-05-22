@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter, usePathname, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import listings from '@/lib/listings';
 import Modal from './Modal';
 import ListingDetailContent from './ListingDetailContent';
@@ -18,7 +18,7 @@ export default function ListingDetailModal({ id }: { id: string }) {
     const params = new URLSearchParams(searchParams.toString());
     params.delete('listing');
     const url = params.toString() ? `${pathname}?${params.toString()}` : pathname;
-    setTimeout(() => router.replace(url), 310);
+    setTimeout(() => router.replace(url, { scroll: false }), 310);
   };
 
   return (

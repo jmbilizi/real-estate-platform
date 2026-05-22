@@ -65,7 +65,7 @@ export default function NavBar() {
   const openModal = (mode: 'login' | 'signup') => {
     const params = new URLSearchParams(window.location.search);
     params.set('modal', mode);
-    router.push(`${window.location.pathname}?${params.toString()}`);
+    router.push(`${window.location.pathname}?${params.toString()}`, { scroll: false });
   };
 
   return (

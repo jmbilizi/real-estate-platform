@@ -23,7 +23,7 @@ export default function AuthModalWrapper({ initialMode }: { initialMode: Mode })
   // Animate out first (Modal takes 300ms), then route
   const navigate = (url: string) => {
     setOpen(false);
-    setTimeout(() => router.replace(url), 310);
+    setTimeout(() => router.replace(url, { scroll: false }), 310);
   };
 
   const handleClose = () => {
@@ -41,7 +41,7 @@ export default function AuthModalWrapper({ initialMode }: { initialMode: Mode })
   const handleSwitchMode = (mode: 'login' | 'signup') => {
     const params = new URLSearchParams(searchParams.toString());
     params.set('modal', mode);
-    router.replace(buildUrl(params));
+    router.replace(buildUrl(params), { scroll: false });
   };
 
   return (
