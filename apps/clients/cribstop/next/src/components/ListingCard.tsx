@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter, usePathname, useSearchParams } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { Listing } from '@/lib/types';
 import { formatPrice } from '@/lib/format';
 import { useApp } from '@/lib/context';
@@ -10,10 +10,9 @@ export default function ListingCard({ listing }: { listing: Listing }) {
   const saved = isSaved(listing.id);
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
 
   const openModal = () => {
-    const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams(window.location.search);
     params.set('listing', listing.id);
     router.push(`${pathname}?${params.toString()}`);
   };
