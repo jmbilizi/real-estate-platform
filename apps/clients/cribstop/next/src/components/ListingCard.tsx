@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter, usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Listing } from '@/lib/types';
 import { formatPrice } from '@/lib/format';
 import { useApp } from '@/lib/context';
@@ -14,7 +14,7 @@ export default function ListingCard({ listing }: { listing: Listing }) {
   const openModal = () => {
     const params = new URLSearchParams(window.location.search);
     params.set('listing', listing.id);
-    router.push(`${pathname}?${params.toString()}`);
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
   const badge = listing.openHouse

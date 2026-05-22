@@ -159,7 +159,7 @@ function SearchContent() {
   const filtered = applyFilters(listings, filters);
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pagedResults = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const heading = 'Search results';
+  const _heading = 'Search results';
 
   return (
     <div className="flex flex-col">
