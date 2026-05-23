@@ -81,9 +81,10 @@ function getChangedFiles(base) {
  * match the given tag.  Returns null when no projects qualify (so callers can
  * skip the step entirely rather than running on an empty set).
  *
- * Using `nx show projects` + `nx run-many --projects=<names>` avoids the Nx
- * bug where extra flags like `--projects=tag:*` are forwarded verbatim to the
- * underlying executor (e.g. ESLint), causing it to fail on unknown options.
+ * Using `nx show projects` + `nx run-many --projects=<names>` avoids the Nx 22
+ * behavior where flags passed to `nx affected` (including `--projects=tag:*`)
+ * are forwarded verbatim to the underlying executor (e.g. ESLint), causing it
+ * to fail on unknown options.
  */
 function getAffectedProjectsList(base, tag) {
   if (!base) return null;

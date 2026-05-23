@@ -78,7 +78,10 @@ function SearchContent() {
   const splitRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const STICKY_TOP = 65; // px — fixed navbar height
+    // Read the navbar height from the CSS custom property so JS and CSS
+    // share a single source of truth (defined in globals.css as --navbar-h).
+    const STICKY_TOP =
+      parseInt(getComputedStyle(document.documentElement).getPropertyValue('--navbar-h'), 10) || 65;
     const MIN_MAP_H = 200; // px — floor so the map is never unusably short
     const update = () => {
       if (!splitRef.current) return;
