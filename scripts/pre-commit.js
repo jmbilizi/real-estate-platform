@@ -76,6 +76,26 @@ function getStagedFiles() {
   }
 }
 
+/**
+ * Return a comma-separated list of project names that are both affected and
+ * match the given tag.  Returns null when no projects qualify.
+ *
+ * Using `nx show projects` + `nx run-many --projects=<names>` avoids the Nx 22
+ * behavior where flags passed to `nx affected` (including `--projects=tag:*`)
+ * are forwarded verbatim to the underlying executor (e.g. ESLint), causing it
+ * to fail on unknown options.
+ */
+function getAffectedProjectsList(base, tag) {
+  if (!base) return null;
+  const result = run(
+    `pnpm exec nx show projects --affected --base=${base} --head=HEAD --projects=${tag}`,
+    { silent: true },
+  );
+  if (!result.success || !result.output?.trim()) return null;
+  const projects = result.output.trim().split('\n').filter(Boolean);
+  return projects.length > 0 ? projects.join(',') : null;
+}
+
 // Check if there are affected Python projects
 function hasPythonProjectsAffected(isAffected, base) {
   try {
@@ -235,8 +255,6 @@ function detectValidationMode() {
 function checkNodeProjects(isAffected, base) {
   logStep('Quick Check: Node.js/TypeScript');
 
-  const affectedFlag = isAffected && base ? `--base=${base} --head=HEAD` : '';
-
   // 1. Format check (MUST PASS to continue)
   log('\n1. Checking code formatting...', 'blue');
   const formatCmd = `pnpm run nx:workspace-format-check`;
@@ -250,31 +268,47 @@ function checkNodeProjects(isAffected, base) {
 
   // 2. Lint (MUST PASS to continue)
   log('\n2. Linting code...', 'blue');
+  const affectedNodeLint =
+    isAffected && base ? getAffectedProjectsList(base, 'tag:runtime:node') : null;
   const lintCmd =
-    isAffected && base
-      ? `pnpm exec nx affected --base=${base} --head=HEAD --target=lint --projects=tag:runtime:node`
-      : `pnpm run nx:node-lint`;
+    affectedNodeLint != null
+      ? `pnpm exec nx run-many --target=lint --projects=${affectedNodeLint}`
+      : isAffected && base
+        ? null
+        : `pnpm run nx:node-lint`;
 
-  const lintResult = run(lintCmd);
-  if (!lintResult.success) {
-    logError('Linting failed');
-    return false; // Exit early
+  if (lintCmd === null) {
+    logSuccess('No affected Node.js projects — skipping lint');
+  } else {
+    const lintResult = run(lintCmd);
+    if (!lintResult.success) {
+      logError('Linting failed');
+      return false; // Exit early
+    }
+    logSuccess('Linting passed');
   }
-  logSuccess('Linting passed');
 
   // 3. Type check (MUST PASS to continue)
   log('\n3. Type checking...', 'blue');
+  const affectedNodeType =
+    isAffected && base ? getAffectedProjectsList(base, 'tag:runtime:node') : null;
   const typeCmd =
-    isAffected && base
-      ? `pnpm exec nx affected --base=${base} --head=HEAD --target=type-check --projects=tag:runtime:node`
-      : `pnpm run nx:node-type-check`;
+    affectedNodeType != null
+      ? `pnpm exec nx run-many --target=type-check --projects=${affectedNodeType}`
+      : isAffected && base
+        ? null
+        : `pnpm run nx:node-type-check`;
 
-  const typeResult = run(typeCmd);
-  if (!typeResult.success) {
-    logError('Type checking failed');
-    return false; // Exit early
+  if (typeCmd === null) {
+    logSuccess('No affected Node.js projects — skipping type check');
+  } else {
+    const typeResult = run(typeCmd);
+    if (!typeResult.success) {
+      logError('Type checking failed');
+      return false; // Exit early
+    }
+    logSuccess('Type checking passed');
   }
-  logSuccess('Type checking passed');
 
   return true; // All checks passed
 }
@@ -297,49 +331,71 @@ function checkPythonProjects(isAffected, base) {
     return true; // Don't fail if Python isn't set up
   }
 
-  const affectedFlag = isAffected && base ? `--base=${base} --head=HEAD` : '';
-
   // 1. Format check (MUST PASS to continue)
   log('\n1. Checking code formatting (Black)...', 'blue');
+  const affectedPyFmt =
+    isAffected && base ? getAffectedProjectsList(base, 'tag:runtime:python') : null;
   const formatCmd =
-    isAffected && base
-      ? `pnpm exec nx affected --base=${base} --head=HEAD --target=format-check --projects=tag:runtime:python`
-      : `pnpm run nx:python-format-check`;
+    affectedPyFmt != null
+      ? `pnpm exec nx run-many --target=format-check --projects=${affectedPyFmt}`
+      : isAffected && base
+        ? null
+        : `pnpm run nx:python-format-check`;
 
-  const formatResult = run(formatCmd);
-  if (!formatResult.success) {
-    logError('Formatting failed - run "pnpm run nx:python-format" to fix');
-    return false; // Exit early
+  if (formatCmd === null) {
+    logSuccess('No affected Python projects — skipping format check');
+  } else {
+    const formatResult = run(formatCmd);
+    if (!formatResult.success) {
+      logError('Formatting failed - run "pnpm run nx:python-format" to fix');
+      return false; // Exit early
+    }
+    logSuccess('Formatting passed');
   }
-  logSuccess('Formatting passed');
 
   // 2. Lint (Flake8) (MUST PASS to continue)
   log('\n2. Linting code (Flake8)...', 'blue');
+  const affectedPyLint =
+    isAffected && base ? getAffectedProjectsList(base, 'tag:runtime:python') : null;
   const lintCmd =
-    isAffected && base
-      ? `pnpm exec nx affected --base=${base} --head=HEAD --target=lint --projects=tag:runtime:python`
-      : `pnpm run nx:python-lint`;
+    affectedPyLint != null
+      ? `pnpm exec nx run-many --target=lint --projects=${affectedPyLint}`
+      : isAffected && base
+        ? null
+        : `pnpm run nx:python-lint`;
 
-  const lintResult = run(lintCmd);
-  if (!lintResult.success) {
-    logError('Linting failed');
-    return false; // Exit early
+  if (lintCmd === null) {
+    logSuccess('No affected Python projects — skipping lint');
+  } else {
+    const lintResult = run(lintCmd);
+    if (!lintResult.success) {
+      logError('Linting failed');
+      return false; // Exit early
+    }
+    logSuccess('Linting passed');
   }
-  logSuccess('Linting passed');
 
   // 3. Type check (mypy) (MUST PASS to continue)
   log('\n3. Type checking (mypy)...', 'blue');
+  const affectedPyType =
+    isAffected && base ? getAffectedProjectsList(base, 'tag:runtime:python') : null;
   const typeCmd =
-    isAffected && base
-      ? `pnpm exec nx affected --base=${base} --head=HEAD --target=type-check --projects=tag:runtime:python`
-      : `pnpm run nx:python-type-check`;
+    affectedPyType != null
+      ? `pnpm exec nx run-many --target=type-check --projects=${affectedPyType}`
+      : isAffected && base
+        ? null
+        : `pnpm run nx:python-type-check`;
 
-  const typeResult = run(typeCmd);
-  if (!typeResult.success) {
-    logError('Type checking failed');
-    return false; // Exit early
+  if (typeCmd === null) {
+    logSuccess('No affected Python projects — skipping type check');
+  } else {
+    const typeResult = run(typeCmd);
+    if (!typeResult.success) {
+      logError('Type checking failed');
+      return false; // Exit early
+    }
+    logSuccess('Type checking passed');
   }
-  logSuccess('Type checking passed');
 
   return true; // All checks passed
 }
@@ -355,8 +411,6 @@ function checkDotNetProjects(isAffected, base) {
     return true; // Don't fail if .NET isn't installed
   }
 
-  const affectedFlag = isAffected && base ? `--base=${base} --head=HEAD` : '';
-
   // 0. Restore packages to catch version issues early (NU1604, transitive deps)
   log('\n0. Restoring NuGet packages...', 'blue');
   const restoreResult = run('dotnet restore', { silent: true });
@@ -368,45 +422,69 @@ function checkDotNetProjects(isAffected, base) {
 
   // 1. Format check (MUST PASS to continue)
   log('\n1. Checking code formatting (dotnet format)...', 'blue');
+  const affectedDnFmt =
+    isAffected && base ? getAffectedProjectsList(base, 'tag:runtime:dotnet') : null;
   const formatCmd =
-    isAffected && base
-      ? `pnpm exec nx affected --base=${base} --head=HEAD --target=format-check --projects=tag:runtime:dotnet`
-      : `pnpm run nx:dotnet-format-check`;
+    affectedDnFmt != null
+      ? `pnpm exec nx run-many --target=format-check --projects=${affectedDnFmt}`
+      : isAffected && base
+        ? null
+        : `pnpm run nx:dotnet-format-check`;
 
-  const formatResult = run(formatCmd);
-  if (!formatResult.success) {
-    logError('Formatting failed - run "pnpm run nx:dotnet-format" to fix');
-    return false; // Exit early
+  if (formatCmd === null) {
+    logSuccess('No affected .NET projects — skipping format check');
+  } else {
+    const formatResult = run(formatCmd);
+    if (!formatResult.success) {
+      logError('Formatting failed - run "pnpm run nx:dotnet-format" to fix');
+      return false; // Exit early
+    }
+    logSuccess('Formatting passed');
   }
-  logSuccess('Formatting passed');
 
   // 2. Lint (StyleCop) (MUST PASS to continue)
   log('\n2. Linting code (StyleCop)...', 'blue');
+  const affectedDnLint =
+    isAffected && base ? getAffectedProjectsList(base, 'tag:runtime:dotnet') : null;
   const lintCmd =
-    isAffected && base
-      ? `pnpm exec nx affected --base=${base} --head=HEAD --target=lint --projects=tag:runtime:dotnet`
-      : `pnpm run nx:dotnet-lint`;
+    affectedDnLint != null
+      ? `pnpm exec nx run-many --target=lint --projects=${affectedDnLint}`
+      : isAffected && base
+        ? null
+        : `pnpm run nx:dotnet-lint`;
 
-  const lintResult = run(lintCmd);
-  if (!lintResult.success) {
-    logError('Linting failed');
-    return false; // Exit early
+  if (lintCmd === null) {
+    logSuccess('No affected .NET projects — skipping lint');
+  } else {
+    const lintResult = run(lintCmd);
+    if (!lintResult.success) {
+      logError('Linting failed');
+      return false; // Exit early
+    }
+    logSuccess('Linting passed');
   }
-  logSuccess('Linting passed');
 
   // 3. Type check (MUST PASS to continue)
   log('\n3. Type checking (dotnet build)...', 'blue');
+  const affectedDnType =
+    isAffected && base ? getAffectedProjectsList(base, 'tag:runtime:dotnet') : null;
   const typeCmd =
-    isAffected && base
-      ? `pnpm exec nx affected --base=${base} --head=HEAD --target=type-check --projects=tag:runtime:dotnet`
-      : `pnpm run nx:dotnet-type-check`;
+    affectedDnType != null
+      ? `pnpm exec nx run-many --target=type-check --projects=${affectedDnType}`
+      : isAffected && base
+        ? null
+        : `pnpm run nx:dotnet-type-check`;
 
-  const typeResult = run(typeCmd);
-  if (!typeResult.success) {
-    logError('Type checking failed');
-    return false; // Exit early
+  if (typeCmd === null) {
+    logSuccess('No affected .NET projects — skipping type check');
+  } else {
+    const typeResult = run(typeCmd);
+    if (!typeResult.success) {
+      logError('Type checking failed');
+      return false; // Exit early
+    }
+    logSuccess('Type checking passed');
   }
-  logSuccess('Type checking passed');
 
   return true; // All checks passed
 }

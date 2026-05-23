@@ -35,8 +35,16 @@ export default function NavBar() {
   useEffect(() => {
     if (headerExpanded) {
       document.documentElement.setAttribute('data-header-expanded', '');
+      // Measure the expanded bar height after it renders so CSS variables
+      // (.search-map-sticky, .search-results-bar) can shift below it.
+      requestAnimationFrame(() => {
+        const el = document.querySelector('.site-header-expanded');
+        const h = el ? el.getBoundingClientRect().height : 0;
+        document.documentElement.style.setProperty('--expanded-bar-h', `${h}px`);
+      });
     } else {
       document.documentElement.removeAttribute('data-header-expanded');
+      document.documentElement.style.setProperty('--expanded-bar-h', '0px');
     }
     window.dispatchEvent(new Event('searchbar:close'));
   }, [headerExpanded]);
