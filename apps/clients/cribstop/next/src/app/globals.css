@@ -34,6 +34,8 @@
 :root {
   --brand: #ff385c;
   --accent: #0e7c66;
+  /* Sticky navbar height — kept in sync with the h-16 + 1px border in NavBar.tsx */
+  --navbar-h: 65px;
 }
 
 html {
@@ -229,6 +231,31 @@ html[data-header-pill][data-header-expanded] .site-header-expanded {
 }
 .marker-cluster span {
   display: none !important;
+}
+
+/* ── Search page: map fills the remaining viewport ───────────────────────────
+   --map-avail-h  : set by JS in SearchContent on every scroll/resize.
+                    = viewport height − max(65px, split-layout top from viewport).
+                    Ensures the map never overflows the viewport bottom when the
+                    in-page search bar is visible at scroll=0.
+   --expanded-bar-h: set by JS in NavBar when the header search overlay opens.
+                    = height of .site-header-expanded; 0px when closed.
+   Both variables fall back gracefully when JS hasn't run yet. ── */
+@media (min-width: 768px) {
+  .search-map-sticky {
+    height: var(--map-avail-h, calc(100vh - var(--navbar-h)));
+  }
+
+  /* When the compact-pill expanded search bar is open, shift the map and
+     results bar down so they start below the overlay, not behind it. */
+  html[data-header-pill][data-header-expanded] .search-map-sticky {
+    top: calc(var(--navbar-h) + var(--expanded-bar-h, 0px));
+    height: calc(var(--map-avail-h, calc(100vh - var(--navbar-h))) - var(--expanded-bar-h, 0px));
+  }
+
+  html[data-header-pill][data-header-expanded] .search-results-bar {
+    top: calc(var(--navbar-h) + var(--expanded-bar-h, 0px));
+  }
 }
 
 /* ── Header tabs ↔ pill smooth swap via data attribute ──────────────────────

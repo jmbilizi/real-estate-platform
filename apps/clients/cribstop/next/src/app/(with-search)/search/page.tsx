@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import ListingCard from '@/components/ListingCard';
 import ListingsMap from '@/components/ListingsMap';
 import listings from '@/lib/listings';
@@ -70,6 +70,36 @@ function SearchContent() {
   const [searchCenter, setSearchCenter] = useState<[number, number] | null>(null);
   // Boundary polygon GeoJSON for the searched area
   const [searchPolygon, setSearchPolygon] = useState<object | null>(null);
+
+  // Ref for the split-layout container so we can measure its top position.
+  // Used to compute --map-avail-h: the viewport height remaining below the
+  // split layout's current top edge (= viewport height when sticking, less
+  // when the in-page search bar is still visible at scroll ≈ 0).
+  const splitRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const STICKY_TOP = 65; // px — fixed navbar height
+    const MIN_MAP_H = 200; // px — floor so the map is never unusably short
+    const update = () => {
+      if (!splitRef.current) return;
+      const { top } = splitRef.current.getBoundingClientRect();
+      // Clamp to the sticky threshold so we never go negative when scrolled far
+      const mapTop = Math.max(STICKY_TOP, top);
+      const avail = window.innerHeight - mapTop;
+      document.documentElement.style.setProperty(
+        '--map-avail-h',
+        `${Math.max(MIN_MAP_H, avail)}px`,
+      );
+    };
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+      document.documentElement.style.removeProperty('--map-avail-h');
+    };
+  }, []);
 
   // Filters state — initialized empty; useEffect above populates from URL after mount
   const [filters, setFilters] = useState<SearchFilters>({});
@@ -182,7 +212,7 @@ function SearchContent() {
            Technique: on mobile the map column is `position:absolute` spanning
            the full parent height, which gives `position:sticky` a tall enough
            parent to remain pinned while cards scroll over it. */}
-      <div className="relative flex flex-col md:flex-row">
+      <div ref={splitRef} className="relative flex flex-col md:flex-row">
         {/* ── Map column ────────────────────────────────────────────────────
             Mobile  : absolute, fills parent so sticky has room to hold.
             Desktop : normal right-half column, edge-to-edge (no padding). ── */}
@@ -190,7 +220,7 @@ function SearchContent() {
           className="absolute inset-0 z-0
                      md:relative md:inset-auto md:order-last md:w-[52%]"
         >
-          <div className="sticky top-[65px] h-[45vh] md:h-[calc(100vh-65px)] md:py-6 md:pl-3 md:pr-10 lg:pl-5 lg:pr-20">
+          <div className="sticky top-[65px] h-[45vh] search-map-sticky md:py-6 md:pl-3 md:pr-10 lg:pl-5 lg:pr-20">
             <ListingsMap
               listings={pagedResults}
               savedIds={savedIds}
@@ -219,7 +249,7 @@ function SearchContent() {
           </div>
 
           {/* Slim sticky bar */}
-          <div className="sticky top-[65px] z-20 bg-white flex items-center justify-between gap-3 px-5 py-2 md:px-0 border-b border-surface-border mb-6">
+          <div className="search-results-bar sticky top-[65px] z-20 bg-white flex items-center justify-between gap-3 px-5 py-2 md:px-0 border-b border-surface-border mb-6">
             <p className="text-sm text-ink-muted">
               <span className="font-semibold text-ink">{filtered.length.toLocaleString()}</span>{' '}
               results
