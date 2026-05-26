@@ -36,7 +36,8 @@
           "Host": "account-svc",
           "Port": 8080
         }
-      ]
+      ],
+      "Priority": 1
     }
   ],
   "SwaggerEndPoints": [
