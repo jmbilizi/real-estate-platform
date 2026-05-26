@@ -80,13 +80,6 @@ internal static class Program
         using var scope = services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AccountDbContext>();
 
-        var hasMigrations = (await dbContext.Database.GetPendingMigrationsAsync().ConfigureAwait(false)).Any();
-        if (hasMigrations)
-        {
-            await dbContext.Database.MigrateAsync().ConfigureAwait(false);
-            return;
-        }
-
-        await dbContext.Database.EnsureCreatedAsync().ConfigureAwait(false);
+        await dbContext.Database.MigrateAsync().ConfigureAwait(false);
     }
 }
