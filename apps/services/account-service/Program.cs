@@ -25,7 +25,7 @@ internal static class Program
 
         var app = builder.Build();
 
-        await EnsureDatabaseCreatedAsync(app.Services).ConfigureAwait(false);
+        await InitializeDatabaseAsync(app.Services).ConfigureAwait(false);
 
         app.MapOpenApi();
 
@@ -57,10 +57,18 @@ internal static class Program
         return $"Host={host};Port={port};Database={database};Username={username};Password={password}";
     }
 
-    private static async Task EnsureDatabaseCreatedAsync(IServiceProvider services)
+    private static async Task InitializeDatabaseAsync(IServiceProvider services)
     {
         using var scope = services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AccountDbContext>();
+
+        var hasMigrations = (await dbContext.Database.GetPendingMigrationsAsync().ConfigureAwait(false)).Any();
+        if (hasMigrations)
+        {
+            await dbContext.Database.MigrateAsync().ConfigureAwait(false);
+            return;
+        }
+
         await dbContext.Database.EnsureCreatedAsync().ConfigureAwait(false);
     }
 }
