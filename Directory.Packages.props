@@ -40,9 +40,12 @@
 
     <!-- Data access packages -->
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="8.0.8" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.8" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.8" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.8" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.4" />
+    <!-- VersionOverride: pins transitive dependency to avoid CVE-2024-43483 (DoS vulnerability fixed in 8.0.1+) -->
+    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="9.0.0" VersionOverride="9.0.0" />
     <PackageVersion Include="Dapper" Version="2.1.28" />
 
     <!-- API packages -->

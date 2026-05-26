@@ -52,6 +52,13 @@
         "command": "node tools/docker/build-image.js {projectName} --tag={args.tag}",
         "cwd": "."
       }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "dotnet test",
+        "cwd": "apps/services/account-service/Tests"
+      }
     }
   },
   "tags": [
