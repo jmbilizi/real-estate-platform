@@ -66,6 +66,12 @@ environments:
         require_approval: false # No approval needed
         rollback_on_failure: false # Disabled in dev for manual investigation
 
+      account-service:
+        enabled: true
+        auto_deploy: true # Auto-deploy in dev
+        require_approval: false # No approval needed
+        rollback_on_failure: false # Disabled in dev for manual investigation
+
       cribstop-web:
         enabled: true
         auto_deploy: true # Auto-deploy in dev
@@ -114,6 +120,12 @@ environments:
         require_approval: false # Optional approval
         rollback_on_failure: false # Disabled for manual validation
 
+      account-service:
+        enabled: false # Not yet deployed to test
+        auto_deploy: false # Manual deployment in test
+        require_approval: false # Optional approval
+        rollback_on_failure: false # Disabled for manual validation
+
       cribstop-web:
         enabled: false # Not yet deployed to test
         auto_deploy: false # Manual deployment in test
@@ -155,6 +167,12 @@ environments:
 
       inference:
         enabled: true
+        auto_deploy: false # Manual deployment only
+        require_approval: true # Always require approval
+        rollback_on_failure: false # Manual review recommended for production
+
+      account-service:
+        enabled: false # Not yet deployed to production
         auto_deploy: false # Manual deployment only
         require_approval: true # Always require approval
         rollback_on_failure: false # Manual review recommended for production

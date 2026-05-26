@@ -1,0 +1,29 @@
+# yaml-language-server: disable
+# Account Service Deployment Patch for Hetzner Prod Environment
+# Production-grade resources
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: account-service
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: account-service
+  template:
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/account-service:latest
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "250m"
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: "Production"

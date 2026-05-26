@@ -36,6 +36,14 @@ build:
           paths:
             - apps/services/multi-model-inference/**
 
+    - image: account-service
+      context: .
+      custom:
+        buildCommand: node tools/infra/skaffold-build.js
+        dependencies:
+          paths:
+            - apps/services/account-service/**
+
     - image: cribstop-web
       context: .
       custom:
