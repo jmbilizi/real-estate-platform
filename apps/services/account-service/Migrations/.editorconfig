@@ -1,0 +1,21 @@
+# Analyzer overrides for EF Core generated migration files.
+# These files are scaffolded by `dotnet ef migrations add` and must not be modified
+# to match StyleCop / Roslyn conventions — the EF Core tooling regenerates them.
+
+root = false
+
+[*.cs]
+# SA1633: File header — EF scaffolding does not emit copyright headers
+dotnet_diagnostic.SA1633.severity = none
+
+# SA1413: Trailing comma — EF scaffolding omits trailing commas in initializers
+dotnet_diagnostic.SA1413.severity = none
+
+# CA1515: Make type internal — EF Core requires public partial migration classes
+dotnet_diagnostic.CA1515.severity = none
+
+# CA1062: Validate non-null parameters — MigrationBuilder is guaranteed non-null by EF Core
+dotnet_diagnostic.CA1062.severity = none
+
+# IDE0005: Remove unnecessary using — EF scaffolding emits fixed using set
+dotnet_diagnostic.IDE0005.severity = none
