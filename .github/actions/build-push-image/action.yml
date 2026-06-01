@@ -174,7 +174,7 @@ runs:
         cache-from: |
           type=registry,ref=${{ inputs.registry }}/${{ inputs.owner }}/${{ inputs.repo }}/${{ steps.resolve-name.outputs.image-name }}:buildcache
           ${{ inputs.cache-from }}
-        cache-to: type=registry,ref=${{ inputs.registry }}/${{ inputs.owner }}/${{ inputs.repo }}/${{ steps.resolve-name.outputs.image-name }}:buildcache,mode=max
+        cache-to: ${{ inputs.push == 'true' && format('type=registry,ref={0}/{1}/{2}/{3}:buildcache,mode=max', inputs.registry, inputs.owner, inputs.repo, steps.resolve-name.outputs.image-name) || '' }}
         provenance: true
         sbom: true
 
