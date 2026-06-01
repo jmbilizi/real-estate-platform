@@ -60,23 +60,6 @@ on:
         description: "SHA before the push (github.event.before). Used for accurate affected detection across multi-commit pushes."
         required: false
         default: ""
-  # Validate on PRs (build only, no push)
-  pull_request:
-    branches:
-      - main
-      - test
-      - dev
-    paths:
-      - "apps/**/Dockerfile"
-      - "apps/**/*.csproj"
-      - "apps/**/*.cs"
-      - "apps/**/package.json"
-      - "apps/**/*.ts"
-      - "apps/**/*.py"
-      - "libs/**"
-      - "tools/docker/**"
-      - ".github/workflows/build-push-images.yml"
-      - ".github/actions/build-push-image/**"
 
 permissions:
   actions: write # Required to trigger deployment workflow
