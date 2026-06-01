@@ -484,6 +484,21 @@ jobs:
           kustomize build infra/k8s/podman/local --enable-alpha-plugins > /dev/null
           echo "✅ podman/local passed"
 
+  # Validate container image builds on PRs (no push) after quality checks pass.
+  # Catches broken Dockerfiles before merge without polluting the registry.
+  validate-images:
+    needs: [node, python, dotnet]
+    if: |
+      always() &&
+      github.event_name == 'pull_request' &&
+      !contains(needs.*.result, 'failure')
+    uses: ./.github/workflows/build-push-images.yml
+    with:
+      environment: ${{ github.base_ref == 'main' && 'prod' || github.base_ref == 'test' && 'test' || 'dev' }}
+      projects: affected
+      push: false
+    secrets: inherit
+
   # Detect which infrastructure workflows need to be triggered
   detect-infra-changes:
     needs: [node, python, dotnet, validate-infra] # Wait for all quality checks to pass
