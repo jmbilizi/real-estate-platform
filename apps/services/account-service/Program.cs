@@ -2,9 +2,11 @@
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
+using System.Net.Sockets;
 using AccountService.Data;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace AccountService;
 
@@ -34,8 +36,8 @@ internal static class Program
 
         app.MapGroup("/account").MapIdentityApi<IdentityUser>();
 
-        app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
-        app.MapGet("/health/ready", () => Results.Ok(new { status = "ready" }));
+        app.MapGet("/account/health", () => Results.Ok(new { status = "healthy" }));
+        app.MapGet("/account/health/ready", () => Results.Ok(new { status = "ready" }));
 
         await app.RunAsync().ConfigureAwait(false);
     }
@@ -80,6 +82,34 @@ internal static class Program
         using var scope = services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AccountDbContext>();
 
+        var delay = TimeSpan.FromSeconds(2);
+        const int maxAttempts = 12;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                await dbContext.Database.MigrateAsync().ConfigureAwait(false);
+                return;
+            }
+            catch (Exception exception) when (IsTransientDatabaseStartupFailure(exception) && attempt < maxAttempts)
+            {
+                await Console.Error.WriteLineAsync(
+                    $"Database is not ready yet. Retrying migration attempt {attempt}/{maxAttempts} in {delay}. {exception.Message}")
+                    .ConfigureAwait(false);
+
+                await Task.Delay(delay).ConfigureAwait(false);
+                delay = TimeSpan.FromSeconds(Math.Min(delay.TotalSeconds * 2, 10));
+            }
+        }
+
         await dbContext.Database.MigrateAsync().ConfigureAwait(false);
+    }
+
+    private static bool IsTransientDatabaseStartupFailure(Exception exception)
+    {
+        return exception is NpgsqlException npgsqlException &&
+               (npgsqlException.InnerException is SocketException or TimeoutException ||
+                npgsqlException.Message.Contains("Failed to connect", StringComparison.OrdinalIgnoreCase));
     }
 }

@@ -12,5 +12,18 @@
     "**/__pycache__": true,
     "**/.pytest_cache": true,
     "**/*.pyc": true
-  }
+  },
+  "sqltools.connections": [
+    {
+      "ssh": "Disabled",
+      "previewLimit": 50,
+      "server": "localhost",
+      "port": 5432,
+      "askForPassword": true,
+      "driver": "PostgreSQL",
+      "database": "account_db",
+      "username": "account_service_db_user",
+      "name": "account_db connection"
+    }
+  ]
 }

@@ -9,35 +9,10 @@
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
         {
-          "Host": "account-svc",
+          "Host": "account-service-svc",
           "Port": 8080
         }
       ]
-    },
-    {
-      "UpstreamPathTemplate": "/account",
-      "UpstreamHttpMethod": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      "DownstreamPathTemplate": "/account",
-      "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [
-        {
-          "Host": "account-svc",
-          "Port": 8080
-        }
-      ]
-    },
-    {
-      "UpstreamPathTemplate": "/account/health",
-      "UpstreamHttpMethod": ["GET"],
-      "DownstreamPathTemplate": "/health",
-      "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [
-        {
-          "Host": "account-svc",
-          "Port": 8080
-        }
-      ],
-      "Priority": 1
     }
   ],
   "SwaggerEndPoints": [
@@ -48,7 +23,7 @@
         {
           "Name": "Account Service",
           "Version": "v1",
-          "Url": "http://account-svc:8080/openapi/v1.json"
+          "Url": "http://account-service-svc:8080/openapi/v1.json"
         }
       ]
     }

@@ -52,7 +52,7 @@ spec:
                   key: ACCOUNT_SERVICE_DB_USER_PASSWORD
           livenessProbe:
             httpGet:
-              path: /health
+              path: /account/health
               port: 8080
             initialDelaySeconds: 30
             periodSeconds: 10
@@ -60,7 +60,7 @@ spec:
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /health/ready
+              path: /account/health/ready
               port: 8080
             initialDelaySeconds: 10
             periodSeconds: 5
@@ -68,7 +68,7 @@ spec:
             failureThreshold: 3
           startupProbe:
             httpGet:
-              path: /health
+              path: /account/health
               port: 8080
             periodSeconds: 5
             timeoutSeconds: 3
