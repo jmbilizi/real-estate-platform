@@ -27,7 +27,7 @@ internal static class Program
             catch (Exception ex)
             {
                 await Console.Error.WriteLineAsync($"FATAL: Migration failed after all retries: {ex}").ConfigureAwait(false);
-                Environment.Exit(1);
+                throw;
             }
         }
 
@@ -155,6 +155,7 @@ internal static class Program
             {
                 // Database hasn't been created yet by init-databases.sh.
                 "3D000" => true,
+
                 // Schema grants not yet applied (race between CREATE DATABASE and GRANT ON SCHEMA
                 // in init-databases.sh). Safe to retry during PostgreSQL initialisation.
                 "42501" => true,
