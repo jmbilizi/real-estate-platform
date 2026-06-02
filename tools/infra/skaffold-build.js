@@ -123,7 +123,21 @@ function detectDockerfile(projectName) {
   );
 }
 
+function ensureWorkspaceCertsDir() {
+  // The Dockerfile uses a BuildKit bind mount for .workspace-certs/ (enterprise CA setup).
+  // That mount fails the build if the directory does not exist in the build context.
+  // .workspace-certs/ is gitignored, so we ensure it exists here (an empty directory is fine).
+  const certsDir = path.join(workspaceRoot, '.workspace-certs');
+  if (!fs.existsSync(certsDir)) {
+    fs.mkdirSync(certsDir, { recursive: true });
+  }
+}
+
 function buildImage(image) {
+  // Ensure the .workspace-certs/ directory exists before the build so that the
+  // BuildKit bind mount in the Dockerfile does not fail on a fresh clone.
+  ensureWorkspaceCertsDir();
+
   // Extract project name from image reference
   const projectName = extractProjectName(image);
   console.log(`Building project: ${projectName}`);

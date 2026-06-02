@@ -108,6 +108,21 @@ services:
     kubectl_labels:
       app: inference
 
+  account-service:
+    type: application
+    description: "Account identity service (.NET 10.0 Minimal API)"
+    resources:
+      # Base resources (provider/environment-agnostic)
+      - infra/k8s/base/deployments/account-service.deployment.yaml
+      - infra/k8s/base/services/account-service.service.yaml
+      # Environment patches (provider/environment-specific)
+      - infra/k8s/hetzner/dev/patches/deployments/account-service.deployment.yaml
+      - infra/k8s/hetzner/test/patches/deployments/account-service.deployment.yaml
+      - infra/k8s/hetzner/prod/patches/deployments/account-service.deployment.yaml
+      - infra/k8s/podman/local/patches/deployments/account-service.deployment.yaml
+    kubectl_labels:
+      app: account-service
+
   cribstop-web:
     type: application
     description: "Cribstop Next.js web client"

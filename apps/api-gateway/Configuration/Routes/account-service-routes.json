@@ -1,0 +1,31 @@
+{
+  "ServiceName": "Account",
+  "Active": true,
+  "Routes": [
+    {
+      "UpstreamPathTemplate": "/account/{everything}",
+      "UpstreamHttpMethod": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      "DownstreamPathTemplate": "/account/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "account-service-svc",
+          "Port": 8080
+        }
+      ]
+    }
+  ],
+  "SwaggerEndPoints": [
+    {
+      "Key": "Account",
+      "TransformByOcelotConfig": true,
+      "Config": [
+        {
+          "Name": "Account Service",
+          "Version": "v1",
+          "Url": "http://account-service-svc:8080/openapi/v1.json"
+        }
+      ]
+    }
+  ]
+}

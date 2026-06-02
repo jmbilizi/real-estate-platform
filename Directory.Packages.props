@@ -39,10 +39,14 @@
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.1" />
 
     <!-- Data access packages -->
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="8.0.3" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.3" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.3" />
-    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.2" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="8.0.8" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.8" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.8" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.8" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.8" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.4" />
+    <!-- VersionOverride: pins transitive dependency to avoid CVE-2024-43483 (DoS vulnerability fixed in 8.0.1+) -->
+    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="9.0.0" VersionOverride="9.0.0" />
     <PackageVersion Include="Dapper" Version="2.1.28" />
 
     <!-- API packages -->
@@ -51,6 +55,7 @@
     <PackageVersion Include="MMLib.SwaggerForOcelot" Version="10.0.0" />
     <PackageVersion Include="Ocelot" Version="24.1.0" />
     <PackageVersion Include="FluentValidation.AspNetCore" Version="11.3.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.8" />
     
     <!-- OpenTelemetry packages (1.15.3 patches GHSA-4625-4j76-fww9, GHSA-mr8r-92fq-pj8p, GHSA-q834-8qmm-v933) -->
     <PackageVersion Include="OpenTelemetry" Version="1.15.3" />

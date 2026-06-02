@@ -1,0 +1,72 @@
+{
+  "name": "account-service",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/services/account-service",
+  "projectType": "application",
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "dotnet build",
+        "cwd": "apps/services/account-service"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "dotnet run",
+        "cwd": "apps/services/account-service"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "dotnet format analyzers --verify-no-changes",
+        "cwd": "apps/services/account-service"
+      }
+    },
+    "format": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "dotnet format",
+        "cwd": "apps/services/account-service"
+      }
+    },
+    "format-check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "dotnet format --verify-no-changes",
+        "cwd": "apps/services/account-service"
+      }
+    },
+    "type-check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "dotnet build --nologo --no-restore",
+        "cwd": "apps/services/account-service"
+      }
+    },
+    "container-build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node tools/docker/build-image.js {projectName} --tag={args.tag}",
+        "cwd": "."
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "dotnet test",
+        "cwd": "apps/services/account-service/Tests"
+      }
+    }
+  },
+  "tags": [
+    "runtime:dotnet",
+    "type:service",
+    "platform:server",
+    "framework:unassigned",
+    "scope:unassigned",
+    "devteam:unassigned"
+  ]
+}

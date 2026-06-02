@@ -65,8 +65,12 @@ function addLocalRegistrySafetyFlags(argsList) {
   }
 
   // Ensure rebuilds trigger a rollout even when the tag is stable (gitCommit).
+  // Use 'remote' instead of 'local' so Skaffold queries the registry for the digest
+  // after the custom build script pushes the image there. The 'local' option queries
+  // the Docker/Podman daemon, which can return inconsistent results with Podman's
+  // Docker-compatible API for images pushed to a separate local registry.
   if (!hasArg(next, '--digest-source')) {
-    next.push('--digest-source=local');
+    next.push('--digest-source=remote');
   }
 
   return next;
