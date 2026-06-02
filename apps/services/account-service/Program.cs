@@ -129,8 +129,26 @@ internal static class Program
 
     private static bool IsTransientDatabaseStartupFailure(Exception exception)
     {
-        return exception is NpgsqlException npgsqlException &&
-               (npgsqlException.InnerException is SocketException or TimeoutException ||
-                npgsqlException.Message.Contains("Failed to connect", StringComparison.OrdinalIgnoreCase));
+        if (exception is not NpgsqlException npgsqlException)
+        {
+            return false;
+        }
+
+        // TCP-level failures: PostgreSQL pod not yet scheduled or not accepting connections.
+        if (npgsqlException.InnerException is SocketException or TimeoutException ||
+            npgsqlException.Message.Contains("Failed to connect", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // PostgreSQL is up but init-databases.sh hasn't created account_db yet.
+        // SQLSTATE 3D000 = invalid_catalog_name (database does not exist).
+        // This is a startup race condition, not a misconfiguration.
+        if (npgsqlException is PostgresException { SqlState: "3D000" })
+        {
+            return true;
+        }
+
+        return false;
     }
 }
