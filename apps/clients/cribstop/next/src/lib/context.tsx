@@ -3,6 +3,7 @@
 import React, { ReactNode, useCallback, useMemo } from 'react';
 import { Provider } from 'react-redux';
 import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
+import { loginAccount, signupAccount } from '@/lib/api/account';
 import {
   selectHeaderExpanded,
   selectListingTab,
@@ -47,8 +48,8 @@ import {
 interface AppContextValue {
   user: User | null;
   savedIds: Set<string>;
-  login: (email: string, password: string) => void;
-  signup: (name: string, email: string, password: string) => void;
+  login: (email: string, password: string) => Promise<void>;
+  signup: (name: string, username: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   toggleSave: (id: string) => void;
   isSaved: (id: string) => boolean;
@@ -100,15 +101,17 @@ export function useApp(): AppContextValue {
   const savedIds = useMemo(() => new Set(savedIdList), [savedIdList]);
 
   const loginUser = useCallback(
-    (email: string, password: string) => {
+    async (email: string, password: string) => {
+      await loginAccount({ email, password });
       dispatch(login({ email, password }));
     },
     [dispatch],
   );
 
   const signupUser = useCallback(
-    (name: string, email: string, password: string) => {
-      dispatch(signup({ name, email, password }));
+    async (name: string, username: string, email: string, password: string) => {
+      await signupAccount({ username, email, password });
+      dispatch(signup({ name: name || username, email, password }));
     },
     [dispatch],
   );

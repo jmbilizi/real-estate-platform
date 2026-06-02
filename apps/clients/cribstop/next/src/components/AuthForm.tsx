@@ -22,26 +22,42 @@ export default function AuthForm({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [remember, setRemember] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { login, signup } = useApp();
   const router = useRouter();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (mode === 'login') {
-      login(email, password);
-      if (onSuccess) onSuccess();
-      else router.push('/');
-    } else if (mode === 'signup') {
-      signup(name, email, password);
-      if (onSuccess) onSuccess();
-      else router.push('/');
-    } else {
-      // Forgot password – mock toast
-      alert('Password reset link sent to ' + email);
-      setMode('login');
+    setError(null);
+    setIsSubmitting(true);
+
+    try {
+      if (mode === 'login') {
+        await login(email, password);
+        if (onSuccess) onSuccess();
+        else router.push('/');
+      } else if (mode === 'signup') {
+        await signup(name, username, email, password);
+        if (onSuccess) onSuccess();
+        else router.push('/');
+      } else {
+        alert('Password reset link sent to ' + email);
+        setMode('login');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Authentication request failed');
+    } finally {
+      setIsSubmitting(false);
     }
   };
+
+  let submitLabel = 'Send Reset Link';
+  if (mode === 'login') submitLabel = 'Sign In';
+  if (mode === 'signup') submitLabel = 'Create Account';
+  if (isSubmitting) submitLabel = 'Please wait...';
 
   return (
     <div className="mx-auto w-full max-w-md">
@@ -118,6 +134,20 @@ export default function AuthForm({
             </div>
           )}
 
+          {mode === 'signup' && (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-ink-muted">UserName</label>
+              <input
+                type="text"
+                required
+                className="input-field"
+                placeholder="janedoe"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+              />
+            </div>
+          )}
+
           <div>
             <label className="mb-1 block text-sm font-medium text-ink-muted">Email</label>
             <input
@@ -165,11 +195,10 @@ export default function AuthForm({
             </div>
           )}
 
-          <button type="submit" className="btn-primary mt-2 w-full py-3">
-            {mode === 'login' && 'Sign In'}
-            {mode === 'signup' && 'Create Account'}
-            {mode === 'forgot' && 'Send Reset Link'}
+          <button type="submit" className="btn-primary mt-2 w-full py-3" disabled={isSubmitting}>
+            {submitLabel}
           </button>
+          {error && <p className="text-sm text-red-600">{error}</p>}
         </form>
 
         <p className="mt-6 text-center text-sm text-ink-muted">
