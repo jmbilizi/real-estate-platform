@@ -220,12 +220,12 @@ data:
         ALTER DEFAULT PRIVILEGES IN SCHEMA audit GRANT INSERT ON TABLES TO account_service_db_user, messaging_service_db_user, property_service_db_user;
         
         -- Grant admin full access to all schemas
-        GRANT ALL ON SCHEMA reference TO postgres;
-        GRANT ALL ON SCHEMA config TO postgres;
-        GRANT ALL ON SCHEMA audit TO postgres;
-        GRANT ALL ON ALL TABLES IN SCHEMA reference TO postgres;
-        GRANT ALL ON ALL TABLES IN SCHEMA config TO postgres;
-        GRANT ALL ON ALL TABLES IN SCHEMA audit TO postgres;
+        GRANT ALL ON SCHEMA reference TO ${POSTGRES_USER};
+        GRANT ALL ON SCHEMA config TO ${POSTGRES_USER};
+        GRANT ALL ON SCHEMA audit TO ${POSTGRES_USER};
+        GRANT ALL ON ALL TABLES IN SCHEMA reference TO ${POSTGRES_USER};
+        GRANT ALL ON ALL TABLES IN SCHEMA config TO ${POSTGRES_USER};
+        GRANT ALL ON ALL TABLES IN SCHEMA audit TO ${POSTGRES_USER};
     EOSQL
 
     echo "✅ All databases, users, and extensions created successfully!"
