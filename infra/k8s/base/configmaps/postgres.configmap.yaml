@@ -10,6 +10,43 @@ metadata:
   labels:
     app: postgres
 data:
+  sync-passwords.sh: |
+    #!/bin/bash
+    # Runs on every Postgres startup via lifecycle.postStart.
+    # Syncs service user passwords from env vars so that rotating a secret
+    # and redeploying Postgres is sufficient — no manual ALTER USER needed.
+    #
+    # Safety notes:
+    #   - No set -e: must exit 0 always so postStart never kills the container.
+    #   - IF EXISTS guards: safe on first boot when init-databases.sh hasn't run yet.
+    #   - Timeout: avoids infinite loop if Postgres never becomes ready.
+    TIMEOUT=60
+    ELAPSED=0
+    until pg_isready -U "$POSTGRES_USER" -q; do
+      sleep 1
+      ELAPSED=$((ELAPSED + 1))
+      if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
+        echo "sync-passwords: timed out waiting for Postgres — skipping (non-fatal)"
+        exit 0
+      fi
+    done
+    psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+        DO \$BODY\$
+        BEGIN
+            IF EXISTS (SELECT FROM pg_user WHERE usename = 'account_service_db_user') THEN
+                ALTER USER account_service_db_user WITH PASSWORD '${ACCOUNT_SERVICE_DB_USER_PASSWORD}';
+            END IF;
+            IF EXISTS (SELECT FROM pg_user WHERE usename = 'messaging_service_db_user') THEN
+                ALTER USER messaging_service_db_user WITH PASSWORD '${MESSAGING_SERVICE_DB_USER_PASSWORD}';
+            END IF;
+            IF EXISTS (SELECT FROM pg_user WHERE usename = 'property_service_db_user') THEN
+                ALTER USER property_service_db_user WITH PASSWORD '${PROPERTY_SERVICE_DB_USER_PASSWORD}';
+            END IF;
+        END
+        \$BODY\$;
+    EOSQL
+    echo "sync-passwords: done."
+
   init-databases.sh: |
     #!/bin/bash
     set -e

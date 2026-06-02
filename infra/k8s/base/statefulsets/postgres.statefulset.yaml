@@ -60,6 +60,10 @@ spec:
                 secretKeyRef:
                   name: postgres-secret
                   key: PROPERTY_SERVICE_DB_USER_PASSWORD
+          lifecycle:
+            postStart:
+              exec:
+                command: ["/bin/bash", "/docker-entrypoint-initdb.d/sync-passwords.sh"]
           livenessProbe:
             exec:
               command:
