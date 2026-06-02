@@ -12,13 +12,17 @@ metadata:
 data:
   sync-passwords.sh: |
     #!/bin/bash
-    # Runs on every Postgres startup via lifecycle.postStart.
-    # Syncs service user passwords from env vars so that rotating a secret
-    # and redeploying Postgres is sufficient — no manual ALTER USER needed.
+    # Runs on every Postgres startup via lifecycle.postStart AND via
+    # kubectl exec from the deploy action.
+    #
+    # Two responsibilities:
+    #   1. Create databases/users if they don't exist (covers the case where
+    #      the PVC already has data and init-databases.sh was never re-run).
+    #   2. Sync service-user passwords from current env vars.
     #
     # Safety notes:
     #   - No set -e: must exit 0 always so postStart never kills the container.
-    #   - IF EXISTS guards: safe on first boot when init-databases.sh hasn't run yet.
+    #   - IF NOT EXISTS / IF EXISTS guards everywhere.
     #   - Timeout: avoids infinite loop if Postgres never becomes ready.
     TIMEOUT=60
     ELAPSED=0
@@ -30,30 +34,55 @@ data:
         exit 0
       fi
     done
+
+    # --- Step 1: Ensure databases exist ---
+    psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+        SELECT 'CREATE DATABASE account_db'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'account_db')\gexec
+
+        SELECT 'CREATE DATABASE messaging_db'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'messaging_db')\gexec
+
+        SELECT 'CREATE DATABASE property_db'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'property_db')\gexec
+    EOSQL
+
+    # --- Step 2: Create users if missing, sync passwords for all ---
     psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
         DO \$BODY\$
         BEGIN
-            IF EXISTS (SELECT FROM pg_user WHERE usename = 'account_service_db_user') THEN
+            IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'account_service_db_user') THEN
+                CREATE USER account_service_db_user WITH PASSWORD '${ACCOUNT_SERVICE_DB_USER_PASSWORD}';
+                RAISE NOTICE 'sync-passwords: CREATED account_service_db_user';
+            ELSE
                 ALTER USER account_service_db_user WITH PASSWORD '${ACCOUNT_SERVICE_DB_USER_PASSWORD}';
                 RAISE NOTICE 'sync-passwords: updated account_service_db_user';
-            ELSE
-                RAISE NOTICE 'sync-passwords: account_service_db_user does not exist yet — skipping';
             END IF;
-            IF EXISTS (SELECT FROM pg_user WHERE usename = 'messaging_service_db_user') THEN
+            IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'messaging_service_db_user') THEN
+                CREATE USER messaging_service_db_user WITH PASSWORD '${MESSAGING_SERVICE_DB_USER_PASSWORD}';
+                RAISE NOTICE 'sync-passwords: CREATED messaging_service_db_user';
+            ELSE
                 ALTER USER messaging_service_db_user WITH PASSWORD '${MESSAGING_SERVICE_DB_USER_PASSWORD}';
                 RAISE NOTICE 'sync-passwords: updated messaging_service_db_user';
-            ELSE
-                RAISE NOTICE 'sync-passwords: messaging_service_db_user does not exist yet — skipping';
             END IF;
-            IF EXISTS (SELECT FROM pg_user WHERE usename = 'property_service_db_user') THEN
+            IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'property_service_db_user') THEN
+                CREATE USER property_service_db_user WITH PASSWORD '${PROPERTY_SERVICE_DB_USER_PASSWORD}';
+                RAISE NOTICE 'sync-passwords: CREATED property_service_db_user';
+            ELSE
                 ALTER USER property_service_db_user WITH PASSWORD '${PROPERTY_SERVICE_DB_USER_PASSWORD}';
                 RAISE NOTICE 'sync-passwords: updated property_service_db_user';
-            ELSE
-                RAISE NOTICE 'sync-passwords: property_service_db_user does not exist yet — skipping';
             END IF;
         END
         \$BODY\$;
     EOSQL
+
+    # --- Step 3: Grant basic privileges (idempotent) ---
+    psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+        GRANT ALL PRIVILEGES ON DATABASE account_db TO account_service_db_user;
+        GRANT ALL PRIVILEGES ON DATABASE messaging_db TO messaging_service_db_user;
+        GRANT ALL PRIVILEGES ON DATABASE property_db TO property_service_db_user;
+    EOSQL
+
     echo "sync-passwords: done."
 
   init-databases.sh: |
