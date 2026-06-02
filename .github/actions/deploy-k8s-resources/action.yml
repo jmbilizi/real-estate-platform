@@ -1040,6 +1040,19 @@ runs:
           for pod in $STUCK_PODS; do
             echo "\n🔍 Pod: $pod"
             kubectl describe pod $pod | grep -A 20 "Events:" || true
+
+            # Capture init container logs — these contain the actual error when migrate/init fails
+            INIT_CONTAINERS=$(kubectl get pod $pod -o jsonpath='{.spec.initContainers[*].name}' 2>/dev/null || echo "")
+            for init_c in $INIT_CONTAINERS; do
+              echo "\n📋 Init container logs [$init_c] (current):"
+              kubectl logs $pod -c $init_c --tail=100 2>&1 || echo "  (no current logs)"
+              echo "\n📋 Init container logs [$init_c] (previous/crashed):"
+              kubectl logs $pod -c $init_c --previous --tail=100 2>&1 || echo "  (no previous logs)"
+            done
+
+            # Capture main container logs for pods that started but crashed
+            echo "\n📋 Container logs [all] (previous/crashed):"
+            kubectl logs $pod --all-containers --previous --tail=100 2>&1 || echo "  (no previous logs)"
           done
         fi
 
