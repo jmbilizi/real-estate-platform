@@ -16,6 +16,7 @@ spec:
       initContainers:
         - name: migrate
           image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/account-service:dev
+          imagePullPolicy: Always
       containers:
         - name: api
           image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/account-service:dev
