@@ -176,3 +176,128 @@ If you encounter issues:
 3. Verify that required tools are installed: `dotnet tool list --global`
 4. Check the Nx plugin documentation: https://nx.dev/nx-api/dotnet
 5. Review the official .NET CLI docs: https://docs.microsoft.com/dotnet/core/tools/
+
+---
+
+## Database Migrations (EF Core)
+
+### Approach: K8s Init Container
+
+Migrations run in a **Kubernetes init container** using the same image as the service. The app
+binary accepts a `--migrate-only` flag that runs `MigrateAsync()` and exits. K8s guarantees the main
+container does not start until the init container exits with code 0.
+
+```
+Pod startup sequence:
+  [init: migrate] → MigrateAsync() → exit 0
+                                          ↓
+                              [api] starts (DB schema guaranteed up to date)
+```
+
+This means the running application **never calls MigrateAsync()**. The app trusts that the schema is
+correct by the time it starts.
+
+### Why not migrate on app startup?
+
+| Risk                                   | Impact                                                                 |
+| -------------------------------------- | ---------------------------------------------------------------------- |
+| Multiple replicas start simultaneously | All pods race to apply the same migration                              |
+| Migration fails mid-way                | Pod crashes → K8s restarts it → retries the broken migration in a loop |
+| Rolling deploy (old + new pods live)   | Old pod may run against a schema it wasn't built for                   |
+| Slow migration blocks readiness probes | Pod killed before migration completes                                  |
+
+The init container pattern eliminates the first three. Rolling deploys still require care — see
+[two-phase deploys](#rolling-back-a-migration) below. K8s runs exactly one init container per pod
+before the app starts, and `MigrateAsync` uses a PostgreSQL advisory lock so concurrent init
+containers (e.g. when `replicas > 1`) serialise safely — one applies, the others wait and exit 0.
+
+### How migrations are structured
+
+Each service owns its own EF Core migrations in a `Migrations/` folder alongside the service code:
+
+```
+apps/services/account-service/
+├── Data/
+│   └── AccountDbContext.cs       # IdentityDbContext<IdentityUser>
+├── Migrations/
+│   ├── 20260527035441_InitialCreate.cs
+│   ├── 20260527035441_InitialCreate.Designer.cs
+│   └── AccountDbContextModelSnapshot.cs
+└── Program.cs                    # --migrate-only flag handled here
+```
+
+### Adding a new migration
+
+```bash
+# From the workspace root
+dotnet ef migrations add <MigrationName> \
+  --project apps/services/account-service \
+  --startup-project apps/services/account-service
+```
+
+Commit the generated migration files. The next deployment will apply them automatically via the init
+container.
+
+### Rolling back a migration
+
+EF Core does not auto-rollback in K8s. If a bad migration is deployed:
+
+1. **Immediately**: The init container will keep failing → main container never starts → old pods
+   stay live (rolling deploy). No downtime if `replicas > 1`.
+2. **Fix**: Either revert the migration code and redeploy, or add a new corrective migration.
+3. **Last resort** (manual): Run a temporary pod with the previous image and override the command to
+   invoke the migration downscript directly via `psql`, or use a one-off K8s Job that runs
+   `dotnet account-service.dll --migrate-only` from the previous image tag. The runtime image does
+   not include EF tooling (`dotnet ef`) — that lives in the SDK image only.
+
+> This is why destructive migrations (dropping columns, renaming) should use a **two-phase deploy**:
+> Phase 1 — deploy code that works with both old and new schema. Phase 2 — deploy the migration that
+> removes the old column.
+
+### `--migrate-only` implementation
+
+`Program.cs` checks for the flag before building the web host:
+
+```csharp
+if (args.Contains("--migrate-only"))
+{
+    await RunMigrationsAsync().ConfigureAwait(false);
+    return; // exits cleanly, init container completes
+}
+// normal app startup follows...
+```
+
+`RunMigrationsAsync` builds its own minimal `DbContext` directly from env vars (no DI, no web host)
+and calls `MigrateWithRetryAsync` which retries up to 12 times with exponential backoff (2s → 10s
+cap) to handle the case where PostgreSQL itself isn't ready yet at pod startup.
+
+### Retry logic
+
+The init container handles transient DB connection failures itself, so K8s `restartPolicy` is a last
+resort rather than the primary retry mechanism:
+
+```
+Attempt 1  → connect fails (Postgres still starting) → wait 2s
+Attempt 2  → connect fails → wait 4s
+Attempt 3  → connect fails → wait 8s
+Attempt 4+ → wait 10s (capped)
+...up to 12 attempts (~90s total before hard failure)
+```
+
+Only `NpgsqlException` with a `SocketException` / `TimeoutException` inner, or a "Failed to connect"
+message, is treated as transient. All other exceptions (bad SQL, wrong schema) fail immediately.
+
+### Deployment YAML structure
+
+The init container is defined in `infra/k8s/base/deployments/account-service.deployment.yaml` and
+each environment overlay patches the image tag:
+
+| Environment  | Init container image                  | Managed by                        |
+| ------------ | ------------------------------------- | --------------------------------- |
+| podman/local | `account-service` (Skaffold resolves) | `infra/k8s/podman/local/patches/` |
+| hetzner/dev  | `…/account-service:dev`               | `infra/k8s/hetzner/dev/patches/`  |
+| hetzner/test | `…/account-service:test`              | `infra/k8s/hetzner/test/patches/` |
+| hetzner/prod | `…/account-service:latest`            | `infra/k8s/hetzner/prod/patches/` |
+
+The init container always uses the **same image tag as the main container** in every environment,
+ensuring the migration code and the application code are always in sync.

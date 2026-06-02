@@ -13,6 +13,9 @@ spec:
       app: account-service
   template:
     spec:
+      initContainers:
+        - name: migrate
+          image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/account-service:test
       containers:
         - name: api
           image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/account-service:test

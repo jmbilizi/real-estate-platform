@@ -13,6 +13,9 @@ spec:
       app: account-service
   template:
     spec:
+      initContainers:
+        - name: migrate
+          image: account-service
       containers:
         - name: api
           image: account-service

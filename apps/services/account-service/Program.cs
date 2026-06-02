@@ -14,6 +14,15 @@ internal static class Program
 {
     public static async Task Main(string[] args)
     {
+        // K8s init container mode: run migrations and exit.
+        // The deployment's initContainer passes --migrate-only so migrations
+        // complete before the main container starts.
+        if (args.Contains("--migrate-only"))
+        {
+            await RunMigrationsAsync().ConfigureAwait(false);
+            return;
+        }
+
         var builder = WebApplication.CreateBuilder(args);
 
         var connectionString = ResolveConnectionString(builder.Configuration);
@@ -26,8 +35,6 @@ internal static class Program
             .AddEntityFrameworkStores<AccountDbContext>();
 
         var app = builder.Build();
-
-        await InitializeDatabaseAsync(app.Services).ConfigureAwait(false);
 
         app.MapOpenApi();
 
@@ -42,7 +49,50 @@ internal static class Program
         await app.RunAsync().ConfigureAwait(false);
     }
 
-    private static string ResolveConnectionString(ConfigurationManager configuration)
+    private static async Task RunMigrationsAsync()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddEnvironmentVariables()
+            .Build();
+
+        var connectionString = ResolveConnectionString(configuration);
+        var options = new DbContextOptionsBuilder<AccountDbContext>()
+            .UseNpgsql(connectionString)
+            .Options;
+
+        using var dbContext = new AccountDbContext(options);
+        await MigrateWithRetryAsync(dbContext).ConfigureAwait(false);
+
+        await Console.Out.WriteLineAsync("Migrations completed successfully.").ConfigureAwait(false);
+    }
+
+    private static async Task MigrateWithRetryAsync(AccountDbContext dbContext)
+    {
+        var delay = TimeSpan.FromSeconds(2);
+        const int maxAttempts = 12;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                await dbContext.Database.MigrateAsync().ConfigureAwait(false);
+                return;
+            }
+            catch (Exception exception) when (IsTransientDatabaseStartupFailure(exception) && attempt < maxAttempts)
+            {
+                await Console.Error.WriteLineAsync(
+                    $"Database not ready. Retrying {attempt}/{maxAttempts} in {delay.TotalSeconds}s. {exception.Message}")
+                    .ConfigureAwait(false);
+
+                await Task.Delay(delay).ConfigureAwait(false);
+                delay = TimeSpan.FromSeconds(Math.Min(delay.TotalSeconds * 2, 10));
+            }
+        }
+
+        await dbContext.Database.MigrateAsync().ConfigureAwait(false);
+    }
+
+    private static string ResolveConnectionString(IConfiguration configuration)
     {
         var hasEnvironmentDatabaseConfiguration =
             !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ACCOUNT_DB_HOST")) ||
@@ -75,35 +125,6 @@ internal static class Program
         var fallbackPassword = configuration["ACCOUNT_SERVICE_DB_USER_PASSWORD"] ?? "StrongBase64Password";
 
         return $"Host={fallbackHost};Port={fallbackPort};Database={fallbackDatabase};Username={fallbackUsername};Password={fallbackPassword}";
-    }
-
-    private static async Task InitializeDatabaseAsync(IServiceProvider services)
-    {
-        using var scope = services.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<AccountDbContext>();
-
-        var delay = TimeSpan.FromSeconds(2);
-        const int maxAttempts = 12;
-
-        for (var attempt = 1; attempt <= maxAttempts; attempt++)
-        {
-            try
-            {
-                await dbContext.Database.MigrateAsync().ConfigureAwait(false);
-                return;
-            }
-            catch (Exception exception) when (IsTransientDatabaseStartupFailure(exception) && attempt < maxAttempts)
-            {
-                await Console.Error.WriteLineAsync(
-                    $"Database is not ready yet. Retrying migration attempt {attempt}/{maxAttempts} in {delay}. {exception.Message}")
-                    .ConfigureAwait(false);
-
-                await Task.Delay(delay).ConfigureAwait(false);
-                delay = TimeSpan.FromSeconds(Math.Min(delay.TotalSeconds * 2, 10));
-            }
-        }
-
-        await dbContext.Database.MigrateAsync().ConfigureAwait(false);
     }
 
     private static bool IsTransientDatabaseStartupFailure(Exception exception)
