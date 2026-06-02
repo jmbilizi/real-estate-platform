@@ -17,7 +17,7 @@ async function postAuth(endpoint: 'login' | 'signup', payload: LoginRequest | Si
   });
 
   if (!response.ok) {
-    let message = 'Authentication request failed';
+    let message = `Authentication request failed (${response.status})`;
     const body = await response.json().catch(() => null);
     if (typeof body?.error === 'string' && body.error.length > 0) {
       message = body.error;

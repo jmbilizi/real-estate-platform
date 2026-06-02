@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server';
-
-const gatewayUrl = (
-  process.env.NEXT_PUBLIC_API_URL ??
-  process.env.API_URL ??
-  'http://localhost:8080'
-).replace(/\/$/, '');
+import { fetchGateway, resolveGatewayUrl } from '@/app/api/account/_lib/gateway';
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
@@ -15,11 +10,25 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
   }
 
-  const upstream = await fetch(`${gatewayUrl}/account/login`, {
+  let gatewayUrl = '';
+  try {
+    gatewayUrl = resolveGatewayUrl();
+  } catch {
+    return NextResponse.json({ error: 'Gateway is not configured' }, { status: 500 });
+  }
+
+  const upstream = await fetchGateway(`${gatewayUrl}/account/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ email, password }),
+  }).catch((error) => {
+    console.error('Gateway login request failed', error);
+    return null;
   });
+
+  if (!upstream) {
+    return NextResponse.json({ error: 'Sign in service unavailable' }, { status: 503 });
+  }
 
   if (!upstream.ok) {
     if (upstream.status === 401) {

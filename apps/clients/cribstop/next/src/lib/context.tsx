@@ -103,7 +103,7 @@ export function useApp(): AppContextValue {
   const loginUser = useCallback(
     async (email: string, password: string) => {
       await loginAccount({ email, password });
-      dispatch(login({ email, password }));
+      dispatch(login({ email }));
     },
     [dispatch],
   );
@@ -111,7 +111,7 @@ export function useApp(): AppContextValue {
   const signupUser = useCallback(
     async (name: string, username: string, email: string, password: string) => {
       await signupAccount({ username, email, password });
-      dispatch(signup({ name: name || username, email, password }));
+      dispatch(signup({ name, email }));
     },
     [dispatch],
   );

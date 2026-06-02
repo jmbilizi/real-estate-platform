@@ -13,10 +13,10 @@ const authSlice = createSlice({
   name: 'auth',
   initialState,
   reducers: {
-    login: (state, action: PayloadAction<{ email: string; password: string }>) => {
+    login: (state, action: PayloadAction<{ email: string }>) => {
       state.user = { name: 'Alex Johnson', email: action.payload.email, avatar: undefined };
     },
-    signup: (state, action: PayloadAction<{ name: string; email: string; password: string }>) => {
+    signup: (state, action: PayloadAction<{ name: string; email: string }>) => {
       state.user = { name: action.payload.name, email: action.payload.email };
     },
     logout: (state) => {

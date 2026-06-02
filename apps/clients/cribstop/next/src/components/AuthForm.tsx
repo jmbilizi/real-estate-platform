@@ -54,9 +54,12 @@ export default function AuthForm({
     }
   };
 
-  let submitLabel = 'Send Reset Link';
-  if (mode === 'login') submitLabel = 'Sign In';
-  if (mode === 'signup') submitLabel = 'Create Account';
+  const submitLabels: Record<Mode, string> = {
+    login: 'Sign In',
+    signup: 'Create Account',
+    forgot: 'Send Reset Link',
+  };
+  let submitLabel = submitLabels[mode];
   if (isSubmitting) submitLabel = 'Please wait...';
 
   return (
@@ -136,7 +139,7 @@ export default function AuthForm({
 
           {mode === 'signup' && (
             <div>
-              <label className="mb-1 block text-sm font-medium text-ink-muted">UserName</label>
+              <label className="mb-1 block text-sm font-medium text-ink-muted">Username</label>
               <input
                 type="text"
                 required
@@ -195,10 +198,19 @@ export default function AuthForm({
             </div>
           )}
 
-          <button type="submit" className="btn-primary mt-2 w-full py-3" disabled={isSubmitting}>
+          <button
+            type="submit"
+            className="btn-primary mt-2 w-full py-3"
+            disabled={isSubmitting}
+            aria-busy={isSubmitting}
+          >
             {submitLabel}
           </button>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && (
+            <p className="text-sm text-red-600" role="alert" aria-live="polite">
+              {error}
+            </p>
+          )}
         </form>
 
         <p className="mt-6 text-center text-sm text-ink-muted">
