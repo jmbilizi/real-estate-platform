@@ -34,4 +34,13 @@ export interface SearchOccupants {
   pets: number;
 }
 
-export type SearchSuggestion = any | null;
+export interface SearchSuggestionValue {
+  display_name?: string;
+  lat: string;
+  lon: string;
+  type?: string;
+  address?: Record<string, string | undefined>;
+  [key: string]: unknown;
+}
+
+export type SearchSuggestion = SearchSuggestionValue | null;

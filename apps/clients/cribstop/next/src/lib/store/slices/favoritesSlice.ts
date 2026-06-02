@@ -14,8 +14,9 @@ const favoritesSlice = createSlice({
   reducers: {
     toggleSave: (state, action: PayloadAction<string>) => {
       const id = action.payload;
-      if (state.savedIds.includes(id)) {
-        state.savedIds = state.savedIds.filter((savedId) => savedId !== id);
+      const existingIndex = state.savedIds.indexOf(id);
+      if (existingIndex >= 0) {
+        state.savedIds.splice(existingIndex, 1);
         return;
       }
       state.savedIds.push(id);
