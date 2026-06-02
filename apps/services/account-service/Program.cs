@@ -159,6 +159,12 @@ internal static class Program
                 // Schema grants not yet applied (race between CREATE DATABASE and GRANT ON SCHEMA
                 // in init-databases.sh). Safe to retry during PostgreSQL initialisation.
                 "42501" => true,
+
+                // Password mismatch during startup — postStart hook on Postgres may still be
+                // running ALTER USER to sync the password from the current secret.
+                // Retry with backoff so account-service waits for sync to complete.
+                "28P01" => true,
+
                 _ => false,
             };
         }
