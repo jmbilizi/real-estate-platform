@@ -612,6 +612,28 @@ runs:
           echo "✅ No StatefulSet pod template changes detected - skipping restart"
         fi
 
+    - name: Sync Postgres passwords from secrets
+      shell: bash
+      run: |
+        # After StatefulSets restart, ensure Postgres user passwords match the
+        # current K8s secret values.  The postStart hook is a best-effort
+        # fallback for non-CI restarts; this exec is the authoritative sync
+        # with visible output for debugging.
+        POSTGRES_STS=$(yq -N e 'select(.kind=="StatefulSet" and .metadata.name=="postgres") | .metadata.name' manifests.yaml 2>/dev/null | head -1 || echo "")
+        if [ -z "$POSTGRES_STS" ]; then
+          echo "ℹ️  No postgres StatefulSet in manifests — skipping password sync"
+          exit 0
+        fi
+        POSTGRES_NS=$(yq -N e 'select(.kind=="StatefulSet" and .metadata.name=="postgres") | (.metadata.namespace // "default")' manifests.yaml 2>/dev/null | head -1)
+        echo "🔑 Waiting for postgres-0 to be Ready (up to 120s)..."
+        if ! kubectl wait pod/postgres-0 -n "$POSTGRES_NS" --for=condition=Ready --timeout=120s 2>/dev/null; then
+          echo "⚠️  postgres-0 not ready within 120s — skipping password sync"
+          exit 0
+        fi
+        echo "🔑 Syncing Postgres user passwords from current secret values..."
+        kubectl exec postgres-0 -n "$POSTGRES_NS" -- /bin/bash /docker-entrypoint-initdb.d/sync-passwords.sh 2>&1
+        echo "✅ Postgres password sync complete"
+
     - name: Restart Deployments (pull latest images)
       shell: bash
       run: |

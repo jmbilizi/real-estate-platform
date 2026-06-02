@@ -35,12 +35,21 @@ data:
         BEGIN
             IF EXISTS (SELECT FROM pg_user WHERE usename = 'account_service_db_user') THEN
                 ALTER USER account_service_db_user WITH PASSWORD '${ACCOUNT_SERVICE_DB_USER_PASSWORD}';
+                RAISE NOTICE 'sync-passwords: updated account_service_db_user';
+            ELSE
+                RAISE NOTICE 'sync-passwords: account_service_db_user does not exist yet — skipping';
             END IF;
             IF EXISTS (SELECT FROM pg_user WHERE usename = 'messaging_service_db_user') THEN
                 ALTER USER messaging_service_db_user WITH PASSWORD '${MESSAGING_SERVICE_DB_USER_PASSWORD}';
+                RAISE NOTICE 'sync-passwords: updated messaging_service_db_user';
+            ELSE
+                RAISE NOTICE 'sync-passwords: messaging_service_db_user does not exist yet — skipping';
             END IF;
             IF EXISTS (SELECT FROM pg_user WHERE usename = 'property_service_db_user') THEN
                 ALTER USER property_service_db_user WITH PASSWORD '${PROPERTY_SERVICE_DB_USER_PASSWORD}';
+                RAISE NOTICE 'sync-passwords: updated property_service_db_user';
+            ELSE
+                RAISE NOTICE 'sync-passwords: property_service_db_user does not exist yet — skipping';
             END IF;
         END
         \$BODY\$;
