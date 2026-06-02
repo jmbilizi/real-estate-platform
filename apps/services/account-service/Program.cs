@@ -19,8 +19,16 @@ internal static class Program
         // complete before the main container starts.
         if (args.Contains("--migrate-only"))
         {
-            await RunMigrationsAsync().ConfigureAwait(false);
-            return;
+            try
+            {
+                await RunMigrationsAsync().ConfigureAwait(false);
+                return;
+            }
+            catch (Exception ex)
+            {
+                await Console.Error.WriteLineAsync($"FATAL: Migration failed after all retries: {ex}").ConfigureAwait(false);
+                Environment.Exit(1);
+            }
         }
 
         var builder = WebApplication.CreateBuilder(args);
@@ -141,12 +149,17 @@ internal static class Program
             return true;
         }
 
-        // PostgreSQL is up but init-databases.sh hasn't created account_db yet.
-        // SQLSTATE 3D000 = invalid_catalog_name (database does not exist).
-        // This is a startup race condition, not a misconfiguration.
-        if (npgsqlException is PostgresException { SqlState: "3D000" })
+        if (npgsqlException is PostgresException pgEx)
         {
-            return true;
+            return pgEx.SqlState switch
+            {
+                // Database hasn't been created yet by init-databases.sh.
+                "3D000" => true,
+                // Schema grants not yet applied (race between CREATE DATABASE and GRANT ON SCHEMA
+                // in init-databases.sh). Safe to retry during PostgreSQL initialisation.
+                "42501" => true,
+                _ => false,
+            };
         }
 
         return false;
