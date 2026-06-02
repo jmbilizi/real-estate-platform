@@ -452,8 +452,11 @@ jobs:
       - name: Install kustomize
         if: steps.detect.outputs.infra-changed == 'true'
         run: |
-          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
-          sudo mv kustomize /usr/local/bin/
+          KUSTOMIZE_VERSION="v5.4.3"
+          curl -sSL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" \
+            -o /tmp/kustomize.tar.gz
+          tar xzf /tmp/kustomize.tar.gz -C /tmp
+          sudo install -o root -g root -m 0755 /tmp/kustomize /usr/local/bin/kustomize
           kustomize version
 
       - name: Validate Hetzner dev
