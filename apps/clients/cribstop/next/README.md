@@ -214,7 +214,8 @@ src/
     types.ts            # TypeScript types including Listing interface
     filters.ts          # Filter/sort logic
     format.ts           # Price, date, number formatters
-    context.tsx         # App-wide state (saved listings, auth mock)
+    context.tsx         # App hook facade backed by Redux
+    store/              # Redux Toolkit store, slices, selectors, hooks
 ```
 
 ## Running Locally
