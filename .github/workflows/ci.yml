@@ -156,9 +156,11 @@ jobs:
           path: node_modules
           key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
-      # Fallback: install if cache miss (should not happen since setup-base saves it)
-      - name: Install Node.js dependencies (fallback)
-        if: steps.restore-node-modules.outputs.cache-hit != 'true'
+      # Always run pnpm install to ensure workspace package node_modules are linked.
+      # The root node_modules cache above speeds this up (no re-download of root deps),
+      # but workspace packages (e.g. cribstop-next) have their own node_modules that
+      # are NOT cached. pnpm install links them using the cached pnpm store (~5-10s).
+      - name: Install Node.js dependencies
         run: pnpm install --frozen-lockfile
 
       # Cache Nx cache directory for faster builds
