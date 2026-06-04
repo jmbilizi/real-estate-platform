@@ -14,11 +14,15 @@ export async function POST(req: Request) {
     );
   }
 
-  const upstream = await fetchGateway('/account/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ userName: username, email, password }),
-  }).catch((err: unknown) => {
+  const upstream = await fetchGateway(
+    '/account/register',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ userName: username, email, password }),
+    },
+    60_000, // .NET cold-start + EF Core pool init can be slow on first request
+  ).catch((err: unknown) => {
     console.error('Gateway signup failed', err);
     return null;
   });

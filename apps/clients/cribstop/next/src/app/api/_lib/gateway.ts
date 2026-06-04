@@ -1,4 +1,4 @@
-const GATEWAY_TIMEOUT_MS = 10_000;
+const GATEWAY_TIMEOUT_MS = 30_000;
 
 /**
  * Returns the base URL of the API gateway.
@@ -27,13 +27,19 @@ export function gatewayBaseUrl(): string {
 
 /**
  * Fetch a gateway endpoint with an automatic timeout.
- * @param path  Gateway path, e.g. "/account/login"
- * @param init  Standard RequestInit (method, headers, body, etc.)
+ * @param path     Gateway path, e.g. "/account/login"
+ * @param init     Standard RequestInit (method, headers, body, etc.)
+ * @param timeoutMs Override the default timeout (default: 30s). Use a higher value
+ *                  for auth routes where cold-start JIT + EF Core pool init can be slow.
  */
-export async function fetchGateway(path: string, init: RequestInit): Promise<Response> {
+export async function fetchGateway(
+  path: string,
+  init: RequestInit,
+  timeoutMs = GATEWAY_TIMEOUT_MS,
+): Promise<Response> {
   const url = `${gatewayBaseUrl()}${path}`;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), GATEWAY_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     return await fetch(url, { ...init, signal: controller.signal });

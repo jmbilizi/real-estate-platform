@@ -11,11 +11,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
   }
 
-  const upstream = await fetchGateway('/account/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ email, password }),
-  }).catch((err: unknown) => {
+  const upstream = await fetchGateway(
+    '/account/login',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ email, password }),
+    },
+    60_000, // .NET cold-start + EF Core pool init can be slow on first request
+  ).catch((err: unknown) => {
     console.error('Gateway login failed', err);
     return null;
   });
