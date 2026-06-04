@@ -22,6 +22,11 @@ build:
         dependencies:
           paths:
             - apps/api-gateway/**
+          ignore:
+            - apps/api-gateway/bin/**
+            - apps/api-gateway/obj/**
+            - apps/api-gateway/Tests/**
+            - apps/api-gateway/TestResults/**
       sync:
         manual:
           - src: apps/api-gateway/GeoLite2-City.mmdb
@@ -35,6 +40,13 @@ build:
         dependencies:
           paths:
             - apps/services/multi-model-inference/**
+          ignore:
+            - apps/services/multi-model-inference/**/__pycache__/**
+            - apps/services/multi-model-inference/**/*.pyc
+            - apps/services/multi-model-inference/**/*.pyo
+            - apps/services/multi-model-inference/.venv/**
+            - apps/services/multi-model-inference/.pytest_cache/**
+            - apps/services/multi-model-inference/.mypy_cache/**
 
     - image: account-service
       context: .
@@ -43,6 +55,11 @@ build:
         dependencies:
           paths:
             - apps/services/account-service/**
+          ignore:
+            - apps/services/account-service/bin/**
+            - apps/services/account-service/obj/**
+            - apps/services/account-service/Tests/**
+            - apps/services/account-service/TestResults/**
 
     - image: cribstop-web
       context: .
@@ -54,6 +71,10 @@ build:
             - package.json
             - pnpm-lock.yaml
             - pnpm-workspace.yaml
+          ignore:
+            - apps/clients/cribstop/next/node_modules/**
+            - apps/clients/cribstop/next/.next/**
+            - apps/clients/cribstop/next/.turbo/**
 
   local:
     # IMPORTANT: This must be true for the Podman+Kind workflow.
