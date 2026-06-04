@@ -72,7 +72,7 @@
     "nx:graph": "pnpm run nx:reset && nx graph",
     "// → Usage: pnpm run nx:run-many -- --target=build --projects=tag:runtime:node / --projects=proj1,proj2": "",
     "nx:run-many": "pnpm run nx:reset && node tools/nx/safe-run-many.js",
-    "nx:affected": "pnpm run nx:reset && nx affected || echo No affected projects found",
+    "nx:affected": "pnpm run nx:reset && nx affected",
     "nx:list-projects": "nx show projects",
     "nx:workspace-format": "prettier --write --ignore-unknown .",
     "nx:workspace-format-check": "prettier --check --ignore-unknown .",

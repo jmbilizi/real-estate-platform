@@ -15,6 +15,11 @@ on:
       - main
       - test
       - dev
+  # Weekly full-suite run on dev every Monday at 06:00 UTC.
+  # Catches pre-existing issues (bad formatting, lint errors) in files that
+  # haven't been touched recently and would be missed by affected-only checks.
+  schedule:
+    - cron: "0 6 * * 1"
   workflow_call: # Allow other workflows to call CI
 
 permissions:
@@ -75,12 +80,13 @@ jobs:
           fetch-depth: 0
 
       # Detect first push to branch (github.event.before is all zeros).
-      # Also treat workflow_call as "run all" since there's no before SHA to diff against.
+      # Also treat workflow_call and schedule as "run all" — no before SHA to diff against,
+      # and scheduled runs are meant to catch pre-existing issues across all projects.
       - name: Detect first push
         id: first-push
         shell: bash
         run: |
-          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ] || [ "${{ github.event_name }}" = "workflow_call" ]; then
+          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ] || [ "${{ github.event_name }}" = "workflow_call" ] || [ "${{ github.event_name }}" = "schedule" ]; then
             echo "is_first=true" >> $GITHUB_OUTPUT
           else
             echo "is_first=false" >> $GITHUB_OUTPUT
@@ -171,27 +177,27 @@ jobs:
 
       - name: Lint Node.js projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=lint --projects=tag:runtime:node || echo "No affected Node.js projects"
+        run: pnpm exec nx run-many --target=lint --projects=tag:runtime:node --affected --base=origin/${{ github.base_ref }} --head=HEAD
 
       - name: Lint Node.js projects (Push - all projects)
         if: github.event_name != 'pull_request'
-        run: pnpm run nx:node-lint || echo "No Node.js projects found"
+        run: pnpm run nx:node-lint
 
       - name: Test Node.js projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:runtime:node || echo "No affected Node.js projects"
+        run: pnpm exec nx run-many --target=test --projects=tag:runtime:node --affected --base=origin/${{ github.base_ref }} --head=HEAD
 
       - name: Test Node.js projects (Push - all projects)
         if: github.event_name != 'pull_request'
-        run: pnpm run nx:node-test || echo "No Node.js projects found"
+        run: pnpm run nx:node-test
 
       - name: Build Node.js projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=build --projects=tag:runtime:node || echo "No affected Node.js projects"
+        run: pnpm exec nx run-many --target=build --projects=tag:runtime:node --affected --base=origin/${{ github.base_ref }} --head=HEAD
 
       - name: Build Node.js projects (Push - all projects)
         if: github.event_name != 'pull_request'
-        run: pnpm run nx:node-build || echo "No Node.js projects found"
+        run: pnpm run nx:node-build
 
       - name: Upload Node.js artifacts
         if: always()
@@ -268,35 +274,35 @@ jobs:
 
       - name: Check Python formatting (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: uv run black --check . --exclude "(/\\.venv/|/node_modules/|/\\.git/|/\\.nx/|/__pycache__/|/dist/|/build/)" || echo "No affected Python projects"
+        run: uv run black --check . --exclude "(/\\.venv/|/node_modules/|/\\.git/|/\\.nx/|/__pycache__/|/dist/|/build/)"
 
       - name: Check Python formatting (Push - all projects)
         if: github.event_name != 'pull_request'
-        run: uv run black --check . --exclude "(/\\.venv/|/node_modules/|/\\.git/|/\\.nx/|/__pycache__/|/dist/|/build/)" || echo "No Python projects found"
+        run: uv run black --check . --exclude "(/\\.venv/|/node_modules/|/\\.git/|/\\.nx/|/__pycache__/|/dist/|/build/)"
 
       - name: Lint Python projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=lint --projects=tag:runtime:python || echo "No affected Python projects"
+        run: pnpm exec nx run-many --target=lint --projects=tag:runtime:python --affected --base=origin/${{ github.base_ref }} --head=HEAD
 
       - name: Lint Python projects (Push - all projects)
         if: github.event_name != 'pull_request'
-        run: pnpm run nx:python-lint || echo "No Python projects found"
+        run: pnpm run nx:python-lint
 
       - name: Test Python projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:runtime:python || echo "No affected Python projects"
+        run: pnpm exec nx run-many --target=test --projects=tag:runtime:python --affected --base=origin/${{ github.base_ref }} --head=HEAD
 
       - name: Test Python projects (Push - all projects)
         if: github.event_name != 'pull_request'
-        run: pnpm run nx:python-test || echo "No Python projects found"
+        run: pnpm run nx:python-test
 
       - name: Build Python projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=build --projects=tag:runtime:python || echo "No affected Python projects"
+        run: pnpm exec nx run-many --target=build --projects=tag:runtime:python --affected --base=origin/${{ github.base_ref }} --head=HEAD
 
       - name: Build Python projects (Push - all projects)
         if: github.event_name != 'pull_request'
-        run: pnpm run nx:python-build || echo "No Python projects found"
+        run: pnpm run nx:python-build
 
       - name: Upload Python artifacts
         if: always()
@@ -370,35 +376,35 @@ jobs:
 
       - name: Check .NET formatting (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=format-check --projects=tag:runtime:dotnet || echo "No affected .NET projects"
+        run: pnpm exec nx run-many --target=format-check --projects=tag:runtime:dotnet --affected --base=origin/${{ github.base_ref }} --head=HEAD
 
       - name: Check .NET formatting (Push - all projects)
         if: github.event_name != 'pull_request'
-        run: pnpm run nx:dotnet-format-check || echo "No .NET projects found"
+        run: pnpm run nx:dotnet-format-check
 
       - name: Lint .NET projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=lint --projects=tag:runtime:dotnet || echo "No affected .NET projects"
+        run: pnpm exec nx run-many --target=lint --projects=tag:runtime:dotnet --affected --base=origin/${{ github.base_ref }} --head=HEAD
 
       - name: Lint .NET projects (Push - all projects)
         if: github.event_name != 'pull_request'
-        run: pnpm run nx:dotnet-lint || echo "No .NET projects found"
+        run: pnpm run nx:dotnet-lint
 
       - name: Test .NET projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=test --projects=tag:runtime:dotnet || echo "No affected .NET projects"
+        run: pnpm exec nx run-many --target=test --projects=tag:runtime:dotnet --affected --base=origin/${{ github.base_ref }} --head=HEAD
 
       - name: Test .NET projects (Push - all projects)
         if: github.event_name != 'pull_request'
-        run: pnpm run nx:dotnet-test || echo "No .NET projects found"
+        run: pnpm run nx:dotnet-test
 
       - name: Build .NET projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: pnpm exec nx affected --base=origin/${{ github.base_ref }} --head=HEAD --target=build --projects=tag:runtime:dotnet || echo "No affected .NET projects"
+        run: pnpm exec nx run-many --target=build --projects=tag:runtime:dotnet --affected --base=origin/${{ github.base_ref }} --head=HEAD
 
       - name: Build .NET projects (Push - all projects)
         if: github.event_name != 'pull_request'
-        run: pnpm run nx:dotnet-build || echo "No .NET projects found"
+        run: pnpm run nx:dotnet-build
 
       - name: Upload .NET artifacts
         if: always()

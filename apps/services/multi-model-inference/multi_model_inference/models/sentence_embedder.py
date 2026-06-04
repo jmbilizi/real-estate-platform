@@ -1,7 +1,7 @@
 """Sentence embedding model using fastembed (ONNX Runtime)."""
 
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from multi_model_inference.config import settings
 from multi_model_inference.core.base_model import InferenceModel
@@ -25,7 +25,7 @@ class SentenceEmbedder(InferenceModel):
     """
 
     def __init__(self) -> None:
-        self._model = None
+        self._model: Optional[Any] = None
         self._loaded = False
 
     def load(self) -> None:

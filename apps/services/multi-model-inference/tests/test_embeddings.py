@@ -83,9 +83,7 @@ def test_embeddings_multiple_inputs():
 def test_embeddings_empty_input_rejected():
     """Empty input list is rejected with 422."""
     with _make_client_with_fake_model(), TestClient(app) as client:
-        response = client.post(
-            "/api/v1/embeddings", json={"input": []}
-        )
+        response = client.post("/api/v1/embeddings", json={"input": []})
     assert response.status_code == 422
 
 
@@ -122,5 +120,3 @@ def test_embeddings_model_not_loaded():
             json={"input": ["test"]},
         )
     assert response.status_code == 503
-
-
