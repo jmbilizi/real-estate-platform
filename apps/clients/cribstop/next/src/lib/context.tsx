@@ -3,14 +3,13 @@
 import React, { ReactNode, useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
 import { Provider } from 'react-redux';
 import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
-import { loginAccount, signupAccount, logoutAccount, getSession } from '@/lib/api/account';
-import { store, AUTH_CACHE_KEY } from '@/lib/store/store';
+import { getSession, loginAccount, logoutAccount, signupAccount } from '@/lib/api/account';
+import { AUTH_CACHE_KEY, store } from '@/lib/store/store';
 import {
   selectHeaderExpanded,
   selectListingTab,
   selectMobileSearchOpen,
   selectSavedIds,
-  selectSessionChecked,
   selectSearchBedsIdx,
   selectSearchDateRange,
   selectSearchLocation,
@@ -18,10 +17,11 @@ import {
   selectSearchOccupants,
   selectSearchPriceIdx,
   selectSearchSuggestion,
+  selectSessionChecked,
   selectShowHeaderPill,
   selectUser,
 } from '@/lib/store/selectors';
-import { login, logout, signup, setSessionChecked } from '@/lib/store/slices/authSlice';
+import { login, logout, setSessionChecked, signup } from '@/lib/store/slices/authSlice';
 import { clearSaved, toggleSave } from '@/lib/store/slices/favoritesSlice';
 
 // useLayoutEffect on the client (fires before first paint), useEffect on the server (no-op)

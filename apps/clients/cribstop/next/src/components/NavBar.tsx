@@ -15,7 +15,6 @@ import { BRAND } from '@/lib/brand';
 export default function NavBar() {
   const {
     user,
-    sessionLoading,
     logout,
     listingTab,
     setListingTab,
