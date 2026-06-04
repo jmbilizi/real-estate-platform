@@ -192,30 +192,14 @@ function detectValidationMode() {
     }
 
     // On feature branch - run AFFECTED checks (like CI does on PR)
+    // Always compare against the BASE branch (origin/dev, origin/main, etc.)
+    // NOT the upstream tracking branch (origin/feature-branch).
+    // This ensures ALL changes in the feature branch are validated on every push,
+    // even if a previous push succeeded and the fix only touches different file types.
     log('On feature branch - running AFFECTED checks (mimics CI PR behavior)', 'yellow');
 
-    // Try to find the upstream tracking branch
+    // Find the base branch to compare against (same as PR target in CI)
     let base = null;
-    try {
-      const upstream = execSync('git rev-parse --abbrev-ref --symbolic-full-name @{u}', {
-        encoding: 'utf8',
-        cwd: path.resolve(__dirname, '..'),
-      }).trim();
-
-      if (upstream && upstream !== '@{u}') {
-        // Extract the remote base (e.g., origin/dev from origin/dev)
-        const parts = upstream.split('/');
-        if (parts.length >= 2) {
-          base = upstream;
-          log(`Comparing against upstream: ${base}`, 'cyan');
-          return { isAffected: true, base, currentBranch };
-        }
-      }
-    } catch (e) {
-      // No upstream set, fall back to common bases
-    }
-
-    // Fall back to detecting which main branch exists
     const branches = execSync('git branch -r', {
       encoding: 'utf8',
       cwd: path.resolve(__dirname, '..'),
@@ -228,11 +212,10 @@ function detectValidationMode() {
     } else if (branches.includes('origin/main')) {
       base = 'origin/main';
     } else {
-      // origin/HEAD always resolves even without a local main branch
-      base = 'origin/HEAD'; // Ultimate fallback
+      base = 'origin/HEAD';
     }
 
-    log(`Comparing against: ${base}`, 'cyan');
+    log(`Comparing against base branch: ${base}`, 'cyan');
     return { isAffected: true, base, currentBranch };
   } catch (error) {
     logWarning('Could not detect branch, defaulting to full validation');

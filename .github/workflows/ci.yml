@@ -71,32 +71,69 @@ jobs:
     needs: setup-base
     runs-on: ubuntu-latest
     outputs:
-      node: ${{ steps.filter.outputs.node == 'true' || steps.first-push.outputs.is_first == 'true' }}
-      python: ${{ steps.filter.outputs.python == 'true' || steps.first-push.outputs.is_first == 'true' }}
-      dotnet: ${{ steps.filter.outputs.dotnet == 'true' || steps.first-push.outputs.is_first == 'true' }}
+      node: ${{ steps.filter.outputs.node == 'true' || steps.run-all.outputs.run_all == 'true' }}
+      python: ${{ steps.filter.outputs.python == 'true' || steps.run-all.outputs.run_all == 'true' }}
+      dotnet: ${{ steps.filter.outputs.dotnet == 'true' || steps.run-all.outputs.run_all == 'true' }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # Detect first push to branch (github.event.before is all zeros).
-      # Also treat workflow_call and schedule as "run all" — no before SHA to diff against,
-      # and scheduled runs are meant to catch pre-existing issues across all projects.
-      - name: Detect first push
-        id: first-push
+      # Determine the base SHA for change detection.
+      # For pushes: use the last SUCCESSFUL CI run's commit on this branch.
+      # This ensures that after a failed run, the next push compares against
+      # the last green state — not just the previous commit. Fixes the bug where
+      # a fix push only touches .yml but the original failure was in .ts files,
+      # causing the node job to be skipped entirely.
+      - name: Determine comparison base
+        id: run-all
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ] || [ "${{ github.event_name }}" = "workflow_call" ] || [ "${{ github.event_name }}" = "schedule" ]; then
-            echo "is_first=true" >> $GITHUB_OUTPUT
+          # First push, workflow_call, or schedule → run all
+          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ] || \
+             [ "${{ github.event_name }}" = "workflow_call" ] || \
+             [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "run_all=true" >> $GITHUB_OUTPUT
+            echo "base_sha=" >> $GITHUB_OUTPUT
+            echo "ℹ️ First push / schedule / workflow_call → running all checks"
+            exit 0
+          fi
+
+          # PRs always compare against the target branch
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "run_all=false" >> $GITHUB_OUTPUT
+            echo "base_sha=origin/${{ github.base_ref }}" >> $GITHUB_OUTPUT
+            echo "ℹ️ PR → comparing against origin/${{ github.base_ref }}"
+            exit 0
+          fi
+
+          # Push: find last successful CI run on this branch
+          BRANCH="${{ github.ref_name }}"
+          LAST_GREEN_SHA=$(gh api \
+            "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?branch=${BRANCH}&status=success&per_page=1" \
+            --jq '.workflow_runs[0].head_sha // empty' 2>/dev/null || echo "")
+
+          if [ -z "$LAST_GREEN_SHA" ]; then
+            echo "run_all=true" >> $GITHUB_OUTPUT
+            echo "base_sha=" >> $GITHUB_OUTPUT
+            echo "⚠️ No previous successful run found on ${BRANCH} → running all checks"
+          elif ! git cat-file -e "$LAST_GREEN_SHA" 2>/dev/null; then
+            echo "run_all=true" >> $GITHUB_OUTPUT
+            echo "base_sha=" >> $GITHUB_OUTPUT
+            echo "⚠️ Last green SHA ${LAST_GREEN_SHA} not in history → running all checks"
           else
-            echo "is_first=false" >> $GITHUB_OUTPUT
+            echo "run_all=false" >> $GITHUB_OUTPUT
+            echo "base_sha=${LAST_GREEN_SHA}" >> $GITHUB_OUTPUT
+            echo "✓ Comparing against last green: ${LAST_GREEN_SHA}"
           fi
 
       - uses: dorny/paths-filter@v3
         id: filter
-        if: steps.first-push.outputs.is_first == 'false'
+        if: steps.run-all.outputs.run_all == 'false'
         with:
-          base: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+          base: ${{ steps.run-all.outputs.base_sha }}
           ref: ${{ github.sha }}
           filters: |
             node:

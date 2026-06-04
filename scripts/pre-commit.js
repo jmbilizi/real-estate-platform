@@ -209,26 +209,14 @@ function detectValidationMode() {
     }
 
     // On feature branch - run AFFECTED checks
+    // Always compare against the BASE branch (origin/dev, origin/main, etc.)
+    // NOT the upstream tracking branch (origin/feature-branch).
+    // This ensures ALL changes in the feature branch are validated on every commit,
+    // even if previous commits already passed. Matches CI PR behavior.
     log('On feature branch - checking AFFECTED projects only', 'yellow');
 
-    // Try to find the upstream tracking branch
+    // Find the base branch to compare against (same as PR target in CI)
     let base = null;
-    try {
-      const upstream = execSync('git rev-parse --abbrev-ref --symbolic-full-name @{u}', {
-        encoding: 'utf8',
-        cwd: path.resolve(__dirname, '..'),
-      }).trim();
-
-      if (upstream && upstream !== '@{u}') {
-        base = upstream;
-        log(`Comparing against upstream: ${base}`, 'cyan');
-        return { isAffected: true, base, currentBranch };
-      }
-    } catch (e) {
-      // No upstream set, fall back to common bases
-    }
-
-    // Fall back to detecting which main branch exists
     const branches = execSync('git branch -r', {
       encoding: 'utf8',
       cwd: path.resolve(__dirname, '..'),
@@ -241,11 +229,10 @@ function detectValidationMode() {
     } else if (branches.includes('origin/main')) {
       base = 'origin/main';
     } else {
-      // origin/HEAD always resolves even without a local main branch
       base = 'origin/HEAD';
     }
 
-    log(`Comparing against: ${base}`, 'cyan');
+    log(`Comparing against base branch: ${base}`, 'cyan');
     return { isAffected: true, base, currentBranch };
   } catch (error) {
     logWarning('Could not detect branch, defaulting to full checks');
