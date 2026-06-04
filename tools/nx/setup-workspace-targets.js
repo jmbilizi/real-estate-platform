@@ -646,6 +646,8 @@ function main() {
     // -----------------------------------------------------------------------
     const beforeRaw = fs.readFileSync(projectJsonPath, 'utf8');
     const projectJson = JSON.parse(beforeRaw);
+    // Snapshot the normalized form before any mutations so we can diff fairly
+    const beforeNormalized = JSON.stringify(projectJson, null, 2) + '\n';
 
     // .NET targets
     if (dotnetDetected) {
@@ -682,7 +684,7 @@ function main() {
 
     // Persist only when something actually changed
     const afterRaw = JSON.stringify(projectJson, null, 2) + '\n';
-    if (afterRaw !== beforeRaw.replace(/\r\n/g, '\n')) {
+    if (afterRaw !== beforeNormalized) {
       writeFilePreservingEncoding(projectJsonPath, afterRaw);
       log(`  ✓ ${projectName}: Updated project.json`, 'green');
       stats.updated++;
