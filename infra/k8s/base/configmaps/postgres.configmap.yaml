@@ -12,18 +12,23 @@ metadata:
 data:
   sync-passwords.sh: |
     #!/bin/bash
-    # Runs on every Postgres startup via lifecycle.postStart AND via
-    # kubectl exec from the deploy action.
+    # Runs on every Postgres startup via lifecycle.postStart.
     #
-    # Two responsibilities:
-    #   1. Create databases/users if they don't exist (covers the case where
-    #      the PVC already has data and init-databases.sh was never re-run).
-    #   2. Sync service-user passwords from current env vars.
+    # Responsibilities:
+    #   1. Ensure databases exist.
+    #   2. Ensure users exist and passwords are current.
+    #   3. Make each service user OWN their database.
+    #
+    # Why ownership instead of GRANT:
+    #   In PostgreSQL 15+, GRANT ALL ON DATABASE does not grant CREATE on the
+    #   public schema. Ownership is stored in the pg_database catalog and
+    #   survives PVC reuse across restarts — no re-granting ever needed.
+    #   The database owner is a member of pg_database_owner, which holds
+    #   CREATE on the public schema by default.
     #
     # Safety notes:
-    #   - No set -e: must exit 0 always so postStart never kills the container.
-    #   - IF NOT EXISTS / IF EXISTS guards everywhere.
-    #   - Timeout: avoids infinite loop if Postgres never becomes ready.
+    #   - No set -e: must exit 0 so postStart never kills the postgres container.
+    #   - All operations are idempotent (IF NOT EXISTS / ALTER is safe to repeat).
     TIMEOUT=60
     ELAPSED=0
     until pg_isready -U "$POSTGRES_USER" -q; do
@@ -47,7 +52,7 @@ data:
         WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'property_db')\gexec
     EOSQL
 
-    # --- Step 2: Create users if missing, sync passwords for all ---
+    # --- Step 2: Ensure users exist and passwords are current ---
     psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
         DO \$BODY\$
         BEGIN
@@ -76,11 +81,14 @@ data:
         \$BODY\$;
     EOSQL
 
-    # --- Step 3: Grant basic privileges (idempotent) ---
+    # --- Step 3: Transfer database ownership to each service user ---
+    # ALTER DATABASE ... OWNER TO writes to pg_database.datdba — persisted in the
+    # PVC catalog. Running this on every startup is idempotent and harmless.
+    # The postgres superuser retains full access via its superuser privilege.
     psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
-        GRANT ALL PRIVILEGES ON DATABASE account_db TO account_service_db_user;
-        GRANT ALL PRIVILEGES ON DATABASE messaging_db TO messaging_service_db_user;
-        GRANT ALL PRIVILEGES ON DATABASE property_db TO property_service_db_user;
+        ALTER DATABASE account_db OWNER TO account_service_db_user;
+        ALTER DATABASE messaging_db OWNER TO messaging_service_db_user;
+        ALTER DATABASE property_db OWNER TO property_service_db_user;
     EOSQL
 
     echo "sync-passwords: done."
@@ -108,20 +116,7 @@ data:
         PROPERTY_SERVICE_DB_USER_PASSWORD="changeme_property"
     fi
 
-    # Check and create databases only if they don't exist
-    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
-        -- Create additional databases for real estate platform (idempotent)
-        SELECT 'CREATE DATABASE account_db'
-        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'account_db')\gexec
-        
-        SELECT 'CREATE DATABASE messaging_db'
-        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'messaging_db')\gexec
-        
-        SELECT 'CREATE DATABASE property_db'
-        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'property_db')\gexec
-    EOSQL
-
-    # Create users and grant privileges (idempotent)
+    # Step 1: Create users first — they must exist before databases can reference them as owners.
     psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
         -- Create dedicated users for each database
         -- Using $BODY$ delimiter instead of $$ to avoid Skaffold kustomize YAML parsing bug
@@ -138,11 +133,25 @@ data:
             END IF;
         END
         \$BODY\$;
+    EOSQL
+
+    # Step 2: Create databases owned by the corresponding service user.
+    # Ownership grants the user full access including CREATE on the public schema
+    # in PostgreSQL 15+ (via pg_database_owner membership) — no GRANT needed.
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+        SELECT 'CREATE DATABASE account_db OWNER account_service_db_user'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'account_db')\gexec
         
-        -- Grant privileges
-        GRANT ALL PRIVILEGES ON DATABASE account_db TO account_service_db_user;
-        GRANT ALL PRIVILEGES ON DATABASE messaging_db TO messaging_service_db_user;
-        GRANT ALL PRIVILEGES ON DATABASE property_db TO property_service_db_user;
+        SELECT 'CREATE DATABASE messaging_db OWNER messaging_service_db_user'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'messaging_db')\gexec
+        
+        SELECT 'CREATE DATABASE property_db OWNER property_service_db_user'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'property_db')\gexec
+
+        -- Transfer ownership for any pre-existing databases not owned by the service user
+        ALTER DATABASE account_db OWNER TO account_service_db_user;
+        ALTER DATABASE messaging_db OWNER TO messaging_service_db_user;
+        ALTER DATABASE property_db OWNER TO property_service_db_user;
     EOSQL
 
     # Enable extensions on account_db

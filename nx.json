@@ -45,6 +45,7 @@
       }
     }
   ],
+  "defaultBase": "origin/HEAD",
   "projects": {},
   "namedInputs": {
     "default": ["{projectRoot}/**/*"],

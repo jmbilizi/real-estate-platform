@@ -65,7 +65,7 @@ let nxJson = { plugins: [] };
 
 if (nxJsonExists) {
   try {
-    nxJson = require(nxJsonPath);
+    nxJson = JSON.parse(fs.readFileSync(nxJsonPath, 'utf8'));
     console.log('✅ Found existing nx.json');
   } catch (error) {
     console.log('⚠️ Error reading nx.json, creating a new one');
@@ -73,17 +73,23 @@ if (nxJsonExists) {
   }
 }
 
+// Track whether we need to write changes
+let nxJsonDirty = !nxJsonExists;
+
 // Ensure minimum required fields
 if (!nxJson.plugins) {
   nxJson.plugins = [];
+  nxJsonDirty = true;
 }
 
 if (!nxJson.installation) {
-  nxJson.installation = { version: '22.0.1' }; // Updated to match package.json
+  nxJson.installation = { version: '22.0.1' };
+  nxJsonDirty = true;
 }
 
 if (!nxJson.projects) {
   nxJson.projects = {};
+  nxJsonDirty = true;
 }
 
 // Check if .NET SDK is available (silently)
@@ -103,10 +109,12 @@ if (isDotNetAvailable) {
     '⚠️ .NET SDK not found - @nx/dotnet plugin disabled (run pnpm run dotnet:env to enable)',
   );
   // Remove @nx/dotnet from plugins if present to prevent project graph failures
+  const before = nxJson.plugins.length;
   nxJson.plugins = nxJson.plugins.filter((p) => {
     const name = typeof p === 'string' ? p : p.plugin;
     return name !== '@nx/dotnet';
   });
+  if (nxJson.plugins.length !== before) nxJsonDirty = true;
 }
 
 // Make sure we have all the plugins listed properly
@@ -128,8 +136,13 @@ const requiredPlugins = [
   {
     plugin: '@nx/js/typescript',
     options: {
-      typecheck: { targetName: 'typecheck' },
-      build: { targetName: 'build', configName: 'tsconfig.lib.json' },
+      typecheck: { targetName: 'type-check' },
+      build: {
+        targetName: 'build',
+        configName: 'tsconfig.lib.json',
+        buildDepsName: 'build-deps',
+        watchDepsName: 'watch-deps',
+      },
     },
   },
   {
@@ -144,6 +157,7 @@ const requiredPlugins = [
       testTargetName: 'test',
       buildTargetName: 'build',
       serveTargetName: 'serve',
+      typecheckTargetName: 'type-check',
     },
   },
 ];
@@ -161,6 +175,7 @@ for (const requiredPlugin of requiredPlugins) {
     if (!exists) {
       console.log(`➕ Adding missing plugin: ${requiredPlugin}`);
       nxJson.plugins.push(requiredPlugin);
+      nxJsonDirty = true;
     }
   } else {
     // For object plugins, check by plugin name
@@ -170,13 +185,18 @@ for (const requiredPlugin of requiredPlugins) {
     if (!exists) {
       console.log(`➕ Adding missing plugin: ${pluginName}`);
       nxJson.plugins.push(requiredPlugin);
+      nxJsonDirty = true;
     }
   }
 }
 
-// Write updated nx.json
-writeFilePreservingEncoding(nxJsonPath, JSON.stringify(nxJson, null, 2) + '\n');
-console.log('✅ Updated nx.json with proper configuration');
+// Only write nx.json when something was actually mutated — avoids false diffs on every commit
+if (nxJsonDirty) {
+  writeFilePreservingEncoding(nxJsonPath, JSON.stringify(nxJson, null, 2) + '\n');
+  console.log('✅ Updated nx.json with proper configuration');
+} else {
+  console.log('✅ nx.json already up to date');
+}
 
 // Ensure .nx directory exists
 const nxDir = path.join(rootDir, '.nx');
