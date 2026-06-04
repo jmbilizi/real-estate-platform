@@ -57,8 +57,7 @@ export default function SlidePanel({
 
   return (
     <>
-      {/* Invisible full-screen backdrop (click outside handled by useEffect above) */}
-      <div className="fixed inset-0 z-[99]" aria-hidden />
+      <div className="fixed inset-0 z-[99] pointer-events-none" aria-hidden />
 
       {/* Panel */}
       <div
