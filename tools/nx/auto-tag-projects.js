@@ -304,6 +304,8 @@ function main() {
 
     const raw = fs.readFileSync(projectJsonPath, 'utf8');
     const projectJson = JSON.parse(raw);
+    // Snapshot normalized form before any mutations for a fair comparison
+    const beforeNormalized = JSON.stringify(projectJson, null, 2) + '\n';
     let tags = projectJson.tags || [];
 
     // --- Step 1: Remove legacy bare tags ---
@@ -361,11 +363,7 @@ function main() {
     projectJson.tags = tags;
     const newContent = JSON.stringify(projectJson, null, 2) + '\n';
 
-    // Normalize for comparison
-    const normalizedOld = raw.replace(/\r\n/g, '\n');
-    const normalizedNew = newContent.replace(/\r\n/g, '\n');
-
-    if (normalizedNew !== normalizedOld) {
+    if (newContent !== beforeNormalized) {
       writeFilePreservingEncoding(projectJsonPath, newContent);
       const tagSummary = tags.join(', ');
       log(`✓ ${projectName}: ${tagSummary}`, 'green');
