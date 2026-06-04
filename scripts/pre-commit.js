@@ -241,7 +241,8 @@ function detectValidationMode() {
     } else if (branches.includes('origin/main')) {
       base = 'origin/main';
     } else {
-      base = 'origin/main';
+      // origin/HEAD always resolves even without a local main branch
+      base = 'origin/HEAD';
     }
 
     log(`Comparing against: ${base}`, 'cyan');
