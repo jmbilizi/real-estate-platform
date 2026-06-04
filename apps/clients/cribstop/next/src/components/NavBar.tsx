@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useApp } from '@/lib/context';
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import CompactSearchBar from './CompactSearchBar';
 import MobileSearchSheet from './MobileSearchSheet';
@@ -26,7 +26,12 @@ export default function NavBar() {
     setMobileSearchOpen,
   } = useApp();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
+
+  // Fire before the browser's first paint so the correct auth button is shown
+  // on the client without ever painting the wrong one.
+  useLayoutEffect(() => setMounted(true), []);
 
   // Collapse expanded search when ScrollSentinel scrolls back into view
   useEffect(() => {
@@ -230,7 +235,7 @@ export default function NavBar() {
             {/* Apps waffle — rightmost, styled like btn-primary */}
             <AppsDropdown />
 
-            {sessionLoading ? (
+            {!mounted ? (
               <div className="h-8 w-8 rounded-full bg-surface-alt" />
             ) : user ? (
               <div className="relative">

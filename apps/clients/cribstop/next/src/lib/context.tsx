@@ -1,9 +1,10 @@
 'use client';
 
-import React, { ReactNode, useCallback, useEffect, useMemo } from 'react';
+import React, { ReactNode, useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
 import { Provider } from 'react-redux';
 import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
 import { loginAccount, signupAccount, logoutAccount, getSession } from '@/lib/api/account';
+import { store, AUTH_CACHE_KEY } from '@/lib/store/store';
 import {
   selectHeaderExpanded,
   selectListingTab,
@@ -20,9 +21,11 @@ import {
   selectShowHeaderPill,
   selectUser,
 } from '@/lib/store/selectors';
-import { store } from '@/lib/store/store';
 import { login, logout, signup, setSessionChecked } from '@/lib/store/slices/authSlice';
 import { clearSaved, toggleSave } from '@/lib/store/slices/favoritesSlice';
+
+// useLayoutEffect on the client (fires before first paint), useEffect on the server (no-op)
+const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 import {
   setSearchBedsIdx,
   setSearchDateRange,
@@ -125,13 +128,46 @@ export function useApp(): AppContextValue {
     dispatch(clearSaved());
   }, [dispatch]);
 
-  // Restore session from cookies on mount / page reload
+  // Restore auth from localStorage synchronously before the browser's first paint.
+  // This means returning users never see the ghost placeholder flash.
+  useIsomorphicLayoutEffect(() => {
+    try {
+      const raw = localStorage.getItem(AUTH_CACHE_KEY);
+      if (raw) {
+        const cached = JSON.parse(raw) as {
+          user?: { email: string } | null;
+          accessToken?: string | null;
+        };
+        if (cached.user?.email) {
+          dispatch(
+            login({ email: cached.user.email, accessToken: cached.accessToken ?? undefined }),
+          );
+          return;
+        }
+      }
+    } catch {}
+    dispatch(setSessionChecked());
+  }, [dispatch]);
+
+  // Background verification: confirm the cached state is still valid.
+  // Only dispatches when something actually changed to avoid a needless re-render.
   useEffect(() => {
     getSession().then((session) => {
+      const currentUser = store.getState().auth.user;
       if (session.authenticated && session.email) {
-        dispatch(login({ email: session.email }));
+        if (currentUser?.email !== session.email) {
+          dispatch(login({ email: session.email }));
+        } else {
+          dispatch(setSessionChecked());
+        }
       } else {
-        dispatch(setSessionChecked());
+        if (currentUser) {
+          // Session expired — clear local state
+          dispatch(logout());
+          dispatch(clearSaved());
+        } else {
+          dispatch(setSessionChecked());
+        }
       }
     });
   }, [dispatch]);
