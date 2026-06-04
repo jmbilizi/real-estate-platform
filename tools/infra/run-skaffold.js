@@ -65,12 +65,14 @@ function addLocalRegistrySafetyFlags(argsList) {
   }
 
   // Ensure rebuilds trigger a rollout even when the tag is stable (gitCommit).
-  // Use 'remote' instead of 'local' so Skaffold queries the registry for the digest
-  // after the custom build script pushes the image there. The 'local' option queries
-  // the Docker/Podman daemon, which can return inconsistent results with Podman's
-  // Docker-compatible API for images pushed to a separate local registry.
+  // For `dev`/`debug` (watch loops) use 'tag' — just check if the tag exists in the
+  // registry. This is much faster than 'remote' (pulls full manifests) and safe because
+  // gitCommit tags change when the worktree changes. For one-shot commands like `run`
+  // and `build`, keep 'remote' for correctness (detects registry/daemon inconsistencies).
   if (!hasArg(next, '--digest-source')) {
-    next.push('--digest-source=remote');
+    const watchCommands = new Set(['dev', 'debug']);
+    const source = watchCommands.has(next[0]) ? 'tag' : 'remote';
+    next.push(`--digest-source=${source}`);
   }
 
   return next;
