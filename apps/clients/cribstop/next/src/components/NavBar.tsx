@@ -9,6 +9,7 @@ import MobileSearchSheet from './MobileSearchSheet';
 import MobileSearchPill from './MobileSearchPill';
 import { Home, KeyRound } from 'lucide-react';
 import AppsDropdown from './AppsDropdown';
+import SlidePanel from './SlidePanel';
 import { BRAND } from '@/lib/brand';
 
 export default function NavBar() {
@@ -217,60 +218,15 @@ export default function NavBar() {
           <div
             className={`relative z-20 flex items-center gap-1 ${showHeaderPill ? 'hidden md:flex' : 'flex'}`}
           >
-            {user ? (
-              <div className="relative">
-                <button
-                  onClick={() => setProfileOpen(!profileOpen)}
-                  className="flex h-10 items-center gap-2 rounded-full border border-surface-border bg-white pl-3 pr-1 transition hover:shadow-card"
-                >
-                  <svg
-                    className="h-4 w-4 text-ink-muted"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 6h16M4 12h16M4 18h16"
-                    />
-                  </svg>
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-ink font-semibold text-white">
-                    {user.name[0]}
-                  </span>
-                </button>
-                {profileOpen && (
-                  <div className="absolute right-0 top-12 z-50 w-56 rounded-2xl border border-surface-border bg-white p-2 shadow-pop">
-                    <p className="px-3 py-2 text-sm font-semibold">{user.name}</p>
-                    <p className="px-3 pb-2 text-xs text-ink-muted">{user.email}</p>
-                    <hr className="my-1 border-surface-border" />
-                    <Link
-                      href="/favorites"
-                      className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-alt"
-                      onClick={() => setProfileOpen(false)}
-                    >
-                      Saved Homes
-                    </Link>
-                    <button
-                      onClick={() => {
-                        logout();
-                        setProfileOpen(false);
-                      }}
-                      className="block w-full rounded-lg px-3 py-2 text-left text-sm text-ink-muted hover:bg-surface-alt"
-                    >
-                      Sign out
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
+            {!user ? (
               <button
                 onClick={() => openModal('login')}
                 className="flex h-10 items-center rounded-full text-sm font-medium text-ink transition hover:text-brand active:text-brand"
               >
                 Sign in/up
               </button>
+            ) : (
+              <></>
             )}
 
             <Link
@@ -280,6 +236,86 @@ export default function NavBar() {
             >
               <HeartIcon className="h-5 w-5" />
             </Link>
+
+            {user ? (
+              <div className="relative">
+                <button
+                  onClick={() => setProfileOpen((v) => !v)}
+                  aria-label="Profile menu"
+                  aria-expanded={profileOpen}
+                  aria-haspopup="dialog"
+                  className="flex h-7 w-7 me-3 items-center justify-center rounded-full bg-ink font-semibold text-white"
+                >
+                  {user.name[0].toUpperCase()}
+                </button>
+
+                <SlidePanel open={profileOpen} onClose={() => setProfileOpen(false)} width={260}>
+                  {/* User identity */}
+                  <div className="px-5 pt-4 pb-3">
+                    <div className="flex items-center gap-3 mb-1">
+                      <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-ink font-semibold text-white text-sm">
+                        {user.name[0].toUpperCase()}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-ink truncate">{user.name}</p>
+                        <p className="text-xs text-ink-muted truncate">{user.email}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mx-4 border-t border-black/[0.06]" />
+
+                  {/* Nav links */}
+                  <div className="px-2 py-2">
+                    <Link
+                      href="/account"
+                      className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-ink hover:bg-surface-alt transition-colors"
+                      onClick={() => setProfileOpen(false)}
+                    >
+                      Account settings
+                    </Link>
+                    <Link
+                      href="/favorites"
+                      className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-ink hover:bg-surface-alt transition-colors"
+                      onClick={() => setProfileOpen(false)}
+                    >
+                      Saved homes
+                    </Link>
+                    <Link
+                      href="/alerts"
+                      className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-ink hover:bg-surface-alt transition-colors"
+                      onClick={() => setProfileOpen(false)}
+                    >
+                      Alerts
+                    </Link>
+                    <Link
+                      href="/messages"
+                      className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-ink hover:bg-surface-alt transition-colors"
+                      onClick={() => setProfileOpen(false)}
+                    >
+                      Messages
+                    </Link>
+                  </div>
+
+                  <div className="mx-4 border-t border-black/[0.06]" />
+
+                  {/* Sign out */}
+                  <div className="px-2 py-2">
+                    <button
+                      onClick={() => {
+                        logout();
+                        setProfileOpen(false);
+                      }}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-ink-muted hover:bg-surface-alt transition-colors"
+                    >
+                      Sign out
+                    </button>
+                  </div>
+                </SlidePanel>
+              </div>
+            ) : (
+              <></>
+            )}
 
             {/* Apps waffle — rightmost, styled like btn-primary */}
             <AppsDropdown />

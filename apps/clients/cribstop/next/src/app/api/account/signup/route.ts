@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchGateway, resolveGatewayUrl } from '@/app/api/account/_lib/gateway';
+import { fetchGateway } from '@/app/api/_lib/gateway';
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
@@ -14,35 +14,35 @@ export async function POST(req: Request) {
     );
   }
 
-  let gatewayUrl = '';
-  try {
-    gatewayUrl = resolveGatewayUrl();
-  } catch {
-    return NextResponse.json({ error: 'Gateway is not configured' }, { status: 500 });
-  }
-
-  const upstream = await fetchGateway(`${gatewayUrl}/account/register`, {
+  const upstream = await fetchGateway('/account/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ userName: username, email, password }),
-  }).catch((error) => {
-    console.error('Gateway signup request failed', error);
+  }).catch((err: unknown) => {
+    console.error('Gateway signup failed', err);
     return null;
   });
 
   if (!upstream) {
-    return NextResponse.json({ error: 'Sign up service unavailable' }, { status: 503 });
+    return NextResponse.json({ error: 'Sign-up service unavailable' }, { status: 503 });
   }
 
   if (!upstream.ok) {
-    if (upstream.status === 400) {
-      return NextResponse.json(
-        { error: 'Sign up failed. Please verify your details.' },
-        { status: 400 },
-      );
-    }
-    return NextResponse.json({ error: 'Sign up failed' }, { status: upstream.status });
+    const errBody = await upstream.json().catch(() => null);
+    const detail = firstValidationError(errBody);
+    return NextResponse.json(
+      { error: detail ?? 'Sign-up failed. Please verify your details.' },
+      { status: upstream.status },
+    );
   }
 
-  return NextResponse.json({ success: true }, { status: 200 });
+  return NextResponse.json({ success: true }, { status: 201 });
+}
+
+function firstValidationError(body: unknown): string | null {
+  if (!body || typeof body !== 'object') return null;
+  const errors = (body as Record<string, unknown>).errors;
+  if (!errors || typeof errors !== 'object') return null;
+  const messages = Object.values(errors as Record<string, string[]>).flat();
+  return messages.length > 0 ? messages[0] : null;
 }

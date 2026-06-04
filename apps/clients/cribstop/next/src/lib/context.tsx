@@ -1,9 +1,9 @@
 'use client';
 
-import React, { ReactNode, useCallback, useMemo } from 'react';
+import React, { ReactNode, useCallback, useEffect, useMemo } from 'react';
 import { Provider } from 'react-redux';
 import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
-import { loginAccount, signupAccount } from '@/lib/api/account';
+import { loginAccount, signupAccount, logoutAccount, getSession } from '@/lib/api/account';
 import {
   selectHeaderExpanded,
   selectListingTab,
@@ -102,8 +102,8 @@ export function useApp(): AppContextValue {
 
   const loginUser = useCallback(
     async (email: string, password: string) => {
-      await loginAccount({ email, password });
-      dispatch(login({ email }));
+      const res = await loginAccount({ email, password });
+      dispatch(login({ email: res.email ?? email, accessToken: res.accessToken }));
     },
     [dispatch],
   );
@@ -116,9 +116,19 @@ export function useApp(): AppContextValue {
     [dispatch],
   );
 
-  const logoutUser = useCallback(() => {
+  const logoutUser = useCallback(async () => {
+    await logoutAccount().catch(() => {}); // clear server cookies
     dispatch(logout());
     dispatch(clearSaved());
+  }, [dispatch]);
+
+  // Restore session from cookies on mount / page reload
+  useEffect(() => {
+    getSession().then((session) => {
+      if (session.authenticated && session.email) {
+        dispatch(login({ email: session.email }));
+      }
+    });
   }, [dispatch]);
 
   const toggleSavedListing = useCallback(

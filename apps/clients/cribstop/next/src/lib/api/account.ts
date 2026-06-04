@@ -9,28 +9,51 @@ interface SignupRequest {
   password: string;
 }
 
-async function postAuth(endpoint: 'login' | 'signup', payload: LoginRequest | SignupRequest) {
-  const response = await fetch(`/api/account/${endpoint}`, {
+export interface LoginResponse {
+  email: string;
+  accessToken?: string;
+  expiresIn?: number;
+}
+
+export interface SessionResponse {
+  authenticated: boolean;
+  email?: string;
+}
+
+async function post<T = unknown>(path: string, payload: unknown): Promise<T> {
+  const res = await fetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
 
-  if (!response.ok) {
-    let message = `Authentication request failed (${response.status})`;
-    const body = await response.json().catch(() => null);
-    if (typeof body?.error === 'string' && body.error.length > 0) {
-      message = body.error;
-    }
+  const body = await res.json().catch(() => null);
 
+  if (!res.ok) {
+    const message =
+      typeof body?.error === 'string' && body.error.length > 0
+        ? body.error
+        : `Request failed (${res.status})`;
     throw new Error(message);
   }
+
+  return body as T;
 }
 
-export async function loginAccount(payload: LoginRequest) {
-  await postAuth('login', payload);
+export async function loginAccount(payload: LoginRequest): Promise<LoginResponse> {
+  return post<LoginResponse>('/api/account/login', payload);
 }
 
-export async function signupAccount(payload: SignupRequest) {
-  await postAuth('signup', payload);
+export async function signupAccount(payload: SignupRequest): Promise<void> {
+  await post('/api/account/signup', payload);
+}
+
+export async function logoutAccount(): Promise<void> {
+  await post('/api/account/logout', {});
+}
+
+export async function getSession(): Promise<SessionResponse> {
+  const res = await fetch('/api/account/session');
+  if (!res.ok) return { authenticated: false };
+  return res.json();
 }

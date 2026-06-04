@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { fetchGateway, resolveGatewayUrl } from '@/app/api/account/_lib/gateway';
+import { fetchGateway } from '@/app/api/_lib/gateway';
+import { authCookies } from '@/app/api/_lib/cookies';
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
@@ -10,32 +11,38 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
   }
 
-  let gatewayUrl = '';
-  try {
-    gatewayUrl = resolveGatewayUrl();
-  } catch {
-    return NextResponse.json({ error: 'Gateway is not configured' }, { status: 500 });
-  }
-
-  const upstream = await fetchGateway(`${gatewayUrl}/account/login`, {
+  const upstream = await fetchGateway('/account/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ email, password }),
-  }).catch((error) => {
-    console.error('Gateway login request failed', error);
+  }).catch((err: unknown) => {
+    console.error('Gateway login failed', err);
     return null;
   });
 
   if (!upstream) {
-    return NextResponse.json({ error: 'Sign in service unavailable' }, { status: 503 });
+    return NextResponse.json({ error: 'Sign-in service unavailable' }, { status: 503 });
   }
 
   if (!upstream.ok) {
     if (upstream.status === 401) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
     }
-    return NextResponse.json({ error: 'Sign in failed' }, { status: upstream.status });
+    return NextResponse.json({ error: 'Sign-in failed' }, { status: upstream.status });
   }
 
-  return NextResponse.json({ success: true }, { status: 200 });
+  const data = await upstream.json().catch(() => ({}));
+
+  // Build response and set auth cookies
+  const res = NextResponse.json({
+    email,
+    accessToken: data.accessToken,
+    expiresIn: data.expiresIn,
+  });
+
+  for (const c of authCookies(data, email)) {
+    res.cookies.set(c.name, c.value, c.opts);
+  }
+
+  return res;
 }
