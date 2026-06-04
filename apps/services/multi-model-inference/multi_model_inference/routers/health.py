@@ -16,9 +16,7 @@ async def health():
 @router.get("/ready")
 async def ready():
     """Readiness probe -- returns ready only when all models are loaded."""
-    models_info = {
-        info["name"]: info["status"] for info in registry.list_models()
-    }
+    models_info = {info["name"]: info["status"] for info in registry.list_models()}
     is_ready = registry.all_ready()
     return {
         "status": "ready" if is_ready else "loading",

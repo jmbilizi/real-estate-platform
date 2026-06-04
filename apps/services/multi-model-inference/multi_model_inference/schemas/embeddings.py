@@ -11,8 +11,7 @@ class EmbeddingRequest(BaseModel):
         min_length=1,
         max_length=256,
         description=(
-            "List of text strings to embed"
-            " (1-256 items, max 8192 chars each)."
+            "List of text strings to embed (1-256 items, max 8192 chars each)."
         ),
         json_schema_extra={
             "examples": [["Find me a 3-bedroom house near good schools"]]
