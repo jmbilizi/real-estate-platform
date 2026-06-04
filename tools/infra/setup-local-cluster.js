@@ -181,13 +181,18 @@ const TOTAL_CPUS = CLUSTER_CONFIG.cpus * CLUSTER_CONFIG.nodes;
 const TOTAL_MEMORY = CLUSTER_CONFIG.memory * CLUSTER_CONFIG.nodes;
 
 function ensureBinaryExists(binary, installHint) {
-  const versionCommand = binary === 'kubectl' ? 'version --client' : 'version';
-  const result = run(`${binary} ${versionCommand}`, { silent: true });
+  // Use the OS "where" / "which" command to check PATH presence without
+  // executing the tool.  Running `podman version` (no flag) talks to the
+  // daemon and fails when the Podman machine is not yet started — which is
+  // normal at this point in the setup flow.
+  const locateCmd = os.platform() === 'win32' ? `where ${binary}` : `which ${binary}`;
+  const result = run(locateCmd, { silent: true });
   if (!result.success) {
     logError(`${binary} is not available in PATH.`);
     logInfo(installHint);
     process.exit(1);
   }
+  logSuccess(`${binary} found: ${(result.output || '').split(/\r?\n/)[0].trim()}`);
 }
 
 function parseDiskSizeToGB(value) {
