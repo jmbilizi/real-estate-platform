@@ -15,6 +15,7 @@ import { BRAND } from '@/lib/brand';
 export default function NavBar() {
   const {
     user,
+    sessionLoading,
     logout,
     listingTab,
     setListingTab,
@@ -216,35 +217,29 @@ export default function NavBar() {
 
           {/* Right nav */}
           <div
-            className={`relative z-20 flex items-center gap-1 ${showHeaderPill ? 'hidden md:flex' : 'flex'}`}
+            className={`relative z-20 flex items-center gap-3 ${showHeaderPill ? 'hidden md:flex' : 'flex'}`}
           >
-            {!user ? (
-              <button
-                onClick={() => openModal('login')}
-                className="flex h-10 items-center rounded-full text-sm font-medium text-ink transition hover:text-brand active:text-brand"
-              >
-                Sign in/up
-              </button>
-            ) : (
-              <></>
-            )}
-
             <Link
               href="/favorites"
-              className="flex h-10 w-10 items-center justify-center rounded-full text-ink transition hover:text-brand active:text-brand"
+              className="flex items-center justify-center rounded-full text-ink transition hover:text-brand active:text-brand"
               aria-label="Saved"
             >
               <HeartIcon className="h-5 w-5" />
             </Link>
 
-            {user ? (
+            {/* Apps waffle — rightmost, styled like btn-primary */}
+            <AppsDropdown />
+
+            {sessionLoading ? (
+              <div className="h-8 w-8 rounded-full bg-surface-alt" />
+            ) : user ? (
               <div className="relative">
                 <button
                   onClick={() => setProfileOpen((v) => !v)}
                   aria-label="Profile menu"
                   aria-expanded={profileOpen}
                   aria-haspopup="dialog"
-                  className="flex h-7 w-7 me-3 items-center justify-center rounded-full bg-ink font-semibold text-white"
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-brand font-semibold text-white"
                 >
                   {user.name[0].toUpperCase()}
                 </button>
@@ -314,11 +309,13 @@ export default function NavBar() {
                 </SlidePanel>
               </div>
             ) : (
-              <></>
+              <button
+                onClick={() => openModal('login')}
+                className="flex h-8 p-3 items-center bg-brand text-sm text-white transition hover:text-ink active:text-ink"
+              >
+                Sign in
+              </button>
             )}
-
-            {/* Apps waffle — rightmost, styled like btn-primary */}
-            <AppsDropdown />
           </div>
         </div>
 

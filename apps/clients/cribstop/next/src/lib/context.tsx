@@ -9,6 +9,7 @@ import {
   selectListingTab,
   selectMobileSearchOpen,
   selectSavedIds,
+  selectSessionChecked,
   selectSearchBedsIdx,
   selectSearchDateRange,
   selectSearchLocation,
@@ -20,7 +21,7 @@ import {
   selectUser,
 } from '@/lib/store/selectors';
 import { store } from '@/lib/store/store';
-import { login, logout, signup } from '@/lib/store/slices/authSlice';
+import { login, logout, signup, setSessionChecked } from '@/lib/store/slices/authSlice';
 import { clearSaved, toggleSave } from '@/lib/store/slices/favoritesSlice';
 import {
   setSearchBedsIdx,
@@ -47,6 +48,7 @@ import {
 
 interface AppContextValue {
   user: User | null;
+  sessionLoading: boolean;
   savedIds: Set<string>;
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, username: string, email: string, password: string) => Promise<void>;
@@ -85,6 +87,7 @@ export function useApp(): AppContextValue {
   const dispatch = useAppDispatch();
 
   const user = useAppSelector(selectUser);
+  const sessionChecked = useAppSelector(selectSessionChecked);
   const savedIdList = useAppSelector(selectSavedIds);
   const listingTab = useAppSelector(selectListingTab);
   const showHeaderPill = useAppSelector(selectShowHeaderPill);
@@ -127,6 +130,8 @@ export function useApp(): AppContextValue {
     getSession().then((session) => {
       if (session.authenticated && session.email) {
         dispatch(login({ email: session.email }));
+      } else {
+        dispatch(setSessionChecked());
       }
     });
   }, [dispatch]);
@@ -219,6 +224,7 @@ export function useApp(): AppContextValue {
 
   return {
     user,
+    sessionLoading: !sessionChecked,
     savedIds,
     login: loginUser,
     signup: signupUser,
