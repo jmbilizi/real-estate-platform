@@ -214,9 +214,18 @@ jobs:
       # Developers should run 'pnpm run check' locally before pushing.
       # Note: workspace format check already ran in setup-base; no need to repeat it here.
 
+      # PR steps use two-step approach: get affected projects first, then run-many.
+      # Nx 22 bug: --affected/--base/--head flags get forwarded to executors (e.g. ESLint)
+      # when passed directly to run-many. Using nx show projects avoids this entirely.
       - name: Lint Node.js projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: pnpm exec nx run-many --target=lint --projects=tag:runtime:node --affected --base=origin/${{ github.base_ref }} --head=HEAD
+        run: |
+          PROJECTS=$(pnpm exec nx show projects --affected --base=origin/${{ github.base_ref }} --head=HEAD --projects=tag:runtime:node --withTarget=lint 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+          if [ -n "$PROJECTS" ]; then
+            pnpm exec nx run-many --target=lint --projects="$PROJECTS"
+          else
+            echo "No affected Node.js projects with lint target"
+          fi
 
       - name: Lint Node.js projects (Push - all projects)
         if: github.event_name != 'pull_request'
@@ -224,7 +233,13 @@ jobs:
 
       - name: Test Node.js projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: pnpm exec nx run-many --target=test --projects=tag:runtime:node --affected --base=origin/${{ github.base_ref }} --head=HEAD
+        run: |
+          PROJECTS=$(pnpm exec nx show projects --affected --base=origin/${{ github.base_ref }} --head=HEAD --projects=tag:runtime:node --withTarget=test 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+          if [ -n "$PROJECTS" ]; then
+            pnpm exec nx run-many --target=test --projects="$PROJECTS"
+          else
+            echo "No affected Node.js projects with test target"
+          fi
 
       - name: Test Node.js projects (Push - all projects)
         if: github.event_name != 'pull_request'
@@ -232,7 +247,13 @@ jobs:
 
       - name: Build Node.js projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: pnpm exec nx run-many --target=build --projects=tag:runtime:node --affected --base=origin/${{ github.base_ref }} --head=HEAD
+        run: |
+          PROJECTS=$(pnpm exec nx show projects --affected --base=origin/${{ github.base_ref }} --head=HEAD --projects=tag:runtime:node --withTarget=build 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+          if [ -n "$PROJECTS" ]; then
+            pnpm exec nx run-many --target=build --projects="$PROJECTS"
+          else
+            echo "No affected Node.js projects with build target"
+          fi
 
       - name: Build Node.js projects (Push - all projects)
         if: github.event_name != 'pull_request'
@@ -321,7 +342,13 @@ jobs:
 
       - name: Lint Python projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: pnpm exec nx run-many --target=lint --projects=tag:runtime:python --affected --base=origin/${{ github.base_ref }} --head=HEAD
+        run: |
+          PROJECTS=$(pnpm exec nx show projects --affected --base=origin/${{ github.base_ref }} --head=HEAD --projects=tag:runtime:python --withTarget=lint 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+          if [ -n "$PROJECTS" ]; then
+            pnpm exec nx run-many --target=lint --projects="$PROJECTS"
+          else
+            echo "No affected Python projects with lint target"
+          fi
 
       - name: Lint Python projects (Push - all projects)
         if: github.event_name != 'pull_request'
@@ -329,7 +356,13 @@ jobs:
 
       - name: Test Python projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: pnpm exec nx run-many --target=test --projects=tag:runtime:python --affected --base=origin/${{ github.base_ref }} --head=HEAD
+        run: |
+          PROJECTS=$(pnpm exec nx show projects --affected --base=origin/${{ github.base_ref }} --head=HEAD --projects=tag:runtime:python --withTarget=test 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+          if [ -n "$PROJECTS" ]; then
+            pnpm exec nx run-many --target=test --projects="$PROJECTS"
+          else
+            echo "No affected Python projects with test target"
+          fi
 
       - name: Test Python projects (Push - all projects)
         if: github.event_name != 'pull_request'
@@ -337,7 +370,13 @@ jobs:
 
       - name: Build Python projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: pnpm exec nx run-many --target=build --projects=tag:runtime:python --affected --base=origin/${{ github.base_ref }} --head=HEAD
+        run: |
+          PROJECTS=$(pnpm exec nx show projects --affected --base=origin/${{ github.base_ref }} --head=HEAD --projects=tag:runtime:python --withTarget=build 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+          if [ -n "$PROJECTS" ]; then
+            pnpm exec nx run-many --target=build --projects="$PROJECTS"
+          else
+            echo "No affected Python projects with build target"
+          fi
 
       - name: Build Python projects (Push - all projects)
         if: github.event_name != 'pull_request'
@@ -415,7 +454,13 @@ jobs:
 
       - name: Check .NET formatting (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: pnpm exec nx run-many --target=format-check --projects=tag:runtime:dotnet --affected --base=origin/${{ github.base_ref }} --head=HEAD
+        run: |
+          PROJECTS=$(pnpm exec nx show projects --affected --base=origin/${{ github.base_ref }} --head=HEAD --projects=tag:runtime:dotnet --withTarget=format-check 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+          if [ -n "$PROJECTS" ]; then
+            pnpm exec nx run-many --target=format-check --projects="$PROJECTS"
+          else
+            echo "No affected .NET projects with format-check target"
+          fi
 
       - name: Check .NET formatting (Push - all projects)
         if: github.event_name != 'pull_request'
@@ -423,7 +468,13 @@ jobs:
 
       - name: Lint .NET projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: pnpm exec nx run-many --target=lint --projects=tag:runtime:dotnet --affected --base=origin/${{ github.base_ref }} --head=HEAD
+        run: |
+          PROJECTS=$(pnpm exec nx show projects --affected --base=origin/${{ github.base_ref }} --head=HEAD --projects=tag:runtime:dotnet --withTarget=lint 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+          if [ -n "$PROJECTS" ]; then
+            pnpm exec nx run-many --target=lint --projects="$PROJECTS"
+          else
+            echo "No affected .NET projects with lint target"
+          fi
 
       - name: Lint .NET projects (Push - all projects)
         if: github.event_name != 'pull_request'
@@ -431,7 +482,13 @@ jobs:
 
       - name: Test .NET projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: pnpm exec nx run-many --target=test --projects=tag:runtime:dotnet --affected --base=origin/${{ github.base_ref }} --head=HEAD
+        run: |
+          PROJECTS=$(pnpm exec nx show projects --affected --base=origin/${{ github.base_ref }} --head=HEAD --projects=tag:runtime:dotnet --withTarget=test 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+          if [ -n "$PROJECTS" ]; then
+            pnpm exec nx run-many --target=test --projects="$PROJECTS"
+          else
+            echo "No affected .NET projects with test target"
+          fi
 
       - name: Test .NET projects (Push - all projects)
         if: github.event_name != 'pull_request'
@@ -439,7 +496,13 @@ jobs:
 
       - name: Build .NET projects (PR - affected only)
         if: github.event_name == 'pull_request'
-        run: pnpm exec nx run-many --target=build --projects=tag:runtime:dotnet --affected --base=origin/${{ github.base_ref }} --head=HEAD
+        run: |
+          PROJECTS=$(pnpm exec nx show projects --affected --base=origin/${{ github.base_ref }} --head=HEAD --projects=tag:runtime:dotnet --withTarget=build 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+          if [ -n "$PROJECTS" ]; then
+            pnpm exec nx run-many --target=build --projects="$PROJECTS"
+          else
+            echo "No affected .NET projects with build target"
+          fi
 
       - name: Build .NET projects (Push - all projects)
         if: github.event_name != 'pull_request'
