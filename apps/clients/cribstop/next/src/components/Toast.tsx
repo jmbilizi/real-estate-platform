@@ -1,27 +1,48 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { CheckCircle, Info, X, XCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle, Info, X, XCircle } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
 import { removeToast } from '@/lib/store/slices/toastSlice';
 import type { Toast as ToastItem, ToastType } from '@/lib/store/slices/toastSlice';
 
-const barColor: Record<ToastType, string> = {
-  success: 'bg-emerald-500',
-  error: 'bg-red-500',
-  info: 'bg-blue-500',
+/** Card background + border per type */
+const cardStyle: Record<ToastType, string> = {
+  success: 'bg-green-50 border border-green-200',
+  warning: 'bg-amber-50 border border-amber-200',
+  error: 'bg-red-50 border border-red-200',
+  info: 'bg-gray-50 border border-gray-200',
 };
 
-const iconBg: Record<ToastType, string> = {
-  success: 'bg-emerald-500/20 text-emerald-400',
-  error: 'bg-red-500/20 text-red-400',
-  info: 'bg-blue-500/20 text-blue-400',
+/** Icon colour per type */
+const iconColor: Record<ToastType, string> = {
+  success: 'text-green-500',
+  warning: 'text-amber-500',
+  error: 'text-red-500',
+  info: 'text-gray-400',
+};
+
+/** Message text colour per type */
+const textColor: Record<ToastType, string> = {
+  success: 'text-green-800',
+  warning: 'text-amber-800',
+  error: 'text-red-800',
+  info: 'text-gray-600',
+};
+
+/** Progress bar colour per type */
+const barColor: Record<ToastType, string> = {
+  success: 'bg-green-400',
+  warning: 'bg-amber-400',
+  error: 'bg-red-400',
+  info: 'bg-gray-400',
 };
 
 const iconEl: Record<ToastType, React.ReactNode> = {
-  success: <CheckCircle className="h-[18px] w-[18px]" />,
-  error: <XCircle className="h-[18px] w-[18px]" />,
-  info: <Info className="h-[18px] w-[18px]" />,
+  success: <CheckCircle className="h-5 w-5" />,
+  warning: <AlertCircle className="h-5 w-5" />,
+  error: <XCircle className="h-5 w-5" />,
+  info: <Info className="h-5 w-5" />,
 };
 
 function ToastCard({ toast }: { toast: ToastItem }) {
@@ -41,21 +62,18 @@ function ToastCard({ toast }: { toast: ToastItem }) {
     <div
       role="status"
       aria-live="polite"
-      className="pointer-events-auto relative flex w-full max-w-[360px] items-center gap-3 overflow-hidden rounded-2xl bg-ink py-3 pr-3 pl-4 shadow-pop animate-fade-up"
+      className={`pointer-events-auto relative flex w-full max-w-[360px] items-center gap-3 overflow-hidden rounded-2xl px-4 py-3 shadow-pop animate-fade-up ${cardStyle[toast.type]}`}
     >
-      {/* tinted icon pill */}
-      <span
-        className={`flex shrink-0 items-center justify-center rounded-xl p-2 ${iconBg[toast.type]}`}
-      >
-        {iconEl[toast.type]}
-      </span>
+      <span className={`shrink-0 ${iconColor[toast.type]}`}>{iconEl[toast.type]}</span>
 
-      <p className="flex-1 text-sm font-medium leading-snug text-white">{toast.message}</p>
+      <p className={`flex-1 text-sm font-medium leading-snug ${textColor[toast.type]}`}>
+        {toast.message}
+      </p>
 
       <button
         onClick={dismiss}
         aria-label="Dismiss notification"
-        className="shrink-0 rounded-full p-1 text-white/40 transition-colors hover:bg-white/10 hover:text-white/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+        className={`shrink-0 rounded-full p-1 transition-colors ${iconColor[toast.type]} opacity-60 hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-current`}
       >
         <X className="h-[14px] w-[14px]" />
       </button>

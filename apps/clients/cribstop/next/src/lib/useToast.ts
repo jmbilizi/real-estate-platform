@@ -5,6 +5,7 @@ import { addToast, ToastType } from '@/lib/store/slices/toastSlice';
 const DEFAULT_DURATION: Record<ToastType, number> = {
   success: 3000,
   error: 5000,
+  warning: 4000,
   info: 4000,
 };
 

@@ -28,7 +28,6 @@ export default function AuthForm({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // Pre-fill email and remember checkbox from a previous "Remember me" login.
   useEffect(() => {
@@ -49,7 +48,6 @@ export default function AuthForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
     setIsSubmitting(true);
 
     try {
@@ -64,20 +62,20 @@ export default function AuthForm({
         } catch {
           // ignore
         }
+        toast('Welcome back!');
         if (onSuccess) onSuccess();
         else router.push('/');
-        toast('Welcome back!');
       } else if (mode === 'signup') {
         await signup(email, password);
+        toast('Account created! Welcome aboard.');
         if (onSuccess) onSuccess();
         else router.push('/');
-        toast('Account created! Welcome aboard.');
       } else {
         alert('Password reset link sent to ' + email);
         setMode('login');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Authentication request failed');
+      toast(err instanceof Error ? err.message : 'Authentication request failed', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -210,11 +208,6 @@ export default function AuthForm({
           >
             {submitLabel}
           </button>
-          {error && (
-            <p className="text-sm text-red-600" role="alert" aria-live="polite">
-              {error}
-            </p>
-          )}
         </form>
 
         <p className="mt-6 text-center text-sm text-ink-muted">

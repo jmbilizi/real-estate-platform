@@ -221,7 +221,7 @@ export default function NavBar() {
 
           {/* Right nav */}
           <div
-            className={`relative z-20 flex items-center gap-3 ${showHeaderPill ? 'hidden md:flex' : 'flex'}`}
+            className={`relative z-20 flex items-center gap-4 ${showHeaderPill ? 'hidden md:flex' : 'flex'}`}
           >
             <Link
               href="/favorites"
@@ -315,15 +315,13 @@ export default function NavBar() {
             ) : (
               <button
                 onClick={() => openModal('login')}
-                className="flex h-8 p-3 items-center bg-brand text-sm text-white transition hover:text-ink active:text-ink"
+                className="flex h-8 p-3 items-center bg-brand font-medium text-sm text-white transition hover:text-ink active:text-ink"
               >
                 Sign in
               </button>
             )}
           </div>
         </div>
-
-        {/* Mobile menu — now handled by AppsDropdown panel */}
       </header>
     </>
   );

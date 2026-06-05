@@ -131,7 +131,7 @@ export function useApp(): AppContextValue {
       addToast({
         id: `signout-${Date.now()}`,
         message: "You've been signed out.",
-        type: 'info',
+        type: 'success',
         duration: 3000,
       }),
     );
