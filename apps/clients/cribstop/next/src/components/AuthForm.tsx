@@ -21,8 +21,6 @@ export default function AuthForm({
   const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [username, setUsername] = useState('');
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -40,7 +38,7 @@ export default function AuthForm({
         if (onSuccess) onSuccess();
         else router.push('/');
       } else if (mode === 'signup') {
-        await signup(name, username, email, password);
+        await signup(email, password);
         if (onSuccess) onSuccess();
         else router.push('/');
       } else {
@@ -123,34 +121,6 @@ export default function AuthForm({
         )}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          {mode === 'signup' && (
-            <div>
-              <label className="mb-1 block text-sm font-medium text-ink-muted">Full Name</label>
-              <input
-                type="text"
-                required
-                className="input-field"
-                placeholder="Jane Doe"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </div>
-          )}
-
-          {mode === 'signup' && (
-            <div>
-              <label className="mb-1 block text-sm font-medium text-ink-muted">Username</label>
-              <input
-                type="text"
-                required
-                className="input-field"
-                placeholder="janedoe"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-              />
-            </div>
-          )}
-
           <div>
             <label className="mb-1 block text-sm font-medium text-ink-muted">Email</label>
             <input

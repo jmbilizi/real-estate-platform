@@ -22,8 +22,8 @@ const authSlice = createSlice({
       state.accessToken = action.payload.accessToken ?? null;
       state.sessionChecked = true;
     },
-    signup: (state, action: PayloadAction<{ name: string; email: string }>) => {
-      state.user = { name: action.payload.name, email: action.payload.email };
+    signup: (state, action: PayloadAction<{ email: string }>) => {
+      state.user = { name: action.payload.email, email: action.payload.email };
       state.sessionChecked = true;
     },
     logout: (state) => {

@@ -3,15 +3,11 @@ import { fetchGateway } from '@/app/api/_lib/gateway';
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
-  const username = typeof body?.username === 'string' ? body.username.trim() : '';
   const email = typeof body?.email === 'string' ? body.email.trim() : '';
   const password = typeof body?.password === 'string' ? body.password : '';
 
-  if (!username || !email || !password) {
-    return NextResponse.json(
-      { error: 'Username, email, and password are required' },
-      { status: 400 },
-    );
+  if (!email || !password) {
+    return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
   }
 
   const upstream = await fetchGateway(
@@ -19,7 +15,7 @@ export async function POST(req: Request) {
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ userName: username, email, password }),
+      body: JSON.stringify({ email, password }),
     },
     60_000, // .NET cold-start + EF Core pool init can be slow on first request
   ).catch((err: unknown) => {

@@ -54,7 +54,7 @@ interface AppContextValue {
   sessionLoading: boolean;
   savedIds: Set<string>;
   login: (email: string, password: string) => Promise<void>;
-  signup: (name: string, username: string, email: string, password: string) => Promise<void>;
+  signup: (email: string, password: string) => Promise<void>;
   logout: () => void;
   toggleSave: (id: string) => void;
   isSaved: (id: string) => boolean;
@@ -115,9 +115,9 @@ export function useApp(): AppContextValue {
   );
 
   const signupUser = useCallback(
-    async (name: string, username: string, email: string, password: string) => {
-      await signupAccount({ username, email, password });
-      dispatch(signup({ name, email }));
+    async (email: string, password: string) => {
+      await signupAccount({ email, password });
+      dispatch(signup({ email }));
     },
     [dispatch],
   );
