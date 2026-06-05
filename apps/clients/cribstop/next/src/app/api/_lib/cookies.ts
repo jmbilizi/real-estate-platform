@@ -23,11 +23,16 @@ export const AUTH_COOKIES = {
  * @param tokens  Token payload from the Identity API
  * @param email   User email for the lightweight session cookie
  */
+const REMEMBER_ME_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
+
 export function authCookies(
   tokens: { accessToken: string; refreshToken?: string; expiresIn?: number },
   email: string,
+  remember = false,
 ): Array<{ name: string; value: string; opts: Partial<ResponseCookie> }> {
-  const maxAge = tokens.expiresIn ?? 3600; // default 1 hour
+  // Without remember me: session cookie (expires when browser closes).
+  // With remember me: persist for 30 days.
+  const maxAge = remember ? REMEMBER_ME_MAX_AGE : (tokens.expiresIn ?? 3600);
 
   const cookies: Array<{ name: string; value: string; opts: Partial<ResponseCookie> }> = [
     {

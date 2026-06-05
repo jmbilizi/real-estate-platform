@@ -6,6 +6,7 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const email = typeof body?.email === 'string' ? body.email.trim() : '';
   const password = typeof body?.password === 'string' ? body.password : '';
+  const remember = body?.remember === true;
 
   if (!email || !password) {
     return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
@@ -44,7 +45,7 @@ export async function POST(req: Request) {
     expiresIn: data.expiresIn,
   });
 
-  for (const c of authCookies(data, email)) {
+  for (const c of authCookies(data, email, remember)) {
     res.cookies.set(c.name, c.value, c.opts);
   }
 

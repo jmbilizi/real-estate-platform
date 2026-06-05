@@ -1,8 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useApp } from '@/lib/context';
+
+/** Keyed by hostname so it never collides across environments or domains. */
+function getRememberEmailKey() {
+  return `cribstop_remember_email_${typeof window !== 'undefined' ? window.location.hostname : 'default'}`;
+}
 
 type Mode = 'login' | 'signup' | 'forgot';
 
@@ -23,6 +28,19 @@ export default function AuthForm({
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Pre-fill email and remember checkbox from a previous "Remember me" login.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(getRememberEmailKey());
+      if (saved) {
+        setEmail(saved);
+        setRemember(true);
+      }
+    } catch {
+      // localStorage unavailable (SSR safety, private browsing)
+    }
+  }, []);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { login, signup } = useApp();
   const router = useRouter();
@@ -34,7 +52,16 @@ export default function AuthForm({
 
     try {
       if (mode === 'login') {
-        await login(email, password);
+        await login(email, password, remember);
+        try {
+          if (remember) {
+            localStorage.setItem(getRememberEmailKey(), email);
+          } else {
+            localStorage.removeItem(getRememberEmailKey());
+          }
+        } catch {
+          // ignore
+        }
         if (onSuccess) onSuccess();
         else router.push('/');
       } else if (mode === 'signup') {

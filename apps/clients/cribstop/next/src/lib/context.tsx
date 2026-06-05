@@ -53,7 +53,7 @@ interface AppContextValue {
   user: User | null;
   sessionLoading: boolean;
   savedIds: Set<string>;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, remember?: boolean) => Promise<void>;
   signup: (email: string, password: string) => Promise<void>;
   logout: () => void;
   toggleSave: (id: string) => void;
@@ -107,8 +107,8 @@ export function useApp(): AppContextValue {
   const savedIds = useMemo(() => new Set(savedIdList), [savedIdList]);
 
   const loginUser = useCallback(
-    async (email: string, password: string) => {
-      const res = await loginAccount({ email, password });
+    async (email: string, password: string, remember?: boolean) => {
+      const res = await loginAccount({ email, password, remember });
       dispatch(login({ email: res.email ?? email, accessToken: res.accessToken }));
     },
     [dispatch],
