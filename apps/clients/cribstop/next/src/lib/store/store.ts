@@ -3,6 +3,7 @@ import authReducer from '@/lib/store/slices/authSlice';
 import favoritesReducer from '@/lib/store/slices/favoritesSlice';
 import searchReducer from '@/lib/store/slices/searchSlice';
 import uiReducer from '@/lib/store/slices/uiSlice';
+import toastReducer from '@/lib/store/slices/toastSlice';
 
 export const AUTH_CACHE_KEY = 'cribstop_auth';
 
@@ -38,6 +39,7 @@ export const store = configureStore({
     favorites: favoritesReducer,
     search: searchReducer,
     ui: uiReducer,
+    toast: toastReducer,
   },
   preloadedState: {
     auth: loadPreloadedAuth(),

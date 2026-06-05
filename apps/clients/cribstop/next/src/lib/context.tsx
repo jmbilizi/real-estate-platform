@@ -23,6 +23,7 @@ import {
 } from '@/lib/store/selectors';
 import { login, logout, setSessionChecked, signup } from '@/lib/store/slices/authSlice';
 import { clearSaved, toggleSave } from '@/lib/store/slices/favoritesSlice';
+import { addToast } from '@/lib/store/slices/toastSlice';
 
 // useLayoutEffect on the client (fires before first paint), useEffect on the server (no-op)
 const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
@@ -126,6 +127,14 @@ export function useApp(): AppContextValue {
     await logoutAccount().catch(() => {}); // clear server cookies
     dispatch(logout());
     dispatch(clearSaved());
+    dispatch(
+      addToast({
+        id: `signout-${Date.now()}`,
+        message: "You've been signed out.",
+        type: 'info',
+        duration: 3000,
+      }),
+    );
   }, [dispatch]);
 
   // Restore auth from localStorage synchronously before the browser's first paint.

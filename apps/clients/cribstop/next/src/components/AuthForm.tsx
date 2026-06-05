@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useApp } from '@/lib/context';
+import { useToast } from '@/lib/useToast';
 
 /** Keyed by hostname so it never collides across environments or domains. */
 function getRememberEmailKey() {
@@ -43,6 +44,7 @@ export default function AuthForm({
   }, []);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { login, signup } = useApp();
+  const { toast } = useToast();
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -64,10 +66,12 @@ export default function AuthForm({
         }
         if (onSuccess) onSuccess();
         else router.push('/');
+        toast('Welcome back!');
       } else if (mode === 'signup') {
         await signup(email, password);
         if (onSuccess) onSuccess();
         else router.push('/');
+        toast('Account created! Welcome aboard.');
       } else {
         alert('Password reset link sent to ' + email);
         setMode('login');
@@ -96,6 +100,9 @@ export default function AuthForm({
             : 'rounded-3xl border border-surface-border bg-white p-8 shadow-pop sm:p-10'
         }
       >
+        {/* TODO(dark-mode): bg-white, border-surface-border and text colours below are
+            hardcoded for light mode — make them conditional (dark:bg-surface-alt etc.)
+            when dark mode support is added. */}
         <h2 className="text-center font-display text-2xl font-bold tracking-tight">
           {mode === 'login' && 'Welcome back'}
           {mode === 'signup' && 'Create your account'}
