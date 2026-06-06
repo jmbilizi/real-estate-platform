@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import DismissButton from '@/components/DismissButton';
 
 /**
  * SlidePanel — a reusable right-anchored dropdown panel.
@@ -77,21 +78,7 @@ export default function SlidePanel({
         {title && (
           <div className="flex items-center justify-between pl-5 pr-2 pt-3 pb-2">
             <span className="text-[13px] font-semibold tracking-wide text-ink">{title}</span>
-            <button
-              onClick={onClose}
-              aria-label="Close"
-              className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted hover:bg-surface-alt transition-colors"
-            >
-              <svg
-                className="h-[18px] w-[18px]"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            <DismissButton onClick={onClose} />
           </div>
         )}
         <div className="overflow-y-auto max-h-[calc(100vh-84px)]">{children}</div>

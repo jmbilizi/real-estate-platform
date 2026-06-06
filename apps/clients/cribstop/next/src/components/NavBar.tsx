@@ -7,9 +7,10 @@ import { useRouter } from 'next/navigation';
 import CompactSearchBar from './CompactSearchBar';
 import MobileSearchSheet from './MobileSearchSheet';
 import MobileSearchPill from './MobileSearchPill';
-import { Home, KeyRound } from 'lucide-react';
+import { Bell, Heart, Home, KeyRound, LogOut, MessageCircle, UserPlus } from 'lucide-react';
 import AppsDropdown from './AppsDropdown';
 import SlidePanel from './SlidePanel';
+import DismissButton from './DismissButton';
 import { BRAND } from '@/lib/brand';
 
 export default function NavBar() {
@@ -248,68 +249,102 @@ export default function NavBar() {
                   {user.name[0].toUpperCase()}
                 </button>
 
-                <SlidePanel open={profileOpen} onClose={() => setProfileOpen(false)} width={260}>
-                  {/* User identity */}
-                  <div className="px-5 pt-4 pb-3">
-                    <div className="flex items-center gap-3 mb-1">
-                      <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-ink font-semibold text-white text-sm">
-                        {user.name[0].toUpperCase()}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-ink truncate">{user.name}</p>
-                        <p className="text-xs text-ink-muted truncate">{user.email}</p>
-                      </div>
-                    </div>
+                <SlidePanel open={profileOpen} onClose={() => setProfileOpen(false)} width={314}>
+                  <div className="absolute right-2 top-2">
+                    <DismissButton onClick={() => setProfileOpen(false)} />
                   </div>
 
-                  <div className="mx-4 border-t border-black/[0.06]" />
-
-                  {/* Nav links */}
-                  <div className="px-2 py-2">
+                  {/* Avatar + name + email — centered, Google-style */}
+                  <div className="flex flex-col items-center px-5 pt-6 pb-4 gap-2">
+                    <span className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full bg-brand font-bold text-white text-xl">
+                      {user.name[0].toUpperCase()}
+                    </span>
+                    <div className="text-center min-w-0 w-full">
+                      <p className="text-sm font-semibold text-ink truncate">{user.name}</p>
+                      <p className="text-xs text-ink-muted truncate">{user.email}</p>
+                    </div>
                     <Link
                       href="/account"
-                      className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-ink hover:bg-surface-alt transition-colors"
                       onClick={() => setProfileOpen(false)}
+                      className="rounded-full border border-surface-border px-4 py-1.5 text-xs font-medium text-ink hover:bg-gray-100 transition-colors"
                     >
-                      Account settings
+                      Manage your Account
                     </Link>
+                  </div>
+
+                  <div className="border-t border-black/[0.06]" />
+
+                  {/* Nav links */}
+                  <div className="">
                     <Link
                       href="/favorites"
-                      className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-ink hover:bg-surface-alt transition-colors"
+                      className="flex items-center gap-3 px-5 py-2.5 text-sm text-ink hover:bg-gray-100 transition-colors"
                       onClick={() => setProfileOpen(false)}
                     >
+                      <Heart className="h-4 w-4 shrink-0 text-ink-muted" />
                       Saved homes
                     </Link>
                     <Link
                       href="/alerts"
-                      className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-ink hover:bg-surface-alt transition-colors"
+                      className="flex items-center gap-3 px-5 py-2.5 text-sm text-ink hover:bg-gray-100 transition-colors"
                       onClick={() => setProfileOpen(false)}
                     >
+                      <Bell className="h-4 w-4 shrink-0 text-ink-muted" />
                       Alerts
                     </Link>
                     <Link
                       href="/messages"
-                      className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-ink hover:bg-surface-alt transition-colors"
+                      className="flex items-center gap-3 px-5 py-2.5 text-sm text-ink hover:bg-gray-100 transition-colors"
                       onClick={() => setProfileOpen(false)}
                     >
+                      <MessageCircle className="h-4 w-4 shrink-0 text-ink-muted" />
                       Messages
                     </Link>
                   </div>
 
-                  <div className="mx-4 border-t border-black/[0.06]" />
+                  <div className="border-t border-black/[0.06]" />
 
-                  {/* Sign out */}
-                  <div className="px-2 py-2">
-                    <button
-                      onClick={() => {
-                        logout();
-                        setProfileOpen(false);
-                      }}
-                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-ink-muted hover:bg-surface-alt transition-colors"
-                    >
-                      Sign out
-                    </button>
+                  {/* Sign out row — two halves in a single bordered container */}
+                  <div className="px-2 py-3">
+                    <div className="flex items-stretch text-sm gap-1">
+                      <button
+                        className="flex flex-1 items-center gap-2 px-4 py-2.5 text-ink hover:bg-gray-100 transition-colors rounded-l-2xl border border-black/[0.12] whitespace-nowrap"
+                        onClick={() => setProfileOpen(false)}
+                      >
+                        <UserPlus className="h-4 w-4 shrink-0" />
+                        Add account
+                      </button>
+                      <button
+                        onClick={() => {
+                          logout();
+                          setProfileOpen(false);
+                        }}
+                        className="flex flex-1 items-center gap-2 px-4 py-2.5 text-ink hover:bg-gray-100 transition-colors rounded-r-2xl border border-black/[0.12] whitespace-nowrap"
+                      >
+                        <LogOut className="h-4 w-4 shrink-0" />
+                        Sign out
+                      </button>
+                    </div>
                   </div>
+
+                  {/* Footer */}
+                  <p className="pb-3 text-center text-[11px] text-ink-muted/70">
+                    <Link
+                      href="/privacy"
+                      onClick={() => setProfileOpen(false)}
+                      className="hover:underline"
+                    >
+                      Privacy Policy
+                    </Link>
+                    {' · '}
+                    <Link
+                      href="/terms"
+                      onClick={() => setProfileOpen(false)}
+                      className="hover:underline"
+                    >
+                      Terms of Service
+                    </Link>
+                  </p>
                 </SlidePanel>
               </div>
             ) : (

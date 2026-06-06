@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { AlertCircle, CheckCircle, Info, X, XCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle, Info, XCircle } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
 import { removeToast } from '@/lib/store/slices/toastSlice';
 import type { Toast as ToastItem, ToastType } from '@/lib/store/slices/toastSlice';
+import DismissButton from '@/components/DismissButton';
 
 /** Card background + border per type */
 const cardStyle: Record<ToastType, string> = {
@@ -70,13 +71,7 @@ function ToastCard({ toast }: { toast: ToastItem }) {
         {toast.message}
       </p>
 
-      <button
-        onClick={dismiss}
-        aria-label="Dismiss notification"
-        className={`shrink-0 rounded-full p-1 transition-colors ${iconColor[toast.type]} opacity-60 hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-current`}
-      >
-        <X className="h-[14px] w-[14px]" />
-      </button>
+      <DismissButton onClick={dismiss} label="Dismiss notification" />
 
       {/* progress bar */}
       <span
