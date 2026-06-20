@@ -114,7 +114,7 @@
   "SwaggerEndPoints": [
     {
       "Key": "Account",
-      "TransformByOcelotConfig": true,
+      "TransformByOcelotConfig": false,
       "Config": [
         {
           "Name": "Account Service",
