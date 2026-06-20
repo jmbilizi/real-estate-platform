@@ -3,6 +3,101 @@
   "Active": true,
   "Routes": [
     {
+      "UpstreamPathTemplate": "/account/login",
+      "UpstreamHttpMethod": ["POST"],
+      "DownstreamPathTemplate": "/account/login",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "account-service-svc",
+          "Port": 8080
+        }
+      ],
+      "Priority": 1,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 10
+      }
+    },
+    {
+      "UpstreamPathTemplate": "/account/register",
+      "UpstreamHttpMethod": ["POST"],
+      "DownstreamPathTemplate": "/account/register",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "account-service-svc",
+          "Port": 8080
+        }
+      ],
+      "Priority": 1,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 5
+      }
+    },
+    {
+      "UpstreamPathTemplate": "/account/forgotPassword",
+      "UpstreamHttpMethod": ["POST"],
+      "DownstreamPathTemplate": "/account/forgotPassword",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "account-service-svc",
+          "Port": 8080
+        }
+      ],
+      "Priority": 1,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 5
+      }
+    },
+    {
+      "UpstreamPathTemplate": "/account/resetPassword",
+      "UpstreamHttpMethod": ["POST"],
+      "DownstreamPathTemplate": "/account/resetPassword",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "account-service-svc",
+          "Port": 8080
+        }
+      ],
+      "Priority": 1,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 5
+      }
+    },
+    {
+      "UpstreamPathTemplate": "/account/confirmEmail",
+      "UpstreamHttpMethod": ["GET"],
+      "DownstreamPathTemplate": "/account/confirmEmail",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "account-service-svc",
+          "Port": 8080
+        }
+      ],
+      "Priority": 1,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 5
+      }
+    },
+    {
       "UpstreamPathTemplate": "/account/{everything}",
       "UpstreamHttpMethod": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       "DownstreamPathTemplate": "/account/{everything}",
@@ -12,13 +107,14 @@
           "Host": "account-service-svc",
           "Port": 8080
         }
-      ]
+      ],
+      "Priority": 0
     }
   ],
   "SwaggerEndPoints": [
     {
       "Key": "Account",
-      "TransformByOcelotConfig": true,
+      "TransformByOcelotConfig": false,
       "Config": [
         {
           "Name": "Account Service",

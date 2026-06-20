@@ -3,7 +3,12 @@
 // </copyright>
 
 using System.Net.Sockets;
+using AccountService.Configuration;
 using AccountService.Data;
+using AccountService.Helpers;
+using AccountService.Models;
+using AccountService.Routes;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -36,25 +41,94 @@ internal static class Program
         var connectionString = ResolveConnectionString(builder.Configuration);
 
         builder.Services.AddOpenApi();
+        builder.Services.AddHttpContextAccessor();
+        builder.Services.Configure<AppSettings>(builder.Configuration.GetSection(AppSettings.SectionName));
         builder.Services.AddDbContext<AccountDbContext>(options => options.UseNpgsql(connectionString));
-        builder.Services.AddAuthorization();
+        builder.Services.AddScoped<IClaimsTransformation, UserAppClaimsTransformation>();
+
         builder.Services
-            .AddIdentityApiEndpoints<IdentityUser>()
+            .AddAuthentication(IdentityConstants.ApplicationScheme)
+            .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(
+                ApiKeyDefaults.AuthenticationScheme, null);
+
+        builder.Services.AddAuthorization(options =>
+        {
+            options.DefaultPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder(
+                IdentityConstants.ApplicationScheme,
+                IdentityConstants.BearerScheme,
+                ApiKeyDefaults.AuthenticationScheme)
+                .RequireAuthenticatedUser()
+                .Build();
+        });
+
+        builder.Services
+            .AddIdentityApiEndpoints<ApplicationUser>()
+            .AddRoles<IdentityRole>()
+            .AddUserManager<AppUserManager>()
+            .AddSignInManager<AppSignInManager>()
             .AddEntityFrameworkStores<AccountDbContext>();
 
+        // Revoke existing sessions immediately when the security stamp changes
+        // (e.g., on account soft-delete or admin suspension).
+        // ValidationInterval = Zero re-checks the stamp against the DB on every authenticated request.
+        builder.Services.Configure<SecurityStampValidatorOptions>(options =>
+            options.ValidationInterval = TimeSpan.Zero);
+
         var app = builder.Build();
+
+        // Seed platform roles after the app starts listening so the readiness probe
+        // is not blocked by a slow DB connection on startup.
+        app.Lifetime.ApplicationStarted.Register(() =>
+            _ = SeedRolesAsync(app.Services));
 
         app.MapOpenApi();
 
         app.UseAuthentication();
         app.UseAuthorization();
 
-        app.MapGroup("/account").MapIdentityApi<IdentityUser>();
-
+        // Infrastructure: liveness/startup probe for K8s — mapped first so it is always reachable
         app.MapGet("/account/health", () => Results.Ok(new { status = "healthy" }));
+
+        // Readiness probe — same response; kept separate so K8s can distinguish liveness from readiness
         app.MapGet("/account/health/ready", () => Results.Ok(new { status = "ready" }));
 
+        // Identity: built-in ASP.NET Identity endpoints (register, login, refresh, etc.)
+        app.MapGroup("/account").MapIdentityApi<ApplicationUser>();
+
+        // Profile: GET/PUT/DELETE /account/profile, GET /account/{userId}/history
+        app.MapProfileRoutes();
+
+        // Admin: GET/POST/DELETE /account/{userId}/roles
+        app.MapAdminRoutes();
+
+        // API Keys: POST/GET/DELETE /account/api-keys
+        app.MapApiKeyRoutes();
+
         await app.RunAsync().ConfigureAwait(false);
+    }
+
+    private static async Task SeedRolesAsync(IServiceProvider services)
+    {
+        using var scope = services.CreateScope();
+        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+
+        string[] roles =
+        [
+            Roles.SuperAdmin,
+            Roles.Admin,
+            Roles.Moderator,
+            Roles.Support,
+            Roles.Developer,
+            Roles.User,
+        ];
+
+        foreach (var role in roles)
+        {
+            if (!await roleManager.RoleExistsAsync(role).ConfigureAwait(false))
+            {
+                await roleManager.CreateAsync(new IdentityRole(role)).ConfigureAwait(false);
+            }
+        }
     }
 
     private static async Task RunMigrationsAsync()
@@ -126,13 +200,9 @@ internal static class Program
             return configuredConnectionString;
         }
 
-        var fallbackHost = configuration["ACCOUNT_DB_HOST"] ?? "postgres-svc";
-        var fallbackPort = configuration["ACCOUNT_DB_PORT"] ?? "5432";
-        var fallbackDatabase = configuration["ACCOUNT_DB_NAME"] ?? "account_db";
-        var fallbackUsername = configuration["ACCOUNT_DB_USER"] ?? "account_service_db_user";
-        var fallbackPassword = configuration["ACCOUNT_SERVICE_DB_USER_PASSWORD"] ?? "StrongBase64Password";
-
-        return $"Host={fallbackHost};Port={fallbackPort};Database={fallbackDatabase};Username={fallbackUsername};Password={fallbackPassword}";
+        // No environment variables and no connection string configured — use hardcoded defaults
+        // suitable for local development only.
+        return "Host=postgres-svc;Port=5432;Database=account_db;Username=account_service_db_user;Password=StrongBase64Password";
     }
 
     private static bool IsTransientDatabaseStartupFailure(Exception exception)

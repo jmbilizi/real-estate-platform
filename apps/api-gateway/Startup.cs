@@ -106,7 +106,10 @@ namespace ApiGateway
 
             MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes(ocelotConfigurationJsonString));
 
-            IConfigurationRoot configuration = new ConfigurationBuilder().AddJsonStream(stream).Build();
+            IConfigurationRoot configuration = new ConfigurationBuilder()
+                .AddJsonStream(stream)
+                .AddEnvironmentVariables() // Allows GlobalConfiguration__BaseUrl override in K8s
+                .Build();
 
             services.AddOcelot(configuration);
 
@@ -155,6 +158,9 @@ namespace ApiGateway
 
             app.UseRouting();
 
+            // No authentication scheme is registered at the gateway level yet.
+            // Auth is handled entirely by downstream services. Add UseAuthentication()
+            // here when gateway-level auth (e.g. JWT validation) is configured.
             app.UseAuthorization();
 
             // Short-circuit .well-known requests (e.g. Chrome DevTools probe) before they reach
