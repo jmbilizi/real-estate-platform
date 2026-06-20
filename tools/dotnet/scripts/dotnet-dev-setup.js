@@ -71,6 +71,11 @@ const commonTools = [
     version: 'latest',
     description: 'Code coverage tool',
   },
+  {
+    name: 'dotnet-reportgenerator-globaltool',
+    version: 'latest',
+    description: 'Generates HTML/Cobertura coverage reports from coverage.cobertura.xml',
+  },
   { name: 'csharpier', version: 'latest', description: 'C# code formatter' },
   {
     name: 'roslynator.dotnet.cli',

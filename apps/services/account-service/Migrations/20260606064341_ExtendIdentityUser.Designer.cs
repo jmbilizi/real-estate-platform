@@ -3,6 +3,7 @@ using System;
 using AccountService.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AccountService.Migrations
 {
     [DbContext(typeof(AccountDbContext))]
-    partial class AccountDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260606064341_ExtendIdentityUser")]
+    partial class ExtendIdentityUser
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -28,9 +31,6 @@ namespace AccountService.Migrations
                         .HasColumnType("text");
 
                     b.Property<int>("AccessFailedCount")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("AccountStatusId")
                         .HasColumnType("integer");
 
                     b.Property<DateOnly?>("DateOfBirth")
@@ -57,9 +57,6 @@ namespace AccountService.Migrations
                     b.Property<string>("DeletedByUserId")
                         .HasColumnType("text");
 
-                    b.Property<string>("DisplayName")
-                        .HasColumnType("text");
-
                     b.Property<string>("Email")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
@@ -76,42 +73,11 @@ namespace AccountService.Migrations
                     b.Property<string>("Bio")
                         .HasColumnType("text");
 
-                    b.Property<DateTime?>("VerifiedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("VerifiedByUserId")
-                        .HasColumnType("text");
-
-                    b.Property<string>("VerificationNote")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("LastLoginAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<string>("LastName")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("text")
                         .HasDefaultValue("");
-
-                    b.Property<int?>("PreferredLocaleId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("EmailNotificationsEnabled")
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
-                    b.Property<bool>("SmsNotificationsEnabled")
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
-
-                    b.Property<bool>("PushNotificationsEnabled")
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
-                    b.Property<bool>("MarketingOptIn")
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
 
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("boolean");
@@ -170,13 +136,7 @@ namespace AccountService.Migrations
 
                     b.HasIndex("CreatedByUserId");
 
-                    b.HasIndex("AccountStatusId");
-
                     b.HasIndex("DeletedByUserId");
-
-                    b.HasIndex("PreferredLocaleId");
-
-                    b.HasIndex("VerifiedByUserId");
 
                     b.HasIndex("NormalizedEmail")
                         .HasDatabaseName("EmailIndex");
@@ -191,139 +151,6 @@ namespace AccountService.Migrations
                         {
                             t.HasCheckConstraint("CK_AspNetUsers_DateOfBirth", "\"DateOfBirth\" >= (CURRENT_DATE - INTERVAL '150 years') AND \"DateOfBirth\" <= CURRENT_DATE");
                         });
-                });
-
-            modelBuilder.Entity("AccountService.Models.AccountStatus", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasDefaultValue("");
-
-                    b.Property<string>("Label")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasDefaultValue("");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Code")
-                        .IsUnique();
-
-                    b.ToTable("AccountStatuses");
-                });
-
-            modelBuilder.Entity("AccountService.Models.Locale", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasDefaultValue("");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasDefaultValue("");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Code")
-                        .IsUnique();
-
-                    b.ToTable("Locales");
-                });
-
-            modelBuilder.Entity("AccountService.Models.ApiKey", b =>
-                {
-                    b.Property<string>("Id")
-                        .HasColumnType("text");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasDefaultValue("");
-
-                    b.Property<string>("Prefix")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasDefaultValue("");
-
-                    b.Property<string>("KeyHash")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasDefaultValue("");
-
-                    b.Property<string>("AppId")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Scopes")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("LastUsedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("NOW()");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("KeyHash")
-                        .IsUnique();
-
-                    b.HasIndex("Prefix");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("ApiKeys");
-                });
-
-            modelBuilder.Entity("AccountService.Models.UserApp", b =>
-                {
-                    b.Property<string>("UserId")
-                        .HasColumnType("text");
-
-                    b.Property<string>("AppId")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("FirstSeenAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("NOW()");
-
-                    b.Property<DateTime>("LastSeenAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("NOW()");
-
-                    b.HasKey("UserId", "AppId");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("UserApps");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
@@ -460,11 +287,6 @@ namespace AccountService.Migrations
 
             modelBuilder.Entity("AccountService.Models.ApplicationUser", b =>
                 {
-                    b.HasOne("AccountService.Models.AccountStatus", "AccountStatus")
-                        .WithMany()
-                        .HasForeignKey("AccountStatusId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("AccountService.Models.ApplicationUser", "CreatedByUser")
                         .WithMany()
                         .HasForeignKey("CreatedByUserId")
@@ -475,54 +297,16 @@ namespace AccountService.Migrations
                         .HasForeignKey("DeletedByUserId")
                         .OnDelete(DeleteBehavior.Restrict);
 
-                    b.HasOne("AccountService.Models.ApplicationUser", "VerifiedByUser")
-                        .WithMany()
-                        .HasForeignKey("VerifiedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("AccountService.Models.ApplicationUser", "UpdatedByUser")
                         .WithMany()
                         .HasForeignKey("UpdatedByUserId")
                         .OnDelete(DeleteBehavior.Restrict);
 
-                    b.HasOne("AccountService.Models.Locale", "PreferredLocale")
-                        .WithMany()
-                        .HasForeignKey("PreferredLocaleId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("AccountStatus");
-
                     b.Navigation("CreatedByUser");
 
                     b.Navigation("DeletedByUser");
 
-                    b.Navigation("PreferredLocale");
-
                     b.Navigation("UpdatedByUser");
-
-                    b.Navigation("VerifiedByUser");
-                });
-
-            modelBuilder.Entity("AccountService.Models.ApiKey", b =>
-                {
-                    b.HasOne("AccountService.Models.ApplicationUser", "User")
-                        .WithMany("ApiKeys")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
-            modelBuilder.Entity("AccountService.Models.UserApp", b =>
-                {
-                    b.HasOne("AccountService.Models.ApplicationUser", "User")
-                        .WithMany("UserApps")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
