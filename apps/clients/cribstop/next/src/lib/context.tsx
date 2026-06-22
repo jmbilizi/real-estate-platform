@@ -1,10 +1,17 @@
 'use client';
 
-import React, { ReactNode, useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
+import React, { ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Provider } from 'react-redux';
 import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
-import { getSession, loginAccount, logoutAccount, signupAccount } from '@/lib/api/account';
-import { AUTH_CACHE_KEY, store } from '@/lib/store/store';
+import {
+  AuthError,
+  getProfile,
+  getSession,
+  loginAccount,
+  logoutAccount,
+  signupAccount,
+} from '@/lib/api/account';
+import { store } from '@/lib/store/store';
 import {
   selectHeaderExpanded,
   selectListingTab,
@@ -21,7 +28,14 @@ import {
   selectShowHeaderPill,
   selectUser,
 } from '@/lib/store/selectors';
-import { login, logout, setSessionChecked, signup } from '@/lib/store/slices/authSlice';
+import {
+  login,
+  logout,
+  setSessionChecked,
+  setShowOnboarding,
+  signup,
+  updateProfile,
+} from '@/lib/store/slices/authSlice';
 import { clearSaved, toggleSave } from '@/lib/store/slices/favoritesSlice';
 import { addToast } from '@/lib/store/slices/toastSlice';
 
@@ -111,6 +125,31 @@ export function useApp(): AppContextValue {
     async (email: string, password: string, remember?: boolean) => {
       const res = await loginAccount({ email, password, remember });
       dispatch(login({ email: res.email ?? email, accessToken: res.accessToken }));
+
+      // Check if profile is complete — show onboarding if not
+      try {
+        const profile = await getProfile();
+        if (profile.firstName) {
+          dispatch(
+            updateProfile({
+              firstName: profile.firstName,
+              lastName: profile.lastName,
+              displayName: profile.displayName,
+              bio: profile.bio,
+              dateOfBirth: profile.dateOfBirth,
+              emailNotificationsEnabled: profile.emailNotificationsEnabled,
+              smsNotificationsEnabled: profile.smsNotificationsEnabled,
+              pushNotificationsEnabled: profile.pushNotificationsEnabled,
+              marketingOptIn: profile.marketingOptIn,
+              profileComplete: true,
+            }),
+          );
+        } else {
+          dispatch(setShowOnboarding(true));
+        }
+      } catch {
+        // Non-blocking — user can still use the app
+      }
     },
     [dispatch],
   );
@@ -119,6 +158,21 @@ export function useApp(): AppContextValue {
     async (email: string, password: string) => {
       await signupAccount({ email, password });
       dispatch(signup({ email }));
+      // Auto-login after signup to get tokens
+      try {
+        const res = await loginAccount({ email, password, remember: false });
+        dispatch(login({ email: res.email ?? email, accessToken: res.accessToken }));
+      } catch {
+        // Signup succeeded but auto-login failed — user can sign in manually
+        dispatch(
+          addToast({
+            id: `signup-login-${Date.now()}`,
+            message: 'Account created! Please sign in.',
+            type: 'info',
+            duration: 5000,
+          }),
+        );
+      }
     },
     [dispatch],
   );
@@ -137,37 +191,60 @@ export function useApp(): AppContextValue {
     );
   }, [dispatch]);
 
-  // Restore auth from localStorage synchronously before the browser's first paint.
-  // This means returning users never see the ghost placeholder flash.
+  // The store is already initialized from localStorage via preloadedState in store.ts.
+  // This effect only handles the edge case where preloadedState didn't find a cached user.
   useIsomorphicLayoutEffect(() => {
-    try {
-      const raw = localStorage.getItem(AUTH_CACHE_KEY);
-      if (raw) {
-        const cached = JSON.parse(raw) as {
-          user?: { email: string } | null;
-          accessToken?: string | null;
-        };
-        if (cached.user?.email) {
-          dispatch(
-            login({ email: cached.user.email, accessToken: cached.accessToken ?? undefined }),
-          );
-          return;
-        }
-      }
-    } catch {}
-    dispatch(setSessionChecked());
+    if (!store.getState().auth.sessionChecked) {
+      dispatch(setSessionChecked());
+    }
   }, [dispatch]);
 
   // Background verification: confirm the cached state is still valid.
   // Only dispatches when something actually changed to avoid a needless re-render.
+  // Ref guard prevents React StrictMode from running this twice.
+  const sessionVerified = useRef(false);
   useEffect(() => {
-    getSession().then((session) => {
+    if (sessionVerified.current) return;
+    sessionVerified.current = true;
+
+    getSession().then(async (session) => {
       const currentUser = store.getState().auth.user;
       if (session.authenticated && session.email) {
         if (currentUser?.email !== session.email) {
           dispatch(login({ email: session.email }));
         } else {
           dispatch(setSessionChecked());
+        }
+        // Only fetch profile from API if we don't already have it cached
+        const needsProfile = !currentUser?.profileComplete;
+        if (needsProfile) {
+          try {
+            const profile = await getProfile();
+            if (profile.firstName) {
+              dispatch(
+                updateProfile({
+                  firstName: profile.firstName,
+                  lastName: profile.lastName,
+                  displayName: profile.displayName,
+                  bio: profile.bio,
+                  dateOfBirth: profile.dateOfBirth,
+                  emailNotificationsEnabled: profile.emailNotificationsEnabled,
+                  smsNotificationsEnabled: profile.smsNotificationsEnabled,
+                  pushNotificationsEnabled: profile.pushNotificationsEnabled,
+                  marketingOptIn: profile.marketingOptIn,
+                  profileComplete: true,
+                }),
+              );
+            } else {
+              dispatch(setShowOnboarding(true));
+            }
+          } catch (err) {
+            if (err instanceof AuthError) {
+              // Token expired/invalid — force re-login
+              dispatch(logout());
+            }
+            // Other errors: non-blocking — display name will just show email
+          }
         }
       } else {
         if (currentUser) {

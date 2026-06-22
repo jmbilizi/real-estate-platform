@@ -20,6 +20,31 @@ export interface SessionResponse {
   email?: string;
 }
 
+export interface ProfileResponse {
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  displayName?: string;
+  bio?: string;
+  dateOfBirth?: string;
+  emailNotificationsEnabled?: boolean;
+  smsNotificationsEnabled?: boolean;
+  pushNotificationsEnabled?: boolean;
+  marketingOptIn?: boolean;
+}
+
+export interface ProfileUpdateRequest {
+  firstName?: string;
+  lastName?: string;
+  displayName?: string;
+  bio?: string;
+  dateOfBirth?: string;
+  emailNotificationsEnabled?: boolean;
+  smsNotificationsEnabled?: boolean;
+  pushNotificationsEnabled?: boolean;
+  marketingOptIn?: boolean;
+}
+
 async function post<T = unknown>(path: string, payload: unknown): Promise<T> {
   const res = await fetch(path, {
     method: 'POST',
@@ -55,5 +80,29 @@ export async function logoutAccount(): Promise<void> {
 export async function getSession(): Promise<SessionResponse> {
   const res = await fetch('/api/account/session');
   if (!res.ok) return { authenticated: false };
+  return res.json();
+}
+
+export class AuthError extends Error {
+  constructor(public status: number) {
+    super('Authentication failed');
+    this.name = 'AuthError';
+  }
+}
+
+export async function getProfile(): Promise<ProfileResponse> {
+  const res = await fetch('/api/account/profile');
+  if (res.status === 401) throw new AuthError(401);
+  if (!res.ok) throw new Error('Failed to fetch profile');
+  return res.json();
+}
+
+export async function updateProfile(data: ProfileUpdateRequest): Promise<ProfileResponse> {
+  const res = await fetch('/api/account/profile', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to update profile');
   return res.json();
 }

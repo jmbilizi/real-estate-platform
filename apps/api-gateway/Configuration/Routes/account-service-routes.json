@@ -108,7 +108,13 @@
           "Port": 8080
         }
       ],
-      "Priority": 0
+      "Priority": 0,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 10,
+        "Limit": 30
+      }
     }
   ],
   "SwaggerEndPoints": [

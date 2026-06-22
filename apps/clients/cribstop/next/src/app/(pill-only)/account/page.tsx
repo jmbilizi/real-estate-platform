@@ -1,7 +1,14 @@
 'use client';
 
+import { useCallback, useState } from 'react';
 import { useApp } from '@/lib/context';
 import { useRouter } from 'next/navigation';
+import { getUserDisplayName, getUserInitials } from '@/lib/store/types';
+import { getProfile, ProfileResponse, updateProfile as updateProfileApi } from '@/lib/api/account';
+import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
+import { updateProfile } from '@/lib/store/slices/authSlice';
+import { addToast } from '@/lib/store/slices/toastSlice';
+import { selectUser } from '@/lib/store/selectors';
 
 export default function AccountPage() {
   const { user, logout } = useApp();
@@ -49,12 +56,8 @@ export default function AccountPage() {
     );
   }
 
-  const initials = user.name
-    .split(' ')
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+  const displayName = getUserDisplayName(user);
+  const initials = getUserInitials(user);
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-16 sm:px-6 lg:px-8">
@@ -64,10 +67,13 @@ export default function AccountPage() {
           {initials}
         </div>
         <div>
-          <h1 className="font-display text-2xl font-extrabold">{user.name}</h1>
-          <p className="text-sm text-ink-muted">{user.email}</p>
+          <h1 className="font-display text-2xl font-extrabold">{displayName}</h1>
+          {displayName !== user.email && <p className="text-sm text-ink-muted">{user.email}</p>}
         </div>
       </div>
+
+      {/* Editable profile section */}
+      <ProfileSection />
 
       {/* Account sections */}
       <div className="mt-10 space-y-3">
@@ -147,6 +153,313 @@ export default function AccountPage() {
         </button>
       </div>
     </div>
+  );
+}
+
+/* ─── Editable Profile Section ────────────────────────────────────────────── */
+
+function ProfileSection() {
+  const dispatch = useAppDispatch();
+  const user = useAppSelector(selectUser);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
+
+  const [firstName, setFirstName] = useState(user?.firstName || '');
+  const [lastName, setLastName] = useState(user?.lastName || '');
+  const [bio, setBio] = useState(user?.bio || '');
+  const [dateOfBirth, setDateOfBirth] = useState(user?.dateOfBirth || '');
+  const [emailNotifications, setEmailNotifications] = useState(
+    user?.emailNotificationsEnabled ?? true,
+  );
+  const [pushNotifications, setPushNotifications] = useState(
+    user?.pushNotificationsEnabled ?? true,
+  );
+  const [smsNotifications, setSmsNotifications] = useState(user?.smsNotificationsEnabled ?? false);
+  const [marketingOptIn, setMarketingOptIn] = useState(user?.marketingOptIn ?? false);
+
+  const populateForm = useCallback((p: ProfileResponse) => {
+    setFirstName(p.firstName || '');
+    setLastName(p.lastName || '');
+    setBio(p.bio || '');
+    setDateOfBirth(p.dateOfBirth || '');
+    setEmailNotifications(p.emailNotificationsEnabled ?? true);
+    setPushNotifications(p.pushNotificationsEnabled ?? true);
+    setSmsNotifications(p.smsNotificationsEnabled ?? false);
+    setMarketingOptIn(p.marketingOptIn ?? false);
+  }, []);
+
+  const handleEdit = () => {
+    setEditing(true);
+    setLoading(true);
+    getProfile()
+      .then((p) => {
+        populateForm(p);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const displayName =
+        [firstName.trim(), lastName.trim()].filter(Boolean).join(' ') || undefined;
+      await updateProfileApi({
+        firstName: firstName.trim() || undefined,
+        lastName: lastName.trim() || undefined,
+        displayName,
+        bio: bio.trim() || undefined,
+        dateOfBirth: dateOfBirth || undefined,
+        emailNotificationsEnabled: emailNotifications,
+        smsNotificationsEnabled: smsNotifications,
+        pushNotificationsEnabled: pushNotifications,
+        marketingOptIn,
+      });
+      dispatch(
+        updateProfile({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          displayName: displayName || undefined,
+          bio: bio.trim(),
+          dateOfBirth,
+          profileComplete: true,
+        }),
+      );
+      dispatch(
+        addToast({
+          id: `profile-${Date.now()}`,
+          message: 'Profile updated',
+          type: 'success',
+          duration: 3000,
+        }),
+      );
+      setEditing(false);
+    } catch (err) {
+      dispatch(
+        addToast({
+          id: `profile-err-${Date.now()}`,
+          message: err instanceof Error ? err.message : 'Could not save profile',
+          type: 'error',
+          duration: 4000,
+        }),
+      );
+    }
+    setSaving(false);
+  };
+
+  const handleCancel = () => {
+    setEditing(false);
+    // Reset form from current store state — no network call needed
+    setFirstName(user?.firstName || '');
+    setLastName(user?.lastName || '');
+    setBio(user?.bio || '');
+    setDateOfBirth(user?.dateOfBirth || '');
+    setEmailNotifications(user?.emailNotificationsEnabled ?? true);
+    setPushNotifications(user?.pushNotificationsEnabled ?? true);
+    setSmsNotifications(user?.smsNotificationsEnabled ?? false);
+    setMarketingOptIn(user?.marketingOptIn ?? false);
+  };
+
+  if (loading && editing) {
+    return (
+      <div className="mt-10 rounded-2xl border border-surface-border bg-white p-6 shadow-card animate-pulse">
+        <div className="h-5 w-32 bg-surface-border rounded" />
+        <div className="mt-4 space-y-3">
+          <div className="h-10 bg-surface-border rounded" />
+          <div className="h-10 bg-surface-border rounded" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-10 rounded-2xl border border-surface-border bg-white shadow-card overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-surface-border">
+        <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide">
+          Personal Information
+        </h2>
+        {!editing && (
+          <button
+            onClick={handleEdit}
+            className="text-sm font-medium text-brand hover:text-brand/80 transition-colors"
+          >
+            Edit
+          </button>
+        )}
+      </div>
+
+      <div className="px-5 py-5 space-y-5">
+        {/* Name fields */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <InputField
+            label="First name"
+            value={firstName}
+            onChange={setFirstName}
+            disabled={!editing}
+            placeholder="Your first name"
+          />
+          <InputField
+            label="Last name"
+            value={lastName}
+            onChange={setLastName}
+            disabled={!editing}
+            placeholder="Your last name"
+          />
+        </div>
+
+        {/* Bio */}
+        <div>
+          <label className="block text-xs font-medium text-ink-muted mb-1.5">Bio</label>
+          <textarea
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+            disabled={!editing}
+            placeholder="A little about yourself"
+            rows={3}
+            maxLength={280}
+            className="w-full rounded-xl border border-surface-border bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-muted/50 disabled:bg-surface-alt disabled:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand resize-none"
+          />
+        </div>
+
+        {/* Date of birth */}
+        <InputField
+          label="Date of birth"
+          type="date"
+          value={dateOfBirth}
+          onChange={setDateOfBirth}
+          disabled={!editing}
+        />
+
+        {/* Notification preferences */}
+        <div className="border-t border-surface-border pt-5">
+          <h3 className="text-xs font-medium text-ink-muted mb-3 uppercase tracking-wide">
+            Notifications
+          </h3>
+          <div className="space-y-3">
+            <ToggleField
+              label="Email notifications"
+              description="New listings, price drops, saved search alerts"
+              checked={emailNotifications}
+              onChange={setEmailNotifications}
+              disabled={!editing}
+            />
+            <ToggleField
+              label="Push notifications"
+              description="Real-time alerts on your device"
+              checked={pushNotifications}
+              onChange={setPushNotifications}
+              disabled={!editing}
+            />
+            <ToggleField
+              label="SMS notifications"
+              description="Text messages for urgent updates"
+              checked={smsNotifications}
+              onChange={setSmsNotifications}
+              disabled={!editing}
+            />
+            <ToggleField
+              label="Marketing emails"
+              description="Tips, market reports, and promotions"
+              checked={marketingOptIn}
+              onChange={setMarketingOptIn}
+              disabled={!editing}
+            />
+          </div>
+        </div>
+
+        {/* Actions */}
+        {editing && (
+          <div className="flex items-center gap-3 pt-2">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="btn-primary rounded-full px-6 py-2.5 text-sm font-semibold"
+            >
+              {saving ? 'Saving...' : 'Save changes'}
+            </button>
+            <button
+              onClick={handleCancel}
+              disabled={saving}
+              className="text-sm font-medium text-ink-muted hover:text-ink transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Sub-components ──────────────────────────────────────────────────────── */
+
+function InputField({
+  label,
+  value,
+  onChange,
+  disabled,
+  placeholder,
+  type = 'text',
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  disabled: boolean;
+  placeholder?: string;
+  type?: string;
+}) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-ink-muted mb-1.5">{label}</label>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        placeholder={placeholder}
+        className="w-full rounded-xl border border-surface-border bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-muted/50 disabled:bg-surface-alt disabled:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
+      />
+    </div>
+  );
+}
+
+function ToggleField({
+  label,
+  description,
+  checked,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled: boolean;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-4 cursor-pointer">
+      <div>
+        <p className="text-sm font-medium text-ink">{label}</p>
+        <p className="text-xs text-ink-muted">{description}</p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        disabled={disabled}
+        onClick={() => onChange(!checked)}
+        className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:opacity-50 disabled:cursor-not-allowed ${
+          checked ? 'bg-brand' : 'bg-gray-200'
+        }`}
+      >
+        <span
+          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+            checked ? 'translate-x-5' : 'translate-x-0'
+          }`}
+        />
+      </button>
+    </label>
   );
 }
 

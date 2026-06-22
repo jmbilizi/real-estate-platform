@@ -2,6 +2,7 @@ import { RootState } from '@/lib/store/store';
 
 export const selectUser = (state: RootState) => state.auth.user;
 export const selectSessionChecked = (state: RootState) => state.auth.sessionChecked;
+export const selectShowOnboarding = (state: RootState) => state.auth.showOnboarding;
 export const selectSavedIds = (state: RootState) => state.favorites.savedIds;
 
 export const selectListingTab = (state: RootState) => state.ui.listingTab;

@@ -4,6 +4,7 @@ import favoritesReducer from '@/lib/store/slices/favoritesSlice';
 import searchReducer from '@/lib/store/slices/searchSlice';
 import uiReducer from '@/lib/store/slices/uiSlice';
 import toastReducer from '@/lib/store/slices/toastSlice';
+import { User } from '@/lib/store/types';
 
 export const AUTH_CACHE_KEY = 'cribstop_auth';
 
@@ -12,25 +13,31 @@ export const AUTH_CACHE_KEY = 'cribstop_auth';
 // correct user before React's first render — no dispatch needed, no re-render,
 // no flash.
 function loadPreloadedAuth(): {
-  user: { name: string; email: string } | null;
+  user: User | null;
   accessToken: string | null;
   sessionChecked: boolean;
+  showOnboarding: boolean;
 } {
   if (typeof window === 'undefined')
-    return { user: null, accessToken: null, sessionChecked: false };
+    return { user: null, accessToken: null, sessionChecked: false, showOnboarding: false };
   try {
     const raw = localStorage.getItem(AUTH_CACHE_KEY);
     if (raw) {
       const cached = JSON.parse(raw) as {
-        user?: { name: string; email: string } | null;
+        user?: User | null;
         accessToken?: string | null;
       };
       if (cached.user?.email) {
-        return { user: cached.user, accessToken: cached.accessToken ?? null, sessionChecked: true };
+        return {
+          user: cached.user,
+          accessToken: cached.accessToken ?? null,
+          sessionChecked: true,
+          showOnboarding: false,
+        };
       }
     }
   } catch {}
-  return { user: null, accessToken: null, sessionChecked: true };
+  return { user: null, accessToken: null, sessionChecked: true, showOnboarding: false };
 }
 
 export const store = configureStore({

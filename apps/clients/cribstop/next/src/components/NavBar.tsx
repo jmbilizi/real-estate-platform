@@ -12,6 +12,7 @@ import AppsDropdown from './AppsDropdown';
 import SlidePanel from './SlidePanel';
 import DismissButton from './DismissButton';
 import { BRAND } from '@/lib/brand';
+import { getUserDisplayName, getUserInitials } from '@/lib/store/types';
 
 export default function NavBar() {
   const {
@@ -236,7 +237,7 @@ export default function NavBar() {
             <AppsDropdown />
 
             {!mounted ? (
-              <div className="h-8 w-8 rounded-full bg-surface-alt" />
+              <div className="h-10 w-10 rounded-full bg-surface-alt" />
             ) : user ? (
               <div className="relative">
                 <button
@@ -244,9 +245,9 @@ export default function NavBar() {
                   aria-label="Profile menu"
                   aria-expanded={profileOpen}
                   aria-haspopup="dialog"
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-brand font-semibold text-white"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-brand font-semibold text-white"
                 >
-                  {user.name[0].toUpperCase()}
+                  {getUserInitials(user)}
                 </button>
 
                 <SlidePanel open={profileOpen} onClose={() => setProfileOpen(false)} width={314}>
@@ -257,11 +258,15 @@ export default function NavBar() {
                   {/* Avatar + name + email — centered, Google-style */}
                   <div className="flex flex-col items-center px-5 pt-6 pb-4 gap-2">
                     <span className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full bg-brand font-bold text-white text-xl">
-                      {user.name[0].toUpperCase()}
+                      {getUserInitials(user)}
                     </span>
                     <div className="text-center min-w-0 w-full">
-                      <p className="text-sm font-semibold text-ink truncate">{user.name}</p>
-                      <p className="text-xs text-ink-muted truncate">{user.email}</p>
+                      <p className="text-sm font-semibold text-ink truncate">
+                        {getUserDisplayName(user)}
+                      </p>
+                      {getUserDisplayName(user) !== user.email && (
+                        <p className="text-xs text-ink-muted truncate">{user.email}</p>
+                      )}
                     </div>
                     <Link
                       href="/account"

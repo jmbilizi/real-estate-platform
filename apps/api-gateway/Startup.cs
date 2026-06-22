@@ -152,6 +152,20 @@ namespace ApiGateway
 
             app.UseForwardedHeaders(forwardedHeadersOptions);
 
+            // Ensure X-Real-IP is always set for Ocelot rate limiting.
+            // In production, Nginx sets this header. Locally (no reverse proxy),
+            // fall back to the TCP connection's remote IP address.
+            app.Use(async (context, next) =>
+            {
+                if (!context.Request.Headers.ContainsKey("X-Real-IP"))
+                {
+                    var remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+                    context.Request.Headers["X-Real-IP"] = remoteIp;
+                }
+
+                await next().ConfigureAwait(false);
+            });
+
             app.UseCors("CORSPolicy");
 
             app.UseHttpsRedirection();
