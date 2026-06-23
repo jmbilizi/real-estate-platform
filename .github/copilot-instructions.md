@@ -28,6 +28,50 @@ This repo must remain usable on **Windows, macOS, and Linux**.
 - If a workflow behaves differently on Windows due to `pnpm.cmd` Ctrl+C behavior, provide a
   **cross-platform Node launcher** that can be run directly via `node`.
 
+## Always Use Project Scripts (CRITICAL)
+
+**NEVER run raw tool commands directly.** Always use the project's `pnpm run` or `pnpm exec nx`
+wrappers. These scripts handle project detection, configuration paths, error handling, and
+cross-platform compatibility automatically.
+
+**Lint, type-check, format, test, build:**
+
+```bash
+# ✅ CORRECT — uses project scripts
+pnpm run nx:node-lint            # Lint all Node.js projects
+pnpm run nx:node-type-check     # Type-check all Node.js projects
+pnpm run nx:dotnet-build        # Build all .NET projects
+pnpm run nx:python-test         # Test all Python projects
+pnpm exec nx lint cribstop-next        # Lint a specific project
+pnpm exec nx type-check cribstop-next  # Type-check a specific project
+pnpm exec nx build api-gateway         # Build a specific project
+
+# ❌ WRONG — never run these directly
+npx eslint ...
+npx tsc --noEmit ...
+dotnet build ...
+pytest ...
+```
+
+**Infrastructure:**
+
+```bash
+# ✅ CORRECT — uses infra scripts with context safety
+pnpm run skaffold:deploy
+pnpm run skaffold
+pnpm run infra:validate
+
+# ❌ WRONG — no context safety, no immutable field handling
+skaffold run
+kubectl apply -f ...
+kustomize build ...
+```
+
+**Why**: The wrappers provide centralized config paths (`tools/node/configs/eslint.config.js`,
+`tsconfig.json` references), safe-run-many error handling, correct Nx project targeting via tags,
+and cross-platform behavior. Running tools directly bypasses all of this and produces inconsistent
+results.
+
 ## Critical Workflows
 
 ### Creating New Projects
@@ -994,11 +1038,7 @@ kustomization.yaml. Secrets must come before resources that reference them.
 **"Resource updates failing with immutable field errors"** → Immutable fields changed on
 StatefulSet/Deployment/Service/DaemonSet/Job. Workflow automatically detects error type, extracts
 resource names, deletes with appropriate flags (`--cascade=orphan` for stateful resources), and
-retries. Supports 5 resource types. For local testing, use
-`node tools/infra/run-skaffold.js run --port-forward --tail`.
-
-For the watch loop on Windows, prefer `node tools/infra/dev-skaffold.js` (avoids `pnpm.cmd` Ctrl+C
-prompts).
+retries. Supports 5 resource types. For local testing, use `pnpm run skaffold:deploy`.
 
 ### Infrastructure Documentation
 
@@ -1077,14 +1117,14 @@ pnpm run infra:local:cluster:delete   # Removes cluster and context
 **Local Kubernetes Resources**:
 
 ```bash
-# Watch loop (preferred, cross-platform)
-node tools/infra/dev-skaffold.js
+# Watch loop (dev mode)
+pnpm run skaffold
 
 # Apply resources (safe context)
-node tools/infra/run-skaffold.js run --port-forward --tail
+pnpm run skaffold:deploy
 
 # Delete resources (safe context)
-node tools/infra/run-skaffold.js delete
+pnpm run skaffold:delete
 ```
 
 **Validation**:
