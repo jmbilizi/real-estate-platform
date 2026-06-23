@@ -98,7 +98,90 @@ interface AppContextValue {
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  return <Provider store={store}>{children}</Provider>;
+  return (
+    <Provider store={store}>
+      <SessionVerifier />
+      {children}
+    </Provider>
+  );
+}
+
+/**
+ * Runs once inside AppProvider to verify the cached session against the server.
+ * Extracted from useApp() to prevent duplicate calls (every useApp() consumer
+ * would otherwise fire its own session check).
+ */
+function SessionVerifier() {
+  const dispatch = useAppDispatch();
+
+  // The store is already initialized from localStorage via preloadedState in store.ts.
+  // This effect only handles the edge case where preloadedState didn't find a cached user.
+  useIsomorphicLayoutEffect(() => {
+    if (!store.getState().auth.sessionChecked) {
+      dispatch(setSessionChecked());
+    }
+  }, [dispatch]);
+
+  // Background verification: confirm the cached state is still valid.
+  // Only dispatches when something actually changed to avoid a needless re-render.
+  // Ref guard prevents React StrictMode from running this twice.
+  const sessionVerified = useRef(false);
+  useEffect(() => {
+    if (sessionVerified.current) return;
+    sessionVerified.current = true;
+
+    getSession().then(async (session) => {
+      const currentUser = store.getState().auth.user;
+      if (session.authenticated && session.email) {
+        if (currentUser?.email !== session.email) {
+          dispatch(login({ email: session.email }));
+        } else {
+          dispatch(setSessionChecked());
+        }
+        // Only fetch profile from API if we don't already have it cached
+        const needsProfile = !currentUser?.profileComplete;
+        if (needsProfile) {
+          try {
+            const profile = await getProfile();
+            if (profile.firstName) {
+              dispatch(
+                updateProfile({
+                  firstName: profile.firstName,
+                  lastName: profile.lastName,
+                  displayName: profile.displayName,
+                  bio: profile.bio,
+                  dateOfBirth: profile.dateOfBirth,
+                  emailNotificationsEnabled: profile.emailNotificationsEnabled,
+                  smsNotificationsEnabled: profile.smsNotificationsEnabled,
+                  pushNotificationsEnabled: profile.pushNotificationsEnabled,
+                  marketingOptIn: profile.marketingOptIn,
+                  profileComplete: true,
+                }),
+              );
+            } else {
+              dispatch(setShowOnboarding(true));
+            }
+          } catch (err) {
+            if (err instanceof AuthError) {
+              // Token expired/invalid — force re-login
+              dispatch(logout());
+            }
+            // Other errors: non-blocking — display name will just show email
+          }
+        }
+      } else {
+        if (currentUser) {
+          // Session expired — clear local state
+          dispatch(logout());
+          dispatch(clearSaved());
+        } else {
+          dispatch(setSessionChecked());
+        }
+      }
+    });
+  }, [dispatch]);
+
+  return null;
 }
 
 export function useApp(): AppContextValue {
@@ -189,73 +272,6 @@ export function useApp(): AppContextValue {
         duration: 3000,
       }),
     );
-  }, [dispatch]);
-
-  // The store is already initialized from localStorage via preloadedState in store.ts.
-  // This effect only handles the edge case where preloadedState didn't find a cached user.
-  useIsomorphicLayoutEffect(() => {
-    if (!store.getState().auth.sessionChecked) {
-      dispatch(setSessionChecked());
-    }
-  }, [dispatch]);
-
-  // Background verification: confirm the cached state is still valid.
-  // Only dispatches when something actually changed to avoid a needless re-render.
-  // Ref guard prevents React StrictMode from running this twice.
-  const sessionVerified = useRef(false);
-  useEffect(() => {
-    if (sessionVerified.current) return;
-    sessionVerified.current = true;
-
-    getSession().then(async (session) => {
-      const currentUser = store.getState().auth.user;
-      if (session.authenticated && session.email) {
-        if (currentUser?.email !== session.email) {
-          dispatch(login({ email: session.email }));
-        } else {
-          dispatch(setSessionChecked());
-        }
-        // Only fetch profile from API if we don't already have it cached
-        const needsProfile = !currentUser?.profileComplete;
-        if (needsProfile) {
-          try {
-            const profile = await getProfile();
-            if (profile.firstName) {
-              dispatch(
-                updateProfile({
-                  firstName: profile.firstName,
-                  lastName: profile.lastName,
-                  displayName: profile.displayName,
-                  bio: profile.bio,
-                  dateOfBirth: profile.dateOfBirth,
-                  emailNotificationsEnabled: profile.emailNotificationsEnabled,
-                  smsNotificationsEnabled: profile.smsNotificationsEnabled,
-                  pushNotificationsEnabled: profile.pushNotificationsEnabled,
-                  marketingOptIn: profile.marketingOptIn,
-                  profileComplete: true,
-                }),
-              );
-            } else {
-              dispatch(setShowOnboarding(true));
-            }
-          } catch (err) {
-            if (err instanceof AuthError) {
-              // Token expired/invalid — force re-login
-              dispatch(logout());
-            }
-            // Other errors: non-blocking — display name will just show email
-          }
-        }
-      } else {
-        if (currentUser) {
-          // Session expired — clear local state
-          dispatch(logout());
-          dispatch(clearSaved());
-        } else {
-          dispatch(setSessionChecked());
-        }
-      }
-    });
   }, [dispatch]);
 
   const toggleSavedListing = useCallback(
