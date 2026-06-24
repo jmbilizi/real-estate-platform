@@ -1,13 +1,24 @@
 # Skaffold Configuration for Real Estate Platform
 # https://skaffold.dev/docs/references/yaml/
 #
+# Two modules in one file:
+#   - services: gateway, services, infrastructure (manifests + deploy + port-forwards)
+#   - clients:  frontend apps (requires services)
+#
+# Full stack:    skaffold dev (runs both modules)
+# Backend only:  skaffold dev --module services
+#
 # Relationship with Nx:
 # - Local dev: Skaffold watches files directly (bypasses Nx for speed)
 # - CI/CD: Use an Nx-driven profile in the future to leverage caching/affected detection
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Module: services — gateway, services, and shared infrastructure
+# ═══════════════════════════════════════════════════════════════════════════════
 apiVersion: skaffold/v4beta11
 kind: Config
 metadata:
-  name: real-estate-platform
+  name: services
 
 build:
   tagPolicy:
@@ -61,21 +72,6 @@ build:
             - apps/services/account-service/Tests/**
             - apps/services/account-service/TestResults/**
 
-    - image: cribstop-web
-      context: .
-      custom:
-        buildCommand: node tools/infra/skaffold-build.js
-        dependencies:
-          paths:
-            - apps/clients/cribstop/next/**
-            - package.json
-            - pnpm-lock.yaml
-            - pnpm-workspace.yaml
-          ignore:
-            - apps/clients/cribstop/next/node_modules/**
-            - apps/clients/cribstop/next/.next/**
-            - apps/clients/cribstop/next/.turbo/**
-
   local:
     # IMPORTANT: This must be true for the Podman+Kind workflow.
     # - The cluster pulls from the local registry (localhost:5001)
@@ -116,10 +112,56 @@ portForward:
     namespace: default
     port: 16686
     localPort: 16686
+
+profiles:
+  - name: services-only
+    manifests:
+      kustomize:
+        paths:
+          - infra/k8s/podman/.generated/services-only
+        buildArgs:
+          - --enable-alpha-plugins
+
+---
+# ═══════════════════════════════════════════════════════════════════════════════
+# Module: clients — frontend apps (add new client apps here)
+# ═══════════════════════════════════════════════════════════════════════════════
+apiVersion: skaffold/v4beta11
+kind: Config
+metadata:
+  name: clients
+requires:
+  - configs: [services]
+
+build:
+  tagPolicy:
+    gitCommit:
+      variant: AbbrevCommitSha
+
+  artifacts:
+    - image: cribstop-web
+      context: .
+      custom:
+        buildCommand: node tools/infra/skaffold-build.js
+        dependencies:
+          paths:
+            - apps/clients/cribstop/next/**
+            - package.json
+            - pnpm-lock.yaml
+            - pnpm-workspace.yaml
+          ignore:
+            - apps/clients/cribstop/next/node_modules/**
+            - apps/clients/cribstop/next/.next/**
+            - apps/clients/cribstop/next/.turbo/**
+
+  local:
+    push: true
+    useBuildkit: false
+    concurrency: 0
+
+portForward:
   - resourceType: service
     resourceName: cribstop-web-svc
     namespace: default
     port: 3000
     localPort: 3000
-
-profiles: []

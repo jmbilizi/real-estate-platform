@@ -6,6 +6,9 @@
 *_processed.yaml
 *_with_secrets.yaml
 
+# Auto-generated overlays (run-skaffold.js creates these from skaffold.yaml module structure)
+podman/.generated/
+
 # Local testing artifacts
 .test-output/
 .dry-run-results/

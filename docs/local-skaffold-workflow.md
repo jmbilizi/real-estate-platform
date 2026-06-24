@@ -60,23 +60,62 @@ node tools/infra/dev-skaffold.js
 ### Available Commands
 
 ```bash
-# Development mode (watch + rebuild + deploy)
-node tools/infra/dev-skaffold.js
+# Development mode — full stack (all services + clients)
+pnpm run skaffold
+
+# Development mode — services only (backend infrastructure + API)
+pnpm run skaffold:services
 
 # Debug mode (same as dev + enables debugging)
-node tools/infra/run-skaffold.js debug --port-forward
+pnpm run skaffold:debug
 
 # Build images only (no deploy)
-node tools/infra/run-skaffold.js build --cache-artifacts=false
+pnpm run skaffold:build
 
-# Deploy existing images
-node tools/infra/run-skaffold.js run --port-forward --tail
+# Deploy existing images — full stack
+pnpm run skaffold:deploy
+
+# Deploy existing images — services only
+pnpm run skaffold:services:deploy
 
 # Delete deployed resources
-node tools/infra/run-skaffold.js delete
+pnpm run skaffold:delete
 
 # Reset local disk usage (registry + podman cache)
 node tools/infra/dev-reset-disk.js
+```
+
+## Multi-Module Architecture
+
+`skaffold.yaml` defines two modules:
+
+| Module     | Contains                                                   | Run with                     |
+| ---------- | ---------------------------------------------------------- | ---------------------------- |
+| `services` | API gateway, microservices, infra manifests, port-forwards | `pnpm run skaffold:services` |
+| `clients`  | Frontend apps and their port-forwards                      | `pnpm run skaffold` (both)   |
+
+`clients` declares `requires: [services]` so running the full stack always brings up services first.
+
+### Services-Only Mode
+
+When `--module services` is used, `run-skaffold.js` automatically:
+
+1. Reads the `clients` module's artifact image names from `skaffold.yaml`
+2. Auto-generates a Kustomize overlay at `infra/k8s/podman/.generated/services-only/` that removes
+   client-app resources (Deployments, Services, Ingresses)
+3. Activates the `services-only` Skaffold profile
+
+This means adding a new frontend app only requires adding its artifact to the `clients` module — the
+services-only exclusion updates automatically.
+
+### Frontend Development Workflow (Recommended)
+
+```bash
+# Terminal 1 — services in K8s (no frontend rebuilds)
+pnpm run skaffold:services
+
+# Terminal 2 — frontend app with HMR (instant feedback)
+pnpm run cribstop:web
 ```
 
 ## Relationship with Nx

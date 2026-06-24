@@ -1117,15 +1117,46 @@ pnpm run infra:local:cluster:delete   # Removes cluster and context
 **Local Kubernetes Resources**:
 
 ```bash
-# Watch loop (dev mode)
+# Watch loop — full stack (all services + clients)
 pnpm run skaffold
 
-# Apply resources (safe context)
+# Watch loop — services only (use when running a frontend app locally for HMR)
+pnpm run skaffold:services
 pnpm run skaffold:deploy
+
+# Apply resources — services only
+pnpm run skaffold:services:deploy
 
 # Delete resources (safe context)
 pnpm run skaffold:delete
 ```
+
+**Frontend development workflow** (recommended for frontend app changes):
+
+```bash
+# Terminal 1 — services only in K8s (no frontend rebuilds on client-side changes)
+pnpm run skaffold:services
+
+# Terminal 2 — frontend app dev server with full HMR (instant ~100ms feedback)
+pnpm run cribstop:web   # or whichever frontend app you're working on
+```
+
+**Skaffold multi-module structure** (`skaffold.yaml`):
+
+| Module     | Contains                                                   | Run with                        |
+| ---------- | ---------------------------------------------------------- | ------------------------------- |
+| `services` | API gateway, microservices, infra manifests, port-forwards | `pnpm run skaffold:services`    |
+| `clients`  | Frontend apps and their port-forwards                      | `pnpm run skaffold` (runs both) |
+
+`clients` declares `requires: [services]` so it always brings up the services layer. When adding a
+new frontend app, add its artifact and port-forward to the `clients` module only. Frontend dev
+servers talk to the gateway via the `localhost:8080` port-forward from the `services` module.
+
+**Services-only auto-exclusion**: When `--module services` is detected, `run-skaffold.js`
+auto-generates a Kustomize overlay at `infra/k8s/podman/.generated/services-only/` that removes
+client-app resources (Deployments, Services, Ingresses) from the manifests. The exclusion list is
+derived from the `clients` module's artifact image names in `skaffold.yaml` — zero manual
+maintenance. The `services-only` Skaffold profile is activated automatically.
 
 **Validation**:
 

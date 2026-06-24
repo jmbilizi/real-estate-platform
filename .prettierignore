@@ -1,6 +1,9 @@
 # Nx cache and generated files
 .nx/
 
+# Auto-generated overlays (run-skaffold.js)
+infra/k8s/podman/.generated/
+
 # Dependencies
 node_modules/
 

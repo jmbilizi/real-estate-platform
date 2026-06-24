@@ -172,7 +172,8 @@ All local resource scripts (apply, delete, build) automatically enforce the corr
 
 - Deploy resources the same way as production: apply the full Kustomize overlay via Skaffold.
 
-- Scripts: `skaffold`, `skaffold:deploy`, `skaffold:delete`
+- Scripts: `skaffold`, `skaffold:deploy`, `skaffold:delete`, `skaffold:services`, `skaffold:services:deploy`
+- `skaffold:services` / `skaffold:services:deploy` deploy services only (no frontend apps) — ideal when running frontends locally with HMR.
 - Implementation: Uses `tools/infra/run-skaffold.js` and enforces the correct `kubectl` context before touching the cluster.
 - If the context cannot be switched, the script aborts with a clear error.
 
