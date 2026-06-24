@@ -65,9 +65,15 @@ const config: Config = {
           '0%': { opacity: '0', transform: 'translateY(8px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
+        toastProgress: {
+          '0%': { width: '100%' },
+          '100%': { width: '0%' },
+        },
       },
       animation: {
+        'fade-up': 'fadeUp 0.25s ease-out both',
         fadeUp: 'fadeUp 0.4s ease-out both',
+        'toast-progress': 'toastProgress linear forwards',
       },
     },
   },

@@ -1,8 +1,17 @@
 'use client';
 
-import React, { ReactNode, useCallback, useMemo } from 'react';
+import React, { ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Provider } from 'react-redux';
 import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
+import {
+  AuthError,
+  getProfile,
+  getSession,
+  loginAccount,
+  logoutAccount,
+  signupAccount,
+} from '@/lib/api/account';
+import { store } from '@/lib/store/store';
 import {
   selectHeaderExpanded,
   selectListingTab,
@@ -15,12 +24,23 @@ import {
   selectSearchOccupants,
   selectSearchPriceIdx,
   selectSearchSuggestion,
+  selectSessionChecked,
   selectShowHeaderPill,
   selectUser,
 } from '@/lib/store/selectors';
-import { store } from '@/lib/store/store';
-import { login, logout, signup } from '@/lib/store/slices/authSlice';
+import {
+  login,
+  logout,
+  setSessionChecked,
+  setShowOnboarding,
+  signup,
+  updateProfile,
+} from '@/lib/store/slices/authSlice';
 import { clearSaved, toggleSave } from '@/lib/store/slices/favoritesSlice';
+import { addToast } from '@/lib/store/slices/toastSlice';
+
+// useLayoutEffect on the client (fires before first paint), useEffect on the server (no-op)
+const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 import {
   setSearchBedsIdx,
   setSearchDateRange,
@@ -46,9 +66,10 @@ import {
 
 interface AppContextValue {
   user: User | null;
+  sessionLoading: boolean;
   savedIds: Set<string>;
-  login: (email: string, password: string) => void;
-  signup: (name: string, email: string, password: string) => void;
+  login: (email: string, password: string, remember?: boolean) => Promise<void>;
+  signup: (email: string, password: string) => Promise<void>;
   logout: () => void;
   toggleSave: (id: string) => void;
   isSaved: (id: string) => boolean;
@@ -77,13 +98,97 @@ interface AppContextValue {
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  return <Provider store={store}>{children}</Provider>;
+  return (
+    <Provider store={store}>
+      <SessionVerifier />
+      {children}
+    </Provider>
+  );
+}
+
+/**
+ * Runs once inside AppProvider to verify the cached session against the server.
+ * Extracted from useApp() to prevent duplicate calls (every useApp() consumer
+ * would otherwise fire its own session check).
+ */
+function SessionVerifier() {
+  const dispatch = useAppDispatch();
+
+  // The store is already initialized from localStorage via preloadedState in store.ts.
+  // This effect only handles the edge case where preloadedState didn't find a cached user.
+  useIsomorphicLayoutEffect(() => {
+    if (!store.getState().auth.sessionChecked) {
+      dispatch(setSessionChecked());
+    }
+  }, [dispatch]);
+
+  // Background verification: confirm the cached state is still valid.
+  // Only dispatches when something actually changed to avoid a needless re-render.
+  // Ref guard prevents React StrictMode from running this twice.
+  const sessionVerified = useRef(false);
+  useEffect(() => {
+    if (sessionVerified.current) return;
+    sessionVerified.current = true;
+
+    getSession().then(async (session) => {
+      const currentUser = store.getState().auth.user;
+      if (session.authenticated && session.email) {
+        if (currentUser?.email !== session.email) {
+          dispatch(login({ email: session.email }));
+        } else {
+          dispatch(setSessionChecked());
+        }
+        // Only fetch profile from API if we don't already have it cached
+        const needsProfile = !currentUser?.profileComplete;
+        if (needsProfile) {
+          try {
+            const profile = await getProfile();
+            if (profile.firstName) {
+              dispatch(
+                updateProfile({
+                  firstName: profile.firstName,
+                  lastName: profile.lastName,
+                  displayName: profile.displayName,
+                  bio: profile.bio,
+                  dateOfBirth: profile.dateOfBirth,
+                  emailNotificationsEnabled: profile.emailNotificationsEnabled,
+                  smsNotificationsEnabled: profile.smsNotificationsEnabled,
+                  pushNotificationsEnabled: profile.pushNotificationsEnabled,
+                  marketingOptIn: profile.marketingOptIn,
+                  profileComplete: true,
+                }),
+              );
+            } else {
+              dispatch(setShowOnboarding(true));
+            }
+          } catch (err) {
+            if (err instanceof AuthError) {
+              // Token expired/invalid — force re-login
+              dispatch(logout());
+            }
+            // Other errors: non-blocking — display name will just show email
+          }
+        }
+      } else {
+        if (currentUser) {
+          // Session expired — clear local state
+          dispatch(logout());
+          dispatch(clearSaved());
+        } else {
+          dispatch(setSessionChecked());
+        }
+      }
+    });
+  }, [dispatch]);
+
+  return null;
 }
 
 export function useApp(): AppContextValue {
   const dispatch = useAppDispatch();
 
   const user = useAppSelector(selectUser);
+  const sessionChecked = useAppSelector(selectSessionChecked);
   const savedIdList = useAppSelector(selectSavedIds);
   const listingTab = useAppSelector(selectListingTab);
   const showHeaderPill = useAppSelector(selectShowHeaderPill);
@@ -100,22 +205,73 @@ export function useApp(): AppContextValue {
   const savedIds = useMemo(() => new Set(savedIdList), [savedIdList]);
 
   const loginUser = useCallback(
-    (email: string, password: string) => {
-      dispatch(login({ email, password }));
+    async (email: string, password: string, remember?: boolean) => {
+      const res = await loginAccount({ email, password, remember });
+      dispatch(login({ email: res.email ?? email, accessToken: res.accessToken }));
+
+      // Check if profile is complete — show onboarding if not
+      try {
+        const profile = await getProfile();
+        if (profile.firstName) {
+          dispatch(
+            updateProfile({
+              firstName: profile.firstName,
+              lastName: profile.lastName,
+              displayName: profile.displayName,
+              bio: profile.bio,
+              dateOfBirth: profile.dateOfBirth,
+              emailNotificationsEnabled: profile.emailNotificationsEnabled,
+              smsNotificationsEnabled: profile.smsNotificationsEnabled,
+              pushNotificationsEnabled: profile.pushNotificationsEnabled,
+              marketingOptIn: profile.marketingOptIn,
+              profileComplete: true,
+            }),
+          );
+        } else {
+          dispatch(setShowOnboarding(true));
+        }
+      } catch {
+        // Non-blocking — user can still use the app
+      }
     },
     [dispatch],
   );
 
   const signupUser = useCallback(
-    (name: string, email: string, password: string) => {
-      dispatch(signup({ name, email, password }));
+    async (email: string, password: string) => {
+      await signupAccount({ email, password });
+      dispatch(signup({ email }));
+      // Auto-login after signup to get tokens
+      try {
+        const res = await loginAccount({ email, password, remember: false });
+        dispatch(login({ email: res.email ?? email, accessToken: res.accessToken }));
+      } catch {
+        // Signup succeeded but auto-login failed — user can sign in manually
+        dispatch(
+          addToast({
+            id: `signup-login-${Date.now()}`,
+            message: 'Account created! Please sign in.',
+            type: 'info',
+            duration: 5000,
+          }),
+        );
+      }
     },
     [dispatch],
   );
 
-  const logoutUser = useCallback(() => {
+  const logoutUser = useCallback(async () => {
+    await logoutAccount().catch(() => {}); // clear server cookies
     dispatch(logout());
     dispatch(clearSaved());
+    dispatch(
+      addToast({
+        id: `signout-${Date.now()}`,
+        message: "You've been signed out.",
+        type: 'success',
+        duration: 3000,
+      }),
+    );
   }, [dispatch]);
 
   const toggleSavedListing = useCallback(
@@ -206,6 +362,7 @@ export function useApp(): AppContextValue {
 
   return {
     user,
+    sessionLoading: !sessionChecked,
     savedIds,
     login: loginUser,
     signup: signupUser,

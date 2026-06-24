@@ -3,6 +3,42 @@ import authReducer from '@/lib/store/slices/authSlice';
 import favoritesReducer from '@/lib/store/slices/favoritesSlice';
 import searchReducer from '@/lib/store/slices/searchSlice';
 import uiReducer from '@/lib/store/slices/uiSlice';
+import toastReducer from '@/lib/store/slices/toastSlice';
+import { User } from '@/lib/store/types';
+
+export const AUTH_CACHE_KEY = 'cribstop_auth';
+
+// Read cached auth synchronously at module load time (client only).
+// Providing it as preloadedState means the store is initialised with the
+// correct user before React's first render — no dispatch needed, no re-render,
+// no flash.
+function loadPreloadedAuth(): {
+  user: User | null;
+  accessToken: string | null;
+  sessionChecked: boolean;
+  showOnboarding: boolean;
+} {
+  if (typeof window === 'undefined')
+    return { user: null, accessToken: null, sessionChecked: false, showOnboarding: false };
+  try {
+    const raw = localStorage.getItem(AUTH_CACHE_KEY);
+    if (raw) {
+      const cached = JSON.parse(raw) as {
+        user?: User | null;
+        accessToken?: string | null;
+      };
+      if (cached.user?.email) {
+        return {
+          user: cached.user,
+          accessToken: cached.accessToken ?? null,
+          sessionChecked: true,
+          showOnboarding: false,
+        };
+      }
+    }
+  } catch {}
+  return { user: null, accessToken: null, sessionChecked: true, showOnboarding: false };
+}
 
 export const store = configureStore({
   reducer: {
@@ -10,7 +46,26 @@ export const store = configureStore({
     favorites: favoritesReducer,
     search: searchReducer,
     ui: uiReducer,
+    toast: toastReducer,
   },
+  preloadedState: {
+    auth: loadPreloadedAuth(),
+  },
+});
+
+// Keep localStorage in sync so future reloads can preload the correct state
+let _prevAuth = store.getState().auth;
+store.subscribe(() => {
+  if (typeof window === 'undefined') return;
+  const auth = store.getState().auth;
+  if (auth === _prevAuth) return;
+  _prevAuth = auth;
+  try {
+    localStorage.setItem(
+      AUTH_CACHE_KEY,
+      JSON.stringify({ user: auth.user, accessToken: auth.accessToken }),
+    );
+  } catch {}
 });
 
 export type RootState = ReturnType<typeof store.getState>;

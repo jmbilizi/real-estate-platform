@@ -2,14 +2,17 @@
 
 import Link from 'next/link';
 import { useApp } from '@/lib/context';
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import CompactSearchBar from './CompactSearchBar';
 import MobileSearchSheet from './MobileSearchSheet';
 import MobileSearchPill from './MobileSearchPill';
-import { Home, KeyRound } from 'lucide-react';
+import { Bell, Heart, Home, KeyRound, LogOut, MessageCircle, UserPlus } from 'lucide-react';
 import AppsDropdown from './AppsDropdown';
+import SlidePanel from './SlidePanel';
+import DismissButton from './DismissButton';
 import { BRAND } from '@/lib/brand';
+import { getUserDisplayName, getUserInitials } from '@/lib/store/types';
 
 export default function NavBar() {
   const {
@@ -24,7 +27,12 @@ export default function NavBar() {
     setMobileSearchOpen,
   } = useApp();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
+
+  // Fire before the browser's first paint so the correct auth button is shown
+  // on the client without ever painting the wrong one.
+  useLayoutEffect(() => setMounted(true), []);
 
   // Collapse expanded search when ScrollSentinel scrolls back into view
   useEffect(() => {
@@ -215,67 +223,11 @@ export default function NavBar() {
 
           {/* Right nav */}
           <div
-            className={`relative z-20 flex items-center gap-1 ${showHeaderPill ? 'hidden md:flex' : 'flex'}`}
+            className={`relative z-20 flex items-center gap-4 ${showHeaderPill ? 'hidden md:flex' : 'flex'}`}
           >
-            {user ? (
-              <div className="relative">
-                <button
-                  onClick={() => setProfileOpen(!profileOpen)}
-                  className="flex h-10 items-center gap-2 rounded-full border border-surface-border bg-white pl-3 pr-1 transition hover:shadow-card"
-                >
-                  <svg
-                    className="h-4 w-4 text-ink-muted"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 6h16M4 12h16M4 18h16"
-                    />
-                  </svg>
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-ink font-semibold text-white">
-                    {user.name[0]}
-                  </span>
-                </button>
-                {profileOpen && (
-                  <div className="absolute right-0 top-12 z-50 w-56 rounded-2xl border border-surface-border bg-white p-2 shadow-pop">
-                    <p className="px-3 py-2 text-sm font-semibold">{user.name}</p>
-                    <p className="px-3 pb-2 text-xs text-ink-muted">{user.email}</p>
-                    <hr className="my-1 border-surface-border" />
-                    <Link
-                      href="/favorites"
-                      className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-alt"
-                      onClick={() => setProfileOpen(false)}
-                    >
-                      Saved Homes
-                    </Link>
-                    <button
-                      onClick={() => {
-                        logout();
-                        setProfileOpen(false);
-                      }}
-                      className="block w-full rounded-lg px-3 py-2 text-left text-sm text-ink-muted hover:bg-surface-alt"
-                    >
-                      Sign out
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <button
-                onClick={() => openModal('login')}
-                className="flex h-10 items-center rounded-full text-sm font-medium text-ink transition hover:text-brand active:text-brand"
-              >
-                Sign in/up
-              </button>
-            )}
-
             <Link
               href="/favorites"
-              className="flex h-10 w-10 items-center justify-center rounded-full text-ink transition hover:text-brand active:text-brand"
+              className="flex items-center justify-center rounded-full text-ink transition hover:text-brand active:text-brand"
               aria-label="Saved"
             >
               <HeartIcon className="h-5 w-5" />
@@ -283,10 +235,133 @@ export default function NavBar() {
 
             {/* Apps waffle — rightmost, styled like btn-primary */}
             <AppsDropdown />
+
+            {!mounted ? (
+              <div className="h-10 w-10 rounded-full bg-surface-alt" />
+            ) : user ? (
+              <div className="relative">
+                <button
+                  onClick={() => setProfileOpen((v) => !v)}
+                  aria-label="Profile menu"
+                  aria-expanded={profileOpen}
+                  aria-haspopup="dialog"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-brand font-semibold text-white"
+                >
+                  {getUserInitials(user)}
+                </button>
+
+                <SlidePanel open={profileOpen} onClose={() => setProfileOpen(false)} width={314}>
+                  <div className="absolute right-2 top-2">
+                    <DismissButton onClick={() => setProfileOpen(false)} />
+                  </div>
+
+                  {/* Avatar + name + email — centered, Google-style */}
+                  <div className="flex flex-col items-center px-5 pt-6 pb-4 gap-2">
+                    <span className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full bg-brand font-bold text-white text-xl">
+                      {getUserInitials(user)}
+                    </span>
+                    <div className="text-center min-w-0 w-full">
+                      <p className="text-sm font-semibold text-ink truncate">
+                        {getUserDisplayName(user)}
+                      </p>
+                      {getUserDisplayName(user) !== user.email && (
+                        <p className="text-xs text-ink-muted truncate">{user.email}</p>
+                      )}
+                    </div>
+                    <Link
+                      href="/account"
+                      onClick={() => setProfileOpen(false)}
+                      className="rounded-full border border-surface-border px-4 py-1.5 text-xs font-medium text-ink hover:bg-gray-100 transition-colors"
+                    >
+                      Manage your Account
+                    </Link>
+                  </div>
+
+                  <div className="border-t border-black/[0.06]" />
+
+                  {/* Nav links */}
+                  <div className="">
+                    <Link
+                      href="/favorites"
+                      className="flex items-center gap-3 px-5 py-2.5 text-sm text-ink hover:bg-gray-100 transition-colors"
+                      onClick={() => setProfileOpen(false)}
+                    >
+                      <Heart className="h-4 w-4 shrink-0 text-ink-muted" />
+                      Saved homes
+                    </Link>
+                    <Link
+                      href="/alerts"
+                      className="flex items-center gap-3 px-5 py-2.5 text-sm text-ink hover:bg-gray-100 transition-colors"
+                      onClick={() => setProfileOpen(false)}
+                    >
+                      <Bell className="h-4 w-4 shrink-0 text-ink-muted" />
+                      Alerts
+                    </Link>
+                    <Link
+                      href="/messages"
+                      className="flex items-center gap-3 px-5 py-2.5 text-sm text-ink hover:bg-gray-100 transition-colors"
+                      onClick={() => setProfileOpen(false)}
+                    >
+                      <MessageCircle className="h-4 w-4 shrink-0 text-ink-muted" />
+                      Messages
+                    </Link>
+                  </div>
+
+                  <div className="border-t border-black/[0.06]" />
+
+                  {/* Sign out row — two halves in a single bordered container */}
+                  <div className="px-2 py-3">
+                    <div className="flex items-stretch text-sm gap-1">
+                      <button
+                        className="flex flex-1 items-center gap-2 px-4 py-2.5 text-ink hover:bg-gray-100 transition-colors rounded-l-2xl border border-black/[0.12] whitespace-nowrap"
+                        onClick={() => setProfileOpen(false)}
+                      >
+                        <UserPlus className="h-4 w-4 shrink-0" />
+                        Add account
+                      </button>
+                      <button
+                        onClick={() => {
+                          logout();
+                          setProfileOpen(false);
+                        }}
+                        className="flex flex-1 items-center gap-2 px-4 py-2.5 text-ink hover:bg-gray-100 transition-colors rounded-r-2xl border border-black/[0.12] whitespace-nowrap"
+                      >
+                        <LogOut className="h-4 w-4 shrink-0" />
+                        Sign out
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  <p className="pb-3 text-center text-[11px] text-ink-muted/70">
+                    <Link
+                      href="/privacy"
+                      onClick={() => setProfileOpen(false)}
+                      className="hover:underline"
+                    >
+                      Privacy Policy
+                    </Link>
+                    {' · '}
+                    <Link
+                      href="/terms"
+                      onClick={() => setProfileOpen(false)}
+                      className="hover:underline"
+                    >
+                      Terms of Service
+                    </Link>
+                  </p>
+                </SlidePanel>
+              </div>
+            ) : (
+              <button
+                onClick={() => openModal('login')}
+                className="flex h-8 p-3 items-center bg-brand font-medium text-sm text-white transition hover:text-ink active:text-ink"
+              >
+                Sign in
+              </button>
+            )}
           </div>
         </div>
-
-        {/* Mobile menu — now handled by AppsDropdown panel */}
       </header>
     </>
   );

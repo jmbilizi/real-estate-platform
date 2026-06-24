@@ -1,8 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Eye, EyeOff } from 'lucide-react';
 import { useApp } from '@/lib/context';
+import { useToast } from '@/lib/useToast';
+
+/** Keyed by hostname so it never collides across environments or domains. */
+function getRememberEmailKey() {
+  return `cribstop_remember_email_${typeof window !== 'undefined' ? window.location.hostname : 'default'}`;
+}
 
 type Mode = 'login' | 'signup' | 'forgot';
 
@@ -21,27 +28,68 @@ export default function AuthForm({
   const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(false);
+
+  // Pre-fill email and remember checkbox from a previous "Remember me" login.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(getRememberEmailKey());
+      if (saved) {
+        setEmail(saved);
+        setRemember(true);
+      }
+    } catch {
+      // localStorage unavailable (SSR safety, private browsing)
+    }
+  }, []);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { login, signup } = useApp();
+  const { toast } = useToast();
   const router = useRouter();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (mode === 'login') {
-      login(email, password);
-      if (onSuccess) onSuccess();
-      else router.push('/');
-    } else if (mode === 'signup') {
-      signup(name, email, password);
-      if (onSuccess) onSuccess();
-      else router.push('/');
-    } else {
-      // Forgot password – mock toast
-      alert('Password reset link sent to ' + email);
-      setMode('login');
+    setIsSubmitting(true);
+
+    try {
+      if (mode === 'login') {
+        await login(email, password, remember);
+        try {
+          if (remember) {
+            localStorage.setItem(getRememberEmailKey(), email);
+          } else {
+            localStorage.removeItem(getRememberEmailKey());
+          }
+        } catch {
+          // ignore
+        }
+        toast('Welcome back!');
+        if (onSuccess) onSuccess();
+        else router.push('/');
+      } else if (mode === 'signup') {
+        await signup(email, password);
+        toast('Account created! Welcome aboard.');
+        if (onSuccess) onSuccess();
+        else router.push('/');
+      } else {
+        alert('Password reset link sent to ' + email);
+        setMode('login');
+      }
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Authentication request failed', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
   };
+
+  const submitLabels: Record<Mode, string> = {
+    login: 'Sign In',
+    signup: 'Create Account',
+    forgot: 'Send Reset Link',
+  };
+  let submitLabel = submitLabels[mode];
+  if (isSubmitting) submitLabel = 'Please wait...';
 
   return (
     <div className="mx-auto w-full max-w-md">
@@ -52,6 +100,9 @@ export default function AuthForm({
             : 'rounded-3xl border border-surface-border bg-white p-8 shadow-pop sm:p-10'
         }
       >
+        {/* TODO(dark-mode): bg-white, border-surface-border and text colours below are
+            hardcoded for light mode — make them conditional (dark:bg-surface-alt etc.)
+            when dark mode support is added. */}
         <h2 className="text-center font-display text-2xl font-bold tracking-tight">
           {mode === 'login' && 'Welcome back'}
           {mode === 'signup' && 'Create your account'}
@@ -96,7 +147,7 @@ export default function AuthForm({
         )}
 
         {mode !== 'forgot' && (
-          <div className="my-6 flex items-center gap-3">
+          <div className="my-5 flex items-center gap-3">
             <div className="h-px flex-1 bg-surface-border" />
             <span className="text-xs text-ink-subtle">or</span>
             <div className="h-px flex-1 bg-surface-border" />
@@ -104,20 +155,6 @@ export default function AuthForm({
         )}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          {mode === 'signup' && (
-            <div>
-              <label className="mb-1 block text-sm font-medium text-ink-muted">Full Name</label>
-              <input
-                type="text"
-                required
-                className="input-field"
-                placeholder="Jane Doe"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </div>
-          )}
-
           <div>
             <label className="mb-1 block text-sm font-medium text-ink-muted">Email</label>
             <input
@@ -133,14 +170,25 @@ export default function AuthForm({
           {mode !== 'forgot' && (
             <div>
               <label className="mb-1 block text-sm font-medium text-ink-muted">Password</label>
-              <input
-                type="password"
-                required
-                className="input-field"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  className="input-field pr-10"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-ink-subtle hover:text-ink"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
           )}
 
@@ -165,10 +213,13 @@ export default function AuthForm({
             </div>
           )}
 
-          <button type="submit" className="btn-primary mt-2 w-full py-3">
-            {mode === 'login' && 'Sign In'}
-            {mode === 'signup' && 'Create Account'}
-            {mode === 'forgot' && 'Send Reset Link'}
+          <button
+            type="submit"
+            className="btn-primary mt-2 w-full py-3"
+            disabled={isSubmitting}
+            aria-busy={isSubmitting}
+          >
+            {submitLabel}
           </button>
         </form>
 

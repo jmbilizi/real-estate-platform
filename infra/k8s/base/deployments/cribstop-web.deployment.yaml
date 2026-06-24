@@ -40,7 +40,11 @@ spec:
               value: "production"
             - name: PORT
               value: "3000"
-            # NEXT_PUBLIC_API_URL: Defined in patches (points to API Gateway per environment)
+            # Server-side only — used by Next.js API routes to reach the gateway.
+            # FQDN required: short names fail when corporate search domains
+            # inject SERVFAIL responses before cluster.local is tried (ndots:5).
+            - name: API_GATEWAY_URL
+              value: "http://api-gateway-svc.default.svc.cluster.local:8080"
             # Kubernetes metadata (Downward API)
             - name: K8S_POD_NAME
               valueFrom:

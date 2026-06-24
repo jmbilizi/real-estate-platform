@@ -7,6 +7,8 @@ import SiteHeader from '@/components/SiteHeader';
 import Footer from '@/components/Footer';
 import AuthModalListener from '@/components/AuthModalListener';
 import ListingModalListener from '@/components/ListingModalListener';
+import OnboardingListener from '@/components/OnboardingListener';
+import Toast from '@/components/Toast';
 import { BRAND } from '@/lib/brand';
 
 export const metadata: Metadata = {
@@ -35,6 +37,8 @@ export default function RootLayout({
           <Suspense fallback={null}>
             <ListingModalListener />
           </Suspense>
+          <OnboardingListener />
+          <Toast />
           {modal}
         </AppProvider>
       </body>

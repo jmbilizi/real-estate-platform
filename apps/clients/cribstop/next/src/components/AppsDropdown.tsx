@@ -205,9 +205,8 @@ export default function AppsDropdown() {
         aria-expanded={open}
         aria-haspopup="dialog"
         className={[
-          'flex h-10 w-10 items-center justify-center rounded-full',
-          'bg-brand text-white transition-opacity duration-150',
-          open ? 'opacity-80' : 'hover:opacity-90',
+          'flex items-center justify-center hover:text-brand',
+          open ? 'text-brand' : 'text-ink',
         ].join(' ')}
       >
         <WaffleIcon className="h-5 w-5" />
