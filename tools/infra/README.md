@@ -212,15 +212,33 @@ cluster context (typically `kind-<cluster_name>`).
 ## Usage
 
 ```bash
-# Start the Skaffold watch loop (single cross-platform entrypoint)
-node tools/infra/dev-skaffold.js
+# Full stack — watch loop (services + clients)
+node tools/infra/run-skaffold.js dev --port-forward
 
-# Apply manifests to local cluster (safe context)
+# Services only — watch loop (excludes frontend apps)
+node tools/infra/run-skaffold.js dev --port-forward --module services
+
+# Full stack — one-shot deploy
 node tools/infra/run-skaffold.js run --port-forward --tail
+
+# Services only — one-shot deploy
+node tools/infra/run-skaffold.js run --port-forward --tail --module services
 
 # Delete manifests from local cluster (safe context)
 node tools/infra/run-skaffold.js delete
 ```
+
+### Services-Only Mode (`--module services`)
+
+When `--module services` is passed, `run-skaffold.js` automatically:
+
+1. Parses `skaffold.yaml` to find image names in the `clients` module
+2. Generates a Kustomize overlay at `infra/k8s/podman/.generated/services-only/` with
+   `$patch: delete` entries for each client resource (Deployment, Service, Ingress)
+3. Activates the `services-only` Skaffold profile (uses the generated overlay)
+
+The generated overlay is gitignored. Adding a new client app to skaffold.yaml's `clients` module is
+the only step needed — the exclusion logic derives everything from that.
 
 ### Registry / Default Repo
 

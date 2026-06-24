@@ -24,6 +24,112 @@ function hasArg(argsList, name) {
   return argsList.includes(name) || argsList.some((a) => a.startsWith(`${name}=`));
 }
 
+/**
+ * Auto-generate a services-only kustomize overlay by reading the clients module
+ * from skaffold.yaml and producing $patch:delete entries for each client resource.
+ *
+ * Source of truth: skaffold.yaml `clients` module artifact image names.
+ * Convention: image "foo" → Deployment "foo", Service "foo-svc", Ingress "foo"
+ *
+ * Returns the generated overlay directory path, or null if generation isn't needed/possible.
+ */
+function ensureServicesOnlyOverlay() {
+  const generatedDir = path.join(
+    workspaceRoot,
+    'infra',
+    'k8s',
+    'podman',
+    '.generated',
+    'services-only',
+  );
+  const generatedFile = path.join(generatedDir, 'kustomization.yaml');
+
+  const skaffoldPath = path.join(workspaceRoot, 'skaffold.yaml');
+  if (!fs.existsSync(skaffoldPath)) return null;
+
+  let configs;
+  try {
+    configs = yaml.loadAll(fs.readFileSync(skaffoldPath, 'utf8'));
+  } catch {
+    return null;
+  }
+
+  const clientsConfig = configs.find((c) => c && c.metadata && c.metadata.name === 'clients');
+  if (!clientsConfig || !clientsConfig.build || !clientsConfig.build.artifacts) return null;
+
+  const clientImages = clientsConfig.build.artifacts.map((a) => a.image).filter(Boolean);
+  if (clientImages.length === 0) return null;
+
+  // Verify base resource files exist for each client image (skip if not found)
+  const baseDir = path.join(workspaceRoot, 'infra', 'k8s', 'base');
+  const patchStrings = [];
+
+  for (const img of clientImages) {
+    // Check if deployment exists in base
+    const deployFile = path.join(baseDir, 'deployments', `${img}.deployment.yaml`);
+    if (fs.existsSync(deployFile)) {
+      patchStrings.push(
+        `apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: ${img}\n$patch: delete\n`,
+      );
+    }
+
+    // Check if service exists (convention: {name}-svc)
+    const svcFile = path.join(baseDir, 'services', `${img}.service.yaml`);
+    if (fs.existsSync(svcFile)) {
+      try {
+        const svcDoc = yaml.load(fs.readFileSync(svcFile, 'utf8'));
+        const svcName = svcDoc && svcDoc.metadata && svcDoc.metadata.name;
+        if (svcName) {
+          patchStrings.push(
+            `apiVersion: v1\nkind: Service\nmetadata:\n  name: ${svcName}\n$patch: delete\n`,
+          );
+        }
+      } catch {
+        /* skip */
+      }
+    }
+
+    // Check if ingress exists
+    const ingressFile = path.join(baseDir, 'ingresses', `${img}.ingress.yaml`);
+    if (fs.existsSync(ingressFile)) {
+      patchStrings.push(
+        `apiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n  name: ${img}\n$patch: delete\n`,
+      );
+    }
+  }
+
+  if (patchStrings.length === 0) return null;
+
+  // Generate the kustomization file directly (avoid yaml.dump mangling $patch key)
+  const patchesYaml = patchStrings
+    .map(
+      (p) =>
+        `  - patch: |\n${p
+          .split('\n')
+          .map((l) => (l ? `      ${l}` : ''))
+          .join('\n')}`,
+    )
+    .join('\n');
+
+  const content = `# AUTO-GENERATED — do not edit. Source of truth: skaffold.yaml clients module.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../local
+patches:
+${patchesYaml}
+`;
+
+  // Only write if changed (avoid unnecessary Skaffold re-renders in dev mode)
+  fs.mkdirSync(generatedDir, { recursive: true });
+  const existing = fs.existsSync(generatedFile) ? fs.readFileSync(generatedFile, 'utf8') : '';
+  if (existing !== content) {
+    fs.writeFileSync(generatedFile, content);
+  }
+
+  return generatedDir;
+}
+
 function addLocalRegistrySafetyFlags(argsList) {
   const command = argsList[0];
   const commandsThatBuildOrResolveImages = new Set(['dev', 'debug', 'run', 'build']);
@@ -307,6 +413,17 @@ function resolvePodmanDockerHost() {
 }
 
 const podmanDockerHost = resolvePodmanDockerHost();
+
+// When running --module services, generate the services-only overlay and activate the profile.
+const isServicesOnly =
+  (args.includes('--module') && args.includes('services')) ||
+  args.some((a) => a === '--module=services');
+if (isServicesOnly) {
+  const overlayDir = ensureServicesOnlyOverlay();
+  if (overlayDir && !hasArg(args, '-p') && !hasArg(args, '--profile')) {
+    args.push('-p', 'services-only');
+  }
+}
 
 const env = {
   ...process.env,
