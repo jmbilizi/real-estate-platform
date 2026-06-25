@@ -653,7 +653,7 @@ jobs:
             echo "✅ Cluster configuration changes detected"
           fi
 
-          if echo "$FILES" | grep -E -q '^infra/k8s/base/|^infra/deploy-control\.yaml|^infra/smart-deployment-config\.yaml|^infra/k8s/hetzner/.*/patches/|^\.github/workflows/deploy-k8s-resources\.yml|^\.github/actions/deploy-k8s-resources/|^\.github/actions/load-deploy-control/|^\.github/workflows/ci\.yml'; then
+          if echo "$FILES" | grep -E -q '^infra/k8s/base/|^infra/deploy-control\.yaml|^infra/smart-deployment-config\.yaml|^infra/k8s/hetzner/.*/patches/|^\.github/workflows/deploy-k8s-resources\.yml|^\.github/actions/deploy-k8s-resources/|^\.github/actions/load-deploy-control/'; then
             deploy=true
             echo "✅ Deploy resource changes detected"
           fi
