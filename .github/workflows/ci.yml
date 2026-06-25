@@ -736,14 +736,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           echo "🐳 Triggering container image build for ${{ steps.env.outputs.environment }} environment..."
-          MANIFEST_SERVICES="${{ needs.detect-infra-changes.outputs.manifest_services }}"
 
           gh workflow run build-push-images.yml \
             --repo ${{ github.repository }} \
             --ref ${{ github.ref }} \
             --field environment=${{ steps.env.outputs.environment }} \
             --field projects=affected \
-            --field additional_projects="$MANIFEST_SERVICES" \
             --field push=true
           echo "✅ Image build workflow triggered"
 
