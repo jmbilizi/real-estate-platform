@@ -23,6 +23,10 @@
   <!-- Code Analysis Settings -->
   <PropertyGroup>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Suppress NU1903 (NuGet vulnerability audit) — Microsoft.OpenApi 2.x has GHSA-v5pm-xwqc-g5wc
+         but no compatible fix exists yet (3.x breaks Microsoft.AspNetCore.OpenApi source generators).
+         Remove this suppression once Microsoft.AspNetCore.OpenApi ships a 3.x-compatible update. -->
+    <NoWarn>$(NoWarn);NU1903</NoWarn>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>latest</AnalysisLevel>
