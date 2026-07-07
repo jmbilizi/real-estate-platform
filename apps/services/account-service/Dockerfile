@@ -19,6 +19,8 @@ COPY [".editorconfig", "."]
 COPY ["Directory.Build.props", "."]
 COPY ["Directory.Build.targets", "."]
 COPY ["Directory.Packages.props", "."]
+COPY ["nuget.config", "."]
+COPY ["global.json", "."]
 RUN dotnet restore "apps/services/account-service/account-service.csproj"
 
 # Copy source code and build

@@ -26,6 +26,8 @@ COPY [".editorconfig", "."]
 COPY ["Directory.Build.props", "."]
 COPY ["Directory.Build.targets", "."]
 COPY ["Directory.Packages.props", "."]
+COPY ["nuget.config", "."]
+COPY ["global.json", "."]
 RUN dotnet restore "apps/api-gateway/api-gateway.csproj" --verbosity detailed
 
 # Copy source code and build
