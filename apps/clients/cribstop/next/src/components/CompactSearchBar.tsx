@@ -1,551 +1,16 @@
 ﻿'use client';
 
-// US state name ? 2-letter abbreviation
-const US_STATE_ABBR: Record<string, string> = {
-  Alabama: 'AL',
-  Alaska: 'AK',
-  Arizona: 'AZ',
-  Arkansas: 'AR',
-  California: 'CA',
-  Colorado: 'CO',
-  Connecticut: 'CT',
-  Delaware: 'DE',
-  'District of Columbia': 'DC',
-  Florida: 'FL',
-  Georgia: 'GA',
-  Hawaii: 'HI',
-  Idaho: 'ID',
-  Illinois: 'IL',
-  Indiana: 'IN',
-  Iowa: 'IA',
-  Kansas: 'KS',
-  Kentucky: 'KY',
-  Louisiana: 'LA',
-  Maine: 'ME',
-  Maryland: 'MD',
-  Massachusetts: 'MA',
-  Michigan: 'MI',
-  Minnesota: 'MN',
-  Mississippi: 'MS',
-  Missouri: 'MO',
-  Montana: 'MT',
-  Nebraska: 'NE',
-  Nevada: 'NV',
-  'New Hampshire': 'NH',
-  'New Jersey': 'NJ',
-  'New Mexico': 'NM',
-  'New York': 'NY',
-  'North Carolina': 'NC',
-  'North Dakota': 'ND',
-  Ohio: 'OH',
-  Oklahoma: 'OK',
-  Oregon: 'OR',
-  Pennsylvania: 'PA',
-  'Rhode Island': 'RI',
-  'South Carolina': 'SC',
-  'South Dakota': 'SD',
-  Tennessee: 'TN',
-  Texas: 'TX',
-  Utah: 'UT',
-  Vermont: 'VT',
-  Virginia: 'VA',
-  Washington: 'WA',
-  'West Virginia': 'WV',
-  Wisconsin: 'WI',
-  Wyoming: 'WY',
-};
-function stateAbbr(name: string): string {
-  return US_STATE_ABBR[name] || name || '';
-}
-
-// Build standard US-format label ? always a single line.
-// Examples: "Alexandria, VA" | "Alexandria, VA 22314" | "King St, Alexandria, VA" | "123 King St, Alexandria, VA 22314"
-function formatLocationLabel(loc: any): string {
-  const { primary, secondary } = getLocationParts(loc);
-  if (!primary) return '';
-  if (!secondary) return primary;
-  // ZIP result: "Alexandria, VA 22314" (space before zip, no comma)
-  if (loc.type === 'postcode') return `${secondary} ${primary}`;
-  // Everything else: "Primary, Secondary"
-  return `${primary}, ${secondary}`;
-}
-
-// Split into primary (the identifier the user searched for) and secondary (context).
-// Used for both the full label and the two-line dropdown display.
-function getLocationParts(loc: any): { primary: string; secondary: string } {
-  const address = loc.address || {};
-  const houseNumber = address.house_number || '';
-  const road = address.road || '';
-  const suburb = address.suburb || address.neighbourhood || address.quarter || '';
-  const city = address.city || address.town || address.village || address.hamlet || '';
-  const raw = address.state || '';
-  const st = address.state_code || stateAbbr(raw);
-  const zip = address.postcode || '';
-  const country = address.country || '';
-  const isUS = !country || country === 'United States';
-  const cityState = [city, st].filter(Boolean).join(', ');
-  const cityStateZip = zip ? `${cityState} ${zip}`.trim() : cityState;
-
-  // Specific street address: "123 King St" ? full label includes zip
-  if (houseNumber && road) {
-    return { primary: `${houseNumber} ${road}`, secondary: cityStateZip };
-  }
-
-  // ZIP code search result: primary = zip, secondary = city/state for context
-  if (loc.type === 'postcode') {
-    const z = zip || loc.display_name?.split(',')[0]?.trim() || '';
-    return { primary: z, secondary: cityState };
-  }
-
-  // Street/road only
-  if (road) {
-    return { primary: road, secondary: cityState };
-  }
-
-  // Neighborhood / suburb
-  if (suburb && city) {
-    return { primary: suburb, secondary: cityState };
-  }
-
-  // City
-  if (city) {
-    const nonUsCountry = !isUS ? country : '';
-    return { primary: city, secondary: [st, nonUsCountry].filter(Boolean).join(', ') };
-  }
-
-  // Fallback: Overpass nearby result (no address object)
-  const fallbackState = loc._hint_state || '';
-  const displayName = loc.display_name || '';
-  return { primary: displayName, secondary: fallbackState };
-}
-
-// Extract precise search identifiers ? only set when the result type explicitly targets zip or street.
-function extractSearchTerms(loc: any): { zip?: string; street?: string } {
-  const address = loc.address || {};
-  const result: { zip?: string; street?: string } = {};
-  // Only filter by zip when the result IS a postcode (user typed "22314")
-  if (loc.type === 'postcode' && address.postcode) result.zip = address.postcode;
-  // Filter by street when result is a road or a specific address
-  if ((loc.type === 'road' || loc.type === 'house' || loc.type === 'residential') && address.road) {
-    result.street = address.house_number ? `${address.house_number} ${address.road}` : address.road;
-  }
-  return result;
-}
-
-// Highlight the portion of `text` that matches `query` (case-insensitive).
-// Matched portion is normal weight; unmatched completion is bold ? same convention as Google/Airbnb.
-function highlightMatch(text: string, query: string): React.ReactNode {
-  const q = query?.trim();
-  if (!q) return <span className="font-semibold">{text}</span>;
-  const idx = text.toLowerCase().indexOf(q.toLowerCase());
-  if (idx === -1) return <span className="font-semibold">{text}</span>;
-  return (
-    <>
-      {text.slice(0, idx)}
-      <span className="font-semibold">{text.slice(idx, idx + q.length)}</span>
-      {text.slice(idx + q.length)}
-    </>
-  );
-}
-
-// Utility: Fetch nearby cities/towns/villages from Overpass API
-export async function fetchNearbyLocationsByType(
-  lat: number,
-  lon: number,
-  placeType: 'city' | 'town' | 'village',
-  radiusMeters = 20000,
-  signal?: AbortSignal,
-): Promise<any[]> {
-  // Overpass QL: Find only the requested place type within radius
-  const query = `
-    [out:json][timeout:10];
-    (
-      node[place=${placeType}](around:${radiusMeters},${lat},${lon});
-    );
-    out body center 20;
-  `;
-  try {
-    const response = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'real-estate-platform/1.0',
-      },
-      body: `data=${encodeURIComponent(query)}`,
-      signal,
-    });
-    if (!response.ok) throw new Error('Overpass API error');
-    const data = await response.json();
-    if (!data.elements) return [];
-    // Map to { display_name, lat, lon, ... }
-    return data.elements.map((el: any) => ({
-      display_name: el.tags?.name || 'Unnamed',
-      lat: el.lat,
-      lon: el.lon,
-      type: el.tags?.place,
-      ...el.tags,
-    }));
-  } catch (e: any) {
-    if (e?.name === 'AbortError') throw e; // propagate so callers can silently ignore
-    console.error('[Overpass] Nearby fetch failed', e);
-    return [];
-  }
-}
-
 import React, { useEffect, useRef, useState } from 'react';
-// import { createPortal } from "react-dom";
 import { useRouter } from 'next/navigation';
 import { useApp } from '@/lib/context';
+import {
+  extractSearchTerms,
+  fetchNearbyLocationsByType,
+  formatLocationLabel,
+  highlightMatch,
+} from '@/lib/search-utils';
+import { BED_OPTIONS, DateRangePanel, PRICE_RANGES } from './DateRangePanel';
 
-const PRICE_RANGES = [
-  { label: 'Any price', min: '', max: '' },
-  { label: 'Under $500k', min: '', max: '500000' },
-  { label: '$500k ? $1M', min: '500000', max: '1000000' },
-  { label: '$1M ? $2M', min: '1000000', max: '2000000' },
-  { label: '$2M+', min: '2000000', max: '' },
-];
-
-const BED_OPTIONS = [
-  { label: 'Any beds', value: '' },
-  { label: '1+ bed', value: '1' },
-  { label: '2+ beds', value: '2' },
-  { label: '3+ beds', value: '3' },
-  { label: '4+ beds', value: '4' },
-  { label: '5+ beds', value: '5' },
-];
-
-type DateRange = {
-  start: string;
-  end: string;
-  flexibility: 'exact' | '1' | '3' | '7' | '14' | '30' | '60' | '90' | '180' | '365' | '730';
-};
-
-const MONTH_NAMES = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
-
-function getDays(year: number, month: number) {
-  return new Date(year, month + 1, 0).getDate();
-}
-function getFirstDay(year: number, month: number) {
-  return new Date(year, month, 1).getDay();
-}
-
-// Context-aware flexibility options
-const FLEX_OPTIONS_RENT: { label: string; value: DateRange['flexibility'] }[] = [
-  { label: 'Exact dates', value: 'exact' },
-  { label: '± 1 day', value: '1' },
-  { label: '± 3 days', value: '3' },
-  { label: '± 1 week', value: '7' },
-  { label: '± 2 weeks', value: '14' },
-];
-const FLEX_OPTIONS_BUY: { label: string; value: DateRange['flexibility'] }[] = [
-  { label: 'Exact date', value: 'exact' },
-  { label: '± 1 week', value: '7' },
-  { label: '± 2 weeks', value: '14' },
-  { label: '± 1 month', value: '30' },
-  { label: '± 2 months', value: '60' },
-  { label: '± 3 months', value: '90' },
-  { label: '± 6 months', value: '180' },
-  { label: '± 1 year', value: '365' },
-  { label: '± 2 years', value: '730' },
-];
-
-function DateRangePanel({
-  dateRange,
-  setDateRange,
-  rangePickStep,
-  setRangePickStep,
-  hoveredDate,
-  setHoveredDate,
-  calendarBaseMonth,
-  setCalendarBaseMonth,
-  onClose,
-  listingType,
-  inline = false,
-}: {
-  dateRange: DateRange;
-  setDateRange: (v: DateRange) => void;
-  rangePickStep: 'start' | 'end';
-  setRangePickStep: (v: 'start' | 'end') => void;
-  hoveredDate: string | null;
-  setHoveredDate: (v: string | null) => void;
-  calendarBaseMonth: { year: number; month: number };
-  setCalendarBaseMonth: (
-    fn: (prev: { year: number; month: number }) => { year: number; month: number },
-  ) => void;
-  onClose: () => void;
-  listingType?: 'for-sale' | 'for-rent';
-  inline?: boolean;
-}) {
-  const today = new Date();
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  const flexOptions = listingType === 'for-sale' ? FLEX_OPTIONS_BUY : FLEX_OPTIONS_RENT;
-
-  function prevMonth() {
-    setCalendarBaseMonth(({ year: y, month: m }) => {
-      const pm = m === 0 ? 11 : m - 1;
-      const py = m === 0 ? y - 1 : y;
-      const now = new Date();
-      if (py < now.getFullYear() || (py === now.getFullYear() && pm < now.getMonth()))
-        return { year: y, month: m };
-      return { year: py, month: pm };
-    });
-  }
-  function nextMonth() {
-    setCalendarBaseMonth(({ year: y, month: m }) => {
-      const nm = m === 11 ? 0 : m + 1;
-      const ny = m === 11 ? y + 1 : y;
-      return { year: ny, month: nm };
-    });
-  }
-
-  function handleDayClick(ds: string) {
-    if (ds < todayStr) return;
-    if (rangePickStep === 'start' || !dateRange.start) {
-      setDateRange({ ...dateRange, start: ds, end: '' });
-      setRangePickStep('end');
-    } else {
-      if (ds < dateRange.start) {
-        setDateRange({ ...dateRange, start: ds, end: dateRange.start });
-      } else if (ds === dateRange.start) {
-        // clicking same day = single-date (exact)
-        setDateRange({ ...dateRange, end: ds });
-      } else {
-        setDateRange({ ...dateRange, end: ds });
-      }
-      setRangePickStep('start');
-      onClose();
-    }
-  }
-
-  function getEffectiveEnd() {
-    return dateRange.end || (rangePickStep === 'end' && hoveredDate ? hoveredDate : '');
-  }
-  function isInRange(ds: string) {
-    if (!dateRange.start) return false;
-    const end = getEffectiveEnd();
-    if (!end) return false;
-    const lo = dateRange.start < end ? dateRange.start : end;
-    const hi = dateRange.start < end ? end : dateRange.start;
-    return ds > lo && ds < hi;
-  }
-  function isRangeStart(ds: string) {
-    return ds === dateRange.start;
-  }
-  function isRangeEnd(ds: string) {
-    const end = getEffectiveEnd();
-    return !!end && ds === end && end !== dateRange.start;
-  }
-
-  function renderMonth(offset: number, showPrev: boolean, showNext: boolean, extraClass = '') {
-    const totalMonth = calendarBaseMonth.month + offset;
-    const year = calendarBaseMonth.year + Math.floor(totalMonth / 12);
-    const month = ((totalMonth % 12) + 12) % 12;
-    const daysInMonth = getDays(year, month);
-    const firstDayOff = getFirstDay(year, month);
-    return (
-      <div key={`${offset}-${extraClass}`} className={`flex-1 min-w-0 ${extraClass}`}>
-        <div className="flex items-center justify-between mb-3">
-          <button
-            type="button"
-            onClick={prevMonth}
-            className={`p-1.5 rounded-full hover:bg-surface-alt transition-colors ${!showPrev ? 'invisible' : ''}`}
-            aria-label="Previous month"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M15 18l-6-6 6-6"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
-          <span className="text-sm font-semibold text-ink select-none">
-            {MONTH_NAMES[month]} {year}
-          </span>
-          <button
-            type="button"
-            onClick={nextMonth}
-            className={`p-1.5 rounded-full hover:bg-surface-alt transition-colors ${!showNext ? 'invisible' : ''}`}
-            aria-label="Next month"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </button>
-        </div>
-        <div className="grid grid-cols-7 mb-1">
-          {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => (
-            <div
-              key={d}
-              className="text-center text-[11px] text-ink-subtle font-medium py-1 select-none"
-            >
-              {d}
-            </div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7">
-          {Array.from({ length: firstDayOff }, (_, i) => (
-            <div key={`e${i}`} />
-          ))}
-          {Array.from({ length: daysInMonth }, (_, i) => {
-            const day = i + 1;
-            const ds = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-            const isPast = ds < todayStr;
-            const isStart = isRangeStart(ds);
-            const isEnd = isRangeEnd(ds);
-            const inRange = isInRange(ds);
-            const effectiveEnd = getEffectiveEnd();
-            const hasEnd = !!(
-              dateRange.end ||
-              (rangePickStep === 'end' && hoveredDate && hoveredDate !== dateRange.start)
-            );
-            const isHovered =
-              hoveredDate === ds && rangePickStep === 'end' && !isPast && ds !== dateRange.start;
-            // Cap ends for rounded-pill range styling
-            const isRangeLeft = isStart && hasEnd && dateRange.start < (effectiveEnd || '');
-            const isRangeRight = isEnd && dateRange.start < (effectiveEnd || '');
-            return (
-              <div
-                key={day}
-                className={`relative flex items-center justify-center h-9
-                  ${inRange ? 'bg-[#EBEBEB]' : ''}
-                  ${isRangeLeft ? 'rounded-l-full' : ''}
-                  ${isRangeRight ? 'rounded-r-full' : ''}
-                `}
-              >
-                <button
-                  type="button"
-                  disabled={isPast}
-                  onMouseEnter={() => !isPast && setHoveredDate(ds)}
-                  onClick={() => handleDayClick(ds)}
-                  className={`w-9 h-9 flex items-center justify-center rounded-full text-[13px] transition-colors focus:outline-none z-[1] relative
-                    ${isStart || isEnd ? 'bg-ink text-white font-semibold' : ''}
-                    ${isHovered && !isStart && !isEnd ? 'bg-ink/15 text-ink' : ''}
-                    ${!isStart && !isEnd && !isHovered && !isPast ? 'hover:bg-surface-alt text-ink' : ''}
-                    ${isPast ? 'text-ink-subtle/30 cursor-default' : 'cursor-pointer'}
-                  `}
-                >
-                  {day}
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
-
-  const hasSelection = !!dateRange.start;
-  const instructionText = !dateRange.start
-    ? listingType === 'for-sale'
-      ? 'Pick your target start date'
-      : 'Pick your move-in date'
-    : !dateRange.end && rangePickStep === 'end'
-      ? 'Now pick an end date (or same day for exact)'
-      : dateRange.end && dateRange.end !== dateRange.start
-        ? `${dateRange.start} → ${dateRange.end}`
-        : '';
-
-  const calendarContent = (
-    <div className={inline ? 'mt-2' : 'p-4 sm:p-6'} onMouseLeave={() => setHoveredDate(null)}>
-      {/* ── Header ─────────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between mb-4 gap-4">
-        <div className="min-w-0">
-          <p className="font-semibold text-ink text-[15px] leading-snug">
-            {listingType === 'for-sale'
-              ? 'When are you looking to buy?'
-              : 'When do you want to move in?'}
-          </p>
-          {instructionText && (
-            <p className="text-[12px] text-ink-muted mt-0.5 truncate">{instructionText}</p>
-          )}
-        </div>
-        {hasSelection && (
-          <button
-            type="button"
-            onClick={() => {
-              setDateRange({ start: '', end: '', flexibility: dateRange.flexibility });
-              setRangePickStep('start');
-            }}
-            className="text-sm font-semibold text-brand hover:underline whitespace-nowrap flex-shrink-0"
-          >
-            Clear
-          </button>
-        )}
-      </div>
-
-      {/* ── Calendars ──────────────────────────────────────────────── */}
-      {/* Mobile: single month; Desktop: two months side by side */}
-      <div className="flex gap-6 lg:gap-10">
-        {/* Month 0 — always visible; on mobile has both nav arrows */}
-        {renderMonth(0, true, true, 'sm:hidden')}
-        {/* Month 0 desktop — left arrow only */}
-        {renderMonth(0, true, false, 'hidden sm:block')}
-        {/* Month 1 desktop — right arrow only */}
-        {renderMonth(1, false, true, 'hidden sm:block')}
-      </div>
-
-      {/* ── Flexibility pills + Any time ────────────────────────────── */}
-      <div className="mt-5 pt-4 border-t border-surface-border">
-        <div className="flex flex-wrap gap-2">
-          {flexOptions.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => setDateRange({ ...dateRange, flexibility: opt.value })}
-              className={`rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors whitespace-nowrap ${
-                dateRange.flexibility === opt.value
-                  ? 'border-ink bg-ink text-white'
-                  : 'border-surface-border text-ink hover:border-ink'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => {
-              setDateRange({ start: '', end: '', flexibility: 'exact' });
-              setRangePickStep('start');
-              onClose();
-            }}
-            className="rounded-full border border-surface-border px-3.5 py-1.5 text-[13px] font-medium text-ink-muted hover:border-ink hover:text-ink transition-colors whitespace-nowrap"
-          >
-            Any time
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  if (inline) return calendarContent;
-
-  return (
-    <div
-      className="search-panel-enter absolute left-0 right-0 z-50 bg-white rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.13)] border border-surface-border"
-      style={{ top: 'calc(100% + 6px)' }}
-      onMouseDown={(e) => e.stopPropagation()}
-    >
-      {calendarContent}
-    </div>
-  );
-}
-
-// All search data lives in AppContext so every instance (in-page, pill, expanded) shares it
 export default function CompactSearchBar({
   headerMode = false,
   onPillClick,
@@ -971,7 +436,7 @@ export default function CompactSearchBar({
 
   // "What" description free-text
   const [description, setDescription] = useState('');
-  const whatSuggestionsRef = useRef<HTMLDivElement>(null);
+  const _whatSuggestionsRef = useRef<HTMLDivElement>(null);
   const whatHighlightRef = useRef<HTMLDivElement>(null);
   const whereHighlightRef = useRef<HTMLDivElement>(null);
   const whereHighlightRef2 = useRef<HTMLDivElement>(null);
@@ -1011,10 +476,506 @@ export default function CompactSearchBar({
     el.style.opacity = '0';
   }
 
+  function renderWhoPanel() {
+    return (
+      <div
+        className="search-panel-enter absolute left-0 right-0 z-[200] bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-surface-border"
+        style={{ top: 'calc(100% + 6px)' }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="p-5">
+          <p className="text-[13px] text-ink-muted mb-4">How many people will live here?</p>
+          <div className="grid grid-cols-2 gap-x-8">
+            {(
+              [
+                { key: 'seniors', label: 'Older adults', desc: 'Ages 55+' },
+                { key: 'adults', label: 'Adults', desc: 'Ages 18–54' },
+                { key: 'teens', label: 'Teens', desc: 'Ages 13–17' },
+                { key: 'children', label: 'Children', desc: 'Ages 2–12' },
+                { key: 'infants', label: 'Infants', desc: 'Under 2' },
+                { key: 'pets', label: 'Pets', desc: 'Bringing pets?' },
+              ] as const
+            ).map(({ key, label, desc }, i) => (
+              <div
+                key={key}
+                className={`flex items-center justify-between py-4 ${
+                  i < 4 ? 'border-b border-surface-border' : ''
+                }`}
+              >
+                <div>
+                  <div className="font-semibold text-[15px]">{label}</div>
+                  <div className="text-[13px] text-ink-muted">{desc}</div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={occupants[key] === 0}
+                    onClick={() =>
+                      setOccupants({ ...occupants, [key]: Math.max(0, occupants[key] - 1) })
+                    }
+                    className={`h-8 w-8 rounded-full border flex items-center justify-center text-lg transition-colors ${occupants[key] === 0 ? 'border-[rgba(0,0,0,0.12)] text-[rgba(0,0,0,0.2)] cursor-default' : 'border-[rgba(0,0,0,0.4)] text-ink hover:border-ink'}`}
+                  >
+                    -
+                  </button>
+                  <span className="w-4 text-center text-[15px] font-medium">{occupants[key]}</span>
+                  <button
+                    type="button"
+                    onClick={() => setOccupants({ ...occupants, [key]: occupants[key] + 1 })}
+                    className="h-8 w-8 rounded-full border border-[rgba(0,0,0,0.4)] flex items-center justify-center text-lg hover:border-ink transition-colors"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 flex justify-end">
+            <button
+              type="button"
+              onClick={() => setActivePanel(null)}
+              className="rounded-full bg-ink text-white px-6 py-2 text-sm font-semibold hover:bg-ink/90"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderWhatPanelContent(highlightRef: React.RefObject<HTMLDivElement | null>) {
+    return (
+      <>
+        {/* Listing type selector */}
+        <p className="text-sm font-semibold text-ink mb-3">Listing type</p>
+        <div className="flex gap-2 mb-5">
+          {(['for-sale', 'for-rent'] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setListingType(tab);
+                setListingTab(tab);
+              }}
+              className={`flex-1 py-2.5 rounded-full text-sm font-semibold transition-colors duration-150 ${
+                listingType === tab
+                  ? 'bg-ink text-white shadow-sm'
+                  : 'bg-surface-alt text-ink-muted hover:bg-[#e0e0e0]'
+              }`}
+            >
+              {tab === 'for-sale' ? 'For Sale' : 'For Rent'}
+            </button>
+          ))}
+        </div>
+
+        {/* Description */}
+        <p className="text-sm font-semibold text-ink mb-2">Description</p>
+        <textarea
+          autoFocus
+          rows={3}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Ask for specific things like a bright, modern kitchen and a yard."
+          className="w-full resize-none rounded-xl border border-surface-border px-4 py-3 text-[15px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/20"
+        />
+        {description && (
+          <button
+            type="button"
+            onClick={() => setDescription('')}
+            className="mt-1 text-xs font-semibold text-ink-muted hover:text-ink underline"
+          >
+            Clear
+          </button>
+        )}
+        <p className="mt-4 mb-2 text-sm font-semibold text-brand">Suggested descriptions</p>
+        <div
+          className="relative flex flex-col gap-1"
+          onMouseLeave={() => clearHighlight(highlightRef)}
+        >
+          <div
+            ref={highlightRef}
+            className="absolute inset-x-0 rounded-xl bg-surface-alt pointer-events-none"
+            style={{ top: 0, height: 0, opacity: 0 }}
+          />
+          {(listingType === 'for-sale'
+            ? SUGGESTED_DESCRIPTIONS_BUY
+            : SUGGESTED_DESCRIPTIONS_RENT
+          ).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => {
+                setDescription(s);
+                setActivePanel(null);
+              }}
+              onMouseEnter={(e) =>
+                applyHighlight(
+                  highlightRef,
+                  e.currentTarget.offsetTop,
+                  e.currentTarget.offsetHeight,
+                )
+              }
+              className="relative z-[1] flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-ink transition"
+            >
+              <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[#e8e8e8]">
+                <svg
+                  className="h-4 w-4 text-ink-muted"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  />
+                </svg>
+              </span>
+              {s}
+            </button>
+          ))}
+        </div>
+      </>
+    );
+  }
+
+  function renderWhatPanel(highlightRef: React.RefObject<HTMLDivElement | null>) {
+    return (
+      <div
+        className="search-panel-enter absolute left-0 right-0 z-[200] bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-surface-border"
+        style={{ top: 'calc(100% + 6px)' }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="p-5">{renderWhatPanelContent(highlightRef)}</div>
+      </div>
+    );
+  }
+
+  function renderWhenPanel() {
+    return (
+      <DateRangePanel
+        dateRange={dateRange}
+        setDateRange={setDateRange}
+        rangePickStep={rangePickStep}
+        setRangePickStep={setRangePickStep}
+        hoveredDate={hoveredDate}
+        setHoveredDate={setHoveredDate}
+        calendarBaseMonth={calendarBaseMonth}
+        setCalendarBaseMonth={setCalendarBaseMonth}
+        onClose={() => setActivePanel(null)}
+        listingType={listingType}
+      />
+    );
+  }
+
+  function renderWherePanel(highlightRef: React.RefObject<HTMLDivElement | null>) {
+    return (
+      <div
+        className="search-panel-enter absolute left-0 right-0 z-[200] bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-surface-border overflow-hidden"
+        style={{ top: 'calc(100% + 6px)' }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="p-4">
+          <div className="relative">
+            <input
+              ref={inputRef}
+              type="text"
+              value={location}
+              autoComplete="off"
+              placeholder="Search city, zip, neighborhood, or address"
+              className="w-full rounded-full border border-surface-border px-5 py-3 text-[15px] focus:outline-none focus:ring-2 focus:ring-brand/20 pr-10"
+              onChange={(e) => {
+                const val = e.target.value;
+                isCommittedSelectionRef.current = false;
+                setIsCommittedSelection(false);
+                if (typeof setLocation === 'function') setLocation(val);
+                setSelectedSuggestion(null);
+                if (debounceRef.current) clearTimeout(debounceRef.current);
+                if (!val.trim() || val.trim().length < 2) {
+                  setSuggestions([]);
+                  setIsDropdownOpen(true);
+                  return;
+                }
+                setLoadingSuggestions(true);
+                debounceRef.current = setTimeout(async () => {
+                  try {
+                    const resp = await fetch(`/api/geocode?q=${encodeURIComponent(val)}`);
+                    setSuggestions(resp.ok ? await resp.json() : []);
+                  } catch {
+                    setSuggestions([]);
+                  } finally {
+                    setLoadingSuggestions(false);
+                    setIsDropdownOpen(true);
+                  }
+                }, 300);
+              }}
+              onFocus={async () => {
+                setIsDropdownOpen(true);
+                if (!location.trim()) await handleFetchNearbyLocations();
+              }}
+            />
+            {location && (
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  if (typeof setLocation === 'function') setLocation('');
+                  setSelectedSuggestion(null);
+                  isCommittedSelectionRef.current = false;
+                  setIsCommittedSelection(false);
+                  setSuggestions([]);
+                  inputRef.current?.focus({ preventScroll: true });
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full hover:bg-black/[0.08] text-ink/50 hover:text-ink transition-colors"
+                aria-label="Clear location"
+              >
+                <svg
+                  className="h-3 w-3"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+        <div
+          ref={dropdownRef}
+          className="relative pb-3 max-h-72 overflow-y-auto"
+          onMouseLeave={() => clearHighlight(highlightRef)}
+        >
+          <div
+            ref={highlightRef}
+            className="absolute inset-x-0 bg-[#f0f0f0] pointer-events-none"
+            style={{ top: 0, height: 0, opacity: 0 }}
+          />
+          <hr className="border-t border-[#f0f0f0] mb-1" />
+          {(location.trim().length < 2 || suggestions.length === 0) && (
+            <button
+              type="button"
+              onMouseEnter={(e) =>
+                applyHighlight(
+                  highlightRef,
+                  e.currentTarget.offsetTop,
+                  e.currentTarget.offsetHeight,
+                )
+              }
+              className="relative z-[1] flex w-full items-center gap-3 px-5 py-3 text-left transition-colors"
+              onClick={async () => {
+                await handleGeolocate();
+                setActivePanel(null);
+                setIsDropdownOpen(false);
+              }}
+            >
+              <span className="inline-block w-5 h-5 text-brand flex-shrink-0">
+                <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10" stroke="#FF385C" strokeWidth="2" />
+                  <circle cx="12" cy="12" r="4" stroke="#FF385C" strokeWidth="2" />
+                </svg>
+              </span>
+              <span className="font-medium text-[15px]">Use current location</span>
+            </button>
+          )}
+          {location.trim().length >= 2 && loadingSuggestions && (
+            <div className="px-5 py-3 text-ink-subtle text-sm">Loading?</div>
+          )}
+          {location.trim().length >= 2 && !loadingSuggestions && suggestions.length === 0 && (
+            <div className="px-5 py-3 text-ink-subtle text-sm">No locations found</div>
+          )}
+          {suggestions.map((s) => (
+            <button
+              key={s.place_id}
+              type="button"
+              onMouseEnter={(e) =>
+                applyHighlight(
+                  highlightRef,
+                  e.currentTarget.offsetTop,
+                  e.currentTarget.offsetHeight,
+                )
+              }
+              className="relative z-[1] flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors"
+              onClick={() => {
+                setSelectedSuggestion(s);
+                isCommittedSelectionRef.current = true;
+                setIsCommittedSelection(true);
+                if (typeof setLocation === 'function') setLocation(formatLocationLabel(s));
+                setActivePanel(null);
+                setIsDropdownOpen(false);
+                addRecentSearch(s);
+              }}
+            >
+              <span className="inline-block w-5 h-5 text-ink-subtle flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <path
+                    d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"
+                    fill="currentColor"
+                  />
+                </svg>
+              </span>
+              <span className="text-[15px] truncate">
+                {highlightMatch(formatLocationLabel(s), location)}
+              </span>
+            </button>
+          ))}
+          {/* Nearby */}
+          {(location.trim().length < 2 || suggestions.length === 0 || isCommittedSelection) &&
+            (loadingNearby || nearbyLocations.length > 0) && (
+              <>
+                <hr className="border-t border-[#f0f0f0] my-1" />
+                <div className="px-5 pt-2 pb-1 text-[11px] text-ink-subtle font-semibold tracking-widest uppercase">
+                  Nearby
+                </div>
+                {loadingNearby && (
+                  <div className="px-5 py-2 text-ink-subtle text-sm">Loading nearby...</div>
+                )}
+                {!loadingNearby &&
+                  nearbyLocations
+                    .filter((loc) => {
+                      if (!formatLocationLabel(loc)) return false;
+                      const locLabel = formatLocationLabel(loc).toLowerCase();
+                      if (
+                        selectedSuggestion &&
+                        loc.lat &&
+                        loc.lon &&
+                        selectedSuggestion.lat &&
+                        selectedSuggestion.lon
+                      ) {
+                        if (
+                          Number(loc.lat).toFixed(5) ===
+                            Number(selectedSuggestion.lat).toFixed(5) &&
+                          Number(loc.lon).toFixed(5) === Number(selectedSuggestion.lon).toFixed(5)
+                        )
+                          return false;
+                      }
+                      if (
+                        selectedSuggestion &&
+                        locLabel === formatLocationLabel(selectedSuggestion).toLowerCase()
+                      )
+                        return false;
+                      return true;
+                    })
+                    .map((loc, idx) => (
+                      <button
+                        key={loc.display_name + idx}
+                        type="button"
+                        onMouseEnter={(e) =>
+                          applyHighlight(
+                            highlightRef,
+                            e.currentTarget.offsetTop,
+                            e.currentTarget.offsetHeight,
+                          )
+                        }
+                        className="relative z-[1] flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors"
+                        onClick={() => {
+                          const formatted = formatLocationLabel(loc);
+                          if (typeof setLocation === 'function') setLocation(formatted);
+                          isCommittedSelectionRef.current = true;
+                          setIsCommittedSelection(true);
+                          setSelectedSuggestion({ ...loc, display_name: formatted });
+                          setActivePanel(null);
+                          setIsDropdownOpen(false);
+                        }}
+                      >
+                        <span className="inline-block w-5 h-5 text-ink-subtle flex-shrink-0">
+                          <svg viewBox="0 0 24 24" fill="none">
+                            <path
+                              d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"
+                              fill="currentColor"
+                            />
+                          </svg>
+                        </span>
+                        <span className="text-[15px] truncate">
+                          {highlightMatch(formatLocationLabel(loc), location)}
+                        </span>
+                      </button>
+                    ))}
+              </>
+            )}
+          {/* Recent searches */}
+          {(location.trim().length < 2 || suggestions.length === 0 || isCommittedSelection) &&
+            recentSearches.length > 0 && (
+              <>
+                <hr className="border-t border-[#f0f0f0] my-1" />
+                <div className="px-5 pt-2 pb-1 text-[11px] text-ink-subtle font-semibold tracking-widest uppercase">
+                  Recent
+                </div>
+                {recentSearches.map((s, idx) => (
+                  <div
+                    key={s.display_name + idx}
+                    onMouseEnter={(e) =>
+                      applyHighlight(
+                        highlightRef,
+                        e.currentTarget.offsetTop,
+                        e.currentTarget.offsetHeight,
+                      )
+                    }
+                    className="relative z-[1] flex w-full items-center px-5 py-2.5 transition-colors group"
+                  >
+                    <button
+                      type="button"
+                      className="flex items-center flex-1 min-w-0 gap-3"
+                      onClick={() => {
+                        setSelectedSuggestion(s);
+                        isCommittedSelectionRef.current = true;
+                        setIsCommittedSelection(true);
+                        if (typeof setLocation === 'function') setLocation(formatLocationLabel(s));
+                        setActivePanel(null);
+                        setIsDropdownOpen(false);
+                      }}
+                    >
+                      <span className="inline-block w-5 h-5 text-ink-subtle flex-shrink-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+                          <path
+                            d="M17.01 14h-.8l-.27-.27c.98-1.14 1.57-2.61 1.57-4.23 0-3.59-2.91-6.5-6.5-6.5s-6.5 3-6.5 6.5H2l3.84 4 4.16-4H6.51C6.51 7 8.53 5 11.01 5s4.5 2.01 4.5 4.5c0 2.48-2.02 4.5-4.5 4.5-.65 0-1.26-.14-1.82-.38L7.71 15.1c.97.57 2.09.9 3.3.9 1.61 0 3.08-.59 4.22-1.57l.27.27v.79l5.01 4.99L22 19l-4.99-5z"
+                            fill="currentColor"
+                          />
+                        </svg>
+                      </span>
+                      <span className="text-[15px] truncate">
+                        {highlightMatch(formatLocationLabel(s), location)}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Remove recent search"
+                      tabIndex={-1}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1.5 rounded-full hover:bg-surface-alt transition-opacity"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRecentSearches((prev) => {
+                          const updated = prev.filter((_, i) => i !== idx);
+                          if (typeof window !== 'undefined')
+                            localStorage.setItem('recentSearches', JSON.stringify(updated));
+                          return updated;
+                        });
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
+                        <path
+                          d="M5 5l8 8M13 5l-8 8"
+                          stroke="#888"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </>
+            )}
+        </div>
+      </div>
+    );
+  }
+
   const SUGGESTED_DESCRIPTIONS_BUY = [
     '3+ bedrooms, open-plan living, and a private backyard',
     'Modern kitchen, home office space, and a 2-car garage',
-    'Corner lot with large yard, updated bathrooms, and good natural light',
     'Quiet neighborhood, close to top-rated schools and commuter routes',
     'Move-in ready with updated HVAC, roof under 5 years, and no HOA',
   ];
@@ -1022,7 +983,6 @@ export default function CompactSearchBar({
     '2+ bedrooms, in-unit laundry, and pet-friendly building',
     'Open-plan apartment with updated kitchen and parking included',
     'Furnished unit near transit, utilities included, flexible lease',
-    'Quiet building, high-speed internet ready, and no smoking policy',
     'Spacious townhouse with private entrance and outdoor space',
   ];
 
@@ -1824,60 +1784,7 @@ export default function CompactSearchBar({
             <div className="px-5 pt-4 pb-4">
               <p className="text-[11px] font-bold text-ink uppercase tracking-wider">What?</p>
               {activePanel === 'what' ? (
-                <div className="mt-3">
-                  <textarea
-                    autoFocus
-                    rows={3}
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Ask for specific things like a bright, modern kitchen and a yard."
-                    className="w-full resize-none rounded-xl border border-surface-border px-4 py-3 text-[14px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/20 bg-[#F7F7F7] focus:bg-white transition-colors"
-                  />
-                  {description && (
-                    <button
-                      onClick={() => setDescription('')}
-                      className="mt-1 text-[13px] text-ink-muted underline underline-offset-2"
-                    >
-                      Clear
-                    </button>
-                  )}
-                  <p className="mt-3 mb-2 text-sm font-semibold text-brand">
-                    Suggested descriptions
-                  </p>
-                  <div className="flex flex-col gap-1">
-                    {(listingType === 'for-sale'
-                      ? SUGGESTED_DESCRIPTIONS_BUY
-                      : SUGGESTED_DESCRIPTIONS_RENT
-                    ).map((s) => (
-                      <button
-                        key={s}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDescription(s);
-                          setActivePanel(null);
-                        }}
-                        className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] text-ink hover:bg-surface-soft transition-colors"
-                      >
-                        <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[#e8e8e8]">
-                          <svg
-                            className="h-3.5 w-3.5 text-ink-muted"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth={2}
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M9 12h6m-3-3v6M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"
-                            />
-                          </svg>
-                        </span>
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <div className="mt-3">{renderWhatPanelContent(whatHighlightRef)}</div>
               ) : (
                 <p className="text-[14px] text-ink-muted mt-1">
                   {description || 'Describe your ideal home'}
@@ -1931,7 +1838,7 @@ export default function CompactSearchBar({
       >
         {/* Where */}
         <div className="flex-1 flex flex-col justify-center px-4 py-2 text-left min-w-0">
-          <span className="text-[10px] font-bold text-ink leading-none mb-0.5 select-none">
+          <span className="text-[10px] font-medium text-ink-muted leading-none mb-1 select-none">
             Where
           </span>
           <span className="text-[13px] text-ink-muted leading-snug truncate">
@@ -1941,7 +1848,7 @@ export default function CompactSearchBar({
         <div className="my-auto h-5 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)]" />
         {/* When */}
         <div className="flex flex-col justify-center px-4 py-2 text-left whitespace-nowrap">
-          <span className="text-[10px] font-bold text-ink leading-none mb-0.5 select-none">
+          <span className="text-[10px] font-medium text-ink-muted leading-none mb-1 select-none">
             When
           </span>
           <span className="text-[13px] text-ink-muted leading-snug">
@@ -1951,7 +1858,7 @@ export default function CompactSearchBar({
         <div className="my-auto h-5 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)]" />
         {/* Who */}
         <div className="flex flex-col justify-center px-4 py-2 text-left whitespace-nowrap">
-          <span className="text-[10px] font-bold text-ink leading-none mb-0.5 select-none">
+          <span className="text-[10px] font-medium text-ink-muted leading-none mb-1 select-none">
             Who
           </span>
           <span className="text-[13px] text-ink-muted leading-snug">
@@ -1961,10 +1868,12 @@ export default function CompactSearchBar({
         <div className="my-auto h-5 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)]" />
         {/* What */}
         <div className="flex flex-col justify-center px-4 py-2 text-left whitespace-nowrap">
-          <span className="text-[10px] font-bold text-ink leading-none mb-0.5 select-none">
+          <span className="text-[10px] font-medium text-ink-muted leading-none mb-1 select-none">
             What
           </span>
-          <span className="text-[13px] text-ink-muted leading-snug">Add description</span>
+          <span className="text-[11px] sm:text-[13px] text-ink font-bold leading-snug">
+            {listingType === 'for-rent' ? 'For Rent' : 'For Sale'}
+          </span>
         </div>
         {/* Search icon button */}
         <div className="flex items-center pr-1.5 pl-1">
@@ -2002,9 +1911,16 @@ export default function CompactSearchBar({
         >
           {activePanel && (
             <div
-              className="absolute top-0 bottom-0 rounded-full bg-white shadow-[0_2px_16px_rgba(0,0,0,0.15)] pointer-events-none"
+              className="absolute rounded-full bg-white shadow-[0_2px_16px_rgba(0,0,0,0.15)] pointer-events-none"
               style={{
-                ...getIndicatorStyle(),
+                ...(() => {
+                  const s = getIndicatorStyle();
+                  const left = typeof s.left === 'number' ? s.left + 1 : s.left;
+                  const width = typeof s.width === 'number' ? s.width - 2 : s.width;
+                  return { ...s, left, width };
+                })(),
+                top: '1px',
+                bottom: '1px',
                 transition:
                   'left 0.22s cubic-bezier(0.4,0,0.2,1), width 0.22s cubic-bezier(0.4,0,0.2,1)',
               }}
@@ -2029,11 +1945,11 @@ export default function CompactSearchBar({
                     : ''
               }`}
             >
-              <span className="text-[11px] sm:text-[12px] font-bold text-ink leading-none mb-0.5">
+              <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
                 Where
               </span>
               <span
-                className={`text-[13px] sm:text-[15px] leading-snug truncate pr-5 ${location ? 'text-ink font-medium' : 'text-ink-muted'}`}
+                className={`text-[11px] sm:text-[13px] leading-snug truncate pr-5 ${location ? 'text-ink font-bold' : 'text-ink-subtle'}`}
               >
                 {isGeolocating ? (
                   <span className="flex items-center gap-1.5 text-ink-muted">
@@ -2106,11 +2022,11 @@ export default function CompactSearchBar({
                   : ''
             }`}
           >
-            <span className="text-[11px] sm:text-[12px] font-bold text-ink leading-none mb-0.5">
+            <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
               When
             </span>
             <span
-              className={`text-[13px] sm:text-[15px] leading-snug truncate ${dateRange.start ? 'text-ink font-medium' : 'text-ink-muted'}`}
+              className={`text-[11px] sm:text-[13px] leading-snug truncate ${dateRange.start ? 'text-ink' : 'text-ink-muted'}`}
             >
               {dateRange.start ? (
                 formatDateRangeLabel(dateRange)
@@ -2137,11 +2053,11 @@ export default function CompactSearchBar({
                   : ''
             }`}
           >
-            <span className="text-[11px] sm:text-[12px] font-bold text-ink leading-none mb-0.5">
+            <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
               Who
             </span>
             <span
-              className={`text-[13px] sm:text-[15px] leading-snug truncate ${occupantSummary(occupants) ? 'text-ink font-medium' : 'text-ink-muted'}`}
+              className={`text-[11px] sm:text-[13px] leading-snug truncate ${occupantSummary(occupants) ? 'text-ink font-bold' : 'text-ink-subtle'}`}
             >
               {occupantSummary(occupants) || 'Add occupants'}
             </span>
@@ -2162,11 +2078,11 @@ export default function CompactSearchBar({
                   : ''
             }`}
           >
-            <span className="text-[11px] sm:text-[12px] font-bold text-ink leading-none mb-0.5">
+            <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
               What
             </span>
-            <span className="text-[13px] sm:text-[15px] text-ink-muted leading-snug truncate">
-              Add description
+            <span className="text-[11px] sm:text-[13px] text-ink font-bold leading-snug truncate">
+              {listingType === 'for-rent' ? 'For Rent' : 'For Sale'}
             </span>
           </button>
           {/* Search */}
@@ -2217,321 +2133,16 @@ export default function CompactSearchBar({
         </div>
 
         {/* WHERE panel */}
-        {activePanel === 'where' && (
-          <div
-            className="search-panel-enter absolute left-0 right-0 z-[200] bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-surface-border overflow-hidden"
-            style={{ top: 'calc(100% + 6px)' }}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="p-4">
-              <div className="relative">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={location}
-                  autoComplete="off"
-                  placeholder="Search city, zip, neighborhood, or address"
-                  className="w-full rounded-full border border-surface-border px-5 py-3 text-[15px] focus:outline-none focus:ring-2 focus:ring-brand/20 pr-10"
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    isCommittedSelectionRef.current = false;
-                    setIsCommittedSelection(false);
-                    if (typeof setLocation === 'function') setLocation(val);
-                    setSelectedSuggestion(null);
-                    if (debounceRef.current) clearTimeout(debounceRef.current);
-                    if (!val.trim() || val.trim().length < 2) {
-                      setSuggestions([]);
-                      setIsDropdownOpen(true);
-                      return;
-                    }
-                    setLoadingSuggestions(true);
-                    debounceRef.current = setTimeout(async () => {
-                      try {
-                        const r = await fetch(`/api/geocode?q=${encodeURIComponent(val)}`);
-                        setSuggestions(r.ok ? await r.json() : []);
-                      } catch {
-                        setSuggestions([]);
-                      } finally {
-                        setLoadingSuggestions(false);
-                        setIsDropdownOpen(true);
-                      }
-                    }, 300);
-                  }}
-                  onFocus={async () => {
-                    setIsDropdownOpen(true);
-                    if (!location.trim()) await handleFetchNearbyLocations();
-                  }}
-                />
-                {location && (
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      if (typeof setLocation === 'function') setLocation('');
-                      setSelectedSuggestion(null);
-                      isCommittedSelectionRef.current = false;
-                      setIsCommittedSelection(false);
-                      setSuggestions([]);
-                      inputRef.current?.focus({ preventScroll: true });
-                    }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full hover:bg-black/[0.08] text-ink/50 hover:text-ink transition-colors"
-                    aria-label="Clear location"
-                  >
-                    <svg
-                      className="h-3 w-3"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth={2.5}
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-            </div>
-            <div
-              ref={dropdownRef}
-              className="relative pb-3 max-h-64 overflow-y-auto"
-              onMouseLeave={() => clearHighlight(whereHighlightRef)}
-            >
-              <div
-                ref={whereHighlightRef}
-                className="absolute inset-x-0 bg-[#f0f0f0] pointer-events-none"
-                style={{ top: 0, height: 0, opacity: 0 }}
-              />
-              <hr className="border-t border-[#f0f0f0] mb-1" />
-              {(location.trim().length < 2 || suggestions.length === 0) && (
-                <button
-                  type="button"
-                  onMouseEnter={(e) =>
-                    applyHighlight(
-                      whereHighlightRef,
-                      e.currentTarget.offsetTop,
-                      e.currentTarget.offsetHeight,
-                    )
-                  }
-                  className="relative z-[1] flex w-full items-center gap-3 px-5 py-3 text-left transition-colors"
-                  onClick={async () => {
-                    await handleGeolocate();
-                    setActivePanel(null);
-                  }}
-                >
-                  <span className="text-brand flex-shrink-0">
-                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
-                      <circle cx="12" cy="12" r="10" stroke="#FF385C" strokeWidth="2" />
-                      <circle cx="12" cy="12" r="4" stroke="#FF385C" strokeWidth="2" />
-                    </svg>
-                  </span>
-                  <span className="font-medium text-[15px]">Use current location</span>
-                </button>
-              )}
-              {location.trim().length >= 2 && loadingSuggestions && (
-                <div className="px-5 py-3 text-ink-subtle text-sm">Loading?</div>
-              )}
-              {location.trim().length >= 2 && !loadingSuggestions && suggestions.length === 0 && (
-                <div className="px-5 py-3 text-ink-subtle text-sm">No locations found</div>
-              )}
-              {suggestions.map((s) => (
-                <button
-                  key={s.place_id}
-                  type="button"
-                  onMouseEnter={(e) =>
-                    applyHighlight(
-                      whereHighlightRef,
-                      e.currentTarget.offsetTop,
-                      e.currentTarget.offsetHeight,
-                    )
-                  }
-                  className="relative z-[1] flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors"
-                  onClick={() => {
-                    setSelectedSuggestion(s);
-                    isCommittedSelectionRef.current = true;
-                    setIsCommittedSelection(true);
-                    if (typeof setLocation === 'function') setLocation(formatLocationLabel(s));
-                    setActivePanel(null);
-                    addRecentSearch(s);
-                  }}
-                >
-                  <span className="w-5 h-5 text-ink-subtle flex-shrink-0">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <path
-                        d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"
-                        fill="currentColor"
-                      />
-                    </svg>
-                  </span>
-                  <span className="text-[15px] truncate">
-                    {highlightMatch(formatLocationLabel(s), location)}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        {activePanel === 'where' && renderWherePanel(whereHighlightRef)}
 
         {/* WHEN panel */}
-        {activePanel === 'when' && (
-          <DateRangePanel
-            dateRange={dateRange}
-            setDateRange={setDateRange}
-            rangePickStep={rangePickStep}
-            setRangePickStep={setRangePickStep}
-            hoveredDate={hoveredDate}
-            setHoveredDate={setHoveredDate}
-            calendarBaseMonth={calendarBaseMonth}
-            setCalendarBaseMonth={setCalendarBaseMonth}
-            onClose={() => setActivePanel(null)}
-            listingType={listingType}
-          />
-        )}
+        {activePanel === 'when' && renderWhenPanel()}
 
-        {/* WHO panel — occupant stepper grid (6 categories) */}
-        {activePanel === 'who' && (
-          <div
-            className="search-panel-enter absolute left-0 right-0 z-[200] bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-surface-border"
-            style={{ top: 'calc(100% + 6px)' }}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="p-5">
-              <p className="text-[13px] text-ink-muted mb-4">How many people will live here?</p>
-              <div className="grid grid-cols-2 gap-x-8">
-                {(
-                  [
-                    { key: 'seniors', label: 'Older adults', desc: 'Ages 55+' },
-                    { key: 'adults', label: 'Adults', desc: 'Ages 18–54' },
-                    { key: 'teens', label: 'Teens', desc: 'Ages 13–17' },
-                    { key: 'children', label: 'Children', desc: 'Ages 2–12' },
-                    { key: 'infants', label: 'Infants', desc: 'Under 2' },
-                    { key: 'pets', label: 'Pets', desc: 'Bringing pets?' },
-                  ] as const
-                ).map(({ key, label, desc }, i) => (
-                  <div
-                    key={key}
-                    className={`flex items-center justify-between py-4 ${
-                      i < 4 ? 'border-b border-surface-border' : ''
-                    }`}
-                  >
-                    <div>
-                      <div className="font-semibold text-[15px]">{label}</div>
-                      <div className="text-[13px] text-ink-muted">{desc}</div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        disabled={occupants[key] === 0}
-                        onClick={() =>
-                          setOccupants({ ...occupants, [key]: Math.max(0, occupants[key] - 1) })
-                        }
-                        className={`h-8 w-8 rounded-full border flex items-center justify-center text-lg transition-colors ${occupants[key] === 0 ? 'border-[rgba(0,0,0,0.12)] text-[rgba(0,0,0,0.2)] cursor-default' : 'border-[rgba(0,0,0,0.4)] text-ink hover:border-ink'}`}
-                      >
-                        -
-                      </button>
-                      <span className="w-4 text-center text-[15px] font-medium">
-                        {occupants[key]}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setOccupants({ ...occupants, [key]: occupants[key] + 1 })}
-                        className="h-8 w-8 rounded-full border border-[rgba(0,0,0,0.4)] flex items-center justify-center text-lg hover:border-ink transition-colors"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setActivePanel(null)}
-                  className="rounded-full bg-ink text-white px-6 py-2 text-sm font-semibold hover:bg-ink/90"
-                >
-                  Done
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* WHO panel */}
+        {activePanel === 'who' && renderWhoPanel()}
 
         {/* WHAT panel */}
-        {activePanel === 'what' && (
-          <div
-            className="search-panel-enter absolute left-0 right-0 z-[200] bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-surface-border"
-            style={{ top: 'calc(100% + 6px)' }}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="p-5">
-              <textarea
-                autoFocus
-                rows={3}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Ask for specific things like a bright, modern kitchen and a yard."
-                className="w-full resize-none rounded-xl border border-surface-border px-4 py-3 text-[15px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/20"
-              />
-              {description && (
-                <button
-                  type="button"
-                  onClick={() => setDescription('')}
-                  className="mt-1 text-xs font-semibold text-ink-muted hover:text-ink underline"
-                >
-                  Clear
-                </button>
-              )}
-              <p className="mt-4 mb-2 text-sm font-semibold text-brand">Suggested descriptions</p>
-              <div
-                ref={whatSuggestionsRef}
-                className="relative flex flex-col gap-1"
-                onMouseLeave={() => clearHighlight(whatHighlightRef)}
-              >
-                <div
-                  ref={whatHighlightRef}
-                  className="absolute inset-x-0 rounded-xl bg-surface-alt pointer-events-none"
-                  style={{ top: 0, height: 0, opacity: 0 }}
-                />
-                {(listingType === 'for-sale'
-                  ? SUGGESTED_DESCRIPTIONS_BUY
-                  : SUGGESTED_DESCRIPTIONS_RENT
-                ).map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => {
-                      setDescription(s);
-                      setActivePanel(null);
-                    }}
-                    onMouseEnter={(e) =>
-                      applyHighlight(
-                        whatHighlightRef,
-                        e.currentTarget.offsetTop,
-                        e.currentTarget.offsetHeight,
-                      )
-                    }
-                    className="relative z-[1] flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-ink transition"
-                  >
-                    <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[#e8e8e8]">
-                      <svg
-                        className="h-4 w-4 text-ink-muted"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                        />
-                      </svg>
-                    </span>
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
+        {activePanel === 'what' && renderWhatPanel(whatHighlightRef)}
       </div>
     );
   }
@@ -2551,9 +2162,16 @@ export default function CompactSearchBar({
           >
             {activePanel && (
               <div
-                className="absolute top-0 bottom-0 rounded-full bg-white shadow-[0_2px_16px_rgba(0,0,0,0.15)] pointer-events-none"
+                className="absolute rounded-full bg-white shadow-[0_2px_16px_rgba(0,0,0,0.15)] pointer-events-none"
                 style={{
-                  ...getIndicatorStyle(),
+                  ...(() => {
+                    const s = getIndicatorStyle();
+                    const left = typeof s.left === 'number' ? s.left + 1 : s.left;
+                    const width = typeof s.width === 'number' ? s.width - 2 : s.width;
+                    return { ...s, left, width };
+                  })(),
+                  top: '1px',
+                  bottom: '1px',
                   transition:
                     'left 0.22s cubic-bezier(0.4,0,0.2,1), width 0.22s cubic-bezier(0.4,0,0.2,1)',
                 }}
@@ -2579,11 +2197,11 @@ export default function CompactSearchBar({
                       : ''
                 }`}
               >
-                <span className="text-[11px] sm:text-[12px] font-bold text-ink leading-none mb-0.5">
+                <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
                   Where
                 </span>
                 <span
-                  className={`text-[13px] sm:text-[15px] leading-snug truncate pr-5 ${location ? 'text-ink font-medium' : 'text-ink-muted'}`}
+                  className={`text-[11px] sm:text-[13px] leading-snug truncate pr-5 ${location ? 'text-ink font-bold' : 'text-ink-subtle'}`}
                 >
                   {isGeolocating ? (
                     <span className="flex items-center gap-1.5 text-ink-muted">
@@ -2609,7 +2227,7 @@ export default function CompactSearchBar({
                       Detecting location…
                     </span>
                   ) : (
-                    location || 'Search city, zip, neighborhood, street or address'
+                    location || 'Add locations'
                   )}
                 </span>
               </button>
@@ -2658,11 +2276,11 @@ export default function CompactSearchBar({
                     : ''
               }`}
             >
-              <span className="text-[11px] sm:text-[12px] font-bold text-ink leading-none mb-0.5">
+              <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
                 When
               </span>
               <span
-                className={`text-[13px] sm:text-[15px] leading-snug truncate ${dateRange.start ? 'text-ink font-medium' : 'text-ink-muted'}`}
+                className={`text-[11px] sm:text-[13px] leading-snug truncate ${dateRange.start ? 'text-ink font-bold' : 'text-ink-subtle'}`}
               >
                 {dateRange.start ? (
                   formatDateRangeLabel(dateRange)
@@ -2691,11 +2309,11 @@ export default function CompactSearchBar({
                     : ''
               }`}
             >
-              <span className="text-[11px] sm:text-[12px] font-bold text-ink leading-none mb-0.5">
+              <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
                 Who
               </span>
               <span
-                className={`text-[13px] sm:text-[15px] leading-snug truncate ${occupantSummary(occupants) ? 'text-ink font-medium' : 'text-ink-muted'}`}
+                className={`text-[11px] sm:text-[13px] leading-snug truncate ${occupantSummary(occupants) ? 'text-ink font-bold' : 'text-ink-subtle'}`}
               >
                 {occupantSummary(occupants) || 'Add occupants'}
               </span>
@@ -2718,11 +2336,11 @@ export default function CompactSearchBar({
                     : ''
               }`}
             >
-              <span className="text-[11px] sm:text-[12px] font-bold text-ink leading-none mb-0.5">
+              <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
                 What
               </span>
-              <span className="text-[13px] sm:text-[15px] text-ink-muted leading-snug truncate">
-                Add description
+              <span className="text-[11px] sm:text-[13px] text-ink font-bold leading-snug truncate">
+                {listingType === 'for-rent' ? 'For Rent' : 'For Sale'}
               </span>
             </button>
 
@@ -2780,477 +2398,17 @@ export default function CompactSearchBar({
             </div>
           </div>
 
-          {/* -- PANEL: WHERE ------------------------------------------------ */}
-          {activePanel === 'where' && (
-            <div
-              className="search-panel-enter absolute left-0 right-0 z-50 bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-surface-border overflow-hidden"
-              style={{ top: 'calc(100% + 6px)' }}
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              <div className="p-4">
-                <div className="relative">
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    value={location}
-                    autoComplete="off"
-                    placeholder="Search city, zip, neighborhood, or address"
-                    className="w-full rounded-full border border-surface-border px-5 py-3 text-[15px] focus:outline-none focus:ring-2 focus:ring-brand/20 pr-10"
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      isCommittedSelectionRef.current = false;
-                      setIsCommittedSelection(false);
-                      if (typeof setLocation === 'function') setLocation(val);
-                      setSelectedSuggestion(null);
-                      if (debounceRef.current) clearTimeout(debounceRef.current);
-                      if (!val.trim() || val.trim().length < 2) {
-                        setSuggestions([]);
-                        setIsDropdownOpen(true);
-                        return;
-                      }
-                      setLoadingSuggestions(true);
-                      debounceRef.current = setTimeout(async () => {
-                        try {
-                          const resp = await fetch(`/api/geocode?q=${encodeURIComponent(val)}`);
-                          setSuggestions(resp.ok ? await resp.json() : []);
-                        } catch {
-                          setSuggestions([]);
-                        } finally {
-                          setLoadingSuggestions(false);
-                          setIsDropdownOpen(true);
-                        }
-                      }, 300);
-                    }}
-                    onFocus={async () => {
-                      setIsDropdownOpen(true);
-                      if (!location.trim()) await handleFetchNearbyLocations();
-                    }}
-                  />
-                  {location && (
-                    <button
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => {
-                        if (typeof setLocation === 'function') setLocation('');
-                        setSelectedSuggestion(null);
-                        isCommittedSelectionRef.current = false;
-                        setIsCommittedSelection(false);
-                        setSuggestions([]);
-                        inputRef.current?.focus({ preventScroll: true });
-                      }}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full hover:bg-black/[0.08] text-ink/50 hover:text-ink transition-colors"
-                      aria-label="Clear location"
-                    >
-                      <svg
-                        className="h-3 w-3"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth={2.5}
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M6 18L18 6M6 6l12 12"
-                        />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-              </div>
-              <div
-                ref={dropdownRef}
-                className="relative pb-3 max-h-72 overflow-y-auto"
-                onMouseLeave={() => clearHighlight(whereHighlightRef2)}
-              >
-                <div
-                  ref={whereHighlightRef2}
-                  className="absolute inset-x-0 bg-[#f0f0f0] pointer-events-none"
-                  style={{ top: 0, height: 0, opacity: 0 }}
-                />
-                <hr className="border-t border-[#f0f0f0] mb-1" />
-                {/* Use current location */}
-                {(location.trim().length < 2 || suggestions.length === 0) && (
-                  <button
-                    type="button"
-                    onMouseEnter={(e) =>
-                      applyHighlight(
-                        whereHighlightRef2,
-                        e.currentTarget.offsetTop,
-                        e.currentTarget.offsetHeight,
-                      )
-                    }
-                    className="relative z-[1] flex w-full items-center gap-3 px-5 py-3 text-left transition-colors"
-                    onClick={async () => {
-                      await handleGeolocate();
-                      setActivePanel(null);
-                      setIsDropdownOpen(false);
-                    }}
-                  >
-                    <span className="inline-block w-5 h-5 text-brand flex-shrink-0">
-                      <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
-                        <circle cx="12" cy="12" r="10" stroke="#FF385C" strokeWidth="2" />
-                        <circle cx="12" cy="12" r="4" stroke="#FF385C" strokeWidth="2" />
-                      </svg>
-                    </span>
-                    <span className="font-medium text-[15px]">Use current location</span>
-                  </button>
-                )}
-                {location.trim().length >= 2 && loadingSuggestions && (
-                  <div className="px-5 py-3 text-ink-subtle text-sm">Loading?</div>
-                )}
-                {location.trim().length >= 2 && !loadingSuggestions && suggestions.length === 0 && (
-                  <div className="px-5 py-3 text-ink-subtle text-sm">No locations found</div>
-                )}
-                {suggestions.map((s) => (
-                  <button
-                    key={s.place_id}
-                    type="button"
-                    onMouseEnter={(e) =>
-                      applyHighlight(
-                        whereHighlightRef2,
-                        e.currentTarget.offsetTop,
-                        e.currentTarget.offsetHeight,
-                      )
-                    }
-                    className="relative z-[1] flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors"
-                    onClick={() => {
-                      setSelectedSuggestion(s);
-                      isCommittedSelectionRef.current = true;
-                      setIsCommittedSelection(true);
-                      if (typeof setLocation === 'function') setLocation(formatLocationLabel(s));
-                      setActivePanel(null);
-                      setIsDropdownOpen(false);
-                      addRecentSearch(s);
-                    }}
-                  >
-                    <span className="inline-block w-5 h-5 text-ink-subtle flex-shrink-0">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <path
-                          d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"
-                          fill="currentColor"
-                        />
-                      </svg>
-                    </span>
-                    <span className="text-[15px] truncate">
-                      {highlightMatch(formatLocationLabel(s), location)}
-                    </span>
-                  </button>
-                ))}
-                {/* Nearby */}
-                {(location.trim().length < 2 || suggestions.length === 0 || isCommittedSelection) &&
-                  (loadingNearby || nearbyLocations.length > 0) && (
-                    <>
-                      <hr className="border-t border-[#f0f0f0] my-1" />
-                      <div className="px-5 pt-2 pb-1 text-[11px] text-ink-subtle font-semibold tracking-widest uppercase">
-                        Nearby
-                      </div>
-                      {loadingNearby && (
-                        <div className="px-5 py-2 text-ink-subtle text-sm">Loading nearby...</div>
-                      )}
-                      {!loadingNearby &&
-                        nearbyLocations
-                          .filter((loc) => {
-                            if (!formatLocationLabel(loc)) return false;
-                            const locLabel = formatLocationLabel(loc).toLowerCase();
-                            if (
-                              selectedSuggestion &&
-                              loc.lat &&
-                              loc.lon &&
-                              selectedSuggestion.lat &&
-                              selectedSuggestion.lon
-                            ) {
-                              if (
-                                Number(loc.lat).toFixed(5) ===
-                                  Number(selectedSuggestion.lat).toFixed(5) &&
-                                Number(loc.lon).toFixed(5) ===
-                                  Number(selectedSuggestion.lon).toFixed(5)
-                              )
-                                return false;
-                            }
-                            if (
-                              selectedSuggestion &&
-                              locLabel === formatLocationLabel(selectedSuggestion).toLowerCase()
-                            )
-                              return false;
-                            return true;
-                          })
-                          .map((loc, idx) => (
-                            <button
-                              key={loc.display_name + idx}
-                              type="button"
-                              onMouseEnter={(e) =>
-                                applyHighlight(
-                                  whereHighlightRef2,
-                                  e.currentTarget.offsetTop,
-                                  e.currentTarget.offsetHeight,
-                                )
-                              }
-                              className="relative z-[1] flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors"
-                              onClick={() => {
-                                const formatted = formatLocationLabel(loc);
-                                if (typeof setLocation === 'function') setLocation(formatted);
-                                isCommittedSelectionRef.current = true;
-                                setIsCommittedSelection(true);
-                                setSelectedSuggestion({ ...loc, display_name: formatted });
-                                setActivePanel(null);
-                                setIsDropdownOpen(false);
-                              }}
-                            >
-                              <span className="inline-block w-5 h-5 text-ink-subtle flex-shrink-0">
-                                <svg viewBox="0 0 24 24" fill="none">
-                                  <path
-                                    d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"
-                                    fill="currentColor"
-                                  />
-                                </svg>
-                              </span>
-                              <span className="text-[15px] truncate">
-                                {highlightMatch(formatLocationLabel(loc), location)}
-                              </span>
-                            </button>
-                          ))}
-                    </>
-                  )}
-                {/* Recent searches */}
-                {(location.trim().length < 2 || suggestions.length === 0 || isCommittedSelection) &&
-                  recentSearches.length > 0 && (
-                    <>
-                      <hr className="border-t border-[#f0f0f0] my-1" />
-                      <div className="px-5 pt-2 pb-1 text-[11px] text-ink-subtle font-semibold tracking-widest uppercase">
-                        Recent
-                      </div>
-                      {recentSearches.map((s, idx) => (
-                        <div
-                          key={s.display_name + idx}
-                          onMouseEnter={(e) =>
-                            applyHighlight(
-                              whereHighlightRef2,
-                              e.currentTarget.offsetTop,
-                              e.currentTarget.offsetHeight,
-                            )
-                          }
-                          className="relative z-[1] flex w-full items-center px-5 py-2.5 transition-colors group"
-                        >
-                          <button
-                            type="button"
-                            className="flex items-center flex-1 min-w-0 gap-3"
-                            onClick={() => {
-                              setSelectedSuggestion(s);
-                              isCommittedSelectionRef.current = true;
-                              setIsCommittedSelection(true);
-                              if (typeof setLocation === 'function')
-                                setLocation(formatLocationLabel(s));
-                              setActivePanel(null);
-                              setIsDropdownOpen(false);
-                            }}
-                          >
-                            <span className="inline-block w-5 h-5 text-ink-subtle flex-shrink-0">
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                              >
-                                <path
-                                  d="M17.01 14h-.8l-.27-.27c.98-1.14 1.57-2.61 1.57-4.23 0-3.59-2.91-6.5-6.5-6.5s-6.5 3-6.5 6.5H2l3.84 4 4.16-4H6.51C6.51 7 8.53 5 11.01 5s4.5 2.01 4.5 4.5c0 2.48-2.02 4.5-4.5 4.5-.65 0-1.26-.14-1.82-.38L7.71 15.1c.97.57 2.09.9 3.3.9 1.61 0 3.08-.59 4.22-1.57l.27.27v.79l5.01 4.99L22 19l-4.99-5z"
-                                  fill="currentColor"
-                                />
-                              </svg>
-                            </span>
-                            <span className="text-[15px] truncate">
-                              {highlightMatch(formatLocationLabel(s), location)}
-                            </span>
-                          </button>
-                          <button
-                            type="button"
-                            aria-label="Remove recent search"
-                            tabIndex={-1}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1.5 rounded-full hover:bg-surface-alt transition-opacity"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setRecentSearches((prev) => {
-                                const updated = prev.filter((_, i) => i !== idx);
-                                if (typeof window !== 'undefined')
-                                  localStorage.setItem('recentSearches', JSON.stringify(updated));
-                                return updated;
-                              });
-                            }}
-                          >
-                            <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
-                              <path
-                                d="M5 5l8 8M13 5l-8 8"
-                                stroke="#888"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                              />
-                            </svg>
-                          </button>
-                        </div>
-                      ))}
-                    </>
-                  )}
-              </div>
-            </div>
-          )}
+          {/* WHERE panel */}
+          {activePanel === 'where' && renderWherePanel(whereHighlightRef2)}
 
-          {/* -- PANEL: WHEN (2-month calendar) ------------------------------ */}
-          {activePanel === 'when' && (
-            <DateRangePanel
-              dateRange={dateRange}
-              setDateRange={setDateRange}
-              rangePickStep={rangePickStep}
-              setRangePickStep={setRangePickStep}
-              hoveredDate={hoveredDate}
-              setHoveredDate={setHoveredDate}
-              calendarBaseMonth={calendarBaseMonth}
-              setCalendarBaseMonth={setCalendarBaseMonth}
-              onClose={() => setActivePanel(null)}
-              listingType={listingType}
-            />
-          )}
+          {/* WHEN panel */}
+          {activePanel === 'when' && renderWhenPanel()}
 
           {/* -- PANEL: WHO (occupant steppers) ------------------------------ */}
-          {activePanel === 'who' && (
-            <div
-              className="search-panel-enter absolute left-0 right-0 z-50 bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-surface-border"
-              style={{ top: 'calc(100% + 6px)' }}
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              <div className="p-6">
-                <p className="text-[13px] text-ink-muted mb-4">How many people will live here?</p>
-                <div className="grid grid-cols-2 gap-x-8">
-                  {(
-                    [
-                      { key: 'seniors' as const, label: 'Older adults', desc: '55+' },
-                      { key: 'adults' as const, label: 'Adults', desc: 'Ages 18–54' },
-                      { key: 'teens' as const, label: 'Teens', desc: 'Ages 13–17' },
-                      { key: 'children' as const, label: 'Children', desc: 'Ages 2–12' },
-                      { key: 'infants' as const, label: 'Infants', desc: 'Under 2' },
-                      { key: 'pets' as const, label: 'Pets', desc: 'Bringing pets?' },
-                    ] as const
-                  ).map(({ key, label, desc }, i) => (
-                    <div
-                      key={key}
-                      className={`flex items-center justify-between py-4 ${
-                        i < 4 ? 'border-b border-surface-border' : ''
-                      }`}
-                    >
-                      <div>
-                        <div className="font-semibold text-[15px] text-ink">{label}</div>
-                        <div className="text-[13px] text-ink-muted">{desc}</div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <button
-                          type="button"
-                          disabled={occupants[key] === 0}
-                          onClick={() =>
-                            setOccupants({ ...occupants, [key]: Math.max(0, occupants[key] - 1) })
-                          }
-                          className={`h-8 w-8 rounded-full border flex items-center justify-center text-lg transition-colors
-                            ${
-                              occupants[key] === 0
-                                ? 'border-[rgba(0,0,0,0.12)] text-[rgba(0,0,0,0.2)] cursor-default'
-                                : 'border-[rgba(0,0,0,0.4)] text-ink hover:border-ink cursor-pointer'
-                            }`}
-                        >
-                          -
-                        </button>
-                        <span className="w-4 text-center text-[15px] font-medium text-ink">
-                          {occupants[key]}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setOccupants({ ...occupants, [key]: occupants[key] + 1 })}
-                          className="h-8 w-8 rounded-full border border-[rgba(0,0,0,0.4)] text-ink flex items-center justify-center text-lg hover:border-ink transition-colors cursor-pointer"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-4 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setActivePanel(null)}
-                    className="rounded-full bg-ink text-white px-6 py-2 text-sm font-semibold hover:bg-ink/90 transition-colors"
-                  >
-                    Done
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          {activePanel === 'who' && renderWhoPanel()}
 
           {/* -- PANEL: WHAT (description) ---------------------------------- */}
-          {activePanel === 'what' && (
-            <div
-              className="search-panel-enter absolute left-0 right-0 z-50 bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-surface-border"
-              style={{ top: 'calc(100% + 6px)' }}
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              <div className="p-5">
-                <textarea
-                  autoFocus
-                  rows={3}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Ask for specific things like a bright, modern kitchen and a yard."
-                  className="w-full resize-none rounded-xl border border-surface-border px-4 py-3 text-[15px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/20"
-                />
-                <p className="mt-2 mb-2 text-sm font-semibold">Suggested descriptions</p>
-                <div
-                  ref={whatSuggestionsRef}
-                  className="relative flex flex-col gap-1"
-                  onMouseLeave={() => clearHighlight(whatHighlightRef2)}
-                >
-                  <div
-                    ref={whatHighlightRef2}
-                    className="absolute inset-x-0 rounded-xl bg-surface-alt pointer-events-none"
-                    style={{ top: 0, height: 0, opacity: 0 }}
-                  />
-                  {(listingType === 'for-sale'
-                    ? SUGGESTED_DESCRIPTIONS_BUY
-                    : SUGGESTED_DESCRIPTIONS_RENT
-                  ).map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => {
-                        setDescription(s);
-                        setActivePanel(null);
-                      }}
-                      onMouseEnter={(e) =>
-                        applyHighlight(
-                          whatHighlightRef2,
-                          e.currentTarget.offsetTop,
-                          e.currentTarget.offsetHeight,
-                        )
-                      }
-                      className="relative z-[1] flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-ink transition"
-                    >
-                      <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[#e8e8e8]">
-                        <svg
-                          className="h-4 w-4 text-ink-muted"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth={2}
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                          />
-                        </svg>
-                      </span>
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
+          {activePanel === 'what' && renderWhatPanel(whatHighlightRef2)}
         </div>
       </div>
     </section>

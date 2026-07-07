@@ -34,6 +34,9 @@ export function getUserInitials(user: User | null): string {
 
 export type ListingTab = 'for-sale' | 'for-rent';
 
+export type NavTab = 'homes' | 'services' | 'connect';
+export type ListingType = 'sale' | 'rent';
+
 export type SearchDateFlexibility =
   | 'exact'
   | '1'

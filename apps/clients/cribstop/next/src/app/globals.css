@@ -83,35 +83,28 @@ body {
 .site-header-wrapper {
   border-bottom: 1px solid transparent;
   box-shadow: none;
+  transition:
+    border-color 200ms ease,
+    box-shadow 200ms ease;
 }
 :root[data-header-pill] .site-header-wrapper {
   border-bottom-color: rgba(0, 0, 0, 0.08);
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.04),
     0 2px 8px rgba(0, 0, 0, 0.04);
-  transition:
-    border-color 150ms ease,
-    box-shadow 150ms ease;
 }
-/* When expanded, the expanded bar provides the visual divider — hide the header border */
 :root[data-header-pill][data-header-expanded] .site-header-wrapper {
   border-bottom-color: transparent;
   box-shadow: none;
 }
 
-/* Expanded bar: absolutely positioned so it overlays page content (no layout shift
-   when toggling). Hidden by default, shown only when data-header-expanded is set. */
+/* ── Expanded overlay: shown when user clicks the compact pill ─────────────── */
 .site-header-expanded {
   display: none;
   position: absolute;
-  /* top: 100% resolves to the padding-box height (64px), but the sentinel starts
-     after the full border-box (65px). Add 1px to align with the sentinel. */
-  top: calc(100% + 1px);
+  top: 100%;
   left: 0;
   right: 0;
-  /* z-index: 50 ensures this paints above the z-[49] backdrop div rendered inside
-     the same site-header-wrapper stacking context — without it, the backdrop
-     intercepts all pointer events on the expanded search bar. */
   z-index: 50;
 }
 html[data-header-pill][data-header-expanded] .site-header-expanded {
@@ -121,6 +114,20 @@ html[data-header-pill][data-header-expanded] .site-header-expanded {
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.04),
     0 2px 8px rgba(0, 0, 0, 0.04);
+}
+.site-header-expanded-inner {
+  padding: 0.5rem 1.5rem 0.75rem;
+  animation: expandedBarIn 450ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes expandedBarIn {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 /* Leaflet overrides */
@@ -172,20 +179,6 @@ html[data-header-pill][data-header-expanded] .site-header-expanded {
   animation: whereShake 0.55s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
 }
 
-/* Expanded header search bar slide-down animation */
-@keyframes searchBarSlideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.search-bar-slide-down {
-  animation: searchBarSlideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
 .cribstop-price-marker,
 .cribstop-cluster {
   background: transparent !important;
@@ -258,39 +251,71 @@ html[data-header-pill][data-header-expanded] .site-header-expanded {
   }
 }
 
-/* ── Header tabs ↔ pill smooth swap via data attribute ──────────────────────
-   Transitions are ONLY on the pill-active state: fade IN when scrolling down,
-   instant swap when scrolling back — prevents ghost overlap of both elements. */
+/* ── Tabs ↔ Pill smooth morph ────────────────────────────────────────────── */
 
-/* Tabs: visible by default, instant restore; fade OUT when scrolled */
+/* Tabs: default — visible, full size */
 .header-tabs {
   opacity: 1;
   pointer-events: auto;
+  transform: translateY(0) scale(1);
+  transition:
+    opacity 450ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 450ms cubic-bezier(0.22, 1, 0.36, 1);
 }
+/* Tabs → hidden on scroll */
 :root[data-header-pill] .header-tabs {
   opacity: 0;
   pointer-events: none;
-  transition: opacity 200ms ease;
+  transform: translateY(6px) scale(0.94);
+  transition:
+    opacity 300ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+/* Tabs → back when expanded */
+:root[data-header-pill][data-header-expanded] .header-tabs {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+  transition:
+    opacity 400ms cubic-bezier(0.22, 1, 0.36, 1) 60ms,
+    transform 400ms cubic-bezier(0.22, 1, 0.36, 1) 60ms;
 }
 
-/* Pill: hidden by default, instant hide; fade IN when scrolled */
+/* Pill: hidden by default */
 .header-pill {
   opacity: 0;
   pointer-events: none;
+  transform: translateY(-4px) scale(0.96);
+  transition:
+    opacity 400ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 400ms cubic-bezier(0.22, 1, 0.36, 1);
 }
+/* Pill → visible on scroll */
 :root[data-header-pill] .header-pill {
   opacity: 1;
   pointer-events: auto;
-  transition: opacity 200ms ease;
+  transform: translateY(0) scale(1);
+  transition:
+    opacity 450ms cubic-bezier(0.22, 1, 0.36, 1) 120ms,
+    transform 450ms cubic-bezier(0.22, 1, 0.36, 1) 120ms;
+}
+/* Pill → hidden when expanded */
+:root[data-header-pill][data-header-expanded] .header-pill {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transform: translateY(-4px) scale(0.92);
+  transition:
+    opacity 250ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 250ms cubic-bezier(0.4, 0, 0.2, 1),
+    visibility 0s 250ms;
 }
 
-/* In-page search section: fade out, then collapse height after fade completes */
+/* In-page search section */
 .search-section {
   opacity: 1;
-  transition: none;
+  transition: opacity 300ms ease;
 }
-/* Mobile only: collapse the in-page search section when scrolled */
-/* Layout breakpoint: 768px — matches Tailwind `md` / `layout:` and LAYOUT_BREAK in tailwind.config.ts */
 @media (max-width: 767px) {
   :root[data-header-pill] .search-section {
     opacity: 0;
@@ -298,9 +323,9 @@ html[data-header-pill][data-header-expanded] .site-header-expanded {
     overflow: hidden;
     pointer-events: none;
     transition:
-      opacity 180ms ease,
-      height 0s 180ms,
-      overflow 0s 180ms;
+      opacity 250ms ease,
+      height 0s 250ms,
+      overflow 0s 250ms;
   }
   :root[data-header-expanded] .search-section {
     opacity: 0;
@@ -310,10 +335,10 @@ html[data-header-pill][data-header-expanded] .site-header-expanded {
     transition: none;
   }
 }
-/* Desktop: SearchSection is just the scroll sentinel — no visual effect needed */
 @media (min-width: 768px) {
   :root[data-header-pill] .search-section {
-    opacity: 1;
+    opacity: 0;
     pointer-events: none;
+    transition: opacity 250ms ease;
   }
 }

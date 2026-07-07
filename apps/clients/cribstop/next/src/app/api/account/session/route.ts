@@ -6,7 +6,7 @@ export async function GET(req: NextRequest) {
   const hasAccessToken = req.cookies.has(AUTH_COOKIES.accessToken);
 
   if (!sessionCookie || !hasAccessToken) {
-    return NextResponse.json({ authenticated: false }, { status: 401 });
+    return NextResponse.json({ authenticated: false });
   }
 
   const session = JSON.parse(sessionCookie) as { email?: string };

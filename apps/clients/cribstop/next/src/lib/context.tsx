@@ -13,8 +13,10 @@ import {
 } from '@/lib/api/account';
 import { store } from '@/lib/store/store';
 import {
+  selectActiveTab,
   selectHeaderExpanded,
   selectListingTab,
+  selectListingType,
   selectMobileSearchOpen,
   selectSavedIds,
   selectSearchBedsIdx,
@@ -51,13 +53,17 @@ import {
   setSearchSuggestion,
 } from '@/lib/store/slices/searchSlice';
 import {
+  setActiveTab,
   setHeaderExpanded,
   setListingTab,
+  setListingType,
   setMobileSearchOpen,
   setShowHeaderPill,
 } from '@/lib/store/slices/uiSlice';
 import {
   ListingTab,
+  ListingType,
+  NavTab,
   SearchDateRange,
   SearchOccupants,
   SearchSuggestion,
@@ -75,6 +81,10 @@ interface AppContextValue {
   isSaved: (id: string) => boolean;
   listingTab: ListingTab;
   setListingTab: (tab: ListingTab) => void;
+  activeTab: NavTab;
+  setActiveTab: (tab: NavTab) => void;
+  listingType: ListingType;
+  setListingType: (type: ListingType) => void;
   showHeaderPill: boolean;
   setShowHeaderPill: (v: boolean) => void;
   headerExpanded: boolean;
@@ -191,6 +201,8 @@ export function useApp(): AppContextValue {
   const sessionChecked = useAppSelector(selectSessionChecked);
   const savedIdList = useAppSelector(selectSavedIds);
   const listingTab = useAppSelector(selectListingTab);
+  const activeTab = useAppSelector(selectActiveTab);
+  const listingType = useAppSelector(selectListingType);
   const showHeaderPill = useAppSelector(selectShowHeaderPill);
   const headerExpanded = useAppSelector(selectHeaderExpanded);
   const mobileSearchOpen = useAppSelector(selectMobileSearchOpen);
@@ -290,6 +302,20 @@ export function useApp(): AppContextValue {
     [dispatch],
   );
 
+  const setNavTab = useCallback(
+    (tab: NavTab) => {
+      dispatch(setActiveTab(tab));
+    },
+    [dispatch],
+  );
+
+  const setType = useCallback(
+    (type: ListingType) => {
+      dispatch(setListingType(type));
+    },
+    [dispatch],
+  );
+
   const setPill = useCallback(
     (v: boolean) => {
       dispatch(setShowHeaderPill(v));
@@ -371,6 +397,10 @@ export function useApp(): AppContextValue {
     isSaved,
     listingTab,
     setListingTab: setTab,
+    activeTab,
+    setActiveTab: setNavTab,
+    listingType,
+    setListingType: setType,
     showHeaderPill,
     setShowHeaderPill: setPill,
     headerExpanded,

@@ -6,6 +6,8 @@ export const selectShowOnboarding = (state: RootState) => state.auth.showOnboard
 export const selectSavedIds = (state: RootState) => state.favorites.savedIds;
 
 export const selectListingTab = (state: RootState) => state.ui.listingTab;
+export const selectActiveTab = (state: RootState) => state.ui.activeTab;
+export const selectListingType = (state: RootState) => state.ui.listingType;
 export const selectShowHeaderPill = (state: RootState) => state.ui.showHeaderPill;
 export const selectHeaderExpanded = (state: RootState) => state.ui.headerExpanded;
 export const selectMobileSearchOpen = (state: RootState) => state.ui.mobileSearchOpen;

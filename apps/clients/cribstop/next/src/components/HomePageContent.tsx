@@ -58,37 +58,33 @@ const NEIGHBORHOODS = [
 ];
 
 export default function HomePageContent() {
-  const { listingTab } = useApp();
+  const { listingType } = useApp();
 
-  const featured = listings.filter(
-    (l) => l.featured && l.listingType === (listingTab === 'for-sale' ? 'sale' : 'rent'),
-  );
+  const featured = listings.filter((l) => l.featured && l.listingType === listingType);
   const forSale = listings.filter((l) => l.listingType === 'sale');
   const forRent = listings.filter((l) => l.listingType === 'rent');
   const luxury = listings.filter((l) => {
-    if (listingTab === 'for-sale') {
+    if (listingType === 'sale') {
       return l.price >= 1000000 && l.listingType === 'sale';
     } else {
       return l.price >= 5000 && l.listingType === 'rent';
     }
   });
-  const recent = listings
-    .filter((l) => l.listingType === (listingTab === 'for-sale' ? 'sale' : 'rent'))
-    .slice(0, 20);
+  const recent = listings.filter((l) => l.listingType === listingType).slice(0, 20);
 
   return (
     <>
       <ListingRow
-        title={listingTab === 'for-sale' ? 'Featured homes for sale' : 'Featured homes for rent'}
+        title={listingType === 'sale' ? 'Featured homes for sale' : 'Featured homes for rent'}
         subtitle={
-          listingTab === 'for-sale' ? 'Hand-picked homes for sale' : 'Hand-picked homes for rent'
+          listingType === 'sale' ? 'Hand-picked homes for sale' : 'Hand-picked homes for rent'
         }
-        href={listingTab === 'for-sale' ? '/search?listingType=sale' : '/search?listingType=rent'}
+        href={listingType === 'sale' ? '/search?listingType=sale' : '/search?listingType=rent'}
         listings={featured.length ? featured : recent}
         max={5}
       />
 
-      {listingTab === 'for-sale' && (
+      {listingType === 'sale' && (
         <ListingRow
           title="Popular homes for sale"
           subtitle="Trending in Washington, Baltimore, and Northern Virginia"
@@ -98,7 +94,7 @@ export default function HomePageContent() {
         />
       )}
 
-      {listingTab === 'for-rent' && (
+      {listingType === 'rent' && (
         <ListingRow
           title="Available homes for rent"
           subtitle="Move-in ready across the DMV"
@@ -117,14 +113,14 @@ export default function HomePageContent() {
       />
 
       <ListingRow
-        title={listingTab === 'for-sale' ? 'Luxury collection for sale' : 'Luxury homes for rent'}
+        title={listingType === 'sale' ? 'Luxury collection for sale' : 'Luxury homes for rent'}
         subtitle={
-          listingTab === 'for-sale'
+          listingType === 'sale'
             ? 'Standout homes for sale priced $1M and above'
             : 'High-end homes for rent priced $5K and above'
         }
         href={
-          listingTab === 'for-sale'
+          listingType === 'sale'
             ? '/search?minPrice=1000000&listingType=sale'
             : '/search?minPrice=5000&listingType=rent'
         }
@@ -133,15 +129,13 @@ export default function HomePageContent() {
       />
 
       <ListingRow
-        title={
-          listingTab === 'for-sale' ? 'Just listed homes for sale' : 'Just listed homes for rent'
-        }
+        title={listingType === 'sale' ? 'Just listed homes for sale' : 'Just listed homes for rent'}
         subtitle={
-          listingTab === 'for-sale'
+          listingType === 'sale'
             ? "Fresh inventory you don't want to miss"
             : 'Newly available homes for rent'
         }
-        href={listingTab === 'for-sale' ? '/search?listingType=sale' : '/search?listingType=rent'}
+        href={listingType === 'sale' ? '/search?listingType=sale' : '/search?listingType=rent'}
         listings={recent}
         max={5}
       />

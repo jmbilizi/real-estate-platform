@@ -10,12 +10,20 @@ import { useApp } from '@/lib/context';
  * The caller is responsible for the outer container / positioning wrapper.
  */
 export default function MobileSearchPill() {
-  const { searchLocation, listingTab, searchDateRange, searchOccupants, setMobileSearchOpen } =
-    useApp();
+  const {
+    searchLocation,
+    listingType,
+    activeTab,
+    searchDateRange,
+    searchOccupants,
+    setMobileSearchOpen,
+  } = useApp();
 
   const summary = (() => {
+    if (activeTab === 'services') return 'Find services';
+    if (activeTab === 'connect') return 'Explore connect';
     const parts: string[] = [];
-    parts.push(listingTab === 'for-rent' ? 'For Rent' : 'For Sale');
+    parts.push(listingType === 'rent' ? 'For Rent' : 'For Sale');
     const { start, end, flexibility } = searchDateRange;
     if (start) {
       const mo = [

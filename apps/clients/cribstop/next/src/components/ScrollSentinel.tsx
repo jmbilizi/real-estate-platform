@@ -46,31 +46,27 @@ export default function ScrollSentinel({ alwaysPill = false }: { alwaysPill?: bo
     const headerEl = document.querySelector('header');
     const headerH = headerEl?.getBoundingClientRect().height ?? 64;
 
-    // Cache the sentinel's offsetTop NOW (before display:none could hide it).
+    // Cache the sentinel's offsetTop
     const sectionTop = ref.current?.getBoundingClientRect().top
       ? ref.current.getBoundingClientRect().top + window.scrollY
       : 0;
 
     const check = () => {
-      // Activate pill when search bar top has reached the sticky header bottom.
-      // No hysteresis offset — threshold aligns exactly with when the search bar
-      // visually passes behind the header, so there's no gap where neither divider shows.
+      // Activate pill when the in-page search bar scrolls behind the header
       const shouldShow = window.scrollY > sectionTop - headerH;
-      // Toggle CSS attribute synchronously — same paint frame as scroll
+
+      if (shouldShow === pillRef.current) return;
+
       if (shouldShow) {
         document.documentElement.setAttribute('data-header-pill', '');
         window.dispatchEvent(new Event('searchbar:close'));
       } else {
-        // Remove both pill and expanded in the same frame so the expanded bar
-        // CSS transition fires immediately (avoids border-jump flash at navbar line)
         document.documentElement.removeAttribute('data-header-pill');
         document.documentElement.removeAttribute('data-header-expanded');
       }
-      // Sync React state only when value changes (avoids excess re-renders)
-      if (shouldShow !== pillRef.current) {
-        pillRef.current = shouldShow;
-        setShowHeaderPill(shouldShow);
-      }
+
+      pillRef.current = shouldShow;
+      setShowHeaderPill(shouldShow);
     };
 
     check();
@@ -87,14 +83,14 @@ export default function ScrollSentinel({ alwaysPill = false }: { alwaysPill?: bo
 
   return (
     <div ref={ref} className="search-section w-full relative">
-      {/* Desktop: full search bar in page flow — scrolls away naturally, triggers compact pill */}
+      {/* Desktop: full search bar in page flow — scrolls away naturally */}
       {!alwaysPill && (
         <div className="hidden md:block bg-white">
           <CompactSearchBar />
         </div>
       )}
 
-      {/* Mobile only: search pill — hidden in alwaysPill mode (header already shows it) */}
+      {/* Mobile only: search pill */}
       {!alwaysPill && (
         <div className="md:hidden px-4 py-3 bg-white flex">
           <MobileSearchPill />
