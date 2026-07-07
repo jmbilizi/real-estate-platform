@@ -51,6 +51,8 @@
 
     <!-- API packages -->
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.2" />
+    <!-- VersionOverride: pins transitive dependency to fix GHSA-v5pm-xwqc-g5wc (high severity vulnerability in 2.x) -->
+    <PackageVersion Include="Microsoft.OpenApi" Version="3.8.0" VersionOverride="3.8.0" />
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.1.1" />
     <PackageVersion Include="MMLib.SwaggerForOcelot" Version="10.0.0" />
     <PackageVersion Include="Ocelot" Version="24.1.0" />
