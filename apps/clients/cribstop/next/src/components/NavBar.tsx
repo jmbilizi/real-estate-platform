@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useApp } from '@/lib/context';
 import { useEffect, useLayoutEffect, useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import { useRouter } from 'nextjs-toploader/app';
 import { motion } from 'motion/react';
 import { Bell, Heart, LogOut, MessageCircle, UserPlus } from 'lucide-react';
 import CompactSearchBar from './CompactSearchBar';
