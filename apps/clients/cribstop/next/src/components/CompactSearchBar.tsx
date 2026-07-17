@@ -9,7 +9,7 @@ import {
   formatLocationLabel,
   highlightMatch,
 } from '@/lib/search-utils';
-import { BED_OPTIONS, DateRangePanel, PRICE_RANGES } from './DateRangePanel';
+import { BED_OPTIONS, DateRangePanel } from './DateRangePanel';
 
 export default function CompactSearchBar({
   headerMode = false,
@@ -45,8 +45,16 @@ export default function CompactSearchBar({
     setSearchDateRange,
     searchOccupants,
     setSearchOccupants,
-    searchPriceIdx,
     searchBedsIdx,
+    setSearchBedsIdx,
+    searchPropertyTypes,
+    setSearchPropertyTypes,
+    searchBaths,
+    setSearchBaths,
+    searchMaxPrice: searchMaxPriceCtx,
+    setSearchMaxPrice: setSearchMaxPriceCtx,
+    searchDescription,
+    setSearchDescription,
   } = useApp();
 
   // Local aliases ? keep all existing JSX/logic unchanged
@@ -64,7 +72,6 @@ export default function CompactSearchBar({
   const [hoveredDate, setHoveredDate] = useState<string | null>(null);
   const occupants = searchOccupants;
   const setOccupants = setSearchOccupants;
-  const priceIdx = searchPriceIdx;
   const bedsIdx = searchBedsIdx;
   const listingTab = ctxTab;
   // State for nearby locations and loading
@@ -73,7 +80,17 @@ export default function CompactSearchBar({
   const [, setNearbyError] = useState<string | null>(null);
   // Cache last geolocated position and resolved place
   type LastGeo = { lat: number; lon: number; placeType: string; address: any };
-  const [lastGeo, setLastGeo] = useState<LastGeo | null>(null);
+  const [lastGeo, setLastGeo] = useState<LastGeo | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const cached = localStorage.getItem('cribstop_lastGeo');
+      if (cached) {
+        const geo = JSON.parse(cached);
+        if (geo && typeof geo.lat === 'number' && typeof geo.lon === 'number') return geo;
+      }
+    } catch {}
+    return null;
+  });
   // Key ("lat,lon" at 5dp) for which nearbyLocations in state was last successfully fetched
   const nearbyForKey = useRef<string | null>(null);
   // AbortControllers — cancel in-flight requests when a new one starts or panel closes
@@ -174,6 +191,12 @@ export default function CompactSearchBar({
                     else if (data.address.village) placeType = 'village';
                     address = data.address;
                     setLastGeo({ lat: latitude, lon: longitude, placeType, address });
+                    try {
+                      localStorage.setItem(
+                        'cribstop_lastGeo',
+                        JSON.stringify({ lat: latitude, lon: longitude, placeType, address }),
+                      );
+                    } catch {}
                   }
                 }
               } catch (e: any) {
@@ -286,6 +309,24 @@ export default function CompactSearchBar({
     }
     if (!signal.aborted) setLoadingNearby(false);
   };
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (lastGeo) {
+      handleFetchNearbyLocations(false).catch(() => {});
+      return;
+    }
+    if (!navigator.permissions) return;
+    navigator.permissions
+      .query({ name: 'geolocation' })
+      .then((status) => {
+        if (status.state === 'granted') {
+          handleFetchNearbyLocations(true).catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const router = useRouter();
   // Location autocomplete state
   const [suggestions, setSuggestions] = useState<any[]>([]);
@@ -388,6 +429,15 @@ export default function CompactSearchBar({
     return () => document.removeEventListener('mousedown', handleOutside);
   }, [activePanel]);
 
+  // Recalculate indicator position on window resize
+  const [, setResizeTick] = useState(0);
+  useEffect(() => {
+    if (!activePanel) return;
+    const handler = () => setResizeTick((n) => n + 1);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, [activePanel]);
+
   // Close activePanel on searchbar:close event (fired during header transitions)
   useEffect(() => {
     function handleClose() {
@@ -434,8 +484,15 @@ export default function CompactSearchBar({
     return () => mq.removeEventListener('change', handler);
   }, [mobileSheetMode, onClose]);
 
-  // "What" description free-text
-  const [description, setDescription] = useState('');
+  // "What" property criteria — shared via context
+  const selectedPropertyTypes = searchPropertyTypes;
+  const setSelectedPropertyTypes = setSearchPropertyTypes;
+  const baths = searchBaths;
+  const setBaths = setSearchBaths;
+  const description = searchDescription;
+  const setDescription = setSearchDescription;
+  const searchMaxPrice = searchMaxPriceCtx;
+  const setSearchMaxPrice = setSearchMaxPriceCtx;
   const _whatSuggestionsRef = useRef<HTMLDivElement>(null);
   const whatHighlightRef = useRef<HTMLDivElement>(null);
   const whereHighlightRef = useRef<HTMLDivElement>(null);
@@ -543,108 +600,181 @@ export default function CompactSearchBar({
     );
   }
 
-  function renderWhatPanelContent(highlightRef: React.RefObject<HTMLDivElement | null>) {
+  function renderWhatPanelContent(_highlightRef: React.RefObject<HTMLDivElement | null>) {
+    const PROPERTY_TYPES = [
+      'House',
+      'Townhome',
+      'Condo',
+      'Co-op',
+      'Lot/Land',
+      'Mobile Homes',
+      'Multi-Family',
+      'Other',
+    ];
+    const BATHS_OPTS = ['Any', '1+', '2+', '3+', '4+', '5+'];
+    const bathIdx = baths === '' ? 0 : BATHS_OPTS.indexOf(baths);
+    const bedsOpts = BED_OPTIONS.map((b) => (b.value ? b.value + '+' : 'Any'));
+    const stepperBtn = (disabled: boolean, onClick: () => void, label: string) => (
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={onClick}
+        className={`h-8 w-8 rounded-full border inline-flex items-center justify-center leading-none select-none transition-colors ${
+          disabled
+            ? 'border-[rgba(0,0,0,0.12)] text-[rgba(0,0,0,0.2)] cursor-default'
+            : 'border-[rgba(0,0,0,0.4)] text-ink hover:border-ink cursor-pointer'
+        }`}
+        style={{ fontSize: '18px', paddingBottom: label === '–' ? '1px' : '0' }}
+      >
+        {label}
+      </button>
+    );
+
     return (
-      <>
+      <div className="flex flex-col gap-5">
         {/* Listing type selector */}
-        <p className="text-sm font-semibold text-ink mb-3">Listing type</p>
-        <div className="flex gap-2 mb-5">
-          {(['for-sale', 'for-rent'] as const).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setListingType(tab);
-                setListingTab(tab);
-              }}
-              className={`flex-1 py-2.5 rounded-full text-sm font-semibold transition-colors duration-150 ${
-                listingType === tab
-                  ? 'bg-ink text-white shadow-sm'
-                  : 'bg-surface-alt text-ink-muted hover:bg-[#e0e0e0]'
-              }`}
-            >
-              {tab === 'for-sale' ? 'For Sale' : 'For Rent'}
-            </button>
-          ))}
+        <div>
+          <p className="text-xs font-semibold text-ink uppercase tracking-wider mb-2">
+            Listing type
+          </p>
+          <div className="flex gap-2">
+            {(['for-sale', 'for-rent'] as const).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setListingType(tab);
+                  setListingTab(tab);
+                }}
+                className={`flex-1 py-2.5 rounded-full text-sm font-semibold transition-colors duration-150 ${
+                  listingType === tab
+                    ? 'bg-ink text-white shadow-sm'
+                    : 'bg-surface-alt text-ink-muted hover:bg-[#e0e0e0]'
+                }`}
+              >
+                {tab === 'for-sale' ? 'For Sale' : 'For Rent'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Property Type */}
+        <div>
+          <p className="text-xs font-semibold text-ink uppercase tracking-wider mb-2">
+            Property Type
+          </p>
+          <div className="grid grid-cols-3 gap-x-4 gap-y-1.5">
+            {PROPERTY_TYPES.map((type) => {
+              const active = selectedPropertyTypes.includes(type);
+              return (
+                <label
+                  key={type}
+                  className="flex items-center gap-2 text-sm text-ink cursor-pointer select-none py-0.5"
+                >
+                  <input
+                    type="checkbox"
+                    checked={active}
+                    onChange={() =>
+                      setSelectedPropertyTypes(
+                        selectedPropertyTypes.includes(type)
+                          ? selectedPropertyTypes.filter((v) => v !== type)
+                          : [...selectedPropertyTypes, type],
+                      )
+                    }
+                    className="h-4 w-4 rounded border-gray-300 text-brand focus:ring-brand/30"
+                  />
+                  <span className="font-normal">{type}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Beds, Baths & Price */}
+        <div className="border-t border-surface-border pt-4">
+          <div className="flex items-center justify-between py-1">
+            <span className="text-sm font-medium text-ink">Bedrooms</span>
+            <div className="flex items-center gap-4">
+              {stepperBtn(bedsIdx === 0, () => setSearchBedsIdx(bedsIdx - 1), '–')}
+              <span className="w-8 text-center text-[15px] font-normal text-ink">
+                {bedsOpts[bedsIdx]}
+              </span>
+              {stepperBtn(
+                bedsIdx === BED_OPTIONS.length - 1,
+                () => setSearchBedsIdx(bedsIdx + 1),
+                '+',
+              )}
+            </div>
+          </div>
+          <div className="flex items-center justify-between py-1 mt-2">
+            <span className="text-sm font-medium text-ink">Bathrooms</span>
+            <div className="flex items-center gap-4">
+              {stepperBtn(
+                bathIdx === 0,
+                () => setBaths(bathIdx === 1 ? '' : BATHS_OPTS[bathIdx - 1]),
+                '–',
+              )}
+              <span className="w-8 text-center text-[15px] font-normal text-ink">
+                {bathIdx === 0 ? 'Any' : BATHS_OPTS[bathIdx]}
+              </span>
+              {stepperBtn(
+                bathIdx === BATHS_OPTS.length - 1,
+                () => setBaths(BATHS_OPTS[bathIdx + 1]),
+                '+',
+              )}
+            </div>
+          </div>
+          <div className="flex items-center justify-between py-1 mt-2">
+            <span className="text-sm font-medium text-ink">Price</span>
+            <div className="flex items-center gap-4">
+              {stepperBtn(
+                searchMaxPrice === 0,
+                () => setSearchMaxPrice(Math.max(0, searchMaxPrice - 25000)),
+                '–',
+              )}
+              <span className="w-24 text-center text-[15px] font-normal text-ink whitespace-nowrap">
+                {searchMaxPrice === 0
+                  ? 'Any'
+                  : searchMaxPrice >= 1000000
+                    ? `≤ $${(searchMaxPrice / 1000000).toFixed(searchMaxPrice % 1000000 === 0 ? 0 : 2)}M`
+                    : `≤ $${(searchMaxPrice / 1000).toFixed(0)}k`}
+              </span>
+              {stepperBtn(false, () => setSearchMaxPrice(searchMaxPrice + 25000), '+')}
+            </div>
+          </div>
         </div>
 
         {/* Description */}
-        <p className="text-sm font-semibold text-ink mb-2">Description</p>
-        <textarea
-          autoFocus
-          rows={3}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Ask for specific things like a bright, modern kitchen and a yard."
-          className="w-full resize-none rounded-xl border border-surface-border px-4 py-3 text-[15px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/20"
-        />
-        {description && (
-          <button
-            type="button"
-            onClick={() => setDescription('')}
-            className="mt-1 text-xs font-semibold text-ink-muted hover:text-ink underline"
-          >
-            Clear
-          </button>
-        )}
-        <p className="mt-4 mb-2 text-sm font-semibold text-brand">Suggested descriptions</p>
-        <div
-          className="relative flex flex-col gap-1"
-          onMouseLeave={() => clearHighlight(highlightRef)}
-        >
-          <div
-            ref={highlightRef}
-            className="absolute inset-x-0 rounded-xl bg-surface-alt pointer-events-none"
-            style={{ top: 0, height: 0, opacity: 0 }}
+        <div className="border-t border-surface-border pt-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-ink uppercase tracking-wider">Description</p>
+            {description && (
+              <button
+                type="button"
+                onClick={() => setDescription('')}
+                className="text-xs font-semibold text-red-500 hover:text-red-700"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          <textarea
+            rows={2}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Describe your ideal home..."
+            className="w-full resize-none rounded-xl border border-surface-border px-4 py-3 text-[15px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/20"
           />
-          {(listingType === 'for-sale'
-            ? SUGGESTED_DESCRIPTIONS_BUY
-            : SUGGESTED_DESCRIPTIONS_RENT
-          ).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => {
-                setDescription(s);
-                setActivePanel(null);
-              }}
-              onMouseEnter={(e) =>
-                applyHighlight(
-                  highlightRef,
-                  e.currentTarget.offsetTop,
-                  e.currentTarget.offsetHeight,
-                )
-              }
-              className="relative z-[1] flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-ink transition"
-            >
-              <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[#e8e8e8]">
-                <svg
-                  className="h-4 w-4 text-ink-muted"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                  />
-                </svg>
-              </span>
-              {s}
-            </button>
-          ))}
         </div>
-      </>
+      </div>
     );
   }
 
   function renderWhatPanel(highlightRef: React.RefObject<HTMLDivElement | null>) {
     return (
       <div
-        className="search-panel-enter absolute left-0 right-0 z-[200] bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-surface-border"
+        className="search-panel-enter absolute left-0 right-0 z-[200] bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-surface-border max-h-[70vh] overflow-y-auto"
         style={{ top: 'calc(100% + 6px)' }}
         onMouseDown={(e) => e.stopPropagation()}
       >
@@ -973,19 +1103,6 @@ export default function CompactSearchBar({
     );
   }
 
-  const SUGGESTED_DESCRIPTIONS_BUY = [
-    '3+ bedrooms, open-plan living, and a private backyard',
-    'Modern kitchen, home office space, and a 2-car garage',
-    'Quiet neighborhood, close to top-rated schools and commuter routes',
-    'Move-in ready with updated HVAC, roof under 5 years, and no HOA',
-  ];
-  const SUGGESTED_DESCRIPTIONS_RENT = [
-    '2+ bedrooms, in-unit laundry, and pet-friendly building',
-    'Open-plan apartment with updated kitchen and parking included',
-    'Furnished unit near transit, utilities included, flexible lease',
-    'Spacious townhouse with private entrance and outdoor space',
-  ];
-
   // listingType mirrors context listingTab with a local copy for optimistic tab switch animation
   const [listingType, setListingType] = useState<'for-sale' | 'for-rent'>(listingTab || 'for-sale');
 
@@ -1038,12 +1155,12 @@ export default function CompactSearchBar({
     params.set('lon', finalSuggestion.lon);
     if (zip) params.set('zip', zip);
     if (street) params.set('street', street);
-    const price = PRICE_RANGES[priceIdx];
-    // (already reset at start of handler)
-    if (price.min) params.set('minPrice', price.min);
-    if (price.max) params.set('maxPrice', price.max);
+    if (searchMaxPrice > 0) params.set('maxPrice', String(searchMaxPrice));
     const beds = BED_OPTIONS[bedsIdx].value;
     if (beds) params.set('beds', beds);
+    if (baths) params.set('baths', baths);
+    if (selectedPropertyTypes.length > 0)
+      params.set('propertyType', selectedPropertyTypes.join(','));
     params.set('type', listingType);
     setIsSearching(true);
     router.push(`/search?${params.toString()}`);
@@ -1113,11 +1230,12 @@ export default function CompactSearchBar({
               if (typeof setLocation === 'function') setLocation(displayName);
               const params = new URLSearchParams();
               params.set('q', displayName);
-              const price = PRICE_RANGES[priceIdx];
-              if (price.min) params.set('minPrice', price.min);
-              if (price.max) params.set('maxPrice', price.max);
+              if (searchMaxPrice > 0) params.set('maxPrice', String(searchMaxPrice));
               const beds = BED_OPTIONS[bedsIdx].value;
               if (beds) params.set('beds', beds);
+              if (baths) params.set('baths', baths);
+              if (selectedPropertyTypes.length > 0)
+                params.set('propertyType', selectedPropertyTypes.join(','));
               params.set('type', listingType);
               router.push(`/search?${params.toString()}`);
               resolve();
@@ -1135,11 +1253,12 @@ export default function CompactSearchBar({
             if (typeof setLocation === 'function') setLocation('');
             const params = new URLSearchParams();
             params.set('q', '');
-            const price = PRICE_RANGES[priceIdx];
-            if (price.min) params.set('minPrice', price.min);
-            if (price.max) params.set('maxPrice', price.max);
+            if (searchMaxPrice > 0) params.set('maxPrice', String(searchMaxPrice));
             const beds = BED_OPTIONS[bedsIdx].value;
             if (beds) params.set('beds', beds);
+            if (baths) params.set('baths', baths);
+            if (selectedPropertyTypes.length > 0)
+              params.set('propertyType', selectedPropertyTypes.join(','));
             params.set('type', listingType);
             router.push(`/search?${params.toString()}`);
             resolve();
@@ -1150,11 +1269,12 @@ export default function CompactSearchBar({
         if (typeof setLocation === 'function') setLocation('');
         const params = new URLSearchParams();
         params.set('q', '');
-        const price = PRICE_RANGES[priceIdx];
-        if (price.min) params.set('minPrice', price.min);
-        if (price.max) params.set('maxPrice', price.max);
+        if (searchMaxPrice > 0) params.set('maxPrice', String(searchMaxPrice));
         const beds = BED_OPTIONS[bedsIdx].value;
         if (beds) params.set('beds', beds);
+        if (baths) params.set('baths', baths);
+        if (selectedPropertyTypes.length > 0)
+          params.set('propertyType', selectedPropertyTypes.join(','));
         params.set('type', listingType);
         router.push(`/search?${params.toString()}`);
         resolve();
@@ -1285,7 +1405,10 @@ export default function CompactSearchBar({
       setDateRange({ start: '', end: '', flexibility: 'exact' });
       setRangePickStep('start');
       setOccupants({ adults: 0, seniors: 0, teens: 0, children: 0, infants: 0, pets: 0 });
+      setSelectedPropertyTypes([]);
+      setBaths('');
       setDescription('');
+      setSearchMaxPrice(0);
       setActivePanel('where');
     };
 
@@ -1786,8 +1909,21 @@ export default function CompactSearchBar({
               {activePanel === 'what' ? (
                 <div className="mt-3">{renderWhatPanelContent(whatHighlightRef)}</div>
               ) : (
-                <p className="text-[14px] text-ink-muted mt-1">
-                  {description || 'Describe your ideal home'}
+                <p className="text-[14px] text-ink-muted mt-1 flex items-center">
+                  {listingType === 'for-rent' ? 'For Rent' : 'For Sale'}
+                  {(() => {
+                    const n =
+                      (selectedPropertyTypes.length > 0 ? 1 : 0) +
+                      (bedsIdx > 0 ? 1 : 0) +
+                      (baths ? 1 : 0) +
+                      (searchMaxPrice > 0 ? 1 : 0) +
+                      (description ? 1 : 0);
+                    return n > 0 ? (
+                      <span className="ml-1.5 inline-flex items-center justify-center h-[18px] px-1.5 rounded-full bg-black/[0.07] text-ink/60 text-[10px] font-semibold leading-none">
+                        +{n} {n === 1 ? 'filter' : 'filters'}
+                      </span>
+                    ) : null;
+                  })()}
                 </p>
               )}
             </div>
@@ -1867,12 +2003,25 @@ export default function CompactSearchBar({
         </div>
         <div className="my-auto h-5 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)]" />
         {/* What */}
-        <div className="flex flex-col justify-center px-4 py-2 text-left whitespace-nowrap">
+        <div className="flex flex-col justify-center px-4 py-2 text-left whitespace-nowrap flex-shrink-0">
           <span className="text-[10px] font-medium text-ink-muted leading-none mb-1 select-none">
             What
           </span>
-          <span className="text-[11px] sm:text-[13px] text-ink font-bold leading-snug">
+          <span className="text-[13px] text-ink font-bold leading-snug flex items-center">
             {listingType === 'for-rent' ? 'For Rent' : 'For Sale'}
+            {(() => {
+              const n =
+                (selectedPropertyTypes.length > 0 ? 1 : 0) +
+                (bedsIdx > 0 ? 1 : 0) +
+                (baths ? 1 : 0) +
+                (searchMaxPrice > 0 ? 1 : 0) +
+                (description ? 1 : 0);
+              return n > 0 ? (
+                <span className="ml-1.5 inline-flex items-center justify-center h-[18px] px-1.5 rounded-full bg-black/[0.07] text-ink/60 text-[10px] font-semibold leading-none whitespace-nowrap">
+                  +{n}
+                </span>
+              ) : null;
+            })()}
           </span>
         </div>
         {/* Search icon button */}
@@ -2339,8 +2488,21 @@ export default function CompactSearchBar({
               <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
                 What
               </span>
-              <span className="text-[11px] sm:text-[13px] text-ink font-bold leading-snug truncate">
+              <span className="text-[11px] sm:text-[13px] text-ink font-bold leading-snug truncate flex items-center">
                 {listingType === 'for-rent' ? 'For Rent' : 'For Sale'}
+                {(() => {
+                  const n =
+                    (selectedPropertyTypes.length > 0 ? 1 : 0) +
+                    (bedsIdx > 0 ? 1 : 0) +
+                    (baths ? 1 : 0) +
+                    (searchMaxPrice > 0 ? 1 : 0) +
+                    (description ? 1 : 0);
+                  return n > 0 ? (
+                    <span className="ml-1.5 inline-flex items-center justify-center h-[18px] px-1.5 rounded-full bg-black/[0.07] text-ink/60 text-[10px] font-semibold leading-none">
+                      +{n} {n === 1 ? 'filter' : 'filters'}
+                    </span>
+                  ) : null;
+                })()}
               </span>
             </button>
 
@@ -2407,7 +2569,7 @@ export default function CompactSearchBar({
           {/* -- PANEL: WHO (occupant steppers) ------------------------------ */}
           {activePanel === 'who' && renderWhoPanel()}
 
-          {/* -- PANEL: WHAT (description) ---------------------------------- */}
+          {/* -- PANEL: WHAT (property criteria) ----------------------------- */}
           {activePanel === 'what' && renderWhatPanel(whatHighlightRef2)}
         </div>
       </div>

@@ -19,12 +19,16 @@ import {
   selectListingType,
   selectMobileSearchOpen,
   selectSavedIds,
+  selectSearchBaths,
   selectSearchBedsIdx,
   selectSearchDateRange,
+  selectSearchDescription,
   selectSearchLocation,
+  selectSearchMaxPrice,
   selectSearchMoveInDate,
   selectSearchOccupants,
   selectSearchPriceIdx,
+  selectSearchPropertyTypes,
   selectSearchSuggestion,
   selectSessionChecked,
   selectShowHeaderPill,
@@ -44,12 +48,16 @@ import { addToast } from '@/lib/store/slices/toastSlice';
 // useLayoutEffect on the client (fires before first paint), useEffect on the server (no-op)
 const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 import {
+  setSearchBaths,
   setSearchBedsIdx,
   setSearchDateRange,
+  setSearchDescription,
   setSearchLocation,
+  setSearchMaxPrice,
   setSearchMoveInDate,
   setSearchOccupants,
   setSearchPriceIdx,
+  setSearchPropertyTypes,
   setSearchSuggestion,
 } from '@/lib/store/slices/searchSlice';
 import {
@@ -105,6 +113,14 @@ interface AppContextValue {
   setSearchPriceIdx: (v: number) => void;
   searchBedsIdx: number;
   setSearchBedsIdx: (v: number) => void;
+  searchPropertyTypes: string[];
+  setSearchPropertyTypes: (v: string[]) => void;
+  searchBaths: string;
+  setSearchBaths: (v: string) => void;
+  searchMaxPrice: number;
+  setSearchMaxPrice: (v: number) => void;
+  searchDescription: string;
+  setSearchDescription: (v: string) => void;
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -213,6 +229,10 @@ export function useApp(): AppContextValue {
   const searchOccupants = useAppSelector(selectSearchOccupants);
   const searchPriceIdx = useAppSelector(selectSearchPriceIdx);
   const searchBedsIdx = useAppSelector(selectSearchBedsIdx);
+  const searchPropertyTypes = useAppSelector(selectSearchPropertyTypes);
+  const searchBaths = useAppSelector(selectSearchBaths);
+  const searchMaxPrice = useAppSelector(selectSearchMaxPrice);
+  const searchDescription = useAppSelector(selectSearchDescription);
 
   const savedIds = useMemo(() => new Set(savedIdList), [savedIdList]);
 
@@ -386,6 +406,34 @@ export function useApp(): AppContextValue {
     [dispatch],
   );
 
+  const setPropertyTypes = useCallback(
+    (v: string[]) => {
+      dispatch(setSearchPropertyTypes(v));
+    },
+    [dispatch],
+  );
+
+  const setBathsCtx = useCallback(
+    (v: string) => {
+      dispatch(setSearchBaths(v));
+    },
+    [dispatch],
+  );
+
+  const setMaxPriceCtx = useCallback(
+    (v: number) => {
+      dispatch(setSearchMaxPrice(v));
+    },
+    [dispatch],
+  );
+
+  const setDescriptionCtx = useCallback(
+    (v: string) => {
+      dispatch(setSearchDescription(v));
+    },
+    [dispatch],
+  );
+
   return {
     user,
     sessionLoading: !sessionChecked,
@@ -421,5 +469,13 @@ export function useApp(): AppContextValue {
     setSearchPriceIdx: setPriceIdx,
     searchBedsIdx,
     setSearchBedsIdx: setBedsIdx,
+    searchPropertyTypes,
+    setSearchPropertyTypes: setPropertyTypes,
+    searchBaths,
+    setSearchBaths: setBathsCtx,
+    searchMaxPrice,
+    setSearchMaxPrice: setMaxPriceCtx,
+    searchDescription,
+    setSearchDescription: setDescriptionCtx,
   };
 }

@@ -9,6 +9,10 @@ interface SearchState {
   searchOccupants: SearchOccupants;
   searchPriceIdx: number;
   searchBedsIdx: number;
+  searchPropertyTypes: string[];
+  searchBaths: string;
+  searchMaxPrice: number;
+  searchDescription: string;
 }
 
 const initialState: SearchState = {
@@ -26,6 +30,10 @@ const initialState: SearchState = {
   },
   searchPriceIdx: 0,
   searchBedsIdx: 0,
+  searchPropertyTypes: [],
+  searchBaths: '',
+  searchMaxPrice: 0,
+  searchDescription: '',
 };
 
 const searchSlice = createSlice({
@@ -53,6 +61,18 @@ const searchSlice = createSlice({
     setSearchBedsIdx: (state, action: PayloadAction<number>) => {
       state.searchBedsIdx = action.payload;
     },
+    setSearchPropertyTypes: (state, action: PayloadAction<string[]>) => {
+      state.searchPropertyTypes = action.payload;
+    },
+    setSearchBaths: (state, action: PayloadAction<string>) => {
+      state.searchBaths = action.payload;
+    },
+    setSearchMaxPrice: (state, action: PayloadAction<number>) => {
+      state.searchMaxPrice = action.payload;
+    },
+    setSearchDescription: (state, action: PayloadAction<string>) => {
+      state.searchDescription = action.payload;
+    },
   },
 });
 
@@ -64,5 +84,9 @@ export const {
   setSearchOccupants,
   setSearchPriceIdx,
   setSearchBedsIdx,
+  setSearchPropertyTypes,
+  setSearchBaths,
+  setSearchMaxPrice,
+  setSearchDescription,
 } = searchSlice.actions;
 export default searchSlice.reducer;

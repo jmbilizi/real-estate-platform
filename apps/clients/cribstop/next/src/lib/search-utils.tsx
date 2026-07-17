@@ -161,7 +161,10 @@ export async function fetchNearbyLocationsByType(
       body: `data=${encodeURIComponent(query)}`,
       signal,
     });
-    if (!response.ok) throw new Error('Overpass API error');
+    if (!response.ok) {
+      console.warn('[Overpass] API returned', response.status);
+      return [];
+    }
     const data = await response.json();
     if (!data.elements) return [];
     return data.elements.map((el: any) => ({
