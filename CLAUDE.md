@@ -50,6 +50,14 @@ pnpm run infra:local:cluster:setup     # Local Kind/Podman cluster
 - `infra/k8s/` — ALL K8s manifests (Kustomize base + per-env overlays).
 - `tools/` — cross-platform Node automation scripts (source of truth).
 
+## Claude Code Automation Conventions
+
+- Repo-wide skills/agents/hooks live in root `.claude/` with no prefix.
+- **Project-specific skills**: nest them in the project (`apps/<...>/.claude/skills/`) — they
+  surface with a path prefix and win over root skills of the same name.
+- **Project-specific hooks and subagents** (root-only discovery): name them with the project prefix,
+  e.g. `cribstop-compliance-reviewer`.
+
 ## Repo-Wide Gotchas
 
 - Test a changed project directly by name (`pnpm exec nx test <project>`); `nx affected` needs a

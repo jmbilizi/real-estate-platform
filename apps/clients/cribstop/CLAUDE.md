@@ -29,6 +29,13 @@ pnpm exec nx lint cribstop-next        # Also: test, type-check
   explicitly says to.
 - The app README says "static JSON only" — **stale** on the auth point; trust the code.
 
+## Project Automations
+
+- `/compliance-check` (skill, this project) — audit copy/mock data for Fair Housing,
+  brand-prominence, fabricated-data, and disclosure rules before shipping.
+- `cribstop-compliance-reviewer` (root agent) — dispatchable parallel compliance review for PR diffs
+  touching user-facing content.
+
 ## Rules
 
 - Airbnb-quality polish; mobile-first; accessible (labels, alt text, focus states, semantic HTML).
