@@ -593,11 +593,16 @@ async function setupDotNetEnvironment() {
   // Reload the current shell so dotnet is available immediately without
   // closing the terminal. `exec zsh` replaces the current shell process
   // with a fresh one that sources ~/.zshrc — making dotnet available right away.
-  if (!isWindows) {
+  //
+  // Skip in CI / non-interactive contexts: spawning a login shell with
+  // stdio:'inherit' has no TTY to attach to there, and can hang the step
+  // (e.g. CI's `pnpm run dotnet:env`) until the job times out.
+  const isCI = Boolean(process.env.CI);
+  const isInteractive = Boolean(process.stdout.isTTY && process.stdin.isTTY);
+  if (!isWindows && !isCI && isInteractive) {
     const shell = process.env.SHELL || '/bin/zsh';
     console.log(`\n🔄 Reloading shell to apply PATH changes...`);
     // Use spawnSync with stdio:'inherit' so the new shell takes over the terminal
-    const { spawnSync } = require('child_process');
     spawnSync(shell, ['-l'], { stdio: 'inherit' });
   }
 }

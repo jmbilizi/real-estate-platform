@@ -78,8 +78,16 @@ internal static class Program
 
         // Seed platform roles after the app starts listening so the readiness probe
         // is not blocked by a slow DB connection on startup.
-        app.Lifetime.ApplicationStarted.Register(() =>
-            _ = SeedRolesAsync(app.Services));
+        // Skipped in the "Testing" environment: AccountServiceFactory already seeds
+        // roles synchronously against the same in-memory DB before requests are
+        // dispatched. Running both concurrently races on the EF InMemory provider
+        // (which does not enforce unique constraints) and can create duplicate
+        // IdentityRole rows, breaking single-role lookups like IsInRoleAsync.
+        if (!app.Environment.IsEnvironment("Testing"))
+        {
+            app.Lifetime.ApplicationStarted.Register(() =>
+                _ = SeedRolesAsync(app.Services));
+        }
 
         app.MapOpenApi();
 
