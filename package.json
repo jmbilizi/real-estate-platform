@@ -50,6 +50,7 @@
     "typescript": "5.9.3"
   },
   "scripts": {
+    "preinstall": "node tools/node/scripts/ensure-pnpm.js",
     "prepare": "husky",
     "// Getting Started": "",
     "// → First time setup:  pnpm run hooks:setup": "",
