@@ -157,8 +157,10 @@ function addToPath(binDir) {
           '-Command',
           `[System.Environment]::SetEnvironmentVariable('PATH','${binDir};' + [System.Environment]::GetEnvironmentVariable('PATH','User'),'User')`,
         ]);
-        if (r.success) ok('Added to Windows User PATH (permanent)');
-        else warn(`Failed to update User PATH — manually add "${binDir}"`);
+        if (r.success) {
+          ok('Added to Windows User PATH (permanent)');
+          warn('Restart this terminal for the PATH change to take effect.');
+        } else warn(`Failed to update User PATH — manually add "${binDir}"`);
       }
     }
 
@@ -172,20 +174,78 @@ function addToPath(binDir) {
       process.env.PATH = refresh.output.trim();
     }
   } else {
-    // Unix: update shell profile
-    const profile = (process.env.SHELL || '').includes('zsh')
-      ? path.join(os.homedir(), '.zshrc')
-      : path.join(os.homedir(), '.bashrc');
-    const exportLine = `export PATH="${binDir}:$PATH"`;
+    // Unix: update shell profiles and install an auto-refresh hook so the new
+    // PATH takes effect at the next prompt without closing the terminal.
+    const home = os.homedir();
+    const shell = process.env.SHELL || '';
+    const isZsh = shell.includes('zsh');
+    const triggerFile = path.join(home, '.infra-env-refresh');
 
-    try {
-      const content = fs.existsSync(profile) ? fs.readFileSync(profile, 'utf8') : '';
-      if (!content.includes(binDir)) {
-        fs.appendFileSync(profile, `\n# Infrastructure tools (setup-infra.js)\n${exportLine}\n`);
-        ok(`Added to ${profile}`);
+    const profiles = isZsh
+      ? [path.join(home, '.zshrc'), path.join(home, '.zprofile')]
+      : [path.join(home, '.bashrc'), path.join(home, '.bash_profile')];
+
+    const pathMarker = '# Added by infra:setup';
+    const exportLine = `export PATH="${binDir}:$PATH"`;
+    const pathBlock = `\n${pathMarker}\n${exportLine}\n`;
+
+    const hookMarker = '# infra:setup auto-refresh hook';
+    const zshHook = `
+${hookMarker}
+_infra_env_refresh() {
+  local trigger="$HOME/.infra-env-refresh"
+  if [ -f "$trigger" ]; then
+    rm -f "$trigger"
+    source "$HOME/.zshrc"
+  fi
+}
+precmd_functions+=(_infra_env_refresh)
+`;
+    const bashHook = `
+${hookMarker}
+_infra_env_refresh() {
+  local trigger="$HOME/.infra-env-refresh"
+  if [ -f "$trigger" ]; then
+    rm -f "$trigger"
+    source "$HOME/.bashrc"
+  fi
+}
+PROMPT_COMMAND="_infra_env_refresh\${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
+`;
+    const hook = isZsh ? zshHook : bashHook;
+
+    for (const profile of profiles) {
+      try {
+        const existing = fs.existsSync(profile) ? fs.readFileSync(profile, 'utf8') : '';
+        let content = existing;
+        let changed = false;
+
+        if (!existing.includes(binDir)) {
+          content += pathBlock;
+          changed = true;
+          ok(`Added PATH entry to ${profile}`);
+        }
+
+        if (!existing.includes(hookMarker)) {
+          content += hook;
+          changed = true;
+          ok(`Added auto-refresh hook to ${profile}`);
+        }
+
+        if (changed) fs.writeFileSync(profile, content, 'utf8');
+      } catch (e) {
+        warn(`Could not update ${profile}: ${e.message}`);
       }
+    }
+
+    // Write trigger file — the hook above detects it at the next shell prompt
+    // and sources the profile, making the new tool available without reopening
+    // the terminal.
+    try {
+      fs.writeFileSync(triggerFile, '', 'utf8');
+      ok('Terminal PATH will refresh automatically at the next prompt.');
     } catch (e) {
-      warn(`Could not update ${profile}: ${e.message}`);
+      warn(`Could not write refresh trigger: ${e.message}`);
     }
 
     // Also update current process so subsequent checks in this run work
@@ -285,7 +345,9 @@ async function installBinary(spec) {
       return true;
     }
 
-    ok(`${name} installed to ${binaryPath} — restart terminal if not yet available`);
+    if (IS_WIN)
+      warn(`${name} installed to ${binaryPath} — restart this terminal for PATH to take effect.`);
+    else ok(`${name} installed to ${binaryPath} — PATH will refresh at next prompt.`);
     return true;
   } catch (err) {
     fail(`Failed to install ${name}: ${err.message}`);
