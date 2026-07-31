@@ -60,3 +60,6 @@ Desktop.ini
 
 # GeoIP Database (download separately - see docs/geoip-setup.md)
 apps/api-gateway/GeoLite2-City.mmdb
+
+# Playwright MCP session artifacts
+.playwright-mcp/
