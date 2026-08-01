@@ -464,7 +464,7 @@ export default function ListingsMapInner({
         />
       </MapContainer>
       {!scrollActive && (
-        <div className="pointer-events-none absolute bottom-6 left-1/2 z-[400] -translate-x-1/2 rounded-full bg-ink/85 px-4 py-1.5 text-xs font-semibold text-white shadow-pop backdrop-blur">
+        <div className="pointer-events-none absolute bottom-6 left-1/2 z-[400] -translate-x-1/2 rounded-full bg-ink/85 px-4 py-1.5 text-xs font-semibold text-white shadow-card backdrop-blur">
           Click map to zoom with scroll
         </div>
       )}

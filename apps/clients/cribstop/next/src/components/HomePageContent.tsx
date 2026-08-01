@@ -81,7 +81,7 @@ export default function HomePageContent() {
         }
         href={listingType === 'sale' ? '/search?listingType=sale' : '/search?listingType=rent'}
         listings={featured.length ? featured : recent}
-        max={5}
+        max={7}
       />
 
       {listingType === 'sale' && (
@@ -90,7 +90,7 @@ export default function HomePageContent() {
           subtitle="Trending in Washington, Baltimore, and Northern Virginia"
           href="/search?listingType=sale"
           listings={forSale}
-          max={5}
+          max={7}
         />
       )}
 
@@ -100,7 +100,7 @@ export default function HomePageContent() {
           subtitle="Move-in ready across the DMV"
           href="/search?listingType=rent"
           listings={forRent}
-          max={5}
+          max={7}
         />
       )}
 
@@ -109,7 +109,7 @@ export default function HomePageContent() {
         subtitle="Popular areas across the DMV"
         href="/search?group=neighborhoods"
         neighborhoods={NEIGHBORHOODS}
-        max={4}
+        max={6}
       />
 
       <ListingRow
@@ -125,7 +125,7 @@ export default function HomePageContent() {
             : '/search?minPrice=5000&listingType=rent'
         }
         listings={luxury}
-        max={5}
+        max={7}
       />
 
       <ListingRow
@@ -137,11 +137,11 @@ export default function HomePageContent() {
         }
         href={listingType === 'sale' ? '/search?listingType=sale' : '/search?listingType=rent'}
         listings={recent}
-        max={5}
+        max={7}
       />
 
       <section className="mx-auto mt-16 max-w-[1760px] px-6 pb-16 sm:px-10 lg:px-20">
-        <div className="overflow-hidden rounded-3xl bg-surface-alt text-ink border border-surface-border">
+        <div className="overflow-hidden rounded-xl bg-surface-alt text-ink border border-surface-border">
           <div className="grid gap-8 px-8 py-12 sm:grid-cols-[1.4fr_1fr] sm:items-center sm:px-12 sm:py-16 lg:px-16">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-400">

@@ -17,20 +17,20 @@ export default function ListingCard({ listing }: { listing: Listing }) {
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
-  const badge = listing.openHouse
-    ? { label: 'Open house', tone: 'bg-white/95 text-ink' }
+  const badgeLabel = listing.openHouse
+    ? 'Open house'
     : listing.priceReduced
-      ? { label: 'Price reduced', tone: 'bg-brand text-white' }
+      ? 'Price reduced'
       : listing.newConstruction
-        ? { label: 'New construction', tone: 'bg-emerald-600 text-white' }
+        ? 'New construction'
         : listing.featured
-          ? { label: 'Featured', tone: 'bg-ink text-white' }
+          ? 'Featured'
           : null;
 
   return (
     <div className="group block cursor-pointer" onClick={openModal}>
       {/* Image */}
-      <div className="relative aspect-square overflow-hidden rounded-2xl bg-surface-soft">
+      <div className="relative aspect-square overflow-hidden rounded-md bg-surface-soft">
         {}
         <img
           src={listing.imageUrls[0]}
@@ -39,11 +39,9 @@ export default function ListingCard({ listing }: { listing: Listing }) {
           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
         />
 
-        {badge && (
-          <span
-            className={`absolute left-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-semibold shadow-sm ${badge.tone}`}
-          >
-            {badge.label}
+        {badgeLabel && (
+          <span className="absolute left-3 top-3 rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-ink shadow-card">
+            {badgeLabel}
           </span>
         )}
 
@@ -58,7 +56,7 @@ export default function ListingCard({ listing }: { listing: Listing }) {
           aria-label={saved ? 'Unsave' : 'Save'}
         >
           <svg
-            className={`h-7 w-7 drop-shadow ${saved ? 'fill-brand stroke-white' : 'fill-black/40 stroke-white'}`}
+            className={`h-5 w-5 drop-shadow ${saved ? 'fill-brand stroke-white' : 'fill-black/40 stroke-white'}`}
             viewBox="0 0 24 24"
             strokeWidth={2}
           >
@@ -72,31 +70,30 @@ export default function ListingCard({ listing }: { listing: Listing }) {
       </div>
 
       {/* Info */}
-      <div className="pt-3">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="truncate font-semibold text-ink">
+      <div className="pt-2">
+        <div className="flex items-start justify-between gap-1.5">
+          <h3 className="truncate text-sm font-semibold text-ink">
             {listing.neighborhood}, {listing.city}
           </h3>
           {listing.openHouse && (
-            <span className="flex flex-shrink-0 items-center gap-1 text-xs text-ink-muted">
-              <svg className="h-3 w-3 fill-ink" viewBox="0 0 24 24">
+            <span className="flex flex-shrink-0 items-center gap-1 text-[11px] text-ink-muted">
+              <svg className="h-2.5 w-2.5 fill-ink" viewBox="0 0 24 24">
                 <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
               </svg>
               Open
             </span>
           )}
         </div>
-        <p className="truncate text-sm text-ink-muted">{listing.address}</p>
-        <p className="text-sm text-ink-muted">
+        <p className="truncate text-xs text-ink-muted">
           {listing.beds} bd · {listing.baths} ba · {listing.sqft.toLocaleString()} sqft
         </p>
-        <p className="mt-1 text-ink">
+        <p className="mt-0.5 text-sm text-ink">
           <span className="font-semibold">
             {formatPrice(listing.price, listing.listingType).split('/')[0]}
           </span>
           {listing.listingType === 'rent' && <span className="text-ink-muted"> /month</span>}
         </p>
-        <p className="mt-0.5 truncate text-[11px] text-ink-subtle">
+        <p className="mt-1 truncate rounded-sm bg-surface-alt px-1.5 py-0.5 text-[11px] text-ink-muted">
           Listing courtesy of {listing.officeName}
         </p>
       </div>

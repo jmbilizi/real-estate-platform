@@ -136,7 +136,9 @@ export function highlightMatch(text: string, query: string): React.ReactNode {
   );
 }
 
-// Fetch nearby cities/towns/villages from Overpass API
+// Fetch nearby cities/towns/villages via the internal Overpass proxy (`/api/overpass`).
+// Overpass doesn't reliably emit CORS headers, so this can't hit the upstream API directly
+// from the browser — see src/app/api/overpass/route.ts.
 export async function fetchNearbyLocationsByType(
   lat: number,
   lon: number,
@@ -144,23 +146,14 @@ export async function fetchNearbyLocationsByType(
   radiusMeters = 20000,
   signal?: AbortSignal,
 ): Promise<any[]> {
-  const query = `
-    [out:json][timeout:10];
-    (
-      node[place=${placeType}](around:${radiusMeters},${lat},${lon});
-    );
-    out body center 20;
-  `;
+  const params = new URLSearchParams({
+    lat: String(lat),
+    lon: String(lon),
+    placeType,
+    radiusMeters: String(radiusMeters),
+  });
   try {
-    const response = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'real-estate-platform/1.0',
-      },
-      body: `data=${encodeURIComponent(query)}`,
-      signal,
-    });
+    const response = await fetch(`/api/overpass?${params.toString()}`, { signal });
     if (!response.ok) {
       console.warn('[Overpass] API returned', response.status);
       return [];

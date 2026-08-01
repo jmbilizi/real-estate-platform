@@ -125,7 +125,7 @@ export default function NeighborhoodRow({ title, subtitle, href, neighborhoods, 
           <Link
             key={n.name}
             href={`/search?neighborhood=${encodeURIComponent(n.name)}`}
-            className="group relative flex-shrink-0 snap-start aspect-[4/5] overflow-hidden rounded-2xl w-[calc((100%-1.25rem)/2)] sm:w-[calc((100%-2.5rem)/3)] lg:w-[calc((100%-3.75rem)/4)] min-w-0"
+            className="group relative flex-shrink-0 snap-start aspect-[4/5] overflow-hidden rounded-md w-[calc((100%-1.25rem)/2)] sm:w-[calc((100%-2.5rem)/3)] md:w-[calc((100%-3.75rem)/4)] lg:w-[calc((100%-5rem)/5)] xl:w-[calc((100%-6.25rem)/6)] min-w-0"
           >
             {}
             <img
@@ -148,9 +148,9 @@ export default function NeighborhoodRow({ title, subtitle, href, neighborhoods, 
           <Link
             key="see-all"
             href={href!}
-            className="group flex flex-shrink-0 snap-start flex-col items-center justify-center gap-3 rounded-2xl border border-surface-border bg-surface-alt/40 p-6 text-center transition hover:bg-surface-alt hover:shadow-card [scroll-snap-stop:always] aspect-[4/5] w-[calc((100%-1.25rem)/2)] sm:w-[calc((100%-2.5rem)/3)] lg:w-[calc((100%-3.75rem)/4)] min-w-0"
+            className="group flex flex-shrink-0 snap-start flex-col items-center justify-center gap-3 rounded-md border border-surface-border bg-surface-alt/40 p-6 text-center transition hover:bg-surface-alt hover:shadow-card [scroll-snap-stop:always] aspect-[4/5] w-[calc((100%-1.25rem)/2)] sm:w-[calc((100%-2.5rem)/3)] md:w-[calc((100%-3.75rem)/4)] lg:w-[calc((100%-5rem)/5)] xl:w-[calc((100%-6.25rem)/6)] min-w-0"
           >
-            <div className="relative aspect-square w-[80px] mx-auto rounded-2xl overflow-visible flex items-center justify-center">
+            <div className="relative aspect-square w-[80px] mx-auto rounded-md overflow-visible flex items-center justify-center">
               {/* Airbnb-style stacked preview: 3 images, visually overlapped, center stack */}
               {[0, 1, 2].map((offset) => {
                 const card = visible[offset] || neighborhoods[offset];
@@ -165,7 +165,7 @@ export default function NeighborhoodRow({ title, subtitle, href, neighborhoods, 
                 return (
                   <span
                     key={offset}
-                    className="absolute rounded-xl border-2 border-white shadow-card bg-white overflow-hidden"
+                    className="absolute rounded-md border-2 border-white shadow-card bg-white overflow-hidden"
                     style={{
                       left: '50%',
                       top: '50%',

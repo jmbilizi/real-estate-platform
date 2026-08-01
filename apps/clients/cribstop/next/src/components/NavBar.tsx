@@ -7,7 +7,6 @@ import { usePathname } from 'next/navigation';
 import { useRouter } from 'nextjs-toploader/app';
 import { motion } from 'motion/react';
 import { Bell, Heart, LogOut, MessageCircle, UserPlus } from 'lucide-react';
-import CompactSearchBar from './CompactSearchBar';
 import MobileSearchSheet from './MobileSearchSheet';
 import MobileSearchPill from './MobileSearchPill';
 import AppsDropdown from './AppsDropdown';
@@ -57,7 +56,7 @@ export default function NavBar() {
     if (headerExpanded) {
       document.documentElement.setAttribute('data-header-expanded', '');
       requestAnimationFrame(() => {
-        const el = document.querySelector('.site-header-expanded');
+        const el = document.querySelector('[data-search-bar-dock="expanded"]');
         const h = el ? el.getBoundingClientRect().height : 0;
         document.documentElement.style.setProperty('--expanded-bar-h', `${h}px`);
       });
@@ -110,7 +109,10 @@ export default function NavBar() {
         {showHeaderPill && !headerExpanded && (
           <div
             className="md:hidden absolute inset-0 z-10 bg-white flex items-center px-3"
-            style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08)' }}
+            style={{
+              boxShadow:
+                'rgba(0, 0, 0, 0.02) 0 0 0 1px, rgba(0, 0, 0, 0.04) 0 2px 6px 0, rgba(0, 0, 0, 0.1) 0 4px 8px 0',
+            }}
           >
             <MobileSearchPill />
           </div>
@@ -181,24 +183,11 @@ export default function NavBar() {
               </div>
             </div>
 
-            {/* COMPACT PILL â€” shown by CSS when data-header-pill is set */}
-            <div
-              className="header-pill absolute inset-0 flex items-center justify-center"
-              style={
-                headerExpanded
-                  ? { opacity: 0, pointerEvents: 'none', transition: 'none', visibility: 'hidden' }
-                  : undefined
-              }
-            >
-              <div className="hidden md:flex items-center justify-center w-full">
-                <div className="w-full max-w-[480px]">
-                  <CompactSearchBar headerMode onPillClick={() => setHeaderExpanded(true)} />
-                </div>
-              </div>
-
-              {/* Mobile pill: handled by the full-width overlay above */}
-              <div className="hidden" />
-            </div>
+            {/* The compact pill itself is CompactSearchBar rendered from
+                ScrollSentinel — it docks here via position:fixed (see its own
+                DOCK_STYLE) rather than being a child of this tree, since it
+                needs to be able to also render in normal page flow further
+                down the page. This slot just hosts the tabs above. */}
           </div>
           {/* Empty grid cell placeholder for col 2 */}
           <div />
@@ -298,7 +287,7 @@ export default function NavBar() {
                       <div className="px-2 py-3">
                         <div className="flex items-stretch text-sm gap-1">
                           <button
-                            className="flex flex-1 items-center gap-2 px-4 py-2.5 text-ink hover:bg-gray-100 transition-colors rounded-l-2xl border border-black/[0.12] whitespace-nowrap"
+                            className="flex flex-1 items-center gap-2 px-4 py-2.5 text-ink hover:bg-gray-100 transition-colors rounded-l-md border border-surface-border whitespace-nowrap"
                             onClick={() => setProfileOpen(false)}
                           >
                             <UserPlus className="h-4 w-4 shrink-0" />
@@ -309,7 +298,7 @@ export default function NavBar() {
                               logout();
                               setProfileOpen(false);
                             }}
-                            className="flex flex-1 items-center gap-2 px-4 py-2.5 text-ink hover:bg-gray-100 transition-colors rounded-r-2xl border border-black/[0.12] whitespace-nowrap"
+                            className="flex flex-1 items-center gap-2 px-4 py-2.5 text-ink hover:bg-gray-100 transition-colors rounded-r-md border border-surface-border whitespace-nowrap"
                           >
                             <LogOut className="h-4 w-4 shrink-0" />
                             Sign out

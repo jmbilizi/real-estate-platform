@@ -63,7 +63,7 @@ function ToastCard({ toast }: { toast: ToastItem }) {
     <div
       role="status"
       aria-live="polite"
-      className={`pointer-events-auto relative flex w-full max-w-[360px] items-center gap-3 overflow-hidden rounded-2xl px-4 py-3 shadow-pop animate-fade-up ${cardStyle[toast.type]}`}
+      className={`pointer-events-auto relative flex w-full max-w-[360px] items-center gap-3 overflow-hidden rounded-2xl px-4 py-3 shadow-card animate-fade-up ${cardStyle[toast.type]}`}
     >
       <span className={`shrink-0 ${iconColor[toast.type]}`}>{iconEl[toast.type]}</span>
 

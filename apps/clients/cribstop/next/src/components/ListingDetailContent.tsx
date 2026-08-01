@@ -100,7 +100,7 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
             {/* Price + status badges + address — below gallery */}
             <div>
               <div className="flex flex-wrap gap-1.5">
-                <span className="badge bg-accent/10 text-accent">{listing.status}</span>
+                <span className="badge bg-surface-border text-ink">{listing.status}</span>
                 {listing.openHouse && (
                   <span className="badge bg-brand text-white">
                     Open House · {formatDate(listing.openHouse.date)}

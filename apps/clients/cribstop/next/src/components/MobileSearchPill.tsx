@@ -90,7 +90,7 @@ export default function MobileSearchPill() {
         type="button"
         onClick={() => setMobileSearchOpen(true)}
         aria-label="Search"
-        className="flex-1 flex items-center justify-center gap-2 rounded-full border border-[rgba(0,0,0,0.12)] bg-white px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.1)] active:scale-[0.99] transition-transform"
+        className="flex-1 flex items-center justify-center gap-2 rounded-full border border-surface-border bg-white px-4 py-3 shadow-card active:scale-[0.99] transition-transform"
       >
         <svg
           className="h-4 w-4 flex-shrink-0 text-ink"
@@ -111,7 +111,7 @@ export default function MobileSearchPill() {
   }
 
   return (
-    <div className="flex-1 flex items-center rounded-full border border-[rgba(0,0,0,0.12)] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.1)] overflow-hidden">
+    <div className="flex-1 flex items-center rounded-full border border-surface-border bg-white shadow-card overflow-hidden">
       <button
         type="button"
         onClick={() => setMobileSearchOpen(true)}

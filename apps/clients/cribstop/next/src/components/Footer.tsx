@@ -100,7 +100,7 @@ export default function Footer() {
         </div>
 
         {/* MLS Compliance Disclosures */}
-        <div className="mt-10 rounded-2xl border border-surface-border bg-white p-6">
+        <div className="mt-10 rounded-md border border-surface-border bg-white p-6">
           <h5 className="mb-3 text-xs font-semibold uppercase tracking-wider text-ink-muted">
             MLS Disclosure
           </h5>

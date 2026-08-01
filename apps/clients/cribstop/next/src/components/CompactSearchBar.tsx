@@ -1,7 +1,8 @@
 ﻿'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion } from 'motion/react';
 import { useApp } from '@/lib/context';
 import {
   extractSearchTerms,
@@ -11,26 +12,293 @@ import {
 } from '@/lib/search-utils';
 import { BED_OPTIONS, DateRangePanel } from './DateRangePanel';
 
+// Shape/position transition for the dock wrapper below. Only pill <-> expanded
+// is handed to Framer's `layout` (not `layoutId` — no shared/cross-tree
+// matching, just this one persistent node): it measures this component's own box
+// before/after a re-render and interpolates. large <-> pill is hand-animated
+// instead — see MORPH_TRANSITION_CSS.
+//
+// Two things move when the bar swaps and they have to read as ONE motion, so
+// they share this duration and curve: the bar's own morph, and the in-page row
+// collapsing/opening under it (.desktop-search-bar-wrapper in globals.css). Any
+// drift between them and the eye picks out the slower one as lag.
+//
+// Curve is balanced-with-a-soft-landing on purpose, and it's the one dial worth
+// tuning here if this ever needs to feel different. A hard ease-out was tried
+// (0.32,0.72,0,1) and measured worse for a size change this large: it puts ~82%
+// of the travel into the first 28% of the duration, so the bar lunges and then
+// crawls the last 50px. This spends the middle of the duration actually moving.
+const DOCK_TRANSITION = { duration: 0.3, ease: [0.4, 0, 0.2, 1] as const };
+
+const MORPH_MS = DOCK_TRANSITION.duration * 1000;
+const MORPH_EASE = `cubic-bezier(${DOCK_TRANSITION.ease.join(',')})`;
+
+// large <-> pill is a shared-element crossfade, animated with NOTHING but
+// `transform` and `opacity`:
+//
+//   - a throwaway clone of the outgoing bar (the "ghost") is pinned over where
+//     that bar was, then animated toward the incoming bar's centre, scaling down
+//     as it fades out;
+//   - the real element renders straight into its new mode at its final size and
+//     comes the other way — starting at the outgoing bar's centre, fading in.
+//
+// Both halves cover the same distance on the same curve, so the eye reads one
+// object shrinking and settling rather than two elements trading places.
+//
+// Why transform/opacity rather than animating the real element's own geometry
+// (left/top/width/height), which would keep the box pixel-exact for free:
+// transform and opacity are the only two properties the browser can animate off
+// the main thread. Every swap fires WHILE the in-page row underneath collapses
+// its height, and that is a document reflow per frame — measured at 30-42ms
+// frames on this page against a 16.7ms budget. Geometry animation is main-thread
+// work, so it inherits those stalls and visibly steps (measured: one frame
+// jumping the width 775 -> 646 mid-shrink). A composited transform keeps ticking
+// straight through them. That is the whole difference between a bar that
+// "changes size" and one that shrinks.
+//
+// Distortion — the reason geometry was tried in the first place — is ruled out by
+// two rules instead:
+//
+//   1. The scale is UNIFORM. A capsule scaled uniformly is still a capsule: its
+//      radius, hairline border and shadow all scale together, which is precisely
+//      what a shrinking object looks like. (Interpolating one box into the other
+//      needs a NON-uniform scale, the two having different aspect ratios — that
+//      is what stretched the capsule into an ellipse.)
+//   2. Only ever scale DOWN — whichever side is larger does the scaling, so the
+//      large bar shrinks on the way out and grows on the way back. Nothing is
+//      drawn bigger than its true size, so no text is ever seen oversized.
+//
+// Framer's `layout` can't be used for this even though it is transform-based: the
+// swap is triggered BY a scroll event, so it usually starts while the page still
+// has momentum, and Framer's layout system tracks window scroll (its document
+// root projection node is created with `layoutScroll: true`) and keeps correcting
+// in-flight animations for it — right for an element staying in flow, wrong for
+// one becoming `position: fixed`, which stops moving with the page. Its escape
+// hatch for that case, `layoutRoot`, works by hard-disabling the animation (same
+// code path as prefers-reduced-motion). A plain CSS transition can't be
+// re-corrected mid-flight.
+const MORPH_TRANSITION_CSS = `transform ${MORPH_MS}ms ${MORPH_EASE}`;
+
+// Opacity is choreographed so that the two layouts' TEXT is never on screen at
+// the same time. A plain symmetric crossfade was tried and looks like exactly
+// what this component's history warns about: for ~100ms both sets of labels are
+// half-visible on top of each other at two different sizes, which reads as
+// garbled rather than smooth. So the layers are sequenced instead:
+//
+//   ghost  (above, .searchbar-ghost-out)  opaque while it does the visible
+//                                         shrinking, then dissolves;
+//   shell  (below, no animation)          the incoming bar's capsule, solid from
+//                                         the first frame, hidden underneath the
+//                                         ghost until the dissolve uncovers it;
+//   fields (.searchbar-fields-in)         the incoming labels, held back until
+//                                         the ghost has gone.
+//
+// Holding the fields back also means they are only ever seen at their true size:
+// on the way back the incoming bar is still scaling up as the ghost dissolves,
+// and text is not revealed until that scale has essentially landed.
+//
+// Which of the two bars the eye should follow flips with direction, so the ghost's
+// fade does too. Shrinking, the ghost IS the big bar and is the thing visibly
+// getting smaller, so it holds opaque through the first part of the movement.
+// Growing, the incoming bar is the one visibly getting bigger — and it very
+// quickly outgrows the little pill ghost, which would otherwise sit opaque inside
+// it looking like a pill stuck in a bar. So on that side the ghost clears out
+// early and lets the growth carry the eye.
+// And because the ghost leaves earlier on the way back, the incoming fields have
+// to arrive earlier to meet it — otherwise the capsule is briefly empty mid-grow
+// (measured at ~90ms of nothing between the ghost going and the labels arriving),
+// where on the way out the two windows meet. Both variants still wait for the
+// scale to be close enough that the type is never legibly undersized.
+const GHOST_OUT_CLASS = 'searchbar-ghost-out';
+const GHOST_OUT_FAST_CLASS = 'searchbar-ghost-out-fast';
+const FIELDS_IN_CLASS = 'searchbar-fields-in';
+const FIELDS_IN_EARLY_CLASS = 'searchbar-fields-in-early';
+
+// The active field's fill. The bar itself stays white in every state and only the
+// focused slot is tinted, so this element mounts with the panel rather than being
+// a permanent layer whose opacity toggles — hence an enter animation instead of a
+// transition, which has nothing to interpolate from on mount.
+const SLOT_IN_CLASS = 'searchbar-slot-in';
+
+// Everything the morph writes on the incoming bar, so it can be cleared exactly.
+// Written to the SHELL, not to the dock: the dock is the motion.div, and Framer
+// treats `transform` as its own property to reset — on the way into 'large' it
+// wipes the start transform between it being set and the next frame, so the bar
+// arrived full-size instead of growing (its `transform: none` fingerprint is
+// visible in the settled inline style). The shell is a plain div React renders and
+// nothing else touches, and it is the visible capsule anyway.
+//
+// None of these are in DOCK_STYLE either, which is what makes writing them safe:
+// React only ever clears inline props that were in its own previous style object,
+// and it applies DOCK_STYLE once per mode (same object identity every render), so
+// anything overlapping it would have to be restored by hand.
+const BAR_MORPH_PROPS = [
+  'transition',
+  'transform',
+  'transform-origin',
+  'opacity',
+  'will-change',
+] as const;
+
+// Marks the visible capsule inside each layout: the node cloned for the ghost,
+// and the node measured for the morph. The dock and the capsule are the same box
+// in every mode (see DOCK_LARGE_CLASS), but measuring what is actually painted
+// keeps that a fact rather than an assumption.
+const SHELL_ATTR = 'data-search-bar-shell';
+const GHOST_ATTR = 'data-search-bar-ghost';
+
+type DockMode = 'large' | 'pill' | 'expanded';
+type MorphBox = { left: number; top: number; width: number; height: number };
+
+const boxOf = (el: Element): MorphBox => {
+  const r = el.getBoundingClientRect();
+  return { left: r.left, top: r.top, width: r.width, height: r.height };
+};
+
+// Where the outgoing bar is, expressed so it survives the wait between being
+// measured and being pinned.
+//
+// The measurement has to happen before the swap commits, and the pinning can only
+// happen after — which is at least one frame later, and in practice more, this
+// component being large enough that its re-render can miss a frame. The swap is
+// triggered by scrolling, so the page has usually moved on by then. Pinning the
+// clone at the raw viewport rect leaves it wherever the bar USED to be, and the
+// gap between that and where the bar actually is shows up as the bar twitching
+// vertically before the shrink starts.
+//
+// So an in-flow source is recorded in document coordinates and converted back
+// against the LIVE scroll offset at pin time; the fixed pill needs no such
+// treatment, its viewport position not being a function of scroll at all.
+type GhostSource = { node: HTMLElement; box: MorphBox; inFlow: boolean };
+
+function pinnedBox({ box, inFlow }: GhostSource): MorphBox {
+  if (!inFlow) return box;
+  return { ...box, top: box.top - window.scrollY, left: box.left - window.scrollX };
+}
+
+// How far, and in which direction, the two capsules' centres are apart. Both
+// halves of the crossfade are expressed against this one vector — the ghost
+// travels +delta, the real element starts at -delta — which is what keeps them
+// locked together instead of merely similar.
+const centreDelta = (from: MorphBox, to: MorphBox) => ({
+  dx: to.left + to.width / 2 - (from.left + from.width / 2),
+  dy: to.top + to.height / 2 - (from.top + from.height / 2),
+});
+
+// Ghosts are inert in every sense that matters: aria-hidden and `inert` keep them
+// out of the accessibility tree and the tab order, pointer-events keeps them from
+// swallowing a click meant for the real pill mid-morph. Any stale ghost from an
+// interrupted morph goes first — there is only ever one.
+function mountGhost(node: HTMLElement, box: MorphBox, holds: boolean) {
+  document.querySelectorAll(`[${GHOST_ATTR}]`).forEach((stale) => stale.remove());
+  node.setAttribute(GHOST_ATTR, '');
+  node.setAttribute('aria-hidden', 'true');
+  node.setAttribute('inert', '');
+  // A clone taken mid-morph would otherwise keep running the incoming-fields
+  // animation and dissolve its own text.
+  node.classList.remove(FIELDS_IN_CLASS);
+  node.classList.add(holds ? GHOST_OUT_CLASS : GHOST_OUT_FAST_CLASS);
+  Object.assign(node.style, {
+    position: 'fixed',
+    left: `${box.left}px`,
+    top: `${box.top}px`,
+    width: `${box.width}px`,
+    height: `${box.height}px`,
+    margin: '0',
+    // ABOVE the real bar (z 55). The incoming capsule is solid from the first
+    // frame, so the ghost has to cover it while it dissolves — that's what keeps
+    // the two layouts' labels from ever being legible at the same time.
+    zIndex: '56',
+    pointerEvents: 'none',
+    transformOrigin: 'center center',
+    willChange: 'transform, opacity',
+  });
+  document.body.appendChild(node);
+  return node;
+}
+
+function clearBarMorph(el: HTMLElement) {
+  for (const prop of BAR_MORPH_PROPS) el.style.removeProperty(prop);
+}
+
+// A morph is any swap where exactly one side is the in-page 'large' layout, in
+// either direction. That covers large <-> pill (the scroll swap) and the rarer
+// expanded -> large (scrolling back to the top with the overlay open), and
+// excludes pill <-> expanded, which is a click-driven change between two docked
+// layouts and stays with Framer.
+const isMorphPair = (a: DockMode, b: DockMode) => a !== b && (a === 'large') !== (b === 'large');
+
+// Fixed geometry for the two docked (position:fixed) states — matches NavBar's
+// center slot (h-16 header, pill vertically centered) and the space below it
+// where the expanded overlay used to live. 'large' geometry lives in
+// DOCK_LARGE_CLASS below instead of here, since that mode stays in normal
+// document flow.
+// Centered via left/right + auto margins, NOT `transform: translateX(-50%)` —
+// `transform` belongs to the animations on this element (Framer's `layout` for
+// pill <-> expanded, the crossfade above for large <-> pill), both of which
+// overwrite and then reset it, silently discarding a manual centering transform
+// and leaving the dock offset to one side.
+const DOCK_STYLE: Record<'pill' | 'expanded', React.CSSProperties> = {
+  pill: {
+    position: 'fixed',
+    top: 7,
+    left: 0,
+    right: 0,
+    marginLeft: 'auto',
+    marginRight: 'auto',
+    width: 'min(480px, calc(100vw - 160px))',
+    zIndex: 55,
+  },
+  expanded: {
+    position: 'fixed',
+    top: 'var(--navbar-h)',
+    left: 0,
+    right: 0,
+    marginLeft: 'auto',
+    marginRight: 'auto',
+    width: 'min(768px, calc(100vw - 48px))',
+    zIndex: 55,
+  },
+};
+
+// 'large' mode geometry — deliberately on the SAME element the shape animation
+// runs on (the dock below), not on a wrapper inside it. Both directions of the
+// large <-> pill morph interpolate this element's own box, measuring it as the
+// "from" box one way and the "to" box the other, so its box has to BE the
+// visible pill's box in every mode. When these
+// max-width/inset/centering rules lived on inner wrappers instead, the dock in
+// 'large' mode was the full width of .desktop-search-bar-wrapper and the full
+// 94px row height, while the pill actually drawn inside it was ~1024px wide
+// and ~62px tall — so the first frame of the shrink painted the pill shell at
+// that outer box, visibly ballooning ~1.6x wider and ~1.5x taller than the bar
+// the user was looking at before it started shrinking (and the grow direction
+// had the mirror-image problem: starting a good 40% too small).
+//
+// Widths are unchanged from what the inner wrappers produced — 'large' only
+// renders at md+, where the old `sm:px-4` was the binding horizontal inset and
+// the old `lg:px-16` never was (the max-widths always won past lg).
+//
+// No vertical spacing here on purpose: the old `py-4` became padding on
+// .desktop-search-bar-wrapper (globals.css) rather than a margin on this
+// element. A margin would be a first-in-flow-child top margin on a wrapper with
+// no padding/border of its own, so it would COLLAPSE out through the wrapper —
+// pushing the whole search row down 16px in 'large' while the docked states
+// (out of flow, wrapper clipped) stayed put: a 16px jump on every swap.
+const DOCK_LARGE_CLASS = 'mx-auto w-[calc(100%_-_2rem)] max-w-3xl lg:max-w-4xl xl:max-w-5xl';
+
 export default function CompactSearchBar({
-  headerMode = false,
-  onPillClick,
-  headerExpandedMode = false,
-  onDone,
   mobileSheetMode = false,
   onClose,
+  alwaysPill = false,
 }: {
-  /** When true: renders the read-only 4-slot compact pill used by Header */
-  headerMode?: boolean;
-  /** Called when the compact pill is clicked (headerMode only) */
-  onPillClick?: () => void;
-  /** When true: renders the full interactive bar without section/padding wrapper */
-  headerExpandedMode?: boolean;
-  /** Called after a successful search when headerExpandedMode=true */
-  onDone?: () => void;
   /** When true: renders a full-screen mobile search sheet (reuses all panels) */
   mobileSheetMode?: boolean;
   /** Called to close the mobile sheet */
   onClose?: () => void;
+  /** When true: this page has no 'large' in-page layout to grow back into
+   *  (see ScrollSentinel's alwaysPill mode) — clicking a pill field opens the
+   *  'expanded' overlay instead of scrolling to top. */
+  alwaysPill?: boolean;
 }) {
   const {
     listingTab: ctxTab,
@@ -55,7 +323,172 @@ export default function CompactSearchBar({
     setSearchMaxPrice: setSearchMaxPriceCtx,
     searchDescription,
     setSearchDescription,
+    showHeaderPill,
+    headerExpanded,
+    setHeaderExpanded,
   } = useApp();
+  // Single always-mounted instance — this is the ONLY place CompactSearchBar is
+  // rendered (see ScrollSentinel.tsx). It used to be mounted three times
+  // simultaneously (in-page bar, header pill, click-to-expand overlay), each
+  // running its own geolocation/autocomplete/etc., synchronized only by a
+  // `searchbar:close` event hack and a decorative shared-layoutId shell to fake
+  // a single continuous shape. That shell showed real field text from BOTH the
+  // exiting and entering copies at once during a swap (Framer's shared-layout
+  // crossfade converges both onto the same interpolated rect), which is what
+  // read as garbled/flickering. Reading scroll state directly and picking ONE
+  // of three layouts to render removes the duplication at the root instead of
+  // re-synchronizing it.
+  const rawMode: DockMode = !showHeaderPill ? 'large' : headerExpanded ? 'expanded' : 'pill';
+  // Every swap renders immediately. The grow used to be held back a full
+  // DOCK_TRANSITION so the in-page row could finish reopening first and the bar
+  // would have a settled box to grow into — a requirement of measuring geometry,
+  // which the crossfade doesn't do: it starts the incoming bar from the outgoing
+  // bar's centre and eases its transform to none, so the box is free to still be
+  // moving underneath. Dropping the wait is what makes the grow the mirror of the
+  // shrink rather than two events in sequence at twice the duration.
+  const [mode, setMode] = useState(rawMode);
+  const dockRef = useRef<HTMLDivElement>(null);
+  // Tracks the mode as of the last commit — read during render (before this
+  // render's own layout effect updates it) to detect "this render IS the swap"
+  // for the morph below.
+  const prevModeRef = useRef(mode);
+  // The outgoing layout, cloned and measured while it is still the one on screen.
+  // This has to happen BEFORE the swap commits — a layout effect is already too
+  // late, React having replaced the subtree by then and taken the only copy of
+  // that markup with it.
+  const ghostRef = useRef<GhostSource | null>(null);
+  // Which morph is in flight, if any. Direction is needed at RENDER time, not just
+  // in the effect, because it selects the incoming fields' ramp — see
+  // FIELDS_IN_EARLY_CLASS. Also holds Framer off the transition throughout.
+  const [morphDir, setMorphDir] = useState<'shrink' | 'grow' | null>(null);
+  const morphing = morphDir !== null;
+  const fieldsInClass = morphDir === 'grow' ? FIELDS_IN_EARLY_CLASS : FIELDS_IN_CLASS;
+
+  const captureGhost = () => {
+    const shell = dockRef.current?.querySelector<HTMLElement>(`[${SHELL_ATTR}]`);
+    if (!shell) return;
+    const box = boxOf(shell);
+    const inFlow = mode === 'large';
+    ghostRef.current = {
+      node: shell.cloneNode(true) as HTMLElement,
+      // Document coordinates for the in-flow bar, so the pin can be re-derived
+      // against the live scroll offset — see pinnedBox.
+      box: inFlow
+        ? { ...box, top: box.top + window.scrollY, left: box.left + window.scrollX }
+        : box,
+      inFlow,
+    };
+  };
+
+  useEffect(() => {
+    if (!alwaysPill && isMorphPair(mode, rawMode)) captureGhost();
+    setMode(rawMode);
+  }, [rawMode]);
+
+  // This render is the commit that swaps the layout, so Framer must not treat it
+  // as a layout change of its own to animate — the morph below owns it.
+  const isMorphTransition = isMorphPair(prevModeRef.current, mode);
+  // Framer owns pill <-> expanded and nothing else. It has to be off not merely
+  // DURING a hand-animated morph but from the render that precedes it — the one
+  // where rawMode has already flipped and mode hasn't. Left enabled there it
+  // snapshots the outgoing box, and a snapshot it already holds still gets
+  // projected even once the prop goes false, so its scale ends up multiplying with
+  // the crossfade's: measured as the growing bar dipping to 356px, narrower than
+  // the 480px pill it was supposed to be growing out of.
+  const framerLayout = !morphing && !isMorphTransition && !isMorphPair(mode, rawMode);
+
+  useLayoutEffect(() => {
+    const prev = prevModeRef.current;
+    prevModeRef.current = mode;
+    const ghost = ghostRef.current;
+    ghostRef.current = null;
+
+    const el = dockRef.current;
+    const shell = el?.querySelector<HTMLElement>(`[${SHELL_ATTR}]`);
+    const isMorph = isMorphPair(prev, mode);
+    // Hand-rolling this animation means hand-rolling the reduced-motion opt-out
+    // too — Framer used to cover it for free. Reduced motion gets the swap with no
+    // morph at all: the layouts still change, nothing travels or dissolves.
+    const reducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!isMorph || !ghost || !el || !shell || reducedMotion) {
+      // Covers pill <-> expanded (Framer's) and the initial mount: nothing to
+      // animate by hand, but a morph interrupted by one of those has to let go.
+      ghost?.node.remove();
+      setMorphDir(null);
+      return;
+    }
+
+    // Clear first: on a fast re-toggle the previous morph's transform is still
+    // in flight, and it would otherwise be baked into this measurement.
+    clearBarMorph(shell);
+    // Pinned against the CURRENT scroll offset, not the one at capture time.
+    const from = pinnedBox(ghost);
+    const to = boxOf(shell);
+    const { dx, dy } = centreDelta(from, to);
+    // Only the larger side scales, and it only ever scales down — see rule 2 at
+    // MORPH_TRANSITION_CSS. One of these is always exactly 1.
+    const ghostScale = Math.min(1, to.width / from.width);
+    const barScale = Math.min(1, from.width / to.width);
+
+    // Direction is read off the boxes rather than the modes: the ghost holds
+    // opaque, and the fields wait longer, only when the outgoing bar is the bigger
+    // of the two — i.e. when it is the one doing the visible shrinking.
+    const shrinking = from.width > to.width;
+    // Setting state from a layout effect is deliberate: it flushes before paint,
+    // so the incoming fields are already held back on the frame the new layout
+    // first appears. A passive effect would let one frame through with them
+    // visible, at the wrong size and in the wrong place.
+    setMorphDir(shrinking ? 'shrink' : 'grow');
+    const ghostNode = mountGhost(ghost.node, from, shrinking);
+
+    shell.style.transition = 'none';
+    shell.style.transformOrigin = 'center center';
+    shell.style.willChange = 'transform';
+    shell.style.transform = `translate(${-dx}px, ${-dy}px) scale(${barScale})`;
+    // Force the start state to resolve on its own before the end state is written
+    // below, or the browser folds both writes into one style resolution and there
+    // is nothing left to transition between.
+    void shell.getBoundingClientRect();
+
+    const raf = requestAnimationFrame(() => {
+      ghostNode.style.transition = MORPH_TRANSITION_CSS;
+      ghostNode.style.transform = `translate(${dx}px, ${dy}px) scale(${ghostScale})`;
+
+      shell.style.transition = MORPH_TRANSITION_CSS;
+      shell.style.transform = 'none';
+    });
+    const settle = setTimeout(() => {
+      ghostNode.remove();
+      clearBarMorph(shell);
+      setMorphDir(null);
+    }, MORPH_MS + 40);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(settle);
+      ghostNode.remove();
+      clearBarMorph(shell);
+    };
+  }, [mode]);
+
+  // Clicking a field while docked as the pill: grow back to the in-page
+  // layout first (or, on alwaysPill pages where there's no in-page layout to
+  // grow back into, open the 'expanded' overlay instead), THEN land on that
+  // field's panel already open — activePanel is set immediately, but panels
+  // only render in 'large'/'expanded' JSX, so it has no visible effect until
+  // the grow (or expand) actually finishes.
+  function openFromPill(panel: 'where' | 'when' | 'who' | 'what') {
+    setActivePanel(panel);
+    if (alwaysPill) {
+      setHeaderExpanded(true);
+    } else {
+      // Instant, not smooth — matches the rest of this component's "hard cut
+      // at the threshold, eased shape tween provides the motion" philosophy
+      // rather than tying perceived smoothness to scroll distance/duration.
+      window.scrollTo({ top: 0 });
+    }
+  }
 
   // Local aliases ? keep all existing JSX/logic unchanged
   const location = searchLocation;
@@ -536,7 +969,7 @@ export default function CompactSearchBar({
   function renderWhoPanel() {
     return (
       <div
-        className="search-panel-enter absolute left-0 right-0 z-[200] bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-surface-border"
+        className="search-panel-enter absolute left-0 right-0 z-[200] bg-white rounded-xl shadow-card border border-surface-border"
         style={{ top: 'calc(100% + 6px)' }}
         onMouseDown={(e) => e.stopPropagation()}
       >
@@ -650,7 +1083,7 @@ export default function CompactSearchBar({
                 className={`flex-1 py-2.5 rounded-full text-sm font-semibold transition-colors duration-150 ${
                   listingType === tab
                     ? 'bg-ink text-white shadow-sm'
-                    : 'bg-surface-alt text-ink-muted hover:bg-[#e0e0e0]'
+                    : 'bg-surface-alt text-ink-muted hover:bg-surface-soft'
                 }`}
               >
                 {tab === 'for-sale' ? 'For Sale' : 'For Rent'}
@@ -764,7 +1197,7 @@ export default function CompactSearchBar({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Describe your ideal home..."
-            className="w-full resize-none rounded-xl border border-surface-border px-4 py-3 text-[15px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/20"
+            className="w-full resize-none rounded-xl border border-surface-border px-4 py-3 text-[15px] text-ink placeholder:text-ink-muted focus:outline-none focus:border-surface-border-strong focus:ring-1 focus:ring-surface-border-strong"
           />
         </div>
       </div>
@@ -774,7 +1207,7 @@ export default function CompactSearchBar({
   function renderWhatPanel(highlightRef: React.RefObject<HTMLDivElement | null>) {
     return (
       <div
-        className="search-panel-enter absolute left-0 right-0 z-[200] bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-surface-border max-h-[70vh] overflow-y-auto"
+        className="search-panel-enter absolute left-0 right-0 z-[200] bg-white rounded-xl shadow-card border border-surface-border max-h-[70vh] overflow-y-auto"
         style={{ top: 'calc(100% + 6px)' }}
         onMouseDown={(e) => e.stopPropagation()}
       >
@@ -803,7 +1236,7 @@ export default function CompactSearchBar({
   function renderWherePanel(highlightRef: React.RefObject<HTMLDivElement | null>) {
     return (
       <div
-        className="search-panel-enter absolute left-0 right-0 z-[200] bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-surface-border overflow-hidden"
+        className="search-panel-enter absolute left-0 right-0 z-[200] bg-white rounded-xl shadow-card border border-surface-border overflow-hidden"
         style={{ top: 'calc(100% + 6px)' }}
         onMouseDown={(e) => e.stopPropagation()}
       >
@@ -815,7 +1248,7 @@ export default function CompactSearchBar({
               value={location}
               autoComplete="off"
               placeholder="Search city, zip, neighborhood, or address"
-              className="w-full rounded-full border border-surface-border px-5 py-3 text-[15px] focus:outline-none focus:ring-2 focus:ring-brand/20 pr-10"
+              className="w-full rounded-full border border-surface-border bg-white px-5 py-3 text-[15px] focus:outline-none focus:border-surface-border-strong focus:ring-1 focus:ring-surface-border-strong pr-10"
               onChange={(e) => {
                 const val = e.target.value;
                 isCommittedSelectionRef.current = false;
@@ -881,10 +1314,10 @@ export default function CompactSearchBar({
         >
           <div
             ref={highlightRef}
-            className="absolute inset-x-0 bg-[#f0f0f0] pointer-events-none"
+            className="absolute inset-x-0 bg-surface-soft pointer-events-none"
             style={{ top: 0, height: 0, opacity: 0 }}
           />
-          <hr className="border-t border-[#f0f0f0] mb-1" />
+          <hr className="border-t border-surface-border mb-1" />
           {(location.trim().length < 2 || suggestions.length === 0) && (
             <button
               type="button"
@@ -904,8 +1337,8 @@ export default function CompactSearchBar({
             >
               <span className="inline-block w-5 h-5 text-brand flex-shrink-0">
                 <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
-                  <circle cx="12" cy="12" r="10" stroke="#FF385C" strokeWidth="2" />
-                  <circle cx="12" cy="12" r="4" stroke="#FF385C" strokeWidth="2" />
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
+                  <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" />
                 </svg>
               </span>
               <span className="font-medium text-[15px]">Use current location</span>
@@ -956,7 +1389,7 @@ export default function CompactSearchBar({
           {(location.trim().length < 2 || suggestions.length === 0 || isCommittedSelection) &&
             (loadingNearby || nearbyLocations.length > 0) && (
               <>
-                <hr className="border-t border-[#f0f0f0] my-1" />
+                <hr className="border-t border-surface-border my-1" />
                 <div className="px-5 pt-2 pb-1 text-[11px] text-ink-subtle font-semibold tracking-widest uppercase">
                   Nearby
                 </div>
@@ -1030,7 +1463,7 @@ export default function CompactSearchBar({
           {(location.trim().length < 2 || suggestions.length === 0 || isCommittedSelection) &&
             recentSearches.length > 0 && (
               <>
-                <hr className="border-t border-[#f0f0f0] my-1" />
+                <hr className="border-t border-surface-border my-1" />
                 <div className="px-5 pt-2 pb-1 text-[11px] text-ink-subtle font-semibold tracking-widest uppercase">
                   Recent
                 </div>
@@ -1166,7 +1599,7 @@ export default function CompactSearchBar({
     router.push(`/search?${params.toString()}`);
     setIsDropdownOpen(false);
     setActivePanel(null);
-    onDone?.();
+    if (mode === 'expanded') setHeaderExpanded(false);
   };
 
   // Always trigger geolocation and update location input
@@ -1433,7 +1866,7 @@ export default function CompactSearchBar({
 
     return (
       <div
-        className="fixed inset-0 z-[60] bg-[#F7F7F7] flex flex-col"
+        className="fixed inset-0 z-[60] bg-surface-alt flex flex-col"
         style={{ animation: 'mss-in 220ms ease both' }}
       >
         <style>
@@ -1443,7 +1876,7 @@ export default function CompactSearchBar({
         </style>
 
         {/* ── Top bar ──────────────────────────────────────────────────── */}
-        <div className="flex-shrink-0 bg-white border-b border-surface-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+        <div className="flex-shrink-0 bg-white border-b border-surface-border shadow-card">
           {/* Title row */}
           <div className="flex items-center justify-between px-4 pt-4 pb-3">
             <p className="text-[15px] font-bold text-ink tracking-tight">Search homes</p>
@@ -1472,7 +1905,7 @@ export default function CompactSearchBar({
                 className={`flex-1 py-2 rounded-full text-[13px] font-semibold transition-colors duration-150 ${
                   listingType === tab
                     ? 'bg-ink text-white shadow-sm'
-                    : 'bg-surface-alt text-ink-muted hover:bg-[#e0e0e0]'
+                    : 'bg-surface-alt text-ink-muted hover:bg-surface-soft'
                 }`}
               >
                 {tab === 'for-sale' ? 'For Sale' : 'For Rent'}
@@ -1485,7 +1918,7 @@ export default function CompactSearchBar({
         <div className="flex-1 overflow-y-auto px-4 pt-4 pb-4 space-y-2.5">
           {/* WHERE card */}
           <div
-            className={`bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.07)] transition-all duration-200 overflow-hidden ${
+            className={`bg-white rounded-md shadow-card transition-all duration-200 overflow-hidden ${
               activePanel === 'where' ? 'ring-2 ring-ink' : 'cursor-pointer'
             }`}
             onClick={() => activePanel !== 'where' && setActivePanel('where')}
@@ -1502,7 +1935,7 @@ export default function CompactSearchBar({
                       value={location || ''}
                       autoComplete="off"
                       placeholder="Search city, zip, neighborhood, or address"
-                      className="w-full rounded-full border border-surface-border px-5 py-3 text-[15px] focus:outline-none focus:ring-2 focus:ring-brand/20 pr-10"
+                      className="w-full rounded-full border border-surface-border bg-white px-5 py-3 text-[15px] focus:outline-none focus:border-surface-border-strong focus:ring-1 focus:ring-surface-border-strong pr-10"
                       onChange={(e) => {
                         const val = e.target.value;
                         isCommittedSelectionRef.current = false;
@@ -1575,10 +2008,10 @@ export default function CompactSearchBar({
               <div className="relative pb-3" onMouseLeave={() => clearHighlight(whereHighlightRef)}>
                 <div
                   ref={whereHighlightRef}
-                  className="absolute inset-x-0 bg-[#f0f0f0] pointer-events-none"
+                  className="absolute inset-x-0 bg-surface-soft pointer-events-none"
                   style={{ top: 0, height: 0, opacity: 0 }}
                 />
-                <hr className="border-t border-[#f0f0f0] mb-1" />
+                <hr className="border-t border-surface-border mb-1" />
                 {/* Use current location */}
                 {((location || '').trim().length < 2 || suggestions.length === 0) && (
                   <button
@@ -1598,8 +2031,8 @@ export default function CompactSearchBar({
                   >
                     <span className="inline-block w-5 h-5 text-brand flex-shrink-0">
                       <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
-                        <circle cx="12" cy="12" r="10" stroke="#FF385C" strokeWidth="2" />
-                        <circle cx="12" cy="12" r="4" stroke="#FF385C" strokeWidth="2" />
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
+                        <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" />
                       </svg>
                     </span>
                     <span className="font-medium text-[15px]">Use current location</span>
@@ -1655,7 +2088,7 @@ export default function CompactSearchBar({
                   isCommittedSelection) &&
                   (loadingNearby || nearbyLocations.length > 0) && (
                     <>
-                      <hr className="border-t border-[#f0f0f0] my-1" />
+                      <hr className="border-t border-surface-border my-1" />
                       <div className="px-5 pt-2 pb-1 text-[11px] text-ink-subtle font-semibold tracking-widest uppercase">
                         Nearby
                       </div>
@@ -1732,7 +2165,7 @@ export default function CompactSearchBar({
                   isCommittedSelection) &&
                   recentSearches.length > 0 && (
                     <>
-                      <hr className="border-t border-[#f0f0f0] my-1" />
+                      <hr className="border-t border-surface-border my-1" />
                       <div className="px-5 pt-2 pb-1 text-[11px] text-ink-subtle font-semibold tracking-widest uppercase">
                         Recent
                       </div>
@@ -1811,7 +2244,7 @@ export default function CompactSearchBar({
 
           {/* WHEN card */}
           <div
-            className={`bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.07)] transition-all duration-200 overflow-hidden ${
+            className={`bg-white rounded-md shadow-card transition-all duration-200 overflow-hidden ${
               activePanel === 'when' ? 'ring-2 ring-ink' : 'cursor-pointer'
             }`}
             onClick={() => activePanel !== 'when' && setActivePanel('when')}
@@ -1840,7 +2273,7 @@ export default function CompactSearchBar({
 
           {/* WHO card */}
           <div
-            className={`bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.07)] transition-all duration-200 overflow-hidden ${
+            className={`bg-white rounded-md shadow-card transition-all duration-200 overflow-hidden ${
               activePanel === 'who' ? 'ring-2 ring-ink' : 'cursor-pointer'
             }`}
             onClick={() => activePanel !== 'who' && setActivePanel('who')}
@@ -1899,7 +2332,7 @@ export default function CompactSearchBar({
 
           {/* WHAT card */}
           <div
-            className={`bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.07)] transition-all duration-200 overflow-hidden ${
+            className={`bg-white rounded-md shadow-card transition-all duration-200 overflow-hidden ${
               activePanel === 'what' ? 'ring-2 ring-ink' : 'cursor-pointer'
             }`}
             onClick={() => activePanel !== 'what' && setActivePanel('what')}
@@ -1931,7 +2364,7 @@ export default function CompactSearchBar({
         </div>
 
         {/* ── Bottom bar ───────────────────────────────────────────────── */}
-        <div className="flex-shrink-0 flex items-center justify-between px-5 py-4 bg-white border-t border-surface-border shadow-[0_-2px_8px_rgba(0,0,0,0.06)]">
+        <div className="flex-shrink-0 flex items-center justify-between px-5 py-4 bg-white border-t border-surface-border shadow-card">
           <button
             onClick={handleClearAll}
             className="text-[14px] font-semibold text-ink underline underline-offset-2"
@@ -1962,48 +2395,76 @@ export default function CompactSearchBar({
     );
   }
 
-  // --- headerMode: compact 4-slot pill (click to scroll to top) ------------
+  // --- pill mode: compact 4-slot pill (click to expand) --------------------
 
-  if (headerMode) {
-    return (
-      <button
-        type="button"
-        onClick={onPillClick}
-        aria-label="Expand search"
-        className="flex w-full items-center rounded-full border border-[rgba(0,0,0,0.08)] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.08),0_4px_12px_rgba(0,0,0,0.05)] hover:shadow-[0_2px_4px_rgba(0,0,0,0.08),0_8px_20px_rgba(0,0,0,0.1)] transition-shadow duration-200 overflow-hidden"
+  let content: React.ReactNode;
+
+  if (mode === 'pill') {
+    content = (
+      <div
+        {...{ [SHELL_ATTR]: '' }}
+        className={`flex w-full items-center rounded-full border border-surface-border bg-white shadow-card overflow-hidden ${
+          morphing ? fieldsInClass : ''
+        }`}
       >
         {/* Where */}
-        <div className="flex-1 flex flex-col justify-center px-4 py-2 text-left min-w-0">
+        <button
+          type="button"
+          onClick={() => openFromPill('where')}
+          aria-label="Where — edit search"
+          className="flex-1 flex flex-col justify-center px-4 py-2 text-left min-w-0 hover:bg-surface-alt/60 transition-colors"
+        >
           <span className="text-[10px] font-medium text-ink-muted leading-none mb-1 select-none">
             Where
           </span>
-          <span className="text-[13px] text-ink-muted leading-snug truncate">
+          <span
+            className={`text-[13px] leading-snug truncate ${location ? 'text-ink font-bold' : 'text-ink-muted'}`}
+          >
             {location || 'Anywhere'}
           </span>
-        </div>
+        </button>
         <div className="my-auto h-5 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)]" />
         {/* When */}
-        <div className="flex flex-col justify-center px-4 py-2 text-left whitespace-nowrap">
+        <button
+          type="button"
+          onClick={() => openFromPill('when')}
+          aria-label="When — edit search"
+          className="flex flex-col justify-center px-4 py-2 text-left whitespace-nowrap hover:bg-surface-alt/60 transition-colors"
+        >
           <span className="text-[10px] font-medium text-ink-muted leading-none mb-1 select-none">
             When
           </span>
-          <span className="text-[13px] text-ink-muted leading-snug">
+          <span
+            className={`text-[13px] leading-snug ${dateRange.start ? 'text-ink font-bold' : 'text-ink-muted'}`}
+          >
             {dateRange.start ? formatDateRangeLabel(dateRange) : 'Anytime'}
           </span>
-        </div>
+        </button>
         <div className="my-auto h-5 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)]" />
         {/* Who */}
-        <div className="flex flex-col justify-center px-4 py-2 text-left whitespace-nowrap">
+        <button
+          type="button"
+          onClick={() => openFromPill('who')}
+          aria-label="Who — edit search"
+          className="flex flex-col justify-center px-4 py-2 text-left whitespace-nowrap hover:bg-surface-alt/60 transition-colors"
+        >
           <span className="text-[10px] font-medium text-ink-muted leading-none mb-1 select-none">
             Who
           </span>
-          <span className="text-[13px] text-ink-muted leading-snug">
+          <span
+            className={`text-[13px] leading-snug ${occupantSummary(occupants) ? 'text-ink font-bold' : 'text-ink-muted'}`}
+          >
             {occupantSummary(occupants) || 'Add occupants'}
           </span>
-        </div>
+        </button>
         <div className="my-auto h-5 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)]" />
         {/* What */}
-        <div className="flex flex-col justify-center px-4 py-2 text-left whitespace-nowrap flex-shrink-0">
+        <button
+          type="button"
+          onClick={() => openFromPill('what')}
+          aria-label="What — edit search"
+          className="flex flex-col justify-center px-4 py-2 text-left whitespace-nowrap flex-shrink-0 hover:bg-surface-alt/60 transition-colors"
+        >
           <span className="text-[10px] font-medium text-ink-muted leading-none mb-1 select-none">
             What
           </span>
@@ -2023,10 +2484,20 @@ export default function CompactSearchBar({
               ) : null;
             })()}
           </span>
-        </div>
-        {/* Search icon button */}
+        </button>
+        {/* Search icon button — grows back (or expands) the same as a field
+            click, then either submits directly (valid location) or lands on
+            the 'where' panel already open (handleSearch's existing fallback). */}
         <div className="flex items-center pr-1.5 pl-1">
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand text-white">
+          <button
+            type="button"
+            aria-label="Search"
+            onClick={() => {
+              openFromPill('where');
+              handleSearch({ preventDefault: () => {} } as any);
+            }}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-brand text-white"
+          >
             <svg
               className="h-[15px] w-[15px]"
               fill="none"
@@ -2040,27 +2511,19 @@ export default function CompactSearchBar({
                 d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
               />
             </svg>
-          </span>
+          </button>
         </div>
-      </button>
+      </div>
     );
-  }
-
-  // --- headerExpandedMode: full 4-slot bar without section wrapper --------
-  // Used in the expanded header second row. Backdrop is provided by Header.tsx.
-
-  if (headerExpandedMode) {
-    return (
+  } else if (mode === 'expanded') {
+    // --- expanded: full 4-slot bar shown as a dropdown below the header -----
+    content = (
       <div className="relative w-full" ref={panelRef}>
         {/* 4-slot pill */}
-        <div
-          className={`relative flex items-center rounded-full transition-colors duration-200 ${
-            activePanel ? 'bg-[#EBEBEB]' : 'bg-white shadow-card ring-1 ring-surface-border'
-          }`}
-        >
+        <div className="relative flex items-center rounded-full bg-white shadow-card ring-1 ring-surface-border">
           {activePanel && (
             <div
-              className="absolute rounded-full bg-white shadow-[0_2px_16px_rgba(0,0,0,0.15)] pointer-events-none"
+              className={`absolute rounded-full bg-surface-soft pointer-events-none ${SLOT_IN_CLASS}`}
               style={{
                 ...(() => {
                   const s = getIndicatorStyle();
@@ -2087,11 +2550,7 @@ export default function CompactSearchBar({
                 setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 50);
               }}
               className={`relative z-[1] w-full flex flex-col justify-center text-left px-3 sm:px-4 py-2.5 sm:py-3.5 rounded-full transition-colors duration-150 min-w-0 focus:outline-none ${
-                activePanel && activePanel !== 'where'
-                  ? 'hover:bg-[rgba(0,0,0,0.06)]'
-                  : !activePanel
-                    ? 'hover:bg-surface-alt/60'
-                    : ''
+                activePanel !== 'where' ? 'hover:bg-surface-alt/60' : ''
               }`}
             >
               <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
@@ -2164,18 +2623,14 @@ export default function CompactSearchBar({
             type="button"
             onClick={() => setActivePanel('when')}
             className={`relative z-[1] flex-1 min-w-0 flex flex-col justify-center text-left px-2 sm:px-3 py-2.5 sm:py-3.5 rounded-full transition-colors duration-150 focus:outline-none ${
-              activePanel && activePanel !== 'when'
-                ? 'hover:bg-[rgba(0,0,0,0.06)]'
-                : !activePanel
-                  ? 'hover:bg-surface-alt/60'
-                  : ''
+              activePanel !== 'when' ? 'hover:bg-surface-alt/60' : ''
             }`}
           >
             <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
               When
             </span>
             <span
-              className={`text-[11px] sm:text-[13px] leading-snug truncate ${dateRange.start ? 'text-ink' : 'text-ink-muted'}`}
+              className={`text-[11px] sm:text-[13px] leading-snug truncate ${dateRange.start ? 'text-ink font-bold' : 'text-ink-muted'}`}
             >
               {dateRange.start ? (
                 formatDateRangeLabel(dateRange)
@@ -2195,11 +2650,7 @@ export default function CompactSearchBar({
             type="button"
             onClick={() => setActivePanel('who')}
             className={`relative z-[1] flex-1 min-w-0 flex flex-col justify-center text-left px-2 sm:px-3 py-2.5 sm:py-3.5 rounded-full transition-colors duration-150 focus:outline-none ${
-              activePanel && activePanel !== 'who'
-                ? 'hover:bg-[rgba(0,0,0,0.06)]'
-                : !activePanel
-                  ? 'hover:bg-surface-alt/60'
-                  : ''
+              activePanel !== 'who' ? 'hover:bg-surface-alt/60' : ''
             }`}
           >
             <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
@@ -2220,11 +2671,7 @@ export default function CompactSearchBar({
             type="button"
             onClick={() => setActivePanel('what')}
             className={`hidden md:flex relative z-[1] flex-1 min-w-0 flex-col justify-center text-left px-2 md:px-3 py-2.5 md:py-3.5 rounded-full transition-colors duration-150 focus:outline-none ${
-              activePanel && activePanel !== 'what'
-                ? 'hover:bg-[rgba(0,0,0,0.06)]'
-                : !activePanel
-                  ? 'hover:bg-surface-alt/60'
-                  : ''
+              activePanel !== 'what' ? 'hover:bg-surface-alt/60' : ''
             }`}
           >
             <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
@@ -2243,7 +2690,7 @@ export default function CompactSearchBar({
                 setActivePanel(null);
                 handleSearch({ preventDefault: () => {} } as any);
               }}
-              className="flex items-center justify-center rounded-full bg-brand text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-80 h-10 w-10 sm:h-12 sm:w-12 flex-shrink-0"
+              className="flex items-center justify-center rounded-full bg-brand text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-80 h-12 w-12 flex-shrink-0"
               aria-label="Search"
             >
               {isSearching ? (
@@ -2294,285 +2741,292 @@ export default function CompactSearchBar({
         {activePanel === 'what' && renderWhatPanel(whatHighlightRef)}
       </div>
     );
-  }
-
-  // --- non-headerMode: full 4-slot panel bar (Airbnb 2026 style) ----------
-
-  return (
-    <section className="relative">
-      {/* Click-catcher when a slot panel is open ? no visual dim */}
-      <div className="relative px-3 sm:px-4 lg:px-16 py-4">
-        <div ref={panelRef} className="relative w-full max-w-3xl lg:max-w-4xl xl:max-w-5xl mx-auto">
-          {/* -- 4-slot pill ------------------------------------------------- */}
-          <div
-            className={`relative flex items-center rounded-full transition-colors duration-200 ${
-              activePanel ? 'bg-[#EBEBEB]' : 'bg-white shadow-card ring-1 ring-surface-border'
-            }`}
-          >
-            {activePanel && (
-              <div
-                className="absolute rounded-full bg-white shadow-[0_2px_16px_rgba(0,0,0,0.15)] pointer-events-none"
-                style={{
-                  ...(() => {
-                    const s = getIndicatorStyle();
-                    const left = typeof s.left === 'number' ? s.left + 1 : s.left;
-                    const width = typeof s.width === 'number' ? s.width - 2 : s.width;
-                    return { ...s, left, width };
-                  })(),
-                  top: '1px',
-                  bottom: '1px',
-                  transition:
-                    'left 0.22s cubic-bezier(0.4,0,0.2,1), width 0.22s cubic-bezier(0.4,0,0.2,1)',
-                }}
-              />
-            )}
-            {/* WHERE slot */}
+  } else {
+    // --- large: full 4-slot panel bar, in normal page flow (Airbnb style) ---
+    // The two wrappers below are intentionally near-empty pass-throughs: the
+    // inset/max-width/vertical centering they used to carry now lives on the
+    // dock element itself (DOCK_LARGE_CLASS), so every box from the dock down
+    // to the pill coincides and the shape animation has nothing oversized to
+    // grow from.
+    content = (
+      <section className="relative">
+        <div className="relative">
+          <div ref={panelRef} className="relative w-full">
+            {/* -- 4-slot pill ------------------------------------------------- */}
             <div
-              className={`relative w-2/5 lg:w-1/2 shrink-0 min-w-0 ${whereShake ? 'where-shake' : ''}`}
+              {...{ [SHELL_ATTR]: '' }}
+              className={`relative flex items-center rounded-full bg-white shadow-card ring-1 ring-surface-border ${
+                morphing ? fieldsInClass : ''
+              }`}
             >
+              {activePanel && (
+                <div
+                  className={`absolute rounded-full bg-surface-soft pointer-events-none ${SLOT_IN_CLASS}`}
+                  style={{
+                    ...(() => {
+                      const s = getIndicatorStyle();
+                      const left = typeof s.left === 'number' ? s.left + 1 : s.left;
+                      const width = typeof s.width === 'number' ? s.width - 2 : s.width;
+                      return { ...s, left, width };
+                    })(),
+                    top: '1px',
+                    bottom: '1px',
+                    transition:
+                      'left 0.22s cubic-bezier(0.4,0,0.2,1), width 0.22s cubic-bezier(0.4,0,0.2,1)',
+                  }}
+                />
+              )}
+              {/* WHERE slot */}
+              <div
+                className={`relative w-2/5 lg:w-1/2 shrink-0 min-w-0 ${whereShake ? 'where-shake' : ''}`}
+              >
+                <button
+                  ref={whereRef}
+                  type="button"
+                  onClick={() => {
+                    setActivePanel('where');
+                    setIsDropdownOpen(true);
+                    setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 50);
+                  }}
+                  className={`relative z-[1] w-full flex flex-col justify-center text-left px-3 sm:px-4 py-2.5 sm:py-3.5 rounded-full transition-colors duration-150 min-w-0 focus:outline-none ${
+                    activePanel !== 'where' ? 'hover:bg-surface-alt/60' : ''
+                  }`}
+                >
+                  <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
+                    Where
+                  </span>
+                  <span
+                    className={`text-[11px] sm:text-[13px] leading-snug truncate pr-5 ${location ? 'text-ink font-bold' : 'text-ink-subtle'}`}
+                  >
+                    {isGeolocating ? (
+                      <span className="flex items-center gap-1.5 text-ink-muted">
+                        <svg
+                          className="h-3.5 w-3.5 animate-spin flex-shrink-0"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                          />
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                          />
+                        </svg>
+                        Detecting location…
+                      </span>
+                    ) : (
+                      location || 'Add locations'
+                    )}
+                  </span>
+                </button>
+                {location && activePanel === 'where' && (
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (typeof setLocation === 'function') setLocation('');
+                      setSelectedSuggestion(null);
+                      isCommittedSelectionRef.current = false;
+                      setIsCommittedSelection(false);
+                      setSuggestions([]);
+                    }}
+                    className="absolute right-2 top-1/2 z-[2] -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full hover:bg-black/[0.08] text-ink/50 hover:text-ink transition-colors"
+                    aria-label="Clear location"
+                  >
+                    <svg
+                      className="h-3 w-3"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2.5}
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              <div
+                className={`h-6 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)] transition-opacity duration-150 ${activePanel === 'where' || activePanel === 'when' ? 'opacity-0' : ''}`}
+              />
+
+              {/* WHEN slot */}
               <button
-                ref={whereRef}
+                ref={whenRef}
                 type="button"
-                onClick={() => {
-                  setActivePanel('where');
-                  setIsDropdownOpen(true);
-                  setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 50);
-                }}
-                className={`relative z-[1] w-full flex flex-col justify-center text-left px-3 sm:px-4 py-2.5 sm:py-3.5 rounded-full transition-colors duration-150 min-w-0 focus:outline-none ${
-                  activePanel && activePanel !== 'where'
-                    ? 'hover:bg-[rgba(0,0,0,0.06)]'
-                    : !activePanel
-                      ? 'hover:bg-surface-alt/60'
-                      : ''
+                onClick={() => setActivePanel('when')}
+                className={`relative z-[1] flex-1 min-w-0 flex flex-col justify-center text-left px-2 sm:px-3 py-2.5 sm:py-3.5 rounded-full transition-colors duration-150 focus:outline-none ${
+                  activePanel !== 'when' ? 'hover:bg-surface-alt/60' : ''
                 }`}
               >
                 <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
-                  Where
+                  When
                 </span>
                 <span
-                  className={`text-[11px] sm:text-[13px] leading-snug truncate pr-5 ${location ? 'text-ink font-bold' : 'text-ink-subtle'}`}
+                  className={`text-[11px] sm:text-[13px] leading-snug truncate ${dateRange.start ? 'text-ink font-bold' : 'text-ink-subtle'}`}
                 >
-                  {isGeolocating ? (
-                    <span className="flex items-center gap-1.5 text-ink-muted">
-                      <svg
-                        className="h-3.5 w-3.5 animate-spin flex-shrink-0"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="2.5"
-                        />
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                        />
-                      </svg>
-                      Detecting location…
-                    </span>
+                  {dateRange.start ? (
+                    formatDateRangeLabel(dateRange)
                   ) : (
-                    location || 'Add locations'
+                    <>
+                      <span className="">Add dates</span>
+                    </>
                   )}
                 </span>
               </button>
-              {location && activePanel === 'where' && (
+
+              <div
+                className={`h-6 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)] transition-opacity duration-150 ${activePanel === 'when' || activePanel === 'who' ? 'opacity-0' : ''}`}
+              />
+
+              {/* WHO slot */}
+              <button
+                ref={whoRef}
+                type="button"
+                onClick={() => setActivePanel('who')}
+                className={`relative z-[1] flex-1 min-w-0 flex flex-col justify-center text-left px-2 sm:px-3 py-2.5 sm:py-3.5 rounded-full transition-colors duration-150 focus:outline-none ${
+                  activePanel !== 'who' ? 'hover:bg-surface-alt/60' : ''
+                }`}
+              >
+                <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
+                  Who
+                </span>
+                <span
+                  className={`text-[11px] sm:text-[13px] leading-snug truncate ${occupantSummary(occupants) ? 'text-ink font-bold' : 'text-ink-subtle'}`}
+                >
+                  {occupantSummary(occupants) || 'Add occupants'}
+                </span>
+              </button>
+
+              <div
+                className={`hidden sm:block h-6 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)] transition-opacity duration-150 ${activePanel === 'who' || activePanel === 'what' ? 'opacity-0' : ''}`}
+              />
+
+              {/* WHAT slot — hidden on mobile, visible sm+ */}
+              <button
+                ref={whatRef}
+                type="button"
+                onClick={() => setActivePanel('what')}
+                className={`hidden sm:flex relative z-[1] flex-1 min-w-0 flex-col justify-center text-left px-2 sm:px-3 py-2.5 sm:py-3.5 rounded-full transition-colors duration-150 focus:outline-none ${
+                  activePanel !== 'what' ? 'hover:bg-surface-alt/60' : ''
+                }`}
+              >
+                <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
+                  What
+                </span>
+                <span className="text-[11px] sm:text-[13px] text-ink font-bold leading-snug truncate flex items-center">
+                  {listingType === 'for-rent' ? 'For Rent' : 'For Sale'}
+                  {(() => {
+                    const n =
+                      (selectedPropertyTypes.length > 0 ? 1 : 0) +
+                      (bedsIdx > 0 ? 1 : 0) +
+                      (baths ? 1 : 0) +
+                      (searchMaxPrice > 0 ? 1 : 0) +
+                      (description ? 1 : 0);
+                    return n > 0 ? (
+                      <span className="ml-1.5 inline-flex items-center justify-center h-[18px] px-1.5 rounded-full bg-black/[0.07] text-ink/60 text-[10px] font-semibold leading-none">
+                        +{n} {n === 1 ? 'filter' : 'filters'}
+                      </span>
+                    ) : null;
+                  })()}
+                </span>
+              </button>
+
+              {/* Search button */}
+              <div
+                ref={searchBtnRef}
+                className="relative z-[1] flex items-center pr-1.5 pl-1 flex-shrink-0"
+              >
                 <button
                   type="button"
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (typeof setLocation === 'function') setLocation('');
-                    setSelectedSuggestion(null);
-                    isCommittedSelectionRef.current = false;
-                    setIsCommittedSelection(false);
-                    setSuggestions([]);
+                  disabled={isSearching}
+                  onClick={() => {
+                    setActivePanel(null);
+                    handleSearch({ preventDefault: () => {} } as any);
                   }}
-                  className="absolute right-2 top-1/2 z-[2] -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full hover:bg-black/[0.08] text-ink/50 hover:text-ink transition-colors"
-                  aria-label="Clear location"
+                  className="flex items-center justify-center rounded-full bg-brand text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-80 h-12 w-12 flex-shrink-0"
+                  aria-label="Search"
                 >
-                  <svg
-                    className="h-3 w-3"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2.5}
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              )}
-            </div>
-
-            <div
-              className={`h-6 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)] transition-opacity duration-150 ${activePanel === 'where' || activePanel === 'when' ? 'opacity-0' : ''}`}
-            />
-
-            {/* WHEN slot */}
-            <button
-              ref={whenRef}
-              type="button"
-              onClick={() => setActivePanel('when')}
-              className={`relative z-[1] flex-1 min-w-0 flex flex-col justify-center text-left px-2 sm:px-3 py-2.5 sm:py-3.5 rounded-full transition-colors duration-150 focus:outline-none ${
-                activePanel && activePanel !== 'when'
-                  ? 'hover:bg-[rgba(0,0,0,0.06)]'
-                  : !activePanel
-                    ? 'hover:bg-surface-alt/60'
-                    : ''
-              }`}
-            >
-              <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
-                When
-              </span>
-              <span
-                className={`text-[11px] sm:text-[13px] leading-snug truncate ${dateRange.start ? 'text-ink font-bold' : 'text-ink-subtle'}`}
-              >
-                {dateRange.start ? (
-                  formatDateRangeLabel(dateRange)
-                ) : (
-                  <>
-                    <span className="">Add dates</span>
-                  </>
-                )}
-              </span>
-            </button>
-
-            <div
-              className={`h-6 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)] transition-opacity duration-150 ${activePanel === 'when' || activePanel === 'who' ? 'opacity-0' : ''}`}
-            />
-
-            {/* WHO slot */}
-            <button
-              ref={whoRef}
-              type="button"
-              onClick={() => setActivePanel('who')}
-              className={`relative z-[1] flex-1 min-w-0 flex flex-col justify-center text-left px-2 sm:px-3 py-2.5 sm:py-3.5 rounded-full transition-colors duration-150 focus:outline-none ${
-                activePanel && activePanel !== 'who'
-                  ? 'hover:bg-[rgba(0,0,0,0.06)]'
-                  : !activePanel
-                    ? 'hover:bg-surface-alt/60'
-                    : ''
-              }`}
-            >
-              <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
-                Who
-              </span>
-              <span
-                className={`text-[11px] sm:text-[13px] leading-snug truncate ${occupantSummary(occupants) ? 'text-ink font-bold' : 'text-ink-subtle'}`}
-              >
-                {occupantSummary(occupants) || 'Add occupants'}
-              </span>
-            </button>
-
-            <div
-              className={`hidden sm:block h-6 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)] transition-opacity duration-150 ${activePanel === 'who' || activePanel === 'what' ? 'opacity-0' : ''}`}
-            />
-
-            {/* WHAT slot — hidden on mobile, visible sm+ */}
-            <button
-              ref={whatRef}
-              type="button"
-              onClick={() => setActivePanel('what')}
-              className={`hidden sm:flex relative z-[1] flex-1 min-w-0 flex-col justify-center text-left px-2 sm:px-3 py-2.5 sm:py-3.5 rounded-full transition-colors duration-150 focus:outline-none ${
-                activePanel && activePanel !== 'what'
-                  ? 'hover:bg-[rgba(0,0,0,0.06)]'
-                  : !activePanel
-                    ? 'hover:bg-surface-alt/60'
-                    : ''
-              }`}
-            >
-              <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
-                What
-              </span>
-              <span className="text-[11px] sm:text-[13px] text-ink font-bold leading-snug truncate flex items-center">
-                {listingType === 'for-rent' ? 'For Rent' : 'For Sale'}
-                {(() => {
-                  const n =
-                    (selectedPropertyTypes.length > 0 ? 1 : 0) +
-                    (bedsIdx > 0 ? 1 : 0) +
-                    (baths ? 1 : 0) +
-                    (searchMaxPrice > 0 ? 1 : 0) +
-                    (description ? 1 : 0);
-                  return n > 0 ? (
-                    <span className="ml-1.5 inline-flex items-center justify-center h-[18px] px-1.5 rounded-full bg-black/[0.07] text-ink/60 text-[10px] font-semibold leading-none">
-                      +{n} {n === 1 ? 'filter' : 'filters'}
-                    </span>
-                  ) : null;
-                })()}
-              </span>
-            </button>
-
-            {/* Search button */}
-            <div
-              ref={searchBtnRef}
-              className="relative z-[1] flex items-center pr-1.5 pl-1 flex-shrink-0"
-            >
-              <button
-                type="button"
-                disabled={isSearching}
-                onClick={() => {
-                  setActivePanel(null);
-                  handleSearch({ preventDefault: () => {} } as any);
-                }}
-                className="flex items-center justify-center rounded-full bg-brand text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-80 h-10 w-10 sm:h-12 sm:w-12 flex-shrink-0"
-                aria-label="Search"
-              >
-                {isSearching ? (
-                  <svg
-                    className="h-4 w-4 sm:h-5 sm:w-5 animate-spin"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
+                  {isSearching ? (
+                    <svg
+                      className="h-4 w-4 sm:h-5 sm:w-5 animate-spin"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                      />
+                    </svg>
+                  ) : (
+                    <svg
+                      className="h-4 w-4 sm:h-5 sm:w-5"
+                      fill="none"
                       stroke="currentColor"
-                      strokeWidth="2.5"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                    />
-                  </svg>
-                ) : (
-                  <svg
-                    className="h-4 w-4 sm:h-5 sm:w-5"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2.5}
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                    />
-                  </svg>
-                )}
-              </button>
+                      strokeWidth={2.5}
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                      />
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
+
+            {/* Panels wait out the morph. Clicking a pill field sets activePanel
+                and scrolls to the top, so with the grow no longer delayed the
+                panel would otherwise mount mid-flight — inside the bar, and
+                therefore inside its transform, growing from 47% scale along with
+                it. They open the moment the bar settles instead. */}
+
+            {/* WHERE panel */}
+            {activePanel === 'where' && !morphing && renderWherePanel(whereHighlightRef2)}
+
+            {/* WHEN panel */}
+            {activePanel === 'when' && !morphing && renderWhenPanel()}
+
+            {/* -- PANEL: WHO (occupant steppers) ------------------------------ */}
+            {activePanel === 'who' && !morphing && renderWhoPanel()}
+
+            {/* -- PANEL: WHAT (property criteria) ----------------------------- */}
+            {activePanel === 'what' && !morphing && renderWhatPanel(whatHighlightRef2)}
           </div>
-
-          {/* WHERE panel */}
-          {activePanel === 'where' && renderWherePanel(whereHighlightRef2)}
-
-          {/* WHEN panel */}
-          {activePanel === 'when' && renderWhenPanel()}
-
-          {/* -- PANEL: WHO (occupant steppers) ------------------------------ */}
-          {activePanel === 'who' && renderWhoPanel()}
-
-          {/* -- PANEL: WHAT (property criteria) ----------------------------- */}
-          {activePanel === 'what' && renderWhatPanel(whatHighlightRef2)}
         </div>
-      </div>
-    </section>
+      </section>
+    );
+  }
+
+  return (
+    <motion.div
+      ref={dockRef}
+      layout={framerLayout}
+      transition={DOCK_TRANSITION}
+      style={mode === 'large' ? undefined : DOCK_STYLE[mode]}
+      className={`hidden md:block ${mode === 'large' ? DOCK_LARGE_CLASS : ''}`}
+      data-search-bar-dock={mode}
+    >
+      {content}
+    </motion.div>
   );
 }

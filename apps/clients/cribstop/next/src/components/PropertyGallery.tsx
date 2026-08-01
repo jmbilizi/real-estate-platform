@@ -82,7 +82,7 @@ export default function PropertyGallery({ images, title }: { images: string[]; t
               setActiveIdx(0);
               setOpen(true);
             }}
-            className="absolute bottom-4 right-4 hidden items-center gap-1.5 rounded-lg border border-ink/15 bg-white px-4 py-2 text-sm font-semibold text-ink shadow-card transition hover:shadow-cardHover md:inline-flex"
+            className="absolute bottom-4 right-4 hidden items-center gap-1.5 rounded-lg border border-ink/15 bg-white px-4 py-2 text-sm font-semibold text-ink shadow-card transition hover:shadow-card md:inline-flex"
           >
             <svg
               className="h-4 w-4"

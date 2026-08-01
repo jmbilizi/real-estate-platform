@@ -264,9 +264,26 @@ components:
     height: 64px
   search-field-segment:
     backgroundColor: transparent
+    backgroundColorFocus: '{colors.surface-strong}'
+    backgroundColorHover: '{colors.surface-soft}' # at 60% over the white bar
     textColor: '{colors.ink}'
     typography: '{typography.caption}'
     padding: 8px 24px
+  search-dropdown:
+    note: 'Panel under an open segment; 6px gap, flush with the bar edges'
+    backgroundColor: '{colors.canvas}'
+    rounded: '{rounded.xl}'
+    border: '1px {colors.hairline}'
+    shadow: 'system tier'
+    rowBackgroundColorHover: '{colors.surface-strong}'
+  search-field-input:
+    note: 'Rounded input inside an open segment dropdown; carries no shadow of its own'
+    backgroundColor: '{colors.canvas}'
+    textColor: '{colors.ink}'
+    rounded: '{rounded.full}'
+    border: '1px {colors.hairline}'
+    borderFocus: '1px {colors.border-strong}'
+    padding: 12px 20px
   intent-toggle:
     note: 'Buy / Rent / Sell pill toggle inside Homes search'
     backgroundColor: '{colors.surface-soft}'
@@ -586,9 +603,8 @@ Select contexts.
 Type runs **Manrope Variable** (an open-source variable font stack), with **Inter Variable** as the
 historic in-house fallback and a system stack underneath. The stack sits at modest weights - display
 headlines render at 22-28px in weight 500-600, not the heavy 700+ weights that financial or
-enterprise systems lean on. The hero h1 ("Find your next home") on the homepage is just 28px / 700,
-which would feel small on a typical SaaS page; here it works because the layout leans on photography
-(neighborhood collage, listing cards) for visual weight rather than typographic muscle.
+enterprise systems lean on. The homepage carries no large hero headline at all - the layout leans on
+photography (neighborhood collage, listing cards) for visual weight rather than typographic muscle.
 
 The shape language is **soft**. Buttons are 8px radius (`{rounded.sm}`), property cards are ~14px
 (`{rounded.md}`), the search bar is fully pill-shaped (`{rounded.full}`), wishlist hearts and search
@@ -642,18 +658,25 @@ interactive element is rounded.
 - **Canvas** (`{colors.canvas}` - #ffffff): The default page floor for every public page. This style
   intentionally avoids dark mode in the public web shell.
 - **Surface Soft** (`{colors.surface-soft}` - #f7f7f7): The lightest fill - used on disabled fields,
-  sub-nav hover backgrounds, and the inline search filter band.
+  sub-nav hover backgrounds, the inline search filter band, and a listing card's courtesy line. On
+  the search bar it appears at 60% as the segment _hover_ wash only - the focused segment is a step
+  darker, see below.
 - **Surface Strong** (`{colors.surface-strong}` - #f2f2f2): Slightly heavier fill - circular
-  icon-button surface (e.g., the breadcrumb back-arrow and listing toolbar buttons).
+  icon-button surface (e.g., the breadcrumb back-arrow and listing toolbar buttons), and the search
+  surface's two highlight states: the focused segment of `{component.search-bar-pill}` and the
+  hovered row inside `{component.search-dropdown}`. Pairing it with Surface Soft as the hover wash
+  is what keeps hover and focus distinguishable; the two tones are one step apart by design.
 
 ### Hairlines & Borders
 
 - **Hairline** (`{colors.hairline}` - #dddddd): The default 1px border tone - search bar dividers,
   table separators, footer column splitters, card 1px borders.
 - **Hairline Soft** (`{colors.hairline-soft}` - #ebebeb): A lighter divider used on long-scrolling
-  editorial body separators.
+  editorial body separators. A stroke tone only - never a surface fill. Use `{colors.surface-soft}`
+  for highlights.
 - **Border Strong** (`{colors.border-strong}` - #c1c1c1): A heavier stroke used on disabled outline
-  buttons and form input outlines after focus.
+  buttons and form input outlines after focus - including the search dropdown's own input
+  (`{component.search-field-input}`), which takes this on focus rather than a brand tint.
 
 ### Text
 
@@ -697,32 +720,32 @@ There is no separate display family. The variable font carries the entire scale.
 
 ### Hierarchy
 
-| Token                         | Size | Weight | Line Height | Letter Spacing     | Use                                                                        |
-| ----------------------------- | ---- | ------ | ----------- | ------------------ | -------------------------------------------------------------------------- |
-| `{typography.rating-display}` | 64px | 700    | 1.1         | -1px               | Provider profile rating display ("4.81")                                   |
-| `{typography.display-xl}`     | 28px | 700    | 1.43        | 0                  | Homepage h1 ("Find your next home")                                        |
-| `{typography.display-lg}`     | 22px | 500    | 1.18        | -0.44px            | Listing detail h1 (property address + headline)                            |
-| `{typography.display-md}`     | 21px | 700    | 1.43        | 0                  | Section heads inside listing detail ("What this home offers")              |
-| `{typography.display-sm}`     | 20px | 600    | 1.20        | -0.18px            | Sub-section titles ("Things to know")                                      |
-| `{typography.title-md}`       | 16px | 600    | 1.25        | 0                  | Neighborhood link block titles ("Bethesda", "Arlington")                   |
-| `{typography.title-sm}`       | 16px | 500    | 1.25        | 0                  | Footer column heads ("Support", "Business", "Company")                     |
-| `{typography.body-md}`        | 16px | 400    | 1.5         | 0                  | Default running-text inside listing copy                                   |
-| `{typography.body-sm}`        | 14px | 400    | 1.43        | 0                  | Card meta lines, dates, prices, distance text                              |
-| `{typography.caption}`        | 14px | 500    | 1.29        | 0                  | Search field segment labels ("Location", "Price", "Home Type", "Intent")   |
-| `{typography.caption-sm}`     | 13px | 400    | 1.23        | 0                  | Footer legal line ("© 2026 Cribstop.com \| Brokered by Real Broker, LLC") |
-| `{typography.badge}`          | 11px | 600    | 1.18        | 0                  | "Just Listed" / "Verified" floating badge text                             |
-| `{typography.micro-label}`    | 12px | 700    | 1.33        | 0                  | Card amenity micro-labels ("Inline 6")                                     |
-| `{typography.uppercase-tag}`  | 8px  | 700    | 1.25        | 0.32px (uppercase) | "NEW" badge on product nav tabs                                            |
-| `{typography.button-md}`      | 16px | 500    | 1.25        | 0                  | Primary CTA button labels                                                  |
-| `{typography.button-sm}`      | 14px | 500    | 1.29        | 0                  | Pill button labels (category strip)                                        |
-| `{typography.link}`           | 14px | 400    | 1.43        | 0                  | Inline body links                                                          |
-| `{typography.nav-link}`       | 16px | 600    | 1.25        | 0                  | Top product-nav labels (Homes, Services, Connect)                          |
+| Token                         | Size | Weight | Line Height | Letter Spacing     | Use                                                                         |
+| ----------------------------- | ---- | ------ | ----------- | ------------------ | --------------------------------------------------------------------------- |
+| `{typography.rating-display}` | 64px | 700    | 1.1         | -1px               | Provider profile rating display ("4.81")                                    |
+| `{typography.display-xl}`     | 28px | 700    | 1.43        | 0                  | Reserved for large editorial/marketing headlines - not used on the homepage |
+| `{typography.display-lg}`     | 22px | 500    | 1.18        | -0.44px            | Listing detail h1 (property address + headline)                             |
+| `{typography.display-md}`     | 21px | 700    | 1.43        | 0                  | Section heads inside listing detail ("What this home offers")               |
+| `{typography.display-sm}`     | 20px | 600    | 1.20        | -0.18px            | Sub-section titles ("Things to know")                                       |
+| `{typography.title-md}`       | 16px | 600    | 1.25        | 0                  | Neighborhood link block titles ("Bethesda", "Arlington")                    |
+| `{typography.title-sm}`       | 16px | 500    | 1.25        | 0                  | Footer column heads ("Support", "Business", "Company")                      |
+| `{typography.body-md}`        | 16px | 400    | 1.5         | 0                  | Default running-text inside listing copy                                    |
+| `{typography.body-sm}`        | 14px | 400    | 1.43        | 0                  | Card meta lines, dates, prices, distance text                               |
+| `{typography.caption}`        | 14px | 500    | 1.29        | 0                  | Search field segment labels ("Location", "Price", "Home Type", "Intent")    |
+| `{typography.caption-sm}`     | 13px | 400    | 1.23        | 0                  | Footer legal line ("© 2026 Cribstop.com \| Brokered by Real Broker, LLC")  |
+| `{typography.badge}`          | 11px | 600    | 1.18        | 0                  | "Just Listed" / "Verified" floating badge text                              |
+| `{typography.micro-label}`    | 12px | 700    | 1.33        | 0                  | Card amenity micro-labels ("Inline 6")                                      |
+| `{typography.uppercase-tag}`  | 8px  | 700    | 1.25        | 0.32px (uppercase) | "NEW" badge on product nav tabs                                             |
+| `{typography.button-md}`      | 16px | 500    | 1.25        | 0                  | Primary CTA button labels                                                   |
+| `{typography.button-sm}`      | 14px | 500    | 1.29        | 0                  | Pill button labels (category strip)                                         |
+| `{typography.link}`           | 14px | 400    | 1.43        | 0                  | Inline body links                                                           |
+| `{typography.nav-link}`       | 16px | 600    | 1.25        | 0                  | Top product-nav labels (Homes, Services, Connect)                           |
 
 ### Principles
 
-Display weights stay modest. The homepage h1 at 28px / 700 is deliberately small - it tucks under
-the search bar so photography and the neighborhood-link grid carry visual hierarchy. The
-listing-detail h1 at 22px / 500 is even quieter; the listing photo banner does the work above it.
+Display weights stay modest across the system. The homepage has no h1 at all - photography and the
+neighborhood-link grid carry visual hierarchy on their own. The listing-detail h1 at 22px / 500 is
+quiet too; the listing photo banner does the work above it.
 
 The single typographically loud moment in the entire system is the **rating display**
 (`{typography.rating-display}` - 64px / 700) on provider profiles. That is the only place the system
@@ -768,14 +791,14 @@ proportions transfer cleanly.
 
 The system gives editorial bands 64px of vertical breathing room but compresses card grids - listing
 and neighborhood-link cards sit just 16px apart. The contrast is intentional: the page reads as
-"open hero, dense marketplace below," reinforcing the marketplace nature without overwhelming the
-visitor at the fold.
+"open at the top, dense marketplace below," reinforcing the marketplace nature without overwhelming
+the visitor at the fold.
 
 ## Elevation
 
 The system has essentially **one shadow tier** plus the flat baseline.
 
-- **Flat (no shadow):** Body, hero, footer, all editorial bands - 95% of surfaces.
+- **Flat (no shadow):** Body, footer, all editorial bands - 95% of surfaces.
 - **Card hover float:**
   `box-shadow: rgba(0, 0, 0, 0.02) 0 0 0 1px, rgba(0, 0, 0, 0.04) 0 2px 6px 0, rgba(0, 0, 0, 0.1) 0 4px 8px 0` -
   applied to listing cards on pointer hover, the search bar at rest, and the dropdown menus (account
@@ -816,7 +839,31 @@ business" sub-CTA) - 9999px radius, 10x20px padding, 14px label.
 `{component.search-bar-connect}`). White fill, 9999px radius, 64px height, 1px hairline 1px-shadow
 border. Internally divided by vertical hairline rules into `{component.search-field-segment}` cells
 — Homes: Location / Price / Home Type / Intent. Each segment holds an uppercase caption label above
-a placeholder line in `{typography.caption}`.
+a placeholder line in `{typography.caption}`. The bar keeps its white fill in every state: focus is
+carried by the open segment alone, which takes a `{colors.surface-strong}` (#f2f2f2) fill inset 1px
+inside the border, sliding between segments as focus moves. Segment hover is `{colors.surface-soft}`
+at 60% (≈#fafafa), so ground → hover → focus reads as one deepening scale, and the hairline rules
+flanking the focused segment drop out.
+
+The fill sits at #f2f2f2 for a reason, having been wrong in both directions:
+`{colors.hairline-soft}` (#ebebeb) is a stroke tone and as a fill reads as a pressed button, while
+`{colors.surface-soft}` (#f7f7f7) is so close to the hover wash that the two states became
+indistinguishable. #f2f2f2 is the only step that leaves both gaps legible.
+
+**`search-dropdown`** - The panel that hangs off an open segment, 6px below the bar and flush with
+its left and right edges. `{rounded.xl}` (32px) - the most rounded surface in the system after a
+full pill, which is what keeps it reading as part of the search bar rather than a generic menu -
+plus a 1px `{colors.hairline}` border and the system's single shadow tier. All four segment panels
+(Where / When / Who / What) share these exactly; the date panel used to carry a bespoke
+`0 4px 24px rgba(0,0,0,0.13)` shadow and a 16px radius, which is the kind of drift this entry exists
+to prevent.
+
+**`search-field-input`** - The rounded input inside an open segment's dropdown. Deliberately
+indistinguishable from the bar itself: white fill, `{rounded.full}`, 1px `{colors.hairline}` border,
+and **no shadow of its own** — the dropdown it sits in already carries the system's single shadow
+tier, and stacking another would break the no-progressive-elevation rule above. On focus the border
+goes to `{colors.border-strong}` (#c1c1c1) with a matching 1px ring; it is never a coral ring, since
+brand coral is reserved for CTAs and `{component.search-orb}`.
 
 **`search-orb`** - The circular coral orb terminating the right edge of the search bar. 48x48px,
 fully rounded, white magnifying-glass icon centered. The hottest single color moment on the
@@ -941,7 +988,11 @@ picker (globe icon + "English (US)" link), and social icons. All text in muted `
 
 - **Hover state colors:** intentionally not documented per the global no-hover policy - the
   platform's actual `:hover` styling for listing cards is a subtle elevation lift, but precise
-  extraction is unreliable.
+  extraction is unreliable. The one exception is the search surface
+  (`{component.search-field-segment}`, and the hovered row in `{component.search-dropdown}`): those
+  tones are ours rather than extracted, so they are specified rather than left as a gap. They use
+  two different steps - Surface Soft at 60% for hover, Surface Strong for focus - because a single
+  tone serving both left them ~1% apart in luminance and effectively identical.
 - **Loading states / skeleton screens:** not visible on the extracted surfaces.
 - **Map view styling:** the search-results map uses third-party tiled maps with custom coral
   markers; not captured here.

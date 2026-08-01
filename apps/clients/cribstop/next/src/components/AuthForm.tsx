@@ -96,8 +96,8 @@ export default function AuthForm({
       <div
         className={
           variant === 'modal'
-            ? 'w-full p-6 sm:rounded-3xl sm:border sm:border-surface-border sm:bg-white sm:p-10 sm:shadow-pop'
-            : 'rounded-3xl border border-surface-border bg-white p-8 shadow-pop sm:p-10'
+            ? 'w-full p-6 sm:rounded-3xl sm:border sm:border-surface-border sm:bg-white sm:p-10 sm:shadow-card'
+            : 'rounded-3xl border border-surface-border bg-white p-8 shadow-card sm:p-10'
         }
       >
         {/* TODO(dark-mode): bg-white, border-surface-border and text colours below are

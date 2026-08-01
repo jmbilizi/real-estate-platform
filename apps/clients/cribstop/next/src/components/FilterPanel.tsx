@@ -44,7 +44,7 @@ export default function FilterPanel({ filters, onChange }: Props) {
   };
 
   return (
-    <div className="rounded-2xl border border-surface-border bg-white p-5 shadow-card">
+    <div className="rounded-md border border-surface-border bg-white p-5 shadow-card">
       {/* Listing type — segmented control */}
       <div className="inline-flex w-full rounded-full bg-surface-alt p-1">
         {(['all', 'sale', 'rent'] as const).map((t) => {
@@ -96,7 +96,7 @@ export default function FilterPanel({ filters, onChange }: Props) {
               <button
                 key={n}
                 onClick={() => set({ beds: n })}
-                className={`flex-1 rounded-lg py-2 text-xs font-medium transition ${
+                className={`flex-1 rounded-sm py-2 text-xs font-medium transition ${
                   (filters.beds ?? 0) === n
                     ? 'bg-brand text-white'
                     : 'bg-surface-alt text-ink-muted hover:text-ink'
@@ -114,7 +114,7 @@ export default function FilterPanel({ filters, onChange }: Props) {
               <button
                 key={n}
                 onClick={() => set({ baths: n })}
-                className={`flex-1 rounded-lg py-2 text-xs font-medium transition ${
+                className={`flex-1 rounded-sm py-2 text-xs font-medium transition ${
                   (filters.baths ?? 0) === n
                     ? 'bg-brand text-white'
                     : 'bg-surface-alt text-ink-muted hover:text-ink'

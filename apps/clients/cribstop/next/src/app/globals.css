@@ -29,17 +29,22 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
   --brand: #ff385c;
-  --accent: #0e7c66;
   /* Sticky navbar height — kept in sync with the h-16 + 1px border in NavBar.tsx */
   --navbar-h: 65px;
 }
 
+/* Disabled document-wide: the .search-section collapse (below) is a layout-affecting
+   height change that happens right at the scroll threshold the user is actively
+   scrolling past. Chrome's scroll anchoring "helpfully" compensates for a shift like
+   that by nudging scrollY, which fights the user's own scroll input. Scoping this to
+   just the collapsing element isn't enough — Chrome can still anchor to a different
+   node elsewhere on the page — so it needs to be off for the whole document. */
 html {
-  scroll-behavior: smooth;
+  overflow-anchor: none;
 }
 
 body {
@@ -62,11 +67,8 @@ body {
   .btn-secondary {
     @apply inline-flex items-center justify-center rounded-full border border-surface-border bg-white px-5 py-2.5 text-sm font-semibold text-ink transition hover:border-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2;
   }
-  .btn-accent {
-    @apply inline-flex items-center justify-center rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2;
-  }
   .input-field {
-    @apply w-full rounded-xl border border-surface-border bg-white px-4 py-2.5 text-sm text-ink placeholder:text-ink-subtle focus:border-ink focus:outline-none focus:ring-2 focus:ring-ink/10;
+    @apply w-full rounded-sm border border-surface-border bg-white px-4 py-2.5 text-sm text-ink placeholder:text-ink-subtle focus:border-ink focus:outline-none focus:ring-2 focus:ring-ink/10;
   }
   .badge {
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-wide;
@@ -96,38 +98,6 @@ body {
 :root[data-header-pill][data-header-expanded] .site-header-wrapper {
   border-bottom-color: transparent;
   box-shadow: none;
-}
-
-/* ── Expanded overlay: shown when user clicks the compact pill ─────────────── */
-.site-header-expanded {
-  display: none;
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  z-index: 50;
-}
-html[data-header-pill][data-header-expanded] .site-header-expanded {
-  display: block;
-  background: white;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.04),
-    0 2px 8px rgba(0, 0, 0, 0.04);
-}
-.site-header-expanded-inner {
-  padding: 0.5rem 1.5rem 0.75rem;
-  animation: expandedBarIn 450ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-@keyframes expandedBarIn {
-  from {
-    opacity: 0;
-    transform: translateY(-12px) scale(0.97);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
 }
 
 /* Leaflet overrides */
@@ -232,7 +202,7 @@ html[data-header-pill][data-header-expanded] .site-header-expanded {
                     Ensures the map never overflows the viewport bottom when the
                     in-page search bar is visible at scroll=0.
    --expanded-bar-h: set by JS in NavBar when the header search overlay opens.
-                    = height of .site-header-expanded; 0px when closed.
+                    = height of CompactSearchBar's own 'expanded' dock; 0px when closed.
    Both variables fall back gracefully when JS hasn't run yet. ── */
 @media (min-width: 768px) {
   .search-map-sticky {
@@ -251,94 +221,284 @@ html[data-header-pill][data-header-expanded] .site-header-expanded {
   }
 }
 
-/* ── Tabs ↔ Pill smooth morph ────────────────────────────────────────────── */
+/* ── Tabs ↔ Pill swap ───────────────────────────────────────────────────────
+   Everything here is keyed off the data-header-pill attribute (set in
+   ScrollSentinel.tsx at a single scroll threshold with hysteresis around it) —
+   the swap triggers at one instant, not gradually in step with scroll position.
 
-/* Tabs: default — visible, full size */
+   The search bar itself is a single always-mounted CompactSearchBar instance
+   (rendered once, from ScrollSentinel.tsx) that reads this same scroll state
+   directly from context and switches its OWN position/size (Framer Motion's
+   `layout` prop, on that one persistent element) between its in-page and
+   docked-pill layouts — see CompactSearchBar.tsx's own comment. There's no
+   crossfade here to keep in sync: only .header-tabs needs CSS timing, since
+   it's the one thing NOT part of that single element. */
+
+/* The tabs leave and return as a movement, not just a fade: they lift up and
+   recede out of the header on the way down, and drop back into it on the way up.
+   A bare opacity fade has no direction, which is why the return read as a pop
+   even at the same duration as the exit — nothing was travelling to make it
+   legible as the reverse of anything.
+
+   Amplitude is the whole game here. An earlier pass used 8px and it was
+   effectively invisible: 8px spread over 300ms is a ~25px/sec drift, below what
+   reads as motion, and worse, pairing it with a SHORTER opacity leg meant the
+   fade was over while a third of the travel was still to come — so the part
+   that did move, moved unseen. Both legs now run on one clock (the bar's own
+   300ms and curve, DOCK_TRANSITION) so every pixel of travel happens while the
+   tabs are visible, and the distance is big enough to see: 18px of lift plus a
+   drop to 0.94 scale, about two thirds of the tab labels' own height. The scale
+   is what makes it read as receding rather than sliding, and it is the shape the
+   markup always assumed — NavBar's expanded-state style has been pinning
+   `translateY(0) scale(1)` all along.
+
+   Both properties are compositor-only, and on the way back that is what keeps
+   them honest: the first frame of the scroll-up commits the whole in-page
+   'large' layout and blocks the main thread for 56-86ms. Chrome promotes this
+   element for the duration (verified: a 520x64 layer of its own, reasons
+   ActiveTransformAnimation + ActiveOpacityAnimation, present mid-glide and
+   absent at rest), so the ramp is ticked independently of that stall. Sampling
+   getComputedStyle across it shows an alarming ~0.5 opacity jump, but that is
+   the blocked main thread failing to observe, not the paint stepping. Anything
+   animated here that is NOT compositable would genuinely stall — which is why
+   this stays on transform/opacity and never on top/height. */
 .header-tabs {
   opacity: 1;
-  pointer-events: auto;
   transform: translateY(0) scale(1);
-  transition:
-    opacity 450ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 450ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-/* Tabs → hidden on scroll */
-:root[data-header-pill] .header-tabs {
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(6px) scale(0.94);
   transition:
     opacity 300ms cubic-bezier(0.4, 0, 0.2, 1),
     transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: auto;
 }
-/* Tabs → back when expanded */
+:root[data-header-pill] .header-tabs {
+  opacity: 0;
+  transform: translateY(-18px) scale(0.94);
+  pointer-events: none;
+}
+/* Delay visibility:hidden until the whole movement finishes — guarantees the
+   tabs never paint or hit-test behind the (narrower, centered) pill once
+   settled, without cutting the exit short. Keyed to 300ms because that is now
+   when both legs land; while they overlap, the rising pill is opaque and above
+   the tabs, so it occludes them from below as they lift rather than mixing with
+   them. */
+:root[data-header-pill]:not([data-header-expanded]) .header-tabs {
+  visibility: hidden;
+  transition:
+    opacity 300ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 300ms cubic-bezier(0.4, 0, 0.2, 1),
+    visibility 0s 300ms;
+}
+/* Tabs → back when the pill is clicked open (discrete, click-triggered — fine
+   to animate on its own timing since it isn't tied to continuous scroll). */
 :root[data-header-pill][data-header-expanded] .header-tabs {
   opacity: 1;
-  pointer-events: auto;
   transform: translateY(0) scale(1);
+  pointer-events: auto;
   transition:
     opacity 400ms cubic-bezier(0.22, 1, 0.36, 1) 60ms,
     transform 400ms cubic-bezier(0.22, 1, 0.36, 1) 60ms;
 }
 
-/* Pill: hidden by default */
-.header-pill {
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-4px) scale(0.96);
-  transition:
-    opacity 400ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 400ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-/* Pill → visible on scroll */
-:root[data-header-pill] .header-pill {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateY(0) scale(1);
-  transition:
-    opacity 450ms cubic-bezier(0.22, 1, 0.36, 1) 120ms,
-    transform 450ms cubic-bezier(0.22, 1, 0.36, 1) 120ms;
-}
-/* Pill → hidden when expanded */
-:root[data-header-pill][data-header-expanded] .header-pill {
-  opacity: 0;
-  pointer-events: none;
-  visibility: hidden;
-  transform: translateY(-4px) scale(0.92);
-  transition:
-    opacity 250ms cubic-bezier(0.4, 0, 0.2, 1),
-    transform 250ms cubic-bezier(0.4, 0, 0.2, 1),
-    visibility 0s 250ms;
-}
-
-/* In-page search section */
+/* In-page search section: plain wrapper, no visual rules of its own —
+   .desktop-search-bar-wrapper and .mobile-search-pill-row (below) each handle
+   their own row. */
 .search-section {
   opacity: 1;
-  transition: opacity 300ms ease;
 }
-@media (max-width: 767px) {
-  :root[data-header-pill] .search-section {
-    opacity: 0;
-    height: 0;
-    overflow: hidden;
-    pointer-events: none;
-    transition:
-      opacity 250ms ease,
-      height 0s 250ms,
-      overflow 0s 250ms;
+
+/* Desktop row — reserves space for CompactSearchBar's in-page ('large') layout.
+   Symmetric: both directions animate on the same duration and curve, alongside
+   the bar's own morph rather than in sequence with it. (Reopening used to wait for
+   this row to finish before the bar was allowed to grow, which doubled the
+   duration and read as two separate events; that was a constraint of measuring
+   geometry, not of the row — see the note on the delay's removal in
+   CompactSearchBar.tsx.)
+
+   Reopening needs explicit `height` (not `max-height`): while collapsed,
+   CompactSearchBar is position:fixed and contributes no in-flow content, so a
+   `max-height` cap has nothing to visibly cap — it wouldn't read as an opening
+   motion at all, just a delayed pop once content returns.
+   94px matches CompactSearchBar's own 'large' rendered height — the ~62px pill
+   plus this row's own 16px padding (constant across viewports where 'large' is
+   reachable — md+ only). That padding used to be a `py-4` on a wrapper INSIDE
+   the bar; it lives here now so the element CompactSearchBar animates is
+   exactly the visible pill, with no oversized outer box to balloon from (see
+   DOCK_LARGE_CLASS there). It has to be padding on this row rather than a
+   margin on the bar, since a margin would collapse out through this
+   (padding/border-less) wrapper and move the whole row instead. The collapsed
+   rule below zeroes it so `height: 0` really means zero height.
+
+   Collapsing (becoming pill): animated on the same curve, and it matters that it
+   is. This row is 94px of real page height; dropping it in one frame would haul
+   everything below it up by 94px at the exact instant the bar starts shrinking,
+   which reads as a lurch no amount of polish on the bar itself can cover. Eased
+   over the same duration, the page slides instead, in step with the bar.
+
+   Duration and curve are DOCK_TRANSITION's, from CompactSearchBar.tsx — the bar
+   morph, this row, and the field fade all move together and must not drift. */
+/* The padding is in the transition, not just the height: it is the bar's own top
+   inset, so collapsing it in one frame yanks the bar's slot up 16px at the exact
+   moment of the swap — which is visible as the bar twitching upward before the
+   shrink begins (measured: a 16px jump), and as a 16px lurch in the page content
+   below on top of the 78px that then slides. Eased alongside the height, the row
+   closes as one movement. */
+.desktop-search-bar-wrapper {
+  height: 94px;
+  padding: 16px 0;
+  transition:
+    height 300ms cubic-bezier(0.4, 0, 0.2, 1),
+    padding 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+:root[data-header-pill] .desktop-search-bar-wrapper {
+  height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* ── Bar swap: the two halves of the large <-> pill morph ────────────────────
+   Movement lives in CompactSearchBar.tsx (transform only, deliberately off the
+   main thread so the row collapse above — a height animation, and therefore
+   main-thread — can't stall it into stepping). These are the opacity halves, and
+   they are sequenced rather than crossfaded: see the note at GHOST_OUT_CLASS
+   there for why overlapping them reads as garbled.
+
+   The outgoing bar's clone stays fully opaque for the first 40%, doing the
+   visible shrinking with its own text, then dissolves by 70% to uncover the
+   incoming capsule underneath it. */
+.searchbar-ghost-out {
+  animation: searchbar-ghost-out 300ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+@keyframes searchbar-ghost-out {
+  0%,
+  40% {
+    opacity: 1;
   }
-  :root[data-header-expanded] .search-section {
+  70%,
+  100% {
     opacity: 0;
-    height: 0;
-    overflow: hidden;
-    pointer-events: none;
+  }
+}
+
+/* The same clone on the way back, where it is the SMALL bar and the incoming one
+   is what's visibly growing. It clears out early instead of holding: within a
+   third of the morph the incoming capsule is already wider than this pill, which
+   would otherwise read as a pill sitting inside a bar. */
+.searchbar-ghost-out-fast {
+  animation: searchbar-ghost-out-fast 300ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+@keyframes searchbar-ghost-out-fast {
+  0% {
+    opacity: 1;
+  }
+  35%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* The incoming bar's fields, held back until the ghost above them has gone (65%)
+   so the two layouts' labels are never legible together — and, on the way back,
+   until the incoming bar has all but finished scaling up, so its text is never
+   seen at anything but its true size. Children only: the capsule they sit in is
+   opaque from the first frame, which is what the ghost is covering. */
+.searchbar-fields-in > * {
+  animation: searchbar-fields-in 300ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+@keyframes searchbar-fields-in {
+  0%,
+  65% {
+    opacity: 0;
+  }
+  90%,
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Growing, the ghost above is already gone by 35%, so the labels start on its
+   heels instead of waiting — otherwise the capsule sits visibly empty in the
+   middle of its own expansion. They still begin at nothing and only pass half
+   opacity once the scale is within a few percent of final, so at no point is
+   readable text drawn undersized. */
+.searchbar-fields-in-early > * {
+  animation: searchbar-fields-in-early 300ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+@keyframes searchbar-fields-in-early {
+  0%,
+  35% {
+    opacity: 0;
+  }
+  75%,
+  100% {
+    opacity: 1;
+  }
+}
+
+/* ── Active field fill ───────────────────────────────────────────────────────
+   The bar keeps a white ground in every state; only the focused slot is tinted.
+   That fill is mounted with the panel, not toggled on a standing layer, so it
+   has no prior opacity for a transition to start from — it fades in on its own
+   keyframes. Sliding between slots is still a left/width transition on the same
+   element (set inline), which this doesn't disturb: the animation lands on 1 and
+   `both` holds it there for the rest of the element's life. */
+.searchbar-slot-in {
+  animation: searchbar-slot-in 160ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+@keyframes searchbar-slot-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Reduced motion: the swap still happens, it just stops being a movement. Pairs
+   with the same opt-out on the JS half (see the reducedMotion check in
+   CompactSearchBar.tsx) — the row snapping instead of sliding is the trade, and
+   holding still is the point. */
+@media (prefers-reduced-motion: reduce) {
+  .desktop-search-bar-wrapper {
+    transition: none;
+  }
+  .searchbar-ghost-out,
+  .searchbar-ghost-out-fast,
+  .searchbar-fields-in > *,
+  .searchbar-fields-in-early > * {
+    animation: none;
+  }
+  /* The fill still appears — it is the focus affordance — it just appears at once. */
+  .searchbar-slot-in {
+    animation: none;
+  }
+  /* Tabs: they still leave and return, they just stop travelling to do it. All
+     four states are listed because the state rules above out-specify a bare
+     `.header-tabs`, and neutralising the transition without neutralising the
+     translate would leave the tabs permanently shifted 8px up while docked. */
+  :root .header-tabs,
+  :root[data-header-pill] .header-tabs,
+  :root[data-header-pill]:not([data-header-expanded]) .header-tabs,
+  :root[data-header-pill][data-header-expanded] .header-tabs {
+    transform: none;
     transition: none;
   }
 }
-@media (min-width: 768px) {
-  :root[data-header-pill] .search-section {
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 250ms ease;
-  }
+
+/* Mobile in-page pill row — simple fade + collapse (max-height, not height, so
+   it doesn't need JS to measure the natural height) when the header's own
+   mobile pill overlay takes over. No shared-layout morph here: unlike the
+   desktop bar, MobileSearchPill has no matching layoutId counterpart to hand
+   off to, so it's just a hide, not a shape animation. */
+.mobile-search-pill-row {
+  opacity: 1;
+  max-height: 80px;
+  transition:
+    opacity 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    max-height 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+:root[data-header-pill] .mobile-search-pill-row {
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  pointer-events: none;
 }

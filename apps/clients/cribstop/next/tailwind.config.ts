@@ -15,50 +15,85 @@ const config: Config = {
         layout: LAYOUT_BREAK,
       },
       colors: {
-        // Primary: warm coral/rose (modern, premium real-estate feel)
+        // Primary: Coral Red — the single brand voltage (DESIGN.md `colors.primary`).
+        // Numeric tints/shades below aren't part of DESIGN.md (hover states are intentionally
+        // undocumented per its "Known Gaps") but are kept as coral-family interaction variants.
         brand: {
-          DEFAULT: '#FF385C',
+          DEFAULT: '#ff385c',
+          active: '#e00b41',
+          disabled: '#ffd1da',
           50: '#FFF1F3',
           100: '#FFE4E8',
           200: '#FECDD3',
+          400: '#FB7185',
           500: '#FB5A75',
-          600: '#FF385C',
-          700: '#E11D48',
+          600: '#ff385c',
+          700: '#e00b41',
           900: '#881337',
         },
-        // Secondary: refined sage for trust accents
+        // Sub-brand accents — Premium / Select contexts only (DESIGN.md `accent-deep`/`accent-rich`)
         accent: {
-          DEFAULT: '#0E7C66',
-          500: '#14B8A6',
-          600: '#0E7C66',
+          deep: '#460479',
+          rich: '#92174d',
         },
-        // Neutral ink / typography
+        // Neutral ink / typography (DESIGN.md `colors.ink`/`body`/`muted`/`muted-soft`)
         ink: {
-          DEFAULT: '#111827',
-          muted: '#4B5563',
-          subtle: '#9CA3AF',
+          DEFAULT: '#222222',
+          body: '#3f3f3f',
+          muted: '#6a6a6a',
+          subtle: '#929292',
         },
-        // Warm surfaces
+        // Surfaces (DESIGN.md `canvas`/`surface-soft`/`surface-strong`) — `alt`/`soft`/`border`
+        // key names kept as-is (widely referenced) with values corrected to spec.
         surface: {
-          DEFAULT: '#FFFFFF',
-          alt: '#FAFAF9',
-          soft: '#F5F5F4',
-          border: '#E7E5E4',
+          DEFAULT: '#ffffff',
+          alt: '#f7f7f7',
+          soft: '#f2f2f2',
+          border: '#dddddd',
+          // DESIGN.md `border-strong` — the focused-input outline tone. The search
+          // inputs used a coral focus ring, which is not a tone the system has for
+          // this: brand coral is reserved for CTAs and the search orb.
+          'border-strong': '#c1c1c1',
+          // DESIGN.md `hairline-soft`. Was the search bar's active-segment and
+          // dropdown-row fill; both now use `soft` (#f2f2f2) because #ebebeb read
+          // as a pressed button rather than a highlight. Kept as a token because
+          // DESIGN.md still specifies the value — currently unreferenced.
+          pressed: '#ebebeb',
         },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        display: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', 'sans-serif'],
+        // Manrope Variable carries the entire scale — no separate display family (DESIGN.md)
+        sans: [
+          "'Manrope Variable'",
+          "'Inter Variable'",
+          '-apple-system',
+          'system-ui',
+          'Roboto',
+          '"Helvetica Neue"',
+          'sans-serif',
+        ],
+        display: [
+          "'Manrope Variable'",
+          "'Inter Variable'",
+          '-apple-system',
+          'system-ui',
+          'Roboto',
+          '"Helvetica Neue"',
+          'sans-serif',
+        ],
       },
       boxShadow: {
-        card: '0 1px 2px rgba(17,24,39,0.04), 0 2px 8px rgba(17,24,39,0.06)',
-        cardHover: '0 6px 16px rgba(17,24,39,0.10), 0 16px 40px rgba(17,24,39,0.12)',
-        pop: '0 10px 32px rgba(17,24,39,0.14)',
+        // The system's single shadow tier (DESIGN.md Elevation) — hover-floated cards & dropdowns
+        card: 'rgba(0, 0, 0, 0.02) 0 0 0 1px, rgba(0, 0, 0, 0.04) 0 2px 6px 0, rgba(0, 0, 0, 0.1) 0 4px 8px 0',
       },
       borderRadius: {
-        xl: '1rem',
-        '2xl': '1.25rem',
-        '3xl': '1.75rem',
+        // DESIGN.md `rounded` scale
+        none: '0px',
+        xs: '4px',
+        sm: '8px',
+        md: '14px',
+        lg: '20px',
+        xl: '32px',
       },
       keyframes: {
         fadeUp: {

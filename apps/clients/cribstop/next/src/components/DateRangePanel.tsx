@@ -329,7 +329,7 @@ export function DateRangePanel({
 
   return (
     <div
-      className="search-panel-enter absolute left-0 right-0 z-50 bg-white rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.13)] border border-surface-border"
+      className="search-panel-enter absolute left-0 right-0 z-50 bg-white rounded-xl shadow-card border border-surface-border"
       style={{ top: 'calc(100% + 6px)' }}
       onMouseDown={(e) => e.stopPropagation()}
     >
