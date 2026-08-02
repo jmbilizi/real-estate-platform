@@ -173,9 +173,10 @@ function addLocalRegistrySafetyFlags(argsList) {
   // Ensure rebuilds trigger a rollout even when the tag is stable (gitCommit).
   // For `dev`/`debug` (watch loops) use 'tag' — just check if the tag exists in the
   // registry. This is much faster than 'remote' (pulls full manifests) and safe because
-  // gitCommit tags change when the worktree changes. For one-shot commands like `run`
-  // and `build`, keep 'remote' for correctness (detects registry/daemon inconsistencies).
-  if (!hasArg(next, '--digest-source')) {
+  // gitCommit tags change when the worktree changes. For one-shot commands like `run`,
+  // keep 'remote' for correctness (detects registry/daemon inconsistencies).
+  // `build` doesn't support this flag at all — it only builds, never resolves/deploys.
+  if (next[0] !== 'build' && !hasArg(next, '--digest-source')) {
     const watchCommands = new Set(['dev', 'debug']);
     const source = watchCommands.has(next[0]) ? 'tag' : 'remote';
     next.push(`--digest-source=${source}`);

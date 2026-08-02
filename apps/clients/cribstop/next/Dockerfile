@@ -34,6 +34,9 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 # Copy the app's own package.json so pnpm workspace resolution works
 COPY apps/clients/cribstop/next/package.json ./apps/clients/cribstop/next/
+# Root package.json's "preinstall" hook requires this script — pnpm runs
+# lifecycle scripts for the root project too, even inside a container build.
+COPY tools/node/scripts/ensure-pnpm.js ./tools/node/scripts/ensure-pnpm.js
 
 RUN corepack enable pnpm && pnpm install --frozen-lockfile
 
