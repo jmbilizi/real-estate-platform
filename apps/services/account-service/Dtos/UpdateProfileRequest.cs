@@ -61,7 +61,7 @@ internal sealed class UpdateProfileRequest
 
     /// <summary>
     /// Gets or sets the user's self-declared onboarding intents (see
-    /// <see cref="AccountService.Models.OnboardingIntents"/> for the fixed vocabulary). When
+    /// <see cref="Models.OnboardingIntents"/> for the fixed vocabulary). When
     /// provided, replaces the entire current set (not additive) — matching "changeable at any
     /// time" (PRD §4.4). Null means no change; an explicit empty list clears all intents.
     /// </summary>
