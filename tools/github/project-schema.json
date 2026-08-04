@@ -1,0 +1,107 @@
+{
+  "projectId": "PVT_kwHOA0YsV84BYs_Y",
+  "syncedAt": "2026-08-03T20:50:31.261Z",
+  "fields": {
+    "Title": {
+      "id": "PVTF_lAHOA0YsV84BYs_YzhTw3kU",
+      "type": "ProjectV2Field",
+      "options": {}
+    },
+    "Assignees": {
+      "id": "PVTF_lAHOA0YsV84BYs_YzhTw3kY",
+      "type": "ProjectV2Field",
+      "options": {}
+    },
+    "Status": {
+      "id": "PVTSSF_lAHOA0YsV84BYs_YzhTw3kc",
+      "type": "ProjectV2SingleSelectField",
+      "options": {
+        "Backlog": "f75ad846",
+        "Ready": "e18bf179",
+        "In progress": "47fc9ee4",
+        "In review": "aba860b9",
+        "Done": "98236657"
+      }
+    },
+    "Labels": {
+      "id": "PVTF_lAHOA0YsV84BYs_YzhTw3kg",
+      "type": "ProjectV2Field",
+      "options": {}
+    },
+    "Linked pull requests": {
+      "id": "PVTF_lAHOA0YsV84BYs_YzhTw3kk",
+      "type": "ProjectV2Field",
+      "options": {}
+    },
+    "Milestone": {
+      "id": "PVTF_lAHOA0YsV84BYs_YzhTw3ko",
+      "type": "ProjectV2Field",
+      "options": {}
+    },
+    "Repository": {
+      "id": "PVTF_lAHOA0YsV84BYs_YzhTw3ks",
+      "type": "ProjectV2Field",
+      "options": {}
+    },
+    "Reviewers": {
+      "id": "PVTF_lAHOA0YsV84BYs_YzhTw3kw",
+      "type": "ProjectV2Field",
+      "options": {}
+    },
+    "Parent issue": {
+      "id": "PVTF_lAHOA0YsV84BYs_YzhTw3k0",
+      "type": "ProjectV2Field",
+      "options": {}
+    },
+    "Sub-issues progress": {
+      "id": "PVTF_lAHOA0YsV84BYs_YzhTw3k4",
+      "type": "ProjectV2Field",
+      "options": {}
+    },
+    "Created": {
+      "id": "PVTF_lAHOA0YsV84BYs_YzhTw3k8",
+      "type": "ProjectV2Field",
+      "options": {}
+    },
+    "Updated": {
+      "id": "PVTF_lAHOA0YsV84BYs_YzhTw3lA",
+      "type": "ProjectV2Field",
+      "options": {}
+    },
+    "Closed": {
+      "id": "PVTF_lAHOA0YsV84BYs_YzhTw3lE",
+      "type": "ProjectV2Field",
+      "options": {}
+    },
+    "Priority": {
+      "id": "PVTSSF_lAHOA0YsV84BYs_YzhTw57w",
+      "type": "ProjectV2SingleSelectField",
+      "options": {
+        "P0": "79628723",
+        "P1": "0a877460",
+        "P2": "da944a9c"
+      }
+    },
+    "Size": {
+      "id": "PVTSSF_lAHOA0YsV84BYs_YzhTw570",
+      "type": "ProjectV2SingleSelectField",
+      "options": {
+        "XS": "911790be",
+        "S": "b277fb01",
+        "M": "86db8eb3",
+        "L": "853c8207",
+        "XL": "2d0801e2"
+      }
+    },
+    "Estimate": {
+      "id": "PVTF_lAHOA0YsV84BYs_YzhTw574",
+      "type": "ProjectV2Field",
+      "options": {}
+    },
+    "Iteration": {
+      "id": "PVTIF_lAHOA0YsV84BYs_YzhTw578",
+      "type": "ProjectV2IterationField",
+      "options": {}
+    }
+  }
+}

@@ -1229,6 +1229,129 @@ kubectl rollout status statefulset/postgres -w
 | Cluster provisioning   | `.github/workflows/provision-hetzner-k8s-cluster.yml`            |
 | Provisioning action    | `.github/actions/provision-hetzner-k8s-cluster/action.yml`       |
 
+## Product Backlog (GitHub Issues & Projects)
+
+Product/planning work lives on a single shared GitHub Projects v2 board ("Cribstop Platform
+Backlog"), not in a separate PM tool. Two agents run the loop: a `cribstop-product-owner` agent
+(`.claude/agents/cribstop-product-owner.md`) authors, prioritizes, and grooms tickets; a
+`principal-engineer` agent (`.claude/agents/principal-engineer.md`) autonomously picks the top Ready
+ticket, decomposes it, orchestrates specialized subagents for parallel domain work
+(frontend/backend/database/infra) while personally verifying everything they produce, and opens a PR
+titled `#<issue> type(scope): ...` with `Closes #<issue>` in the body — In Review is its terminal
+state; a human merges. Interactive sessions can do the same via the `pick-next-ticket` and
+`close-ticket` skills. None of them talk to `git`/`gh` directly for board operations — everything
+goes through the wrapper scripts below (per the "Always Use Project Scripts" rule).
+
+**Board**: [Cribstop Platform Backlog](https://github.com/users/jmbilizi/projects/7) (user-level
+project — Projects v2 permissions for a user-owned board are granted per-user, not per-org).
+
+**Board model:**
+
+- **Issues** are the ticket unit (Problem / Acceptance Criteria / Technical Notes).
+- **Fields**: `Status` (Backlog → Ready → In Progress → In Review → Done, single-select) — "ready to
+  work" is `Status: Ready`, not a separate field, so a ticket can't be simultaneously Backlog and
+  ready-for-dev. `Priority` (P0–P2 — three levels on purpose; low-value work gets declined by the
+  product owner, not parked at a P3 that never ships). `Size` (XS/S/M/L/XL, optional estimate).
+  Field _option_ matching in the wrapper scripts is case-insensitive ("In progress" on the board ==
+  "In Progress" in docs/commands), so board-UI casing edits can't break automation.
+- **Labels** carry scope tagging (`scope:cribstop-web`, `scope:api-gateway`,
+  `scope:account-service`, `scope:multi-model-inference`, `scope:shared` for cross-cutting work) and
+  type (`type:bug`/`type:feature`/`type:chore`). Scope values use each component's **canonical
+  platform name** — today that equals the Nx project name for everything except the web app, whose
+  Nx project is currently `cribstop-next` (a framework-detail name expected to eventually be renamed
+  to match `cribstop-web`; the build→deploy name mapping already lives in
+  `tools/docker/image-name-map.json`). These labels are unrelated to the Nx _tag_ dimensions despite
+  the shared prefixes: an Nx `scope:` tag is a business-domain classifier and an Nx `type:` tag a
+  project-kind classifier — different vocabulary, different system. Prefix convention: prefixed
+  labels (`type:`, `scope:`) are dimensions picked from the taxonomy; unprefixed labels (`blocked`,
+  `human-action`) are orthogonal overlays that combine with any Status or dimension. Labels are
+  multi-valued (a ticket touching web + gateway gets both scope labels), which Projects v2 fields
+  cannot do — there's no multi-select field type. `blocked` marks anything stuck regardless of its
+  current Status (Status's linear progression has no room for a branch state). `human-action` marks
+  tickets only a human can complete (provision a secret/API key per environment, PAT scopes, DNS,
+  paid accounts, legal/broker sign-off) — authored as a runbook (what / where / how / by when) with
+  `Blocks #<n>` referencing the work waiting on it; the engineer agent files these whenever it hits
+  such a dependency, adds `blocked` to the dependent ticket, and moves on to unblocked work. All
+  taxonomy labels are provisioned on the repo (labels must pre-exist — `gh:ticket:create` passes
+  them through to `gh issue create`, which rejects unknown labels).
+- **Milestones are epics** — an outcome-scoped body of work, not a point in time. The work hierarchy
+  has three levels, each with one owner: **milestone = epic** (product owner creates via
+  `gh:milestone`, decomposes into tickets, and owns membership) → **issue = story/deliverable** (the
+  Kanban unit engineers pull) → **Implementation Plan item = task** (engineer-owned breakdown inside
+  the ticket). A milestone is never a scheduler: the pull order stays `Status=Ready` sorted by
+  Priority, and an at-risk epic gets its remaining stories' Priority raised, not "worked as a
+  sprint". Scope rules are enforced in the wrapper: `gh:milestone -- close` refuses while stories
+  are open (an epic closes when its scope is delivered — ship the stories or `--remove-milestone`
+  what was descoped); due dates are optional context. Milestones live on the issue (one per issue,
+  GitHub-enforced); the board's `Milestone` field reflects them automatically, and
+  `gh:milestone -- list` reports delivered/total per epic. Engineers treat a ticket's milestone as
+  read-only context.
+- **Implementation Plan & branching**: one ticket = one branch (`<issue>-short-slug`, always cut
+  from `dev`) = one PR (targeting `dev`). Before coding, the engineer writes an ordered checklist
+  into a marker-delimited `## Implementation Plan` section of the ticket body
+  (`gh:ticket:update-status -- --plan-file`) — each item independently testable, mapping to roughly
+  one commit — and checks items off as they land, so any later session can resume mid-ticket by
+  reconciling the checklist against the branch's commits. The plan section is the only part of the
+  body the engineer script can touch; Problem / Acceptance Criteria / Technical Notes remain the
+  product owner's. There is no parent/child ticket hierarchy: a ticket too big for one reviewable PR
+  is bounced back with a proposed split, and the product owner cuts it into sequenced sibling
+  tickets (ordering expressed with `blocked` + "Blocked by #n" in the body).
+
+**Commands** (`tools/github/*.js`, wrapping `gh issue`/`gh project`/`gh api graphql`):
+
+```bash
+# One-time, and again whenever a field/option is added or renamed on the board:
+pnpm run gh:project:sync-schema
+
+# Create a ticket (issue + project item + fields + labels, atomically):
+pnpm run gh:ticket:create -- --title "..." --priority P1 --size M --status Ready \
+  --scope cribstop-web --label type:feature
+
+# Find work (this is what pick-next-ticket queries):
+pnpm run gh:ticket:list -- --status Ready --priority P0
+
+# Product owner: reprioritize/groom (Status/Priority/Size — full field access):
+pnpm run gh:ticket:update-fields -- --issue 42 --priority P0
+
+# Engineer: move through the workflow (Status + assignee/comment only, can't touch Priority/Size):
+pnpm run gh:ticket:update-status -- --issue 42 --status "In Progress" --claim
+
+# Engineer: write/refresh the Implementation Plan checklist (touches ONLY the marker-delimited section):
+pnpm run gh:ticket:update-status -- --issue 42 --plan-file ./plan.md
+
+# Full detail — body, fields, labels, comments:
+pnpm run gh:ticket:view -- --issue 42
+
+# Product owner: epics (milestone = epic, issue = story, plan item = task; list shows
+# delivered/total per epic; assignment via gh:ticket:create/update-fields -- --milestone
+# "<title>" / --remove-milestone; close refuses while stories are open):
+pnpm run gh:milestone -- list
+pnpm run gh:milestone -- create --title "Services MVP" --description "..."
+```
+
+`update-ticket-fields.js` vs `update-ticket-status.js` is a deliberate least-privilege split:
+engineer-facing flows (`pick-next-ticket`, `close-ticket` skills) only ever get the script that
+can't touch Priority/Size, enforced at the script level rather than by trusting an agent's prompt.
+
+**Session brief**: a repo-scoped SessionStart hook (`.claude/settings.json` →
+`tools/github/session-brief.js`, manual run: `pnpm run gh:session-brief`) primes every Claude Code
+session with the board state — In Progress tickets to resume, top Ready tickets by priority, or the
+exact setup step that's missing (gh install/auth/scopes/schema sync). It always exits 0 and fails
+quiet on network errors so a broken board can never block a session; its output is injected into
+session context, so keep it small if extending it.
+
+**Config**: `tools/github/project.config.js` defaults to the board above (`owner: jmbilizi`,
+`projectNumber: 7`), overridable via `GH_PROJECT_OWNER` / `GH_PROJECT_REPO` / `GH_PROJECT_NUMBER`
+env vars. Field/option UUIDs are cached in `tools/github/project-schema.json` by
+`gh:project:sync-schema` — the other scripts never re-query the board schema per call.
+
+**Auth**: try a fine-grained PAT first, scoped to Issues (repo) + Projects (this user account) —
+straightforward for a user-owned board like this one. Fine-grained PATs have historically had gaps
+in Projects v2 GraphQL support for _org_-owned boards specifically; if `gh project field-list`/
+`item-edit` fail with a permissions error, fall back to a classic PAT (`repo` + `project` scopes).
+Either way, store it as `GH_AUTOMATION_TOKEN` for CI/unattended use — interactive Claude Code
+sessions rely on the developer's own `gh auth login` session instead.
+
 ## External Dependencies
 
 - **Nx 22.0.1**: Monorepo orchestration
@@ -1243,6 +1366,11 @@ kubectl rollout status statefulset/postgres -w
 - **yq**: YAML processor for secret substitution and config parsing (installed in workflows)
 - **hetzner-k3s**: K3s cluster provisioning CLI (v2.4.1, installed by provision-hetzner-k8s-cluster
   action)
+- **gh (GitHub CLI)**: Issues/Projects automation for the product backlog (see
+  [Product Backlog](#product-backlog-github-issues--projects) below) and manual workflow dispatch
+  (`gh workflow run ...`). Installed by `pnpm run gh:setup` (kept separate from `infra:setup` — `gh`
+  is unrelated to the Kubernetes/local-cluster tooling that script manages); preinstalled on GitHub
+  Actions' `ubuntu-latest` runners, so no CI install step is needed.
 
 - **UV**: Python package manager and workspace tool (auto-installed by `python:env` script)
 
