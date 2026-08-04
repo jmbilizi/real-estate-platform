@@ -21,6 +21,18 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/tools/github/session-brief.js\"",
+            "timeout": 20
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {
