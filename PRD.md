@@ -33,8 +33,21 @@ The platform serves consumers (buyers, sellers, renters), real estate profession
 professionals, and landlords managing multiple communities and properties of varying composition. It
 combines verified listings, dynamic professional/landlord–consumer communication, and interactive
 community features — all unified by centralized media management and a consistent property
-hierarchy. Initial market focus is the **DMV (Maryland, DC, Northern Virginia)**, matching the
-brokerage's licensure.
+hierarchy.
+
+**Market scope**: the **DMV (Maryland, DC, Northern Virginia)** is the first focus market — a
+go-to-market sequencing choice, **not** a software or business-model limitation, and nothing in the
+platform may hard-code it as one (market/MLS coverage is data, not a constant). The platform
+provides consumer value in any state: every listing displayed carries its listing agent's contact
+(required on IDX displays by NAR Policy 7.58 regardless of market), and Cribstop does not close
+transactions itself. Monetization outside brokerage-licensed states is likewise available via
+broker-to-broker referral fees (RESPA §8 brokerage exemption — written agreements, no brokerage acts
+performed in the destination state), flat non-contingent lead fees, and advertising, none of which
+require destination-state licensure; success-contingent referral fees require licensure wherever
+collected. The practical gate on new-market listing display is per-MLS data licensing (IDX
+participatory rights + license agreement per MLS), so expansion is a per-MLS onboarding pipeline.
+Licensure claims in consumer-facing copy remain limited to states where the brokerage is actually
+licensed (Section 6.1).
 
 ### 1.1 Business Model
 
@@ -359,8 +372,8 @@ withholding categories.
 | Property Tax Appeal & Valuation           | Lead & consultation   | Request an assessment-appeal review or a free valuation/CMA; routed to an agent or tax specialist                                                        |
 | Explore a Career (Licensing & Mentorship) | Mentorship & guidance | Browse licensing/education requirements by category; request a mentor or a "shadow a pro" session; no payment                                            |
 
-The Services tab's contextual search collects **What** (category) + **Where** (location within the
-DMV) and routes to the appropriate model above.
+The Services tab's contextual search collects **What** (category) + **Where** (location within a
+supported market — DMV first) and routes to the appropriate model above.
 
 ### 5.2 Consumer discovery & booking flow
 
@@ -397,7 +410,8 @@ DMV) and routes to the appropriate model above.
 Each provider profile (mirroring an Airbnb host/service listing) includes:
 
 - Identity: display name, business name, photo/logo, category & specialties, **Verified** badge,
-  years in business, languages, service areas (DMV neighborhoods/counties).
+  years in business, languages, service areas (neighborhoods/counties — e.g., DMV areas in the first
+  market).
 - Credentials: license type & number where applicable, insurance/bonding status, certifications;
   agents link to their **brokerage** (Section 6).
 - Services/packages: named offerings with description, what's included, duration, and
