@@ -99,6 +99,13 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
             entity.Property(u => u.SmsNotificationsEnabled).HasDefaultValue(false);
             entity.Property(u => u.PushNotificationsEnabled).HasDefaultValue(true);
             entity.Property(u => u.MarketingOptIn).HasDefaultValue(false);
+
+            // Onboarding intents (PRD §4.4) — Npgsql maps List<string> to a native text[] column.
+            // Fixed vocabulary (see OnboardingIntents) is validated at the API boundary, not via a
+            // DB CHECK constraint, to keep the migration simple.
+            entity.Property(u => u.Intents)
+                .HasColumnType("text[]")
+                .HasDefaultValueSql("ARRAY[]::text[]");
         });
 
         builder.Entity<AccountStatus>(entity =>
