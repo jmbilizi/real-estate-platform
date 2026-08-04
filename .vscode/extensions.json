@@ -9,6 +9,9 @@
     "ms-toolsai.jupyter",
     "njpwerner.autodocstring",
     "kevinrose.vsc-python-indent",
-    "nrwl.angular-console"
+    "nrwl.angular-console",
+    "esbenp.prettier-vscode",
+    "dbaeumer.vscode-eslint",
+    "firsttris.vscode-jest-runner"
   ]
 }

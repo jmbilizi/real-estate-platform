@@ -1,0 +1,62 @@
+{
+  "name": "listings-service-e2e",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "implicitDependencies": ["listings-service"],
+  "targets": {
+    "e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{e2eProjectRoot}"],
+      "options": {
+        "jestConfig": "apps/services/listings-service-e2e/jest.config.ts",
+        "passWithNoTests": true
+      },
+      "dependsOn": ["listings-service:build", "listings-service:serve"]
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "command": "eslint --config tools/node/configs/eslint.config.js apps/services/listings-service-e2e",
+        "cwd": "."
+      }
+    },
+    "type-check": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "command": "tsc --noEmit -p apps/services/listings-service-e2e/tsconfig.json",
+        "cwd": "."
+      }
+    },
+    "format": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "prettier --write .",
+        "cwd": "apps/services/listings-service-e2e"
+      }
+    },
+    "format-check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "prettier --check .",
+        "cwd": "apps/services/listings-service-e2e"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "command": "jest --passWithNoTests",
+        "cwd": "apps/services/listings-service-e2e"
+      }
+    }
+  },
+  "tags": [
+    "runtime:node",
+    "type:service",
+    "framework:unassigned",
+    "scope:unassigned",
+    "devteam:unassigned"
+  ]
+}
