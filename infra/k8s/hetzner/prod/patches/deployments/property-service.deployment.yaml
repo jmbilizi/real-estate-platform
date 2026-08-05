@@ -16,13 +16,6 @@ spec:
       initContainers:
         - name: migrate
           image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:latest
-          resources:
-            requests:
-              memory: "64Mi"
-              cpu: "50m"
-            limits:
-              memory: "128Mi"
-              cpu: "200m"
       containers:
         - name: api
           image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:latest

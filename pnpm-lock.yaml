@@ -253,6 +253,21 @@ importers:
         specifier: "catalog:"
         version: 3.4.19(yaml@2.8.1)
 
+  apps/services/property-service:
+    dependencies:
+      express:
+        specifier: ^4.21.2
+        version: 4.21.2
+      node-pg-migrate:
+        specifier: ^9.0.0
+        version: 9.0.0(@types/pg@8.20.4)(pg@8.22.0)
+      pg:
+        specifier: ^8.22.0
+        version: 8.22.0
+      tslib:
+        specifier: ^2.3.0
+        version: 2.8.1
+
 packages:
   "@alloc/quick-lru@5.2.0":
     resolution:
@@ -12942,13 +12957,6 @@ packages:
       }
     engines: { node: ">= 0.4" }
 
-  side-channel-list@1.0.0:
-    resolution:
-      {
-        integrity: sha512-FCLHtRD/gnpCiCHEiJLOwdmFP+wzCmDEkc9y7NsYxeF4u7Btsn1ZuwgwJGxImImHicJArLP4R0yX4c2KCrMrTA==,
-      }
-    engines: { node: ">= 0.4" }
-
   side-channel-list@1.0.1:
     resolution:
       {
@@ -19834,7 +19842,7 @@ snapshots:
       has-property-descriptors: 1.0.2
       has-proto: 1.2.0
       has-symbols: 1.1.0
-      hasown: 2.0.2
+      hasown: 2.0.4
       internal-slot: 1.1.0
       is-array-buffer: 3.0.5
       is-callable: 1.2.7
@@ -19901,11 +19909,11 @@ snapshots:
       es-errors: 1.3.0
       get-intrinsic: 1.3.0
       has-tostringtag: 1.0.2
-      hasown: 2.0.2
+      hasown: 2.0.4
 
   es-shim-unscopables@1.1.0:
     dependencies:
-      hasown: 2.0.2
+      hasown: 2.0.4
 
   es-to-primitive@1.3.0:
     dependencies:
@@ -20479,7 +20487,7 @@ snapshots:
       call-bound: 1.0.4
       define-properties: 1.2.1
       functions-have-names: 1.2.3
-      hasown: 2.0.2
+      hasown: 2.0.4
       is-callable: 1.2.7
 
   functions-have-names@1.2.3: {}
@@ -20509,7 +20517,7 @@ snapshots:
       get-proto: 1.0.1
       gopd: 1.2.0
       has-symbols: 1.1.0
-      hasown: 2.0.2
+      hasown: 2.0.4
       math-intrinsics: 1.1.0
 
   get-package-type@0.1.0: {}
@@ -20917,8 +20925,8 @@ snapshots:
   internal-slot@1.1.0:
     dependencies:
       es-errors: 1.3.0
-      hasown: 2.0.2
-      side-channel: 1.1.0
+      hasown: 2.0.4
+      side-channel: 1.1.1
 
   interpret@3.1.1: {}
 
@@ -20967,7 +20975,7 @@ snapshots:
 
   is-core-module@2.16.1:
     dependencies:
-      hasown: 2.0.2
+      hasown: 2.0.4
 
   is-data-view@1.0.2:
     dependencies:
@@ -21053,7 +21061,7 @@ snapshots:
       call-bound: 1.0.4
       gopd: 1.2.0
       has-tostringtag: 1.0.2
-      hasown: 2.0.2
+      hasown: 2.0.4
 
   is-set@2.0.3: {}
 
@@ -23168,7 +23176,7 @@ snapshots:
 
   qs@6.13.0:
     dependencies:
-      side-channel: 1.1.0
+      side-channel: 1.1.1
 
   qs@6.15.3:
     dependencies:
@@ -23772,11 +23780,6 @@ snapshots:
 
   shell-quote@1.8.3: {}
 
-  side-channel-list@1.0.0:
-    dependencies:
-      es-errors: 1.3.0
-      object-inspect: 1.13.4
-
   side-channel-list@1.0.1:
     dependencies:
       es-errors: 1.3.0
@@ -23801,7 +23804,7 @@ snapshots:
     dependencies:
       es-errors: 1.3.0
       object-inspect: 1.13.4
-      side-channel-list: 1.0.0
+      side-channel-list: 1.0.1
       side-channel-map: 1.0.1
       side-channel-weakmap: 1.0.2
 
@@ -24518,7 +24521,7 @@ snapshots:
 
   union@0.5.0:
     dependencies:
-      qs: 6.13.0
+      qs: 6.15.3
 
   universalify@0.1.2: {}
 
