@@ -254,18 +254,15 @@ function detectPlatform(projectConfig, runtime, type) {
   // Mobile — Expo
   if (executors.includes('@nx/expo') || commands.includes('expo ')) return 'mobile';
 
-  // Server — backend services/gateways
-  if (
-    (type === 'service' || type === 'gateway') &&
-    (runtime === 'dotnet' || runtime === 'python')
-  ) {
-    return 'server';
-  }
-
-  // Node.js backend services (express, etc.)
-  if (type === 'service' && runtime === 'node') {
-    if (executors.includes('@nx/express') || commands.includes('express')) return 'server';
-  }
+  // Server — backend services/gateways, any runtime.
+  //
+  // Deliberately NOT gated on an express/framework hint. `@nx/express:app` generates
+  // webpack + `@nx/js:node` executors and never mentions "express" in a target, so a
+  // Node service scored as agnostic — and because an agnostic result *removes* any
+  // platform tag (see caller), a hand-added `platform:server` was silently deleted on
+  // the next `nx:reset`. A project typed as a service or gateway is server-deployed by
+  // definition, whatever built it.
+  if (type === 'service' || type === 'gateway') return 'server';
 
   // Libraries and ambiguous projects — no platform (agnostic)
   return null;
