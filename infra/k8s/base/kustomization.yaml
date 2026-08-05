@@ -38,6 +38,7 @@ resources:
   - services/api-gateway.service.yaml
   - services/inference.service.yaml
   - services/account-service.service.yaml
+  - services/property-service.service.yaml
   - services/cribstop-web.service.yaml
 
   # Workloads (statefulsets, deployments, etc.)
@@ -50,6 +51,7 @@ resources:
   - deployments/api-gateway.deployment.yaml
   - deployments/inference.deployment.yaml
   - deployments/account-service.deployment.yaml
+  - deployments/property-service.deployment.yaml
   - deployments/cribstop-web.deployment.yaml
 
   # Ingress rules (external routing - uses Nginx controller above)

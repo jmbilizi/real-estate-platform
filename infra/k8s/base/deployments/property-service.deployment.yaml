@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: property-service
+  namespace: default
+  labels:
+    app: property-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: property-service
+  template:
+    metadata:
+      labels:
+        app: property-service
+    spec:
+      initContainers:
+        - name: migrate
+          # Same image as the main container — reuses the built bundle and the
+          # migrations/ directory the Dockerfile copies in. node-pg-migrate reads
+          # DATABASE_URL from the environment; there is deliberately no --envPath
+          # here, because containers get env vars, not a .env file.
+          image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            ["./node_modules/.bin/node-pg-migrate", "up", "-m", "migrations", "--no-check-order"]
+          env:
+            # Assembled from the same parts account-service uses; the password is the
+            # only secret. Values align with infra/k8s/base/configmaps/postgres.configmap.yaml.
+            - name: PROPERTY_SERVICE_DB_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: PROPERTY_SERVICE_DB_USER_PASSWORD
+            - name: DATABASE_URL
+              value: "postgresql://property_service_db_user:$(PROPERTY_SERVICE_DB_USER_PASSWORD)@postgres-svc:5432/property_db"
+      containers:
+        - name: api
+          # Image format: ghcr.io/<owner>/<repo>/property-service:<tag>
+          # CI/CD workflow substitutes GITHUB_REPOSITORY_OWNER, GITHUB_REPOSITORY_NAME
+          # Local development uses Skaffold override (see podman/local/patches)
+          image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3002
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "3002"
+            - name: HOST
+              value: "0.0.0.0"
+            - name: PROPERTY_SERVICE_DB_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: PROPERTY_SERVICE_DB_USER_PASSWORD
+            - name: DATABASE_URL
+              value: "postgresql://property_service_db_user:$(PROPERTY_SERVICE_DB_USER_PASSWORD)@postgres-svc:5432/property_db"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3002
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3002
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 3002
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12

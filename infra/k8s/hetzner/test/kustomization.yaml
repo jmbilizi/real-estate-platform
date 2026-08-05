@@ -25,6 +25,7 @@ patches:
   - path: patches/deployments/api-gateway.deployment.yaml
   - path: patches/deployments/inference.deployment.yaml
   - path: patches/deployments/account-service.deployment.yaml
+  - path: patches/deployments/property-service.deployment.yaml
   - path: patches/deployments/cribstop-web.deployment.yaml
 
   ## Services (network access)
