@@ -55,7 +55,7 @@ function ghJson(args) {
   }
   try {
     return JSON.parse(result.stdout);
-  } catch (e) {
+  } catch {
     die(`gh ${args.join(' ')} returned non-JSON output:\n${result.stdout}`);
   }
 }
@@ -175,6 +175,23 @@ function resolveFieldOption(schema, fieldName, optionName) {
   return { fieldId: field.id, optionId: field.options[optionKey] };
 }
 
+/**
+ * Turns literal `\n` / `\t` escape sequences in a CLI-supplied string into real whitespace.
+ *
+ * No shell interprets escapes inside a plain double-quoted argument, so a caller passing
+ * `--body "## Problem\n\nText"` sends the two characters `\` and `n`. GitHub then renders the whole
+ * ticket or comment as one unreadable line (see the original bodies of #29/#30). A literal `\n` is
+ * essentially never intended in prose, so normalizing is safe; prefer a `--*-file` flag for anything
+ * multi-line.
+ */
+function unescapeInlineText(text) {
+  if (!text || !/\\[nt]/.test(text)) return text;
+  return text
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\\t/g, '\t');
+}
+
 module.exports = {
   config,
   log,
@@ -182,6 +199,7 @@ module.exports = {
   warn,
   info,
   die,
+  unescapeInlineText,
   run,
   ghJson,
   ghExec,
