@@ -81,6 +81,14 @@ namespace AccountService.Tests.Routes
         }
 
         [Fact]
+        public void ApplicationUser_Intents_ShouldDefaultToEmptyList_NotNull()
+        {
+            var user = new ApplicationUser();
+            user.Intents.Should().NotBeNull();
+            user.Intents.Should().BeEmpty();
+        }
+
+        [Fact]
         public void UpdateProfileRequest_AllFieldsOptional_EmptyRequestIsValid()
         {
             var request = new UpdateProfileRequest();
@@ -88,6 +96,15 @@ namespace AccountService.Tests.Routes
             request.LastName.Should().BeNull();
             request.Bio.Should().BeNull();
             request.DateOfBirth.Should().BeNull();
+            request.Intents.Should().BeNull();
+        }
+
+        [Fact]
+        public void UpdateProfileRequest_Intents_CanBeSet()
+        {
+            var expected = new[] { "buying", "renting" };
+            var request = new UpdateProfileRequest { Intents = new List<string>(expected) };
+            request.Intents.Should().BeEquivalentTo(expected);
         }
 
         [Fact]
@@ -119,6 +136,31 @@ namespace AccountService.Tests.Routes
             var deserialized = JsonSerializer.Deserialize<JsonElement>(user.PreviousState);
             deserialized.GetProperty("Bio").GetString().Should().Be("Original bio");
             deserialized.GetProperty("FirstName").GetString().Should().Be("Jane");
+        }
+
+        [Fact]
+        public void PreviousState_ShouldIncludeIntentsInAuditChain()
+        {
+            var user = MakeUser();
+            user.Intents = new List<string> { "buying" };
+            user.UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+            var snapshot = new
+            {
+                user.FirstName,
+                user.Intents,
+                changedAt = user.UpdatedAt,
+            };
+
+            var json = JsonSerializer.Serialize(snapshot);
+            user.PreviousState = json;
+
+            var deserialized = JsonSerializer.Deserialize<JsonElement>(user.PreviousState);
+            var intents = deserialized.GetProperty("Intents").EnumerateArray()
+                .Select(e => e.GetString())
+                .ToArray();
+            var expected = new[] { "buying" };
+            intents.Should().BeEquivalentTo(expected);
         }
 
         [Fact]

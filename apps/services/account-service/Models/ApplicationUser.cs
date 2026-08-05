@@ -75,6 +75,16 @@ internal class ApplicationUser : IdentityUser
     /// <summary>Gets or sets a value indicating whether the user has opted in to marketing communications.</summary>
     public bool MarketingOptIn { get; set; }
 
+    // Onboarding
+
+    /// <summary>
+    /// Gets or sets the user's self-declared onboarding intents (PRD §4.4) — an optional,
+    /// multi-select signal (see <see cref="OnboardingIntents"/>) that is changeable at any time
+    /// and never collapses to a single persona. Not a capability grant — distinct from the RBAC
+    /// domain roles in <see cref="Roles"/> (PRD §11.2). Defaults to an empty list.
+    /// </summary>
+    public List<string> Intents { get; set; } = new List<string>();
+
     // Audit
 
     /// <summary>Gets or sets the UTC timestamp when this record was created.</summary>
