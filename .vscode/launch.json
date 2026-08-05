@@ -21,9 +21,9 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "Debug listings-service with Nx",
+      "name": "Debug property-service with Nx",
       "runtimeExecutable": "pnpm exec",
-      "runtimeArgs": ["nx", "serve", "listings-service"],
+      "runtimeArgs": ["nx", "serve", "property-service"],
       "env": {
         "NODE_OPTIONS": "--inspect=9229"
       },
@@ -32,7 +32,7 @@
       "skipFiles": ["<node_internals>/**"],
       "sourceMaps": true,
       "outFiles": [
-        "${workspaceFolder}/dist/apps/services/listings-service/**/*.(m|c|)js",
+        "${workspaceFolder}/dist/apps/services/property-service/**/*.(m|c|)js",
         "!**/node_modules/**"
       ]
     }

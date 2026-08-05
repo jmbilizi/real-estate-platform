@@ -87,7 +87,7 @@ Ocelot API Gateway (ClusterIP Service)
 Microservices (ClusterIP - Internal Only):
    ├─ account-service:3000      (User management, authentication)
    ├─ messaging-service:3001    (Real-time chat, WebSocket)
-   ├─ listings-service:3002     (Property hierarchy, search, MLS ingestion)
+   ├─ property-service:3002     (Property hierarchy, search, MLS ingestion)
    ├─ social-service:3003       (Community posts, events)
    ├─ services-service:3004     (Professional directory, bookings, leads)
    ├─ media-service:3005        (Presigned uploads, media metadata, processing)
@@ -113,7 +113,7 @@ Monitoring (External - Secured):
 | Ingress Controller   | Nginx Ingress Controller for HTTPS termination, external routing, WebSocket support, and certificate management via cert-manager                                                                                                                                                                       |
 | API Gateway          | Ocelot (.NET 9.0) for internal service routing, authentication forwarding (cookie / opaque bearer / API key, validated by account-service), rate limiting, and Swagger aggregation                                                                                                                     |
 | Account Service      | .NET (ASP.NET Core 10 Minimal APIs) + ASP.NET Identity + PostgreSQL for identity, authentication, a six-tier RBAC hierarchy, multi-app tracking, API keys, and audited/soft-deletable profiles                                                                                                         |
-| Listings Service     | Node.js + Express + PostgreSQL for the Communities → Properties → Units → Listings hierarchy, the consumer listing model (Section 3.1), property relationship claims (Section 3.2), saved searches & alerts, and Bright MLS ingestion/sync (RESO Web API) with MLS↔internal deduplication             |
+| Property Service     | Node.js + Express + PostgreSQL for the Communities → Properties → Units → Listings hierarchy, the consumer listing model (Section 3.1), property relationship claims (Section 3.2), saved searches & alerts, and Bright MLS ingestion/sync (RESO Web API) with MLS↔internal deduplication             |
 | Messaging Service    | Node.js + Express + WebSocket + PostgreSQL + Redis for real-time multi-user chat with persistent storage                                                                                                                                                                                               |
 | Social Media Service | Node.js + Express + PostgreSQL + ElasticSearch for community posts, comments, events with scoped visibility                                                                                                                                                                                            |
 | Services Service     | Node.js + Express + PostgreSQL + ElasticSearch for the professional directory, provider profiles, service listings, bookings/leads/quotes/mentorship requests, and reviews                                                                                                                             |
@@ -216,7 +216,7 @@ shared by the web client and the listings service:
 Several features need a verified answer to "what is this account's relationship to this property?" —
 FSBO listing and listing claims, the Verified Resident badge, seller opt-in for service history
 (Section 4.6), and landlord/agent authority over properties. Rather than each feature verifying its
-own way, the platform has **one** claims model, owned by the **listings-service** (which owns the
+own way, the platform has **one** claims model, owned by the **property-service** (which owns the
 property hierarchy):
 
 - **Claim record:** account ↔ property (or unit), `relationshipType` (`owner` | `resident` |
@@ -546,7 +546,7 @@ Exact pricing and packaging per category to be specified.
 ### 6.2 Bright MLS data integration
 
 - **Ingestion:** listings sync from Bright MLS via its RESO Web API / approved feed (owned by the
-  listings-service), on a cadence that satisfies MLS refresh rules; `lastUpdated` reflects feed
+  property-service), on a cadence that satisfies MLS refresh rules; `lastUpdated` reflects feed
   freshness.
 - Listings sourced from **Bright MLS** are tagged `source: brightMLS` and carry required
   broker/office attribution on every card and detail view.
@@ -772,7 +772,7 @@ flag once approved (Section 5.4).
 - **Relevance & full-text:** ElasticSearch index across listings and the provider directory;
   location typeahead/autocomplete; index freshness on listing updates (respecting MLS refresh),
   driven by `listing.*` events on the **Redis Streams** event bus (Section 2.3).
-- **Index ownership:** each domain service owns its own index — listings-service indexes listings,
+- **Index ownership:** each domain service owns its own index — property-service indexes listings,
   services-service indexes the provider directory, social-service indexes Connect content.
 - **Services search:** What (category/specialty) + Where (service area) with filters (price, rating,
   availability, verified).

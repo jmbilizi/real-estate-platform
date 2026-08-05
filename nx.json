@@ -59,8 +59,7 @@
       "plugin": "@nx/jest/plugin",
       "options": {
         "targetName": "test"
-      },
-      "exclude": ["apps/services/listings-service-e2e/**/*"]
+      }
     }
   ],
   "defaultBase": "origin/HEAD",

@@ -687,7 +687,7 @@ substitution. Infrastructure code in `infra/`:
   - Routes external requests to internal microservices
   - Provides unified API surface with versioning support
 - **Microservices** (Node.js/Python/.NET): Domain-specific services
-  - account-service, messaging-service, listings-service, social-service (future)
+  - account-service, messaging-service, property-service, social-service (future)
 - **Web App** (Next.js): Frontend application (future)
 
 **External Access** (via Ingress):
@@ -1338,6 +1338,7 @@ pnpm run gh:ticket:view -- --issue 42
 # "<title>" / --remove-milestone; close refuses while stories are open):
 pnpm run gh:milestone -- list
 pnpm run gh:milestone -- create --title "Services MVP" --description "..."
+pnpm run gh:milestone -- update --title "Services MVP" --description "..." [--new-title "..."]
 ```
 
 `update-ticket-fields.js` vs `update-ticket-status.js` is a deliberate least-privilege split:

@@ -2,7 +2,7 @@ import { createApp } from './app';
 
 const app = createApp();
 
-// Port 3002 per the service map in PRD §2.1 (listings-service:3002).
+// Port 3002 per the service map in PRD §2.1 (property-service:3002).
 //
 // Parsed explicitly rather than handed to app.listen() as a string. Node does
 // bind a numeric string as a TCP port (it only treats a *non-numeric* string as
@@ -16,6 +16,6 @@ if (!Number.isInteger(port) || port < 0 || port > 65535) {
 }
 
 const server = app.listen(port, () => {
-  console.info(`listings-service listening at http://localhost:${port}`);
+  console.info(`property-service listening at http://localhost:${port}`);
 });
 server.on('error', console.error);

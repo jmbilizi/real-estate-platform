@@ -1,4 +1,4 @@
-# listings-service
+# property-service
 
 Node.js + Express service owning the property domain: the **Communities → Properties → Units →
 Listings** hierarchy (PRD §3) and the consumer listing model (PRD §3.1).
@@ -22,17 +22,17 @@ Copy `.env.example` to `.env` for local work. Credentials never belong in source
 ## Commands
 
 ```bash
-pnpm exec nx serve listings-service          # Run locally (port 3002)
-pnpm exec nx test listings-service           # Unit tests — no database required
-pnpm exec nx lint listings-service
-pnpm exec nx type-check listings-service
-pnpm exec nx build listings-service
+pnpm exec nx serve property-service          # Run locally (port 3002)
+pnpm exec nx test property-service           # Unit tests — no database required
+pnpm exec nx lint property-service
+pnpm exec nx type-check property-service
+pnpm exec nx build property-service
 
-pnpm exec nx run listings-service:migrate       # Apply migrations (needs DATABASE_URL)
-pnpm exec nx run listings-service:migrate-down  # Roll back the last migration
-pnpm exec nx run listings-service:seed          # Load the sample dataset
+pnpm exec nx run property-service:migrate       # Apply migrations (needs DATABASE_URL)
+pnpm exec nx run property-service:migrate-down  # Roll back the last migration
+pnpm exec nx run property-service:seed          # Load the sample dataset
 
-pnpm exec nx e2e listings-service-e2e        # Boots the service, then hits it over HTTP
+pnpm exec nx e2e property-service        # Boots the service, then hits it over HTTP
 ```
 
 Unit tests mock the `pg` client and never open a connection, so they run anywhere. The `e2e` project
@@ -58,7 +58,7 @@ rather than by a CHECK constraint, so the vocabulary can evolve without a migrat
 
 ## Seed data and compliance
 
-`pnpm exec nx run listings-service:seed` loads 12 sample listings adapted from the web app's mock
+`pnpm exec nx run property-service:seed` loads 12 sample listings adapted from the web app's mock
 dataset. This data is **sample data, not real inventory**, and is authored so that it can never be
 mistaken for real (PRD §6.2/§6.3):
 
