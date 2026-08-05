@@ -132,11 +132,12 @@ landscape shifts):
   between an API and the schema it queries.
   - **Never write "no infra/Kubernetes changes required" on a ticket that creates a new
     deployable.** A pre-provisioned database, queue, or bucket does not make a service runnable —
-    without a Dockerfile, Deployment/Service manifests, env/secret wiring, and a skaffold artifact,
-    nothing deploys and every downstream ticket is built on sand. The definition of done for a new
-    service is that `pnpm run skaffold:services` deploys it and its health probes pass. It is fine
-    to scope the _gateway route_ and _client integration_ into later tickets; it is not fine to
-    scope out the ability to run.
+    without a Dockerfile, Deployment/Service manifests, env/secret wiring, a skaffold artifact, and
+    an `infra/deploy-control.yaml` entry, nothing deploys and every downstream ticket is built on
+    sand. The definition of done for a new service is that `pnpm run skaffold:services:deploy`
+    **exits 0** and its health probes pass — not that a pod is eventually Running. It is fine to
+    scope the _gateway route_ and _client integration_ into later tickets; it is not fine to scope
+    out the ability to run.
   - Sequence accordingly: deployable service (with schema) → API + gateway route → client swap. A
     gateway route pointed at a service that isn't deployed returns 502, and a client switched to an
     API that isn't reachable is a user-visible regression.

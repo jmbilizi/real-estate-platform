@@ -78,3 +78,19 @@ pnpm run infra:validate:dev            # Kustomize validation per env
 - `tag:runtime:*` commands miss new projects until `pnpm run nx:reset`.
 - Accounts are multi-role platform-wide (owner+renter+buyer+agent+provider simultaneously); never
   introduce a single-value `user_type` (PRD §11.2).
+- **Deployment is gated in two registries, and omission is silent**: `skaffold.yaml` (local) and
+  `infra/deploy-control.yaml` (CI/CD, enumerated by `yq` key lookup). A service missing from either
+  never deploys, with no error. The CI image-build matrix is auto-derived from the `container-build`
+  target — don't hardcode it.
+- **`pnpm-lock.yaml` is Prettier-formatted here** (it's not in `.prettierignore`). Any
+  `pnpm install` rewrites it in pnpm's native style and CI's format check fails — run
+  `pnpm run nx:workspace-format` after installing, and confirm `pnpm install --frozen-lockfile`
+  still exits 0.
+- **No Alpine base images for anything doing in-cluster DNS.** musl fails Kubernetes service
+  resolution with `EAI_AGAIN`; use a Debian `-slim` base. (`cribstop-next` is still on Alpine and
+  has this latent bug.)
+- **Kill background test processes when done.** `skaffold --port-forward` and `kubectl port-forward`
+  outlive their command and squat on ports, or serve a stale pod so later checks pass against
+  nothing. `pkill` does nothing on Windows — use `taskkill //F //IM kubectl.exe`.
+- Jest `<rootDir>` inside `testMatch` / `testPathIgnorePatterns` silently matches nothing on Windows
+  (native backslashes read as escapes). Write the patterns without it.

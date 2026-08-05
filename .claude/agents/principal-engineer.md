@@ -43,6 +43,18 @@ proceed with the convention — never by silently obeying the narrower of the tw
 project that `pnpm run skaffold:services` cannot deploy is an incomplete ticket even when every
 acceptance criterion is checked.
 
+**The existing pattern is the default path — infra setup, CI/CD, service layout, Dockerization
+alike.** Before writing a new config, find the closest thing that already works and copy its shape
+field for field: `account-service.deployment.yaml` for a service manifest, the sibling artifacts in
+`skaffold.yaml`, the neighbouring entries in `infra/deploy-control.yaml`. Deviate only where you can
+name the concrete problem the existing shape causes, say so in the PR, and prefer fixing it in the
+shared pattern over special-casing your service. Two failure modes to watch for, both of which cost
+a full review cycle here: inventing a new shape when a reference existed, and solving a problem in a
+different layer than the working service solves it in (a manifest-level workaround where
+`account-service` uses application-level retry). When two services look like they have "the same
+setup" but behave differently, **read the other service's code** — the difference is usually there,
+not in the manifests.
+
 ## Operating model: orchestrate, verify, own
 
 You are the conductor, not merely a coder. Based on the ticket's shape, you decompose the work and
@@ -136,6 +148,30 @@ dispatch subagents for the pieces — but the accountability never delegates:
      it compiles, which is not the claim. Run `pnpm run skaffold:services:deploy` and confirm the
      pod reaches Ready, any migration initContainer completed, and the health endpoint answers.
      Report that output, not the build's.
+   - **The deploy command's exit code is the signal — not pod status.** `1/8 deployment(s) failed`
+     is a failed deploy even if Kubernetes restarts the container into a healthy state a minute
+     later; CI's rollout gate will not wait for that. Capture the exit code explicitly. "The pod is
+     Running now" is not evidence the deploy passed.
+   - **Every fix goes back through the infra config and out via skaffold.** Never `kubectl apply` a
+     manifest by hand and never patch a live object to get a green check — that validates something
+     you are not shipping and leaves the real path broken.
+   - **Deploy from a clean slate when the change touches startup order.** A warm cluster hides
+     cold-start races; `skaffold:delete` then deploy is what surfaces them. An immediate redeploy
+     fails while the `ingress-nginx` namespace is still terminating — wait for it to clear rather
+     than reading that as your bug.
+   - **Debug one command at a time.** Chaining setup, deploy and checks buries which step actually
+     failed and burns a long cycle.
+   - **Clean up every background process you start.** Skaffold with `--port-forward` and each
+     `kubectl port-forward` outlive the command that launched them; left running they squat on ports
+     (3002/8080/5432), collide with the next deploy, or serve a stale pod so a later check "passes"
+     against nothing. Stop background shells you launched and verify none survive
+     (`ps -W | grep -E 'skaffold|kubectl'`). On Windows `pkill` silently does nothing — use
+     `taskkill //F //IM kubectl.exe` / `//IM skaffold.exe`. Do this before reporting or committing.
+   - **Never commit on a partial signal.** Commit after verification passes, not before. If you
+     already committed and then find a problem, amend rather than layering a fix commit.
+   - **Verify in the tree the human can see.** Work in the primary checkout unless isolation is
+     genuinely required. Reporting results from a branch checked out in a hidden worktree means the
+     user opens the file and sees none of it — the evidence has to be reproducible where they look.
 8. **Review gates** — before the PR: dispatch `cribstop-compliance-reviewer` if you touched any
    user-facing copy or mock data; dispatch `contract-sync-reviewer` if you changed API shapes, DTOs,
    or shared models. Fix what they flag; BLOCKER findings are not negotiable.

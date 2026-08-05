@@ -52,6 +52,21 @@ This syncs the .NET solution, generates missing targets, and auto-tags the proje
 Shipping them means `tag:*` commands silently miss the project. Set all three to real values
 matching what sibling services use.
 
+## 2a. Node services need their own `package.json` and a workspace entry
+
+`setup-workspace-targets.js` gives every Node project `prune-lockfile` and `copy-workspace-modules`
+targets, and both hard-fail with `<project>/package.json does not exist.` — so a Node service
+without its own manifest cannot produce the pruned `package.json` + `pnpm-lock.yaml` that a slim,
+reproducible production image installs from. Create one declaring the service's runtime deps and add
+the project to `pnpm-workspace.yaml`.
+
+**Then re-run the formatter before committing.** `pnpm-lock.yaml` is NOT in `.prettierignore`, so
+the committed lockfile is Prettier-formatted (`lockfileVersion: "9.0"`, double quotes). Any
+`pnpm install` rewrites it in pnpm's native style (`'9.0'`, single quotes), which looks like a
+~19,000-line diff and fails CI's `prettier --check --ignore-unknown .`. Run
+`pnpm run nx:workspace-format` after any install, then confirm both gates still pass:
+`pnpm install --frozen-lockfile` (exit 0) and `pnpm exec prettier --check pnpm-lock.yaml`.
+
 ## 2b. Fold the generator's `-e2e` sibling into the service project
 
 `@nx/express:app` (and the Node generators generally) create a **second** Nx project, `<name>-e2e`.
@@ -68,6 +83,16 @@ Leaving the sibling in place forces a workaround: `tools/nx/setup-standard-targe
 `runtime:node` project a jest `test` target, CI's `nx:node-test` sweeps them all, and the e2e spec
 then runs with no server and fails. Deleting the project is the fix; a `nx:noop` `test` target is
 not.
+
+Once both suites live in one project, keep `nx test` off the e2e specs with a second jest config
+(`jest.config.ts` for unit, `jest.e2e.config.ts` driving an explicit `e2e` target). **Never use
+`<rootDir>` inside `testPathIgnorePatterns` or `testMatch`** — it interpolates the _native_ path, so
+on Windows its backslashes are read as regex/glob escapes and the pattern silently matches nothing
+(first it ran the e2e spec anyway, then it matched zero tests and "passed"). Write
+`testPathIgnorePatterns: ['/node_modules/', '/tests/']` and
+`testMatch: ['**/tests/**/*.e2e.spec.ts']` — which is why the stock `/node_modules/` default has no
+`<rootDir>` either. Confirm the split with `pnpm exec jest --config <path> --listTests` for both
+configs before trusting it.
 
 ## 3. Port assignment & PRD alignment
 
@@ -86,6 +111,28 @@ Copy the pattern from the closest existing service (`apps/services/account-servi
 .NET, `apps/services/multi-model-inference/Dockerfile` for Python). For .NET: copy `nuget.config`
 and `global.json` before `dotnet restore` (known CI fix — see git history #19).
 
+Traps that cost real debugging time on the first Node service:
+
+- **Do NOT use an Alpine base for anything that resolves an in-cluster service name.** musl's
+  resolver fails Kubernetes DNS with `EAI_AGAIN`. Proven with an A/B in the same cluster at the same
+  moment: `node:20-alpine` → `EAI_AGAIN postgres-svc`, `node:20-slim` → resolves. An Alpine build
+  crash-looped its migrate initContainer 7× against a healthy `postgres-svc`. Use a Debian (`-slim`)
+  base. Note `cribstop-next` is still on Alpine and carries the same latent bug.
+- **`node:20-slim` ships no CA bundle at all**, so appending an enterprise root to
+  `/etc/ssl/certs/ca-certificates.crt` fails with "Directory nonexistent". Install `ca-certificates`
+  first (apt over HTTP, so no TLS needed to bootstrap) then `update-ca-certificates` — copy the
+  block from `multi-model-inference/Dockerfile`, which already does exactly this on
+  `python:3.11-slim`.
+- **Only `main.js` is bundled.** Webpack bundles the entry point; anything read from disk at runtime
+  (`migrations/`, a `migrate.js` runner, seed data files) is NOT in the bundle and must be `COPY`d
+  into the runtime image explicitly. Miss it and the migrate step reports "No migrations to run!"
+  and exits 0 — a silent no-op, not an error.
+- **Keep the package manager out of the runtime stage.** `corepack enable pnpm` there tries to fetch
+  `pnpm/latest` from npmjs.org and dies behind SSL inspection. Resolve production dependencies in
+  the builder stage (which inherits the CA bundle and the pinned pnpm) and `COPY` the result.
+- **Don't verify images with `pnpm run container:build`** — it shells out to `docker`, which does
+  not exist on a Podman host. Build through the skaffold path instead (step 9).
+
 ## 5. Kubernetes manifests (ALL manifests live in infra/k8s/, never in apps/)
 
 Minimal-base rules (see copilot-instructions § Kustomize Structure):
@@ -97,6 +144,23 @@ Minimal-base rules (see copilot-instructions § Kustomize Structure):
 - Add to each environment's `kustomization.yaml` in correct order (Secrets → ConfigMaps → Services →
   workloads).
 - Validate: `pnpm run infra:validate`
+
+**Copy `account-service.deployment.yaml` field for field — it is the reference, not an example.**
+The existing shape is the default path; deviate only where you can name a concrete reason, and say
+so. Same key order (image → imagePullPolicy → command → env → resources for the initContainer; image
+→ imagePullPolicy → resources → ports → env → liveness/readiness/startup probes for the app
+container), same comment placement, discrete `<SERVICE>_DB_HOST/PORT/NAME/USER` env values, and
+identical env blocks between the two containers rather than one carrying extra commentary. Per-env
+patches override only image / imagePullPolicy / replicas / resources / environment — check the real
+conventions before inventing values: test uses the `:test` tag with 2 replicas, prod uses `:latest`
+with 3 (not a `:prod` tag).
+
+**Keep insertion position consistent everywhere.** A new service goes in the same relative slot in
+every registry — for `property-service` that meant after `account-service` and before `cribstop-web`
+in all five `kustomization.yaml` files, all three `deploy-control.yaml` environments, and the
+skaffold services module. Verify the _rendered_ result, not just the source:
+`kustomize build infra/k8s/<overlay> --enable-alpha-plugins`. Strategic-merge patches reorder list
+entries by the patch's order, so ordering you wrote in base can silently change per overlay.
 
 ### 5b. If the service owns a database
 
@@ -116,11 +180,47 @@ not where it ends. Wire all three of these or the pod cannot talk to it:
 - **A migration path that exists in the built image.** A target that runs `ts-node` against `src/`
   works on a dev box and not in a container; make sure whatever the initContainer invokes is present
   in the build output.
+- **Retry transient DB failures inside the migration entry point, not from the manifest.** Nothing
+  orders your Deployment after the postgres StatefulSet, so on a cold cluster the first attempt
+  reliably loses the race, exits non-zero, and fails the whole deploy (`1/8 deployment(s) failed`) —
+  even though Kubernetes would eventually restart it. `account-service` already solves this in
+  application code: `Program.cs` → `MigrateWithRetryAsync` (12 attempts, 2s backoff doubling to a
+  10s ceiling) with `IsTransientDatabaseStartupFailure` whitelisting socket errors plus SQLSTATE
+  `3D000` (database not yet created), `42501` (grants race), `28P01` (password still syncing) and
+  `57P03` (server starting up). Mirror that; `property-service/migrate.js` is the Node counterpart.
+  - Retry ONLY those classes. Retrying everything masks bad SQL and wrong credentials behind 12
+    attempts and a rollout timeout instead of failing fast.
+  - Resist solving this with a `wait-for-postgres` initContainer. It puts the policy in a different
+    layer than the existing service uses, and because a strategic-merge patch reorders
+    `initContainers` by the patch's own order, every overlay then has to re-declare the container
+    just to stop the wait step being silently reordered _after_ migrate.
 
-## 6. Skaffold
+## 6. Deployment control — TWO separate registries, both mandatory
 
-Add the artifact + port-forward to the **services** module in `skaffold.yaml` (never the clients
-module). The services-only overlay auto-derives exclusions — zero manual maintenance needed there.
+This repo gates deployment in two places. Manifests alone deploy nothing; a service missing from
+either registry is skipped **silently**, with no error to trace back to.
+
+**6a. Local — `skaffold.yaml`.** Add the artifact + port-forward to the **services** module (never
+the clients module). Match the shape of the sibling artifacts: `context: .`, the
+`node tools/infra/skaffold-build.js` buildCommand, `dependencies.paths` for the project, and an
+`ignore` list for build output and tests. The services-only overlay derives its exclusions from the
+_clients_ module, so a new service needs no overlay work.
+
+**6b. CI/CD — `infra/deploy-control.yaml`.** Add the service under
+`environments.{dev,test,prod}.services`. This is the one that is easy to miss and impossible to
+notice: `.github/actions/load-deploy-control` enumerates services with
+`yq '.environments.<env>.services | keys[]'`, so a service absent from that map is never even
+considered a deploy candidate — no warning, no failure, it just never ships. Follow the existing
+promotion convention: `enabled: true` + `auto_deploy: true` for dev, `enabled: false` for test/prod
+until the service is deliberately promoted (that is how `account-service` and `cribstop-web` are
+set).
+
+**What you do NOT need to touch:** the CI image-build matrix. `build-push-images.yml` derives it
+from Nx projects that have a `container-build` target, which `nx:reset` adds automatically. Don't
+add a hardcoded list.
+
+Image name defaults to the Nx project name; only add an entry to `tools/docker/image-name-map.json`
+if they must differ (as for `multi-model-inference` → `inference-service`).
 
 ## 7. Gateway route
 
@@ -143,18 +243,52 @@ pnpm run nx:workspace-format
 ```
 
 All must pass. **Then prove it deploys** — this is the acceptance test for steps 4–6, and the only
-thing that distinguishes a real service from a directory that compiles:
+thing that distinguishes a real service from a directory that compiles. Deploy the way the repo
+deploys; never `kubectl apply` a manifest by hand, and never patch a live object to make a test
+pass. Every fix goes back through the infra config and out via skaffold, or you are validating
+something you are not shipping.
 
 ```bash
-pnpm run skaffold:services:deploy
+pnpm run skaffold:delete            # from a clean slate — a warm cluster hides cold-start races
+pnpm run skaffold:services:deploy   # THE gate: its exit code must be 0
 ```
 
-Confirm the pod reaches Ready, the migration initContainer completed, and the health endpoint
-answers through its port-forward. A green `nx build` says nothing about any of that.
+**Skaffold's exit code is the pass/fail signal, not pod status.** `1/8 deployment(s) failed` is a
+failure even when Kubernetes later restarts the container into a healthy state — CI's rollout gate
+will not wait for that. Capture it explicitly (`echo "EXIT: $?"`); a passing `kubectl get pods` a
+few minutes later proves only that Kubernetes recovered, not that the deploy succeeded.
 
-If there's no cluster yet, create one (`pnpm run infra:local:cluster:setup`; registry via
-`infra:local:registry:ensure`, disk recovery via `infra:local:cluster:reset:disk`) — the whole
-lifecycle is scripted, so standing the environment up is part of the job, never a blocker to report.
+Then confirm, in this order:
 
-Then summarize what was created — and if you skipped the gateway route (step 7) because it belongs
-to a later ticket, say so explicitly, along with what will and won't work until it lands.
+- The migration initContainer **completed** and its log shows what you expect.
+  `No migrations to run!` with exit 0 usually means the migrations directory never made it into the
+  image — verify the schema really exists (`select count(*) from pgmigrations`), don't trust the
+  message.
+- Restart count is **0** and the container is `ready=true` (the readiness probe hitting `/health` is
+  the cluster's own verdict).
+- `/health` answers over the ClusterIP. Prefer a one-shot in-cluster call
+  (`kubectl run --rm --image=node:20-slim ...`) over a port-forward — it tests the Service, not just
+  the pod, and leaves nothing running.
+
+Sequencing notes that cost time otherwise:
+
+- Run these **one command at a time** when something fails; chained commands bury which step broke.
+- `skaffold:delete` followed immediately by a deploy fails on the `ingress-nginx` namespace still
+  terminating. Wait for `kubectl get ns` to stop listing it before redeploying — that failure is not
+  your service.
+- If there's no cluster yet, create one (`pnpm run infra:local:cluster:setup`; registry via
+  `infra:local:registry:ensure`, disk recovery via `infra:local:cluster:reset:disk`). The whole
+  lifecycle is scripted, so standing the environment up is part of the job, never a blocker to
+  report.
+
+**Then clean up every background process you started.** Skaffold with `--port-forward` and each
+`kubectl port-forward` keep running after the command returns; left behind they hold ports
+3002/8080/ 5432 and collide with the next run, or silently serve a stale pod so a later check
+"passes" against nothing. Stop background shells you launched and confirm none survive
+(`ps -W | grep -E 'skaffold|kubectl'`; on Windows `pkill` does not work — use
+`taskkill //F //IM kubectl.exe` / `//IM skaffold.exe`). Do this before you report or commit — 60+
+orphaned `kubectl` processes accumulated across one debugging session.
+
+Finally: **do not commit until the above has actually passed.** Then summarize what was created —
+and if you skipped the gateway route (step 7) because it belongs to a later ticket, say so
+explicitly, along with what will and won't work until it lands.
