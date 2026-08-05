@@ -1,7 +1,9 @@
 # Run quick checks before commit (format + lint + type only, ~5-15s)
 
-# This catches most issues without slowing down commits
+# Enforced automatically on protected branches (dev/test/main) only.
+# Feature branches skip intentionally (fast iteration) — run `pnpm run pre-commit`
+# yourself, or targeted format/lint/type-check commands for small obvious changes.
 
 # Runs nx:reset to clean solution files and auto-stages modifications
 
-node scripts/pre-commit.js
+node scripts/pre-commit.js --hook

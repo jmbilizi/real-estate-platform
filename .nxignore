@@ -1,0 +1,3 @@
+# Claude Code agent worktrees are full repo copies — without this, Nx sees
+# every project defined twice and fails to build the project graph.
+.claude/worktrees/
