@@ -150,6 +150,15 @@ reset once at start; git hooks skip it entirely.
 
 ### Two-Tier System
 
+**Branch gating**: The automatic hooks enforce checks only on protected branches (`dev`, `test`,
+`main`). On feature branches both hooks exit immediately (<1s) — **intentionally, to speed up
+feature-branch development**: run `pnpm run pre-commit` once over a body of work and then make
+multiple separate commits without waiting for the full sweep again, or skip it for a small/obvious
+change and run targeted checks instead (`pnpm run nx:workspace-format`,
+`pnpm exec nx lint|type-check <project>`). The expectation that remains: `pnpm run pre-push` before
+pushing; CI on the PR is the backstop. Manual runs of those commands always execute in full
+regardless of branch (the gate only applies to the `--hook` flag the husky scripts pass).
+
 **Pre-Commit (Fast - ~5-15s with projects, <1s empty workspace)**
 
 - Format + Lint + Type Check only
@@ -195,6 +204,8 @@ of running nx:reset and empty checks.
 - Pre-commit catches errors immediately (before commit is created)
 - Pre-push provides safety net if pre-commit was bypassed (`git commit --no-verify`)
 - Same validation logic in both = consistent behavior
+- Both auto-enforce on protected branches only (see **Branch gating** above); on feature branches
+  the same protection comes from running the commands manually + CI on the PR
 
 ### Intelligent Language Detection
 
@@ -629,10 +640,10 @@ kustomize build infra/k8s/{provider}/{env} --enable-alpha-plugins  # Build manif
 kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins       # Example: Hetzner dev
 
 # Validation
-pnpm run pre-commit           # Quick checks (manual)
-pnpm run pre-push             # Full validation (manual)
-git commit                   # Triggers pre-commit hook (automatic)
-git push                     # Triggers pre-push hook (automatic)
+pnpm run pre-commit           # Quick checks (manual — required on feature branches)
+pnpm run pre-push             # Full validation (manual — required on feature branches)
+git commit                   # Triggers pre-commit hook (automatic on dev/test/main only)
+git push                     # Triggers pre-push hook (automatic on dev/test/main only)
 
 # Troubleshooting
 pnpm run nx:reset             # Fix project detection, sync .NET, auto-tag

@@ -63,3 +63,7 @@ apps/api-gateway/GeoLite2-City.mmdb
 
 # Playwright MCP session artifacts
 .playwright-mcp/
+
+# Claude Code agent worktrees and machine-local settings
+.claude/worktrees/
+.claude/settings.local.json
