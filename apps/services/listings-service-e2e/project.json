@@ -44,11 +44,9 @@
       }
     },
     "test": {
-      "executor": "nx:run-commands",
-      "cache": true,
-      "options": {
-        "command": "jest --passWithNoTests",
-        "cwd": "apps/services/listings-service-e2e"
+      "executor": "nx:noop",
+      "metadata": {
+        "description": "Intentional no-op. This project holds no unit tests — its suite is the 'e2e' target, which boots listings-service first. A jest 'test' target here would run the e2e spec without a server and fail CI's nx:node-test sweep. Defined explicitly (rather than omitted) because tools/nx/setup-standard-targets.js re-adds a jest test target to any Node project missing one."
       }
     }
   },
