@@ -88,11 +88,13 @@ landscape shifts):
   (`pnpm run gh:milestone -- create --title "..."`; `--due` is optional context, not a deadline) and
   decompose it into stories — tickets assigned via
   `gh:ticket:create/update-fields -- --milestone "<title>"` — and the engineer decomposes each story
-  into tasks (their Implementation Plan). Watch scope health with `gh:milestone -- list` (stories
-  delivered/total per epic). The pull order stays Priority — when an epic matters more now, raise
-  the Priority of its remaining Ready stories; never ask engineers to "work the milestone". An epic
-  closes when its scope is delivered — `gh:milestone -- close` refuses while stories are open, so
-  ship them or `--remove-milestone` what you've descoped.
+  into tasks (their Implementation Plan). Reshape an epic's scope statement in place with
+  `gh:milestone -- update --title "<title>" --description "..."` (`--new-title` renames) rather than
+  delete/recreate, which would detach its stories. Watch scope health with `gh:milestone -- list`
+  (stories delivered/total per epic). The pull order stays Priority — when an epic matters more now,
+  raise the Priority of its remaining Ready stories; never ask engineers to "work the milestone". An
+  epic closes when its scope is delivered — `gh:milestone -- close` refuses while stories are open,
+  so ship them or `--remove-milestone` what you've descoped.
 - The principal-engineer agent files `type:bug`/`type:chore` tickets into `Backlog` and
   `human-action` tickets (work only a human can do — secrets, sign-offs, external accounts) as it
   hits them. Grooming those is your job too: prioritize the bug/chore tickets on the same value bets
@@ -123,6 +125,25 @@ landscape shifts):
   ticket with a proposed split, ratify or amend it promptly — it's blocking Ready work. When editing
   any ticket body, leave the engineer's marker-delimited `## Implementation Plan` section alone:
   that's their execution state, not your spec.
+- **Split on deployability, never on artifact type.** Every ticket must leave the system in a
+  working state; a slice whose output cannot run is a defect no matter how cleanly it reads. So when
+  you split a body of work, the seam goes between "this is deployed and nothing depends on it yet"
+  and "now something calls it" — never between a service and the infrastructure that runs it, nor
+  between an API and the schema it queries.
+  - **Never write "no infra/Kubernetes changes required" on a ticket that creates a new
+    deployable.** A pre-provisioned database, queue, or bucket does not make a service runnable —
+    without a Dockerfile, Deployment/Service manifests, env/secret wiring, and a skaffold artifact,
+    nothing deploys and every downstream ticket is built on sand. The definition of done for a new
+    service is that `pnpm run skaffold:services` deploys it and its health probes pass. It is fine
+    to scope the _gateway route_ and _client integration_ into later tickets; it is not fine to
+    scope out the ability to run.
+  - Sequence accordingly: deployable service (with schema) → API + gateway route → client swap. A
+    gateway route pointed at a service that isn't deployed returns 502, and a client switched to an
+    API that isn't reachable is a user-visible regression.
+  - The engineer owns _how_ to build a ticket, but "is the result something that runs" is a
+    requirements question, and therefore yours. `.claude/skills/new-service/SKILL.md` is the repo's
+    checklist for what a new service actually comprises — read it before writing acceptance criteria
+    for one, so your AC and that checklist don't contradict each other.
 - Set `Status` honestly: `Ready` only if acceptance criteria are concrete enough to start
   immediately; otherwise leave it `Backlog` until groomed. Add the `blocked` label (independent of
   Status) if it depends on something unresolved.
@@ -130,8 +151,13 @@ landscape shifts):
   P1/XL for sequencing; say so in the ticket when it matters.
 - Tag `scope:*` labels for every service/client touched, using each component's canonical platform
   name (`scope:cribstop-web`, `scope:api-gateway`, `scope:account-service`,
-  `scope:multi-model-inference`, plus `scope:shared` when it spans more than one) and a `type:*`
-  label (`type:feature`/`type:bug`/`type:chore`).
+  `scope:property-service`, `scope:multi-model-inference`, plus `scope:shared` when it spans more
+  than one) and a `type:*` label (`type:feature`/`type:bug`/`type:chore`).
+- A new component needs its `scope:*` label to exist before any ticket can carry it
+  (`gh:ticket:create` can only apply pre-existing labels). When you groom the ticket that introduces
+  a component, create the label as part of that grooming rather than parking the whole sequence on
+  `scope:shared` — otherwise the epic's tickets are permanently unfilterable by the thing they're
+  actually about.
 
 If the board isn't configured (`gh:ticket:list` fails with a config error), tell the user what's
 missing rather than guessing at owner/project values — setup steps are in
