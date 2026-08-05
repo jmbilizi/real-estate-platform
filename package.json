@@ -37,6 +37,7 @@
     "@types/pg": "^8.20.4",
     "@types/supertest": "^7.2.1",
     "@typescript-eslint/eslint-plugin": "^8.41.0",
+    "axios": "^1.6.0",
     "@typescript-eslint/parser": "^8.41.0",
     "baseline-browser-mapping": "^2.10.8",
     "cross-env": "^10.1.0",
@@ -222,7 +223,6 @@
     ]
   },
   "dependencies": {
-    "axios": "^1.6.0",
     "express": "^4.21.2",
     "nextjs-toploader": "^3.9.17",
     "node-pg-migrate": "^9.0.0",

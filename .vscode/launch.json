@@ -32,7 +32,7 @@
       "skipFiles": ["<node_internals>/**"],
       "sourceMaps": true,
       "outFiles": [
-        "${workspaceFolder}/apps/services/listings-service/dist/**/*.(m|c|)js",
+        "${workspaceFolder}/dist/apps/services/listings-service/**/*.(m|c|)js",
         "!**/node_modules/**"
       ]
     }

@@ -58,6 +58,15 @@ const PHOTOS = [
   'photo-1600047509807-ba8f99d2cdde',
 ];
 
+/**
+ * Builds an Unsplash URL for the photo at index `i` in {@link PHOTOS},
+ * wrapping around when `i` exceeds the list.
+ *
+ * `i` is an **index**, not an Unsplash photo ID. The frontend mock file this
+ * data came from called it with IDs (`IMG(1600596542815)`), which silently
+ * resolved to an unrelated photo via the modulo — the URLs were valid but had
+ * nothing to do with the ID passed. Call sites here pass real indices.
+ */
 const IMG = (i: number): string =>
   `https://images.unsplash.com/${PHOTOS[i % PHOTOS.length]}?w=1200&h=800&fit=crop&auto=format&q=80`;
 
@@ -80,7 +89,7 @@ export const mockListings: MockListing[] = [
     sqft: 4200,
     lotSqft: 10890,
     yearBuilt: 2019,
-    imageUrls: [IMG(1600596542815), IMG(1600585154340), IMG(1600607687939), IMG(1560448204771)],
+    imageUrls: [IMG(0), IMG(1), IMG(2), IMG(3)],
     brokerName: 'Sample Agent 1',
     brokerPhone: '(410) 555-0100',
     brokerEmail: 'sample.agent1@example.com',
@@ -115,7 +124,7 @@ export const mockListings: MockListing[] = [
     baths: 2,
     sqft: 1450,
     yearBuilt: 2021,
-    imageUrls: [IMG(1502672260266), IMG(1560448204771), IMG(1600585154340), IMG(1600607687939)],
+    imageUrls: [IMG(4), IMG(5), IMG(6), IMG(7)],
     brokerName: 'Sample Agent 2',
     brokerPhone: '(202) 555-0102',
     brokerEmail: 'sample.agent2@example.com',
@@ -156,7 +165,7 @@ export const mockListings: MockListing[] = [
     baths: 2.5,
     sqft: 1800,
     yearBuilt: 1920,
-    imageUrls: [IMG(1600585154340), IMG(1600596542815), IMG(1502672260266), IMG(1600607687939)],
+    imageUrls: [IMG(8), IMG(9), IMG(10), IMG(11)],
     brokerName: 'Sample Agent 3',
     brokerPhone: '(443) 555-0104',
     brokerEmail: 'sample.agent3@example.com',
@@ -190,7 +199,7 @@ export const mockListings: MockListing[] = [
     sqft: 3600,
     lotSqft: 6500,
     yearBuilt: 2026,
-    imageUrls: [IMG(1600607687939), IMG(1600596542815), IMG(1560448204771), IMG(1502672260266)],
+    imageUrls: [IMG(12), IMG(13), IMG(14), IMG(15)],
     brokerName: 'Sample Agent 4',
     brokerPhone: '(301) 555-0106',
     brokerEmail: 'sample.agent4@example.com',
@@ -223,7 +232,7 @@ export const mockListings: MockListing[] = [
     baths: 1.5,
     sqft: 1200,
     yearBuilt: 1910,
-    imageUrls: [IMG(1560448204771), IMG(1600585154340), IMG(1600596542815), IMG(1600607687939)],
+    imageUrls: [IMG(16), IMG(17), IMG(18), IMG(19)],
     brokerName: 'Sample Agent 5',
     brokerPhone: '(202) 555-0108',
     brokerEmail: 'sample.agent5@example.com',
@@ -255,7 +264,7 @@ export const mockListings: MockListing[] = [
     baths: 1,
     sqft: 920,
     yearBuilt: 2023,
-    imageUrls: [IMG(1502672260266), IMG(1600607687939), IMG(1560448204771), IMG(1600585154340)],
+    imageUrls: [IMG(20), IMG(21), IMG(22), IMG(23)],
     brokerName: 'Sample Agent 6',
     brokerPhone: '(703) 555-0110',
     brokerEmail: 'sample.agent6@example.com',
@@ -296,7 +305,7 @@ export const mockListings: MockListing[] = [
     baths: 4,
     sqft: 3200,
     yearBuilt: 1945,
-    imageUrls: [IMG(1600585154340), IMG(1600596542815), IMG(1502672260266), IMG(1600607687939)],
+    imageUrls: [IMG(24), IMG(25), IMG(26), IMG(27)],
     brokerName: 'Sample Agent 7',
     brokerPhone: '(443) 555-0112',
     brokerEmail: 'sample.agent7@example.com',
@@ -328,7 +337,7 @@ export const mockListings: MockListing[] = [
     baths: 1,
     sqft: 750,
     yearBuilt: 2018,
-    imageUrls: [IMG(1560448204771), IMG(1600607687939), IMG(1502672260266), IMG(1600596542815)],
+    imageUrls: [IMG(28), IMG(29), IMG(30), IMG(31)],
     brokerName: 'Sample Agent 8',
     brokerPhone: '(202) 555-0114',
     brokerEmail: 'sample.agent8@example.com',
@@ -361,7 +370,7 @@ export const mockListings: MockListing[] = [
     sqft: 3800,
     lotSqft: 12000,
     yearBuilt: 1928,
-    imageUrls: [IMG(1600596542815), IMG(1600585154340), IMG(1560448204771), IMG(1600607687939)],
+    imageUrls: [IMG(32), IMG(33), IMG(34), IMG(35)],
     brokerName: 'Sample Agent 9',
     brokerPhone: '(410) 555-0115',
     brokerEmail: 'sample.agent9@example.com',
@@ -394,7 +403,7 @@ export const mockListings: MockListing[] = [
     baths: 2,
     sqft: 1600,
     yearBuilt: 2017,
-    imageUrls: [IMG(1502672260266), IMG(1600596542815), IMG(1600607687939), IMG(1560448204771)],
+    imageUrls: [IMG(36), IMG(37), IMG(38), IMG(39)],
     brokerName: 'Sample Agent 10',
     brokerPhone: '(410) 555-0117',
     brokerEmail: 'sample.agent10@example.com',
@@ -428,7 +437,7 @@ export const mockListings: MockListing[] = [
     sqft: 2400,
     lotSqft: 8200,
     yearBuilt: 1965,
-    imageUrls: [IMG(1600607687939), IMG(1600585154340), IMG(1502672260266), IMG(1600596542815)],
+    imageUrls: [IMG(40), IMG(41), IMG(42), IMG(43)],
     brokerName: 'Sample Agent 11',
     brokerPhone: '(301) 555-0119',
     brokerEmail: 'sample.agent11@example.com',
@@ -460,7 +469,7 @@ export const mockListings: MockListing[] = [
     baths: 3,
     sqft: 2800,
     yearBuilt: 2022,
-    imageUrls: [IMG(1600596542815), IMG(1502672260266), IMG(1600607687939), IMG(1560448204771)],
+    imageUrls: [IMG(44), IMG(45), IMG(46), IMG(47)],
     brokerName: 'Sample Agent 12',
     brokerPhone: '(703) 555-0121',
     brokerEmail: 'sample.agent12@example.com',

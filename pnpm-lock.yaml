@@ -19,9 +19,6 @@ catalogs:
 importers:
   .:
     dependencies:
-      axios:
-        specifier: ^1.6.0
-        version: 1.12.2
       express:
         specifier: ^4.21.2
         version: 4.21.2
@@ -119,6 +116,9 @@ importers:
       "@typescript-eslint/parser":
         specifier: ^8.41.0
         version: 8.46.2(eslint@9.38.0(jiti@2.7.0))(typescript@5.9.3)
+      axios:
+        specifier: ^1.6.0
+        version: 1.12.2
       baseline-browser-mapping:
         specifier: ^2.10.8
         version: 2.10.20

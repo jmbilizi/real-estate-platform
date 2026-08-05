@@ -26,8 +26,13 @@ exports.up = (pgm) => {
     zip: { type: 'text', notNull: true },
     latitude: { type: 'double precision' },
     longitude: { type: 'double precision' },
+    // notNull matters as much as the CHECK: a CHECK evaluates to UNKNOWN for
+    // NULL and therefore passes, so without this a typeless property would slip
+    // through the enum constraint entirely. Every property has a type (the web
+    // client's Listing.propertyType is required), so NULL is never legitimate.
     property_type: {
       type: 'text',
+      notNull: true,
       check:
         "property_type IN ('Single Family','Condo','Townhome','Multi-Family','Loft','Land','New Construction')",
     },
