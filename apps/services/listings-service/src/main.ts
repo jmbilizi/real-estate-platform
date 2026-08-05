@@ -12,9 +12,7 @@ const app = createApp();
 // startup, which matters in K8s where the value comes from config.
 const port = Number(process.env.PORT ?? 3002);
 if (!Number.isInteger(port) || port < 0 || port > 65535) {
-  throw new Error(
-    `Invalid PORT "${process.env.PORT}" — expected an integer between 0 and 65535.`,
-  );
+  throw new Error(`Invalid PORT "${process.env.PORT}" — expected an integer between 0 and 65535.`);
 }
 
 const server = app.listen(port, () => {
