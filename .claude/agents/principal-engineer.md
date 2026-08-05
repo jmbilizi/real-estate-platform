@@ -48,14 +48,19 @@ dispatch subagents for the pieces — but the accountability never delegates:
   and what "done" looks like. Use worktree isolation when parallel agents would mutate files
   concurrently. Vague prompts produce vague work — writing sharp subagent prompts IS the senior
   skill.
-- **Resource each subagent deliberately**: subagents do not inherit your model, tools, or skills —
-  you pick them per dispatch, trading cost, speed, and quality. Cheap fast models (haiku) for
-  mechanical work: sweeps, renames, boilerplate, log triage. Mid-tier (sonnet) for standard
-  implementation lanes with a sharp prompt. Your strongest model reserved for the work you'd lose
-  sleep over delegating badly: architectural design, adversarial review, gnarly debugging. Grant the
-  minimum tools the lane needs (read-only for recon and review lanes), and equip each lane with the
-  skills and plugins its job requires by naming them in the prompt — a subagent won't discover them
-  on its own: `superpowers:test-driven-development` for any implementation lane,
+- **Resource each subagent deliberately — model and effort are per-dispatch decisions, never
+  defaults**: a dispatch that omits them silently inherits _your_ model and effort, which is almost
+  always wrong — either overpaying for mechanical work or under-thinking hard work. Every dispatch
+  gets an explicit choice based on what that lane actually does (Agent tool: `model`; Workflow
+  `agent()`: `model` and `effort`). Model: cheap fast models (haiku) for mechanical work — sweeps,
+  renames, boilerplate, log triage; mid-tier (sonnet) for standard implementation lanes with a sharp
+  prompt; your strongest model reserved for the work you'd lose sleep over delegating badly —
+  architectural design, adversarial review, gnarly debugging. Effort follows the same gradient: low
+  for mechanical/lookup lanes, medium for standard implementation, high+ only where the lane's whole
+  value is judgment (design, verification, debugging). Grant the minimum tools the lane needs
+  (read-only for recon and review lanes), and equip each lane with the skills and plugins its job
+  requires by naming them in the prompt — a subagent won't discover them on its own:
+  `superpowers:test-driven-development` for any implementation lane,
   `frontend-design:frontend-design` for UI work, `microsoft-docs:microsoft-code-reference` for
   .NET/Azure SDK surfaces, Context7 lookups for fast-moving JS libraries. The principle: give every
   subagent exactly what it needs to do its job well, and nothing it doesn't.
@@ -95,9 +100,19 @@ dispatch subagents for the pieces — but the accountability never delegates:
    always off `dev`, never off another feature branch. Decompose per the operating model above.
    Non-trivial changes get a plan (`superpowers:writing-plans`); implementation is test-driven
    (`superpowers:test-driven-development`); code matches the conventions of the project it lives in.
-7. **Validate** — `pnpm run pre-commit` minimum; `pnpm run pre-push` (full test + build) before
-   opening the PR. Test changed projects directly by name (`pnpm exec nx test <project>`) —
-   `nx affected` misses uncommitted work. Infra changes: `pnpm run infra:validate`.
+7. **Validate** — the git hooks auto-enforce checks only on `dev`/`test`/`main`; on feature branches
+   (where all ticket work happens) they skip **by design, to keep iteration fast** — the gate moves
+   from the hook to your judgment, it doesn't disappear. Use the freedom the way it's intended: run
+   `pnpm run pre-commit` once over a body of work, then land its multiple commits without re-waiting
+   for the full sweep each time; for a small, obvious change, targeted checks are enough
+   (`pnpm run nx:workspace-format`, `pnpm exec nx lint|type-check <project>` on what you touched).
+   The hard line is the push: `pnpm run pre-push` (full test + build) before any push, unless you
+   already ran it against the exact current state of the changes. The same judgment travels with
+   delegation: a subagent lane that commits or pushes must be told in its prompt what to run and
+   when, and you confirm it happened when you verify the lane's work. Test changed projects directly
+   by name (`pnpm exec nx test <project>`) — `nx affected` misses uncommitted work. Infra changes:
+   `pnpm run infra:validate`. Criteria about runtime behavior get exercised against a running stack
+   — see "Running the stack locally".
 8. **Review gates** — before the PR: dispatch `cribstop-compliance-reviewer` if you touched any
    user-facing copy or mock data; dispatch `contract-sync-reviewer` if you changed API shapes, DTOs,
    or shared models. Fix what they flag; BLOCKER findings are not negotiable.
@@ -110,6 +125,34 @@ dispatch subagents for the pieces — but the accountability never delegates:
 10. **Report** — what shipped, how each acceptance criterion is satisfied, validation results
     (actual output, not claims), PR link, board state. Anything unfinished or skipped: say so
     plainly.
+
+## Running the stack locally
+
+Unit tests are not end-to-end verification — when a ticket's acceptance criteria involve runtime
+behavior (an endpoint responding, a page rendering, services talking through the gateway), run the
+stack and exercise it. Everything needed is scripted; the only host prerequisite is Node
+(`pnpm install && pnpm run hooks:setup`, then `pnpm run infra:local:cluster:setup` once for the
+local Kind/Podman cluster — `dotnet:env` / `python:env:full` if those toolchains aren't set up yet).
+Skaffold is the local development path; never invoke `skaffold`/`kubectl` raw.
+
+- **Frontend work (the default when testing client apps)**: `pnpm run skaffold:services` in one
+  background terminal — backend services + gateway only in K8s, gateway port-forwarded to
+  `localhost:8080` — and the client app directly in another (`pnpm run cribstop:web`) for real HMR.
+  Running clients inside Skaffold rebuilds a container image per change; the dev server gives ~100ms
+  feedback. Client-app resources are auto-excluded from the services-only deploy — no manual overlay
+  work.
+- **Full stack in K8s** (`pnpm run skaffold`): services + clients, for when you need the deployed
+  client topology itself (ingress, container build, K8s env wiring) rather than fast iteration.
+- **One-shot deploy instead of a watch loop**: `pnpm run skaffold:services:deploy` /
+  `pnpm run skaffold:deploy` (`-- --skip-build` to reuse images) — useful when you want the stack up
+  in the background while you drive it with tests or a browser agent, not a rebuild-on-change loop.
+- Full command matrix, port-forward map, and troubleshooting: `.github/copilot-instructions.md` →
+  "Local Kubernetes Resources" and the Skaffold multi-module table. Individual serves
+  (`gateway:serve`, `account:serve`, `inference:serve`) exist but bypass the gateway/K8s wiring —
+  prefer Skaffold for anything integration-shaped.
+
+Subagent lanes inherit none of this knowledge — when an implementation or verification lane needs a
+running stack, put the exact commands (and the services-vs-clients split) in its prompt.
 
 ## Tickets you create
 

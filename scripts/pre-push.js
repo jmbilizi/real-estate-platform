@@ -175,6 +175,22 @@ function setupPythonEnvironment() {
   }
 }
 
+// Branches where the git hooks enforce checks automatically. Feature branches
+// skip the automatic run — developers and agents run `pnpm run pre-commit` /
+// `pnpm run pre-push` themselves before committing/pushing; CI is the backstop.
+const PROTECTED_BRANCHES = ['main', 'dev', 'test'];
+
+function getCurrentBranch() {
+  try {
+    return execSync('git rev-parse --abbrev-ref HEAD', {
+      encoding: 'utf8',
+      cwd: path.resolve(__dirname, '..'),
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
 // Detect current branch and determine validation mode
 function detectValidationMode() {
   try {
@@ -186,7 +202,7 @@ function detectValidationMode() {
     log(`Current branch: ${currentBranch}`, 'cyan');
 
     // If on base branches (main/dev/test), run ALL checks (like CI does on push)
-    if (['main', 'dev', 'test'].includes(currentBranch)) {
+    if (PROTECTED_BRANCHES.includes(currentBranch)) {
       log('On base branch - running ALL checks (mimics CI push behavior)', 'yellow');
       return { isAffected: false, base: null, currentBranch };
     }
@@ -643,6 +659,22 @@ function checkInfrastructure() {
 function main() {
   log('\n🔍 Full Check (Pre-Push Validation)', 'bright');
   log('='.repeat(80), 'cyan');
+
+  // Git-hook invocations (--hook) enforce checks only on protected branches.
+  // Manual runs (`pnpm run pre-push`) always execute in full.
+  if (process.argv.includes('--hook')) {
+    const branch = getCurrentBranch();
+    if (branch && !PROTECTED_BRANCHES.includes(branch)) {
+      log(`Feature branch (${branch}) — automatic pre-push checks are off.`, 'yellow');
+      log(
+        `Hooks enforce checks on ${PROTECTED_BRANCHES.join('/')} only. Run 'pnpm run pre-push'`,
+        'yellow',
+      );
+      log('yourself before pushing changes that have not been validated yet.\n', 'yellow');
+      process.exit(0);
+    }
+  }
+
   log('Running: Format + Lint + Type + Test + Build (complete validation)\n', 'yellow');
 
   // Early exit if no projects exist (empty workspace)

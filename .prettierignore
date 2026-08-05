@@ -1,6 +1,10 @@
 # Nx cache and generated files
 .nx/
 
+# Claude Code agent worktrees and machine-local settings
+.claude/worktrees/
+.claude/settings.local.json
+
 # Auto-generated overlays (run-skaffold.js)
 infra/k8s/podman/.generated/
 
