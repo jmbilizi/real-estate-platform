@@ -134,6 +134,26 @@ namespace AccountService.Tests.Integration
         }
 
         [Fact]
+        public async Task PutProfile_Intents_DeduplicatesRepeatedValues()
+        {
+            var client = await AuthHelper.CreateAuthenticatedClientAsync(
+                factory, $"put-intents-dupes-{Guid.NewGuid()}@example.com", Password);
+
+            var duplicated = new[] { "buying", "owning", "buying" };
+            await client.PutAsJsonAsync("/account/profile", new { intents = duplicated });
+
+            var response = await client.GetAsync("/account/profile");
+            var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+            var intents = body.GetProperty("intents").EnumerateArray()
+                .Select(e => e.GetString())
+                .ToArray();
+
+            // Set semantics, with first-occurrence order preserved.
+            var expected = new[] { "buying", "owning" };
+            intents.Should().Equal(expected);
+        }
+
+        [Fact]
         public async Task PutProfile_Intents_EmptyArrayClearsAll()
         {
             var client = await AuthHelper.CreateAuthenticatedClientAsync(
