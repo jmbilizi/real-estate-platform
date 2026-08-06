@@ -161,12 +161,9 @@ dispatch subagents for the pieces — but the accountability never delegates:
      than reading that as your bug.
    - **Debug one command at a time.** Chaining setup, deploy and checks buries which step actually
      failed and burns a long cycle.
-   - **Clean up every background process you start.** Skaffold with `--port-forward` and each
-     `kubectl port-forward` outlive the command that launched them; left running they squat on ports
-     (3002/8080/5432), collide with the next deploy, or serve a stale pod so a later check "passes"
-     against nothing. Stop background shells you launched and verify none survive
-     (`ps -W | grep -E 'skaffold|kubectl'`). On Windows `pkill` silently does nothing — use
-     `taskkill //F //IM kubectl.exe` / `//IM skaffold.exe`. Do this before reporting or committing.
+   - Shut down whatever you started in the background before reporting (root `CLAUDE.md` rule 8) —
+     and tell subagent lanes to do the same, since a lane that leaves a port-forward running
+     corrupts _your_ verification, not just its own.
    - **Never commit on a partial signal.** Commit after verification passes, not before. If you
      already committed and then find a problem, amend rather than layering a fix commit.
    - **Verify in the tree the human can see.** Work in the primary checkout unless isolation is

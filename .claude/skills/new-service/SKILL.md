@@ -60,12 +60,8 @@ without its own manifest cannot produce the pruned `package.json` + `pnpm-lock.y
 reproducible production image installs from. Create one declaring the service's runtime deps and add
 the project to `pnpm-workspace.yaml`.
 
-**Then re-run the formatter before committing.** `pnpm-lock.yaml` is NOT in `.prettierignore`, so
-the committed lockfile is Prettier-formatted (`lockfileVersion: "9.0"`, double quotes). Any
-`pnpm install` rewrites it in pnpm's native style (`'9.0'`, single quotes), which looks like a
-~19,000-line diff and fails CI's `prettier --check --ignore-unknown .`. Run
-`pnpm run nx:workspace-format` after any install, then confirm both gates still pass:
-`pnpm install --frozen-lockfile` (exit 0) and `pnpm exec prettier --check pnpm-lock.yaml`.
+Adding that manifest changes `pnpm-lock.yaml`, so commit it alongside — see root `CLAUDE.md` for the
+lockfile rule.
 
 ## 2b. Fold the generator's `-e2e` sibling into the service project
 
@@ -85,14 +81,9 @@ then runs with no server and fails. Deleting the project is the fix; a `nx:noop`
 not.
 
 Once both suites live in one project, keep `nx test` off the e2e specs with a second jest config
-(`jest.config.ts` for unit, `jest.e2e.config.ts` driving an explicit `e2e` target). **Never use
-`<rootDir>` inside `testPathIgnorePatterns` or `testMatch`** — it interpolates the _native_ path, so
-on Windows its backslashes are read as regex/glob escapes and the pattern silently matches nothing
-(first it ran the e2e spec anyway, then it matched zero tests and "passed"). Write
-`testPathIgnorePatterns: ['/node_modules/', '/tests/']` and
-`testMatch: ['**/tests/**/*.e2e.spec.ts']` — which is why the stock `/node_modules/` default has no
-`<rootDir>` either. Confirm the split with `pnpm exec jest --config <path> --listTests` for both
-configs before trusting it.
+(`jest.config.ts` for unit, `jest.e2e.config.ts` driving an explicit `e2e` target). Mind the
+`<rootDir>` gotcha in root `CLAUDE.md` when writing those patterns, and confirm the split with
+`pnpm exec jest --config <path> --listTests` for both configs before trusting it.
 
 ## 3. Port assignment & PRD alignment
 
@@ -113,11 +104,9 @@ and `global.json` before `dotnet restore` (known CI fix — see git history #19)
 
 Traps that cost real debugging time on the first Node service:
 
-- **Do NOT use an Alpine base for anything that resolves an in-cluster service name.** musl's
-  resolver fails Kubernetes DNS with `EAI_AGAIN`. Proven with an A/B in the same cluster at the same
-  moment: `node:20-alpine` → `EAI_AGAIN postgres-svc`, `node:20-slim` → resolves. An Alpine build
-  crash-looped its migrate initContainer 7× against a healthy `postgres-svc`. Use a Debian (`-slim`)
-  base. Note `cribstop-next` is still on Alpine and carries the same latent bug.
+- **Pick a Debian (`-slim`) base, not Alpine** — see the in-cluster DNS rule in root `CLAUDE.md`.
+  This is a base-image decision, so make it here rather than discovering it from a crash-looping
+  pod.
 - **`node:20-slim` ships no CA bundle at all**, so appending an enterprise root to
   `/etc/ssl/certs/ca-certificates.crt` fails with "Directory nonexistent". Install `ca-certificates`
   first (apt over HTTP, so no TLS needed to bootstrap) then `update-ca-certificates` — copy the
@@ -280,14 +269,6 @@ Sequencing notes that cost time otherwise:
   `infra:local:registry:ensure`, disk recovery via `infra:local:cluster:reset:disk`). The whole
   lifecycle is scripted, so standing the environment up is part of the job, never a blocker to
   report.
-
-**Then clean up every background process you started.** Skaffold with `--port-forward` and each
-`kubectl port-forward` keep running after the command returns; left behind they hold ports
-3002/8080/ 5432 and collide with the next run, or silently serve a stale pod so a later check
-"passes" against nothing. Stop background shells you launched and confirm none survive
-(`ps -W | grep -E 'skaffold|kubectl'`; on Windows `pkill` does not work — use
-`taskkill //F //IM kubectl.exe` / `//IM skaffold.exe`). Do this before you report or commit — 60+
-orphaned `kubectl` processes accumulated across one debugging session.
 
 Finally: **do not commit until the above has actually passed.** Then summarize what was created —
 and if you skipped the gateway route (step 7) because it belongs to a later ticket, say so

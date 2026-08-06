@@ -64,3 +64,7 @@ LICENSE text eol=lf
 *.exe binary
 *.so binary
 *.dylib binary
+
+# Generated lockfile — collapse it in diffs/PR review (it is pnpm's output, not hand-edited).
+# Paired with its .prettierignore entry, which keeps Prettier from reformatting it.
+pnpm-lock.yaml linguist-generated=true

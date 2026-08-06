@@ -39,6 +39,13 @@ marketplace), **Connect** (community). Consumer brand Cribstop.com, brokered by 
    `new-service` skill checklist — Dockerfile, `infra/k8s/` manifests, skaffold artifact, env/secret
    wiring — verified with `pnpm run skaffold:services:deploy`, not just a green `nx build`. A ticket
    that scopes infra out is a defective ticket; flag it and build it correctly.
+8. **Always shut down anything you started in the background.** Dev servers, `skaffold` watches,
+   `kubectl port-forward`, test runners in watch mode — they outlive the command that launched them.
+   Left running they squat on ports (3000/3002/5432/8080) so the next run fails or, worse, silently
+   answers from a stale process and a later check "passes" against nothing. Stop background shells
+   when the task that needed them is done — before reporting or committing — and confirm none
+   survive (`ps -W | grep -E 'skaffold|kubectl|node'`). **On Windows `pkill` silently does nothing**
+   — use `taskkill //F //IM kubectl.exe` (or `skaffold.exe`, `node.exe`).
 
 ## Commands (repo level)
 
@@ -82,15 +89,11 @@ pnpm run infra:validate:dev            # Kustomize validation per env
   `infra/deploy-control.yaml` (CI/CD, enumerated by `yq` key lookup). A service missing from either
   never deploys, with no error. The CI image-build matrix is auto-derived from the `container-build`
   target — don't hardcode it.
-- **`pnpm-lock.yaml` is Prettier-formatted here** (it's not in `.prettierignore`). Any
-  `pnpm install` rewrites it in pnpm's native style and CI's format check fails — run
-  `pnpm run nx:workspace-format` after installing, and confirm `pnpm install --frozen-lockfile`
-  still exits 0.
+- **`pnpm-lock.yaml` is Prettier-ignored** — pnpm owns its formatting, so never reformat it. After
+  any dependency change the gate is correctness, not style: `pnpm install --frozen-lockfile` must
+  exit 0 (CI runs it in six places). Reconcile a failure with an install, never by hand-editing.
 - **No Alpine base images for anything doing in-cluster DNS.** musl fails Kubernetes service
   resolution with `EAI_AGAIN`; use a Debian `-slim` base. (`cribstop-next` is still on Alpine and
   has this latent bug.)
-- **Kill background test processes when done.** `skaffold --port-forward` and `kubectl port-forward`
-  outlive their command and squat on ports, or serve a stale pod so later checks pass against
-  nothing. `pkill` does nothing on Windows — use `taskkill //F //IM kubectl.exe`.
 - Jest `<rootDir>` inside `testMatch` / `testPathIgnorePatterns` silently matches nothing on Windows
   (native backslashes read as escapes). Write the patterns without it.
