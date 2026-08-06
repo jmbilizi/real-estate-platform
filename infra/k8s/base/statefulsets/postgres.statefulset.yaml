@@ -71,6 +71,18 @@ spec:
                 - pg_isready
                 - -U
                 - postgres_sa
+                # -d is required, not optional. libpq defaults the database name to the USERNAME, so
+                # `pg_isready -U postgres_sa` dials a database called "postgres_sa" — which does not
+                # exist, because POSTGRES_DB is "appdb". The probe still passes (a FATAL response
+                # proves the postmaster is answering, so pg_isready exits 0), which is why this was
+                # invisible in deploys while writing a FATAL line to the log every few seconds —
+                # roughly 17k a day, enough to bury a genuine authentication failure.
+                #
+                # "postgres" rather than "appdb": it is the maintenance database created by initdb and
+                # is never dropped, so the probe cannot start failing because an application database
+                # was legitimately recreated.
+                - -d
+                - postgres
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
@@ -81,6 +93,9 @@ spec:
                 - pg_isready
                 - -U
                 - postgres_sa
+                # See the livenessProbe above for why -d is mandatory here.
+                - -d
+                - postgres
             initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 3
