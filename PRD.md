@@ -94,7 +94,7 @@ Microservices (ClusterIP - Internal Only):
    └─ notification-service:3006 (Channel delivery: in-app, email, push, SMS)
       ↓
 Data Layer (StatefulSets):
-   ├─ PostgreSQL 18 + PostGIS (Multi-tenant databases)
+   ├─ PostgreSQL 18 + PostGIS + pgvector (Multi-tenant databases)
    ├─ Redis/Valkey 9.0 (Pub/Sub, Streams event bus, caching, rate limiting)
    └─ ElasticSearch (Search indexing)
 
@@ -190,26 +190,94 @@ dead-lettering/backpressure become necessary.
 Supports flexible composition: townhomes or single-family homes (property only), or multi-unit
 buildings.
 
+**Durable home vs. listing episode.** The property is the durable record and the listing is an
+episode attached to it: one property may have **zero or many** listings across the years, with
+different types and statuses, and a property must be **fully meaningful with none**. This is not a
+storage detail — the claims model (Section 3.2), Verified Resident (Section 8), service history
+(Section 4.6), and homeowner re-engagement (Section 13) all attach to homes that are usually _not_
+for sale. Two consequences bind the whole platform:
+
+- Facts are located at the level whose lifetime they share. Physical facts (beds, baths, living
+  area, lot, year built, geography, neighborhood) belong to the property — or to the unit when the
+  building is genuinely subdivided — never to the offer. Offer facts (price, status, marketing copy,
+  agency attribution, provenance) belong to the listing, because a home relisted years later has a
+  different agent, price, and copy.
+- Units remain **optional**: a single-family home or townhome is one property with no unit rows, and
+  a listing with no `unit_id` means "the offer is the whole property", never "unknown". No synthetic
+  placeholder unit is created for a house or a vacant parcel.
+
+A property therefore needs a **canonical identity** that survives relisting and arrives consistently
+from different sources (MLS feed, FSBO submission, public records). Without it the same home can
+exist twice, and two accounts could each hold an approved `owner` claim on one house — see the
+deduplication requirement in Section 6.2.
+
 ### 3.1 Consumer Listing Model (Marketplace)
 
 Beyond the management hierarchy above, the consumer marketplace requires a richer listing shape,
-shared by the web client and the listings service:
+shared by the web client and the property service.
+
+> **This section defines the consumer/API shape, not a table layout.** It is the DTO a client
+> receives, deliberately flat and listing-centric because that is what a listing card and detail
+> page render. **Storage locates each attribute at the level whose lifetime it shares** (Section 3),
+> so a physical attribute listed below lives on the property or unit and is resolved into this shape
+> by the API. Read as a table spec it would mandate duplicating every physical fact onto every
+> offer, which is precisely what Section 3 forbids.
 
 - **Listing type:** `sale` | `rent` | `sold` (the platform supports buy, sell, and rent — not
-  rentals only).
+  rentals only). `sold` is a **lifecycle state projected into this union for display**, not a kind
+  of offer: storage separates the durable offer kind (`sale` | `rent`) from status, so a sold
+  _rental_ is representable and a listing cannot simultaneously claim to be sold and active.
 - **Listing source:** `brightMLS` | `internal` | `other` — tracks provenance for MLS compliance,
-  attribution, and deduplication.
+  attribution, and deduplication. This is the consumer-facing discriminator; the specific
+  originating system and per-source record keys are stored alongside it, so onboarding a second MLS
+  is data rather than a code change (Section 1 — market/MLS coverage is data, not a constant).
 - **Property type:** Single Family, Condo, Townhome, Multi-Family, Loft, Land, New Construction.
-- **Status:** Active, Pending, Coming Soon, Sold.
+- **Status:** Active, Pending, Coming Soon, Sold — the **consumer-facing labels**. Feeds emit a
+  wider vocabulary (including Active Under Contract, Closed, Withdrawn, Expired, Canceled, Hold),
+  which the platform must store and map, publishing only the statuses a consumer should see. A feed
+  status the platform cannot record is worse than one it does not display: the update is rejected
+  and the prior status keeps being advertised.
+- **Sample/derived data marker:** every independently displayable record carries a sample flag, and
+  a displayed listing is labelled if _any_ record contributing to it is sample data (Section 6.3).
 - **Core attributes:** price, beds, baths, sqft, lot size, year built, neighborhood, city/state/zip,
-  `latitude`/`longitude` (map), image gallery, description, `lastUpdated`.
+  `latitude`/`longitude` (map), image gallery, description, `lastUpdated`. Of these, only price and
+  `lastUpdated` are offer facts; the rest describe the physical home and are stored there (Section
+  3). Baths are stored as full/half counts — feeds supply them separately and a single decimal
+  cannot be decomposed back — and presented as the familiar `2.5`. `lastUpdated` is **feed freshness
+  for that listing** and must never be advanced by an unrelated local write (Section 6.2). For a
+  sold listing, the sale price is recorded separately from the ask, with its close date: without
+  both, prior sales cannot be dated or ordered and the solds-display rules in Section 4.6 have
+  nothing to key on.
 - **Amenities:** structured enum (Pool, Garage, Gym, Elevator, Balcony, Fireplace, Washer/Dryer, Pet
-  Friendly, Waterfront, Office, Rooftop, Garden, Smart Home, Solar, EV Charging).
-- **Merchandising flags:** `featured`, `priceReduced`, `newConstruction`, `openHouse`
-  (date/start/end).
+  Friendly, Waterfront, Office, Rooftop, Garden, Smart Home, Solar, EV Charging). The closed set is
+  enforced in the database, not only in application code — an ingestion mapper or manual fix that
+  bypassed validation could otherwise persist unreviewed Fair Housing copy (Section 6.3). For the
+  same reason the model carries **no open keyword/tag/feature field and no free-form attribute
+  bag**: an open field accepts steering-adjacent data from a feed mapping with no review step.
+- **Merchandising flags:** `featured`, `priceReduced`, `newConstruction`, `openHouse`. A listing may
+  have **multiple** open houses (successive weekends), each a real start/end instant so "upcoming"
+  is a comparison rather than a string; a single date with text times cannot express this. Where
+  `featured` placement is **paid**, the reason must be recorded so the Sponsored disclosure in
+  Section 6 can be rendered from data.
+- **Media:** the gallery is an ordered set of assets with per-asset alt text and provenance, not an
+  opaque list of URLs — ordering and alt text are accessibility requirements, and provenance is what
+  makes purge-on-expiry possible for licensed MLS media.
 - **Attribution (required):** listing broker name/phone/email and office name plus office broker
-  lead contact — displayed on every listing for MLS/brokerage compliance.
-- **Consumer state (per user):** `isSaved` / `isFavorited` for saved homes and search alerts.
+  lead contact — displayed on every listing for MLS/brokerage compliance, in **list and detail
+  responses alike** (NAR 7.58 applies to search results, not just a detail page). Attribution is an
+  offer fact and is never inherited from the property: a home relisted years later has a different
+  agent, and showing the prior firm falsely attributes the listing. The listing agent's licence/MLS
+  identifier is stored alongside the display contact, because Section 3.2's automatic
+  `listing_agent` claim tier matches on that identifier — name matching would let anyone
+  self-approve.
+- **Seller display suppression:** feeds carry per-listing flags withholding the whole listing or the
+  street address from internet display. Both must be honoured, and suppressing an address must also
+  suppress its map coordinates — a published point re-identifies the address the seller opted out
+  of.
+- **Consumer state (per user):** `isSaved` / `isFavorited` for saved homes and search alerts. Saved
+  state belongs to the **home**, not the offer: feeds issue a new listing record when a listing
+  agreement changes, so state keyed to a listing silently detaches. A saved home with no active
+  listing is a normal, renderable state, not an error.
 
 ### 3.2 Property Relationship Claims
 
