@@ -22,8 +22,10 @@
       "type": "node",
       "request": "launch",
       "name": "Debug property-service with Nx",
-      "runtimeExecutable": "pnpm exec",
-      "runtimeArgs": ["nx", "serve", "property-service"],
+      // runtimeExecutable is a single executable path, so "pnpm exec" (with a space) resolves to a
+      // non-existent binary and the config never launches. `exec` belongs in runtimeArgs.
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["exec", "nx", "serve", "property-service"],
       "env": {
         "NODE_OPTIONS": "--inspect=9229"
       },

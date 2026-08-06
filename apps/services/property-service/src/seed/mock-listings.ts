@@ -70,6 +70,32 @@ const PHOTOS = [
 const IMG = (i: number): string =>
   `https://images.unsplash.com/${PHOTOS[i % PHOTOS.length]}?w=1200&h=800&fit=crop&auto=format&q=80`;
 
+/**
+ * Open-house dates are generated relative to seed run time, never hardcoded.
+ *
+ * They used to be fixed calendar dates, which meant the demo dataset rotted: the dates fell into the
+ * past and every open house in the sample data was expired. That is invisible while the filter means
+ * "has any open house" and silently returns zero results the moment it means "has an UPCOMING one".
+ *
+ * Exported so tests assert against the same function rather than a literal that would need editing
+ * every few months.
+ */
+export function upcomingWeekend(from: Date = new Date()): { saturday: string; sunday: string } {
+  const saturday = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()));
+  // 6 = Saturday. Always land on a FUTURE Saturday, so a seed run on a Saturday advances a week rather
+  // than producing an open house that may already have finished today.
+  const daysUntilSaturday = (6 - saturday.getUTCDay() + 7) % 7 || 7;
+  saturday.setUTCDate(saturday.getUTCDate() + daysUntilSaturday);
+  const sunday = new Date(saturday);
+  sunday.setUTCDate(sunday.getUTCDate() + 1);
+  return {
+    saturday: saturday.toISOString().slice(0, 10),
+    sunday: sunday.toISOString().slice(0, 10),
+  };
+}
+
+const WEEKEND = upcomingWeekend();
+
 export const mockListings: MockListing[] = [
   {
     id: '1',
@@ -103,7 +129,7 @@ export const mockListings: MockListing[] = [
     latitude: 38.9784,
     longitude: -76.4922,
     featured: true,
-    openHouse: { date: '2026-04-26', startTime: '1:00 PM', endTime: '4:00 PM' },
+    openHouse: { date: WEEKEND.saturday, startTime: '1:00 PM', endTime: '4:00 PM' },
     priceReduced: false,
     newConstruction: false,
   },
@@ -179,7 +205,7 @@ export const mockListings: MockListing[] = [
     latitude: 39.2754,
     longitude: -76.6122,
     featured: false,
-    openHouse: { date: '2026-04-27', startTime: '11:00 AM', endTime: '1:00 PM' },
+    openHouse: { date: WEEKEND.sunday, startTime: '11:00 AM', endTime: '1:00 PM' },
   },
   {
     id: '4',
@@ -417,7 +443,7 @@ export const mockListings: MockListing[] = [
     latitude: 39.2826,
     longitude: -76.5929,
     featured: true,
-    openHouse: { date: '2026-04-26', startTime: '10:00 AM', endTime: '12:00 PM' },
+    openHouse: { date: WEEKEND.saturday, startTime: '10:00 AM', endTime: '12:00 PM' },
   },
   {
     id: '11',
@@ -493,5 +519,51 @@ export const mockListings: MockListing[] = [
     latitude: 38.8185,
     longitude: -77.0524,
     featured: true,
+  },
+  {
+    // The only entry that shares an address with another listing (id '1', '1200 Harbor View Dr'), and it
+    // is here on purpose: it exercises the claim this whole schema rests on — ONE physical property with
+    // MULTIPLE listings across the years. Every other address is distinct once the unit designator is
+    // stripped, so without this entry `UNIQUE (address_key)` collapses nothing and the
+    // property -> N listings path would ship with no coverage at all.
+    //
+    // It is also the only closed listing, so it exercises list-vs-close price, the 'Closed' feed status
+    // that maps to the consumer 'Sold' label, and the solds-display gate in listing_search_v (a Closed
+    // listing with no close_date is deliberately not publishable).
+    id: '13',
+    title: 'Modern Waterfront Estate — Prior Sale (Sample)',
+    address: '1200 Harbor View Dr',
+    city: 'Annapolis',
+    state: 'MD',
+    zip: '21401',
+    neighborhood: 'Eastport',
+    price: 1195000,
+    status: 'Sold',
+    listingType: 'sold',
+    source: 'internal',
+    propertyType: 'Single Family',
+    // The same physical home as id '1'. The durable property row owns these facts, so the two listings
+    // must agree on them — a disagreement here would mean the snapshot never matched durable truth.
+    beds: 5,
+    baths: 4,
+    sqft: 4200,
+    lotSqft: 10890,
+    yearBuilt: 2019,
+    imageUrls: [IMG(0), IMG(1)],
+    brokerName: 'Sample Agent 13',
+    brokerPhone: '(410) 555-0126',
+    brokerEmail: 'sample.agent13@example.com',
+    officeName: 'Real Broker, LLC',
+    officeBrokerLeadPhone: '(410) 555-0127',
+    officeBrokerLeadMail: 'broker@example.com',
+    lastUpdated: '2023-09-15T12:00:00Z',
+    description:
+      'Prior sale of this waterfront property, retained as historical record. Conveyed with the deep-water dock and boat lift.',
+    amenities: ['Pool', 'Waterfront', 'Garage', 'Fireplace'],
+    latitude: 38.9784,
+    longitude: -76.4922,
+    featured: false,
+    closePrice: 1150000,
+    closeDate: '2023-09-15',
   },
 ];

@@ -7,5 +7,9 @@
   "cribstop-next": {
     "imageName": "cribstop-web",
     "dockerfilePath": "apps/clients/cribstop/next"
+  },
+  "postgres-image": {
+    "imageName": "postgres-postgis-pgvector",
+    "dockerfilePath": "infra/docker/postgres"
   }
 }

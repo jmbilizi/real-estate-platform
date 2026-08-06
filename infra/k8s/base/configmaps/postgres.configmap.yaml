@@ -91,6 +91,35 @@ data:
         ALTER DATABASE property_db OWNER TO property_service_db_user;
     EOSQL
 
+    # --- Step 4: Reconcile extensions that require SUPERUSER ---
+    # This must live here, NOT only in init-databases.sh: that script is mounted into
+    # /docker-entrypoint-initdb.d and therefore runs only when PGDATA is empty, so anything added
+    # there silently never executes on an environment that already has a volume. This script runs on
+    # every boot (lifecycle.postStart) as the superuser, and CREATE EXTENSION IF NOT EXISTS is
+    # idempotent.
+    #
+    # The FULL set is reconciled here, not just newly-added ones. Dropping and recreating a single
+    # database on a running cluster is a real operation (a schema reset), and it does not re-run initdb
+    # — so a database recreated that way would come back with none of these, and property-service's
+    # migrations would fail on the geography column with a permission error rather than a clear
+    # "extension missing".
+    #
+    # Why the services cannot do this themselves: an extension is installable by a database owner only
+    # if it is marked TRUSTED. Verified on this image: pg_trgm and uuid-ossp are trusted; postgis and
+    # vector are NOT, so they require SUPERUSER and belong here. The pgvector .so ships in our own
+    # image — see infra/docker/postgres/Dockerfile.
+    psql --username "$POSTGRES_USER" --dbname property_db <<-EOSQL
+        CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+        CREATE EXTENSION IF NOT EXISTS "postgis";
+        CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+        CREATE EXTENSION IF NOT EXISTS "btree_gist";
+        CREATE EXTENSION IF NOT EXISTS "vector";
+    EOSQL
+    psql --username "$POSTGRES_USER" --dbname account_db <<-EOSQL
+        CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+        CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+    EOSQL
+
     echo "sync-passwords: done."
 
   init-databases.sh: |
@@ -190,7 +219,8 @@ data:
         CREATE EXTENSION IF NOT EXISTS "postgis";
         CREATE EXTENSION IF NOT EXISTS "pg_trgm";        -- Text search & similarity
         CREATE EXTENSION IF NOT EXISTS "btree_gist";     -- Advanced indexing
-        
+        CREATE EXTENSION IF NOT EXISTS "vector";         -- Embeddings (pgvector; superuser-only)
+
         -- Grant all permissions to property_service_db_user
         GRANT ALL ON SCHEMA public TO property_service_db_user;
         GRANT ALL ON ALL TABLES IN SCHEMA public TO property_service_db_user;

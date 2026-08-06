@@ -86,6 +86,16 @@ build:
             - apps/services/property-service/node_modules/**
             - apps/services/property-service/tests/**
 
+    # PostgreSQL 18 + PostGIS + pgvector. Built here rather than pulled because no trusted public
+    # image carries both extensions — see infra/docker/postgres/Dockerfile.
+    - image: postgres-postgis-pgvector
+      context: .
+      custom:
+        buildCommand: node tools/infra/skaffold-build.js
+        dependencies:
+          paths:
+            - infra/docker/postgres/**
+
   local:
     # IMPORTANT: This must be true for the Podman+Kind workflow.
     # - The cluster pulls from the local registry (localhost:5001)

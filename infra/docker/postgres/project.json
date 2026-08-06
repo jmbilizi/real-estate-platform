@@ -1,0 +1,22 @@
+{
+  "name": "postgres-image",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "tags": [
+    "runtime:none",
+    "type:service",
+    "platform:server",
+    "framework:unassigned",
+    "scope:shared",
+    "devteam:unassigned"
+  ],
+  "targets": {
+    "container-build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node tools/docker/build-image.js {projectName} --tag={args.tag}",
+        "cwd": "."
+      }
+    }
+  }
+}

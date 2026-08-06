@@ -74,7 +74,12 @@ environments:
 
       property-service:
         enabled: true
-        auto_deploy: true # Auto-deploy in dev
+        # Temporarily manual: the #21 schema is being reshaped in place, and dev's property_db is
+        # persistent. Auto-deploying would apply the whole migration chain to it in one unreviewed
+        # CI run, after which the migration files are immutable (node-pg-migrate keys applied
+        # migrations by filename, so a correction cannot re-run). Restore auto_deploy: true once
+        # the schema has been reviewed and dev has been migrated deliberately.
+        auto_deploy: false
         require_approval: false # No approval needed
         rollback_on_failure: false # Disabled in dev for manual investigation
 

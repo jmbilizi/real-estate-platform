@@ -4,8 +4,11 @@ import { Amenity, ListingSource, ListingStatus, ListingType, PropertyType } from
  * Shape of one entry in the frontend mock dataset
  * (`apps/clients/cribstop/next/src/lib/listings.ts`), trimmed to the fields
  * the seed transform needs. Field names/casing mirror the frontend `Listing`
- * interface (`apps/clients/cribstop/next/src/lib/types.ts`) so the mapping
- * in `transform.ts` is a straight camelCase -> snake_case translation.
+ * interface (`apps/clients/cribstop/next/src/lib/types.ts`).
+ *
+ * Note this is the CONSUMER shape, which is deliberately flat. The database is not: facts are stored at
+ * the level whose lifetime they share (see the migrations), and `transform.ts` is where the flat entry
+ * is decomposed into community / property / unit / listing rows.
  */
 export interface MockListing {
   id: string;
@@ -38,72 +41,130 @@ export interface MockListing {
   latitude: number;
   longitude: number;
   featured: boolean;
+  /**
+   * A single open house in the consumer shape. The database models open houses as their own multi-row
+   * child table, so this maps to zero or one `listing_open_houses` row — a listing with two weekends of
+   * showings is representable in the schema even though this mock shape cannot express it.
+   */
   openHouse?: { date: string; startTime: string; endTime: string } | null;
   priceReduced?: boolean;
   newConstruction?: boolean;
+  /** Sale price, for a listing that has already closed. Requires `closeDate`. */
+  closePrice?: number;
+  /** Close date, required for a sold listing to be publicly displayable (Bright solds-display policy). */
+  closeDate?: string;
 }
 
 export interface CommunityRow {
   id: string;
   name: string;
+  is_sample: boolean;
 }
 
+/**
+ * The durable physical home. Holds site facts AND — when the property is not subdivided — the dwelling
+ * facts (beds/baths/living area) that used to live only on the transient listing.
+ */
 export interface PropertyRow {
   id: string;
   community_id: string | null;
-  address: string;
+  address_raw: string;
+  street_line: string;
   city: string;
   state: string;
-  zip: string;
+  zip5: string;
+  address_key: string;
   latitude: number | null;
   longitude: number | null;
+  neighborhood: string | null;
   property_type: PropertyType;
   year_built: number | null;
+  lot_sqft: number | null;
+  beds: number | null;
+  baths_full: number | null;
+  baths_half: number | null;
+  living_sqft: number | null;
+  is_sample: boolean;
 }
 
+/** An optional subdivision of a property. Absent for single-family homes and townhomes. */
 export interface UnitRow {
   id: string;
   property_id: string;
   unit_number: string | null;
   floor: number | null;
-  sqft: number | null;
+  beds: number | null;
+  baths_full: number | null;
+  baths_half: number | null;
+  living_sqft: number | null;
+  is_sample: boolean;
 }
 
+/**
+ * One offer. Everything here is either an offer fact or a deliberate write-time snapshot of the
+ * dwelling facts resolved from properties/units — see `upsertListing()`, the only writer.
+ */
 export interface ListingRow {
   id: string;
   property_id: string;
   unit_id: string | null;
   title: string;
-  listing_type: ListingType;
+  offer_kind: OfferKind;
+  consumer_status: ListingStatus | null;
+  status: string;
   source: ListingSource;
-  status: ListingStatus;
-  price: number;
-  beds: number;
-  baths: number;
-  sqft: number;
+  list_price: number;
+  close_price: number | null;
+  close_date: string | null;
+  // Dwelling snapshot
+  beds: number | null;
+  baths_full: number | null;
+  baths_half: number | null;
+  living_sqft: number | null;
   lot_sqft: number | null;
   year_built: number | null;
-  neighborhood: string;
+  neighborhood: string | null;
   city: string;
   state: string;
-  zip: string;
-  latitude: number;
-  longitude: number;
-  image_urls: string[];
-  description: string;
+  zip5: string;
+  latitude: number | null;
+  longitude: number | null;
+  // Copy
+  description: string | null;
+  description_source: DescriptionSource | null;
   amenities: Amenity[];
+  // Merchandising
   featured: boolean;
   price_reduced: boolean;
   new_construction: boolean;
-  open_house_date: string | null;
-  open_house_start_time: string | null;
-  open_house_end_time: string | null;
+  // Attribution
   broker_name: string;
   broker_phone: string;
   broker_email: string;
   office_name: string;
   office_broker_lead_phone: string | null;
   office_broker_lead_email: string | null;
+  listing_agent_name: string | null;
   is_sample: boolean;
   last_updated: string;
 }
+
+export interface OpenHouseRow {
+  id: string;
+  listing_id: string;
+  starts_at: string;
+  ends_at: string;
+  is_sample: boolean;
+}
+
+export interface MediaRow {
+  id: string;
+  listing_id: string;
+  source_url: string;
+  sort_order: number;
+  is_primary: boolean;
+  is_sample: boolean;
+}
+
+export type OfferKind = 'sale' | 'rent';
+export type DescriptionSource = 'mls_remarks' | 'agent' | 'internal';

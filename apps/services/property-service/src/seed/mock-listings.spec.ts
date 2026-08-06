@@ -73,7 +73,7 @@ describe('mock-listings compliance', () => {
     const rows = mockListings.map((listing, index) =>
       mapToListingRow(`listing-${index}`, `property-${index}`, null, listing),
     );
-    expect(rows).toHaveLength(12);
+    expect(rows).toHaveLength(mockListings.length);
     expect(rows.every((row) => row.source === 'internal')).toBe(true);
     expect(rows.every((row) => row.is_sample)).toBe(true);
   });

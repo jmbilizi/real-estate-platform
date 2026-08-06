@@ -1,6 +1,7 @@
 # PostgreSQL StatefulSet (Base Configuration)
 # Cloud-agnostic base - NO resources or storage defined (added via environment patches)
-# Image: postgis/postgis:18-3.6 (PostgreSQL 18 with PostGIS spatial extensions)
+# Image: postgres-postgis-pgvector - built from infra/docker/postgres/Dockerfile
+#        (postgis/postgis:18-3.6 + pgvector; no trusted public image ships both)
 # Multi-tenant setup: Creates 3 service databases (account_db, messaging_db, property_db)
 # Secrets: Password authentication via postgres-secret (substituted by workflow)
 # Persistence: PVC managed by volumeClaimTemplates (defined in environment patches)
@@ -27,7 +28,7 @@ spec:
         fsGroup: 999 # postgres user group
       containers:
         - name: postgres
-          image: postgis/postgis:18-3.6
+          image: postgres-postgis-pgvector
           imagePullPolicy: IfNotPresent
           # Resources intentionally omitted - MUST be defined in environment patches
           # This ensures explicit resource decisions per environment (dev vs prod)
