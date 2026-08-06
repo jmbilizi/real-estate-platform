@@ -9,7 +9,11 @@ const yaml = require('js-yaml');
 const workspaceRoot = path.resolve(__dirname, '../..');
 const toolsBinDir = path.join(workspaceRoot, 'tools', 'bin');
 
-let args = process.argv.slice(2);
+// pnpm forwards the literal '--' separator as its own argument, so
+// `pnpm run skaffold:services:deploy -- --skip-build` arrives here as ['run', ..., '--',
+// '--skip-build'] and skaffold rejects it with `unknown command "--"`. That is the usage
+// package.json documents, so drop the separator rather than letting it break every override.
+let args = process.argv.slice(2).filter((arg) => arg !== '--');
 if (args.length === 0) {
   console.error('Usage: node tools/infra/run-skaffold.js <skaffold args...>');
   process.exit(1);
