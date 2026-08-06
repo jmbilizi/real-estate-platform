@@ -176,20 +176,35 @@ function resolveFieldOption(schema, fieldName, optionName) {
 }
 
 /**
- * Turns literal `\n` / `\t` escape sequences in a CLI-supplied string into real whitespace.
+ * Turns literal `\n` / `\t` escape sequences in a CLI-supplied string into real whitespace,
+ * skipping Markdown code spans and fenced blocks.
  *
  * No shell interprets escapes inside a plain double-quoted argument, so a caller passing
  * `--body "## Problem\n\nText"` sends the two characters `\` and `n`. GitHub then renders the whole
- * ticket or comment as one unreadable line (see the original bodies of #29/#30). A literal `\n` is
- * essentially never intended in prose, so normalizing is safe; prefer a `--*-file` flag for anything
- * multi-line.
+ * ticket or comment as one unreadable line (see the original bodies of #29/#30).
+ *
+ * Prose is safe to normalize, but Windows paths are not: `C:\new\test` and `C:\temp` contain the
+ * very sequences we rewrite, so a blanket replace would silently corrupt them into a newline and a
+ * tab. Code is where verbatim paths belong in Markdown, so backticks are the discriminator — the
+ * odd-indexed segments below are the captured code, and they pass through untouched. A bare path
+ * outside backticks is still at risk; use a `--*-file` flag for anything that formatting matters
+ * for, which is also the answer for multi-line text.
  */
+const MARKDOWN_CODE_SEGMENT = /(```[\s\S]*?```|`[^`\n]*`)/;
+
 function unescapeInlineText(text) {
   if (!text || !/\\[nt]/.test(text)) return text;
   return text
-    .replace(/\\r\\n/g, '\n')
-    .replace(/\\n/g, '\n')
-    .replace(/\\t/g, '\t');
+    .split(MARKDOWN_CODE_SEGMENT)
+    .map((segment, index) =>
+      index % 2 === 1
+        ? segment
+        : segment
+            .replace(/\\r\\n/g, '\n')
+            .replace(/\\n/g, '\n')
+            .replace(/\\t/g, '\t'),
+    )
+    .join('');
 }
 
 module.exports = {

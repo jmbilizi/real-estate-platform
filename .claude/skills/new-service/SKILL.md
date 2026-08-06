@@ -82,8 +82,10 @@ not.
 
 Once both suites live in one project, keep `nx test` off the e2e specs with a second jest config
 (`jest.config.ts` for unit, `jest.e2e.config.ts` driving an explicit `e2e` target). Mind the
-`<rootDir>` gotcha in root `CLAUDE.md` when writing those patterns, and confirm the split with
-`pnpm exec jest --config <path> --listTests` for both configs before trusting it.
+`<rootDir>` gotcha in root `CLAUDE.md` when writing those patterns, and confirm the split before
+trusting it — `nx:run-commands` forwards extra flags to jest, so
+`pnpm exec nx test <name> --listTests` and `pnpm exec nx run <name>:e2e --listTests` list each
+config's real matches through the same target CI runs.
 
 ## 3. Port assignment & PRD alignment
 
