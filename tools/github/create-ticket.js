@@ -19,6 +19,9 @@
  *     --scope cribstop --scope api-gateway \
  *     --label type:feature \
  *     --milestone "Beta Launch"
+ *
+ * Always use `--body-file` for the body. `--body` exists for one-liners; multi-line markdown passed
+ * that way arrives with literal `\n` characters (see resolveBody below).
  */
 
 const fs = require('fs');
@@ -29,6 +32,7 @@ const {
   ghExec,
   ghJson,
   resolveFieldOption,
+  unescapeInlineText,
   die,
   ok,
   info,
@@ -52,6 +56,17 @@ function parseArgs(argv) {
   return args;
 }
 
+/** Reads the body from `--body-file` (preferred) or `--body`. See `unescapeInlineText`. */
+function resolveBody(args) {
+  if (args['body-file']) return fs.readFileSync(args['body-file'], 'utf-8');
+  const raw = args.body || '';
+  const unescaped = unescapeInlineText(raw);
+  if (unescaped !== raw) {
+    info('Body contained literal \\n / \\t escapes — unescaping. Prefer --body-file for markdown.');
+  }
+  return unescaped;
+}
+
 function main() {
   ensureGhReady();
   const { owner, repo, projectNumber } = requireConfig();
@@ -62,7 +77,7 @@ function main() {
     die('--title is required');
   }
 
-  const body = args['body-file'] ? fs.readFileSync(args['body-file'], 'utf-8') : args.body || '';
+  const body = resolveBody(args);
 
   const labels = [...args.label, ...args.scope.map((s) => `scope:${s}`)];
 

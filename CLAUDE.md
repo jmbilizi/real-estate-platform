@@ -29,6 +29,23 @@ marketplace), **Connect** (community). Consumer brand Cribstop.com, brokered by 
 4. **Never bypass git hooks** (`--no-verify`), never force-push.
 5. **Compliance in all user-facing copy/mock data**: Fair Housing, Real Broker LLC brand prominence,
    no fabricated data — see PRD.md §6 and the cribstop project guide.
+6. **The whole local infra lifecycle is scripted — manage it yourself, never ask.** Cluster,
+   registry, images, and deploys all have `pnpm run` scripts (see Commands below and `package.json`
+   → "Local Cluster Lifecycle" / "Local Container Registry"). If the cluster isn't up, create it; if
+   it's wedged or out of disk, reset it. Never ask whether the environment is available — that's a
+   question you answer with a command. Only genuine external dependencies (secrets, paid accounts,
+   sign-offs) need a human.
+7. **A new deployable isn't done until it deploys.** Creating an Nx service/app means the full
+   `new-service` skill checklist — Dockerfile, `infra/k8s/` manifests, skaffold artifact, env/secret
+   wiring — verified with `pnpm run skaffold:services:deploy`, not just a green `nx build`. A ticket
+   that scopes infra out is a defective ticket; flag it and build it correctly.
+8. **Always shut down anything you started in the background.** Dev servers, `skaffold` watches,
+   `kubectl port-forward`, test runners in watch mode — they outlive the command that launched them.
+   Left running they squat on ports (3000/3002/5432/8080) so the next run fails or, worse, silently
+   answers from a stale process and a later check "passes" against nothing. Stop background shells
+   when the task that needed them is done — before reporting or committing — and confirm none
+   survive (`ps -W | grep -E 'skaffold|kubectl|node'`). **On Windows `pkill` silently does nothing**
+   — use `taskkill //F //IM kubectl.exe` (or `skaffold.exe`, `node.exe`).
 
 ## Commands (repo level)
 
@@ -40,7 +57,10 @@ pnpm run nx:workspace-format           # Fix formatting repo-wide
 pnpm run pre-commit                    # Fast validation (format+lint+type-check)
 pnpm run pre-push                      # Full validation (+ test + build)
 pnpm install && pnpm run hooks:setup   # First-time setup
-pnpm run infra:local:cluster:setup     # Local Kind/Podman cluster
+pnpm run infra:local:cluster:setup     # Local cluster: also :delete | :reset:disk | :images:list
+pnpm run infra:local:registry:ensure   # Local registry: also :status | :delete
+pnpm run skaffold:services:deploy      # One-shot deploy (vs. skaffold:services watch loop)
+pnpm run infra:validate:dev            # Kustomize validation per env
 ```
 
 ## Layout
@@ -65,3 +85,15 @@ pnpm run infra:local:cluster:setup     # Local Kind/Podman cluster
 - `tag:runtime:*` commands miss new projects until `pnpm run nx:reset`.
 - Accounts are multi-role platform-wide (owner+renter+buyer+agent+provider simultaneously); never
   introduce a single-value `user_type` (PRD §11.2).
+- **Deployment is gated in two registries, and omission is silent**: `skaffold.yaml` (local) and
+  `infra/deploy-control.yaml` (CI/CD, enumerated by `yq` key lookup). A service missing from either
+  never deploys, with no error. The CI image-build matrix is auto-derived from the `container-build`
+  target — don't hardcode it.
+- **`pnpm-lock.yaml` is Prettier-ignored** — pnpm owns its formatting, so never reformat it. After
+  any dependency change the gate is correctness, not style: `pnpm install --frozen-lockfile` must
+  exit 0 (CI runs it in six places). Reconcile a failure with an install, never by hand-editing.
+- **No Alpine base images for anything doing in-cluster DNS.** musl fails Kubernetes service
+  resolution with `EAI_AGAIN`; use a Debian `-slim` base. (`cribstop-next` is still on Alpine and
+  has this latent bug.)
+- Jest `<rootDir>` inside `testMatch` / `testPathIgnorePatterns` silently matches nothing on Windows
+  (native backslashes read as escapes). Write the patterns without it.
