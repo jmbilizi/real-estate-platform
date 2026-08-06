@@ -33,6 +33,28 @@ especially: never raw tool commands (always `pnpm run` / `pnpm exec nx` wrappers
 hooks, `pnpm run nx:reset` after creating/deleting projects, multi-role accounts (never a
 single-value `user_type`).
 
+**Creating a new Nx project — service, app, or lib — means following the `new-service` skill's
+checklist, start to finish, regardless of what the ticket says its scope is.** That checklist is the
+repo's definition of a deployable unit (generator → `nx:reset` → real tags → Dockerfile → K8s
+manifests → skaffold artifact → gateway route → project `CLAUDE.md`), and a ticket cannot descope
+parts of it into non-existence. If the ticket claims infra isn't needed, that is a contradiction
+between the ticket and repo convention: resolve it per step 4 below — comment on the issue and
+proceed with the convention — never by silently obeying the narrower of the two. Shipping an Nx
+project that `pnpm run skaffold:services` cannot deploy is an incomplete ticket even when every
+acceptance criterion is checked.
+
+**The existing pattern is the default path — infra setup, CI/CD, service layout, Dockerization
+alike.** Before writing a new config, find the closest thing that already works and copy its shape
+field for field: `account-service.deployment.yaml` for a service manifest, the sibling artifacts in
+`skaffold.yaml`, the neighbouring entries in `infra/deploy-control.yaml`. Deviate only where you can
+name the concrete problem the existing shape causes, say so in the PR, and prefer fixing it in the
+shared pattern over special-casing your service. Two failure modes to watch for, both of which cost
+a full review cycle here: inventing a new shape when a reference existed, and solving a problem in a
+different layer than the working service solves it in (a manifest-level workaround where
+`account-service` uses application-level retry). When two services look like they have "the same
+setup" but behave differently, **read the other service's code** — the difference is usually there,
+not in the manifests.
+
 ## Operating model: orchestrate, verify, own
 
 You are the conductor, not merely a coder. Based on the ticket's shape, you decompose the work and
@@ -85,6 +107,15 @@ dispatch subagents for the pieces — but the accountability never delegates:
    questions on the issue (`gh:ticket:update-status -- --issue <n> --comment "..."`), set Status
    back to `Backlog` if it truly can't proceed, and report why. A wrong implementation costs more
    than a bounced ticket.
+   - **A ticket can be wrong about scope, not just ambiguous.** The AC are the definition of done
+     for _product behavior_; they do not get to redefine what a working system is. When an AC would
+     have you ship something that cannot run, cannot deploy, or leaves a downstream ticket
+     unbuildable — the classic case being "no infra/Kubernetes changes required" on a ticket that
+     creates a new service — comment the gap on the issue and **build it correctly anyway**. Note
+     the deviation in the PR body so the reviewer sees you overrode the AC deliberately. Obeying a
+     defective requirement is not compliance, it's a defect you chose to ship.
+   - Conflicts with `PRD.md` are still a bounce, not a spec edit (see Hard boundaries) — flag the
+     needed PRD change on the ticket and let the product owner make it.
 5. **Plan the implementation** — before writing code, write a Implementation Plan into the ticket
    body: `pnpm run gh:ticket:update-status -- --issue <n> --plan-file <path>` (replaces only the
    marker-delimited `## Implementation Plan` section; the rest of the body stays the product
@@ -113,6 +144,31 @@ dispatch subagents for the pieces — but the accountability never delegates:
    by name (`pnpm exec nx test <project>`) — `nx affected` misses uncommitted work. Infra changes:
    `pnpm run infra:validate`. Criteria about runtime behavior get exercised against a running stack
    — see "Running the stack locally".
+   - **A new deployable is not validated until it has actually deployed.** `nx build` passing proves
+     it compiles, which is not the claim. Run `pnpm run skaffold:services:deploy` and confirm the
+     pod reaches Ready, any migration initContainer completed, and the health endpoint answers.
+     Report that output, not the build's.
+   - **The deploy command's exit code is the signal — not pod status.** `1/8 deployment(s) failed`
+     is a failed deploy even if Kubernetes restarts the container into a healthy state a minute
+     later; CI's rollout gate will not wait for that. Capture the exit code explicitly. "The pod is
+     Running now" is not evidence the deploy passed.
+   - **Every fix goes back through the infra config and out via skaffold.** Never `kubectl apply` a
+     manifest by hand and never patch a live object to get a green check — that validates something
+     you are not shipping and leaves the real path broken.
+   - **Deploy from a clean slate when the change touches startup order.** A warm cluster hides
+     cold-start races; `skaffold:delete` then deploy is what surfaces them. An immediate redeploy
+     fails while the `ingress-nginx` namespace is still terminating — wait for it to clear rather
+     than reading that as your bug.
+   - **Debug one command at a time.** Chaining setup, deploy and checks buries which step actually
+     failed and burns a long cycle.
+   - Shut down whatever you started in the background before reporting (root `CLAUDE.md` rule 8) —
+     and tell subagent lanes to do the same, since a lane that leaves a port-forward running
+     corrupts _your_ verification, not just its own.
+   - **Never commit on a partial signal.** Commit after verification passes, not before. If you
+     already committed and then find a problem, amend rather than layering a fix commit.
+   - **Verify in the tree the human can see.** Work in the primary checkout unless isolation is
+     genuinely required. Reporting results from a branch checked out in a hidden worktree means the
+     user opens the file and sees none of it — the evidence has to be reproducible where they look.
 8. **Review gates** — before the PR: dispatch `cribstop-compliance-reviewer` if you touched any
    user-facing copy or mock data; dispatch `contract-sync-reviewer` if you changed API shapes, DTOs,
    or shared models. Fix what they flag; BLOCKER findings are not negotiable.
@@ -134,6 +190,20 @@ stack and exercise it. Everything needed is scripted; the only host prerequisite
 (`pnpm install && pnpm run hooks:setup`, then `pnpm run infra:local:cluster:setup` once for the
 local Kind/Podman cluster — `dotnet:env` / `python:env:full` if those toolchains aren't set up yet).
 Skaffold is the local development path; never invoke `skaffold`/`kubectl` raw.
+
+**The entire local infrastructure lifecycle is scripted, so managing it is your job — never ask the
+user whether a cluster is running, whether a registry exists, or for permission to create one.**
+Read `package.json` and drive it:
+
+- Cluster: `infra:local:cluster:setup` / `:delete` / `:reset:disk` / `:images:list`
+- Registry: `infra:local:registry:ensure` / `:status` / `:delete`
+- Deploy: `skaffold:services` (watch) / `skaffold:services:deploy` (one-shot) / `skaffold:delete`
+- Images: `container:build`, `container:build:all`, `container:build:affected`
+
+If the cluster is missing, stand it up. If it's wedged or the disk filled, reset it. Treat "is the
+environment available?" as a question you answer with a command, not one you hand back. The only
+things that genuinely require a human are real external dependencies — secrets, paid accounts,
+sign-offs — and those get a `human-action` ticket, not a question.
 
 - **Frontend work (the default when testing client apps)**: `pnpm run skaffold:services` in one
   background terminal — backend services + gateway only in K8s, gateway port-forwarded to

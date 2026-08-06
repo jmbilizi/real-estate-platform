@@ -203,19 +203,20 @@ window.
 
 Key additions on top of the standard Identity columns:
 
-| Field                                                                                                | Purpose                                                               |
-| ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `FirstName`, `LastName`, `MiddleName`, `DisplayName`                                                 | Name fields                                                           |
-| `Bio`, `DateOfBirth`                                                                                 | Personal                                                              |
-| `ProfileImageId`, `CoverImageId`                                                                     | Media references                                                      |
-| `VerifiedAt`, `VerifiedByUserId`, `VerificationNote`                                                 | KYC / account verification                                            |
-| `AccountStatusId`                                                                                    | FK → `AccountStatuses` lookup (Active, Suspended, etc.)               |
-| `LastLoginAt`                                                                                        | Updated by `AppSignInManager` on every login                          |
-| `PreferredLocaleId`                                                                                  | FK → `Locales` lookup                                                 |
-| `EmailNotificationsEnabled`, `SmsNotificationsEnabled`, `PushNotificationsEnabled`, `MarketingOptIn` | Communication preferences                                             |
-| `PreviousState`                                                                                      | JSON audit chain — each `PUT /profile` pushes the previous state here |
-| `CreatedAt`, `UpdatedAt`, `DeletedAt`                                                                | Timestamps                                                            |
-| `CreatedByUserId`, `UpdatedByUserId`, `DeletedByUserId`                                              | Audit actor FKs                                                       |
+| Field                                                                                                | Purpose                                                                                                                        |
+| ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `FirstName`, `LastName`, `MiddleName`, `DisplayName`                                                 | Name fields                                                                                                                    |
+| `Bio`, `DateOfBirth`                                                                                 | Personal                                                                                                                       |
+| `ProfileImageId`, `CoverImageId`                                                                     | Media references                                                                                                               |
+| `VerifiedAt`, `VerifiedByUserId`, `VerificationNote`                                                 | KYC / account verification                                                                                                     |
+| `AccountStatusId`                                                                                    | FK → `AccountStatuses` lookup (Active, Suspended, etc.)                                                                        |
+| `LastLoginAt`                                                                                        | Updated by `AppSignInManager` on every login                                                                                   |
+| `PreferredLocaleId`                                                                                  | FK → `Locales` lookup                                                                                                          |
+| `EmailNotificationsEnabled`, `SmsNotificationsEnabled`, `PushNotificationsEnabled`, `MarketingOptIn` | Communication preferences                                                                                                      |
+| `Intents`                                                                                            | Self-declared onboarding intents (PRD §4.4) — multi-select, changeable at any time, defaults to `[]` (see `OnboardingIntents`) |
+| `PreviousState`                                                                                      | JSON audit chain — each `PUT /profile` pushes the previous state here                                                          |
+| `CreatedAt`, `UpdatedAt`, `DeletedAt`                                                                | Timestamps                                                                                                                     |
+| `CreatedByUserId`, `UpdatedByUserId`, `DeletedByUserId`                                              | Audit actor FKs                                                                                                                |
 
 ### `ApiKey`
 

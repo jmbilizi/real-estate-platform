@@ -4,6 +4,7 @@
 
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using FluentAssertions;
 using Xunit;
 
@@ -49,6 +50,17 @@ namespace AccountService.Tests.Integration
         }
 
         [Fact]
+        public async Task GetProfile_ContainsEmptyIntents_ForNewUser()
+        {
+            var client = await AuthHelper.CreateAuthenticatedClientAsync(
+                factory, $"get-intents-empty-{Guid.NewGuid()}@example.com", Password);
+
+            var response = await client.GetAsync("/account/profile");
+            var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+            body.GetProperty("intents").EnumerateArray().Should().BeEmpty();
+        }
+
+        [Fact]
         public async Task PutProfile_ReturnsNoContent_WhenAuthenticated()
         {
             var client = await AuthHelper.CreateAuthenticatedClientAsync(
@@ -87,6 +99,74 @@ namespace AccountService.Tests.Integration
             var client = factory.CreateClient();
             var response = await client.PutAsJsonAsync("/account/profile", new { firstName = "X" });
             response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        }
+
+        [Fact]
+        public async Task PutProfile_WithUnknownIntent_ReturnsValidationProblem()
+        {
+            var client = await AuthHelper.CreateAuthenticatedClientAsync(
+                factory, $"put-intents-bad-{Guid.NewGuid()}@example.com", Password);
+
+            var requestedIntents = new[] { "buying", "not_a_real_intent" };
+            var response = await client.PutAsJsonAsync("/account/profile", new { intents = requestedIntents });
+
+            response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        }
+
+        [Fact]
+        public async Task PutProfile_Intents_ReplacesWholeSet_NotAdditive()
+        {
+            var client = await AuthHelper.CreateAuthenticatedClientAsync(
+                factory, $"put-intents-replace-{Guid.NewGuid()}@example.com", Password);
+
+            var firstIntents = new[] { "buying" };
+            var secondIntents = new[] { "selling" };
+            await client.PutAsJsonAsync("/account/profile", new { intents = firstIntents });
+            await client.PutAsJsonAsync("/account/profile", new { intents = secondIntents });
+
+            var response = await client.GetAsync("/account/profile");
+            var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+            var intents = body.GetProperty("intents").EnumerateArray()
+                .Select(e => e.GetString())
+                .ToArray();
+
+            intents.Should().BeEquivalentTo(secondIntents);
+        }
+
+        [Fact]
+        public async Task PutProfile_Intents_DeduplicatesRepeatedValues()
+        {
+            var client = await AuthHelper.CreateAuthenticatedClientAsync(
+                factory, $"put-intents-dupes-{Guid.NewGuid()}@example.com", Password);
+
+            var duplicated = new[] { "buying", "owning", "buying" };
+            await client.PutAsJsonAsync("/account/profile", new { intents = duplicated });
+
+            var response = await client.GetAsync("/account/profile");
+            var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+            var intents = body.GetProperty("intents").EnumerateArray()
+                .Select(e => e.GetString())
+                .ToArray();
+
+            // Set semantics, with first-occurrence order preserved.
+            var expected = new[] { "buying", "owning" };
+            intents.Should().Equal(expected);
+        }
+
+        [Fact]
+        public async Task PutProfile_Intents_EmptyArrayClearsAll()
+        {
+            var client = await AuthHelper.CreateAuthenticatedClientAsync(
+                factory, $"put-intents-clear-{Guid.NewGuid()}@example.com", Password);
+
+            var initialIntents = new[] { "buying", "owning" };
+            var emptyIntents = Array.Empty<string>();
+            await client.PutAsJsonAsync("/account/profile", new { intents = initialIntents });
+            await client.PutAsJsonAsync("/account/profile", new { intents = emptyIntents });
+
+            var response = await client.GetAsync("/account/profile");
+            var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+            body.GetProperty("intents").EnumerateArray().Should().BeEmpty();
         }
 
         [Fact]

@@ -15,11 +15,21 @@
  * Usage:
  *   pnpm run gh:milestone -- list [--all]
  *   pnpm run gh:milestone -- create --title "Services MVP" [--due 2026-09-15] [--description "..."]
+ *   pnpm run gh:milestone -- update --title "Services MVP" [--new-title "..."] [--description "..."] [--due 2026-09-15]
  *   pnpm run gh:milestone -- close --title "Services MVP"
  *   pnpm run gh:milestone -- delete --title "Services MVP"
  */
 
-const { ensureGhReady, requireConfig, ghJson, ghExec, die, ok, log } = require('./lib/gh-client');
+const {
+  ensureGhReady,
+  requireConfig,
+  ghJson,
+  ghExec,
+  unescapeInlineText,
+  die,
+  ok,
+  log,
+} = require('./lib/gh-client');
 
 function parseArgs(argv) {
   const args = { _: [] };
@@ -81,9 +91,25 @@ function main() {
     // T08:00:00Z (US-Pacific midnight) is GitHub's own storage convention for milestone due
     // dates — midnight UTC gets rendered as the *previous* day.
     if (args.due) apiArgs.push('-f', `due_on=${args.due}T08:00:00Z`);
-    if (args.description) apiArgs.push('-f', `description=${args.description}`);
+    if (args.description) apiArgs.push('-f', `description=${unescapeInlineText(args.description)}`);
     const created = JSON.parse(ghExec(apiArgs));
     ok(`Created milestone "${created.title}" (#${created.number}): ${created.html_url}`);
+    return;
+  }
+
+  if (command === 'update') {
+    if (!args.title) die('--title is required');
+    const milestone = findByTitle(base, args.title);
+    const apiArgs = ['api', '--method', 'PATCH', `${base}/${milestone.number}`];
+    if (args['new-title']) apiArgs.push('-f', `title=${args['new-title']}`);
+    if (args.description !== undefined)
+      apiArgs.push('-f', `description=${unescapeInlineText(args.description)}`);
+    if (args.due) apiArgs.push('-f', `due_on=${args.due}T08:00:00Z`);
+    if (apiArgs.length === 4) {
+      die('Nothing to update — pass at least one of --new-title, --description, --due');
+    }
+    const updated = JSON.parse(ghExec(apiArgs));
+    ok(`Updated milestone "${updated.title}" (#${updated.number}): ${updated.html_url}`);
     return;
   }
 
@@ -116,7 +142,7 @@ function main() {
     return;
   }
 
-  die(`Unknown command "${command}". Use: list | create | close | delete`);
+  die(`Unknown command "${command}". Use: list | create | update | close | delete`);
 }
 
 main();

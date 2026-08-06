@@ -29,6 +29,7 @@ const {
   resolveFieldOption,
   ghExec,
   ghJson,
+  unescapeInlineText,
   die,
   ok,
 } = require('./lib/gh-client');
@@ -124,7 +125,8 @@ function main() {
     ok(`Issue #${args.issue}: assigned to self`);
   }
 
-  const comment = args.comment || (args.claim ? 'Picked up via pick-next-ticket.' : null);
+  const comment =
+    unescapeInlineText(args.comment) || (args.claim ? 'Picked up via pick-next-ticket.' : null);
   if (comment) {
     ghExec(['issue', 'comment', args.issue, ...issueRef, '--body', comment]);
     ok(`Issue #${args.issue}: commented`);
