@@ -217,6 +217,7 @@ jobs:
               echo "🔍 DEBUG: Running: pnpm exec nx show projects --affected --base=$BASE --withTarget=container-build"
               PROJECTS=$(pnpm exec nx show projects --affected --base=$BASE --withTarget=container-build)
               echo "🔍 DEBUG: Affected projects result: '$PROJECTS'"
+              NARROW_BASE="$BASE"
             else
               echo "🔍 DEBUG: Using explicit projects list: ${{ inputs.projects }}"
               PROJECTS="${{ inputs.projects }}"
@@ -226,11 +227,39 @@ jobs:
             echo "🔍 DEBUG: PR mode, base=origin/${{ github.base_ref }}"
             PROJECTS=$(pnpm exec nx show projects --affected --base=origin/${{ github.base_ref }} --withTarget=container-build)
             echo "🔍 DEBUG: PR affected result: '$PROJECTS'"
+            NARROW_BASE="origin/${{ github.base_ref }}"
           else
             # Fallback: build all projects with container-build target
             echo "🔍 DEBUG: Fallback - building all container-build projects"
             PROJECTS=$(pnpm exec nx show projects --withTarget=container-build)
             echo "🔍 DEBUG: Fallback result: '$PROJECTS'"
+          fi
+
+          # Narrow the affected list to images whose contents can actually change.
+          #
+          # Nx treats pnpm-lock.yaml, nx.json and the root package.json as global inputs, so any
+          # branch that adds a service marks EVERY project affected. That is the correct answer to
+          # Nx's question and the wrong answer to ours: a pnpm lockfile cannot alter a .NET, Python
+          # or Postgres image, because those Dockerfiles never read it. The practical cost was that
+          # one image's unrelated flakiness failed unrelated PRs.
+          #
+          # Only applied to the two affected-driven paths — an explicit project list, `all`, and the
+          # build-everything fallbacks stay untouched. The script only ever removes projects, and
+          # fails open on anything it cannot resolve.
+          if [ -n "$NARROW_BASE" ] && [ -n "$(echo "$PROJECTS" | tr -d '[:space:]')" ]; then
+            echo "🔎 Narrowing to images whose contents can change (base: $NARROW_BASE)"
+            FLAT_PROJECTS=$(echo "$PROJECTS" | tr '\n' ' ' | xargs)
+            NARROWED=$(node tools/ci/affected-images.js --base="$NARROW_BASE" --projects="$FLAT_PROJECTS" --explain) || {
+              echo "⚠️  Narrowing failed; keeping the full affected list"
+              NARROWED="$FLAT_PROJECTS"
+            }
+            PROJECTS="$NARROWED"
+            NARROWED_APPLIED=true
+            if [ -z "$(echo "$PROJECTS" | tr -d '[:space:]')" ]; then
+              echo "✅ No image contents changed - nothing to build"
+            else
+              echo "📦 After narrowing: $PROJECTS"
+            fi
           fi
 
           # Merge additional projects if provided (e.g., services with changed deployment manifests)
@@ -241,8 +270,13 @@ jobs:
             echo "📦 Combined projects: $PROJECTS"
           fi
 
-          # Fallback: if still no projects found, build all
-          if [ -z "$(echo "$PROJECTS" | tr -d '[:space:]')" ]; then
+          # Fallback: if still no projects found, build all.
+          #
+          # Skipped when narrowing ran: there, an empty list is a real answer ("no image content
+          # changed"), not a detection failure. Without this guard the fallback would read the
+          # deliberate empty as "something went wrong" and rebuild all six images — turning the
+          # best case straight back into the worst one.
+          if [ -z "$(echo "$PROJECTS" | tr -d '[:space:]')" ] && [ "$NARROWED_APPLIED" != "true" ]; then
             echo "⚠️  No affected or additional projects found, building ALL services"
             PROJECTS=$(pnpm exec nx show projects --withTarget=container-build)
             echo "🔍 DEBUG: Fallback all projects: '$PROJECTS'"
