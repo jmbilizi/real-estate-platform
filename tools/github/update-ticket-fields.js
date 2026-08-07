@@ -12,7 +12,10 @@
  *   pnpm run gh:ticket:update-fields -- --issue 42 --status Ready
  *   pnpm run gh:ticket:update-fields -- --issue 42 --milestone "Beta Launch"
  *   pnpm run gh:ticket:update-fields -- --issue 42 --remove-milestone
+ *   pnpm run gh:ticket:update-fields -- --issue 42 --body-file ./spec.md
  */
+
+const fs = require('fs');
 
 const {
   ensureGhReady,
@@ -21,9 +24,12 @@ const {
   findProjectItemId,
   resolveFieldOption,
   ghExec,
+  ghEditBody,
+  ghJson,
   die,
   ok,
 } = require('./lib/gh-client');
+const { replaceBodyPreservingPlan, findPlanBlock } = require('./lib/issue-body');
 
 const FLAGS = new Set(['remove-milestone']);
 
@@ -52,14 +58,39 @@ function main() {
 
   if (!args.issue) die('--issue <number> is required');
 
+  const issueRef = ['--repo', `${owner}/${repo}`];
+
   const fieldsToSet = {
     Status: args.status,
     Priority: args.priority,
     Size: args.size,
   };
   const provided = Object.entries(fieldsToSet).filter(([, value]) => value);
-  if (provided.length === 0 && !args.milestone && !args['remove-milestone']) {
-    die('Provide at least one of --status, --priority, --size, --milestone, --remove-milestone');
+  if (provided.length === 0 && !args.milestone && !args['remove-milestone'] && !args['body-file']) {
+    die(
+      'Provide at least one of --status, --priority, --size, --milestone, --remove-milestone, ' +
+        '--body-file',
+    );
+  }
+
+  // Resolve the whole body up front: a refused --body-file must leave the ticket completely
+  // untouched, fields included, so every validation happens before the first gh mutation.
+  let bodyToWrite = null;
+  let existingHadPlan = false;
+  if (args['body-file']) {
+    const file = args['body-file'];
+    if (!fs.existsSync(file)) die(`--body-file not found: ${file}`);
+    const incoming = fs.readFileSync(file, 'utf-8');
+    if (!incoming.trim()) die(`--body-file is empty: ${file}`);
+
+    const issue = ghJson(['issue', 'view', args.issue, ...issueRef, '--json', 'body']);
+    const existing = issue.body || '';
+    existingHadPlan = findPlanBlock(existing) !== null;
+    try {
+      bodyToWrite = replaceBodyPreservingPlan(existing, incoming);
+    } catch (error) {
+      die(error.message);
+    }
   }
 
   if (provided.length > 0) {
@@ -83,9 +114,16 @@ function main() {
     }
   }
 
+  if (bodyToWrite !== null) {
+    ghEditBody(owner, repo, args.issue, bodyToWrite);
+    ok(
+      `Issue #${args.issue}: body replaced` +
+        (existingHadPlan ? ' (Implementation Plan preserved)' : ''),
+    );
+  }
+
   // Milestone lives on the issue itself (not a project field); the board's Milestone
   // field reflects it automatically.
-  const issueRef = ['--repo', `${owner}/${repo}`];
   if (args.milestone) {
     ghExec(['issue', 'edit', args.issue, ...issueRef, '--milestone', args.milestone]);
     ok(`Issue #${args.issue}: Milestone = ${args.milestone}`);
