@@ -35,32 +35,48 @@ pnpm exec nx run property-service:seed          # Load the sample dataset
 pnpm exec nx e2e property-service        # Boots the service, then hits it over HTTP
 ```
 
-Unit tests mock the `pg` client and never open a connection, so they run anywhere. The `e2e` project
-is where anything requiring a live server lives — note its `test` target is a deliberate no-op for
-that reason.
+Unit tests mock the `pg` client and never open a connection, so they run anywhere. There is
+deliberately **no `property-service-e2e` sibling project**: unit specs sit beside their subject as
+`src/**/*.spec.ts`, and the server-dependent suite is `tests/**/*.e2e.spec.ts` driven by
+`jest.e2e.config.ts`. `jest.config.ts` ignores `tests/`, so `nx test` and CI's sweep never boot a
+server. See #29.
 
 ## Schema
 
-| Table         | Notes                                                                                         |
-| ------------- | --------------------------------------------------------------------------------------------- |
-| `communities` | Groups properties managed together.                                                           |
-| `properties`  | A building or standalone home; optional `community_id`. `property_type` is CHECK-constrained. |
-| `units`       | Optional subdivision of a property (apartment/condo unit).                                    |
-| `listings`    | An offer against a property and optionally a unit. Carries the full consumer model.           |
+Facts live at the lifetime they belong to: `properties`/`units` hold what does **not** change when a
+listing does, and `listings` holds one offer. A property is fully meaningful with zero listings.
 
-`listings` holds the required broker/office attribution block, merchandising flags (`featured`,
-`price_reduced`, `new_construction`, open-house fields), `text[]` image URLs and amenities, and
-CHECK constraints on `listing_type`, `source`, and `status`. Indexes cover `property_id`, `status`,
-`(city, state, zip)`, and a `pg_trgm` GIN index on `neighborhood` for the fuzzy search #22 will add.
+| Table                 | Notes                                                                                                                                        |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `communities`         | Groups properties managed together.                                                                                                          |
+| `properties`          | Site facts (parsed address, `geog`, lot, year built, type) **plus dwelling facts when not subdivided**. `address_key` is the dedup identity. |
+| `units`               | **Optional** — only for a genuinely subdivided building. A single-family home has zero unit rows.                                            |
+| `listings`            | One offer, plus a one-way snapshot of the resolved dwelling facts so search stays a single-table query.                                      |
+| `listing_statuses`    | Lookup seeded with the full RESO vocabulary; carries `consumer_status`, `is_terminal`, `counts_toward_dom`.                                  |
+| `listing_events`      | Append-only price/status/correction history.                                                                                                 |
+| `listing_open_houses` | Multi-occurrence open houses.                                                                                                                |
+| `listing_media`       | The gallery, ordered — replaces the old `image_urls text[]`.                                                                                 |
+| `listing_search_v`    | Read model that **enforces** the display rules rather than exposing flags for callers to remember.                                           |
 
-Amenity values are validated in application code against the fixed enum in `src/seed/constants.ts`
-rather than by a CHECK constraint, so the vocabulary can evolve without a migration.
+`listings` holds the required broker/office attribution block, merchandising flags, the offer
+(`offer_kind` plus a generated `listing_type`), ingest identity (`source_system`,
+`source_listing_key`), and display-suppression flags. `status` is a foreign key into
+`listing_statuses`, not a CHECK. Indexes cover `property_id`, `status`, `(city, state, zip5)`, a
+GiST index on `properties.geog`, a GIN index on `amenities`, and a `pg_trgm` GIN index on
+`neighborhood` for the fuzzy search #22 will add.
+
+`amenities` is enforced by a **database CHECK** against the fixed 15-value set as well as by
+`validateAmenities()` in `src/seed/constants.ts` — a Fair Housing surface is not left to application
+code alone. Widening it is a deliberate migration, which is the point.
+
+See the project `CLAUDE.md` for the migration rules and the columns that must never be added.
 
 ## Seed data and compliance
 
-`pnpm exec nx run property-service:seed` loads 12 sample listings adapted from the web app's mock
-dataset. This data is **sample data, not real inventory**, and is authored so that it can never be
-mistaken for real (PRD §6.2/§6.3):
+`pnpm exec nx run property-service:seed` loads 13 sample listings across 12 properties — two of them
+share an address, so the property → many-listings case the schema exists for is actually exercised —
+adapted from the web app's mock dataset. This data is **sample data, not real inventory**, and is
+authored so that it can never be mistaken for real (PRD §6.2/§6.3):
 
 - `source` is `internal` on every row — never `brightMLS`. This data did not come from the MLS.
 - Every `title` ends in `(Sample)`, and every row sets `is_sample = true`, so the labelling reaches

@@ -18,4 +18,12 @@ if (!Number.isInteger(port) || port < 0 || port > 65535) {
 const server = app.listen(port, () => {
   console.info(`property-service listening at http://localhost:${port}`);
 });
-server.on('error', console.error);
+// Must exit, not just log. Attaching any 'error' listener suppresses Node's default behaviour of
+// throwing on a failed listen, so `console.error` alone would leave the process alive with no
+// listening socket — a local dev run that hangs instead of failing, and a container that stays up
+// while every request is refused. Exiting non-zero lets Kubernetes restart it and surfaces the real
+// cause (EADDRINUSE, EACCES) instead of a silent no-op.
+server.on('error', (error) => {
+  console.error(`property-service failed to listen on port ${port}:`, error);
+  process.exit(1);
+});
