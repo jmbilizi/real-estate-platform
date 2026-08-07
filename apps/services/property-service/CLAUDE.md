@@ -5,6 +5,39 @@ hierarchy (PRD §3), the consumer listing model (§3.1), and eventually Bright M
 property-relationship claims (§3.2). Nx project name: **`property-service`**. Port **3002** (PRD
 §2.1). The first Node service in this repo that talks to Postgres.
 
+## Why Node, and what that commits us to
+
+Re-decided on merits before #22 froze the API contract, not inherited from PRD §2.2. The deciding
+reason is that **this service's primary customer is a TypeScript app**: it exists to serve the
+Next.js client, and the dominant failure mode here is contract drift, not throughput — hence the
+repo's `contract-sync-reviewer` agent and PRD §17 making TypeScript canonical with ".NET contracts
+mirror them where needed". One compiler-enforced definition of the listing shape matters most
+exactly where the data carries Fair Housing and NAR 7.58 obligations. Everything expensive is
+delegated to Postgres, so runtime performance was never the variable.
+
+The strongest counter-argument was .NET's `$metadata`-driven OData tooling for RESO ingestion. It
+does not hold: RESO Web API replication is paginated GETs with
+`$filter=ModificationTimestamp gt <checkpoint>`, `$select` and `$skiptoken`. A generated typed
+client is a convenience, not a requirement.
+
+**The split that does matter is by workload, not language.** MLS ingestion is throughput-bound and
+scheduled and must not compete with request-serving CPU, so it becomes a separate process — but
+start it as another Nx target _in this project_, still Node, so it reuses `src/db/write.ts`
+directly.
+
+> **An ingestion worker in another language must never write to `property_db` directly.** It would
+> have to re-implement the snapshot resolution rule (`COALESCE(unit.x, property.x)`, terminal
+> freeze, audited corrections) and would drift — the precise failure `write.ts` exists to prevent.
+> The language-agnostic seam is the Redis Streams bus (PRD §2.3): the worker publishes normalised
+> listing events in whatever language suits, and this service stays the only writer.
+
+Consequence to budget in #22: **Express generates no OpenAPI**, while the gateway's
+`MMLib.SwaggerForOcelot` fetches a spec URL per service (account-service serves `/openapi/v1.json`,
+inference serves `/openapi.json`). Do not hand-write one — define the request/response schemas once
+in a shared `libs/` package and derive runtime validation, the client's types, and the OpenAPI
+document from it. A hand-written spec is a second source of truth that silently drifts from the
+routes.
+
 ## Commands
 
 ```bash
