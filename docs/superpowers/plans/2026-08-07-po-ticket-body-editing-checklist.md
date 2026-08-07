@@ -12,7 +12,7 @@ one is prose. Without it `--plan-file` keeps destroying any ticket that document
 one included — and the AC's "reject an incoming body containing either marker" would refuse this
 ticket's own Acceptance Criteria.
 
-- [ ] **1. Shared `issue-body` module + code-span-aware lookup + a test runner for `tools/`** — move
+- [x] **1. Shared `issue-body` module + code-span-aware lookup + a test runner for `tools/`** — move
       `PLAN_START`/`PLAN_END` and `spliceImplementationPlan` out of `update-ticket-status.js` into
       `tools/github/lib/issue-body.js`, adding `maskCode` (blanks code spans/fences preserving
       length, so indices still map to the original), `findPlanBlock` and `containsBarePlanMarker`.
@@ -21,13 +21,13 @@ ticket's own Acceptance Criteria.
       `tools/` is not an Nx project, so nothing covers it today). Verify: `pnpm run tools:test`,
       then re-write this checklist to this ticket and diff — the AC bullet quoting the markers must
       not appear in the diff.
-- [ ] **2. `replaceBodyPreservingPlan(existingBody, newBody)`** — the inverse operation, and the
+- [x] **2. `replaceBodyPreservingPlan(existingBody, newBody)`** — the inverse operation, and the
       only wholly new logic. Carries the marker-delimited block over byte-for-byte, appended after
       the new content; returns `newBody` as-is (no markers injected) when the issue has no plan;
       throws when the incoming body carries a **bare** marker, and when the existing markers are
       unbalanced. A backticked mention is accepted. Tested with a fixture containing
       checked/unchecked items, nested items and a fenced code block. Verify: `pnpm run tools:test`.
-- [ ] **3. Share the temp-file body write as `ghEditBody()`** in `lib/gh-client.js`, and switch
+- [x] **3. Share the temp-file body write as `ghEditBody()`** in `lib/gh-client.js`, and switch
       `update-ticket-status.js --plan-file` onto it. Verify end-to-end against this ticket.
 - [ ] **4. `--body-file` on `gh:ticket:update-fields`** — all validation runs before the first `gh`
       mutation, so a refused body leaves the ticket untouched, fields included. Verify: missing
