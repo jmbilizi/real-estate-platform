@@ -89,6 +89,14 @@ pnpm run infra:validate:dev            # Kustomize validation per env
   `infra/deploy-control.yaml` (CI/CD, enumerated by `yq` key lookup). A service missing from either
   never deploys, with no error. The CI image-build matrix is auto-derived from the `container-build`
   target — don't hardcode it.
+- **An image is rebuilt only when its own Dockerfile inputs change.** Nx marks _every_ project
+  affected when `pnpm-lock.yaml`, `nx.json` or the root `package.json` changes, which any
+  service-adding branch does — so `tools/ci/affected-images.js` narrows the matrix using each
+  Dockerfile's `COPY`/`ADD`/`--mount=type=bind` sources as the source of truth. Consequence: **if a
+  Dockerfile depends on a path it never copies, its image will not rebuild when that path changes.**
+  Declare the dependency in the Dockerfile rather than special-casing the script. The script only
+  ever removes projects and fails open, so a parse it cannot handle costs a rebuild, not a stale
+  image.
 - **`pnpm-lock.yaml` is Prettier-ignored** — pnpm owns its formatting, so never reformat it. After
   any dependency change the gate is correctness, not style: `pnpm install --frozen-lockfile` must
   exit 0 (CI runs it in six places). Reconcile a failure with an install, never by hand-editing.
