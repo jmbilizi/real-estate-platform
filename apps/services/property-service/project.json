@@ -56,6 +56,9 @@
       }
     },
     "test": {
+      "metadata": {
+        "description": "Run Jest Tests. No executor here on purpose: @nx/jest/plugin (see nx.json) infers this target from jest.config.ts as nx:run-commands, and this block only merges options onto it. Adding an explicit executor would override the inferred one — verify with `nx show project property-service --json` before changing it."
+      },
       "options": {
         "passWithNoTests": true
       }
@@ -77,10 +80,19 @@
       }
     },
     "type-check": {
+      "metadata": {
+        "description": "Type-check both referenced projects. MUST be `tsc -b`, not `tsc -p`: this project's tsconfig.json is solution-style (files: [], include: [], only references), and `-p` does not follow project references — it compiled ZERO files and passed unconditionally. Regression test: put `const x: number = 's';` in src/ and confirm this target fails."
+      },
       "executor": "nx:run-commands",
       "cache": true,
+      "inputs": [
+        "{projectRoot}/**/*.ts",
+        "{projectRoot}/tsconfig*.json",
+        "{workspaceRoot}/tsconfig.json",
+        "^production"
+      ],
       "options": {
-        "command": "tsc --noEmit -p apps/services/property-service/tsconfig.json",
+        "command": "tsc -b --noEmit apps/services/property-service/tsconfig.json",
         "cwd": "."
       }
     },
