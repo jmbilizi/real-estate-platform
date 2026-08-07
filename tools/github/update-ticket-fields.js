@@ -13,6 +13,7 @@
  *   pnpm run gh:ticket:update-fields -- --issue 42 --milestone "Beta Launch"
  *   pnpm run gh:ticket:update-fields -- --issue 42 --remove-milestone
  *   pnpm run gh:ticket:update-fields -- --issue 42 --body-file ./spec.md
+ *   pnpm run gh:ticket:update-fields -- --issue 42 --add-label blocked --remove-label type:chore
  */
 
 const fs = require('fs');
@@ -32,6 +33,7 @@ const {
 const { replaceBodyPreservingPlan, findPlanBlock } = require('./lib/issue-body');
 
 const FLAGS = new Set(['remove-milestone']);
+const REPEATABLE = new Set(['add-label', 'remove-label']);
 
 function parseArgs(argv) {
   const args = {};
@@ -42,6 +44,9 @@ function parseArgs(argv) {
     const key = arg.slice(2);
     if (FLAGS.has(key)) {
       args[key] = true;
+    } else if (REPEATABLE.has(key)) {
+      (args[key] ||= []).push(argv[i + 1]);
+      i++;
     } else {
       args[key] = argv[i + 1];
       i++;
@@ -66,10 +71,24 @@ function main() {
     Size: args.size,
   };
   const provided = Object.entries(fieldsToSet).filter(([, value]) => value);
-  if (provided.length === 0 && !args.milestone && !args['remove-milestone'] && !args['body-file']) {
+
+  const labelsToAdd = args['add-label'] || [];
+  const labelsToRemove = args['remove-label'] || [];
+  if (labelsToAdd.some((label) => !label) || labelsToRemove.some((label) => !label)) {
+    die('--add-label / --remove-label each require a label name');
+  }
+
+  if (
+    provided.length === 0 &&
+    !args.milestone &&
+    !args['remove-milestone'] &&
+    !args['body-file'] &&
+    labelsToAdd.length === 0 &&
+    labelsToRemove.length === 0
+  ) {
     die(
       'Provide at least one of --status, --priority, --size, --milestone, --remove-milestone, ' +
-        '--body-file',
+        '--body-file, --add-label, --remove-label',
     );
   }
 
@@ -120,6 +139,21 @@ function main() {
       `Issue #${args.issue}: body replaced` +
         (existingHadPlan ? ' (Implementation Plan preserved)' : ''),
     );
+  }
+
+  // One call for the whole label change — gh rejects unknown labels, which is the validation we
+  // want (loud failure, nothing silently dropped).
+  if (labelsToAdd.length > 0 || labelsToRemove.length > 0) {
+    ghExec([
+      'issue',
+      'edit',
+      args.issue,
+      ...issueRef,
+      ...labelsToAdd.flatMap((label) => ['--add-label', label]),
+      ...labelsToRemove.flatMap((label) => ['--remove-label', label]),
+    ]);
+    if (labelsToAdd.length > 0) ok(`Issue #${args.issue}: +${labelsToAdd.join(', +')}`);
+    if (labelsToRemove.length > 0) ok(`Issue #${args.issue}: -${labelsToRemove.join(', -')}`);
   }
 
   // Milestone lives on the issue itself (not a project field); the board's Milestone
