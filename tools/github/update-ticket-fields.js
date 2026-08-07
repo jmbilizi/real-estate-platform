@@ -45,7 +45,15 @@ function parseArgs(argv) {
     if (FLAGS.has(key)) {
       args[key] = true;
     } else if (REPEATABLE.has(key)) {
-      (args[key] ||= []).push(argv[i + 1]);
+      const value = argv[i + 1];
+      if (!value || value.startsWith('--')) {
+        throw new Error(
+          value
+            ? `--${key} requires a label name (got "${value}")`
+            : `--${key} requires a label name`,
+        );
+      }
+      (args[key] ||= []).push(value);
       i++;
     } else {
       args[key] = argv[i + 1];
@@ -59,7 +67,12 @@ function main() {
   ensureGhReady();
   const { owner, repo } = requireConfig();
   const schema = loadSchema();
-  const args = parseArgs(process.argv.slice(2));
+  let args;
+  try {
+    args = parseArgs(process.argv.slice(2));
+  } catch (error) {
+    die(error.message);
+  }
 
   if (!args.issue) die('--issue <number> is required');
 
@@ -72,11 +85,10 @@ function main() {
   };
   const provided = Object.entries(fieldsToSet).filter(([, value]) => value);
 
+  // parseArgs already rejects a missing/flag-shaped value for --add-label/--remove-label before
+  // this point, so every entry here is guaranteed to be a real label string.
   const labelsToAdd = args['add-label'] || [];
   const labelsToRemove = args['remove-label'] || [];
-  if (labelsToAdd.some((label) => !label) || labelsToRemove.some((label) => !label)) {
-    die('--add-label / --remove-label each require a label name');
-  }
 
   if (
     provided.length === 0 &&
@@ -167,4 +179,6 @@ function main() {
   }
 }
 
-main();
+if (require.main === module) main();
+
+module.exports = { parseArgs };
