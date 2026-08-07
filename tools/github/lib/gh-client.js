@@ -8,6 +8,7 @@
 
 const { spawnSync } = require('child_process');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const config = require('../project.config.js');
@@ -67,6 +68,29 @@ function ghExec(args) {
     die(`gh ${args.join(' ')} failed:\n${result.stderr || result.stdout}`);
   }
   return result.stdout;
+}
+
+/**
+ * Replace an issue body. The new body reaches `gh` via a temp file, never an inline `--body`:
+ * a full ticket body blows the Windows command-line length limit, and a `\n` inside an argument
+ * reaches GitHub literally (see unescapeInlineText).
+ */
+function ghEditBody(owner, repo, issueNumber, body) {
+  const tmp = path.join(os.tmpdir(), `cribstop-ticket-${issueNumber}-body.md`);
+  fs.writeFileSync(tmp, body, 'utf-8');
+  try {
+    ghExec([
+      'issue',
+      'edit',
+      String(issueNumber),
+      '--repo',
+      `${owner}/${repo}`,
+      '--body-file',
+      tmp,
+    ]);
+  } finally {
+    fs.unlinkSync(tmp);
+  }
 }
 
 /**
@@ -218,6 +242,7 @@ module.exports = {
   run,
   ghJson,
   ghExec,
+  ghEditBody,
   graphql,
   ensureGhReady,
   requireConfig,

@@ -18,8 +18,6 @@
  */
 
 const fs = require('fs');
-const os = require('os');
-const path = require('path');
 
 const {
   ensureGhReady,
@@ -28,6 +26,7 @@ const {
   findProjectItemId,
   resolveFieldOption,
   ghExec,
+  ghEditBody,
   ghJson,
   unescapeInlineText,
   die,
@@ -75,14 +74,7 @@ function main() {
     const issue = ghJson(['issue', 'view', args.issue, ...issueRef, '--json', 'body']);
     const updated = spliceImplementationPlan(issue.body || '', plan);
 
-    // gh needs the new body via file — inline args hit quoting/length limits on Windows.
-    const tmp = path.join(os.tmpdir(), `cribstop-ticket-${args.issue}-body.md`);
-    fs.writeFileSync(tmp, updated, 'utf-8');
-    try {
-      ghExec(['issue', 'edit', args.issue, ...issueRef, '--body-file', tmp]);
-    } finally {
-      fs.unlinkSync(tmp);
-    }
+    ghEditBody(owner, repo, args.issue, updated);
     ok(`Issue #${args.issue}: Implementation Plan section updated`);
   }
 
