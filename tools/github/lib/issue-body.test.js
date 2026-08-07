@@ -8,6 +8,7 @@ const {
   findPlanBlock,
   spliceImplementationPlan,
   containsBarePlanMarker,
+  replaceBodyPreservingPlan,
 } = require('./issue-body');
 
 /**
@@ -127,4 +128,62 @@ test('spliceImplementationPlan leaves quoted markers in the prose untouched', ()
   assert.ok(updated.startsWith(ac), 'the AC prose must survive byte-for-byte');
   assert.ok(updated.includes('- [ ] **Task 1: new**'));
   assert.ok(!updated.includes('Task 2: endpoints'));
+});
+
+const REVISED_PO_BODY = ['## Problem', '', 'Corrected: query listing_search_v.', ''].join('\n');
+
+test('replaceBodyPreservingPlan carries the plan block over byte-for-byte', () => {
+  const existing = `${PO_BODY}\n${PLAN_BLOCK}\n`;
+  const updated = replaceBodyPreservingPlan(existing, REVISED_PO_BODY);
+
+  // The engineer's execution state survives with zero character changes.
+  assert.ok(updated.includes(PLAN_BLOCK));
+  const block = findPlanBlock(updated);
+  assert.equal(updated.slice(block.start, block.end), PLAN_BLOCK);
+
+  // ...and it lands at the end of the new product-owner content.
+  assert.equal(updated, `${REVISED_PO_BODY.trimEnd()}\n\n${PLAN_BLOCK}\n`);
+
+  // The stale spec is gone.
+  assert.ok(!updated.includes('Search is client-side only.'));
+  assert.ok(updated.includes('Corrected: query listing_search_v.'));
+});
+
+test('replaceBodyPreservingPlan replaces as-is when the existing body has no plan', () => {
+  const updated = replaceBodyPreservingPlan(PO_BODY, REVISED_PO_BODY);
+  assert.equal(updated, REVISED_PO_BODY); // byte-identical, no markers injected
+  assert.equal(containsBarePlanMarker(updated), false);
+});
+
+test('replaceBodyPreservingPlan refuses an incoming body containing the start marker', () => {
+  assert.throws(
+    () => replaceBodyPreservingPlan(PO_BODY, `${REVISED_PO_BODY}\n${PLAN_START}\n- [ ] mine\n`),
+    /Implementation Plan marker/,
+  );
+});
+
+test('replaceBodyPreservingPlan refuses an incoming body containing the end marker', () => {
+  assert.throws(
+    () => replaceBodyPreservingPlan(PO_BODY, `${REVISED_PO_BODY}\n${PLAN_END}\n`),
+    /Implementation Plan marker/,
+  );
+});
+
+test('replaceBodyPreservingPlan refuses to overwrite when the existing markers are unbalanced', () => {
+  assert.throws(
+    () => replaceBodyPreservingPlan(`${PO_BODY}\n${PLAN_START}\n- [ ] truncated`, REVISED_PO_BODY),
+    /unbalanced/,
+  );
+});
+
+/**
+ * The product owner must be able to submit a spec that DOCUMENTS the markers — #35's own Acceptance
+ * Criteria does exactly that. Only a bare marker is an attempt to author the plan.
+ */
+test('replaceBodyPreservingPlan accepts an incoming body that only quotes the markers', () => {
+  const spec = `## Acceptance Criteria\n\n- \`${PLAN_START}\` … \`${PLAN_END}\` is preserved.\n`;
+  const updated = replaceBodyPreservingPlan(`${PO_BODY}\n${PLAN_BLOCK}\n`, spec);
+
+  assert.ok(updated.startsWith(spec.trimEnd()));
+  assert.equal(updated, `${spec.trimEnd()}\n\n${PLAN_BLOCK}\n`);
 });

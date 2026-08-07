@@ -78,6 +78,41 @@ function spliceImplementationPlan(body, plan) {
   return `${body.trimEnd()}\n\n${section}\n`;
 }
 
+/**
+ * Replace the product owner's content (Problem / Acceptance Criteria / Technical Notes) while
+ * carrying the engineer's marker-delimited plan block over byte-for-byte, appended after the new
+ * content.
+ *
+ * Refuses two cases rather than guessing, because both would destroy execution state:
+ *   - the incoming body carries a marker itself (a product owner authoring/overwriting the plan);
+ *   - the existing body's markers are unbalanced, so the block cannot be read back reliably.
+ */
+function replaceBodyPreservingPlan(existingBody, newBody) {
+  if (containsBarePlanMarker(newBody)) {
+    throw new Error(
+      'The new body contains an Implementation Plan marker ' +
+        `(${PLAN_START} / ${PLAN_END}). That section is the engineer's execution state and is ` +
+        'carried over automatically — remove the markers and everything between them from your ' +
+        'file. Nothing was written.',
+    );
+  }
+
+  const block = findPlanBlock(existingBody);
+  if (!block) {
+    if (containsBarePlanMarker(existingBody)) {
+      throw new Error(
+        "The issue's existing Implementation Plan markers are unbalanced, so the plan block " +
+          'cannot be located and preserved. Refusing to overwrite an engineer plan that cannot be ' +
+          'read back — fix the markers on the issue first. Nothing was written.',
+      );
+    }
+    return newBody;
+  }
+
+  const plan = existingBody.slice(block.start, block.end);
+  return `${newBody.trimEnd()}\n\n${plan}\n`;
+}
+
 module.exports = {
   PLAN_START,
   PLAN_END,
@@ -85,4 +120,5 @@ module.exports = {
   findPlanBlock,
   containsBarePlanMarker,
   spliceImplementationPlan,
+  replaceBodyPreservingPlan,
 };
