@@ -56,6 +56,14 @@ const BUILD_TOOLING_PREFIXES = [
   '.github/actions/build-push-image/',
   '.github/workflows/build-push-images.yml',
   'tools/ci/affected-images.js',
+  // Every image is built with `context=.`, so the root .dockerignore decides what a directory COPY
+  // actually yields — and it is load-bearing here, not cosmetic: its own comments record that
+  // getting the node_modules glob wrong overwrites the deps stage's Linux symlinks. A change to it
+  // can therefore alter an image whose Dockerfile did not change at all.
+  //
+  // A per-Dockerfile `<dockerfile>.dockerignore` needs no entry: it sits beside its Dockerfile, so
+  // the Dockerfile's own directory already covers it.
+  '.dockerignore',
 ];
 
 /** Reads the image-name map as of a git ref. Returns null when absent or unparseable. */
