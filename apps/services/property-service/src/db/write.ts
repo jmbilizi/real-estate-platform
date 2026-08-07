@@ -185,6 +185,44 @@ async function assertNotTerminal(client: Queryable, listingId: string): Promise<
 }
 
 /**
+ * Refuses a correction to a listing that is NOT terminal.
+ *
+ * The mirror of `assertNotTerminal`, and the reason this function's name is a contract rather than a
+ * suggestion. A live listing must go through `upsertListing()`, which re-resolves the snapshot from
+ * durable truth; letting a "correction" write those columns directly would be a second write path
+ * into `listings` that sets values the resolver never produced — precisely the containment this
+ * module exists to provide.
+ */
+async function assertTerminal(client: Queryable, listingId: string): Promise<void> {
+  const { rows } = await client.query(
+    `SELECT s.is_terminal
+       FROM listings l JOIN listing_statuses s ON s.code = l.status
+      WHERE l.id = $1`,
+    [listingId],
+  );
+  const status = rows[0];
+  if (!status) {
+    throw new Error(`Listing ${listingId} does not exist.`);
+  }
+  if (!status.is_terminal) {
+    throw new Error(
+      `Listing ${listingId} is not in a terminal status; corrections are only for frozen ` +
+        'listings. Use upsertListing() so the snapshot is resolved from the durable rows.',
+    );
+  }
+}
+
+/**
+ * The only columns a correction may touch, enforced at runtime rather than by the type alone.
+ *
+ * The UPDATE below interpolates these keys straight into SQL — they are identifiers, so they cannot
+ * be bound as parameters. TypeScript stops that at compile time for ordinary callers, but a `as any`
+ * cast or an unvalidated request body reaching this function would otherwise let the caller name any
+ * column in `listings`, including the status and display-suppression flags.
+ */
+const CORRECTABLE_COLUMNS = ['living_sqft', 'beds', 'close_price', 'description'] as const;
+
+/**
  * The one sanctioned way to change a terminal listing.
  *
  * Upstream corrections to closed listings are real (a corrected advertised area, a seller invoking
@@ -205,6 +243,16 @@ export async function applyTerminalCorrection(
   if (entries.length === 0) {
     throw new Error('applyTerminalCorrection requires at least one column to change.');
   }
+  const rejected = entries
+    .map(([column]) => column)
+    .filter((column) => !(CORRECTABLE_COLUMNS as readonly string[]).includes(column));
+  if (rejected.length > 0) {
+    throw new Error(
+      `applyTerminalCorrection cannot change: ${rejected.join(', ')}. ` +
+        `Correctable columns are ${CORRECTABLE_COLUMNS.join(', ')}.`,
+    );
+  }
+  await assertTerminal(client, input.listingId);
   const assignments = entries.map(([column], index) => `${column} = $${index + 2}`).join(', ');
   await client.query(`UPDATE listings SET ${assignments} WHERE id = $1`, [
     input.listingId,
