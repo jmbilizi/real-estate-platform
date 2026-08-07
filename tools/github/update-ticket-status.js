@@ -33,23 +33,7 @@ const {
   die,
   ok,
 } = require('./lib/gh-client');
-
-const PLAN_START = '<!-- implementation-plan:start -->';
-const PLAN_END = '<!-- implementation-plan:end -->';
-
-/**
- * Replace the marker-delimited Implementation Plan section in an issue body, or append one if the
- * markers aren't present yet. Everything outside the markers is returned byte-for-byte.
- */
-function spliceImplementationPlan(body, plan) {
-  const section = `${PLAN_START}\n\n## Implementation Plan\n\n${plan}\n\n${PLAN_END}`;
-  const start = body.indexOf(PLAN_START);
-  const end = body.indexOf(PLAN_END);
-  if (start !== -1 && end !== -1 && end > start) {
-    return body.slice(0, start) + section + body.slice(end + PLAN_END.length);
-  }
-  return `${body.trimEnd()}\n\n${section}\n`;
-}
+const { spliceImplementationPlan } = require('./lib/issue-body');
 
 const FLAGS = new Set(['claim']);
 

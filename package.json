@@ -154,6 +154,8 @@
     "gh:milestone": "node tools/github/milestone.js",
     "// → Session brief (SessionStart hook; safe to run manually):": "",
     "gh:session-brief": "node tools/github/session-brief.js",
+    "// → Unit tests for tools/ (node:test; tools/ is not an Nx project):": "",
+    "tools:test": "node --test tools",
     "// GeoIP Database (Optional)": "",
     "// → One-command setup: pnpm run geoip:download": "",
     "// → Requires:          MAXMIND_LICENSE_KEY env var (free at maxmind.com)": "",
