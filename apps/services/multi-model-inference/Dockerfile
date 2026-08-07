@@ -37,22 +37,51 @@ COPY ["apps/services/multi-model-inference/README.md", "."]
 # Install production dependencies only
 RUN pip install --no-cache-dir .
 
-# Copy application source and install the package
-COPY ["apps/services/multi-model-inference/multi_model_inference/", "multi_model_inference/"]
-RUN pip install --no-cache-dir .
-
 # Pre-download the ML model during build so the container starts offline.
 # fastembed caches to /opt/models; at runtime it finds the files and skips
 # the network call to HuggingFace entirely.
 # Set PRE_DOWNLOAD_MODEL=false for local dev when HuggingFace is unreachable
 # (e.g. behind a corporate proxy). The model will be downloaded at first startup instead.
+#
+# This deliberately sits BEFORE the application source is copied. It depends only on the
+# dependency install, so an app-code change no longer invalidates it — previously it was the
+# last layer, so every source edit re-fetched the weights from HuggingFace and put the build
+# back in the path of the rate limiter below for no reason.
+#
+# MODEL_ID must match sentence_embedder.py's MODEL_ID, and the cache dir must match
+# config.py's model_cache_dir default: if either drifts, the weights are baked into the image
+# but not found at runtime, and the service silently falls back to downloading at startup.
 ARG PRE_DOWNLOAD_MODEL=true
-RUN if [ "$PRE_DOWNLOAD_MODEL" = "true" ]; then \
-      python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='BAAI/bge-small-en-v1.5', cache_dir='/opt/models')"; \
-    else \
+ARG MODEL_ID=BAAI/bge-small-en-v1.5
+# HuggingFace rate-limits anonymous downloads per source IP, and GitHub-hosted runners share
+# their egress IPs with the rest of the world — so a 429 here is a routine event, not a defect
+# in the build. fastembed's own retry gives up after ~40s, which is not long enough to outlast
+# one. Retry over ~8 minutes before failing.
+#
+# The failure stays FATAL on purpose. Swallowing it would produce an image that builds green,
+# ships with no weights, and then reports itself ready while every embedding request 503s.
+RUN set -eu; \
+    if [ "$PRE_DOWNLOAD_MODEL" != "true" ]; then \
       echo "Skipping model pre-download (PRE_DOWNLOAD_MODEL=false) - model will download at first startup"; \
       mkdir -p /opt/models; \
+    else \
+      for backoff in 15 45 120 300 give-up; do \
+        if python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='${MODEL_ID}', cache_dir='/opt/models')"; then \
+          break; \
+        fi; \
+        if [ "$backoff" = give-up ]; then \
+          echo "ERROR: could not fetch ${MODEL_ID} after 5 attempts (HuggingFace rate limit or outage)." >&2; \
+          exit 1; \
+        fi; \
+        echo "Model fetch failed; retrying in ${backoff}s..."; \
+        sleep "$backoff"; \
+      done; \
+      test -n "$(ls -A /opt/models)"; \
     fi
+
+# Copy application source and install the package
+COPY ["apps/services/multi-model-inference/multi_model_inference/", "multi_model_inference/"]
+RUN pip install --no-cache-dir .
 
 # Runtime stage - minimal image
 ARG PYTHON_VERSION
