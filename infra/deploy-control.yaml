@@ -215,13 +215,20 @@ deployment_strategies:
     strategy: "RollingUpdate"
     wait_for_ready: true
     timeout: "2m" # Rollout timeout for all environments
-    rollback_on_failure: true # Combined OR logic with service.rollback_on_failure
+    # Combined OR logic with service.rollback_on_failure — for StatefulSets ONLY.
+    # It used to be ORed in for every kind, which made each environment's per-service
+    # `rollback_on_failure: false` unreachable (see the Conditional rollback step in
+    # .github/actions/deploy-k8s-resources/action.yml).
+    rollback_on_failure: true
     max_unavailable: 0 # Zero-downtime for stateful apps
 
   deployment:
     strategy: "RollingUpdate"
     wait_for_ready: true
     timeout: "2m"
+    # NOT CONSUMED by the deploy workflow. Deployment rollback is driven solely by the
+    # per-service `rollback_on_failure` under environments.<env>.services.<svc>, so that
+    # an environment can opt out. Wiring this key in would re-override that opt-out.
     rollback_on_failure: true
     max_surge: 1
     max_unavailable: 0 # Zero-downtime deployments
