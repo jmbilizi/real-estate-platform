@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: property-service
+  namespace: default
+  labels:
+    app: property-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: property-service
+  template:
+    metadata:
+      labels:
+        app: property-service
+    spec:
+      initContainers:
+        - name: migrate
+          # Same image as the main container — reuses the built bundle and the
+          # migrations/ directory the Dockerfile copies in.
+          # migrate.js retries transient startup failures the way account-service's
+          # MigrateWithRetryAsync does, so a cold cluster does not fail the deploy.
+          image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:latest
+          imagePullPolicy: IfNotPresent
+          command: ["node", "migrate.js"]
+          env:
+            - name: PROPERTY_DB_HOST
+              value: "postgres-svc"
+            - name: PROPERTY_DB_PORT
+              value: "5432"
+            - name: PROPERTY_DB_NAME
+              value: "property_db"
+            - name: PROPERTY_DB_USER
+              value: "property_service_db_user"
+            - name: PROPERTY_SERVICE_DB_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: PROPERTY_SERVICE_DB_USER_PASSWORD
+            - name: DATABASE_URL
+              value: "postgresql://$(PROPERTY_DB_USER):$(PROPERTY_SERVICE_DB_USER_PASSWORD)@$(PROPERTY_DB_HOST):$(PROPERTY_DB_PORT)/$(PROPERTY_DB_NAME)"
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+      containers:
+        - name: api
+          # Image format: ghcr.io/<owner>/<repo>/property-service:<tag>
+          # CI/CD workflow substitutes GITHUB_REPOSITORY_OWNER, GITHUB_REPOSITORY_NAME
+          # Local development uses Skaffold override (see podman/local/patches)
+          image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:latest
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+          ports:
+            - name: http
+              containerPort: 3002
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "3002"
+            - name: HOST
+              value: "0.0.0.0"
+            # DB values are aligned with infra/k8s/base/configmaps/postgres.configmap.yaml
+            - name: PROPERTY_DB_HOST
+              value: "postgres-svc"
+            - name: PROPERTY_DB_PORT
+              value: "5432"
+            - name: PROPERTY_DB_NAME
+              value: "property_db"
+            - name: PROPERTY_DB_USER
+              value: "property_service_db_user"
+            - name: PROPERTY_SERVICE_DB_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: PROPERTY_SERVICE_DB_USER_PASSWORD
+            - name: DATABASE_URL
+              value: "postgresql://$(PROPERTY_DB_USER):$(PROPERTY_SERVICE_DB_USER_PASSWORD)@$(PROPERTY_DB_HOST):$(PROPERTY_DB_PORT)/$(PROPERTY_DB_NAME)"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3002
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3002
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 3002
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12

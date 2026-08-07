@@ -16,6 +16,8 @@ spec:
     spec:
       containers:
         - name: postgres
+          # Built image (PostGIS + pgvector) — see infra/docker/postgres/Dockerfile.
+          image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/postgres-postgis-pgvector:test
           resources:
             requests:
               memory: "256Mi"

@@ -72,6 +72,30 @@ build:
             - apps/services/account-service/Tests/**
             - apps/services/account-service/TestResults/**
 
+    - image: property-service
+      context: .
+      custom:
+        buildCommand: node tools/infra/skaffold-build.js
+        dependencies:
+          paths:
+            - apps/services/property-service/**
+            - package.json
+            - pnpm-lock.yaml
+            - pnpm-workspace.yaml
+          ignore:
+            - apps/services/property-service/node_modules/**
+            - apps/services/property-service/tests/**
+
+    # PostgreSQL 18 + PostGIS + pgvector. Built here rather than pulled because no trusted public
+    # image carries both extensions — see infra/docker/postgres/Dockerfile.
+    - image: postgres-postgis-pgvector
+      context: .
+      custom:
+        buildCommand: node tools/infra/skaffold-build.js
+        dependencies:
+          paths:
+            - infra/docker/postgres/**
+
   local:
     # IMPORTANT: This must be true for the Podman+Kind workflow.
     # - The cluster pulls from the local registry (localhost:5001)
@@ -97,6 +121,11 @@ portForward:
     namespace: default
     port: 8080
     localPort: 8080
+  - resourceType: service
+    resourceName: property-service-svc
+    namespace: default
+    port: 3002
+    localPort: 3002
   - resourceType: service
     resourceName: postgres-svc
     namespace: default

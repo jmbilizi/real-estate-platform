@@ -1,6 +1,10 @@
 packages:
   # clients apps
   - "apps/clients/cribstop/next"
+  # backend services that declare their own runtime dependencies, so that
+  # `nx run <svc>:prune` can emit a pruned package.json + lockfile for a slim
+  # production image (those targets require a project-level package.json)
+  - "apps/services/property-service"
   # shared libs for web and mobile apps
   # - "libs/expo-next"
   # - "libs/next"

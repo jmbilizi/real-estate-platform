@@ -1,0 +1,32 @@
+# yaml-language-server: disable
+# Property Service Deployment Patch for Hetzner Prod Environment
+# Production-grade resources
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: property-service
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: property-service
+  template:
+    spec:
+      initContainers:
+        - name: migrate
+          image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:latest
+      containers:
+        - name: api
+          image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:latest
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "250m"
+          env:
+            - name: NODE_ENV
+              value: "production"

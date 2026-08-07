@@ -21,6 +21,17 @@
       "port": 5432,
       "askForPassword": true,
       "driver": "PostgreSQL",
+      "database": "property_db",
+      "username": "property_service_db_user",
+      "name": "property_db"
+    },
+    {
+      "ssh": "Disabled",
+      "previewLimit": 50,
+      "server": "localhost",
+      "port": 5432,
+      "askForPassword": true,
+      "driver": "PostgreSQL",
       "database": "account_db",
       "username": "account_service_db_user",
       "name": "account_db connection"

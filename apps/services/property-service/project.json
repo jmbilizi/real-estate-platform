@@ -1,0 +1,142 @@
+{
+  "name": "property-service",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/services/property-service/src",
+  "projectType": "application",
+  "tags": [
+    "runtime:node",
+    "type:service",
+    "platform:server",
+    "framework:express",
+    "scope:properties",
+    "devteam:unassigned"
+  ],
+  "targets": {
+    "prune-lockfile": {
+      "dependsOn": ["build"],
+      "cache": true,
+      "executor": "@nx/js:prune-lockfile",
+      "outputs": [
+        "{workspaceRoot}/dist/apps/services/property-service/package.json",
+        "{workspaceRoot}/dist/apps/services/property-service/pnpm-lock.yaml"
+      ],
+      "options": {
+        "buildTarget": "build"
+      }
+    },
+    "copy-workspace-modules": {
+      "dependsOn": ["build"],
+      "cache": true,
+      "outputs": ["{workspaceRoot}/dist/apps/services/property-service/workspace_modules"],
+      "executor": "@nx/js:copy-workspace-modules",
+      "options": {
+        "buildTarget": "build"
+      }
+    },
+    "prune": {
+      "dependsOn": ["prune-lockfile", "copy-workspace-modules"],
+      "executor": "nx:noop"
+    },
+    "serve": {
+      "continuous": true,
+      "executor": "@nx/js:node",
+      "defaultConfiguration": "development",
+      "dependsOn": ["build"],
+      "options": {
+        "buildTarget": "property-service:build",
+        "runBuildTargetDependencies": false
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "property-service:build:development"
+        },
+        "production": {
+          "buildTarget": "property-service:build:production"
+        }
+      }
+    },
+    "test": {
+      "metadata": {
+        "description": "Run Jest Tests. No executor here on purpose: @nx/jest/plugin (see nx.json) infers this target from jest.config.ts as nx:run-commands, and this block only merges options onto it. Adding an explicit executor would override the inferred one — verify with `nx show project property-service --json` before changing it."
+      },
+      "options": {
+        "passWithNoTests": true
+      }
+    },
+    "e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/services/property-service-e2e"],
+      "options": {
+        "jestConfig": "apps/services/property-service/jest.e2e.config.ts"
+      },
+      "dependsOn": ["build", "serve"]
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "command": "eslint --config tools/node/configs/eslint.config.js apps/services/property-service",
+        "cwd": "."
+      }
+    },
+    "type-check": {
+      "metadata": {
+        "description": "Type-check both referenced projects. MUST be `tsc -b`, not `tsc -p`: this project's tsconfig.json is solution-style (files: [], include: [], only references), and `-p` does not follow project references — it compiled ZERO files and passed unconditionally. Regression test: put `const x: number = 's';` in src/ and confirm this target fails."
+      },
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/**/*.ts",
+        "{projectRoot}/tsconfig*.json",
+        "{workspaceRoot}/tsconfig.json",
+        "^production"
+      ],
+      "options": {
+        "command": "tsc -b --noEmit apps/services/property-service/tsconfig.json",
+        "cwd": "."
+      }
+    },
+    "format": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "prettier --write .",
+        "cwd": "apps/services/property-service"
+      }
+    },
+    "format-check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "prettier --check .",
+        "cwd": "apps/services/property-service"
+      }
+    },
+    "migrate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node-pg-migrate up --envPath .env",
+        "cwd": "apps/services/property-service"
+      }
+    },
+    "migrate-down": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node-pg-migrate down --envPath .env",
+        "cwd": "apps/services/property-service"
+      }
+    },
+    "seed": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "ts-node -P tsconfig.app.json src/seed/seed.ts",
+        "cwd": "apps/services/property-service"
+      }
+    },
+    "container-build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node tools/docker/build-image.js {projectName} --tag={args.tag}",
+        "cwd": "."
+      }
+    }
+  }
+}

@@ -687,7 +687,7 @@ substitution. Infrastructure code in `infra/`:
   - Routes external requests to internal microservices
   - Provides unified API surface with versioning support
 - **Microservices** (Node.js/Python/.NET): Domain-specific services
-  - account-service, messaging-service, listings-service, social-service (future)
+  - account-service, messaging-service, property-service, social-service (future)
 - **Web App** (Next.js): Frontend application (future)
 
 **External Access** (via Ingress):
@@ -830,12 +830,21 @@ infra/k8s/
 **Strategic merge behavior**: When base omits resources/storage, patches ADD complete sections (not
 merge/replace fields).
 
-**CRITICAL - Environment Variable Pattern**: Kustomize replaces the entire `env:` array when patches
-define it. To preserve base variables:
+**Environment Variable Pattern**: a strategic-merge patch **merges** `env:` entry by entry, keyed on
+`name` — it does **not** replace the array. So a patch lists only what it changes:
 
 - **Base**: Define all common environment variables (OTLP settings, sampling config, storage type)
 - **Patches**: Define ONLY environment-specific variables (retention periods, resource limits)
 - Example: Jaeger base defines SAMPLING_STRATEGIES_FILE, patches only define BADGER_SPAN_STORE_TTL
+
+Never re-list the base variables in a patch "to be safe". Copying `DATABASE_URL` and its
+`secretKeyRef` into four overlays gives four copies to drift, and the next person to change the base
+has no signal that the overlays silently override it.
+
+Verified on the running cluster: `property-service`'s local patch defines only `NODE_ENV`, and the
+rendered Deployment carries all nine variables (`PORT`, `HOST`, `PROPERTY_DB_*`, `DATABASE_URL`).
+This paragraph previously claimed the opposite — that the array is replaced — which contradicted the
+very prescription beneath it and made automated reviewers flag every correct patch in the repo.
 
 **Benefits of minimal base:**
 
@@ -1338,6 +1347,7 @@ pnpm run gh:ticket:view -- --issue 42
 # "<title>" / --remove-milestone; close refuses while stories are open):
 pnpm run gh:milestone -- list
 pnpm run gh:milestone -- create --title "Services MVP" --description "..."
+pnpm run gh:milestone -- update --title "Services MVP" --description "..." [--new-title "..."]
 ```
 
 `update-ticket-fields.js` vs `update-ticket-status.js` is a deliberate least-privilege split:

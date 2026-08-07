@@ -1,0 +1,12 @@
+{
+  "name": "property-service",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Communities → Properties → Units → Listings domain service (PRD §3)",
+  "dependencies": {
+    "express": "^4.21.2",
+    "node-pg-migrate": "^9.0.0",
+    "pg": "^8.22.0",
+    "tslib": "^2.3.0"
+  }
+}
