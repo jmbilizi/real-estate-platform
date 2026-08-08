@@ -42,8 +42,9 @@ function maskCode(text) {
  * Locate the marker-delimited plan block, ignoring markers quoted in prose. `end` is exclusive, so
  * body.slice(start, end) is the whole block with both markers.
  *
- * Returns null for a body with no plan AND for a malformed/unbalanced pair — callers that would
- * destroy content on a false negative must check containsBarePlanMarker() themselves and refuse.
+ * Returns null for a body with no plan AND for a malformed/unbalanced/hidden pair — it cannot tell
+ * "there is no plan" from "there is a plan I could not read". Callers that would destroy content on
+ * a false negative must run assertLegiblePlanBlock() first, which separates the two and throws.
  */
 function findPlanBlock(body) {
   const masked = maskCode(body);
@@ -66,10 +67,87 @@ function containsBarePlanMarker(text) {
 }
 
 /**
+ * Count lines that are nothing BUT `marker` (surrounding whitespace allowed). A marker on its own
+ * line is structure; one mentioned mid-sentence is prose. Split on /\r?\n/ so a body fetched from
+ * GitHub counts the same whether it came back with CRLF or LF endings.
+ */
+function countMarkerLines(text, marker) {
+  return text.split(/\r?\n/).filter((line) => line.trim() === marker).length;
+}
+
+/**
+ * maskCode pairs ``` delimiters greedily left to right, so an UNCLOSED fence silently pairs with a
+ * later one and blanks everything between them — real plan markers included. An odd number of ```
+ * delimiters is the tell. When the fences don't balance, the mask is not trustworthy and the guard
+ * below reads the body raw instead: refusing a body we cannot parse beats concluding "no plan here"
+ * and overwriting one.
+ */
+function fencesBalanced(text) {
+  return (text.match(/```/g) || []).length % 2 === 0;
+}
+
+/**
+ * The one legibility guard both editing paths run before touching a body.
+ *
+ * findPlanBlock() returns null for two very different situations — "there is no plan" and "there is
+ * a plan but I could not read it" — and every caller used to treat the second as the first, then
+ * silently destroy content: --plan-file appended a second block next to a stray marker and the run
+ * after that spliced across the product owner's sections; --body-file dropped a plan hidden by a
+ * runaway fence. The invariant that separates them: if a body contains structural plan markers at
+ * all, there must be exactly ONE legible pair.
+ *
+ * Throws (never exits) with an actionable message naming which of the three failures it is. The
+ * scripts turn that into die(); nothing is ever written on a throw.
+ */
+function assertLegiblePlanBlock(body) {
+  const scanned = fencesBalanced(body) ? maskCode(body) : body;
+  const starts = countMarkerLines(scanned, PLAN_START);
+  const ends = countMarkerLines(scanned, PLAN_END);
+
+  if (starts === 0 && ends === 0) {
+    // No structural markers. Either genuinely no plan, or a marker sitting inline — which is only
+    // safe if it still forms a pair findPlanBlock can read back.
+    const anyMarker = scanned.includes(PLAN_START) || scanned.includes(PLAN_END);
+    if (!anyMarker || findPlanBlock(body)) return;
+    throw new Error(
+      `The issue body contains an Implementation Plan marker (${PLAN_START} / ${PLAN_END}) that is ` +
+        'neither on a line of its own nor part of a readable pair, so the plan block cannot be ' +
+        'located. Put each marker alone on its own line, or quote it in backticks if it is meant ' +
+        'as prose. Nothing was written.',
+    );
+  }
+
+  if (starts !== 1 || ends !== 1) {
+    throw new Error(
+      `The issue's Implementation Plan markers are unbalanced: ${starts} \`${PLAN_START}\` ` +
+        `line(s) and ${ends} \`${PLAN_END}\` line(s), where exactly one of each is required. ` +
+        'Editing the body would splice across the wrong span and destroy content — fix the markers ' +
+        'on the issue by hand first. Nothing was written.',
+    );
+  }
+
+  if (!findPlanBlock(body)) {
+    throw new Error(
+      "The issue's Implementation Plan markers are present but unreadable — either an unclosed " +
+        `code fence hides them, or ${PLAN_END} comes before ${PLAN_START}. The plan block cannot ` +
+        'be located, so editing the body would destroy content. Fix the markers (and any unclosed ' +
+        '``` fence) on the issue by hand first. Nothing was written.',
+    );
+  }
+}
+
+/**
  * Replace the marker-delimited Implementation Plan section in an issue body, or append one if the
  * markers aren't present yet. Everything outside the markers is returned byte-for-byte.
+ *
+ * Refuses a body whose markers cannot be read back as exactly one pair. Appending a fresh block
+ * next to a stray marker used to "work" (exit 0, plausible output) and left the body with two
+ * starts and one end, so the NEXT --plan-file run spliced from the stray marker to the real end and
+ * deleted everything in between — the product owner's Technical Notes included.
  */
 function spliceImplementationPlan(body, plan) {
+  assertLegiblePlanBlock(body);
+
   const section = `${PLAN_START}\n\n## Implementation Plan\n\n${plan}\n\n${PLAN_END}`;
   const block = findPlanBlock(body);
   if (block) {
@@ -85,7 +163,11 @@ function spliceImplementationPlan(body, plan) {
  *
  * Refuses two cases rather than guessing, because both would destroy execution state:
  *   - the incoming body carries a marker itself (a product owner authoring/overwriting the plan);
- *   - the existing body's markers are unbalanced, so the block cannot be read back reliably.
+ *   - the existing body's markers cannot be read back as exactly one legible pair
+ *     (assertLegiblePlanBlock), so the plan would be dropped on the floor.
+ *
+ * Content in the existing body AFTER the plan block is deliberately dropped: the product owner's
+ * file is the whole of the product owner's content, and the plan is re-appended at the end.
  */
 function replaceBodyPreservingPlan(existingBody, newBody) {
   if (containsBarePlanMarker(newBody)) {
@@ -97,17 +179,10 @@ function replaceBodyPreservingPlan(existingBody, newBody) {
     );
   }
 
+  assertLegiblePlanBlock(existingBody);
+
   const block = findPlanBlock(existingBody);
-  if (!block) {
-    if (containsBarePlanMarker(existingBody)) {
-      throw new Error(
-        "The issue's existing Implementation Plan markers are unbalanced, so the plan block " +
-          'cannot be located and preserved. Refusing to overwrite an engineer plan that cannot be ' +
-          'read back — fix the markers on the issue first. Nothing was written.',
-      );
-    }
-    return newBody;
-  }
+  if (!block) return newBody;
 
   const plan = existingBody.slice(block.start, block.end);
   return `${newBody.trimEnd()}\n\n${plan}\n`;
@@ -119,6 +194,7 @@ module.exports = {
   maskCode,
   findPlanBlock,
   containsBarePlanMarker,
+  assertLegiblePlanBlock,
   spliceImplementationPlan,
   replaceBodyPreservingPlan,
 };
