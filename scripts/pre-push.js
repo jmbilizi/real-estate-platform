@@ -656,6 +656,19 @@ function checkInfrastructure() {
   return true;
 }
 
+// Unit tests for tools/ — not an Nx project, so no nx target covers it (see #38).
+function checkToolsScripts() {
+  logStep('Validating tools/ Scripts');
+
+  const result = run('pnpm run tools:test');
+  if (!result.success) {
+    logError('tools/ tests failed - run "pnpm run tools:test" to reproduce');
+    return false;
+  }
+  logSuccess('tools/ tests passed');
+  return true;
+}
+
 function main() {
   log('\n🔍 Full Check (Pre-Push Validation)', 'bright');
   log('='.repeat(80), 'cyan');
@@ -757,6 +770,9 @@ function main() {
   // Check infrastructure files (Kustomize) if changed
   const infraResult = checkInfrastructure();
   allPassed = allPassed && infraResult;
+
+  const toolsResult = checkToolsScripts();
+  allPassed = allPassed && toolsResult;
 
   // Final summary
   logStep('Summary');
