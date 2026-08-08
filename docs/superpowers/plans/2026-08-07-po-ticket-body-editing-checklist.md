@@ -29,17 +29,17 @@ ticket's own Acceptance Criteria.
       checked/unchecked items, nested items and a fenced code block. Verify: `pnpm run tools:test`.
 - [x] **3. Share the temp-file body write as `ghEditBody()`** in `lib/gh-client.js`, and switch
       `update-ticket-status.js --plan-file` onto it. Verify end-to-end against this ticket.
-- [ ] **4. `--body-file` on `gh:ticket:update-fields`** — all validation runs before the first `gh`
+- [x] **4. `--body-file` on `gh:ticket:update-fields`** — all validation runs before the first `gh`
       mutation, so a refused body leaves the ticket untouched, fields included. Verify: missing
       file, bare-marker-in-incoming-body and no-flag cases all fail with nothing written; then a
       no-op round-trip of this ticket's own body diffs empty.
-- [ ] **5. Repeatable `--add-label` / `--remove-label`** — applied in one `gh issue edit` call;
+- [x] **5. Repeatable `--add-label` / `--remove-label`** — applied in one `gh issue edit` call;
       unknown labels fail loudly via `gh` itself. Guard message extended to list every new flag.
       Verify: unknown label fails; a real add/remove round-trip nets the board back to
       `type:chore, scope:shared`.
-- [ ] **6. Docs** — `.github/copilot-instructions.md` (command block + the symmetry of the
+- [x] **6. Docs** — `.github/copilot-instructions.md` (command block + the symmetry of the
       least-privilege split), and `.claude/agents/cribstop-product-owner.md` so the product owner
       actually knows the flag exists instead of posting another amendment comment.
-- [ ] **7. Run `tools:test` in `pre-push`** — beyond the letter of the AC, and separable: without it
+- [x] **7. Run `tools:test` in `pre-push`** — beyond the letter of the AC, and separable: without it
       nothing ever executes the test this ticket mandates. #38 stays the place for the Nx/CI-side
       lint fix.
