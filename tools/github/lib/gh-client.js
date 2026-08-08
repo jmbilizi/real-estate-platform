@@ -76,9 +76,23 @@ function ghExec(args) {
  * reaches GitHub literally (see unescapeInlineText).
  */
 function ghEditBody(owner, repo, issueNumber, body) {
-  const tmp = path.join(os.tmpdir(), `cribstop-ticket-${issueNumber}-body.md`);
-  fs.writeFileSync(tmp, body, 'utf-8');
+  // A private temp DIRECTORY rather than a predictable file in the shared temp root. os.tmpdir() is
+  // world-writable on Linux/macOS (it is per-user only on Windows), so a fixed name like
+  // cribstop-ticket-35-body.md can be pre-created by another local user as a symlink, and
+  // writeFileSync would follow it and overwrite whatever it points at. mkdtempSync appends random
+  // characters and creates the directory 0700, which also stops two concurrent runs on the same
+  // issue from clobbering each other's file. Same pattern as tools/infra/setup-local-cluster.js.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cribstop-ticket-'));
+  // force so a cleanup failure can never mask the real error from ghExec — the previous unlinkSync
+  // threw ENOENT if the file had already gone, replacing a useful message with a confusing one.
+  const cleanup = () => fs.rmSync(dir, { recursive: true, force: true });
+  // A failing `gh` sends ghExec into die() -> process.exit(1), which skips finally blocks entirely,
+  // so the temp dir would survive every failed edit. 'exit' handlers DO run on process.exit(), and
+  // rmSync is synchronous, so this is the one hook that fires on both paths.
+  process.once('exit', cleanup);
+  const tmp = path.join(dir, `issue-${issueNumber}-body.md`);
   try {
+    fs.writeFileSync(tmp, body, { encoding: 'utf-8', mode: 0o600 });
     ghExec([
       'issue',
       'edit',
@@ -89,7 +103,8 @@ function ghEditBody(owner, repo, issueNumber, body) {
       tmp,
     ]);
   } finally {
-    fs.unlinkSync(tmp);
+    cleanup();
+    process.removeListener('exit', cleanup);
   }
 }
 
