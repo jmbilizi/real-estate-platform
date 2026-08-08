@@ -111,6 +111,8 @@ function main() {
   if (args['body-file']) {
     const file = args['body-file'];
     if (!fs.existsSync(file)) die(`--body-file not found: ${file}`);
+    // existsSync is true for a directory too, and the read below would then throw a raw EISDIR.
+    if (fs.statSync(file).isDirectory()) die(`--body-file is a directory, not a file: ${file}`);
     const incoming = fs.readFileSync(file, 'utf-8');
     if (!incoming.trim()) die(`--body-file is empty: ${file}`);
 
