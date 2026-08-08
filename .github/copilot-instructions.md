@@ -1370,13 +1370,17 @@ and cannot touch the product owner's sections. Both directions first run the sam
 over the issue's existing body: if it carries structural plan markers at all, there must be exactly
 one legible pair — one bare `<!-- implementation-plan:start -->` line and one bare
 `<!-- implementation-plan:end -->` line that can actually be read back as a block. Markers that are
-duplicated, unbalanced, or hidden by an unclosed ```fence are refused with`✗ … Nothing was
-written.`instead of guessed at, because a guess appends a second block or silently drops the plan, and the run after that splices across the wrong span and eats a whole section. Fix the markers on the issue by hand and re-run. Unit tests for both directions live in`tools/github/lib/issue-body.test.js`— run them with`pnpm
-run
-tools:test`. Unknown labels are validated by `gh`at write time rather than pre-checked locally, so a rejected label can leave earlier edits in the same invocation already applied — e.g.`--issue
-42 --status Ready --add-label
-typo`writes Status first, then fails on the label, and the Status change stays. That's the accepted trade-off of letting`gh`
-reject unknown labels, not a bug; a failed call isn't necessarily an atomic no-op.
+duplicated, unbalanced, or hidden by an unclosed code fence are refused with
+`✗ … Nothing was written.` instead of guessed at, because a guess appends a second block or silently
+drops the plan, and the run after that splices across the wrong span and eats a whole section. Fix
+the markers on the issue by hand and re-run. Unit tests for both directions live in
+`tools/github/lib/issue-body.test.js` — run them with `pnpm run tools:test`.
+
+Unknown labels are validated by `gh` at write time rather than pre-checked locally, so a rejected
+label can leave earlier edits in the same invocation already applied — e.g.
+`--issue 42 --status Ready --add-label typo` writes Status first, then fails on the label, and the
+Status change stays. That's the accepted trade-off of letting `gh` reject unknown labels, not a bug;
+a failed call isn't necessarily an atomic no-op.
 
 **Session brief**: a repo-scoped SessionStart hook (`.claude/settings.json` →
 `tools/github/session-brief.js`, manual run: `pnpm run gh:session-brief`) primes every Claude Code
