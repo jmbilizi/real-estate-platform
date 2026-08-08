@@ -128,8 +128,8 @@ landscape shifts):
   `pnpm run gh:ticket:update-fields -- --issue <n> --body-file <path>` rather than posting an
   amendment comment and leaving the wrong body above it — the plan section is preserved for you
   automatically, and the command refuses if your file contains a bare plan marker (one quoted in
-  backticks or a fence is fine). Same tool for labels that need to change after creation:
-  `--add-label` / `--remove-label` (both repeatable).
+  backticks or a fence is fine — and `gh:ticket:create` refuses the same way). Same tool for labels
+  that need to change after creation: `--add-label` / `--remove-label` (both repeatable).
 - **Split on deployability, never on artifact type.** Every ticket must leave the system in a
   working state; a slice whose output cannot run is a defect no matter how cleanly it reads. So when
   you split a body of work, the seam goes between "this is deployed and nothing depends on it yet"
