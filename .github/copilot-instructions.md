@@ -1370,10 +1370,10 @@ and cannot touch the product owner's sections. Both directions first run the sam
 over the issue's existing body: if it carries structural plan markers at all, there must be exactly
 one legible pair — one bare `<!-- implementation-plan:start -->` line and one bare
 `<!-- implementation-plan:end -->` line that can actually be read back as a block. Markers that are
-duplicated, unbalanced, or hidden by an unclosed code fence are refused with
-`✗ … Nothing was written.` instead of guessed at, because a guess appends a second block or silently
-drops the plan, and the run after that splices across the wrong span and eats a whole section. Fix
-the markers on the issue by hand and re-run. Unit tests for both directions live in
+duplicated, unbalanced, mentioned inline mid-line, or hidden by an unclosed code fence are refused
+with `✗ … Nothing was written.` instead of guessed at, because a guess appends a second block or
+silently drops the plan, and the run after that splices across the wrong span and eats a whole
+section. Fix the markers on the issue by hand and re-run. Unit tests for both directions live in
 `tools/github/lib/issue-body.test.js` — run them with `pnpm run tools:test`.
 
 Unknown labels are validated by `gh` at write time rather than pre-checked locally, so a rejected

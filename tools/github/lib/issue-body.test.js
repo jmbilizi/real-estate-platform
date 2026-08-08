@@ -316,8 +316,46 @@ test('assertLegiblePlanBlock refuses an end marker that precedes the start marke
 test('assertLegiblePlanBlock refuses a bare marker that is not on a line of its own', () => {
   assert.throws(
     () => assertLegiblePlanBlock(`${PO_BODY}\nsee ${PLAN_START} for the plan\n`),
-    /neither on a line of its own nor part of a readable pair/,
+    /mentions an Implementation Plan marker[\s\S]*inline/,
   );
+});
+
+/**
+ * The dangerous variant of the case above, and the reason the own-line rule is enforced per
+ * OCCURRENCE rather than only when the line counts come up short: an inline mention ABOVE a real
+ * plan block leaves the counts looking healthy (one bare start line, one bare end line), but
+ * findPlanBlock() binds to the FIRST occurrence — the prose one — so the "block" spans from
+ * mid-sentence all the way to the real end marker. Splicing that span deleted every product-owner
+ * section in between, which is the exact class of silent destruction this guard exists to stop.
+ */
+test('assertLegiblePlanBlock refuses an inline marker that coexists with a real plan block', () => {
+  const mixed = [
+    '## Problem',
+    '',
+    `The plan sits between ${PLAN_START} and the end marker.`,
+    '',
+    '## Technical Notes',
+    '',
+    'Files: tools/github/update-ticket-fields.js.',
+    '',
+    PLAN_BLOCK,
+    '',
+  ].join('\n');
+
+  assert.throws(() => assertLegiblePlanBlock(mixed), /mentions an Implementation Plan marker/);
+
+  // Both editing directions must refuse it rather than "succeed" while eating a section.
+  assert.throws(() => spliceImplementationPlan(mixed, '- [ ] task A'), /inline/);
+  assert.throws(() => replaceBodyPreservingPlan(mixed, '## Problem\n\nRewritten.\n'), /inline/);
+
+  // Belt and braces: whatever happens, Technical Notes must never silently vanish.
+  let spliced = null;
+  try {
+    spliced = spliceImplementationPlan(mixed, '- [ ] task A');
+  } catch {
+    spliced = null;
+  }
+  assert.equal(spliced, null, 'splicing an ambiguous body must throw, not return a truncated body');
 });
 
 test('assertLegiblePlanBlock accepts the bodies a healthy workflow produces', () => {

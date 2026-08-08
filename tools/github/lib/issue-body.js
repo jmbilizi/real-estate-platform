@@ -75,6 +75,26 @@ function countMarkerLines(text, marker) {
   return text.split(/\r?\n/).filter((line) => line.trim() === marker).length;
 }
 
+/** Every index at which `marker` occurs in `text`, scanning left to right. */
+function markerIndexes(text, marker) {
+  const found = [];
+  for (let i = text.indexOf(marker); i !== -1; i = text.indexOf(marker, i + marker.length)) {
+    found.push(i);
+  }
+  return found;
+}
+
+/**
+ * True when the line holding `index` contains nothing but `marker`. Slicing to the surrounding
+ * newlines and trimming means a CRLF body answers the same as an LF one.
+ */
+function isOwnLine(text, index, marker) {
+  const lineStart = text.lastIndexOf('\n', index) + 1;
+  const nextNewline = text.indexOf('\n', index);
+  const lineEnd = nextNewline === -1 ? text.length : nextNewline;
+  return text.slice(lineStart, lineEnd).trim() === marker;
+}
+
 /**
  * maskCode pairs ``` delimiters greedily left to right, so an UNCLOSED fence silently pairs with a
  * later one and blanks everything between them — real plan markers included. An odd number of ```
@@ -94,28 +114,40 @@ function fencesBalanced(text) {
  * silently destroy content: --plan-file appended a second block next to a stray marker and the run
  * after that spliced across the product owner's sections; --body-file dropped a plan hidden by a
  * runaway fence. The invariant that separates them: if a body contains structural plan markers at
- * all, there must be exactly ONE legible pair.
+ * all, every one of them is alone on its line and they form exactly ONE legible pair.
  *
- * Throws (never exits) with an actionable message naming which of the three failures it is. The
+ * The own-line half of that invariant is not cosmetic. findPlanBlock() takes the FIRST occurrence,
+ * so a single unbacktick'd prose mention sitting above a real block is enough to make the located
+ * "block" start mid-sentence and swallow every product-owner section down to the real end marker.
+ * The line counts stay balanced throughout, which is why this is checked per occurrence.
+ *
+ * Throws (never exits) with an actionable message naming which of the four failures it is. The
  * scripts turn that into die(); nothing is ever written on a throw.
  */
 function assertLegiblePlanBlock(body) {
   const scanned = fencesBalanced(body) ? maskCode(body) : body;
+
+  // Every structural marker must sit alone on its line, checked per OCCURRENCE rather than only
+  // when the line counts come up short. An inline mention ABOVE a real plan block leaves the counts
+  // looking perfectly healthy — one bare start line, one bare end line — while findPlanBlock() binds
+  // to the FIRST occurrence, the prose one. The "block" then spans from mid-sentence to the real end
+  // marker, and splicing it deletes every product-owner section in between.
+  for (const marker of [PLAN_START, PLAN_END]) {
+    for (const index of markerIndexes(scanned, marker)) {
+      if (isOwnLine(scanned, index, marker)) continue;
+      throw new Error(
+        `The issue body mentions an Implementation Plan marker (${marker}) inline, in the middle ` +
+          'of a line, so the plan block cannot be located unambiguously. Put each marker alone on ' +
+          'its own line, or quote it in backticks if it is meant as prose. Nothing was written.',
+      );
+    }
+  }
+
   const starts = countMarkerLines(scanned, PLAN_START);
   const ends = countMarkerLines(scanned, PLAN_END);
 
-  if (starts === 0 && ends === 0) {
-    // No structural markers. Either genuinely no plan, or a marker sitting inline — which is only
-    // safe if it still forms a pair findPlanBlock can read back.
-    const anyMarker = scanned.includes(PLAN_START) || scanned.includes(PLAN_END);
-    if (!anyMarker || findPlanBlock(body)) return;
-    throw new Error(
-      `The issue body contains an Implementation Plan marker (${PLAN_START} / ${PLAN_END}) that is ` +
-        'neither on a line of its own nor part of a readable pair, so the plan block cannot be ' +
-        'located. Put each marker alone on its own line, or quote it in backticks if it is meant ' +
-        'as prose. Nothing was written.',
-    );
-  }
+  // Every marker is now known to be on its own line, so zero lines means genuinely no plan.
+  if (starts === 0 && ends === 0) return;
 
   if (starts !== 1 || ends !== 1) {
     throw new Error(
