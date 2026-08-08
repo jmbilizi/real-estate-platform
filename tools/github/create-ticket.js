@@ -37,6 +37,7 @@ const {
   ok,
   info,
 } = require('./lib/gh-client');
+const { PLAN_START, PLAN_END, containsBarePlanMarker } = require('./lib/issue-body');
 
 function parseArgs(argv) {
   const args = { label: [], scope: [] };
@@ -78,6 +79,19 @@ function main() {
   }
 
   const body = resolveBody(args);
+
+  // Creation is a product-owner flow, so the same rule as update-ticket-fields --body-file applies:
+  // the plan block is the engineer's, written only by gh:ticket:update-status --plan-file. Letting a
+  // bare marker in here is how a ticket gets born with an unbalanced pair that later splices across
+  // the product owner's own sections. A marker quoted in backticks or a fence is prose and is fine.
+  if (containsBarePlanMarker(body)) {
+    die(
+      'The body contains an Implementation Plan marker ' +
+        `(${PLAN_START} / ${PLAN_END}). That section is the engineer's execution state, written ` +
+        'by `gh:ticket:update-status -- --plan-file` — remove the markers and everything between ' +
+        'them from your file. Nothing was created.',
+    );
+  }
 
   const labels = [...args.label, ...args.scope.map((s) => `scope:${s}`)];
 
