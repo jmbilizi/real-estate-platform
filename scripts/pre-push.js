@@ -690,10 +690,20 @@ function main() {
 
   log('Running: Format + Lint + Type + Test + Build (complete validation)\n', 'yellow');
 
+  // tools/ is not an Nx project, so its tests have nothing to do with the workspace's project list
+  // and must run BEFORE the empty-workspace early exit below — otherwise a tools/-only change is
+  // waved through unvalidated in exactly the case that exit optimizes for.
+  const toolsResult = checkToolsScripts();
+
   // Early exit if no projects exist (empty workspace)
   const projectCheck = run('pnpm exec nx show projects', { silent: true });
   if (!projectCheck.output || projectCheck.output.trim().length === 0) {
-    log('\nℹ No projects in workspace - skipping all checks', 'cyan');
+    log('\nℹ No projects in workspace - skipping all Nx checks', 'cyan');
+    if (!toolsResult) {
+      logError('\n❌ tools/ tests failed.');
+      logError('Please fix the issues above before pushing.\n');
+      process.exit(1);
+    }
     logSuccess('\n✅ Push allowed (empty workspace)\n');
     process.exit(0);
   }
@@ -771,7 +781,7 @@ function main() {
   const infraResult = checkInfrastructure();
   allPassed = allPassed && infraResult;
 
-  const toolsResult = checkToolsScripts();
+  // Already run above, before the empty-workspace early exit — just fold the result in.
   allPassed = allPassed && toolsResult;
 
   // Final summary
