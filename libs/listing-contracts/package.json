@@ -1,0 +1,11 @@
+{
+  "name": "@cribstop/listing-contracts",
+  "version": "0.0.1",
+  "private": true,
+  "description": "The listings wire contract (PRD §3.1) — one definition for validation, types and OpenAPI",
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "dependencies": {
+    "zod": "^4.4.3"
+  }
+}
