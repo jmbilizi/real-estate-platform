@@ -59,15 +59,18 @@ hand-rolled coercion layer — which puts the contract in a second place, which 
 package exists to prevent.
 
 Zod v4 ships `z.toJSONSchema()` in core, so there is **no converter package** — one less dependency
-that can lag the schema library and mis-emit silently. `.nullable()` emits
-`anyOf: [{…}, {type: "null"}]` under draft-2020-12, i.e. OpenAPI 3.1. That is already proven through
-this gateway: `multi-model-inference` serves a FastAPI-generated 3.1 document and
-MMLib.SwaggerForOcelot aggregates it today.
+that can lag the schema library and mis-emit silently. It is emitted with `target: "openapi-3.0"`,
+which renders `.nullable()` as `nullable: true` rather than the default draft-2020-12
+`anyOf: [{…}, {type: "null"}]`. This contract is nullable-heavy by design, so the 3.0 form is
+markedly more legible in the gateway's aggregated Swagger UI. (The gateway handles either: MMLib
+already aggregates `multi-model-inference`'s FastAPI-generated 3.1 document today.)
 
-**Known sharp edge:** `z.toJSONSchema()` cannot represent a `.transform()`, and `z.coerce.number()`
-has an `unknown` input type that renders as `{}`. The query schema is authored with that in mind,
-and the emitted document is pinned by a golden-file snapshot test — so any drift in Zod's emitter
-lands in a reviewable diff instead of in the gateway's Swagger UI.
+**Known sharp edge:** `z.toJSONSchema()` cannot represent a `.transform()`, and a coerced primitive
+has an `unknown` input type that renders as an empty `{}` under `io: "input"`. So numeric query
+parameters are authored as `z.string().regex(…).transform(Number)` rather than `z.coerce.number()`,
+which keeps the published spec meaningful for those fields. The emitted document is pinned by a
+golden-file snapshot test, so any drift in Zod's emitter lands in a reviewable diff instead of in
+the gateway's Swagger UI.
 
 ### No discriminated union for sold rows
 
