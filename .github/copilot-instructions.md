@@ -1333,6 +1333,15 @@ pnpm run gh:ticket:list -- --status Ready --priority P0
 # Product owner: reprioritize/groom (Status/Priority/Size — full field access):
 pnpm run gh:ticket:update-fields -- --issue 42 --priority P0
 
+# Product owner: correct a ticket's spec after creation. Replaces the whole body with the file's
+# contents apart from the engineer's Implementation Plan block, carried over byte-for-byte; refuses
+# (writing nothing) if the file itself contains a bare plan marker (one quoted in backticks/a fence
+# is fine):
+pnpm run gh:ticket:update-fields -- --issue 42 --body-file ./spec.md
+
+# Product owner: labels on an existing ticket (both flags repeatable; unknown labels fail loudly):
+pnpm run gh:ticket:update-fields -- --issue 42 --add-label blocked --remove-label type:chore
+
 # Engineer: move through the workflow (Status + assignee/comment only, can't touch Priority/Size):
 pnpm run gh:ticket:update-status -- --issue 42 --status "In Progress" --claim
 
@@ -1353,6 +1362,25 @@ pnpm run gh:milestone -- update --title "Services MVP" --description "..." [--ne
 `update-ticket-fields.js` vs `update-ticket-status.js` is a deliberate least-privilege split:
 engineer-facing flows (`pick-next-ticket`, `close-ticket` skills) only ever get the script that
 can't touch Priority/Size, enforced at the script level rather than by trusting an agent's prompt.
+The split is symmetric on the body: `update-fields --body-file` rewrites everything but the plan
+block and cannot touch it (it is carried over byte-for-byte, and a body file containing a bare plan
+marker — one quoted in backticks or a fence is prose and is fine — is rejected outright, as it is at
+creation time by `gh:ticket:create`), while `update-status --plan-file` rewrites only the plan block
+and cannot touch the product owner's sections. Both directions first run the same legibility guard
+over the issue's existing body: if it carries structural plan markers at all, there must be exactly
+one legible pair — one bare `<!-- implementation-plan:start -->` line and one bare
+`<!-- implementation-plan:end -->` line that can actually be read back as a block. Markers that are
+duplicated, unbalanced, mentioned inline mid-line, or hidden by an unclosed code fence are refused
+with `✗ … Nothing was written.` instead of guessed at, because a guess appends a second block or
+silently drops the plan, and the run after that splices across the wrong span and eats a whole
+section. Fix the markers on the issue by hand and re-run. Unit tests for both directions live in
+`tools/github/lib/issue-body.test.js` — run them with `pnpm run tools:test`.
+
+Unknown labels are validated by `gh` at write time rather than pre-checked locally, so a rejected
+label can leave earlier edits in the same invocation already applied — e.g.
+`--issue 42 --status Ready --add-label typo` writes Status first, then fails on the label, and the
+Status change stays. That's the accepted trade-off of letting `gh` reject unknown labels, not a bug;
+a failed call isn't necessarily an atomic no-op.
 
 **Session brief**: a repo-scoped SessionStart hook (`.claude/settings.json` →
 `tools/github/session-brief.js`, manual run: `pnpm run gh:session-brief`) primes every Claude Code

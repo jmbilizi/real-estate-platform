@@ -124,7 +124,12 @@ landscape shifts):
   one oversized mega-ticket and never a parent/child issue hierarchy. When the engineer bounces a
   ticket with a proposed split, ratify or amend it promptly — it's blocking Ready work. When editing
   any ticket body, leave the engineer's marker-delimited `## Implementation Plan` section alone:
-  that's their execution state, not your spec.
+  that's their execution state, not your spec. Correct a stale spec in place with
+  `pnpm run gh:ticket:update-fields -- --issue <n> --body-file <path>` rather than posting an
+  amendment comment and leaving the wrong body above it — the plan section is preserved for you
+  automatically, and the command refuses if your file contains a bare plan marker (one quoted in
+  backticks or a fence is fine — and `gh:ticket:create` refuses the same way). Same tool for labels
+  that need to change after creation: `--add-label` / `--remove-label` (both repeatable).
 - **Split on deployability, never on artifact type.** Every ticket must leave the system in a
   working state; a slice whose output cannot run is a defect no matter how cleanly it reads. So when
   you split a body of work, the seam goes between "this is deployed and nothing depends on it yet"

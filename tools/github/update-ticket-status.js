@@ -18,8 +18,6 @@
  */
 
 const fs = require('fs');
-const os = require('os');
-const path = require('path');
 
 const {
   ensureGhReady,
@@ -28,28 +26,13 @@ const {
   findProjectItemId,
   resolveFieldOption,
   ghExec,
+  ghEditBody,
   ghJson,
   unescapeInlineText,
   die,
   ok,
 } = require('./lib/gh-client');
-
-const PLAN_START = '<!-- implementation-plan:start -->';
-const PLAN_END = '<!-- implementation-plan:end -->';
-
-/**
- * Replace the marker-delimited Implementation Plan section in an issue body, or append one if the
- * markers aren't present yet. Everything outside the markers is returned byte-for-byte.
- */
-function spliceImplementationPlan(body, plan) {
-  const section = `${PLAN_START}\n\n## Implementation Plan\n\n${plan}\n\n${PLAN_END}`;
-  const start = body.indexOf(PLAN_START);
-  const end = body.indexOf(PLAN_END);
-  if (start !== -1 && end !== -1 && end > start) {
-    return body.slice(0, start) + section + body.slice(end + PLAN_END.length);
-  }
-  return `${body.trimEnd()}\n\n${section}\n`;
-}
+const { spliceImplementationPlan } = require('./lib/issue-body');
 
 const FLAGS = new Set(['claim']);
 
@@ -84,21 +67,23 @@ function main() {
   const issueRef = ['--repo', `${owner}/${repo}`];
 
   if (args['plan-file']) {
-    if (!fs.existsSync(args['plan-file'])) die(`--plan-file not found: ${args['plan-file']}`);
-    const plan = fs.readFileSync(args['plan-file'], 'utf-8').trim();
-    if (!plan) die(`--plan-file is empty: ${args['plan-file']}`);
+    const file = args['plan-file'];
+    if (!fs.existsSync(file)) die(`--plan-file not found: ${file}`);
+    if (fs.statSync(file).isDirectory()) die(`--plan-file is a directory, not a file: ${file}`);
+    const plan = fs.readFileSync(file, 'utf-8').trim();
+    if (!plan) die(`--plan-file is empty: ${file}`);
 
     const issue = ghJson(['issue', 'view', args.issue, ...issueRef, '--json', 'body']);
-    const updated = spliceImplementationPlan(issue.body || '', plan);
-
-    // gh needs the new body via file — inline args hit quoting/length limits on Windows.
-    const tmp = path.join(os.tmpdir(), `cribstop-ticket-${args.issue}-body.md`);
-    fs.writeFileSync(tmp, updated, 'utf-8');
+    // spliceImplementationPlan refuses a body whose markers can't be read back as one legible pair
+    // rather than appending a second block; surface that as a clean ✗ instead of a stack trace.
+    let updated;
     try {
-      ghExec(['issue', 'edit', args.issue, ...issueRef, '--body-file', tmp]);
-    } finally {
-      fs.unlinkSync(tmp);
+      updated = spliceImplementationPlan(issue.body || '', plan);
+    } catch (error) {
+      die(error.message);
     }
+
+    ghEditBody(owner, repo, args.issue, updated);
     ok(`Issue #${args.issue}: Implementation Plan section updated`);
   }
 
