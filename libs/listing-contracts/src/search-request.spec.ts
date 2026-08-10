@@ -52,4 +52,20 @@ describe('searchRequestSchema', () => {
     expect(searchRequestSchema.parse({ waterfront: 'false' }).waterfront).toBe(false);
     expect(searchRequestSchema.safeParse({ openHouse: 'yes' }).success).toBe(false);
   });
+
+  it('accepts a half-bath step for baths but rejects other fractions', () => {
+    expect(searchRequestSchema.parse({ baths: '2.5' }).baths).toBe(2.5);
+    expect(searchRequestSchema.parse({ baths: '2' }).baths).toBe(2);
+    expect(searchRequestSchema.safeParse({ baths: '2.7' }).success).toBe(false);
+    expect(searchRequestSchema.safeParse({ baths: 'abc' }).success).toBe(false);
+  });
+
+  it('rejects a page of 0 or a negative page', () => {
+    expect(searchRequestSchema.safeParse({ page: '0' }).success).toBe(false);
+    expect(searchRequestSchema.safeParse({ page: '-1' }).success).toBe(false);
+  });
+
+  it('rejects a pageSize of 0', () => {
+    expect(searchRequestSchema.safeParse({ pageSize: '0' }).success).toBe(false);
+  });
 });

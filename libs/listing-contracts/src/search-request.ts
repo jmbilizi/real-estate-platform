@@ -8,6 +8,14 @@ export const PAGE_SIZE_MAX = 100;
 
 const queryInt = z.string().regex(/^\d+$/, 'must be a whole number').transform(Number);
 
+/** `baths` alone tolerates a half step: `baths_display` in
+ *  `apps/services/property-service/migrations/1785801600003_create-listings.js` is
+ *  `COALESCE(baths_full,0) + 0.5*COALESCE(baths_half,0)`, so `2.5`/`3.5` are legitimate values. */
+const queryBathCount = z
+  .string()
+  .regex(/^\d+(\.5)?$/, 'must be a whole number or a half step (e.g. 2.5)')
+  .transform(Number);
+
 const queryBoolean = z.enum(['true', 'false']).transform((value) => value === 'true');
 
 /** Repeated param (`?amenities=Pool&amenities=Garage`) or comma list (`?amenities=Pool,Garage`). */
@@ -32,7 +40,7 @@ export const searchRequestSchema = z.strictObject({
   minPrice: queryInt.optional(),
   maxPrice: queryInt.optional(),
   beds: queryInt.optional(),
-  baths: queryInt.optional(),
+  baths: queryBathCount.optional(),
   minSqft: queryInt.optional(),
   neighborhood: z.string().optional(),
   openHouse: queryBoolean.optional(),
