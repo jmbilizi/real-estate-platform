@@ -2,7 +2,11 @@ import { z } from 'zod';
 import { listingCardSchema } from './listing-card';
 import { mediaSchema, openHouseSchema, propertyTypeSchema } from './common';
 
-/** Durable site facts the view drops. Display-suppressed values are NOT re-sourced from here. */
+/**
+ * Durable site facts the view drops. Display-suppressed values are NOT re-sourced from here.
+ * May differ from `listing.yearBuilt`/`listing.lotSqft` — those are a one-way snapshot frozen
+ * when the listing was advertised, this is the current durable value.
+ */
 const propertyFactsSchema = z.object({
   id: z.string(),
   propertyType: propertyTypeSchema,
