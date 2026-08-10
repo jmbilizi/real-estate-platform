@@ -1,4 +1,4 @@
-# `libs/listing-contracts` Implementation Plan
+# `libs/property-contracts` Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
@@ -20,7 +20,7 @@ pnpm workspaces.
 
 ## Global Constraints
 
-- Package name is `@cribstop/listing-contracts`; Nx project name is `listing-contracts`.
+- Package name is `@cribstop/property-contracts`; Nx project name is `property-contracts`.
 - Zod **v4** (`^4.4.3`), using built-in `z.toJSONSchema()`. **No converter package.**
 - **No `tsconfig` `paths` entry** anywhere. Resolution is pnpm `workspace:*` + TS project
   references.
@@ -44,17 +44,17 @@ pnpm workspaces.
 
 **Files:**
 
-- Create: `libs/listing-contracts/` (generator output)
-- Create: `libs/listing-contracts/CLAUDE.md`
+- Create: `libs/property-contracts/` (generator output)
+- Create: `libs/property-contracts/CLAUDE.md`
 - Modify: `pnpm-workspace.yaml`
-- Modify: `libs/listing-contracts/package.json`, `libs/listing-contracts/project.json`
+- Modify: `libs/property-contracts/package.json`, `libs/property-contracts/project.json`
 
 **Interfaces:**
 
 - Consumes: nothing.
-- Produces: an Nx project named `listing-contracts` with working `build`, `test`, `lint`,
+- Produces: an Nx project named `property-contracts` with working `build`, `test`, `lint`,
   `type-check`, `format` and `format-check` targets, published to the workspace as
-  `@cribstop/listing-contracts`.
+  `@cribstop/property-contracts`.
 
 - [ ] **Step 1: Generate the library**
 
@@ -62,8 +62,8 @@ pnpm workspaces.
 change flat-config resolution repo-wide.
 
 ```bash
-pnpm exec nx g @nx/js:lib libs/listing-contracts \
-  --name=listing-contracts \
+pnpm exec nx g @nx/js:lib libs/property-contracts \
+  --name=property-contracts \
   --bundler=tsc \
   --unitTestRunner=jest \
   --linter=none \
@@ -71,7 +71,7 @@ pnpm exec nx g @nx/js:lib libs/listing-contracts \
 ```
 
 Expected: creates
-`libs/listing-contracts/{project.json,package.json,tsconfig*.json,jest.config.ts,src/index.ts}` and
+`libs/property-contracts/{project.json,package.json,tsconfig*.json,jest.config.ts,src/index.ts}` and
 updates root `tsconfig.json` with a project reference. **If it also reports
 `CREATE eslint.config.mjs` at the repo root, delete that file** — the flag did not take.
 
@@ -82,16 +82,16 @@ this. Replace the commented-out shared-libs block:
 
 ```yaml
 # shared libs for web and mobile apps
-- 'libs/listing-contracts'
+- 'libs/property-contracts'
 ```
 
 - [ ] **Step 3: Set the package identity and dependency**
 
-In `libs/listing-contracts/package.json`:
+In `libs/property-contracts/package.json`:
 
 ```json
 {
-  "name": "@cribstop/listing-contracts",
+  "name": "@cribstop/property-contracts",
   "version": "0.0.1",
   "private": true,
   "description": "The listings wire contract (PRD §3.1) — one definition for validation, types and OpenAPI",
@@ -105,7 +105,7 @@ In `libs/listing-contracts/package.json`:
 
 - [ ] **Step 4: Copy the target and tag shape from property-service**
 
-In `libs/listing-contracts/project.json`, set `tags` and add the four targets that
+In `libs/property-contracts/project.json`, set `tags` and add the four targets that
 `apps/services/property-service/project.json` defines. Auto-tagging infers
 `runtime`/`type`/`platform` but not `scope`/`framework`:
 
@@ -124,7 +124,7 @@ In `libs/listing-contracts/project.json`, set `tags` and add the four targets th
       "executor": "nx:run-commands",
       "cache": true,
       "options": {
-        "command": "eslint --config tools/node/configs/eslint.config.js libs/listing-contracts",
+        "command": "eslint --config tools/node/configs/eslint.config.js libs/property-contracts",
         "cwd": "."
       }
     },
@@ -138,17 +138,17 @@ In `libs/listing-contracts/project.json`, set `tags` and add the four targets th
         "^production"
       ],
       "options": {
-        "command": "tsc -b --noEmit libs/listing-contracts/tsconfig.json",
+        "command": "tsc -b --noEmit libs/property-contracts/tsconfig.json",
         "cwd": "."
       }
     },
     "format": {
       "executor": "nx:run-commands",
-      "options": { "command": "prettier --write .", "cwd": "libs/listing-contracts" }
+      "options": { "command": "prettier --write .", "cwd": "libs/property-contracts" }
     },
     "format-check": {
       "executor": "nx:run-commands",
-      "options": { "command": "prettier --check .", "cwd": "libs/listing-contracts" }
+      "options": { "command": "prettier --check .", "cwd": "libs/property-contracts" }
     }
   }
 }
@@ -166,10 +166,10 @@ pnpm run nx:reset
 - [ ] **Step 6: Verify the project is real**
 
 ```bash
-pnpm exec nx show project listing-contracts --json
-pnpm exec nx build listing-contracts
-pnpm exec nx type-check listing-contracts
-pnpm exec nx lint listing-contracts
+pnpm exec nx show project property-contracts --json
+pnpm exec nx build property-contracts
+pnpm exec nx type-check property-contracts
+pnpm exec nx lint property-contracts
 ```
 
 Expected: all four succeed, and `nx show project` lists `build`, `test`, `lint`, `type-check`,
@@ -177,7 +177,7 @@ Expected: all four succeed, and `nx show project` lists `build`, `test`, `lint`,
 
 - [ ] **Step 7: Write the project CLAUDE.md**
 
-Create `libs/listing-contracts/CLAUDE.md` covering: what this package is (the single definition of
+Create `libs/property-contracts/CLAUDE.md` covering: what this package is (the single definition of
 the listings wire contract), what belongs in it (schemas, derived types, the OpenAPI builder), what
 does **not** (SQL, HTTP, environment access, anything importing `pg` or `express`), the
 no-`paths`-entry rule, the prohibition on field-selection parameters / `hasOpenHouse` / `imageUrls`,
@@ -187,8 +187,8 @@ services.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add libs/listing-contracts pnpm-workspace.yaml pnpm-lock.yaml nx.json tsconfig.json
-git commit -m "#47 feat(contracts): scaffold the listing-contracts library"
+git add libs/property-contracts pnpm-workspace.yaml pnpm-lock.yaml nx.json tsconfig.json
+git commit -m "#47 feat(contracts): scaffold the property-contracts library"
 ```
 
 ---
@@ -197,8 +197,8 @@ git commit -m "#47 feat(contracts): scaffold the listing-contracts library"
 
 **Files:**
 
-- Create: `libs/listing-contracts/src/common.ts`
-- Test: `libs/listing-contracts/src/common.spec.ts`
+- Create: `libs/property-contracts/src/common.ts`
+- Test: `libs/property-contracts/src/common.spec.ts`
 
 **Interfaces:**
 
@@ -215,7 +215,7 @@ git commit -m "#47 feat(contracts): scaffold the listing-contracts library"
 here means the API accepts a filter value the database will never match.
 
 ```ts
-// libs/listing-contracts/src/common.spec.ts
+// libs/property-contracts/src/common.spec.ts
 import { AMENITIES, amenitySchema, attributionSchema, mediaSchema } from './common';
 
 describe('common schemas', () => {
@@ -275,7 +275,7 @@ describe('common schemas', () => {
 
 - [ ] **Step 2: Run it and confirm it fails**
 
-Run: `pnpm exec nx test listing-contracts` Expected: FAIL — `Cannot find module './common'`.
+Run: `pnpm exec nx test property-contracts` Expected: FAIL — `Cannot find module './common'`.
 
 - [ ] **Step 3: Implement `common.ts`**
 
@@ -354,12 +354,12 @@ export type Attribution = z.infer<typeof attributionSchema>;
 
 - [ ] **Step 4: Run the tests and confirm they pass**
 
-Run: `pnpm exec nx test listing-contracts` Expected: PASS, 4 tests.
+Run: `pnpm exec nx test property-contracts` Expected: PASS, 4 tests.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add libs/listing-contracts/src/common.ts libs/listing-contracts/src/common.spec.ts
+git add libs/property-contracts/src/common.ts libs/property-contracts/src/common.spec.ts
 git commit -m "#47 feat(contracts): add shared listing enums and value objects"
 ```
 
@@ -369,8 +369,8 @@ git commit -m "#47 feat(contracts): add shared listing enums and value objects"
 
 **Files:**
 
-- Create: `libs/listing-contracts/src/search-request.ts`
-- Test: `libs/listing-contracts/src/search-request.spec.ts`
+- Create: `libs/property-contracts/src/search-request.ts`
+- Test: `libs/property-contracts/src/search-request.spec.ts`
 
 **Interfaces:**
 
@@ -381,7 +381,7 @@ git commit -m "#47 feat(contracts): add shared listing enums and value objects"
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// libs/listing-contracts/src/search-request.spec.ts
+// libs/property-contracts/src/search-request.spec.ts
 import { PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX, searchRequestSchema } from './search-request';
 
 describe('searchRequestSchema', () => {
@@ -441,7 +441,7 @@ describe('searchRequestSchema', () => {
 
 - [ ] **Step 2: Run it and confirm it fails**
 
-Run: `pnpm exec nx test listing-contracts` Expected: FAIL — `Cannot find module './search-request'`.
+Run: `pnpm exec nx test property-contracts` Expected: FAIL — `Cannot find module './search-request'`.
 
 - [ ] **Step 3: Implement `search-request.ts`**
 
@@ -503,13 +503,13 @@ export type SearchRequest = z.output<typeof searchRequestSchema>;
 
 - [ ] **Step 4: Run the tests and confirm they pass**
 
-Run: `pnpm exec nx test listing-contracts` Expected: PASS. If `.default()` on a piped schema
+Run: `pnpm exec nx test property-contracts` Expected: PASS. If `.default()` on a piped schema
 misbehaves, adjust the composition — the assertions are the contract, not this exact expression.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add libs/listing-contracts/src/search-request.ts libs/listing-contracts/src/search-request.spec.ts
+git add libs/property-contracts/src/search-request.ts libs/property-contracts/src/search-request.spec.ts
 git commit -m "#47 feat(contracts): add the strict search request schema"
 ```
 
@@ -519,8 +519,8 @@ git commit -m "#47 feat(contracts): add the strict search request schema"
 
 **Files:**
 
-- Create: `libs/listing-contracts/src/listing-card.ts`
-- Test: `libs/listing-contracts/src/listing-card.spec.ts`
+- Create: `libs/property-contracts/src/listing-card.ts`
+- Test: `libs/property-contracts/src/listing-card.spec.ts`
 
 **Interfaces:**
 
@@ -531,7 +531,7 @@ git commit -m "#47 feat(contracts): add the strict search request schema"
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// libs/listing-contracts/src/listing-card.spec.ts
+// libs/property-contracts/src/listing-card.spec.ts
 import { listingCardSchema, listingsEnvelopeSchema } from './listing-card';
 
 const row = {
@@ -616,7 +616,7 @@ describe('listingCardSchema', () => {
 
 - [ ] **Step 2: Run it and confirm it fails**
 
-Run: `pnpm exec nx test listing-contracts` Expected: FAIL — `Cannot find module './listing-card'`.
+Run: `pnpm exec nx test property-contracts` Expected: FAIL — `Cannot find module './listing-card'`.
 
 - [ ] **Step 3: Implement `listing-card.ts`**
 
@@ -698,12 +698,12 @@ export type ListingsEnvelope = z.infer<typeof listingsEnvelopeSchema>;
 
 - [ ] **Step 4: Run the tests and confirm they pass**
 
-Run: `pnpm exec nx test listing-contracts` Expected: PASS.
+Run: `pnpm exec nx test property-contracts` Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add libs/listing-contracts/src/listing-card.ts libs/listing-contracts/src/listing-card.spec.ts
+git add libs/property-contracts/src/listing-card.ts libs/property-contracts/src/listing-card.spec.ts
 git commit -m "#47 feat(contracts): add the list row and response envelope"
 ```
 
@@ -713,11 +713,11 @@ git commit -m "#47 feat(contracts): add the list row and response envelope"
 
 **Files:**
 
-- Create: `libs/listing-contracts/src/listing-detail.ts`
-- Create: `libs/listing-contracts/src/listings-meta.ts`
-- Create: `libs/listing-contracts/src/errors.ts`
-- Test: `libs/listing-contracts/src/listing-detail.spec.ts`
-- Test: `libs/listing-contracts/src/listings-meta.spec.ts`
+- Create: `libs/property-contracts/src/listing-detail.ts`
+- Create: `libs/property-contracts/src/listings-meta.ts`
+- Create: `libs/property-contracts/src/errors.ts`
+- Test: `libs/property-contracts/src/listing-detail.spec.ts`
+- Test: `libs/property-contracts/src/listings-meta.spec.ts`
 
 **Interfaces:**
 
@@ -728,7 +728,7 @@ git commit -m "#47 feat(contracts): add the list row and response envelope"
 - [ ] **Step 1: Write the failing tests**
 
 ```ts
-// libs/listing-contracts/src/listing-detail.spec.ts
+// libs/property-contracts/src/listing-detail.spec.ts
 import { listingDetailSchema } from './listing-detail';
 
 const detail = {
@@ -801,7 +801,7 @@ describe('listingDetailSchema', () => {
 ```
 
 ```ts
-// libs/listing-contracts/src/listings-meta.spec.ts
+// libs/property-contracts/src/listings-meta.spec.ts
 import { listingsMetaSchema } from './listings-meta';
 
 describe('listingsMetaSchema', () => {
@@ -822,12 +822,12 @@ describe('listingsMetaSchema', () => {
 
 - [ ] **Step 2: Run them and confirm they fail**
 
-Run: `pnpm exec nx test listing-contracts` Expected: FAIL — modules not found.
+Run: `pnpm exec nx test property-contracts` Expected: FAIL — modules not found.
 
 - [ ] **Step 3: Implement the three modules**
 
 ```ts
-// libs/listing-contracts/src/listing-detail.ts
+// libs/property-contracts/src/listing-detail.ts
 import { z } from 'zod';
 import { listingCardSchema } from './listing-card';
 import { mediaSchema, openHouseSchema, propertyTypeSchema } from './common';
@@ -871,7 +871,7 @@ export type ListingDetail = z.infer<typeof listingDetailSchema>;
 ```
 
 ```ts
-// libs/listing-contracts/src/listings-meta.ts
+// libs/property-contracts/src/listings-meta.ts
 import { z } from 'zod';
 import { listingSourceSchema } from './common';
 
@@ -891,7 +891,7 @@ export type ListingsMeta = z.infer<typeof listingsMetaSchema>;
 ```
 
 ```ts
-// libs/listing-contracts/src/errors.ts
+// libs/property-contracts/src/errors.ts
 import { z } from 'zod';
 
 export const errorBodySchema = z.object({
@@ -914,13 +914,13 @@ export type ErrorBody = z.infer<typeof errorBodySchema>;
 
 - [ ] **Step 4: Run the tests and confirm they pass**
 
-Run: `pnpm exec nx test listing-contracts` Expected: PASS.
+Run: `pnpm exec nx test property-contracts` Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add libs/listing-contracts/src/listing-detail.ts libs/listing-contracts/src/listings-meta.ts \
-        libs/listing-contracts/src/errors.ts libs/listing-contracts/src/*.spec.ts
+git add libs/property-contracts/src/listing-detail.ts libs/property-contracts/src/listings-meta.ts \
+        libs/property-contracts/src/errors.ts libs/property-contracts/src/*.spec.ts
 git commit -m "#47 feat(contracts): add detail, metadata and error shapes"
 ```
 
@@ -930,9 +930,9 @@ git commit -m "#47 feat(contracts): add detail, metadata and error shapes"
 
 **Files:**
 
-- Create: `libs/listing-contracts/src/openapi.ts`
-- Modify: `libs/listing-contracts/src/index.ts`
-- Test: `libs/listing-contracts/src/openapi.spec.ts`
+- Create: `libs/property-contracts/src/openapi.ts`
+- Modify: `libs/property-contracts/src/index.ts`
+- Test: `libs/property-contracts/src/openapi.spec.ts`
 
 **Interfaces:**
 
@@ -947,7 +947,7 @@ values that #22 will add — MMLib.SwaggerForOcelot matches on them, and a misma
 untransformed with no error logged.
 
 ```ts
-// libs/listing-contracts/src/openapi.spec.ts
+// libs/property-contracts/src/openapi.spec.ts
 import { toOpenApiDocument } from './openapi';
 
 describe('toOpenApiDocument', () => {
@@ -987,7 +987,7 @@ describe('toOpenApiDocument', () => {
 
 - [ ] **Step 2: Run it and confirm it fails**
 
-Run: `pnpm exec nx test listing-contracts` Expected: FAIL — `Cannot find module './openapi'`.
+Run: `pnpm exec nx test property-contracts` Expected: FAIL — `Cannot find module './openapi'`.
 
 - [ ] **Step 3: Implement `openapi.ts`**
 
@@ -1126,7 +1126,7 @@ export type OpenApiDocument = ReturnType<typeof toOpenApiDocument>;
 
 - [ ] **Step 4: Export everything from the package root**
 
-Replace `libs/listing-contracts/src/index.ts`:
+Replace `libs/property-contracts/src/index.ts`:
 
 ```ts
 export * from './common';
@@ -1140,16 +1140,16 @@ export * from './openapi';
 
 - [ ] **Step 5: Run the tests and confirm they pass**
 
-Run: `pnpm exec nx test listing-contracts` Expected: PASS, and a new snapshot file is written under
-`libs/listing-contracts/src/__snapshots__/openapi.spec.ts.snap`. **Read the snapshot before
+Run: `pnpm exec nx test property-contracts` Expected: PASS, and a new snapshot file is written under
+`libs/property-contracts/src/__snapshots__/openapi.spec.ts.snap`. **Read the snapshot before
 committing it** — it is the published contract. If a field renders as `{}`, that field's schema uses
 a construct `toJSONSchema` cannot represent; fix the schema rather than accepting the snapshot.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add libs/listing-contracts/src/openapi.ts libs/listing-contracts/src/openapi.spec.ts \
-        libs/listing-contracts/src/index.ts libs/listing-contracts/src/__snapshots__
+git add libs/property-contracts/src/openapi.ts libs/property-contracts/src/openapi.spec.ts \
+        libs/property-contracts/src/index.ts libs/property-contracts/src/__snapshots__
 git commit -m "#47 feat(contracts): derive the OpenAPI document from the schemas"
 ```
 
@@ -1166,7 +1166,7 @@ git commit -m "#47 feat(contracts): derive the OpenAPI document from the schemas
 **Interfaces:**
 
 - Consumes: the package root exports from Task 6.
-- Produces: `@cribstop/listing-contracts` resolvable from both consumers; a type-check that fails
+- Produces: `@cribstop/property-contracts` resolvable from both consumers; a type-check that fails
   when the contract changes.
 
 - [ ] **Step 1: Declare the dependency in both consumers**
@@ -1175,7 +1175,7 @@ Add to the `dependencies` of **both** `apps/services/property-service/package.js
 `apps/clients/cribstop/next/package.json`:
 
 ```json
-"@cribstop/listing-contracts": "workspace:*"
+"@cribstop/property-contracts": "workspace:*"
 ```
 
 Then:
@@ -1195,7 +1195,7 @@ This is the acceptance test for the whole runtime decision. It is type-only: it 
 ```ts
 // apps/clients/cribstop/next/src/lib/contracts.check.ts
 /**
- * Type-only conformance assertions against @cribstop/listing-contracts.
+ * Type-only conformance assertions against @cribstop/property-contracts.
  *
  * This file exists so that renaming, adding or removing a contract field FAILS
  * `pnpm exec nx type-check cribstop-next` instead of silently shipping a card that stopped
@@ -1207,7 +1207,7 @@ import type {
   ListingDetail,
   ListingsEnvelope,
   ListingsMeta,
-} from '@cribstop/listing-contracts';
+} from '@cribstop/property-contracts';
 
 type Equals<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
@@ -1291,7 +1291,7 @@ Expected: both PASS.
 - [ ] **Step 4: Prove the coupling by breaking it deliberately**
 
 Temporarily rename `officeBrokerLeadEmail` to `officeBrokerLeadEmailX` in
-`libs/listing-contracts/src/common.ts`, then:
+`libs/property-contracts/src/common.ts`, then:
 
 ```bash
 pnpm exec nx type-check cribstop-next
@@ -1329,7 +1329,7 @@ git commit -m "#47 feat(contracts): consume the contract from both apps with a c
 **Interfaces:**
 
 - Consumes: Task 7's `workspace:*` dependencies.
-- Produces: both images rebuild when `libs/listing-contracts/**` changes.
+- Produces: both images rebuild when `libs/property-contracts/**` changes.
 
 `tools/ci/affected-images.js` derives the CI image matrix from each Dockerfile's `COPY`/`ADD`
 sources. A Dockerfile that depends on a path it never copies will not rebuild when that path changes
@@ -1342,14 +1342,14 @@ In the **deps** stage, after the existing
 
 ```dockerfile
 # Every workspace member's manifest must be present for --frozen-lockfile.
-COPY libs/listing-contracts/package.json ./libs/listing-contracts/
+COPY libs/property-contracts/package.json ./libs/property-contracts/
 ```
 
 In the **builder** stage, after
 `COPY apps/services/property-service ./apps/services/property-service`:
 
 ```dockerfile
-COPY libs/listing-contracts ./libs/listing-contracts
+COPY libs/property-contracts ./libs/property-contracts
 ```
 
 Copy the narrow path, not `libs`, so the CI matrix stays narrow while still declaring the
@@ -1360,7 +1360,7 @@ dependency.
 Three lines. In the **deps** stage, after `COPY apps/clients/cribstop/next/package.json …`:
 
 ```dockerfile
-COPY libs/listing-contracts/package.json ./libs/listing-contracts/
+COPY libs/property-contracts/package.json ./libs/property-contracts/
 ```
 
 In the **builder** stage, alongside the other `COPY --from=deps` node_modules lines:
@@ -1368,13 +1368,13 @@ In the **builder** stage, alongside the other `COPY --from=deps` node_modules li
 ```dockerfile
 # pnpm's isolated layout puts zod under the library's own node_modules, not the root store link.
 # Without this, `next build` fails with "Cannot find module 'zod'" from a directory that exists.
-COPY --from=deps /app/libs/listing-contracts/node_modules ./libs/listing-contracts/node_modules
+COPY --from=deps /app/libs/property-contracts/node_modules ./libs/property-contracts/node_modules
 ```
 
 In the **builder** stage, alongside `COPY apps/clients/cribstop/next ./apps/clients/cribstop/next`:
 
 ```dockerfile
-COPY libs/listing-contracts ./libs/listing-contracts
+COPY libs/property-contracts ./libs/property-contracts
 ```
 
 The source is required here because `contracts.check.ts` lives under `src/`, and `next build`
@@ -1382,7 +1382,7 @@ type-checks it.
 
 - [ ] **Step 3: Update `skaffold.yaml`**
 
-Add `libs/listing-contracts/**` to `dependencies.paths` for **both** the `property-service` artifact
+Add `libs/property-contracts/**` to `dependencies.paths` for **both** the `property-service` artifact
 and the `cribstop-web` artifact. Missing this means the local watch loop silently serves a stale
 image whenever the contract changes.
 
@@ -1397,7 +1397,7 @@ node tools/ci/affected-images.js --base=origin/dev \
   --projects="property-service cribstop-next" --explain
 ```
 
-Expected on **stderr**: `rebuilding (libs/listing-contracts/… is an input to …)` for **both**
+Expected on **stderr**: `rebuilding (libs/property-contracts/… is an input to …)` for **both**
 projects. If either says `skipping — no changed file enters …`, a `COPY` line is wrong or too narrow
 — fix the Dockerfile, never special-case the script.
 
@@ -1439,7 +1439,7 @@ kubectl describe pod -l app=property-service | grep -A3 "migrate"
 
 Expected: pod `Ready 1/1`, migrate initContainer `Completed`.
 
-If the pruned production install fails to resolve `@cribstop/listing-contracts`, move the dependency
+If the pruned production install fails to resolve `@cribstop/property-contracts`, move the dependency
 to `devDependencies` in `apps/services/property-service/package.json` — webpack bundles the library
 into `main.js`, so nothing resolves it at runtime — and re-run. Record which form was used in the
 PR.
@@ -1457,8 +1457,8 @@ ps -W | grep -E 'skaffold|kubectl' || echo "clean"
 - [ ] **Step 4: Document the coupling where it will be found**
 
 In `apps/services/property-service/CLAUDE.md`, add a short section: the wire contract lives in
-`libs/listing-contracts` and is the only definition — do not restate a shape locally; the Dockerfile
-must keep its `libs/listing-contracts` `COPY` lines or the image goes stale silently.
+`libs/property-contracts` and is the only definition — do not restate a shape locally; the Dockerfile
+must keep its `libs/property-contracts` `COPY` lines or the image goes stale silently.
 
 In `apps/clients/cribstop/CLAUDE.md`, add: `src/lib/contracts.check.ts` is a type-only conformance
 file — if a contract change breaks the type-check, reconcile the rendering code rather than editing

@@ -1,7 +1,7 @@
 {
-  "name": "listing-contracts",
+  "name": "property-contracts",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "libs/listing-contracts/src",
+  "sourceRoot": "libs/property-contracts/src",
   "projectType": "library",
   "tags": ["runtime:node", "type:lib", "framework:zod", "scope:properties", "devteam:unassigned"],
   "targets": {
@@ -9,17 +9,17 @@
       "executor": "@nx/js:tsc",
       "outputs": ["{options.outputPath}"],
       "options": {
-        "outputPath": "dist/libs/listing-contracts",
-        "main": "libs/listing-contracts/src/index.ts",
-        "tsConfig": "libs/listing-contracts/tsconfig.lib.json",
-        "assets": ["libs/listing-contracts/*.md"]
+        "outputPath": "dist/libs/property-contracts",
+        "main": "libs/property-contracts/src/index.ts",
+        "tsConfig": "libs/property-contracts/tsconfig.lib.json",
+        "assets": ["libs/property-contracts/*.md"]
       }
     },
     "lint": {
       "executor": "nx:run-commands",
       "cache": true,
       "options": {
-        "command": "eslint --config tools/node/configs/eslint.config.js libs/listing-contracts",
+        "command": "eslint --config tools/node/configs/eslint.config.js libs/property-contracts",
         "cwd": "."
       }
     },
@@ -33,7 +33,7 @@
         "^production"
       ],
       "options": {
-        "command": "tsc -b --noEmit libs/listing-contracts/tsconfig.json",
+        "command": "tsc -b --noEmit libs/property-contracts/tsconfig.json",
         "cwd": "."
       }
     },
@@ -41,14 +41,14 @@
       "executor": "nx:run-commands",
       "options": {
         "command": "prettier --write .",
-        "cwd": "libs/listing-contracts"
+        "cwd": "libs/property-contracts"
       }
     },
     "format-check": {
       "executor": "nx:run-commands",
       "options": {
         "command": "prettier --check .",
-        "cwd": "libs/listing-contracts"
+        "cwd": "libs/property-contracts"
       }
     },
     "test": {
@@ -56,7 +56,7 @@
       "cache": true,
       "options": {
         "command": "jest --passWithNoTests",
-        "cwd": "libs/listing-contracts"
+        "cwd": "libs/property-contracts"
       }
     }
   }

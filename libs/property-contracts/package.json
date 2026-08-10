@@ -1,5 +1,5 @@
 {
-  "name": "@cribstop/listing-contracts",
+  "name": "@cribstop/property-contracts",
   "version": "0.0.1",
   "private": true,
   "description": "The listings wire contract (PRD §3.1) — one definition for validation, types and OpenAPI",

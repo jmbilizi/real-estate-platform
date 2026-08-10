@@ -1,5 +1,5 @@
 /**
- * Type-only conformance assertions against @cribstop/listing-contracts.
+ * Type-only conformance assertions against @cribstop/property-contracts.
  *
  * This file exists so that renaming, adding or removing a contract field FAILS
  * `pnpm exec nx type-check cribstop-next` instead of silently shipping a card that stopped
@@ -13,7 +13,7 @@ import type {
   ListingsMeta,
   Media,
   OpenHouse,
-} from '@cribstop/listing-contracts';
+} from '@cribstop/property-contracts';
 
 type Equals<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;

@@ -1,7 +1,7 @@
-# listing-contracts (`@cribstop/listing-contracts`)
+# property-contracts (`@cribstop/property-contracts`)
 
 The single definition of the listings wire contract (PRD §3.1). Nx project name:
-**`listing-contracts`**. Port n/a — this is a library, imported at build time, never served.
+**`property-contracts`**. Port n/a — this is a library, imported at build time, never served.
 
 **`libs/` was empty before this package landed.** Its shape — targets, tags, `package.json`
 identity, workspace registration — is the template the next four Node libraries will copy. Getting
@@ -61,7 +61,7 @@ anything else.
 
 **Never add a `tsconfig` `paths` entry for this package, in this repo's root `tsconfig.json` or
 anywhere else.** Resolution is pnpm `workspace:*` (declare
-`"@cribstop/listing-contracts": "workspace:*"` in a consumer's `package.json`) plus TypeScript
+`"@cribstop/property-contracts": "workspace:*"` in a consumer's `package.json`) plus TypeScript
 project references. A `paths` alias resolves for `tsc` and then fails at webpack bundle time in
 `cribstop-next` — it is a trap that looks like it works until a real build is attempted. The
 `@nx/js:lib` generator writes a `paths` entry into the root `tsconfig.json` on every run; delete it,
@@ -70,16 +70,16 @@ don't build on it.
 ## Commands
 
 ```bash
-pnpm exec nx build listing-contracts        # tsc build (@nx/js:tsc)
-pnpm exec nx test listing-contracts         # Jest
-pnpm exec nx lint listing-contracts
-pnpm exec nx type-check listing-contracts   # tsc -b -- follows project references; -p would not
-pnpm exec nx format listing-contracts       # also: format-check
+pnpm exec nx build property-contracts        # tsc build (@nx/js:tsc)
+pnpm exec nx test property-contracts         # Jest
+pnpm exec nx lint property-contracts
+pnpm exec nx type-check property-contracts   # tsc -b -- follows project references; -p would not
+pnpm exec nx format property-contracts       # also: format-check
 ```
 
 ## Rules
 
-- Package name `@cribstop/listing-contracts`; Nx project name `listing-contracts`. Keep these
+- Package name `@cribstop/property-contracts`; Nx project name `property-contracts`. Keep these
   distinct — the pnpm package name is scoped, the Nx project name is not.
 - Only dependency: `zod` (pinned `^4.4.3`). Do not add a JSON-Schema converter package — Zod v4
   emits `z.toJSONSchema()` natively, target `"openapi-3.0"` for legible `nullable: true` rendering

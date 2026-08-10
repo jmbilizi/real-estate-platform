@@ -1,4 +1,4 @@
-# `libs/listing-contracts` — design
+# `libs/property-contracts` — design
 
 **Ticket:** [#47](https://github.com/jmbilizi/real-estate-platform/issues/47) · **Blocks:**
 [#22](https://github.com/jmbilizi/real-estate-platform/issues/22) (endpoints),
@@ -138,12 +138,12 @@ flat-config resolution repo-wide.
 
 | Unit                                                    | Purpose                                                         | Depends on |
 | ------------------------------------------------------- | --------------------------------------------------------------- | ---------- |
-| `libs/listing-contracts/src/search-request.ts`          | Strict, coercing query schema                                   | zod        |
-| `libs/listing-contracts/src/listing-card.ts`            | Flat list row + envelope (`total`, page info, `appliedFilters`) | zod        |
-| `libs/listing-contracts/src/listing-detail.ts`          | Nested `{ property, unit, listing }`; `unit` nullable           | zod        |
-| `libs/listing-contracts/src/listings-meta.ts`           | Dataset-freshness shape                                         | zod        |
-| `libs/listing-contracts/src/errors.ts`                  | The one 400 body and the one 404 body                           | zod        |
-| `libs/listing-contracts/src/openapi.ts`                 | `toOpenApiDocument()`                                           | the above  |
+| `libs/property-contracts/src/search-request.ts`          | Strict, coercing query schema                                   | zod        |
+| `libs/property-contracts/src/listing-card.ts`            | Flat list row + envelope (`total`, page info, `appliedFilters`) | zod        |
+| `libs/property-contracts/src/listing-detail.ts`          | Nested `{ property, unit, listing }`; `unit` nullable           | zod        |
+| `libs/property-contracts/src/listings-meta.ts`           | Dataset-freshness shape                                         | zod        |
+| `libs/property-contracts/src/errors.ts`                  | The one 400 body and the one 404 body                           | zod        |
+| `libs/property-contracts/src/openapi.ts`                 | `toOpenApiDocument()`                                           | the above  |
 | `apps/clients/cribstop/next/src/lib/contracts.check.ts` | Type-only conformance assertions                                | types only |
 
 Each file is one shape group, readable without reading its siblings. `openapi.ts` is the only module
@@ -167,7 +167,7 @@ confirmation oracle.
 
 | Assertion                                                          | Where                                                           |
 | ------------------------------------------------------------------ | --------------------------------------------------------------- |
-| Emitted OpenAPI document is stable                                 | Golden-file snapshot in `libs/listing-contracts`                |
+| Emitted OpenAPI document is stable                                 | Golden-file snapshot in `libs/property-contracts`                |
 | Unknown query parameter rejected                                   | Schema unit test                                                |
 | `amenities` limited to the closed 15-value set                     | Schema unit test                                                |
 | Numeric coercion from string query values                          | Schema unit test                                                |
@@ -181,7 +181,7 @@ confirmation oracle.
 **The pruned production install.** `property-service`'s `prune` target chains
 `@nx/js:prune-lockfile` and `@nx/js:copy-workspace-modules`. Both are no-ops today because no
 workspace dependency exists; adding one makes them do real work, and the Dockerfile's
-`pnpm --dir dist/… install --prod --frozen-lockfile` must resolve `@cribstop/listing-contracts`
+`pnpm --dir dist/… install --prod --frozen-lockfile` must resolve `@cribstop/property-contracts`
 against whatever `prune-lockfile` rewrote it to. Declaring it in `dependencies` is the honest
 declaration and is tried first. If that install fails, the fallback is `devDependencies` — webpack
 bundles the library into `main.js`, so nothing resolves it at runtime. The verification is
@@ -189,7 +189,7 @@ bundles the library into `main.js`, so nothing resolves it at runtime. The verif
 
 **`cribstop-next` is on Alpine**, which is the pre-existing latent musl/DNS issue recorded in the
 root `CLAUDE.md`. If the `next build` fails here, the cause is the missing
-`libs/listing-contracts/node_modules` copy, not the base image. Do not "fix" it by switching bases.
+`libs/property-contracts/node_modules` copy, not the base image. Do not "fix" it by switching bases.
 
 **Getting the `libs/` pattern wrong costs five times.** `libs/` is empty today and four more Node
 services will copy whatever this establishes.

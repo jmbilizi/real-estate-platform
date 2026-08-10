@@ -40,7 +40,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/clients/cribstop/next/package.json ./apps/clients/cribstop/next/
 COPY apps/services/property-service/package.json ./apps/services/property-service/
 # Every workspace member's manifest must be present for --frozen-lockfile.
-COPY libs/listing-contracts/package.json ./libs/listing-contracts/
+COPY libs/property-contracts/package.json ./libs/property-contracts/
 # Root package.json's "preinstall" hook requires this script — pnpm runs
 # lifecycle scripts for the root project too, even inside a container build.
 COPY tools/node/scripts/ensure-pnpm.js ./tools/node/scripts/ensure-pnpm.js
@@ -57,7 +57,7 @@ WORKDIR /app
 COPY nx.json tsconfig.json ./
 COPY tools ./tools
 COPY apps/services/property-service ./apps/services/property-service
-COPY libs/listing-contracts ./libs/listing-contracts
+COPY libs/property-contracts ./libs/property-contracts
 
 # `prune` (not `build`) — it depends on build and additionally emits a pruned
 # package.json + pnpm-lock.yaml into dist. Those two files are what make the

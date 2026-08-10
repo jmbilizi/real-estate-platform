@@ -6,7 +6,7 @@ packages:
   # production image (those targets require a project-level package.json)
   - "apps/services/property-service"
   # shared libs for web and mobile apps
-  - "libs/listing-contracts"
+  - "libs/property-contracts"
   # - "libs/expo-next"
   # - "libs/next"
   # - "libs/expo"
