@@ -38,6 +38,26 @@ in a shared `libs/` package and derive runtime validation, the client's types, a
 document from it. A hand-written spec is a second source of truth that silently drifts from the
 routes.
 
+## The wire contract lives in `libs/property-contracts`
+
+`libs/property-contracts` (`@cribstop/property-contracts`) is the **only** definition of the
+request/response shapes described above — never restate a field list here even for a single route;
+import the types and schemas instead. `#22` is where this service starts actually consuming them.
+
+The Dockerfile must keep its `libs/property-contracts` `COPY` lines (both the `package.json`-only
+copy in the `deps` stage and the full-source copy in `builder`) or the image goes stale silently the
+next time the contract changes — `tools/ci/affected-images.js` derives the rebuild matrix from those
+`COPY` sources, not from Nx's affected graph.
+
+**Nx 22.0.1's `@nx/js:prune-lockfile` cannot prune a scoped workspace package whose npm name differs
+from its Nx project name** (`@cribstop/property-contracts` vs. project `property-contracts`):
+`pruneProjectGraph`'s dependency walk looks the project up by package name in a map keyed by project
+name, misses, and silently drops that package's own dependencies (`zod`) from the pruned
+`pnpm-lock.yaml`. The Dockerfile works around this with a `pnpm install --lockfile-only` pass
+immediately before the `--frozen-lockfile` production install — don't remove it without re-verifying
+`pnpm run skaffold:services:deploy` end to end, and re-check whether an Nx upgrade has fixed the
+upstream bug before deleting the workaround.
+
 ## Commands
 
 ```bash

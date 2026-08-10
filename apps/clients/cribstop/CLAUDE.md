@@ -24,6 +24,12 @@ pnpm exec nx lint cribstop-next        # Also: test, type-check
   changes from here only, never hardcode.
 - `next/src/lib/listings.ts` — **mock data** for listings/services/community, clearly labeled as
   sample.
+- `next/src/lib/contracts.check.ts` — a **type-only** conformance file against
+  `@cribstop/property-contracts` (`libs/property-contracts`), the single definition of the listings
+  wire contract. It emits no runtime code and touches no component. If a contract change breaks
+  `pnpm exec nx type-check cribstop-next` here, reconcile the rendering code to the new contract
+  rather than editing these assertions to match — the assertions are what caught the drift.
+  Reconciling the UI with the real contract is ticket #24.
 - `next/src/app/api/account/*` — **real backend** (login/logout/profile/session/ signup) via the API
   gateway. Do not break this wiring; do not wire mock domains to live backends unless the task
   explicitly says to.
