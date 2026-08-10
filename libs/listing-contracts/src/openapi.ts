@@ -1,12 +1,21 @@
 import { z } from 'zod';
+import { idSchema } from './common';
 import { listingCardSchema, listingsEnvelopeSchema } from './listing-card';
 import { listingDetailSchema } from './listing-detail';
 import { listingsMetaSchema } from './listings-meta';
 import { errorBodySchema } from './errors';
 import { searchRequestSchema } from './search-request';
 
+/**
+ * `unrepresentable` is deliberately left at its default (`'throw'`), not `'any'`. `'any'` would
+ * make the next schema change that adds a transform on an output path render as a silent `{}` in
+ * this frozen contract instead of failing the test run — exactly the trap this package's own
+ * CLAUDE.md warns about. If a future schema genuinely can't be represented, the fix is to reshape
+ * the schema (as `queryInt`/`queryBathCount` already do for coerced query params), not to paper
+ * over it here.
+ */
 const schema = (value: z.ZodType, io: 'input' | 'output' = 'output') =>
-  z.toJSONSchema(value, { target: 'openapi-3.0', io, unrepresentable: 'any' });
+  z.toJSONSchema(value, { target: 'openapi-3.0', io });
 
 /** Query parameters, derived from the request schema so the two cannot drift. */
 function searchParameters() {
@@ -14,12 +23,59 @@ function searchParameters() {
     properties: Record<string, unknown>;
     required?: string[];
   };
-  return Object.entries(requestJsonSchema.properties).map(([name, propertySchema]) => ({
-    name,
-    in: 'query',
-    required: requestJsonSchema.required?.includes(name) ?? false,
-    schema: propertySchema,
-  }));
+  return Object.entries(requestJsonSchema.properties).map(([name, propertySchema]) => {
+    const parameter: Record<string, unknown> = {
+      name,
+      in: 'query',
+      required: requestJsonSchema.required?.includes(name) ?? false,
+      schema: propertySchema,
+    };
+    if (name === 'amenities') {
+      // `style`/`explode` are the only OpenAPI-level vocabulary for how an array-typed query
+      // parameter serializes; `form`/`explode: false` documents the comma-list form
+      // (`?amenities=Pool,Garage`) this schema's `anyOf` schema advertises but which is otherwise
+      // invisible to a codegen tool. The repeated-parameter form this schema also accepts
+      // (`?amenities=Pool&amenities=Garage`) has no keyword of its own here, so it stays called
+      // out in the schema's own `description` instead (#47 review, M3).
+      parameter['style'] = 'form';
+      parameter['explode'] = false;
+    }
+    return parameter;
+  });
+}
+
+/**
+ * The five response/error schemas in one `z.toJSONSchema()` call over a registry, rather than
+ * five independent calls. `listingCardSchema` is the exact same schema instance embedded inside
+ * `listingsEnvelopeSchema` (`results: z.array(listingCardSchema)`), and only a single shared call
+ * lets Zod's identity-based dedup notice that and emit a `$ref` instead of inlining the ~40-field
+ * card a second time. (`ListingDetail.listing` does NOT dedup this way — it's a genuinely
+ * different schema, built via `listingCardSchema.omit(...).extend(...)`, so it is a distinct
+ * object with no shared identity to detect; it stays inline.)
+ *
+ * The registry's `uri` callback is what makes `$ref` point at `#/components/schemas/<id>` instead
+ * of a bare id, but as a side effect Zod also stamps a `$id` keyword onto every registered
+ * top-level schema so its own resolver can find them again — `$id` is not a valid OpenAPI 3.0
+ * Schema Object keyword, so it's stripped from each schema before publishing.
+ */
+function componentSchemas() {
+  const registry = z.registry<{ id: string }>();
+  registry.add(listingCardSchema, { id: 'ListingCardRow' });
+  registry.add(listingsEnvelopeSchema, { id: 'ListingsEnvelope' });
+  registry.add(listingDetailSchema, { id: 'ListingDetail' });
+  registry.add(listingsMetaSchema, { id: 'ListingsMeta' });
+  registry.add(errorBodySchema, { id: 'ErrorBody' });
+
+  const { schemas } = z.toJSONSchema(registry, {
+    target: 'openapi-3.0',
+    uri: (id) => `#/components/schemas/${id}`,
+  });
+
+  for (const componentSchema of Object.values(schemas)) {
+    delete (componentSchema as { $id?: unknown }).$id;
+  }
+
+  return schemas;
 }
 
 /**
@@ -92,7 +148,7 @@ export function toOpenApiDocument() {
             'Returns the object graph. `unit` is null for a non-subdivided home — meaningful, ' +
             'not missing. Unknown, removed and seller-suppressed listings are indistinguishable.',
           parameters: [
-            { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+            { name: 'id', in: 'path', required: true, schema: schema(idSchema, 'input') },
           ],
           responses: {
             '200': {
@@ -112,13 +168,7 @@ export function toOpenApiDocument() {
       },
     },
     components: {
-      schemas: {
-        ListingCardRow: schema(listingCardSchema),
-        ListingsEnvelope: schema(listingsEnvelopeSchema),
-        ListingDetail: schema(listingDetailSchema),
-        ListingsMeta: schema(listingsMetaSchema),
-        ErrorBody: schema(errorBodySchema),
-      },
+      schemas: componentSchemas(),
     },
   };
 }
