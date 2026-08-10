@@ -201,6 +201,9 @@ importers:
 
   apps/clients/cribstop/next:
     dependencies:
+      '@cribstop/listing-contracts':
+        specifier: workspace:*
+        version: link:../../../../libs/listing-contracts
       '@reduxjs/toolkit':
         specifier: ^2.10.1
         version: 2.12.0(react-redux@9.3.0(@types/react@19.2.14)(react@19.2.5)(redux@5.0.1))(react@19.2.5)
@@ -256,6 +259,9 @@ importers:
 
   apps/services/property-service:
     dependencies:
+      '@cribstop/listing-contracts':
+        specifier: workspace:*
+        version: link:../../../libs/listing-contracts
       express:
         specifier: ^4.21.2
         version: 4.21.2

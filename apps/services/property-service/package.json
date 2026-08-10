@@ -4,6 +4,7 @@
   "private": true,
   "description": "Communities → Properties → Units → Listings domain service (PRD §3)",
   "dependencies": {
+    "@cribstop/listing-contracts": "workspace:*",
     "express": "^4.21.2",
     "node-pg-migrate": "^9.0.0",
     "pg": "^8.22.0",
