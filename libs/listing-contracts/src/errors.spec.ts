@@ -30,10 +30,18 @@ describe('NOT_FOUND_BODY', () => {
     });
   });
 
-  it('does NOT freeze the nested error object (Object.freeze is shallow)', () => {
-    // This documents current behaviour rather than asserting a requirement: a caller could
-    // mutate NOT_FOUND_BODY.error's fields in place without a deep freeze. Flagged for the
-    // coordinator to decide whether a deep freeze should be added.
-    expect(Object.isFrozen(NOT_FOUND_BODY.error)).toBe(false);
+  it('freezes the nested error object too, so an in-place write does not change it', () => {
+    // Object.freeze is shallow, so the nested object must be frozen explicitly (see errors.ts).
+    // Without this, `body.error.message = ...` at a call site would silently rewrite every
+    // subsequent 404 response process-wide — this constant's whole reason to exist is that a
+    // 404 is byte-identical regardless of why the listing isn't visible.
+    expect(Object.isFrozen(NOT_FOUND_BODY.error)).toBe(true);
+
+    expect(() => {
+      // @ts-expect-error — intentionally attempting to mutate a frozen nested object.
+      NOT_FOUND_BODY.error.message = 'mutated';
+    }).toThrow();
+
+    expect(NOT_FOUND_BODY.error.message).toBe('Listing not found.');
   });
 });
