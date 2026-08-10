@@ -1,4 +1,10 @@
-import { AMENITIES, amenitySchema, attributionSchema, mediaSchema } from './common';
+import {
+  AMENITIES,
+  amenitySchema,
+  ATTRIBUTION_KEYS,
+  attributionSchema,
+  mediaSchema,
+} from './common';
 
 describe('common schemas', () => {
   it('locks the amenity set to the 15 values the database CHECK allows', () => {
@@ -42,6 +48,26 @@ describe('common schemas', () => {
       listedBy: 'B – O',
     });
     expect(Object.keys(parsed).sort()).toEqual([
+      'brokerEmail',
+      'brokerName',
+      'brokerPhone',
+      'listedBy',
+      'listingAgentName',
+      'officeBrokerLeadEmail',
+      'officeBrokerLeadPhone',
+      'officeName',
+    ]);
+  });
+
+  // ATTRIBUTION_KEYS is derived from attributionSchema.shape (`Object.keys(...)`), so asserting it
+  // against itself — or against anything else derived from attributionSchema, like
+  // ListingCardRow's OpenAPI properties — is circular: deleting a key shrinks both sides at once
+  // and the assertion still passes. This is the one place the eight names are hard-coded
+  // independently of the schema, so a key removed from attributionSchema is caught here even if
+  // every downstream derivation quietly shrinks to match (#47 review round 2, finding 1).
+  it('pins ATTRIBUTION_KEYS to exactly the eight NAR 7.58 names, not whatever attributionSchema currently declares', () => {
+    expect(ATTRIBUTION_KEYS).toHaveLength(8);
+    expect([...ATTRIBUTION_KEYS].sort()).toEqual([
       'brokerEmail',
       'brokerName',
       'brokerPhone',

@@ -1,5 +1,6 @@
 import { ATTRIBUTION_KEYS } from './common';
 import { toOpenApiDocument } from './openapi';
+import { PAGE_SIZE_MAX } from './search-request';
 
 describe('toOpenApiDocument', () => {
   // `any` lets these assertions inspect the raw JSON Schema shape (the published contract)
@@ -55,6 +56,21 @@ describe('toOpenApiDocument', () => {
       (p: { name: string }) => p.name === 'baths',
     );
     expect(bathsParam.schema.pattern).toBe('^\\d+(\\.5)?$');
+  });
+
+  // The pageSize pattern's upper bound (`^([1-9][0-9]?|100)$`) is a hand-written regex, not
+  // derived from PAGE_SIZE_MAX — so lowering that constant would go uncaught: the pattern would
+  // keep advertising 1-100 while the service enforces a smaller cap, over-promising to any client
+  // built against the published contract. Deriving expected pass/fail values from the constant
+  // itself, rather than hard-coding "100"/"101" here, makes this test fail the moment the pattern
+  // and the constant disagree in either direction (#47 review round 2, finding 2).
+  it('keeps the pageSize pattern bound in sync with PAGE_SIZE_MAX', () => {
+    const pageSizeParam = doc.paths['/listings'].get.parameters.find(
+      (p: { name: string }) => p.name === 'pageSize',
+    );
+    const pattern = new RegExp(pageSizeParam.schema.pattern);
+    expect(pattern.test(String(PAGE_SIZE_MAX))).toBe(true);
+    expect(pattern.test(String(PAGE_SIZE_MAX + 1))).toBe(false);
   });
 
   it('keeps every nullable ListingCardRow field in `required` (present, never omitted)', () => {
