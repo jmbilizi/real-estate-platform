@@ -43,7 +43,7 @@ const detail = {
     listingAgentName: null,
     brokerName: 'B',
     brokerPhone: '1',
-    brokerEmail: 'b@x',
+    brokerEmail: 'agent@brokerco.com',
     officeName: 'O',
     officeBrokerLeadPhone: null,
     officeBrokerLeadEmail: null,

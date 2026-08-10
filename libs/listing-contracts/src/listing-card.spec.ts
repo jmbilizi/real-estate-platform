@@ -34,7 +34,7 @@ const row = {
   listingAgentName: null,
   brokerName: 'B',
   brokerPhone: '1',
-  brokerEmail: 'b@x',
+  brokerEmail: 'agent@brokerco.com',
   officeName: 'O',
   officeBrokerLeadPhone: null,
   officeBrokerLeadEmail: null,
@@ -64,7 +64,11 @@ describe('listingCardSchema', () => {
   });
 
   it('carries no description, no imageUrls and no hasOpenHouse', () => {
-    const keys = Object.keys(listingCardSchema.parse(row));
+    // Inspects the schema's declared shape, not a parsed fixture: parsing `row` only proves these
+    // keys are absent from this one object, and would still pass even if the schema declared them
+    // `.optional()` — the shape is the only thing that can prove the schema itself never carries
+    // them (#47 review, I6).
+    const keys = Object.keys(listingCardSchema.shape);
     expect(keys).not.toContain('description');
     expect(keys).not.toContain('imageUrls');
     expect(keys).not.toContain('hasOpenHouse');
