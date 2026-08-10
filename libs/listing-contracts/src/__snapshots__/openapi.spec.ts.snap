@@ -64,16 +64,19 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "type": "array",
           },
           "baths": {
+            "minimum": 0,
             "nullable": true,
             "type": "number",
           },
           "beds": {
             "maximum": 9007199254740991,
-            "minimum": -9007199254740991,
+            "minimum": 0,
             "nullable": true,
             "type": "integer",
           },
           "brokerEmail": {
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
             "type": "string",
           },
           "brokerName": {
@@ -86,10 +89,13 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "type": "string",
           },
           "closeDate": {
+            "format": "date",
             "nullable": true,
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
             "type": "string",
           },
           "closePrice": {
+            "minimum": 0,
             "nullable": true,
             "type": "number",
           },
@@ -97,12 +103,16 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "type": "boolean",
           },
           "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
             "type": "string",
           },
           "isSample": {
             "type": "boolean",
           },
           "lastUpdated": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
             "type": "string",
           },
           "latitude": {
@@ -130,7 +140,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
           },
           "lotSqft": {
             "maximum": 9007199254740991,
-            "minimum": -9007199254740991,
+            "minimum": 0,
             "nullable": true,
             "type": "integer",
           },
@@ -142,7 +152,9 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "type": "boolean",
           },
           "officeBrokerLeadEmail": {
+            "format": "email",
             "nullable": true,
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
             "type": "string",
           },
           "officeBrokerLeadPhone": {
@@ -157,6 +169,8 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "nullable": true,
             "properties": {
               "endsAt": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
                 "type": "string",
               },
               "remarks": {
@@ -164,6 +178,8 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "type": "string",
               },
               "startsAt": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
                 "type": "string",
               },
             },
@@ -175,6 +191,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "type": "object",
           },
           "price": {
+            "minimum": 0,
             "nullable": true,
             "type": "number",
           },
@@ -190,6 +207,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "type": "string",
               },
               "url": {
+                "format": "uri",
                 "type": "string",
               },
             },
@@ -224,7 +242,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
           },
           "sqft": {
             "maximum": 9007199254740991,
-            "minimum": -9007199254740991,
+            "minimum": 0,
             "nullable": true,
             "type": "integer",
           },
@@ -245,7 +263,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
           },
           "yearBuilt": {
             "maximum": 9007199254740991,
-            "minimum": -9007199254740991,
+            "minimum": 0,
             "nullable": true,
             "type": "integer",
           },
@@ -329,16 +347,19 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "type": "array",
               },
               "baths": {
+                "minimum": 0,
                 "nullable": true,
                 "type": "number",
               },
               "beds": {
                 "maximum": 9007199254740991,
-                "minimum": -9007199254740991,
+                "minimum": 0,
                 "nullable": true,
                 "type": "integer",
               },
               "brokerEmail": {
+                "format": "email",
+                "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
                 "type": "string",
               },
               "brokerName": {
@@ -351,10 +372,13 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "type": "string",
               },
               "closeDate": {
+                "format": "date",
                 "nullable": true,
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
                 "type": "string",
               },
               "closePrice": {
+                "minimum": 0,
                 "nullable": true,
                 "type": "number",
               },
@@ -366,12 +390,16 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "type": "boolean",
               },
               "id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
                 "type": "string",
               },
               "isSample": {
                 "type": "boolean",
               },
               "lastUpdated": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
                 "type": "string",
               },
               "latitude": {
@@ -399,7 +427,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
               },
               "lotSqft": {
                 "maximum": 9007199254740991,
-                "minimum": -9007199254740991,
+                "minimum": 0,
                 "nullable": true,
                 "type": "integer",
               },
@@ -412,6 +440,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                       "type": "string",
                     },
                     "url": {
+                      "format": "uri",
                       "type": "string",
                     },
                   },
@@ -431,7 +460,9 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "type": "boolean",
               },
               "officeBrokerLeadEmail": {
+                "format": "email",
                 "nullable": true,
+                "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
                 "type": "string",
               },
               "officeBrokerLeadPhone": {
@@ -446,6 +477,8 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                   "additionalProperties": false,
                   "properties": {
                     "endsAt": {
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
                       "type": "string",
                     },
                     "remarks": {
@@ -453,6 +486,8 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                       "type": "string",
                     },
                     "startsAt": {
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
                       "type": "string",
                     },
                   },
@@ -466,6 +501,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "type": "array",
               },
               "price": {
+                "minimum": 0,
                 "nullable": true,
                 "type": "number",
               },
@@ -497,7 +533,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
               },
               "sqft": {
                 "maximum": 9007199254740991,
-                "minimum": -9007199254740991,
+                "minimum": 0,
                 "nullable": true,
                 "type": "integer",
               },
@@ -518,7 +554,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
               },
               "yearBuilt": {
                 "maximum": 9007199254740991,
-                "minimum": -9007199254740991,
+                "minimum": 0,
                 "nullable": true,
                 "type": "integer",
               },
@@ -573,11 +609,13 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "additionalProperties": false,
             "properties": {
               "id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
                 "type": "string",
               },
               "lotSqft": {
                 "maximum": 9007199254740991,
-                "minimum": -9007199254740991,
+                "minimum": 0,
                 "nullable": true,
                 "type": "integer",
               },
@@ -595,7 +633,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
               },
               "yearBuilt": {
                 "maximum": 9007199254740991,
-                "minimum": -9007199254740991,
+                "minimum": 0,
                 "nullable": true,
                 "type": "integer",
               },
@@ -613,21 +651,24 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "nullable": true,
             "properties": {
               "baths": {
+                "minimum": 0,
                 "nullable": true,
                 "type": "number",
               },
               "beds": {
                 "maximum": 9007199254740991,
-                "minimum": -9007199254740991,
+                "minimum": 0,
                 "nullable": true,
                 "type": "integer",
               },
               "id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
                 "type": "string",
               },
               "sqft": {
                 "maximum": 9007199254740991,
-                "minimum": -9007199254740991,
+                "minimum": 0,
                 "nullable": true,
                 "type": "integer",
               },
@@ -661,288 +702,31 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "type": "object",
           },
           "page": {
+            "exclusiveMinimum": true,
             "maximum": 9007199254740991,
-            "minimum": -9007199254740991,
+            "minimum": 0,
             "type": "integer",
           },
           "pageCount": {
             "maximum": 9007199254740991,
-            "minimum": -9007199254740991,
+            "minimum": 0,
             "type": "integer",
           },
           "pageSize": {
+            "exclusiveMinimum": true,
             "maximum": 9007199254740991,
-            "minimum": -9007199254740991,
+            "minimum": 0,
             "type": "integer",
           },
           "results": {
             "items": {
-              "additionalProperties": false,
-              "properties": {
-                "address": {
-                  "nullable": true,
-                  "type": "string",
-                },
-                "amenities": {
-                  "items": {
-                    "enum": [
-                      "Pool",
-                      "Garage",
-                      "Gym",
-                      "Elevator",
-                      "Balcony",
-                      "Fireplace",
-                      "Washer/Dryer",
-                      "Pet Friendly",
-                      "Waterfront",
-                      "Office",
-                      "Rooftop",
-                      "Garden",
-                      "Smart Home",
-                      "Solar",
-                      "EV Charging",
-                    ],
-                    "type": "string",
-                  },
-                  "type": "array",
-                },
-                "baths": {
-                  "nullable": true,
-                  "type": "number",
-                },
-                "beds": {
-                  "maximum": 9007199254740991,
-                  "minimum": -9007199254740991,
-                  "nullable": true,
-                  "type": "integer",
-                },
-                "brokerEmail": {
-                  "type": "string",
-                },
-                "brokerName": {
-                  "type": "string",
-                },
-                "brokerPhone": {
-                  "type": "string",
-                },
-                "city": {
-                  "type": "string",
-                },
-                "closeDate": {
-                  "nullable": true,
-                  "type": "string",
-                },
-                "closePrice": {
-                  "nullable": true,
-                  "type": "number",
-                },
-                "featured": {
-                  "type": "boolean",
-                },
-                "id": {
-                  "type": "string",
-                },
-                "isSample": {
-                  "type": "boolean",
-                },
-                "lastUpdated": {
-                  "type": "string",
-                },
-                "latitude": {
-                  "nullable": true,
-                  "type": "number",
-                },
-                "listedBy": {
-                  "type": "string",
-                },
-                "listingAgentName": {
-                  "nullable": true,
-                  "type": "string",
-                },
-                "listingType": {
-                  "enum": [
-                    "sale",
-                    "rent",
-                    "sold",
-                  ],
-                  "type": "string",
-                },
-                "longitude": {
-                  "nullable": true,
-                  "type": "number",
-                },
-                "lotSqft": {
-                  "maximum": 9007199254740991,
-                  "minimum": -9007199254740991,
-                  "nullable": true,
-                  "type": "integer",
-                },
-                "neighborhood": {
-                  "nullable": true,
-                  "type": "string",
-                },
-                "newConstruction": {
-                  "type": "boolean",
-                },
-                "officeBrokerLeadEmail": {
-                  "nullable": true,
-                  "type": "string",
-                },
-                "officeBrokerLeadPhone": {
-                  "nullable": true,
-                  "type": "string",
-                },
-                "officeName": {
-                  "type": "string",
-                },
-                "openHouse": {
-                  "additionalProperties": false,
-                  "nullable": true,
-                  "properties": {
-                    "endsAt": {
-                      "type": "string",
-                    },
-                    "remarks": {
-                      "nullable": true,
-                      "type": "string",
-                    },
-                    "startsAt": {
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "startsAt",
-                    "endsAt",
-                    "remarks",
-                  ],
-                  "type": "object",
-                },
-                "price": {
-                  "nullable": true,
-                  "type": "number",
-                },
-                "priceReduced": {
-                  "type": "boolean",
-                },
-                "primaryMedia": {
-                  "additionalProperties": false,
-                  "nullable": true,
-                  "properties": {
-                    "altText": {
-                      "nullable": true,
-                      "type": "string",
-                    },
-                    "url": {
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "url",
-                    "altText",
-                  ],
-                  "type": "object",
-                },
-                "propertyType": {
-                  "enum": [
-                    "Single Family",
-                    "Condo",
-                    "Townhome",
-                    "Multi-Family",
-                    "Loft",
-                    "Land",
-                    "New Construction",
-                  ],
-                  "type": "string",
-                },
-                "source": {
-                  "enum": [
-                    "brightMLS",
-                    "internal",
-                    "other",
-                  ],
-                  "type": "string",
-                },
-                "sponsored": {
-                  "type": "boolean",
-                },
-                "sqft": {
-                  "maximum": 9007199254740991,
-                  "minimum": -9007199254740991,
-                  "nullable": true,
-                  "type": "integer",
-                },
-                "state": {
-                  "type": "string",
-                },
-                "status": {
-                  "enum": [
-                    "Active",
-                    "Pending",
-                    "Coming Soon",
-                    "Sold",
-                  ],
-                  "type": "string",
-                },
-                "title": {
-                  "type": "string",
-                },
-                "yearBuilt": {
-                  "maximum": 9007199254740991,
-                  "minimum": -9007199254740991,
-                  "nullable": true,
-                  "type": "integer",
-                },
-                "zip": {
-                  "type": "string",
-                },
-              },
-              "required": [
-                "id",
-                "title",
-                "address",
-                "city",
-                "state",
-                "zip",
-                "neighborhood",
-                "latitude",
-                "longitude",
-                "price",
-                "status",
-                "listingType",
-                "source",
-                "propertyType",
-                "beds",
-                "baths",
-                "sqft",
-                "lotSqft",
-                "yearBuilt",
-                "primaryMedia",
-                "openHouse",
-                "amenities",
-                "featured",
-                "sponsored",
-                "priceReduced",
-                "newConstruction",
-                "isSample",
-                "closePrice",
-                "closeDate",
-                "lastUpdated",
-                "listingAgentName",
-                "brokerName",
-                "brokerPhone",
-                "brokerEmail",
-                "officeName",
-                "officeBrokerLeadPhone",
-                "officeBrokerLeadEmail",
-                "listedBy",
-              ],
-              "type": "object",
+              "$ref": "#/components/schemas/ListingCardRow",
             },
             "type": "array",
           },
           "total": {
             "maximum": 9007199254740991,
-            "minimum": -9007199254740991,
+            "minimum": 0,
             "type": "integer",
           },
         },
@@ -960,12 +744,14 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
         "additionalProperties": false,
         "properties": {
           "dataUpdatedAt": {
+            "format": "date-time",
             "nullable": true,
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
             "type": "string",
           },
           "listingCount": {
             "maximum": 9007199254740991,
-            "minimum": -9007199254740991,
+            "minimum": 0,
             "type": "integer",
           },
           "sources": {
@@ -1030,23 +816,14 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "name": "listingType",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "enum": [
-                    "sale",
-                    "rent",
-                    "sold",
-                  ],
-                  "type": "string",
-                },
-                {
-                  "enum": [
-                    "all",
-                  ],
-                  "type": "string",
-                },
-              ],
               "default": "all",
+              "enum": [
+                "sale",
+                "rent",
+                "sold",
+                "all",
+              ],
+              "type": "string",
             },
           },
           {
@@ -1054,27 +831,18 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "name": "propertyType",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "enum": [
-                    "Single Family",
-                    "Condo",
-                    "Townhome",
-                    "Multi-Family",
-                    "Loft",
-                    "Land",
-                    "New Construction",
-                  ],
-                  "type": "string",
-                },
-                {
-                  "enum": [
-                    "all",
-                  ],
-                  "type": "string",
-                },
-              ],
               "default": "all",
+              "enum": [
+                "Single Family",
+                "Condo",
+                "Townhome",
+                "Multi-Family",
+                "Loft",
+                "Land",
+                "New Construction",
+                "all",
+              ],
+              "type": "string",
             },
           },
           {
@@ -1179,6 +947,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             },
           },
           {
+            "explode": false,
             "in": "query",
             "name": "amenities",
             "required": false,
@@ -1194,7 +963,9 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                   "type": "array",
                 },
               ],
+              "description": "Comma-separated or repeated values from the closed set: Pool, Garage, Gym, Elevator, Balcony, Fireplace, Washer/Dryer, Pet Friendly, Waterfront, Office, Rooftop, Garden, Smart Home, Solar, EV Charging.",
             },
+            "style": "form",
           },
           {
             "in": "query",
@@ -1216,7 +987,8 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "name": "page",
             "required": false,
             "schema": {
-              "pattern": "^\\d+$",
+              "description": "Whole number, 1 or greater. Default 1.",
+              "pattern": "^[1-9]\\d*$",
               "type": "string",
             },
           },
@@ -1225,7 +997,8 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "name": "pageSize",
             "required": false,
             "schema": {
-              "pattern": "^\\d+$",
+              "description": "Whole number from 1 to 100. Default 20.",
+              "pattern": "^([1-9][0-9]?|100)$",
               "type": "string",
             },
           },
@@ -1285,6 +1058,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "required": true,
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
               "type": "string",
             },
           },
