@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { amenitySchema, listingTypeSchema, propertyTypeSchema } from './common';
+import { AMENITIES, amenitySchema, LISTING_TYPES, PROPERTY_TYPES } from './common';
 
 /** Preserves the client's existing paging arithmetic in
  *  `apps/clients/cribstop/next/src/app/(with-search)/search/page.tsx`. */
@@ -16,15 +16,47 @@ const queryBathCount = z
   .regex(/^\d+(\.5)?$/, 'must be a whole number or a half step (e.g. 2.5)')
   .transform(Number);
 
+/**
+ * `.min()`/`.max()` on the far side of a `.pipe()` are invisible to `z.toJSONSchema({io:
+ * 'input'})` — it only sees the string source schema, so a bare `queryInt.pipe(...).default(...)`
+ * silently drops the bound from the published contract even though the service still enforces it
+ * (#47 review, C1). The regex is tightened to the exact bound instead, so the published `pattern`
+ * cannot say more than the service allows.
+ */
+const queryPage = z
+  .string()
+  .regex(/^[1-9]\d*$/, 'must be a positive whole number')
+  .transform(Number)
+  .pipe(z.number().int().min(1))
+  .describe('Whole number, 1 or greater. Default 1.');
+
+/** Mirrors `PAGE_SIZE_MAX` (100) exactly in the regex — if that constant ever changes, this
+ *  pattern must change with it, or the published bound silently drifts from the enforced one. */
+const queryPageSize = z
+  .string()
+  .regex(/^([1-9][0-9]?|100)$/, `must be a whole number from 1 to ${PAGE_SIZE_MAX}`)
+  .transform(Number)
+  .pipe(z.number().int().min(1).max(PAGE_SIZE_MAX))
+  .describe(`Whole number from 1 to ${PAGE_SIZE_MAX}. Default ${PAGE_SIZE_DEFAULT}.`);
+
 const queryBoolean = z.enum(['true', 'false']).transform((value) => value === 'true');
 
-/** Repeated param (`?amenities=Pool&amenities=Garage`) or comma list (`?amenities=Pool,Garage`). */
+/**
+ * Repeated param (`?amenities=Pool&amenities=Garage`) or comma list (`?amenities=Pool,Garage`).
+ * The closed 15-value set is enforced by `.pipe(z.array(amenitySchema))`, but that enforcement
+ * happens after the split/trim transform, so it is invisible to the published contract the same
+ * way the paging bounds are (#47 review, C1). Validating each *branch* against `amenitySchema`
+ * instead would publish the enum, but would also reject the comma-list and repeated-param forms
+ * this transform exists to accept (a raw `"Pool,Garage"` string is not itself an enum member) —
+ * so the transform stays and the closed set is documented instead of type-enforced in the spec.
+ */
 const amenityList = z
   .union([z.string(), z.array(z.string())])
   .transform((value) =>
     (Array.isArray(value) ? value : value.split(',')).map((entry) => entry.trim()).filter(Boolean),
   )
-  .pipe(z.array(amenitySchema));
+  .pipe(z.array(amenitySchema))
+  .describe(`Comma-separated or repeated values from the closed set: ${AMENITIES.join(', ')}.`);
 
 /**
  * Strict on purpose. An unknown parameter is rejected rather than ignored, which kills the
@@ -35,8 +67,12 @@ export const searchRequestSchema = z.strictObject({
   query: z.string().optional(),
   zip: z.string().optional(),
   street: z.string().optional(),
-  listingType: z.union([listingTypeSchema, z.literal('all')]).default('all'),
-  propertyType: z.union([propertyTypeSchema, z.literal('all')]).default('all'),
+  // A flat enum, not `z.union([enumSchema, z.literal('all')])`: the inferred TS type is identical
+  // (a literal union is flat regardless of which schema shape produced it) but the union form
+  // renders in the published contract as a two-branch `anyOf` that loses the dropdown-friendly
+  // single-enum shape codegen and Swagger UI expect (#47 review, I3).
+  listingType: z.enum([...LISTING_TYPES, 'all'] as const).default('all'),
+  propertyType: z.enum([...PROPERTY_TYPES, 'all'] as const).default('all'),
   minPrice: queryInt.optional(),
   maxPrice: queryInt.optional(),
   beds: queryInt.optional(),
@@ -49,8 +85,8 @@ export const searchRequestSchema = z.strictObject({
   petFriendly: queryBoolean.optional(),
   amenities: amenityList.optional(),
   sort: z.enum(['recommended', 'newest', 'price-asc', 'price-desc']).default('recommended'),
-  page: queryInt.pipe(z.number().int().min(1)).default(1),
-  pageSize: queryInt.pipe(z.number().int().min(1).max(PAGE_SIZE_MAX)).default(PAGE_SIZE_DEFAULT),
+  page: queryPage.default(1),
+  pageSize: queryPageSize.default(PAGE_SIZE_DEFAULT),
 });
 
 export type SearchRequestInput = z.input<typeof searchRequestSchema>;
