@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { listingCardSchema } from './listing-card';
-import { mediaSchema, openHouseSchema, propertyTypeSchema } from './common';
+import { idSchema, mediaSchema, openHouseSchema, propertyTypeSchema } from './common';
 
 /**
  * Durable site facts the view drops. Display-suppressed values are NOT re-sourced from here.
@@ -8,10 +8,10 @@ import { mediaSchema, openHouseSchema, propertyTypeSchema } from './common';
  * when the listing was advertised, this is the current durable value.
  */
 const propertyFactsSchema = z.object({
-  id: z.string(),
+  id: idSchema,
   propertyType: propertyTypeSchema,
-  yearBuilt: z.number().int().nullable(),
-  lotSqft: z.number().int().nullable(),
+  yearBuilt: z.number().int().nonnegative().nullable(),
+  lotSqft: z.number().int().nonnegative().nullable(),
 });
 
 /**
@@ -19,11 +19,11 @@ const propertyFactsSchema = z.object({
  * was masked — otherwise the suppressed address is reconstructible from zip + unit number.
  */
 const unitFactsSchema = z.object({
-  id: z.string(),
+  id: idSchema,
   unitNumber: z.string().nullable(),
-  beds: z.number().int().nullable(),
-  baths: z.number().nullable(),
-  sqft: z.number().int().nullable(),
+  beds: z.number().int().nonnegative().nullable(),
+  baths: z.number().nonnegative().nullable(),
+  sqft: z.number().int().nonnegative().nullable(),
 });
 
 const listingDetailFieldsSchema = listingCardSchema

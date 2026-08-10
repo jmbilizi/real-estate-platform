@@ -39,17 +39,22 @@ export const amenitySchema = z.enum(AMENITIES);
 export const consumerStatusSchema = z.enum(CONSUMER_STATUSES);
 export const listingSourceSchema = z.enum(LISTING_SOURCES);
 
+/** Every entity id in this contract, request and response alike. The database columns are
+ *  `uuid` defaulting to `uuidv7()` — a single source of truth here means the hand-written
+ *  `/listings/{id}` path parameter in `openapi.ts` can be derived from it instead of drifting. */
+export const idSchema = z.uuid();
+
 /** Media is an object, never a bare URL: alt text is an accessibility requirement and is
  *  consumer-visible copy subject to the same review as a description. */
 export const mediaSchema = z.object({
-  url: z.string(),
+  url: z.url(),
   altText: z.string().nullable(),
 });
 
 /** Instants, not date strings — so "upcoming" is a comparison rather than a parse. */
 export const openHouseSchema = z.object({
-  startsAt: z.string(),
-  endsAt: z.string(),
+  startsAt: z.iso.datetime(),
+  endsAt: z.iso.datetime(),
   remarks: z.string().nullable(),
 });
 
@@ -58,12 +63,18 @@ export const attributionSchema = z.object({
   listingAgentName: z.string().nullable(),
   brokerName: z.string(),
   brokerPhone: z.string(),
-  brokerEmail: z.string(),
+  brokerEmail: z.email(),
   officeName: z.string(),
   officeBrokerLeadPhone: z.string().nullable(),
-  officeBrokerLeadEmail: z.string().nullable(),
+  officeBrokerLeadEmail: z.email().nullable(),
   listedBy: z.string(),
 });
+
+/** Derived from the schema itself, not hand-copied, so the published OpenAPI assertions and any
+ *  future consumer of "all eight attribution keys" cannot drift from the actual field list. */
+export const ATTRIBUTION_KEYS = Object.keys(attributionSchema.shape) as Array<
+  keyof typeof attributionSchema.shape
+>;
 
 export type Media = z.infer<typeof mediaSchema>;
 export type OpenHouse = z.infer<typeof openHouseSchema>;

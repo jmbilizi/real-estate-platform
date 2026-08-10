@@ -8,9 +8,9 @@ import { listingSourceSchema } from './common';
  * substituting the current time, which would be fabricated data (PRD §6.3).
  */
 export const listingsMetaSchema = z.object({
-  dataUpdatedAt: z.string().nullable(),
+  dataUpdatedAt: z.iso.datetime().nullable(),
   sources: z.array(listingSourceSchema),
-  listingCount: z.number().int(),
+  listingCount: z.number().int().nonnegative(),
 });
 
 export type ListingsMeta = z.infer<typeof listingsMetaSchema>;
