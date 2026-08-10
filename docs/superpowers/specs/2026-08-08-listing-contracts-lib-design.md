@@ -138,12 +138,12 @@ flat-config resolution repo-wide.
 
 | Unit                                                    | Purpose                                                         | Depends on |
 | ------------------------------------------------------- | --------------------------------------------------------------- | ---------- |
-| `libs/property-contracts/src/search-request.ts`          | Strict, coercing query schema                                   | zod        |
-| `libs/property-contracts/src/listing-card.ts`            | Flat list row + envelope (`total`, page info, `appliedFilters`) | zod        |
-| `libs/property-contracts/src/listing-detail.ts`          | Nested `{ property, unit, listing }`; `unit` nullable           | zod        |
-| `libs/property-contracts/src/listings-meta.ts`           | Dataset-freshness shape                                         | zod        |
-| `libs/property-contracts/src/errors.ts`                  | The one 400 body and the one 404 body                           | zod        |
-| `libs/property-contracts/src/openapi.ts`                 | `toOpenApiDocument()`                                           | the above  |
+| `libs/property-contracts/src/search-request.ts`         | Strict, coercing query schema                                   | zod        |
+| `libs/property-contracts/src/listing-card.ts`           | Flat list row + envelope (`total`, page info, `appliedFilters`) | zod        |
+| `libs/property-contracts/src/listing-detail.ts`         | Nested `{ property, unit, listing }`; `unit` nullable           | zod        |
+| `libs/property-contracts/src/listings-meta.ts`          | Dataset-freshness shape                                         | zod        |
+| `libs/property-contracts/src/errors.ts`                 | The one 400 body and the one 404 body                           | zod        |
+| `libs/property-contracts/src/openapi.ts`                | `toOpenApiDocument()`                                           | the above  |
 | `apps/clients/cribstop/next/src/lib/contracts.check.ts` | Type-only conformance assertions                                | types only |
 
 Each file is one shape group, readable without reading its siblings. `openapi.ts` is the only module
@@ -167,7 +167,7 @@ confirmation oracle.
 
 | Assertion                                                          | Where                                                           |
 | ------------------------------------------------------------------ | --------------------------------------------------------------- |
-| Emitted OpenAPI document is stable                                 | Golden-file snapshot in `libs/property-contracts`                |
+| Emitted OpenAPI document is stable                                 | Golden-file snapshot in `libs/property-contracts`               |
 | Unknown query parameter rejected                                   | Schema unit test                                                |
 | `amenities` limited to the closed 15-value set                     | Schema unit test                                                |
 | Numeric coercion from string query values                          | Schema unit test                                                |

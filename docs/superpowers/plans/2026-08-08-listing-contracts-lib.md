@@ -441,7 +441,8 @@ describe('searchRequestSchema', () => {
 
 - [ ] **Step 2: Run it and confirm it fails**
 
-Run: `pnpm exec nx test property-contracts` Expected: FAIL — `Cannot find module './search-request'`.
+Run: `pnpm exec nx test property-contracts` Expected: FAIL —
+`Cannot find module './search-request'`.
 
 - [ ] **Step 3: Implement `search-request.ts`**
 
@@ -1382,9 +1383,9 @@ type-checks it.
 
 - [ ] **Step 3: Update `skaffold.yaml`**
 
-Add `libs/property-contracts/**` to `dependencies.paths` for **both** the `property-service` artifact
-and the `cribstop-web` artifact. Missing this means the local watch loop silently serves a stale
-image whenever the contract changes.
+Add `libs/property-contracts/**` to `dependencies.paths` for **both** the `property-service`
+artifact and the `cribstop-web` artifact. Missing this means the local watch loop silently serves a
+stale image whenever the contract changes.
 
 - [ ] **Step 4: Prove the CI matrix narrowing works — this is the acceptance evidence**
 
@@ -1439,10 +1440,10 @@ kubectl describe pod -l app=property-service | grep -A3 "migrate"
 
 Expected: pod `Ready 1/1`, migrate initContainer `Completed`.
 
-If the pruned production install fails to resolve `@cribstop/property-contracts`, move the dependency
-to `devDependencies` in `apps/services/property-service/package.json` — webpack bundles the library
-into `main.js`, so nothing resolves it at runtime — and re-run. Record which form was used in the
-PR.
+If the pruned production install fails to resolve `@cribstop/property-contracts`, move the
+dependency to `devDependencies` in `apps/services/property-service/package.json` — webpack bundles
+the library into `main.js`, so nothing resolves it at runtime — and re-run. Record which form was
+used in the PR.
 
 - [ ] **Step 3: Shut down everything started in the background**
 
@@ -1457,8 +1458,8 @@ ps -W | grep -E 'skaffold|kubectl' || echo "clean"
 - [ ] **Step 4: Document the coupling where it will be found**
 
 In `apps/services/property-service/CLAUDE.md`, add a short section: the wire contract lives in
-`libs/property-contracts` and is the only definition — do not restate a shape locally; the Dockerfile
-must keep its `libs/property-contracts` `COPY` lines or the image goes stale silently.
+`libs/property-contracts` and is the only definition — do not restate a shape locally; the
+Dockerfile must keep its `libs/property-contracts` `COPY` lines or the image goes stale silently.
 
 In `apps/clients/cribstop/CLAUDE.md`, add: `src/lib/contracts.check.ts` is a type-only conformance
 file — if a contract change breaks the type-check, reconcile the rendering code rather than editing
