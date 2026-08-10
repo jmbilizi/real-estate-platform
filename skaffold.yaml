@@ -79,6 +79,7 @@ build:
         dependencies:
           paths:
             - apps/services/property-service/**
+            - libs/listing-contracts/**
             - package.json
             - pnpm-lock.yaml
             - pnpm-workspace.yaml
@@ -175,6 +176,7 @@ build:
         dependencies:
           paths:
             - apps/clients/cribstop/next/**
+            - libs/listing-contracts/**
             - package.json
             - pnpm-lock.yaml
             - pnpm-workspace.yaml

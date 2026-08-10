@@ -34,6 +34,7 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 # Copy the app's own package.json so pnpm workspace resolution works
 COPY apps/clients/cribstop/next/package.json ./apps/clients/cribstop/next/
+COPY libs/listing-contracts/package.json ./libs/listing-contracts/
 # Root package.json's "preinstall" hook requires this script — pnpm runs
 # lifecycle scripts for the root project too, even inside a container build.
 COPY tools/node/scripts/ensure-pnpm.js ./tools/node/scripts/ensure-pnpm.js
@@ -46,6 +47,9 @@ WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/clients/cribstop/next/node_modules ./apps/clients/cribstop/next/node_modules
+# pnpm's isolated layout puts zod under the library's own node_modules, not the root store link.
+# Without this, `next build` fails with "Cannot find module 'zod'" from a directory that exists.
+COPY --from=deps /app/libs/listing-contracts/node_modules ./libs/listing-contracts/node_modules
 # Copy corepack's downloaded pnpm binary so the builder stage needs no network access.
 # Without this, corepack asks npmjs.org for pnpm/latest and fails behind a corporate proxy.
 COPY --from=deps /root/.cache/node/corepack /root/.cache/node/corepack
@@ -54,6 +58,9 @@ COPY package.json ./
 
 # Copy only the app source (not the entire monorepo)
 COPY apps/clients/cribstop/next ./apps/clients/cribstop/next
+# The source is required here (not just node_modules) because contracts.check.ts lives under
+# src/, and `next build` type-checks it.
+COPY libs/listing-contracts ./libs/listing-contracts
 
 ENV NEXT_TELEMETRY_DISABLED=1
 # Always enable standalone output in container builds
