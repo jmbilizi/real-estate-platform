@@ -38,6 +38,28 @@ in a shared `libs/` package and derive runtime validation, the client's types, a
 document from it. A hand-written spec is a second source of truth that silently drifts from the
 routes.
 
+## The wire contract lives in `libs/property-contracts`
+
+`libs/property-contracts` (`@cribstop/property-contracts`) is the **only** definition of the
+request/response shapes described above — never restate a field list here even for a single route;
+import the types and schemas instead. `#22` is where this service starts actually consuming them.
+
+The Dockerfile must keep its `libs/property-contracts` `COPY` lines (both the `package.json`-only
+copy in the `deps` stage and the full-source copy in `builder`) or the image goes stale silently the
+next time the contract changes — `tools/ci/affected-images.js` **narrows** the Nx-affected CI
+image-rebuild matrix using those `COPY` sources (it never adds a project Nx's own affected graph
+didn't already call for, and fails open when it can't resolve a Dockerfile).
+
+**`libs/property-contracts`'s Nx project name must stay identical to its npm package name**
+(`@cribstop/property-contracts`). Nx 22.0.1's `@nx/js:prune-lockfile` looks a workspace dependency
+up by **package** name in a map keyed by **project** name; a mismatch makes the lookup miss and
+silently drops that package's own dependencies (`zod`) from this service's pruned `pnpm-lock.yaml`,
+breaking the `--frozen-lockfile` production install with `ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY`.
+`#47` originally worked around this with a `pnpm install --lockfile-only` pass before the frozen
+install; that workaround is gone now that the names match — see `libs/property-contracts/CLAUDE.md`
+(ticket #55 tracks the underlying upstream defects). If a future rename ever lets the two names
+diverge again, expect this exact failure to come back.
+
 ## Commands
 
 ```bash

@@ -1,0 +1,1093 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`toOpenApiDocument matches the committed golden document 1`] = `
+{
+  "components": {
+    "schemas": {
+      "ErrorBody": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "not_found",
+                ],
+                "type": "string",
+              },
+              "message": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "code",
+              "message",
+            ],
+            "type": "object",
+          },
+        },
+        "required": [
+          "error",
+        ],
+        "type": "object",
+      },
+      "ListingCardRow": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "nullable": true,
+            "type": "string",
+          },
+          "amenities": {
+            "items": {
+              "enum": [
+                "Pool",
+                "Garage",
+                "Gym",
+                "Elevator",
+                "Balcony",
+                "Fireplace",
+                "Washer/Dryer",
+                "Pet Friendly",
+                "Waterfront",
+                "Office",
+                "Rooftop",
+                "Garden",
+                "Smart Home",
+                "Solar",
+                "EV Charging",
+              ],
+              "type": "string",
+            },
+            "type": "array",
+          },
+          "baths": {
+            "minimum": 0,
+            "nullable": true,
+            "type": "number",
+          },
+          "beds": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer",
+          },
+          "brokerEmail": {
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+            "type": "string",
+          },
+          "brokerName": {
+            "type": "string",
+          },
+          "brokerPhone": {
+            "type": "string",
+          },
+          "city": {
+            "type": "string",
+          },
+          "closeDate": {
+            "format": "date",
+            "nullable": true,
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "type": "string",
+          },
+          "closePrice": {
+            "minimum": 0,
+            "nullable": true,
+            "type": "number",
+          },
+          "featured": {
+            "type": "boolean",
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string",
+          },
+          "isSample": {
+            "type": "boolean",
+          },
+          "lastUpdated": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string",
+          },
+          "latitude": {
+            "nullable": true,
+            "type": "number",
+          },
+          "listedBy": {
+            "type": "string",
+          },
+          "listingAgentName": {
+            "nullable": true,
+            "type": "string",
+          },
+          "listingType": {
+            "enum": [
+              "sale",
+              "rent",
+              "sold",
+            ],
+            "type": "string",
+          },
+          "longitude": {
+            "nullable": true,
+            "type": "number",
+          },
+          "lotSqft": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer",
+          },
+          "neighborhood": {
+            "nullable": true,
+            "type": "string",
+          },
+          "newConstruction": {
+            "type": "boolean",
+          },
+          "officeBrokerLeadEmail": {
+            "format": "email",
+            "nullable": true,
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+            "type": "string",
+          },
+          "officeBrokerLeadPhone": {
+            "nullable": true,
+            "type": "string",
+          },
+          "officeName": {
+            "type": "string",
+          },
+          "openHouse": {
+            "additionalProperties": false,
+            "nullable": true,
+            "properties": {
+              "endsAt": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "type": "string",
+              },
+              "remarks": {
+                "nullable": true,
+                "type": "string",
+              },
+              "startsAt": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "startsAt",
+              "endsAt",
+              "remarks",
+            ],
+            "type": "object",
+          },
+          "price": {
+            "minimum": 0,
+            "nullable": true,
+            "type": "number",
+          },
+          "priceReduced": {
+            "type": "boolean",
+          },
+          "primaryMedia": {
+            "additionalProperties": false,
+            "nullable": true,
+            "properties": {
+              "altText": {
+                "nullable": true,
+                "type": "string",
+              },
+              "url": {
+                "format": "uri",
+                "type": "string",
+              },
+            },
+            "required": [
+              "url",
+              "altText",
+            ],
+            "type": "object",
+          },
+          "propertyType": {
+            "enum": [
+              "Single Family",
+              "Condo",
+              "Townhome",
+              "Multi-Family",
+              "Loft",
+              "Land",
+              "New Construction",
+            ],
+            "type": "string",
+          },
+          "source": {
+            "enum": [
+              "brightMLS",
+              "internal",
+              "other",
+            ],
+            "type": "string",
+          },
+          "sponsored": {
+            "type": "boolean",
+          },
+          "sqft": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer",
+          },
+          "state": {
+            "type": "string",
+          },
+          "status": {
+            "enum": [
+              "Active",
+              "Pending",
+              "Coming Soon",
+              "Sold",
+            ],
+            "type": "string",
+          },
+          "title": {
+            "type": "string",
+          },
+          "yearBuilt": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer",
+          },
+          "zip": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "id",
+          "title",
+          "address",
+          "city",
+          "state",
+          "zip",
+          "neighborhood",
+          "latitude",
+          "longitude",
+          "price",
+          "status",
+          "listingType",
+          "source",
+          "propertyType",
+          "beds",
+          "baths",
+          "sqft",
+          "lotSqft",
+          "yearBuilt",
+          "primaryMedia",
+          "openHouse",
+          "amenities",
+          "featured",
+          "sponsored",
+          "priceReduced",
+          "newConstruction",
+          "isSample",
+          "closePrice",
+          "closeDate",
+          "lastUpdated",
+          "listingAgentName",
+          "brokerName",
+          "brokerPhone",
+          "brokerEmail",
+          "officeName",
+          "officeBrokerLeadPhone",
+          "officeBrokerLeadEmail",
+          "listedBy",
+        ],
+        "type": "object",
+      },
+      "ListingDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "listing": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "nullable": true,
+                "type": "string",
+              },
+              "amenities": {
+                "items": {
+                  "enum": [
+                    "Pool",
+                    "Garage",
+                    "Gym",
+                    "Elevator",
+                    "Balcony",
+                    "Fireplace",
+                    "Washer/Dryer",
+                    "Pet Friendly",
+                    "Waterfront",
+                    "Office",
+                    "Rooftop",
+                    "Garden",
+                    "Smart Home",
+                    "Solar",
+                    "EV Charging",
+                  ],
+                  "type": "string",
+                },
+                "type": "array",
+              },
+              "baths": {
+                "minimum": 0,
+                "nullable": true,
+                "type": "number",
+              },
+              "beds": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "nullable": true,
+                "type": "integer",
+              },
+              "brokerEmail": {
+                "format": "email",
+                "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+                "type": "string",
+              },
+              "brokerName": {
+                "type": "string",
+              },
+              "brokerPhone": {
+                "type": "string",
+              },
+              "city": {
+                "type": "string",
+              },
+              "closeDate": {
+                "format": "date",
+                "nullable": true,
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                "type": "string",
+              },
+              "closePrice": {
+                "minimum": 0,
+                "nullable": true,
+                "type": "number",
+              },
+              "description": {
+                "nullable": true,
+                "type": "string",
+              },
+              "featured": {
+                "type": "boolean",
+              },
+              "id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "isSample": {
+                "type": "boolean",
+              },
+              "lastUpdated": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "type": "string",
+              },
+              "latitude": {
+                "nullable": true,
+                "type": "number",
+              },
+              "listedBy": {
+                "type": "string",
+              },
+              "listingAgentName": {
+                "nullable": true,
+                "type": "string",
+              },
+              "listingType": {
+                "enum": [
+                  "sale",
+                  "rent",
+                  "sold",
+                ],
+                "type": "string",
+              },
+              "longitude": {
+                "nullable": true,
+                "type": "number",
+              },
+              "lotSqft": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "nullable": true,
+                "type": "integer",
+              },
+              "media": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "altText": {
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "url": {
+                      "format": "uri",
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "url",
+                    "altText",
+                  ],
+                  "type": "object",
+                },
+                "type": "array",
+              },
+              "neighborhood": {
+                "nullable": true,
+                "type": "string",
+              },
+              "newConstruction": {
+                "type": "boolean",
+              },
+              "officeBrokerLeadEmail": {
+                "format": "email",
+                "nullable": true,
+                "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+                "type": "string",
+              },
+              "officeBrokerLeadPhone": {
+                "nullable": true,
+                "type": "string",
+              },
+              "officeName": {
+                "type": "string",
+              },
+              "openHouses": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "endsAt": {
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                      "type": "string",
+                    },
+                    "remarks": {
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "startsAt": {
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "startsAt",
+                    "endsAt",
+                    "remarks",
+                  ],
+                  "type": "object",
+                },
+                "type": "array",
+              },
+              "price": {
+                "minimum": 0,
+                "nullable": true,
+                "type": "number",
+              },
+              "priceReduced": {
+                "type": "boolean",
+              },
+              "propertyType": {
+                "enum": [
+                  "Single Family",
+                  "Condo",
+                  "Townhome",
+                  "Multi-Family",
+                  "Loft",
+                  "Land",
+                  "New Construction",
+                ],
+                "type": "string",
+              },
+              "source": {
+                "enum": [
+                  "brightMLS",
+                  "internal",
+                  "other",
+                ],
+                "type": "string",
+              },
+              "sponsored": {
+                "type": "boolean",
+              },
+              "sqft": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "nullable": true,
+                "type": "integer",
+              },
+              "state": {
+                "type": "string",
+              },
+              "status": {
+                "enum": [
+                  "Active",
+                  "Pending",
+                  "Coming Soon",
+                  "Sold",
+                ],
+                "type": "string",
+              },
+              "title": {
+                "type": "string",
+              },
+              "yearBuilt": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "nullable": true,
+                "type": "integer",
+              },
+              "zip": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "id",
+              "title",
+              "address",
+              "city",
+              "state",
+              "zip",
+              "neighborhood",
+              "latitude",
+              "longitude",
+              "price",
+              "status",
+              "listingType",
+              "source",
+              "propertyType",
+              "beds",
+              "baths",
+              "sqft",
+              "lotSqft",
+              "yearBuilt",
+              "amenities",
+              "featured",
+              "sponsored",
+              "priceReduced",
+              "newConstruction",
+              "isSample",
+              "closePrice",
+              "closeDate",
+              "lastUpdated",
+              "listingAgentName",
+              "brokerName",
+              "brokerPhone",
+              "brokerEmail",
+              "officeName",
+              "officeBrokerLeadPhone",
+              "officeBrokerLeadEmail",
+              "listedBy",
+              "description",
+              "media",
+              "openHouses",
+            ],
+            "type": "object",
+          },
+          "property": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "lotSqft": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "nullable": true,
+                "type": "integer",
+              },
+              "propertyType": {
+                "enum": [
+                  "Single Family",
+                  "Condo",
+                  "Townhome",
+                  "Multi-Family",
+                  "Loft",
+                  "Land",
+                  "New Construction",
+                ],
+                "type": "string",
+              },
+              "yearBuilt": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "nullable": true,
+                "type": "integer",
+              },
+            },
+            "required": [
+              "id",
+              "propertyType",
+              "yearBuilt",
+              "lotSqft",
+            ],
+            "type": "object",
+          },
+          "unit": {
+            "additionalProperties": false,
+            "nullable": true,
+            "properties": {
+              "baths": {
+                "minimum": 0,
+                "nullable": true,
+                "type": "number",
+              },
+              "beds": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "nullable": true,
+                "type": "integer",
+              },
+              "id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "sqft": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "nullable": true,
+                "type": "integer",
+              },
+              "unitNumber": {
+                "nullable": true,
+                "type": "string",
+              },
+            },
+            "required": [
+              "id",
+              "unitNumber",
+              "beds",
+              "baths",
+              "sqft",
+            ],
+            "type": "object",
+          },
+        },
+        "required": [
+          "property",
+          "unit",
+          "listing",
+        ],
+        "type": "object",
+      },
+      "ListingsEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "appliedFilters": {
+            "additionalProperties": {},
+            "type": "object",
+          },
+          "page": {
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer",
+          },
+          "pageCount": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer",
+          },
+          "pageSize": {
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer",
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ListingCardRow",
+            },
+            "type": "array",
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer",
+          },
+        },
+        "required": [
+          "results",
+          "total",
+          "page",
+          "pageSize",
+          "pageCount",
+          "appliedFilters",
+        ],
+        "type": "object",
+      },
+      "ListingsMeta": {
+        "additionalProperties": false,
+        "properties": {
+          "dataUpdatedAt": {
+            "format": "date-time",
+            "nullable": true,
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string",
+          },
+          "listingCount": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer",
+          },
+          "sources": {
+            "items": {
+              "enum": [
+                "brightMLS",
+                "internal",
+                "other",
+              ],
+              "type": "string",
+            },
+            "type": "array",
+          },
+        },
+        "required": [
+          "dataUpdatedAt",
+          "sources",
+          "listingCount",
+        ],
+        "type": "object",
+      },
+    },
+  },
+  "info": {
+    "description": "Consumer listings search and detail. Every response carries the full broker/office attribution block (NAR 7.58, PRD §6.2); no parameter can omit it. Results are read through a compliance-enforcing view, so seller-suppressed listings are absent rather than redacted. Free-text \`query\` matches title, address, city, neighborhood and zip — never the description.",
+    "title": "Cribstop Listings API",
+    "version": "1.0.0",
+  },
+  "openapi": "3.0.3",
+  "paths": {
+    "/listings": {
+      "get": {
+        "description": "Sorted with a deterministic total order, so paging is stable. \`listingType=all\` covers currently marketed listings and excludes sold; ask for \`sold\` explicitly.",
+        "operationId": "searchListings",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "zip",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "street",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "listingType",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "sale",
+                "rent",
+                "sold",
+                "all",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "propertyType",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "Single Family",
+                "Condo",
+                "Townhome",
+                "Multi-Family",
+                "Loft",
+                "Land",
+                "New Construction",
+                "all",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "minPrice",
+            "required": false,
+            "schema": {
+              "pattern": "^\\d+$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "maxPrice",
+            "required": false,
+            "schema": {
+              "pattern": "^\\d+$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "beds",
+            "required": false,
+            "schema": {
+              "pattern": "^\\d+$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "baths",
+            "required": false,
+            "schema": {
+              "pattern": "^\\d+(\\.5)?$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "minSqft",
+            "required": false,
+            "schema": {
+              "pattern": "^\\d+$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "neighborhood",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "openHouse",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "newConstruction",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "waterfront",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "petFriendly",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "amenities",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                },
+                {
+                  "items": {
+                    "type": "string",
+                  },
+                  "type": "array",
+                },
+              ],
+              "description": "Comma-separated or repeated values from the closed set: Pool, Garage, Gym, Elevator, Balcony, Fireplace, Washer/Dryer, Pet Friendly, Waterfront, Office, Rooftop, Garden, Smart Home, Solar, EV Charging.",
+            },
+            "style": "form",
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "recommended",
+              "enum": [
+                "recommended",
+                "newest",
+                "price-asc",
+                "price-desc",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "description": "Whole number, 1 or greater. Default 1.",
+              "pattern": "^[1-9]\\d*$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "description": "Whole number from 1 to 100. Default 20.",
+              "pattern": "^([1-9][0-9]?|100)$",
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingsEnvelope",
+                },
+              },
+            },
+            "description": "A page of listings with an exact total.",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unknown or invalid query parameter.",
+          },
+        },
+        "summary": "Search listings",
+      },
+    },
+    "/listings/meta": {
+      "get": {
+        "description": "Callable without running a search. \`dataUpdatedAt\` is MLS feed freshness, not the time ingestion ran, and is null when nothing is publishable.",
+        "operationId": "getListingsMeta",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingsMeta",
+                },
+              },
+            },
+            "description": "Dataset freshness and provenance.",
+          },
+        },
+        "summary": "Dataset freshness",
+      },
+    },
+    "/listings/{id}": {
+      "get": {
+        "description": "Returns the object graph. \`unit\` is null for a non-subdivided home — meaningful, not missing. Unknown, removed and seller-suppressed listings are indistinguishable.",
+        "operationId": "getListing",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingDetail",
+                },
+              },
+            },
+            "description": "The listing.",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No such listing.",
+          },
+        },
+        "summary": "Listing detail",
+      },
+    },
+  },
+}
+`;

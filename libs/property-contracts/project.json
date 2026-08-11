@@ -1,0 +1,63 @@
+{
+  "name": "@cribstop/property-contracts",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/property-contracts/src",
+  "projectType": "library",
+  "tags": ["runtime:node", "type:lib", "framework:zod", "scope:properties", "devteam:unassigned"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/property-contracts",
+        "main": "libs/property-contracts/src/index.ts",
+        "tsConfig": "libs/property-contracts/tsconfig.lib.json",
+        "assets": ["libs/property-contracts/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "command": "eslint --config tools/node/configs/eslint.config.js libs/property-contracts",
+        "cwd": "."
+      }
+    },
+    "type-check": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/**/*.ts",
+        "{projectRoot}/tsconfig*.json",
+        "{workspaceRoot}/tsconfig.json",
+        "^production"
+      ],
+      "options": {
+        "command": "tsc -b --noEmit libs/property-contracts/tsconfig.json",
+        "cwd": "."
+      }
+    },
+    "format": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "prettier --write .",
+        "cwd": "libs/property-contracts"
+      }
+    },
+    "format-check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "prettier --check .",
+        "cwd": "libs/property-contracts"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "command": "jest --passWithNoTests",
+        "cwd": "libs/property-contracts"
+      }
+    }
+  }
+}
