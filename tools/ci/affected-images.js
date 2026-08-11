@@ -111,7 +111,37 @@ function changedFiles(base, head) {
     .filter(Boolean);
 }
 
-/** Mirrors the resolution order in .github/actions/build-push-image/action.yml. */
+/**
+ * Resolves a project's on-disk root via the Nx project graph (`nx show project --json`).
+ *
+ * String-interpolating the project name into `libs/${project}/Dockerfile` breaks for a scoped Nx
+ * project name (e.g. `@cribstop/property-contracts`), mangling it into a bogus nested path. The
+ * project's own `root`, as Nx reports it, is correct regardless of naming — and every project this
+ * function is ever asked about already came out of `nx show projects`, so Nx already knows it.
+ *
+ * Returns null on any failure (nx not resolvable, project not found, unparseable output). The
+ * caller treats that exactly like an unresolvable Dockerfile: fail open, keep the project.
+ */
+function projectRoot(project) {
+  try {
+    const out = execFileSync('pnpm', ['exec', 'nx', 'show', 'project', project, '--json'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      shell: true,
+    });
+    const parsed = JSON.parse(out);
+    return typeof parsed.root === 'string' ? parsed.root : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Mirrors the resolution order in .github/actions/build-push-image/action.yml: the image-name-map
+ * override first, then the project's own location. Where action.yml still guesses a path from the
+ * project name, this resolves the same location from the Nx project graph instead, which stays
+ * correct for a scoped project name a guess would mangle.
+ */
 function resolveDockerfile(project) {
   if (fs.existsSync(IMAGE_NAME_MAP)) {
     try {
@@ -125,11 +155,9 @@ function resolveDockerfile(project) {
       return null; // Unreadable map — fail open.
     }
   }
-  for (const candidate of [
-    `apps/${project}/Dockerfile`,
-    `apps/services/${project}/Dockerfile`,
-    `libs/${project}/Dockerfile`,
-  ]) {
+  const root = projectRoot(project);
+  if (root) {
+    const candidate = `${root}/Dockerfile`;
     if (fs.existsSync(candidate)) return candidate;
   }
   return null;
@@ -305,4 +333,11 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { contextInputs, imageInputs, logicalLines, fileMatches, resolveDockerfile };
+module.exports = {
+  contextInputs,
+  imageInputs,
+  logicalLines,
+  fileMatches,
+  resolveDockerfile,
+  projectRoot,
+};

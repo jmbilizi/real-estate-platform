@@ -163,6 +163,27 @@ function loadImageNameMap() {
   return map;
 }
 
+/**
+ * Resolves a project's on-disk root via the Nx project graph (`nx show project --json`).
+ *
+ * Interpolating the project name straight into `libs/${projectName}/Dockerfile` breaks for a
+ * scoped Nx project name (e.g. `@cribstop/property-contracts`), which would mangle into a bogus
+ * nested path. The project's own `root`, as Nx reports it, is correct regardless of naming.
+ *
+ * Returns null on any failure (nx not resolvable, project not found, unparseable output) so the
+ * caller can fall back to the legacy path guesses below.
+ */
+function resolveProjectRoot(projectName) {
+  const result = run(`pnpm exec nx show project ${projectName} --json`, { silent: true });
+  if (!result.success) return null;
+  try {
+    const parsed = JSON.parse(result.output);
+    return typeof parsed.root === 'string' ? parsed.root : null;
+  } catch {
+    return null;
+  }
+}
+
 function findDockerfile(projectName) {
   const workspaceRoot = path.resolve(__dirname, '../..');
 
@@ -179,6 +200,16 @@ function findDockerfile(projectName) {
     }
   }
 
+  // Resolve via the project's own root in the Nx project graph — safe for scoped project names.
+  const projectRoot = resolveProjectRoot(projectName);
+  if (projectRoot) {
+    const rootPath = path.join(workspaceRoot, projectRoot, 'Dockerfile');
+    if (fs.existsSync(rootPath)) {
+      return rootPath;
+    }
+  }
+
+  // Fallback for the rare case `nx show project` cannot run at all (e.g. no project graph yet).
   const possiblePaths = [
     path.join(workspaceRoot, 'apps', projectName, 'Dockerfile'),
     path.join(workspaceRoot, 'apps/services', projectName, 'Dockerfile'),
@@ -330,4 +361,4 @@ if (require.main === module) {
   console.log(`\n📦 Image: ${imageName}\n`);
 }
 
-module.exports = { buildImage, parseArgs, findDockerfile, resolveImageName };
+module.exports = { buildImage, parseArgs, findDockerfile, resolveImageName, resolveProjectRoot };
