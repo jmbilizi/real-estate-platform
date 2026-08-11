@@ -1,0 +1,76 @@
+{
+  "ServiceName": "Property",
+  "Active": true,
+  "Routes": [
+    {
+      "UpstreamPathTemplate": "/listings/meta",
+      "UpstreamHttpMethod": ["GET"],
+      "DownstreamPathTemplate": "/listings/meta",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "property-service-svc",
+          "Port": 3002
+        }
+      ],
+      "Priority": 2,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 120
+      }
+    },
+    {
+      "UpstreamPathTemplate": "/listings",
+      "UpstreamHttpMethod": ["GET"],
+      "DownstreamPathTemplate": "/listings",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "property-service-svc",
+          "Port": 3002
+        }
+      ],
+      "Priority": 1,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 60
+      }
+    },
+    {
+      "UpstreamPathTemplate": "/listings/{id}",
+      "UpstreamHttpMethod": ["GET"],
+      "DownstreamPathTemplate": "/listings/{id}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "property-service-svc",
+          "Port": 3002
+        }
+      ],
+      "Priority": 0,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 90
+      }
+    }
+  ],
+  "SwaggerEndPoints": [
+    {
+      "Key": "Property",
+      "TransformByOcelotConfig": false,
+      "Config": [
+        {
+          "Name": "Property API",
+          "Version": "v1",
+          "Url": "http://property-service-svc:3002/openapi.json"
+        }
+      ]
+    }
+  ]
+}
