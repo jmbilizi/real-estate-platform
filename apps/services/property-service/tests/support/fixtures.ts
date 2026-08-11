@@ -25,44 +25,35 @@
  *
  * WRITER DISCIPLINE: `src/db/write.ts` is the only module that writes `listings`
  * (`src/seed/seed.spec.ts` asserts this), so every listing/property/unit/community row below goes
- * through its exported functions — `getOrCreateProperty()`, `insertCommunity()`, `insertOpenHouse()`,
- * `upsertListing()`. This module never issues a raw INSERT/UPDATE against `listings`, `properties` or
- * `units`. `removeComplianceFixtures()` is the one exception, and only for DELETE (see its own
- * comment) — there is no exported "delete a listing" helper because nothing in the product needs one
- * yet, and this module only ever deletes rows carrying its own fixture marker.
+ * through its exported functions — `getOrCreateProperty()`, `getOrCreateUnit()`, `insertCommunity()`,
+ * `insertOpenHouse()`, `upsertListing()`. This module never issues a raw INSERT/UPDATE against
+ * `listings`, `properties` or `units`. `removeComplianceFixtures()` is the one exception, and only
+ * for DELETE (see its own comment) — there is no exported "delete a listing" helper because nothing
+ * in the product needs one yet, and this module only ever deletes rows carrying its own fixture
+ * marker.
  *
- * KNOWN GAP — read this before wiring this module into `tests/support/global-setup.ts` (a later
- * task) or extending it:
+ * All 11 required scenarios are reachable as of commit 6d041e7, which widened `upsertListing()` and
+ * `insertOpenHouse()` to bind `description_moderation`, `featured_reason`, `internet_display_allowed`,
+ * `address_display_allowed`, `remarks` and `is_cancelled` — previously none of those six columns were
+ * caller-settable at all (they silently took the table default), which made the suppressed-address,
+ * suppressed-listing, unapproved-description and cancelled-open-house scenarios impossible to build
+ * without a second write path or raw SQL. See git history on this file for the prior "STOP and
+ * report" state if you need the detail.
  *
- * Four of the required scenarios cannot be built through `src/db/write.ts`'s current exports, and per
- * this ticket's instructions that means STOP and report rather than add a second write path or raw
- * SQL against these tables. `upsertListing()`'s INSERT statement enumerates exactly 38 columns and
- * does not include `address_display_allowed`, `internet_display_allowed` or
- * `description_moderation` — all three default from the table (`true`, `true`, `'approved'`) with no
- * caller override, and `ListingRow` (src/seed/types.ts) carries no such fields either.
- * `applyTerminalCorrection()`'s `CORRECTABLE_COLUMNS` doesn't cover them. Likewise
- * `insertOpenHouse()`'s INSERT lists only `(id, listing_id, starts_at, ends_at, is_sample)`, with no
- * `is_cancelled` or `remarks`, and `OpenHouseRow` carries neither. Concretely, blocked:
- *
- *   - suppressed address    (`listings.address_display_allowed = false`)
- *   - suppressed listing    (`listings.internet_display_allowed = false`)
- *   - unapproved description(`listings.description_moderation = 'suppressed'`)
- *   - cancelled open house  (`listing_open_houses.is_cancelled = true`)
- *
- * `loadComplianceFixtures()` below builds every OTHER required scenario for real, inside one
- * transaction, and then throws — rolling all of it back — instead of returning a
- * `ComplianceFixtureIds` with a made-up id standing in for a row that cannot actually exhibit the
- * suppression/cancellation it claims to. Returning such an id would silently recreate the exact
- * "vacuously true" problem this module exists to fix, just one level further down. The fix is to
- * extend `src/db/write.ts`'s column lists and the `ListingRow`/`OpenHouseRow` types (out of this
- * task's scope — it may only touch `tests/`), then delete the `throw` at the bottom of the `try`
- * block below and fill in the four scenarios using the same pattern as the rest of this file.
+ * Every listing fixture states `internet_display_allowed`, `address_display_allowed`,
+ * `description_moderation` and `featured_reason` EXPLICITLY at its call site (see
+ * `buildFixtureListingRow`, which takes them as required parameters with no default) — that is the
+ * whole point of `ListingRow` making them required: a fixture that forgot one would silently publish
+ * a suppressed row exactly like the bug this module exists to catch. No fixture row ever sets
+ * `featured_reason` to `'paid'` — a later spec asserts that no row anywhere does, because the
+ * Sponsored disclosure label cannot be rendered until #24.
  */
 
 import { randomUUID } from 'node:crypto';
 
 import {
   getOrCreateProperty,
+  getOrCreateUnit,
   insertCommunity,
   insertOpenHouse,
   Queryable,
@@ -70,7 +61,15 @@ import {
 } from '../../src/db/write';
 import { buildAddressKey } from '../../src/seed/address';
 import { Amenity, ListingStatus, PropertyType } from '../../src/seed/constants';
-import { CommunityRow, ListingRow, OfferKind, PropertyRow } from '../../src/seed/types';
+import {
+  CommunityRow,
+  DescriptionModeration,
+  FeaturedReason,
+  ListingRow,
+  OfferKind,
+  PropertyRow,
+  UnitRow,
+} from '../../src/seed/types';
 
 /** Ids of every fixture row, keyed by the scenario name a spec asserts against. */
 export interface ComplianceFixtureIds {
@@ -157,16 +156,20 @@ const FIXTURE_AGENT_NAME = 'E2E Fixture Agent (Sample)';
 
 /** One obviously-fake street per scenario, so two fixture rows never collide on address_key. */
 const FIXTURE_STREETS = {
-  land: '100 Fixture Test Lane',
-  withdrawn: '101 Fixture Test Lane',
-  expired: '102 Fixture Test Lane',
-  canceled: '103 Fixture Test Lane',
-  hold: '104 Fixture Test Lane',
-  soldWithCloseDate: '105 Fixture Test Lane',
-  soldWithoutCloseDate: '106 Fixture Test Lane',
-  openHouseInProgress: '107 Fixture Test Lane',
-  pastOpenHouse: '108 Fixture Test Lane',
-  sample: '109 Fixture Test Lane',
+  suppressedAddress: '100 Fixture Test Lane',
+  suppressedListing: '101 Fixture Test Lane',
+  unapprovedDescription: '102 Fixture Test Lane',
+  withdrawn: '103 Fixture Test Lane',
+  expired: '104 Fixture Test Lane',
+  canceled: '105 Fixture Test Lane',
+  hold: '106 Fixture Test Lane',
+  land: '107 Fixture Test Lane',
+  soldWithCloseDate: '108 Fixture Test Lane',
+  soldWithoutCloseDate: '109 Fixture Test Lane',
+  openHouseInProgress: '110 Fixture Test Lane',
+  pastOpenHouse: '111 Fixture Test Lane',
+  cancelledOpenHouse: '112 Fixture Test Lane',
+  sample: '113 Fixture Test Lane',
 } as const;
 
 function buildFixtureProperty(input: {
@@ -213,10 +216,15 @@ function buildFixtureProperty(input: {
  * `upsertListing()` IGNORES whatever the caller passes for them and resolves the real snapshot from
  * the property/unit rows instead (see src/db/write.ts's module header). Passing anything else here
  * would just be dead data.
+ *
+ * `internetDisplayAllowed`, `addressDisplayAllowed`, `descriptionModeration` and `featuredReason` are
+ * required (no default) so every call site below states them explicitly, matching why `ListingRow`
+ * itself makes them required rather than optional.
  */
 function buildFixtureListingRow(input: {
   id: string;
   propertyId: string;
+  unitId?: string | null;
   title: string;
   offerKind: OfferKind;
   consumerStatus: ListingStatus | null;
@@ -225,12 +233,16 @@ function buildFixtureListingRow(input: {
   closePrice?: number | null;
   closeDate?: string | null;
   description: string;
+  descriptionModeration: DescriptionModeration;
+  featuredReason: FeaturedReason | null;
+  internetDisplayAllowed: boolean;
+  addressDisplayAllowed: boolean;
   amenities?: Amenity[];
 }): ListingRow {
   return {
     id: input.id,
     property_id: input.propertyId,
-    unit_id: null,
+    unit_id: input.unitId ?? null,
     title: `${FIXTURE_TITLE_PREFIX}: ${input.title} (Sample)`,
     offer_kind: input.offerKind,
     consumer_status: input.consumerStatus,
@@ -253,10 +265,16 @@ function buildFixtureListingRow(input: {
     longitude: FIXTURE_LONGITUDE,
     description: input.description,
     description_source: 'internal',
+    description_moderation: input.descriptionModeration,
     amenities: input.amenities ?? [],
     featured: false,
+    // Never 'paid': the Sponsored disclosure label can't render until #24, and a later spec asserts
+    // no row anywhere carries it.
+    featured_reason: input.featuredReason,
     price_reduced: false,
     new_construction: false,
+    internet_display_allowed: input.internetDisplayAllowed,
+    address_display_allowed: input.addressDisplayAllowed,
     broker_name: FIXTURE_BROKER_NAME,
     broker_phone: FIXTURE_BROKER_PHONE,
     broker_email: FIXTURE_BROKER_EMAIL,
@@ -273,27 +291,14 @@ function isoHoursFromNow(hours: number): string {
   return new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
 }
 
-const UNREACHABLE_SCENARIOS_MESSAGE =
-  'loadComplianceFixtures: 4 of the required compliance scenarios cannot be built through the ' +
-  'current src/db/write.ts exports, so this function refuses to fabricate ids for them. Everything ' +
-  'else this call attempted has been rolled back (this function is one transaction). Blocked:\n' +
-  "  - suppressed address     needs listings.address_display_allowed  (upsertListing() can't set it)\n" +
-  "  - suppressed listing     needs listings.internet_display_allowed (upsertListing() can't set it)\n" +
-  "  - unapproved description needs listings.description_moderation   (upsertListing() can't set it)\n" +
-  "  - cancelled open house   needs listing_open_houses.is_cancelled  (insertOpenHouse() can't set it)\n" +
-  'Fix: extend upsertListing()/insertOpenHouse() in src/db/write.ts (and ListingRow/OpenHouseRow in ' +
-  'src/seed/types.ts) to accept these columns, then delete this throw and build the four scenarios ' +
-  'the same way as the rest of this file. Do not work around this with raw SQL or a second writer.';
-
 /**
- * Loads every compliance fixture this ticket can build through `src/db/write.ts`, inside one
- * transaction, and returns their ids.
+ * Loads every required compliance fixture through `src/db/write.ts`, inside one transaction, and
+ * returns their ids.
  *
- * Idempotent: `upsertListing()` and `insertCommunity()` are plain INSERTs with no `ON CONFLICT`, so
- * calling this twice would otherwise collide on a reused id. Calling `removeComplianceFixtures()`
- * first (before opening this function's own transaction) is what makes a second call safe.
- *
- * See the file header ("KNOWN GAP") for why this currently always throws before committing.
+ * Idempotent: `upsertListing()`, `insertCommunity()` and `insertOpenHouse()` are plain INSERTs with
+ * no `ON CONFLICT`, so calling this twice would otherwise collide on a reused id. Calling
+ * `removeComplianceFixtures()` first (before opening this function's own transaction) is what makes a
+ * second call safe.
  */
 export async function loadComplianceFixtures(pool: FixturesPool): Promise<ComplianceFixtureIds> {
   assertFixturesEnabled();
@@ -311,7 +316,135 @@ export async function loadComplianceFixtures(pool: FixturesPool): Promise<Compli
     };
     await insertCommunity(client, communityRow);
 
-    // --- Land parcel: NULL beds/baths/sqft, non-null lot_sqft ------------------------------------
+    // --- Suppressed address: address_display_allowed=false, on a genuinely subdivided property so
+    // the view's unit-number suppression is exercised too, not just the street mask -----------------
+    const suppressedAddressPropertyId = randomUUID();
+    await getOrCreateProperty(
+      client,
+      buildFixtureProperty({
+        id: suppressedAddressPropertyId,
+        communityId,
+        streetLine: FIXTURE_STREETS.suppressedAddress,
+        propertyType: 'Condo',
+        beds: 2,
+        bathsFull: 2,
+        bathsHalf: 0,
+        livingSqft: 1200,
+        lotSqft: null,
+      }),
+    );
+    const suppressedAddressUnitNumber = '4B';
+    const suppressedAddressUnitId = await getOrCreateUnit(client, {
+      id: randomUUID(),
+      property_id: suppressedAddressPropertyId,
+      unit_number: suppressedAddressUnitNumber,
+      floor: 4,
+      beds: 2,
+      baths_full: 2,
+      baths_half: 0,
+      living_sqft: 1200,
+      is_sample: true,
+    } satisfies UnitRow);
+    const suppressedAddressListingId = randomUUID();
+    await upsertListing(
+      client,
+      buildFixtureListingRow({
+        id: suppressedAddressListingId,
+        propertyId: suppressedAddressPropertyId,
+        unitId: suppressedAddressUnitId,
+        title: 'Suppressed Address',
+        offerKind: 'sale',
+        consumerStatus: 'Active',
+        status: 'Active',
+        listPrice: 350000,
+        description:
+          'This E2E Fixture (Sample) listing is a 2 bedroom, 2 bathroom condo unit of 1,200 square feet.',
+        descriptionModeration: 'approved',
+        featuredReason: null,
+        internetDisplayAllowed: true,
+        // The scenario under test: the seller opted out of address display, so the view must mask
+        // street_line/unit_number/latitude/longitude together.
+        addressDisplayAllowed: false,
+      }),
+    );
+
+    // --- Suppressed listing: internet_display_allowed=false → absent everywhere, 404 on detail -----
+    const suppressedListingPropertyId = randomUUID();
+    await getOrCreateProperty(
+      client,
+      buildFixtureProperty({
+        id: suppressedListingPropertyId,
+        communityId,
+        streetLine: FIXTURE_STREETS.suppressedListing,
+        propertyType: 'Single Family',
+        beds: 3,
+        bathsFull: 2,
+        bathsHalf: 0,
+        livingSqft: 1800,
+        lotSqft: 6000,
+      }),
+    );
+    const suppressedListingId = randomUUID();
+    await upsertListing(
+      client,
+      buildFixtureListingRow({
+        id: suppressedListingId,
+        propertyId: suppressedListingPropertyId,
+        title: 'Suppressed Listing',
+        offerKind: 'sale',
+        consumerStatus: 'Active',
+        status: 'Active',
+        listPrice: 425000,
+        description:
+          'This E2E Fixture (Sample) listing has a 3 bedroom, 2 bathroom single family home.',
+        descriptionModeration: 'approved',
+        featuredReason: null,
+        // The scenario under test: the seller withheld the WHOLE listing.
+        internetDisplayAllowed: false,
+        addressDisplayAllowed: true,
+      }),
+    );
+
+    // --- Unapproved description: description_moderation='suppressed' → withheld, never matched -----
+    const unapprovedDescriptionText =
+      'E2E FIXTURE UNAPPROVED DESCRIPTION (Sample): this third-party remark text has not passed ' +
+      'moderation and must never be returned to a consumer or matched by free-text search.';
+    const unapprovedDescriptionPropertyId = randomUUID();
+    await getOrCreateProperty(
+      client,
+      buildFixtureProperty({
+        id: unapprovedDescriptionPropertyId,
+        communityId,
+        streetLine: FIXTURE_STREETS.unapprovedDescription,
+        propertyType: 'Single Family',
+        beds: 3,
+        bathsFull: 2,
+        bathsHalf: 0,
+        livingSqft: 1800,
+        lotSqft: 6000,
+      }),
+    );
+    const unapprovedDescriptionListingId = randomUUID();
+    await upsertListing(
+      client,
+      buildFixtureListingRow({
+        id: unapprovedDescriptionListingId,
+        propertyId: unapprovedDescriptionPropertyId,
+        title: 'Unapproved Description',
+        offerKind: 'sale',
+        consumerStatus: 'Active',
+        status: 'Active',
+        listPrice: 435000,
+        description: unapprovedDescriptionText,
+        // The scenario under test: pending moderation withholds the description from the view.
+        descriptionModeration: 'suppressed',
+        featuredReason: null,
+        internetDisplayAllowed: true,
+        addressDisplayAllowed: true,
+      }),
+    );
+
+    // --- Land parcel: NULL beds/baths/sqft, non-null lot_sqft --------------------------------------
     // upsertListing() resolves the snapshot from the PROPERTY, not from whatever is passed on the
     // listing row, so the NULLs have to live on the property itself.
     const landPropertyId = randomUUID();
@@ -344,10 +477,14 @@ export async function loadComplianceFixtures(pool: FixturesPool): Promise<Compli
         description:
           'This E2E Fixture (Sample) listing is an unimproved land parcel of 43,560 square feet ' +
           '(1 acre). No dwelling exists on this parcel.',
+        descriptionModeration: 'approved',
+        featuredReason: null,
+        internetDisplayAllowed: true,
+        addressDisplayAllowed: true,
       }),
     );
 
-    // --- Sold WITH a close date: publishable, close_price differs from list_price ---------------
+    // --- Sold WITH a close date: publishable, close_price differs from list_price ------------------
     const soldWithCloseDatePropertyId = randomUUID();
     await getOrCreateProperty(
       client,
@@ -379,10 +516,14 @@ export async function loadComplianceFixtures(pool: FixturesPool): Promise<Compli
         description:
           'This E2E Fixture (Sample) listing recorded a closed sale with a list price of $500,000 ' +
           'and a close price of $480,000.',
+        descriptionModeration: 'approved',
+        featuredReason: null,
+        internetDisplayAllowed: true,
+        addressDisplayAllowed: true,
       }),
     );
 
-    // --- Sold WITHOUT a close date: never publishable ---------------------------------------------
+    // --- Sold WITHOUT a close date: never publishable ------------------------------------------------
     // close_price stays NULL too: the table's CHECK requires close_price IS NULL OR
     // close_date IS NOT NULL, so a close price with no close date is not representable (correctly).
     const soldWithoutCloseDatePropertyId = randomUUID();
@@ -413,10 +554,14 @@ export async function loadComplianceFixtures(pool: FixturesPool): Promise<Compli
         listPrice: 500000,
         description:
           'This E2E Fixture (Sample) listing recorded a closed sale with no close date on file.',
+        descriptionModeration: 'approved',
+        featuredReason: null,
+        internetDisplayAllowed: true,
+        addressDisplayAllowed: true,
       }),
     );
 
-    // --- Non-consumer statuses: excluded by listing_search_v's `consumer_status IS NOT NULL` -----
+    // --- Non-consumer statuses: excluded by listing_search_v's `consumer_status IS NOT NULL` -------
     // listing_statuses.consumer_status is NULL for every one of these feed codes, and
     // upsertListing() binds whatever this function passes directly to the column — it does not look
     // the value up from listing_statuses itself. So the caller must supply NULL explicitly.
@@ -460,12 +605,17 @@ export async function loadComplianceFixtures(pool: FixturesPool): Promise<Compli
           description:
             `This E2E Fixture (Sample) listing exercises the ${status} feed status, which the ` +
             'Property API must never surface to a consumer.',
+          descriptionModeration: 'approved',
+          featuredReason: null,
+          internetDisplayAllowed: true,
+          addressDisplayAllowed: true,
         }),
       );
       nonConsumerStatusListingIds[status] = listingId;
     }
 
-    // --- Open house in progress: starts_at past, ends_at future, not cancelled -------------------
+    // --- Open house in progress: starts_at past, ends_at future, not cancelled ---------------------
+    // Also the fixture carrying a non-null `remarks`, so openHouse.remarks is exercised on the wire.
     const inProgressPropertyId = randomUUID();
     await getOrCreateProperty(
       client,
@@ -493,6 +643,10 @@ export async function loadComplianceFixtures(pool: FixturesPool): Promise<Compli
         status: 'Active',
         listPrice: 450000,
         description: 'This E2E Fixture (Sample) listing has an open house currently in progress.',
+        descriptionModeration: 'approved',
+        featuredReason: null,
+        internetDisplayAllowed: true,
+        addressDisplayAllowed: true,
       }),
     );
     await insertOpenHouse(client, {
@@ -500,10 +654,12 @@ export async function loadComplianceFixtures(pool: FixturesPool): Promise<Compli
       listing_id: inProgressOpenHouseListingId,
       starts_at: isoHoursFromNow(-1),
       ends_at: isoHoursFromNow(1),
+      remarks: 'E2E Fixture (Sample) remarks: enter through the side door; parking is on-street.',
+      is_cancelled: false,
       is_sample: true,
     });
 
-    // --- Open house past only: ends_at already elapsed --------------------------------------------
+    // --- Open house past only: ends_at already elapsed ---------------------------------------------
     const pastOpenHousePropertyId = randomUUID();
     await getOrCreateProperty(
       client,
@@ -531,6 +687,10 @@ export async function loadComplianceFixtures(pool: FixturesPool): Promise<Compli
         status: 'Active',
         listPrice: 450000,
         description: 'This E2E Fixture (Sample) listing has an open house that already ended.',
+        descriptionModeration: 'approved',
+        featuredReason: null,
+        internetDisplayAllowed: true,
+        addressDisplayAllowed: true,
       }),
     );
     await insertOpenHouse(client, {
@@ -538,11 +698,60 @@ export async function loadComplianceFixtures(pool: FixturesPool): Promise<Compli
       listing_id: pastOpenHouseListingId,
       starts_at: isoHoursFromNow(-48),
       ends_at: isoHoursFromNow(-24),
+      remarks: null,
+      is_cancelled: false,
+      is_sample: true,
+    });
+
+    // --- Open house cancelled: upcoming times, but is_cancelled=true — must NOT match --------------
+    // starts_at/ends_at are both in the future here, deliberately: the ONLY reason this must not
+    // match `openHouse=true` is the cancellation flag, not stale timing (that is pastOpenHouse's job).
+    const cancelledOpenHousePropertyId = randomUUID();
+    await getOrCreateProperty(
+      client,
+      buildFixtureProperty({
+        id: cancelledOpenHousePropertyId,
+        communityId,
+        streetLine: FIXTURE_STREETS.cancelledOpenHouse,
+        propertyType: 'Single Family',
+        beds: 3,
+        bathsFull: 2,
+        bathsHalf: 0,
+        livingSqft: 1800,
+        lotSqft: 6000,
+      }),
+    );
+    const cancelledOpenHouseListingId = randomUUID();
+    await upsertListing(
+      client,
+      buildFixtureListingRow({
+        id: cancelledOpenHouseListingId,
+        propertyId: cancelledOpenHousePropertyId,
+        title: 'Cancelled Open House',
+        offerKind: 'sale',
+        consumerStatus: 'Active',
+        status: 'Active',
+        listPrice: 450000,
+        description:
+          'This E2E Fixture (Sample) listing has an upcoming open house that was cancelled.',
+        descriptionModeration: 'approved',
+        featuredReason: null,
+        internetDisplayAllowed: true,
+        addressDisplayAllowed: true,
+      }),
+    );
+    await insertOpenHouse(client, {
+      id: randomUUID(),
+      listing_id: cancelledOpenHouseListingId,
+      starts_at: isoHoursFromNow(24),
+      ends_at: isoHoursFromNow(26),
+      remarks: null,
+      is_cancelled: true,
       is_sample: true,
     });
 
     // --- Sample row: is_sample=true (true of every row above too, but this one is addressed
-    // directly by id, with no other scenario attached to it) --------------------------------------
+    // directly by id, with no other scenario attached to it) ----------------------------------------
     const samplePropertyId = randomUUID();
     await getOrCreateProperty(
       client,
@@ -571,22 +780,32 @@ export async function loadComplianceFixtures(pool: FixturesPool): Promise<Compli
         listPrice: 425000,
         description:
           'This E2E Fixture (Sample) listing is a plain, otherwise unremarkable, active listing.',
+        descriptionModeration: 'approved',
+        featuredReason: null,
+        internetDisplayAllowed: true,
+        addressDisplayAllowed: true,
       }),
     );
 
-    // Everything above is real, addressable inventory built through src/db/write.ts. The four
-    // scenarios this ticket also requires — suppressed address, suppressed listing, unapproved
-    // description, cancelled open house — cannot be built at all through that module's current
-    // exports (see the file header's "KNOWN GAP"). Silently returning a made-up id for them here
-    // would recreate the exact "vacuously true" compliance-assertion problem this module exists to
-    // fix, so this function fails loudly and rolls back instead.
-    //
-    // landParcelLotSqft is otherwise unread: the function throws before it would be returned on the
-    // ComplianceFixtureIds object, but it is kept as its own named constant (rather than inlining
-    // 43560 twice) so the fix described above only has to add a `return { ...landParcelLotSqft... }`
-    // rather than also re-deriving this value.
-    void landParcelLotSqft;
-    throw new Error(UNREACHABLE_SCENARIOS_MESSAGE);
+    await client.query('COMMIT');
+
+    return {
+      suppressedAddressListingId,
+      suppressedAddressUnitNumber,
+      suppressedAddressStreetLine: FIXTURE_STREETS.suppressedAddress,
+      suppressedListingId,
+      unapprovedDescriptionListingId,
+      unapprovedDescriptionText,
+      nonConsumerStatusListingIds,
+      landParcelListingId,
+      landParcelLotSqft,
+      soldWithCloseDateListingId,
+      soldWithoutCloseDateListingId,
+      inProgressOpenHouseListingId,
+      pastOpenHouseListingId,
+      cancelledOpenHouseListingId,
+      sampleListingId,
+    };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
