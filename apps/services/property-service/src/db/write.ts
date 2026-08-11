@@ -93,8 +93,9 @@ export async function upsertListing(client: Queryable, row: ListingRow): Promise
         list_price, close_price, close_date,
         beds, baths_full, baths_half, living_sqft, lot_sqft, year_built,
         neighborhood, city, state, zip5, latitude, longitude,
-        description, description_source, amenities,
-        featured, price_reduced, new_construction,
+        description, description_source, description_moderation, amenities,
+        featured, featured_reason, price_reduced, new_construction,
+        internet_display_allowed, address_display_allowed,
         broker_name, broker_phone, broker_email, office_name,
         office_broker_lead_phone, office_broker_lead_email, listing_agent_name,
         is_sample, last_updated)
@@ -102,11 +103,12 @@ export async function upsertListing(client: Queryable, row: ListingRow): Promise
              $9, $10, $11,
              $12, $13, $14, $15, $16, $17,
              $18, $19, $20, $21, $22, $23,
-             $24, $25, $26,
-             $27, $28, $29,
-             $30, $31, $32, $33,
-             $34, $35, $36,
-             $37, $38)`,
+             $24, $25, $26, $27,
+             $28, $29, $30, $31,
+             $32, $33,
+             $34, $35, $36, $37,
+             $38, $39, $40,
+             $41, $42)`,
     [
       row.id,
       row.property_id,
@@ -133,10 +135,18 @@ export async function upsertListing(client: Queryable, row: ListingRow): Promise
       facts.longitude,
       row.description,
       row.description_source,
+      row.description_moderation,
       row.amenities,
       row.featured,
+      row.featured_reason,
       row.price_reduced,
       row.new_construction,
+      // The two RESO seller display-suppression flags. Bound explicitly and never defaulted here:
+      // the columns default to `true` in the database, so a caller that omitted them would publish a
+      // listing the seller withheld, with no error anywhere. `ListingRow` makes them required so
+      // that omission is a compile error rather than a runtime disclosure.
+      row.internet_display_allowed,
+      row.address_display_allowed,
       row.broker_name,
       row.broker_phone,
       row.broker_email,
@@ -393,11 +403,26 @@ function requireId(rows: Record<string, unknown>[], table: string): string {
   return id;
 }
 
+/**
+ * `remarks` and `is_cancelled` were previously absent from both `OpenHouseRow` and this INSERT, which
+ * made two things untestable and one field permanently dead: `openHouse.remarks` is declared by the
+ * wire contract but could never be non-null, and `listing_search_v` filters cancelled occurrences out
+ * without any writer being able to create one to exclude.
+ */
 export async function insertOpenHouse(client: Queryable, row: OpenHouseRow): Promise<void> {
   await client.query(
-    `INSERT INTO listing_open_houses (id, listing_id, starts_at, ends_at, is_sample)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [row.id, row.listing_id, row.starts_at, row.ends_at, row.is_sample],
+    `INSERT INTO listing_open_houses
+       (id, listing_id, starts_at, ends_at, remarks, is_cancelled, is_sample)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [
+      row.id,
+      row.listing_id,
+      row.starts_at,
+      row.ends_at,
+      row.remarks,
+      row.is_cancelled,
+      row.is_sample,
+    ],
   );
 }
 

@@ -133,10 +133,35 @@ export interface ListingRow {
   description: string | null;
   description_source: DescriptionSource | null;
   amenities: Amenity[];
+  /**
+   * Moderation state for `description`. **Required, not optional.** The column has a DB default of
+   * `'approved'`, and an optional field here would let an MLS mapper omit it and thereby publish
+   * unreviewed third-party remarks as approved copy — the exact failure the moderation state exists
+   * to prevent. Stating it is cheap; forgetting it must not be possible.
+   */
+  description_moderation: DescriptionModeration;
   // Merchandising
   featured: boolean;
+  /**
+   * Why this listing is featured. `featured` was already writable while this was not, which is the
+   * real defect: a row could rank first under `recommended` with no recordable reason, and paid
+   * placement with no disclosure is an FTC / PRD §6 failure. `sponsored` on the wire is derived
+   * from `featured_reason = 'paid'`, so the disclosure is only renderable if this is written.
+   */
+  featured_reason: FeaturedReason | null;
   price_reduced: boolean;
   new_construction: boolean;
+  /**
+   * RESO `InternetEntireListingDisplayYN` — the seller withheld the WHOLE listing.
+   * **Required, not optional**, for the same reason as `description_moderation` and more urgently:
+   * both columns default to `true` in the database, so an optional field lets a feed mapper that
+   * forgets to map the flag publish a listing the seller opted out of, silently and with no error.
+   * `listing_search_v` enforces the consequence; this is where the fact has to arrive intact.
+   */
+  internet_display_allowed: boolean;
+  /** RESO `InternetAddressDisplayYN` — the seller withheld the street address (and, with it, the
+   *  coordinates, which the view masks together because the point re-identifies the address). */
+  address_display_allowed: boolean;
   // Attribution
   broker_name: string;
   broker_phone: string;
@@ -154,6 +179,18 @@ export interface OpenHouseRow {
   listing_id: string;
   starts_at: string;
   ends_at: string;
+  /**
+   * Consumer-visible showing copy. It was previously absent from both this type and the INSERT, so
+   * `openHouse.remarks` — a field the wire contract declares — could never be anything but null no
+   * matter what the feed sent.
+   */
+  remarks: string | null;
+  /**
+   * A cancelled occurrence must not light the "Open house" badge. `listing_search_v` filters on this
+   * column, so leaving it unwritable meant the filter had nothing to exclude and could not be tested
+   * against a row that actually exercised it.
+   */
+  is_cancelled: boolean;
   is_sample: boolean;
 }
 
@@ -168,3 +205,8 @@ export interface MediaRow {
 
 export type OfferKind = 'sale' | 'rent';
 export type DescriptionSource = 'mls_remarks' | 'agent' | 'internal';
+/** Mirrors the CHECK on `listings.description_moderation`. */
+export type DescriptionModeration = 'pending' | 'approved' | 'suppressed';
+/** Mirrors the CHECK on `listings.featured_reason`. Editorial and algorithmic placement are ordinary
+ *  product; `paid` is what requires a Sponsored disclosure at render time. */
+export type FeaturedReason = 'editorial' | 'algorithmic' | 'paid';
