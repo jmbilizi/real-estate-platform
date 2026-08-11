@@ -7,6 +7,15 @@ describe('toOpenApiDocument', () => {
   // rather than a typed wrapper.
   const doc: any = toOpenApiDocument();
 
+  // property-service owns the whole Communities → Properties → Units → Listings hierarchy, so its
+  // HTTP surface is the Property API, singular — `listings` is one resource within it. The same
+  // inversion #47 made when `libs/listing-contracts` became `libs/property-contracts`. The URL
+  // paths deliberately stay `/listings/*`: a service name is not a resource name.
+  it('publishes the singular Property API title, not a per-resource one', () => {
+    expect(doc.info.title).toBe('Cribstop Property API');
+    expect(Object.keys(doc.paths)).toContain('/listings');
+  });
+
   it('declares the three listings paths #22 will serve', () => {
     expect(Object.keys(doc.paths).sort()).toEqual([
       '/listings',

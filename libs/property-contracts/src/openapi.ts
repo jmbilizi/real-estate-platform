@@ -89,14 +89,22 @@ export function toOpenApiDocument() {
   return {
     openapi: '3.0.3',
     info: {
-      title: 'Cribstop Listings API',
+      // Singular, and deliberately not "Listings API": property-service owns the whole
+      // Communities → Properties → Units → Listings hierarchy, so `listings` is one resource
+      // within this API rather than the name of it. The paths below stay `/listings/*` — a
+      // service name is not a resource name.
+      title: 'Cribstop Property API',
       version: '1.0.0',
       description:
-        'Consumer listings search and detail. Every response carries the full broker/office ' +
-        'attribution block (NAR 7.58, PRD §6.2); no parameter can omit it. Results are read ' +
-        'through a compliance-enforcing view, so seller-suppressed listings are absent rather ' +
-        'than redacted. Free-text `query` matches title, address, city, neighborhood and zip — ' +
-        'never the description.',
+        'The Property API. `property-service` owns Communities → Properties → Units → Listings; ' +
+        '`listings` is the consumer resource within it. Every response carries the full ' +
+        'broker/office attribution block (NAR 7.58, PRD §6.2), there is no field-selection ' +
+        'parameter, and unknown query parameters are rejected with 400 — so no caller can omit ' +
+        'it. Results are read through a compliance-enforcing view, so seller-suppressed ' +
+        'listings are absent rather than redacted. Free-text `query` matches title, address, ' +
+        'city, neighborhood and zip — never the description, which is third-party MLS remarks ' +
+        'carrying a moderation state; making it searchable would turn phrases like "great for ' +
+        'families" into matchable terms, i.e. keyword-based steering (PRD §6.3).',
     },
     paths: {
       '/listings': {
