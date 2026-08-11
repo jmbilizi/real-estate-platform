@@ -77,23 +77,10 @@ RUN pnpm exec nx run property-service:prune --skip-nx-cache
 #
 # `--dir` keeps the CWD at /app so corepack still resolves the pnpm version
 # pinned in the root package.json rather than fetching pnpm/latest.
-#
-# `--lockfile-only` before the frozen install works around an Nx 22.0.1 bug in
-# @nx/js:prune-lockfile: `pruneProjectGraph`'s addNodesAndDependencies() looks up a
-# workspace dependency's project node via `graph.nodes[packageName]`, but
-# `graph.nodes` is keyed by the Nx *project* name, not the npm package name — and
-# @cribstop/property-contracts's project name (`property-contracts`) differs from its
-# scoped package name. The lookup misses, so the workspace lib's own dependencies
-# (zod) are never traversed into the pruned lockfile's `packages`, and a bare
-# `--frozen-lockfile` install fails with `ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY`. The
-# `--lockfile-only` pass re-resolves the pruned manifest (network is available in this
-# build stage) into a self-consistent lockfile before the frozen install locks it in.
 RUN node -e "const y=require('fs').readFileSync('pnpm-workspace.yaml','utf8'); \
       const i=y.indexOf('catalog:'); \
       require('fs').writeFileSync('dist/apps/services/property-service/pnpm-workspace.yaml', \
         i === -1 ? 'packages: []\n' : 'packages: []\n' + y.slice(i));" && \
-    pnpm --dir dist/apps/services/property-service \
-      install --prod --lockfile-only --ignore-scripts && \
     pnpm --dir dist/apps/services/property-service \
       install --prod --frozen-lockfile --ignore-scripts
 
