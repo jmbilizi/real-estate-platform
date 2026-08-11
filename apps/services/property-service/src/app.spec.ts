@@ -259,6 +259,32 @@ describe('GET /listings', () => {
       expect(response.status).toBe(400);
       expect(response.body.error.message).not.toContain('<script>');
     });
+
+    it('names the offending parameter, so a typo is debuggable', async () => {
+      // A strict-object rejection is reported as `unrecognized_keys`, whose `path` is EMPTY and whose
+      // names live in `issue.keys`. Reading only `path` reported every unknown parameter as
+      // "(request)" — technically a 400, but it told the caller nothing about which parameter was
+      // wrong, which defeats half the reason for rejecting typos in the first place.
+      const response = await request(createApp({ pool: createSearchPool() })).get(
+        '/listings?bed=3',
+      );
+
+      expect(response.status).toBe(400);
+      expect(response.body.error.message).toContain('bed');
+      expect(response.body.error.message).not.toContain('(request)');
+    });
+
+    it('does not reflect a hostile parameter NAME either', async () => {
+      // The key is caller-controlled too, so naming it must not turn the body into a reflection
+      // surface. Filtered to an identifier shape and truncated, not echoed.
+      const response = await request(createApp({ pool: createSearchPool() })).get(
+        '/listings?%3Cimg%20src%3Dx%3E=1',
+      );
+
+      expect(response.status).toBe(400);
+      expect(response.body.error.message).not.toContain('<img');
+      expect(response.body.error.message).toContain('(unnamed)');
+    });
   });
 });
 

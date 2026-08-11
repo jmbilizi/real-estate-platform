@@ -49,6 +49,17 @@ const invalidRequest = (message: string): ErrorBody => ({
  */
 type ParseResult = { ok: true; value: SearchRequest } | { ok: false; body: ErrorBody };
 
+/**
+ * A parameter name safe to reflect. Names ARE caller-controlled — an unknown-key issue reports the key
+ * the caller invented — so the value is filtered to an identifier-ish shape and truncated rather than
+ * echoed. Anything else becomes a fixed placeholder: naming the offending parameter is worth a lot for
+ * debuggability, and worth nothing if it turns the error body into a reflection surface.
+ */
+function safeParameterName(name: string): string {
+  const trimmed = name.slice(0, 40);
+  return /^[A-Za-z0-9_.-]+$/.test(trimmed) ? trimmed : '(unnamed)';
+}
+
 function parseSearchRequest(query: unknown): ParseResult {
   const parsed = searchRequestSchema.safeParse(query);
   if (parsed.success) {
@@ -56,9 +67,16 @@ function parseSearchRequest(query: unknown): ParseResult {
   }
   const offending = [
     ...new Set(
-      parsed.error.issues.map((issue) =>
-        issue.path.length > 0 ? String(issue.path[0]) : '(request)',
-      ),
+      parsed.error.issues.flatMap((issue) => {
+        // A strict-object rejection is reported as `unrecognized_keys`, whose `path` is EMPTY — the
+        // offending names live in `issue.keys`. Reading only `path` (the obvious implementation)
+        // therefore reports every typo'd or field-selection parameter as "(request)", which tells the
+        // caller nothing about which of their parameters was wrong. Verified against a live request.
+        if (issue.code === 'unrecognized_keys') {
+          return issue.keys.map(safeParameterName);
+        }
+        return issue.path.length > 0 ? [safeParameterName(String(issue.path[0]))] : ['(request)'];
+      }),
     ),
   ];
   return {
