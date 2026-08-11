@@ -6,9 +6,80 @@ Listings** hierarchy (PRD §3) and the consumer listing model (PRD §3.1).
 Backed by the `property_db` PostgreSQL database, which infra already provisions with `uuid-ossp`,
 `postgis`, `pg_trgm`, and `btree_gist` (`infra/k8s/base/configmaps/postgres.configmap.yaml`).
 
-> **Scope today.** This project currently ships the schema, migrations, a seed dataset, and
-> `GET /health` only. The search/detail REST API is #22; saved/favorited listings are #23. Property
-> relationship claims (PRD §3.2) are not modelled yet.
+> **Scope today.** Schema, migrations, a seed dataset, and the **Property API** — listings search,
+> detail and dataset freshness. Saved/favorited listings are #23; property relationship claims (PRD
+> §3.2) are not modelled yet.
+
+## The Property API
+
+This service's HTTP surface is the **Property API**, singular — it owns the whole Communities →
+Properties → Units → Listings hierarchy, so `listings` is one resource _within_ the API rather than
+the name of it. **The URL paths stay `/listings/*`: a service name is not a resource name.** A
+second resource later extends the same OpenAPI document rather than publishing a new one, because
+the aggregation key is a segment of the gateway's docs URL.
+
+| Endpoint             | Purpose                                                                     |
+| -------------------- | --------------------------------------------------------------------------- |
+| `GET /listings`      | Search. Envelope with an **exact** `total`, page info, and `appliedFilters` |
+| `GET /listings/meta` | Dataset freshness — callable without running a search                       |
+| `GET /listings/{id}` | Detail: the nested `{ property, unit, listing }` graph                      |
+| `GET /openapi.json`  | The generated document the gateway's `MMLib.SwaggerForOcelot` aggregates    |
+| `GET /health`        | Liveness/readiness                                                          |
+
+Request parsing, response shapes and the published OpenAPI document all come from
+`@cribstop/property-contracts`. This service adds SQL and HTTP and **never** a second copy of a
+shape. Never hand-write an `openapi.yaml`: it becomes a second source of truth that drifts from the
+request parser silently.
+
+### Rules that are not negotiable in this layer
+
+- **Every read goes through `listing_search_v`**, which _enforces_ the display rules rather than
+  carrying flags for callers to remember. There is no parameter, header or flag that bypasses it,
+  and none of its predicates is restated in a handler's `WHERE` clause — a second copy of a
+  compliance rule is a second place for it to drift.
+- **Columns are enumerated** (`src/listings/columns.ts`), never `SELECT *`. The view still carries
+  the unmasked `street_line` beside the masked `address` (**#48**), so enumerating keeps that value
+  out of this process entirely instead of reading it and dropping it later. `FORBIDDEN_COLUMNS`
+  names it and a unit test enforces the absence.
+- **No `COALESCE` on `beds`/`baths`/`sqft`.** NULL must fail the predicate, so a land parcel is
+  excluded by `beds>=2` rather than coerced to a fabricated `0`. `minSqft` is **living area**, never
+  lot size. Equally: no `COALESCE(neighborhood, city)`, which would make the neighborhood filter
+  match city names.
+- **No field-selection parameter, and unknown query parameters are rejected with 400.** That is the
+  only durable guarantee a caller cannot strip the NAR 7.58 attribution block, and it kills the
+  silent-typo'd-filter bug at the same time.
+- **Two compliance decisions have exactly one named function each**, so a rule change is one edit:
+  `visibleListingTypesFor()` (`src/listings/sold-gate.ts`) decides sold visibility —
+  `listingType=all` means sale + rent and sold is opt-in — and `applyAddressSuppression()`
+  (`src/listings/suppression.ts`) nulls `unit.unitNumber` whenever the view masked the address.
+- **`404` is byte-identical** for an unknown id, a soft-deleted id, a view-excluded id and a
+  malformed id. A 403 or a distinct message is a confirmation oracle that defeats the seller's
+  opt-out.
+- **Sorts are total orders.** Every sort ends in an `id` tiebreaker or page 2 repeats page 1 and the
+  exact `total` stops meaning anything. `recommended` is `featured DESC, last_updated DESC, id DESC`
+  and is identical for every user — **no per-user ranking signal may be introduced**, now or later:
+  personalised ranking on housing inventory is a steering vector and goes through product and legal,
+  not a sort key.
+- **No `isSaved`/`isFavorited`** (#23/#25 own saved state). The moment they appear every search
+  response becomes per-user and uncacheable — a permanent architectural cost for a boolean.
+
+### Two traps this layer has already been bitten by
+
+- **Search runs its `COUNT(*)` and its page in one `REPEATABLE READ READ ONLY` transaction.**
+  `now()` is transaction-scoped, and the view compares `ends_at > now()`, so separate transactions
+  can disagree about which rows match `openHouse=true` — `total` would then describe a result set
+  the page never came from.
+- **Express 4 does not await handlers.** An unforwarded rejection leaves the request hanging until
+  the client times out, which presents as a gateway 504 and sends whoever debugs it to the wrong
+  layer. Every handler goes through the `asyncRoute` wrapper in `src/listings/routes.ts`.
+
+### Caching
+
+`/listings` and `/listings/{id}` are `public, max-age=60` — they embed a time-relative fact (the
+upcoming open house), so 60s is the ceiling. Deliberately **not** `no-store`: these payloads carry
+no PII and must not start to. `/listings/meta` is
+`public, max-age=60, s-maxage=300, stale-while-revalidate=60`; the browser TTL stays short because
+`Footer` renders on every route, so a long session must not drift.
 
 ## Configuration
 
