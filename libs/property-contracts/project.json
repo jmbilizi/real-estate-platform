@@ -1,5 +1,5 @@
 {
-  "name": "property-contracts",
+  "name": "@cribstop/property-contracts",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/property-contracts/src",
   "projectType": "library",

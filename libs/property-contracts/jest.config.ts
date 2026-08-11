@@ -1,5 +1,5 @@
 export default {
-  displayName: 'property-contracts',
+  displayName: '@cribstop/property-contracts',
   preset: '../../jest.preset.js',
   testEnvironment: 'node',
   transform: {
