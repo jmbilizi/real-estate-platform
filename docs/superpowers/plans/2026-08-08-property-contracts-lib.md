@@ -16,7 +16,7 @@ endpoints.
 pnpm workspaces.
 
 **Ticket:** [#47](https://github.com/jmbilizi/real-estate-platform/issues/47) · **Spec:**
-`docs/superpowers/specs/2026-08-08-listing-contracts-lib-design.md`
+`docs/superpowers/specs/2026-08-08-property-contracts-lib-design.md`
 
 ## Global Constraints
 
