@@ -46,17 +46,19 @@ import the types and schemas instead. `#22` is where this service starts actuall
 
 The Dockerfile must keep its `libs/property-contracts` `COPY` lines (both the `package.json`-only
 copy in the `deps` stage and the full-source copy in `builder`) or the image goes stale silently the
-next time the contract changes — `tools/ci/affected-images.js` derives the rebuild matrix from those
-`COPY` sources, not from Nx's affected graph.
+next time the contract changes — `tools/ci/affected-images.js` **narrows** the Nx-affected CI
+image-rebuild matrix using those `COPY` sources (it never adds a project Nx's own affected graph
+didn't already call for, and fails open when it can't resolve a Dockerfile).
 
-**Nx 22.0.1's `@nx/js:prune-lockfile` cannot prune a scoped workspace package whose npm name differs
-from its Nx project name** (`@cribstop/property-contracts` vs. project `property-contracts`):
-`pruneProjectGraph`'s dependency walk looks the project up by package name in a map keyed by project
-name, misses, and silently drops that package's own dependencies (`zod`) from the pruned
-`pnpm-lock.yaml`. The Dockerfile works around this with a `pnpm install --lockfile-only` pass
-immediately before the `--frozen-lockfile` production install — don't remove it without re-verifying
-`pnpm run skaffold:services:deploy` end to end, and re-check whether an Nx upgrade has fixed the
-upstream bug before deleting the workaround.
+**`libs/property-contracts`'s Nx project name must stay identical to its npm package name**
+(`@cribstop/property-contracts`). Nx 22.0.1's `@nx/js:prune-lockfile` looks a workspace dependency
+up by **package** name in a map keyed by **project** name; a mismatch makes the lookup miss and
+silently drops that package's own dependencies (`zod`) from this service's pruned `pnpm-lock.yaml`,
+breaking the `--frozen-lockfile` production install with `ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY`.
+`#47` originally worked around this with a `pnpm install --lockfile-only` pass before the frozen
+install; that workaround is gone now that the names match — see `libs/property-contracts/CLAUDE.md`
+(ticket #55 tracks the underlying upstream defects). If a future rename ever lets the two names
+diverge again, expect this exact failure to come back.
 
 ## Commands
 

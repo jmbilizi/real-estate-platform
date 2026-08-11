@@ -11,6 +11,7 @@ marketplace), **Connect** (community). Consumer brand Cribstop.com, brokered by 
 - `apps/services/account-service/CLAUDE.md` — .NET identity/auth service
 - `apps/services/property-service/CLAUDE.md` — Node property/listings domain service
 - `apps/services/multi-model-inference/CLAUDE.md` — Python inference service
+- `libs/property-contracts/CLAUDE.md` — shared listings wire-contract library
 
 ## Key Docs (read before deep work)
 

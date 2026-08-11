@@ -1,7 +1,8 @@
 # property-contracts (`@cribstop/property-contracts`)
 
 The single definition of the listings wire contract (PRD §3.1). Nx project name:
-**`property-contracts`**. Port n/a — this is a library, imported at build time, never served.
+**`@cribstop/property-contracts`** — deliberately identical to the npm package name; see Rules
+below. Port n/a — this is a library, imported at build time, never served.
 
 **`libs/` was empty before this package landed.** Its shape — targets, tags, `package.json`
 identity, workspace registration — is the template the next four Node libraries will copy. Getting
@@ -70,17 +71,27 @@ don't build on it.
 ## Commands
 
 ```bash
-pnpm exec nx build property-contracts        # tsc build (@nx/js:tsc)
-pnpm exec nx test property-contracts         # Jest
-pnpm exec nx lint property-contracts
-pnpm exec nx type-check property-contracts   # tsc -b -- follows project references; -p would not
-pnpm exec nx format property-contracts       # also: format-check
+pnpm exec nx build @cribstop/property-contracts        # tsc build (@nx/js:tsc)
+pnpm exec nx test @cribstop/property-contracts         # Jest
+pnpm exec nx lint @cribstop/property-contracts
+pnpm exec nx type-check @cribstop/property-contracts   # tsc -b -- follows project references; -p would not
+pnpm exec nx format @cribstop/property-contracts       # also: format-check
 ```
 
 ## Rules
 
-- Package name `@cribstop/property-contracts`; Nx project name `property-contracts`. Keep these
-  distinct — the pnpm package name is scoped, the Nx project name is not.
+- **The Nx project name must equal the npm package name** — both are `@cribstop/property-contracts`.
+  This is the opposite of an earlier draft of this rule, which said to keep them distinct; that was
+  backwards and shipped a real bug (#47, ticket #55 tracks the upstream defects).
+  `@nx/js:prune-lockfile` on Nx 22.0.1 looks up a workspace dependency's project node by **package**
+  name in a map keyed by **project** name (`project-graph-pruning.js:98-104` vs. `:22-24`); when the
+  two names differ the lookup misses and the library's own dependencies (here, `zod`) are silently
+  dropped from a consumer's pruned `pnpm-lock.yaml`, breaking that consumer's `--frozen-lockfile`
+  production install with `ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY`. Moving the dependency to
+  `devDependencies` is not a fallback on this Nx version — the executor never rewrites workspace
+  specifiers there either, so it trades one failure for a guaranteed `ERR_PNPM_OUTDATED_LOCKFILE`.
+  This is the template the next four Node libraries copy: give every one of them a scoped Nx project
+  name that matches its package name from the start.
 - Only dependency: `zod` (pinned `^4.4.3`). Do not add a JSON-Schema converter package — Zod v4
   emits `z.toJSONSchema()` natively, target `"openapi-3.0"` for legible `nullable: true` rendering
   instead of the draft-2020-12 `anyOf` form.
@@ -90,6 +101,8 @@ pnpm exec nx format property-contracts       # also: format-check
 - `description` belongs on the detail shape only, never the list row — it is the field carrying the
   most Fair Housing steering risk and does not belong on the widest, most-cached surface.
 - Any consuming Dockerfile must declare this package's path in its `COPY`/`--mount=type=bind`
-  sources. `tools/ci/affected-images.js` derives the CI image-rebuild matrix from those `COPY`
-  sources, not from Nx's affected graph — a consumer that depends on this package without copying it
-  will build locally and then silently fail to rebuild its image when the contract changes.
+  sources. `tools/ci/affected-images.js` **narrows** the Nx-affected CI image-rebuild matrix using
+  those `COPY` sources — it never adds a project Nx's own affected graph didn't already call for,
+  and it fails open (keeps a project in the matrix) whenever it cannot resolve or parse a
+  Dockerfile. A consumer that depends on this package without copying it will build locally and then
+  silently fail to rebuild its image when the contract changes.
