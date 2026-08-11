@@ -74,16 +74,22 @@ export function buildSearchQuery(request: SearchRequest): {
   // WHERE treats as not-matching. That is exactly the behaviour a NULL column should have here
   // (a masked address contributes nothing, never a false match), and it keeps every COALESCE out
   // of this file.
+  // The parentheses are load-bearing, not cosmetic. `AND` binds tighter than `OR` in SQL, so an
+  // unwrapped disjunction spliced into an AND-joined list silently reassociates to
+  // `(listing_type AND zip AND title_match) OR address_match OR city_match OR ...` — and every
+  // branch after the first then bypasses EVERY other filter, including the sold gate. A free-text
+  // search would have returned sold listings under `listingType=all`. Any condition added here
+  // that is internally a disjunction must be wrapped the same way.
   if (request.query) {
     const q = bind(request.query);
     conditions.push(
-      [
+      `(${[
         `strpos(lower(v.title), lower(${q})) > 0`,
         `strpos(lower(v.address), lower(${q})) > 0`,
         `strpos(lower(v.city), lower(${q})) > 0`,
         `strpos(lower(v.neighborhood), lower(${q})) > 0`,
         `strpos(v.zip, ${q}) > 0`,
-      ].join('\n      OR '),
+      ].join('\n       OR ')})`,
     );
   }
 
@@ -103,6 +109,13 @@ export function buildSearchQuery(request: SearchRequest): {
   // No COALESCE on beds/baths/sqft: NULL must fail the predicate so a land parcel (NULL beds) is
   // excluded by `beds>=2` rather than being coerced to 0 and matching (or failing to match) on a
   // fabricated value.
+  //
+  // `typeof === 'number'`, so an explicit `beds=0` IS applied as `v.beds >= 0` rather than being
+  // treated as "unset". filters.ts guards with `filters.beds && filters.beds > 0`, i.e. it discards
+  // a zero — but discarding a parameter the caller sent is precisely what the AC forbids, and the
+  // observable difference is real: `beds >= 0` still excludes land parcels, because NULL fails it.
+  // Callers wanting "any bed count" must omit the parameter, which is what the OpenAPI description
+  // says. Same reasoning for `baths` and `minSqft`.
   if (typeof request.beds === 'number') {
     conditions.push(`v.beds >= ${bind(request.beds)}`);
   }

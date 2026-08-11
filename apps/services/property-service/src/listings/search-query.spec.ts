@@ -45,6 +45,42 @@ describe('buildSearchQuery', () => {
     expect(where).toContain('lower(v.title)');
   });
 
+  // Regression: the free-text group was originally spliced in unparenthesised. Because `AND` binds
+  // tighter than `OR`, the emitted predicate reassociated to
+  // `(listing_type AND zip AND title_match) OR address_match OR city_match OR ...`, so every OR
+  // branch after the first bypassed EVERY other filter — including the sold gate, which means a
+  // free-text search returned sold listings under `listingType=all`. The two assertions below are
+  // deliberately structural rather than string-contains: the previous test above passed against the
+  // broken output, because both substrings were present either way.
+  it('parenthesises the free-text disjunction so it cannot escape the AND chain', () => {
+    const { where } = build({ zip: '22314', query: 'King' });
+
+    expect(where).toMatch(/AND \(strpos\(lower\(v\.title\)/);
+    expect(where).toMatch(/strpos\(v\.zip, \$\d+\) > 0\)/);
+  });
+
+  it('never leaves a bare OR at the top level of the predicate', () => {
+    // The invariant, stated once for every current and future condition: splitting on the top-level
+    // AND separator must yield conditions that are each either OR-free or fully bracketed. Any new
+    // disjunctive filter added to buildSearchQuery is caught here without a bespoke test.
+    const { where } = build({
+      zip: '22314',
+      query: 'King',
+      street: 'King',
+      amenities: 'Pool,Garage',
+      beds: '2',
+      openHouse: 'true',
+    });
+
+    for (const condition of where.split('\n  AND ')) {
+      const trimmed = condition.trim();
+      if (/\bOR\b/.test(trimmed)) {
+        expect(trimmed.startsWith('(')).toBe(true);
+        expect(trimmed.endsWith(')')).toBe(true);
+      }
+    }
+  });
+
   it('requires every requested amenity, not any', () => {
     const { where, params } = build({ amenities: 'Pool,Garage' });
     expect(where).toContain('v.amenities @> ');
