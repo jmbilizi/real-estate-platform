@@ -41,6 +41,8 @@ const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 
+const { resolveProjectRoot } = require('../lib/project-root');
+
 const IMAGE_NAME_MAP = 'tools/docker/image-name-map.json';
 
 /**
@@ -122,18 +124,18 @@ function changedFiles(base, head) {
  * Returns null on any failure (nx not resolvable, project not found, unparseable output). The
  * caller treats that exactly like an unresolvable Dockerfile: fail open, keep the project.
  */
+/**
+ * Resolves a project's root by reading `project.json` files — never by spawning a shell.
+ *
+ * A project name arrives here from the CI matrix, so interpolating it into a shell was both an
+ * injection shape and a correctness bug for scoped names. `pnpm.cmd` with the shell disabled is not
+ * an option either: Node throws EINVAL executing a `.cmd` without one. See tools/lib/project-root.js.
+ *
+ * Returns null for an unknown project, which this script treats as "keep it" — the fail-open
+ * contract in the module header.
+ */
 function projectRoot(project) {
-  try {
-    const out = execFileSync('pnpm', ['exec', 'nx', 'show', 'project', project, '--json'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-      shell: true,
-    });
-    const parsed = JSON.parse(out);
-    return typeof parsed.root === 'string' ? parsed.root : null;
-  } catch {
-    return null;
-  }
+  return resolveProjectRoot(project);
 }
 
 /**

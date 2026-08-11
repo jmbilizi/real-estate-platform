@@ -26,6 +26,12 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
+// Resolves a project name to its on-disk root by reading project.json files. Interpolating the name
+// into `libs/${projectName}/Dockerfile` breaks for a scoped Nx project name (e.g.
+// `@cribstop/property-contracts`), which would mangle into a bogus nested path. Reading the
+// manifests also keeps the project name out of any shell — see tools/lib/project-root.js.
+const { resolveProjectRoot } = require('../lib/project-root');
+
 // ANSI color codes
 const colors = {
   reset: '\x1b[0m',
@@ -161,27 +167,6 @@ function loadImageNameMap() {
     }
   }
   return map;
-}
-
-/**
- * Resolves a project's on-disk root via the Nx project graph (`nx show project --json`).
- *
- * Interpolating the project name straight into `libs/${projectName}/Dockerfile` breaks for a
- * scoped Nx project name (e.g. `@cribstop/property-contracts`), which would mangle into a bogus
- * nested path. The project's own `root`, as Nx reports it, is correct regardless of naming.
- *
- * Returns null on any failure (nx not resolvable, project not found, unparseable output) so the
- * caller can fall back to the legacy path guesses below.
- */
-function resolveProjectRoot(projectName) {
-  const result = run(`pnpm exec nx show project ${projectName} --json`, { silent: true });
-  if (!result.success) return null;
-  try {
-    const parsed = JSON.parse(result.output);
-    return typeof parsed.root === 'string' ? parsed.root : null;
-  } catch {
-    return null;
-  }
 }
 
 function findDockerfile(projectName) {

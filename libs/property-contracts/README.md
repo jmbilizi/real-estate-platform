@@ -1,11 +1,24 @@
-# property-contracts
+# property-contracts (`@cribstop/property-contracts`)
 
-This library was generated with [Nx](https://nx.dev).
+The single definition of the listings wire contract (PRD §3.1). One set of Zod schemas, from which
+runtime request validation, the TypeScript types the web app renders against, and the OpenAPI
+document the gateway aggregates are all derived — so none of the three can drift from the others.
 
-## Building
+Consumed via pnpm workspaces: declare `"@cribstop/property-contracts": "workspace:*"` in a
+consumer's `package.json`. Never add a `tsconfig` `paths` entry for it.
 
-Run `nx build @cribstop/property-contracts` to build the library.
+See `CLAUDE.md` in this directory for what belongs here, the structural prohibitions the schemas
+enforce, and why the Nx project name is scoped to match the npm package name.
 
-## Running unit tests
+## Commands
 
-Run `nx test @cribstop/property-contracts` to execute the unit tests via [Jest](https://jestjs.io).
+Always use the `pnpm exec nx` wrapper rather than a bare `nx` — repo rule, for consistent tool
+resolution and cross-platform behaviour.
+
+```bash
+pnpm exec nx build @cribstop/property-contracts        # tsc build (@nx/js:tsc)
+pnpm exec nx test @cribstop/property-contracts         # Jest
+pnpm exec nx lint @cribstop/property-contracts
+pnpm exec nx type-check @cribstop/property-contracts
+pnpm exec nx format @cribstop/property-contracts       # also: format-check
+```
