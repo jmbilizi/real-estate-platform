@@ -96,8 +96,11 @@ export function toOpenApiDocument() {
       title: 'Cribstop Property API',
       version: '1.0.0',
       description:
-        'The Property API. `property-service` owns Communities → Properties → Units → Listings; ' +
-        '`listings` is the consumer resource within it. Every response carries the full ' +
+        'The Property API. `property-service` owns the Communities → Properties → Units → ' +
+        'Listings hierarchy; `listings` is the resource this version of the document exposes, and ' +
+        'a later resource extends THIS document rather than publishing a second one — the ' +
+        'aggregation key is part of the docs URL, so splitting would break every bookmark. Every ' +
+        'response carries the full ' +
         'broker/office attribution block (NAR 7.58, PRD §6.2), there is no field-selection ' +
         'parameter, and unknown query parameters are rejected with 400 — so no caller can omit ' +
         'it. Results are read through a compliance-enforcing view, so seller-suppressed ' +
