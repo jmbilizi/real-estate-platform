@@ -264,6 +264,13 @@ database, which is why nearly all of the logic lives in them:
   the raw `YYYY-MM-DD` string, because the contract declares `closeDate` as `z.iso.date()` and,
   worse, west of UTC the instant lands on the previous calendar day — a sale would publish as having
   closed a day early, with no type error anywhere.
+- **`pg`'s type parsers never see a value nested inside `json_agg`/`json_build_object`.** Postgres
+  serialises the JSON itself, so a `timestamptz` arrives as the string `...+00:00` rather than a
+  `Date` — and the contract's `z.iso.datetime()` accepts only the `Z` form. This shipped a 500 on
+  every `GET /listings/{id}` with an upcoming open house, while the card path was fine because it
+  converts explicitly. **Route every instant through `instant()`**, whichever query produced it: one
+  wire format per service, not one per code path. The class of bug is wider than timestamps — any
+  per-column parser you rely on is bypassed inside a JSON aggregate.
 - **A disjunctive filter must be bracketed** before it joins the AND-chain in `search-query.ts`.
   `AND` binds tighter than `OR`, so an unbracketed group reassociates and every branch after the
   first bypasses _every_ other filter, including the sold gate. There is a general invariant test
