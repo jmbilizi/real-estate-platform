@@ -13,7 +13,7 @@ describe('published document identity', () => {
     const response = await axios.get('/openapi.json');
 
     expect(response.status).toBe(200);
-    expect(response.data.info.title).toBe('Cribstop Property API');
+    expect(response.data.info.title).toBe('Property Service');
     expect(Object.keys(response.data.paths).sort()).toEqual([
       '/listings',
       '/listings/meta',

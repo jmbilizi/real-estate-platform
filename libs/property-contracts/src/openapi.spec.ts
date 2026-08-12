@@ -7,12 +7,17 @@ describe('toOpenApiDocument', () => {
   // rather than a typed wrapper.
   const doc: any = toOpenApiDocument();
 
-  // property-service owns the whole Communities → Properties → Units → Listings hierarchy, so its
-  // HTTP surface is the Property API, singular — `listings` is one resource within it. The same
-  // inversion #47 made when `libs/listing-contracts` became `libs/property-contracts`. The URL
-  // paths deliberately stay `/listings/*`: a service name is not a resource name.
-  it('publishes the singular Property API title, not a per-resource one', () => {
-    expect(doc.info.title).toBe('Cribstop Property API');
+  // `<Domain> Service`, the shape every other aggregated document already uses (`Account
+  // Service`, `Inference Service`). Not named for a client — `cribstop-next` is one consumer of
+  // this document, not its owner — and not named for a resource: property-service owns the whole
+  // Communities → Properties → Units → Listings hierarchy, so `listings` is one resource within
+  // it (the same inversion #47 made when `libs/listing-contracts` became
+  // `libs/property-contracts`). The URL paths deliberately stay `/listings/*`: a service name is
+  // not a resource name, and the gateway's `/property/*` namespace lives in its upstream
+  // templates, not in this document.
+  it('publishes the service-level title, named for neither a client nor a resource', () => {
+    expect(doc.info.title).toBe('Property Service');
+    expect(doc.info.title).not.toMatch(/cribstop/i);
     expect(Object.keys(doc.paths)).toContain('/listings');
   });
 

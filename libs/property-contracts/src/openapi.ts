@@ -106,22 +106,33 @@ export function toOpenApiDocument() {
   return {
     openapi: '3.0.3',
     info: {
-      // Singular, and deliberately not "Listings API": property-service owns the whole
-      // Communities → Properties → Units → Listings hierarchy, so `listings` is one resource
-      // within this API rather than the name of it. The paths below stay `/listings/*` — a
-      // service name is not a resource name.
-      title: 'Cribstop Property API',
+      // `<Domain> Service`, matching every other entry the gateway aggregates (`Account Service`,
+      // `Inference Service`). Deliberately NOT named for a client: `cribstop-next` is one consumer
+      // of this document, not its owner, and a document named for one client is wrong the moment a
+      // second one (an agent tool, a partner feed) reads it. Deliberately not "Listings API"
+      // either: property-service owns the whole Communities → Properties → Units → Listings
+      // hierarchy, so `listings` is one resource within this API rather than the name of it. The
+      // paths below stay `/listings/*` and mirror the gateway's DownstreamPathTemplate values — a
+      // service name is not a resource name, and the `/property/*` namespace is applied by the
+      // gateway's upstream templates, not restated here.
+      title: 'Property Service',
       version: '1.0.0',
       description:
-        'The Property API. `property-service` owns the Communities → Properties → Units → ' +
+        "`property-service`'s HTTP API. The service owns the Communities → Properties → Units → " +
         'Listings hierarchy; `listings` is the resource this version of the document exposes, and ' +
         'a later resource extends THIS document rather than publishing a second one — the ' +
         'aggregation key is part of the docs URL, so splitting would break every bookmark. Every ' +
         'response carries the full ' +
         'broker/office attribution block (NAR 7.58, PRD §6.2), there is no field-selection ' +
         'parameter, and unknown query parameters are rejected with 400 — so no caller can omit ' +
-        'it. Results are read through a compliance-enforcing view, so seller-suppressed ' +
-        'listings are absent rather than redacted. Free-text `query` matches title, address, ' +
+        'it. Results are read through a compliance-enforcing view that applies two distinct ' +
+        'seller opt-outs. A listing withheld from internet display is absent entirely: omitted ' +
+        'from search results and from `total`, and indistinguishable from an unknown id on detail ' +
+        '(the same 404, byte for byte). A listing whose street address is withheld is still ' +
+        'returned, with `address`, `latitude` and `longitude` null together and `unit.unitNumber` ' +
+        'withheld on detail, so the address cannot be reconstructed; such rows remain in `total` ' +
+        'and simply have no map coordinates — never substitute a city or ZIP centroid for them. ' +
+        'Free-text `query` matches title, address, ' +
         'city, neighborhood and zip — never the description, which is third-party MLS remarks ' +
         'carrying a moderation state; making it searchable would allow keyword-based steering on ' +
         'protected-class language (PRD §6.3).',

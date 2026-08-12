@@ -450,7 +450,7 @@ describe('GET /openapi.json', () => {
       .get('/openapi.json')
       .expect(200);
 
-    expect(response.body.info.title).toBe('Cribstop Property API');
+    expect(response.body.info.title).toBe('Property Service');
     expect(Object.keys(response.body.paths).sort()).toEqual([
       '/listings',
       '/listings/meta',
