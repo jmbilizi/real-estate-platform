@@ -1,21 +1,15 @@
-# Build context: workspace root (set by build-image.js / Skaffold)
-# Monorepo-aware — installs from the workspace root so pnpm resolves catalog:
-# versions and hoisted deps correctly. Mirrors apps/clients/cribstop/next/Dockerfile.
+# Build context is the workspace root, so pnpm resolves catalog: versions and hoisted deps.
 
-# Debian (glibc), NOT alpine. musl's resolver fails cluster-DNS lookups here with
-# `EAI_AGAIN postgres-svc` — verified: the same name resolves fine from the Debian-based
-# account-service pod, and an alpine build of this service crash-looped its migrate
-# initContainer 7 times against a healthy postgres-svc. Do not "optimize" this to alpine.
+# Debian (glibc), NOT alpine — musl fails cluster-DNS lookups (`EAI_AGAIN postgres-svc`); see the
+# root CLAUDE.md gotcha. An alpine build crash-looped this service's migrate initContainer 7 times.
 FROM node:20-slim AS base
 
 # ── Stage 1: Install workspace dependencies ───────────────────────────────────
 FROM base AS deps
 ARG COPY_CERTS=false
 
-# Optional: Enterprise CA setup (local dev only, skipped in CI/CD).
-# Same shape as apps/services/multi-model-inference/Dockerfile: node:20-slim ships no
-# CA bundle at all, so ca-certificates is installed first (apt over HTTP, no TLS needed
-# to bootstrap) and the enterprise root is then registered via update-ca-certificates.
+# node:20-slim ships no CA bundle at all, so ca-certificates is installed first (apt over HTTP,
+# no TLS needed to bootstrap) before the enterprise root is registered. COPY_CERTS is local-dev only.
 RUN --mount=type=bind,source=.workspace-certs,target=/tmp/certs,readonly \
     if [ "$COPY_CERTS" = "true" ] && [ -f /tmp/certs/workspace-enterprise-roots.pem ]; then \
       echo "Installing enterprise CA certificates for local development..." && \
@@ -39,7 +33,6 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 # the ones this image doesn't build.
 COPY apps/clients/cribstop/next/package.json ./apps/clients/cribstop/next/
 COPY apps/services/property-service/package.json ./apps/services/property-service/
-# Every workspace member's manifest must be present for --frozen-lockfile.
 COPY libs/property-contracts/package.json ./libs/property-contracts/
 # Root package.json's "preinstall" hook requires this script — pnpm runs
 # lifecycle scripts for the root project too, even inside a container build.
@@ -48,9 +41,8 @@ COPY tools/node/scripts/ensure-pnpm.js ./tools/node/scripts/ensure-pnpm.js
 RUN corepack enable pnpm && pnpm install --frozen-lockfile
 
 # ── Stage 2: Build, then resolve production deps ─────────────────────────────
-# FROM deps (not base) so this stage inherits the CA bundle, the corepack cache
-# and node_modules. Without the inherited certs and pnpm pin, corepack tries to
-# fetch pnpm/latest from npmjs.org and fails behind SSL inspection.
+# FROM deps (not base) to inherit the CA bundle, corepack cache and node_modules — without them
+# corepack tries to fetch pnpm/latest from npmjs.org and fails behind SSL inspection.
 FROM deps AS builder
 WORKDIR /app
 
@@ -59,24 +51,15 @@ COPY tools ./tools
 COPY apps/services/property-service ./apps/services/property-service
 COPY libs/property-contracts ./libs/property-contracts
 
-# `prune` (not `build`) — it depends on build and additionally emits a pruned
-# package.json + pnpm-lock.yaml into dist. Those two files are what make the
-# production install below both slim and reproducible; a bare `nx build` emits
-# the package.json but no lockfile, leaving --frozen-lockfile nothing to honour.
+# `prune`, not `build`: it depends on build and additionally emits a pruned package.json AND
+# pnpm-lock.yaml, and the production install below needs that lockfile for --frozen-lockfile.
 RUN pnpm exec nx run property-service:prune --skip-nx-cache
 
-# Install production deps *here* rather than in the runtime image, so the runtime
-# image needs no package manager and no network at all.
-#
-# The pruned lockfile inherits the workspace's `catalogs` config, and a frozen
-# install refuses to proceed when that config isn't visible
-# (ERR_PNPM_LOCKFILE_CONFIG_MISMATCH). Giving the pruned output its own
-# pnpm-workspace.yaml carrying only the catalog makes it a self-contained
-# workspace root whose config matches the lockfile exactly — `--ignore-workspace`
-# cannot be used here because it would hide the catalog again.
-#
-# `--dir` keeps the CWD at /app so corepack still resolves the pnpm version
-# pinned in the root package.json rather than fetching pnpm/latest.
+# Production deps are resolved here, not in the runtime image, so the runtime needs no package
+# manager and no network. The pruned lockfile inherits the workspace's `catalogs` config and a
+# frozen install fails when that config isn't visible (ERR_PNPM_LOCKFILE_CONFIG_MISMATCH), so the
+# pruned output gets its own pnpm-workspace.yaml carrying the catalog — `--ignore-workspace` would
+# hide the catalog again. `--dir` keeps the CWD at /app so corepack resolves the pinned pnpm version.
 RUN node -e "const y=require('fs').readFileSync('pnpm-workspace.yaml','utf8'); \
       const i=y.indexOf('catalog:'); \
       require('fs').writeFileSync('dist/apps/services/property-service/pnpm-workspace.yaml', \
@@ -97,9 +80,8 @@ RUN groupadd --system --gid 1001 nodejs && \
 # The bundle plus the node_modules resolved in the builder stage.
 COPY --from=builder --chown=nodeapp:nodejs /app/dist/apps/services/property-service ./
 
-# migrate.js and migrations/ are plain CommonJS read at runtime — neither is part of the
-# webpack bundle, so both must be copied in explicitly. Without them the migrate
-# initContainer has nothing to run or nothing to apply.
+# migrate.js and migrations/ are read at runtime and are not in the webpack bundle, so they must be
+# copied explicitly — without them the migrate initContainer has nothing to run or nothing to apply.
 COPY --from=builder --chown=nodeapp:nodejs /app/apps/services/property-service/migrate.js ./migrate.js
 COPY --from=builder --chown=nodeapp:nodejs /app/apps/services/property-service/migrations ./migrations
 
