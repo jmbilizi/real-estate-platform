@@ -3,7 +3,7 @@
   "Active": true,
   "Routes": [
     {
-      "UpstreamPathTemplate": "/listings/meta",
+      "UpstreamPathTemplate": "/property/listings/meta",
       "UpstreamHttpMethod": ["GET"],
       "DownstreamPathTemplate": "/listings/meta",
       "DownstreamScheme": "http",
@@ -22,7 +22,7 @@
       }
     },
     {
-      "UpstreamPathTemplate": "/listings",
+      "UpstreamPathTemplate": "/property/listings",
       "UpstreamHttpMethod": ["GET"],
       "DownstreamPathTemplate": "/listings",
       "DownstreamScheme": "http",
@@ -41,7 +41,7 @@
       }
     },
     {
-      "UpstreamPathTemplate": "/listings/{id}",
+      "UpstreamPathTemplate": "/property/listings/{id}",
       "UpstreamHttpMethod": ["GET"],
       "DownstreamPathTemplate": "/listings/{id}",
       "DownstreamScheme": "http",
@@ -63,10 +63,10 @@
   "SwaggerEndPoints": [
     {
       "Key": "Property",
-      "TransformByOcelotConfig": false,
+      "TransformByOcelotConfig": true,
       "Config": [
         {
-          "Name": "Property API",
+          "Name": "Property Service",
           "Version": "v1",
           "Url": "http://property-service-svc:3002/openapi.json"
         }

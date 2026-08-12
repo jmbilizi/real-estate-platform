@@ -195,16 +195,35 @@ native and every primary key uses it rather than random `uuid_generate_v4()`.
 
 ## The Property API (`src/listings/`)
 
-This service's HTTP surface is the **Property API**, singular: it owns the whole Communities →
-Properties → Units → Listings hierarchy, so `listings` is one resource _within_ the API rather than
-the name of it. **The URL paths stay `/listings/*` — a service name is not a resource name**, and
-the resource-level names (`listing_search_v`, the `listings` table, `ListingCardRow`,
+This service's HTTP surface is the **Property API** in prose, singular: it owns the whole
+Communities → Properties → Units → Listings hierarchy, so `listings` is one resource _within_ the
+API rather than the name of it. **"Property API" is informal prose only — never a metadata value.**
+The published `info.title` is **`Property Service`**, matching the two entries the gateway already
+aggregates (`Account Service`, `Inference Service`), and it is deliberately named for neither a
+client (`cribstop-next` is one consumer of the document, not its owner) nor a resource. The
+resource-level names (`listing_search_v`, the `listings` table, `ListingCardRow`,
 `ListingsEnvelope`, the `searchListings`/`getListing` operation ids) are correct as they are. Do not
-let the API-identity rename spread onto them.
+let the API-identity naming spread onto them.
 
 `GET /listings`, `GET /listings/meta`, `GET /listings/{id}`, `GET /openapi.json`, `GET /health`. A
 second resource later **extends the same OpenAPI document** rather than publishing a second one: the
 aggregation key is a segment of the gateway's docs URL, so splitting breaks every bookmark.
+
+**This service serves `/listings/*`; consumers call `/property/listings/*`.** Every service is
+namespaced at the gateway by its bounded context, and Ocelot rewrites — the upstream templates in
+`apps/api-gateway/Configuration/Routes/property-service-routes.json` are `/property/listings`,
+`/property/listings/meta` and `/property/listings/{id}`, while the downstream templates (and
+therefore this service's routes and the OpenAPI document's `paths`) stay `/listings/*`. Two
+consequences that bite:
+
+- Because upstream and downstream now differ, that route file **must** keep
+  `"TransformByOcelotConfig": true`, or `MMLib.SwaggerForOcelot` republishes the raw `/listings`
+  paths on the aggregated docs page and every "Try it out" 404s against a path the gateway does not
+  expose. `inference-service-routes.json` sets it for exactly this reason; `account` can leave it
+  false only because its paths are identical on both sides.
+- The namespace never subsumes the resource segment. `/property/{id}` is forbidden: it collides
+  permanently with every future literal segment under `/property/`, and the durable-home resource
+  gets its own — `/property/homes/{id}`, never `/property/properties/{id}`.
 
 One file per responsibility, and the split is deliberate — the pure ones are unit-testable with no
 database, which is why nearly all of the logic lives in them:

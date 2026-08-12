@@ -37,6 +37,14 @@ describe('no field-selection parameter is published', () => {
   });
 });
 
+/**
+ * The published paths mirror the gateway's **downstream** templates, not its upstream ones. The
+ * gateway namespaces this service at `/property/*` and Ocelot rewrites onto the `/listings/*` this
+ * service actually serves, so `MMLib.SwaggerForOcelot` has to transform the document — which it can
+ * only do by matching each published path against a `DownstreamPathTemplate`. That is what this
+ * assertion pins, and it is why the route file must keep `TransformByOcelotConfig: true`: drift on
+ * either side republishes paths the gateway does not expose and every "Try it out" 404s.
+ */
 describe('path templates match the gateway route file byte-for-byte', () => {
   it("has every published path present as a DownstreamPathTemplate in the gateway route file — a drift here leaves MMLib.SwaggerForOcelot's paths untransformed and the published spec 404s through the gateway", async () => {
     const response = await axios.get('/openapi.json');

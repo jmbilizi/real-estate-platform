@@ -14,9 +14,15 @@ Backed by the `property_db` PostgreSQL database, which infra already provisions 
 
 This service's HTTP surface is the **Property API**, singular — it owns the whole Communities →
 Properties → Units → Listings hierarchy, so `listings` is one resource _within_ the API rather than
-the name of it. **The URL paths stay `/listings/*`: a service name is not a resource name.** A
-second resource later extends the same OpenAPI document rather than publishing a new one, because
-the aggregation key is a segment of the gateway's docs URL.
+the name of it. That phrase is prose: the published `info.title` is **`Property Service`**, the same
+`<Domain> Service` shape as the gateway's other aggregated documents. **The URL paths stay
+`/listings/*`: a service name is not a resource name.** A second resource later extends the same
+OpenAPI document rather than publishing a new one, because the aggregation key is a segment of the
+gateway's docs URL.
+
+Through the gateway these are namespaced by bounded context — `/property/listings`,
+`/property/listings/meta`, `/property/listings/{id}` — and Ocelot rewrites them onto the paths
+below. The service itself never sees the `/property` prefix.
 
 | Endpoint             | Purpose                                                                     |
 | -------------------- | --------------------------------------------------------------------------- |
