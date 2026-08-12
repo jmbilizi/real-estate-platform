@@ -1,3 +1,5 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { applyTerminalCorrection, Queryable } from './write';
 
 /**
@@ -95,5 +97,49 @@ describe('applyTerminalCorrection', () => {
     );
 
     expect(queries).toHaveLength(0);
+  });
+});
+
+/**
+ * The two RESO seller display-suppression flags and the description moderation state were absent from
+ * `upsertListing`'s column list until #22, so every written row silently took the database defaults
+ * (`true`, `true`, `'approved'`). The consequence of a regression here is not a broken test — it is
+ * publishing a listing, or an address, that a seller withheld. So the binding is asserted directly,
+ * against the parameter array rather than the SQL text, because a column can be present in the
+ * statement and still be handed the wrong value.
+ */
+describe('upsertListing column coverage for the suppression flags', () => {
+  const insertColumns = (): string => {
+    // Read from the module's own SQL rather than restating a field list, so this test cannot pass by
+    // agreeing with a copy of the truth.
+    const source = readFileSync(join(__dirname, 'write.ts'), 'utf8');
+    const start = source.indexOf('INSERT INTO listings');
+    expect(start).toBeGreaterThan(-1);
+    return source.slice(start, source.indexOf('VALUES', start));
+  };
+
+  it.each([
+    'internet_display_allowed',
+    'address_display_allowed',
+    'description_moderation',
+    'featured_reason',
+  ])('names %s in the INSERT, so the caller-supplied value is not lost to a default', (column) => {
+    expect(insertColumns()).toContain(column);
+  });
+
+  it('binds one parameter per column, so no value is shifted out of step with its column', () => {
+    const source = readFileSync(join(__dirname, 'write.ts'), 'utf8');
+    const start = source.indexOf('INSERT INTO listings');
+    const statementEnd = source.indexOf('`,', start);
+    const statement = source.slice(start, statementEnd);
+
+    const columnList = statement.slice(statement.indexOf('(') + 1, statement.indexOf('VALUES'));
+    const columnCount = columnList.split(',').filter((entry) => entry.trim().length > 0).length;
+    const placeholderCount = new Set(statement.slice(statement.indexOf('VALUES')).match(/\$\d+/g))
+      .size;
+
+    // A literal such as now() inside the VALUES list consumes no placeholder and silently shifts
+    // every later column onto the wrong value — the exact trap this project's CLAUDE.md warns about.
+    expect(placeholderCount).toBe(columnCount);
   });
 });

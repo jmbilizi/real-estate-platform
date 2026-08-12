@@ -46,6 +46,15 @@ Thumbs.db
 ehthumbs.db
 Icon?
 Desktop.ini
+# Windows reserved console device names. A shell redirect that resolves to one of
+# these (e.g. `> CONOUT$` from a Git Bash script) leaves a stray zero-byte file in
+# the working tree; it is a console artifact, never source.
+CON
+CONIN$
+CONOUT$
+PRN
+AUX
+NUL
 
 # Env
 .env

@@ -191,4 +191,138 @@ native and every primary key uses it rather than random `uuid_generate_v4()`.
   represent sample data as MLS-sourced (PRD §6.2/§6.3). Invariants are asserted against the dataset
   in `src/seed/mock-listings.spec.ts`, not just against the transform.
 - Every listing response must carry the full broker/office attribution block (PRD §6.2, NAR 7.58).
-- No public REST API beyond `GET /health` yet — search/detail is #22, saved listings #23.
+- Saved/favorited listings are #23. Property relationship claims (PRD §3.2) are not modelled yet.
+
+## The Property API (`src/listings/`)
+
+This service's HTTP surface is the **Property API** in prose, singular: it owns the whole
+Communities → Properties → Units → Listings hierarchy, so `listings` is one resource _within_ the
+API rather than the name of it. **"Property API" is informal prose only — never a metadata value.**
+The published `info.title` is **`Property Service`**, matching the two entries the gateway already
+aggregates (`Account Service`, `Inference Service`), and it is deliberately named for neither a
+client (`cribstop-next` is one consumer of the document, not its owner) nor a resource. The
+resource-level names (`listing_search_v`, the `listings` table, `ListingCardRow`,
+`ListingsEnvelope`, the `searchListings`/`getListing` operation ids) are correct as they are. Do not
+let the API-identity naming spread onto them.
+
+`GET /listings`, `GET /listings/meta`, `GET /listings/{id}`, `GET /openapi.json`, `GET /health`. A
+second resource later **extends the same OpenAPI document** rather than publishing a second one: the
+aggregation key is a segment of the gateway's docs URL, so splitting breaks every bookmark.
+
+**This service serves `/listings/*`; consumers call `/property/listings/*`.** Every service is
+namespaced at the gateway by its bounded context, and Ocelot rewrites — the upstream templates in
+`apps/api-gateway/Configuration/Routes/property-service-routes.json` are `/property/listings`,
+`/property/listings/meta` and `/property/listings/{id}`, while the downstream templates (and
+therefore this service's routes and the OpenAPI document's `paths`) stay `/listings/*`. Two
+consequences that bite:
+
+- Because upstream and downstream now differ, that route file **must** keep
+  `"TransformByOcelotConfig": true`, or `MMLib.SwaggerForOcelot` republishes the raw `/listings`
+  paths on the aggregated docs page and every "Try it out" 404s against a path the gateway does not
+  expose. `inference-service-routes.json` sets it for exactly this reason; `account` can leave it
+  false only because its paths are identical on both sides.
+- The namespace never subsumes the resource segment. `/property/{id}` is forbidden: it collides
+  permanently with every future literal segment under `/property/`, and the durable-home resource
+  gets its own — `/property/homes/{id}`, never `/property/properties/{id}`.
+
+One file per responsibility, and the split is deliberate — the pure ones are unit-testable with no
+database, which is why nearly all of the logic lives in them:
+
+| File              | Responsibility                                                           |
+| ----------------- | ------------------------------------------------------------------------ |
+| `columns.ts`      | The enumerated projections and `FORBIDDEN_COLUMNS`                       |
+| `sold-gate.ts`    | `visibleListingTypesFor()` — THE sold-visibility decision                |
+| `suppression.ts`  | `applyAddressSuppression()` — THE response-boundary suppression          |
+| `search-query.ts` | `buildSearchQuery()` — validated request to `{ where, params, orderBy }` |
+| `map-row.ts`      | DB row to wire shape, each ending in the contract's own `.parse()`       |
+| `repository.ts`   | The only module executing read SQL                                       |
+| `routes.ts`       | Express wiring, strict parse, status codes, cache headers                |
+
+### Rules with teeth (each one is a compliance failure if broken, not a style lapse)
+
+- **Every read goes through `listing_search_v`.** It _enforces_ the display rules rather than
+  carrying flags for callers to remember. No parameter, header or flag bypasses it, and none of its
+  predicates is restated in a handler's `WHERE` clause.
+- **Enumerate columns, never `SELECT *`.** The view still carries the unmasked `street_line` beside
+  the masked `address` (**#48**, open); enumerating keeps that value out of this process rather than
+  reading it and dropping it after it has already been buffered and logged. `app.spec.ts` asserts no
+  statement contains a wildcard or that column name.
+- **No `COALESCE` on `beds`/`baths`/`sqft`** — NULL must fail the predicate so a land parcel is
+  excluded by `beds>=2` instead of matching a fabricated `0`. `minSqft` is **living area**. No
+  `COALESCE(neighborhood, city)` either: it would make the neighborhood filter match city names.
+- **`street` and free-text `query` match the MASKED `address`**, never `street_line`. Filtering on
+  the raw line and getting a masked row back hands the caller the address the seller opted out of.
+- **`query` never searches `description`.** It is third-party MLS remarks carrying a moderation
+  state; making it searchable turns "great for families" into a matchable term (PRD §6.3). It is an
+  explicit non-goal in the OpenAPI description _and_ an assertion, because it will look like an
+  obvious enhancement to someone later.
+- **No field-selection parameter; unknown query parameters are 400.** The only durable guarantee
+  that no caller can strip attribution.
+- **Every sort is a total order** with an `id` tiebreaker, or page 2 repeats page 1 and the exact
+  `total` stops meaning anything. `recommended` is `featured DESC, last_updated DESC, id DESC`,
+  identical for every user. **Never introduce a per-user ranking signal** — personalised ranking on
+  housing inventory is a steering vector and goes through product and legal, not a sort key.
+- **`sponsored` is derived from `featured_reason = 'paid'`**, never from `featured`. Paid placement
+  ranked first with no label is an FTC / PRD §6 failure; nothing may be `'paid'` until #24 can
+  render the label.
+- **`404` is byte-identical** for unknown, soft-deleted, view-excluded and malformed ids. Never 403,
+  never a distinct message.
+- **No `isSaved`/`isFavorited`** (#23/#25). They make every search response per-user and
+  uncacheable.
+
+### Gotchas already paid for once
+
+- **`COUNT(*)` and the page run in ONE `REPEATABLE READ READ ONLY` transaction.** `now()` is
+  transaction-scoped and the view compares `ends_at > now()`, so separate transactions can disagree
+  about which rows match `openHouse=true` — `total` would describe a result set the page never came
+  from, and the client computes `pageCount` from that number.
+- **Express 4 does not await handlers.** An unforwarded rejection leaves the request hanging until
+  the client times out, presenting as a gateway 504 and pointing the debugger at the wrong layer.
+  Use the `asyncRoute` wrapper; forgetting it is a silent-hang bug.
+- **`pg` parses `date` into a JS `Date` at LOCAL midnight.** `src/db/pool.ts` overrides it to return
+  the raw `YYYY-MM-DD` string, because the contract declares `closeDate` as `z.iso.date()` and,
+  worse, west of UTC the instant lands on the previous calendar day — a sale would publish as having
+  closed a day early, with no type error anywhere.
+- **`pg`'s type parsers never see a value nested inside `json_agg`/`json_build_object`.** Postgres
+  serialises the JSON itself, so a `timestamptz` arrives as the string `...+00:00` rather than a
+  `Date` — and the contract's `z.iso.datetime()` accepts only the `Z` form. This shipped a 500 on
+  every `GET /listings/{id}` with an upcoming open house, while the card path was fine because it
+  converts explicitly. **Route every instant through `instant()`**, whichever query produced it: one
+  wire format per service, not one per code path. The class of bug is wider than timestamps — any
+  per-column parser you rely on is bypassed inside a JSON aggregate.
+- **A disjunctive filter must be bracketed** before it joins the AND-chain in `search-query.ts`.
+  `AND` binds tighter than `OR`, so an unbracketed group reassociates and every branch after the
+  first bypasses _every_ other filter, including the sold gate. There is a general invariant test
+  for this.
+- **Mappers end in `.parse()`, never a cast.** `unknown as ListingCardRow` asserts nothing at
+  runtime, so an attribution key that quietly stops being sent would ship silently.
+
+### e2e fixtures — why they exist and why they fail loudly
+
+The seed dataset has **zero** suppressed addresses, zero suppressed listings, zero unapproved
+descriptions, zero non-consumer statuses, zero `Land` rows and zero NULL beds/baths/sqft, so every
+compliance assertion in this repo was **vacuously true** before #22. `tests/support/fixtures.ts`
+supplies one row per scenario, behind three independent guards: it lives in `tests/` (not bundled,
+not in the image context, ignored by `nx test`), it refuses to run unless
+`PROPERTY_SERVICE_E2E_FIXTURES=1` and unconditionally when `NODE_ENV=production`, and every row is
+`is_sample` with a `(Sample)`-suffixed title and an `internal` source.
+
+The e2e suite **throws rather than skipping** when the fixtures are absent. A suite that silently
+skips reproduces the vacuous-assertion problem with extra steps. CI does not run `nx e2e`, so this
+cannot break CI:
+
+```bash
+DATABASE_URL=... PROPERTY_SERVICE_E2E_FIXTURES=1 pnpm exec nx e2e property-service
+```
+
+Note the e2e harness and the in-cluster port-forward both use **3002**; pass `PORT=3003` (honoured
+by `main.ts` and the harness alike) to run the suite while `skaffold` holds that port.
+
+### The writer carries the suppression flags — keep it that way
+
+`ListingRow` requires `internet_display_allowed`, `address_display_allowed`,
+`description_moderation` and `featured_reason`, and `OpenHouseRow` requires `remarks` and
+`is_cancelled`. They are **required, not optional-with-default**: all of these columns have
+permissive database defaults, so an optional field would let a future MLS mapper that forgets to
+carry `InternetEntireListingDisplayYN` publish a listing the seller withheld, silently and with no
+error at any layer. Required makes that omission a compile error. Do not relax them.

@@ -357,6 +357,10 @@ describe('mapToOpenHouseRow', () => {
       listing_id: 'l1',
       starts_at: '2026-02-01T13:00:00Z',
       ends_at: '2026-02-01T15:00:00Z',
+      // The mock shape carries no showing remarks; inventing some would be fabricated
+      // consumer-visible copy, so null is the honest value rather than a placeholder string.
+      remarks: null,
+      is_cancelled: false,
       is_sample: true,
     });
   });

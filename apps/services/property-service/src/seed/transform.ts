@@ -219,10 +219,22 @@ export function mapToListingRow(
     // Sample copy is authored by us, not lifted from MLS remarks — mislabelling it would assert MLS
     // provenance for text the MLS never supplied.
     description_source: 'internal',
+    // Authored by us and reviewed against the Fair Housing rules in mock-listings.spec.ts, so
+    // `approved` is a true statement about this copy rather than a default nobody chose.
+    description_moderation: 'approved',
     amenities,
     featured: listing.featured,
+    // Editorial, never `paid`. Seed rows must not present as paid placement: `sponsored` on the wire
+    // is derived from `featured_reason = 'paid'` and the Sponsored label cannot be rendered until
+    // #24, so a seeded `paid` row would rank first under `recommended` with no disclosure.
+    featured_reason: listing.featured ? 'editorial' : null,
     price_reduced: listing.priceReduced ?? false,
     new_construction: listing.newConstruction ?? false,
+    // Sample inventory is fully displayable — there is no real seller here to have opted out. Stated
+    // explicitly rather than defaulted, because `ListingRow` requires it precisely so that a future
+    // MLS mapper cannot forget to carry the feed's real value.
+    internet_display_allowed: true,
+    address_display_allowed: true,
     broker_name: listing.brokerName,
     broker_phone: listing.brokerPhone,
     broker_email: listing.brokerEmail,
@@ -258,6 +270,10 @@ export function mapToOpenHouseRow(
     listing_id: listingId,
     starts_at: combineDateAndTime(openHouse.date, openHouse.startTime),
     ends_at: combineDateAndTime(openHouse.date, openHouse.endTime),
+    // The mock shape carries no showing remarks, and inventing some would be fabricated copy on a
+    // consumer-visible surface (PRD §6.3). Null is the honest value.
+    remarks: null,
+    is_cancelled: false,
     is_sample: SEED_IS_SAMPLE,
   };
 }

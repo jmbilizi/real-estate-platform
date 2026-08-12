@@ -15,6 +15,27 @@ import { Pool, PoolConfig, types } from 'pg';
 types.setTypeParser(types.builtins.NUMERIC, (value) => (value === null ? null : Number(value)));
 
 /**
+ * DATE is returned by node-postgres as a JS `Date` at LOCAL midnight, and that default is wrong here
+ * in two compounding ways.
+ *
+ * `listings.close_date` is the only `date` column this service reads, and `@cribstop/property-contracts`
+ * declares the wire field as `z.iso.date()` — a calendar day, `YYYY-MM-DD`. A `Date` serialises to a
+ * full datetime, which that schema rejects at the response boundary. Worse, the instant is midnight
+ * *local*, so anywhere west of UTC it lands on the previous calendar day: `2026-01-05` read on an
+ * America/New_York host becomes `2026-01-05T05:00:00.000Z`, and any consumer formatting in a timezone
+ * behind UTC-5 renders a sale as having closed a day earlier than it did. That is a misstated
+ * transaction fact, not a formatting nit, and nothing in the type system catches it.
+ *
+ * A `date` carries no timezone by definition, so the faithful representation is the string Postgres
+ * already sent. Returning it unchanged makes the wire value identical to the stored value and removes
+ * the timezone from the problem entirely rather than picking a "correct" one.
+ *
+ * TIMESTAMPTZ deliberately keeps its default `Date` parsing: `last_updated` genuinely is an instant,
+ * and the row mappers call `.toISOString()` on it.
+ */
+types.setTypeParser(types.builtins.DATE, (value) => value);
+
+/**
  * Lazily-created singleton `pg` connection pool for the `property_db`
  * database, configured entirely from the `DATABASE_URL` env var (standard
  * for both `pg.Pool` and `node-pg-migrate`) — never hardcode credentials
