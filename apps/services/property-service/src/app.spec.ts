@@ -274,6 +274,42 @@ describe('GET /listings', () => {
       expect(response.body.error.message).not.toContain('(request)');
     });
 
+    it('does not call a known parameter with a bad value an unknown parameter', async () => {
+      // `pageSize` IS a published parameter; 101 is simply above the documented maximum of 100.
+      // Reporting it as an unknown/field-selection parameter sends whoever is debugging it looking
+      // for a typo or a stripped-attribution attempt instead of at the value they sent, which is the
+      // one thing the message exists to tell them. Both cases stay 400 — only the wording differs.
+      const response = await request(createApp({ pool: createSearchPool() })).get(
+        '/listings?pageSize=101',
+      );
+
+      expect(response.status).toBe(400);
+      expect(response.body.error.message).toContain('pageSize');
+      expect(response.body.error.message).not.toMatch(/unknown/i);
+      expect(response.body.error.message).not.toMatch(/field-selection/i);
+    });
+
+    it('still calls an unrecognised parameter unknown, and says there is no field selection', async () => {
+      const response = await request(createApp({ pool: createSearchPool() })).get(
+        '/listings?fields=id',
+      );
+
+      expect(response.status).toBe(400);
+      expect(response.body.error.message).toMatch(/unknown/i);
+      expect(response.body.error.message).toContain('fields');
+      expect(response.body.error.message).toMatch(/field-selection/i);
+    });
+
+    it('reports both classes separately when a request carries each', async () => {
+      const response = await request(createApp({ pool: createSearchPool() })).get(
+        '/listings?bed=3&pageSize=101',
+      );
+
+      expect(response.status).toBe(400);
+      expect(response.body.error.message).toContain('bed');
+      expect(response.body.error.message).toContain('pageSize');
+    });
+
     it('does not reflect a hostile parameter NAME either', async () => {
       // The key is caller-controlled too, so naming it must not turn the body into a reflection
       // surface. Filtered to an identifier shape and truncated, not echoed.

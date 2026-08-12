@@ -65,27 +65,44 @@ function parseSearchRequest(query: unknown): ParseResult {
   if (parsed.success) {
     return { ok: true as const, value: parsed.data };
   }
-  const offending = [
-    ...new Set(
-      parsed.error.issues.flatMap((issue) => {
-        // A strict-object rejection is reported as `unrecognized_keys`, whose `path` is EMPTY — the
-        // offending names live in `issue.keys`. Reading only `path` (the obvious implementation)
-        // therefore reports every typo'd or field-selection parameter as "(request)", which tells the
-        // caller nothing about which of their parameters was wrong. Verified against a live request.
-        if (issue.code === 'unrecognized_keys') {
-          return issue.keys.map(safeParameterName);
-        }
-        return issue.path.length > 0 ? [safeParameterName(String(issue.path[0]))] : ['(request)'];
-      }),
-    ),
-  ];
-  return {
-    ok: false as const,
-    body: invalidRequest(
-      `Invalid query parameter(s): ${offending.join(', ')}. Unknown parameters are rejected; ` +
-        'there is no field-selection parameter.',
-    ),
-  };
+
+  // The two rejection classes are reported separately because they send the reader to different
+  // places. An UNKNOWN parameter means a typo or an attempt at field selection, so the message says
+  // that no such parameter exists. A KNOWN parameter with a bad value (`pageSize=101`, above the
+  // documented maximum of 100) means the name was right and the value was not — calling that
+  // "unknown" sends whoever is debugging it hunting for a misspelling that is not there. Both are
+  // still 400; only the wording differs.
+  const unknownParameters = new Set<string>();
+  const invalidValues = new Set<string>();
+
+  for (const issue of parsed.error.issues) {
+    // A strict-object rejection is reported as `unrecognized_keys`, whose `path` is EMPTY — the
+    // offending names live in `issue.keys`. Reading only `path` (the obvious implementation)
+    // therefore reports every typo'd or field-selection parameter as "(request)", which tells the
+    // caller nothing about which of their parameters was wrong. Verified against a live request.
+    if (issue.code === 'unrecognized_keys') {
+      for (const key of issue.keys) {
+        unknownParameters.add(safeParameterName(key));
+      }
+      continue;
+    }
+    invalidValues.add(
+      issue.path.length > 0 ? safeParameterName(String(issue.path[0])) : '(request)',
+    );
+  }
+
+  const sentences: string[] = [];
+  if (unknownParameters.size > 0) {
+    sentences.push(
+      `Unknown query parameter(s): ${[...unknownParameters].join(', ')}. Unknown parameters are ` +
+        'rejected; there is no field-selection parameter.',
+    );
+  }
+  if (invalidValues.size > 0) {
+    sentences.push(`Invalid value for query parameter(s): ${[...invalidValues].join(', ')}.`);
+  }
+
+  return { ok: false as const, body: invalidRequest(sentences.join(' ')) };
 }
 
 /** The one 404. Shared so every call site is byte-identical by construction, not by discipline. */
