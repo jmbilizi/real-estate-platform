@@ -1,5 +1,5 @@
 import express, { type Express, type NextFunction, type Request, type Response } from 'express';
-import { toOpenApiDocument } from '@cribstop/property-contracts';
+import { INTERNAL_ERROR_BODY, toOpenApiDocument } from '@cribstop/property-contracts';
 import { getPool } from './db/pool';
 import { createListingsRouter } from './listings/routes';
 import type { ReadPool } from './listings/repository';
@@ -67,7 +67,7 @@ export function createApp(options: CreateAppOptions = {}): Express {
       return;
     }
     console.error('Unhandled error while serving the Property API:', error);
-    res.status(500).json({ error: { code: 'internal_error', message: 'Internal server error.' } });
+    res.status(500).json(INTERNAL_ERROR_BODY);
   });
 
   return app;

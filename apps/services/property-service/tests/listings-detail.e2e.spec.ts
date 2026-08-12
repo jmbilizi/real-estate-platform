@@ -84,6 +84,57 @@ describe('404 parity — the seller opt-out depends on these being indistinguish
   });
 });
 
+describe('a listing that HAS an upcoming open house', () => {
+  /**
+   * The regression this suite was missing. Every detail spec above requests a fixture with no open
+   * house, so `toListingDetail` had never once run with a populated `open_houses` array — and the
+   * detail endpoint 500'd for all three seeded open-house listings in the deployed cluster while
+   * this suite reported green.
+   *
+   * The cause is worth stating so the test is not "simplified" later: the detail query aggregates
+   * open houses with `json_agg(json_build_object(...))`, and a `timestamptz` nested inside JSON is
+   * serialised by Postgres rather than by `pg`'s type parsers, so it arrives as `...+00:00` instead
+   * of as a `Date`. The contract's `z.iso.datetime()` rejects a numeric offset. Fetching detail for
+   * a listing with an occurrence is the only assertion that exercises that path end to end.
+   */
+  it('returns 200 with contract-valid ISO instants, not a 500 — a JSON-nested timestamptz bypasses pg’s type parsers and reaches the mapper in Postgres’s own offset format', async () => {
+    const response = await axios.get(`/listings/${fixtures.inProgressOpenHouseListingId}`);
+
+    expect(response.status).toBe(200);
+
+    // `parse` (not `safeParse`) is the assertion: the contract itself decides whether the instants
+    // are publishable, so this cannot drift from what the client is promised.
+    const detail = listingDetailSchema.parse(response.data);
+
+    expect(detail.listing.openHouses.length).toBeGreaterThan(0);
+    for (const occurrence of detail.listing.openHouses) {
+      expect(occurrence.startsAt).toMatch(/Z$/);
+      expect(occurrence.endsAt).toMatch(/Z$/);
+      expect(Number.isNaN(Date.parse(occurrence.startsAt))).toBe(false);
+      // This fixture is deliberately IN PROGRESS (started an hour ago, still running), which is the
+      // case `ends_at > now()` exists to keep visible and `starts_at > now()` would have dropped.
+      expect(Date.parse(occurrence.endsAt)).toBeGreaterThan(Date.now());
+    }
+  });
+
+  it('agrees with the card projection about the soonest occurrence, so the badge and the detail page cannot disagree', async () => {
+    const [detailResponse, searchResponse] = await Promise.all([
+      axios.get(`/listings/${fixtures.inProgressOpenHouseListingId}`),
+      axios.get('/listings', { params: { openHouse: true, pageSize: 100 } }),
+    ]);
+
+    const detail = listingDetailSchema.parse(detailResponse.data);
+    const card = searchResponse.data.results.find(
+      (row: { id: string }) => row.id === fixtures.inProgressOpenHouseListingId,
+    );
+
+    expect(card).toBeDefined();
+    expect(card.openHouse).not.toBeNull();
+    // The card carries the SOONEST upcoming occurrence; detail carries all of them in start order.
+    expect(detail.listing.openHouses[0]).toEqual(card.openHouse);
+  });
+});
+
 describe('attribution (NAR 7.58 / PRD §6.2) on the detail listing', () => {
   it('carries the full attribution block on listing, not just on search cards', async () => {
     const response = await axios.get(`/listings/${fixtures.sampleListingId}`);

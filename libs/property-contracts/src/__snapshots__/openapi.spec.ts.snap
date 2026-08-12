@@ -14,6 +14,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "enum": [
                   "invalid_request",
                   "not_found",
+                  "internal_error",
                 ],
                 "type": "string",
               },
@@ -776,7 +777,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
     },
   },
   "info": {
-    "description": "The Property API. \`property-service\` owns the Communities → Properties → Units → Listings hierarchy; \`listings\` is the resource this version of the document exposes, and a later resource extends THIS document rather than publishing a second one — the aggregation key is part of the docs URL, so splitting would break every bookmark. Every response carries the full broker/office attribution block (NAR 7.58, PRD §6.2), there is no field-selection parameter, and unknown query parameters are rejected with 400 — so no caller can omit it. Results are read through a compliance-enforcing view, so seller-suppressed listings are absent rather than redacted. Free-text \`query\` matches title, address, city, neighborhood and zip — never the description, which is third-party MLS remarks carrying a moderation state; making it searchable would turn phrases like "great for families" into matchable terms, i.e. keyword-based steering (PRD §6.3).",
+    "description": "The Property API. \`property-service\` owns the Communities → Properties → Units → Listings hierarchy; \`listings\` is the resource this version of the document exposes, and a later resource extends THIS document rather than publishing a second one — the aggregation key is part of the docs URL, so splitting would break every bookmark. Every response carries the full broker/office attribution block (NAR 7.58, PRD §6.2), there is no field-selection parameter, and unknown query parameters are rejected with 400 — so no caller can omit it. Results are read through a compliance-enforcing view, so seller-suppressed listings are absent rather than redacted. Free-text \`query\` matches title, address, city, neighborhood and zip — never the description, which is third-party MLS remarks carrying a moderation state; making it searchable would allow keyword-based steering on protected-class language (PRD §6.3).",
     "title": "Cribstop Property API",
     "version": "1.0.0",
   },
@@ -1024,6 +1025,16 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             },
             "description": "Unknown or invalid query parameter.",
           },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
         },
         "summary": "Search listings",
       },
@@ -1042,6 +1053,16 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
               },
             },
             "description": "Dataset freshness and provenance.",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
           },
         },
         "summary": "Dataset freshness",
@@ -1083,6 +1104,16 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
               },
             },
             "description": "No such listing.",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
           },
         },
         "summary": "Listing detail",

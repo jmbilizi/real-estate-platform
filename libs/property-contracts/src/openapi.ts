@@ -79,6 +79,23 @@ function componentSchemas() {
 }
 
 /**
+ * Documented on every operation, because every operation can emit it: the service's error boundary
+ * turns any unhandled rejection into a 500 carrying `INTERNAL_ERROR_BODY`. Leaving it undocumented
+ * meant a client generated from this document had no branch that could deserialise a response the
+ * service really sends — the same drift class this package exists to prevent, just in the direction
+ * nobody checks.
+ *
+ * 429 is deliberately NOT documented here: rate limiting is enforced by the gateway's Ocelot route
+ * configuration, not by this service, so it is not this document's claim to make.
+ */
+const serverErrorResponse = {
+  description: 'Unexpected server error. The body carries no detail by design.',
+  content: {
+    'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+  },
+};
+
+/**
  * The whole OpenAPI document, derived from the schemas. Never hand-write a parallel spec file:
  * it becomes a second source of truth that drifts from the routes silently.
  *
@@ -106,8 +123,8 @@ export function toOpenApiDocument() {
         'it. Results are read through a compliance-enforcing view, so seller-suppressed ' +
         'listings are absent rather than redacted. Free-text `query` matches title, address, ' +
         'city, neighborhood and zip — never the description, which is third-party MLS remarks ' +
-        'carrying a moderation state; making it searchable would turn phrases like "great for ' +
-        'families" into matchable terms, i.e. keyword-based steering (PRD §6.3).',
+        'carrying a moderation state; making it searchable would allow keyword-based steering on ' +
+        'protected-class language (PRD §6.3).',
     },
     paths: {
       '/listings': {
@@ -131,6 +148,7 @@ export function toOpenApiDocument() {
                 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
               },
             },
+            '500': serverErrorResponse,
           },
         },
       },
@@ -148,6 +166,7 @@ export function toOpenApiDocument() {
                 'application/json': { schema: { $ref: '#/components/schemas/ListingsMeta' } },
               },
             },
+            '500': serverErrorResponse,
           },
         },
       },
@@ -174,6 +193,7 @@ export function toOpenApiDocument() {
                 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
               },
             },
+            '500': serverErrorResponse,
           },
         },
       },

@@ -85,6 +85,25 @@ export interface ListingCardDbRow {
 const instant = (value: Date): string => value.toISOString();
 
 /**
+ * The same conversion for a `timestamptz` that reached us **inside a JSON payload**.
+ *
+ * `pg`'s per-column type parsers (`src/db/pool.ts`) only see TOP-LEVEL columns. A value nested in a
+ * `json_agg`/`json_build_object` is serialised by Postgres itself and arrives already decoded, so a
+ * `timestamptz` comes through as Postgres's own text form — `2026-08-12T04:44:01.545038+00:00` —
+ * rather than as a `Date`. The contract publishes `z.iso.datetime()`, which accepts the `Z` form and
+ * rejects a numeric offset, so passing one straight through fails the `.parse()` below and 500s the
+ * detail endpoint for every listing that has an upcoming open house.
+ *
+ * Routing it through `instant()` keeps ONE wire format for an instant in this service rather than
+ * one convention per code path. An uninterpretable value throws here (`toISOString()` on an Invalid
+ * Date), which is the intended loud failure — never a fabricated or dropped showing time.
+ *
+ * Any future `timestamptz` added to a JSON aggregate needs this too; `media` is safe only because
+ * both of its values are `text`.
+ */
+const nestedInstant = (value: string): string => instant(new Date(value));
+
+/**
  * The soonest upcoming occurrence, collapsed from the view's three columns. They are null together by
  * construction (one `LEFT JOIN LATERAL`), so a partial row means the projection changed and the
  * contract parse below should be the thing that complains.
@@ -190,8 +209,8 @@ export function toListingDetail(row: ListingCardDbRow): ListingDetail {
       description: row.description ?? null,
       media: (row.media ?? []).map((item) => ({ url: item.url, altText: item.alt_text })),
       openHouses: (row.open_houses ?? []).map((item) => ({
-        startsAt: item.starts_at,
-        endsAt: item.ends_at,
+        startsAt: nestedInstant(item.starts_at),
+        endsAt: nestedInstant(item.ends_at),
         remarks: item.remarks,
       })),
     },
