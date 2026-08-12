@@ -105,5 +105,13 @@ pnpm run infra:validate:dev            # Kustomize validation per env
 - **No Alpine base images for anything doing in-cluster DNS.** musl fails Kubernetes service
   resolution with `EAI_AGAIN`; use a Debian `-slim` base. (`cribstop-next` is still on Alpine and
   has this latent bug.)
+- **Any Dockerfile that runs Nx must set `ENV NX_DAEMON=false`.** Nx turns its daemon off in CI and
+  in Docker, but does not detect podman/buildah or BuildKit (`isDocker()` checks only `/.dockerenv`
+  and cgroup `"docker"`; podman writes `/run/.containerenv`, and no build engine propagates `CI`).
+  So a daemon — with a file watcher — starts inside the build layer, recomputes the project graph
+  while the build is mutating files, trips over a transient generated tsconfig, and persists the
+  graph with an `errors[]` entry; every later `readCachedProjectGraph()` then reports **"No cached
+  ProjectGraph is available"** for a file that is present and fine. Cost a red `dev` build at 50%
+  reproducibility (#69). `property-service` is currently the only such Dockerfile.
 - Jest `<rootDir>` inside `testMatch` / `testPathIgnorePatterns` silently matches nothing on Windows
   (native backslashes read as escapes). Write the patterns without it.

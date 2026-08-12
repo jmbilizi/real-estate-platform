@@ -51,6 +51,12 @@ COPY tools ./tools
 COPY apps/services/property-service ./apps/services/property-service
 COPY libs/property-contracts ./libs/property-contracts
 
+# Required, not an optimization: Nx does not recognise podman/BuildKit as a container, so it leaves
+# its daemon on and the daemon's file watcher poisons the project graph mid-build — see the
+# NX_DAEMON gotcha in the root CLAUDE.md. Removing this line fails this RUN ~50% of the time with a
+# webpack config-load error that names nothing relevant (#69).
+ENV NX_DAEMON=false
+
 # `prune`, not `build`: it depends on build and additionally emits a pruned package.json AND
 # pnpm-lock.yaml, and the production install below needs that lockfile for --frozen-lockfile.
 RUN pnpm exec nx run property-service:prune --skip-nx-cache
