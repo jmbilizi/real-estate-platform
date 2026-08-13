@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { BRAND } from '@/lib/brand';
 import { getListingsMeta } from '@/lib/api/listings';
+import { PROPERTY_TIME_ZONE } from '@/lib/format';
 import type { ListingsMeta } from '@/lib/types';
 
 export default function Footer() {
@@ -29,7 +30,9 @@ export default function Footer() {
   const lastUpdatedFormatted =
     meta?.dataUpdatedAt != null
       ? new Date(meta.dataUpdatedAt).toLocaleString('en-US', {
-          timeZone: 'America/New_York',
+          // Shared with the per-listing provenance line so the two "Data last updated" sentences
+          // on a page can never disagree about the day.
+          timeZone: PROPERTY_TIME_ZONE,
           month: 'long',
           day: 'numeric',
           year: 'numeric',

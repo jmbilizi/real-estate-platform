@@ -1,5 +1,5 @@
 import type { ListingType, OpenHouse } from '@cribstop/property-contracts';
-import { formatNumber, formatPrice } from '@/lib/format';
+import { formatNumber, formatPrice, PROPERTY_TIME_ZONE } from '@/lib/format';
 
 /**
  * Null-safe presentation of listing fields.
@@ -145,14 +145,25 @@ export function formatOpenHouseBadge(openHouse: OpenHouse): string {
   const starts = new Date(openHouse.startsAt);
   const ends = new Date(openHouse.endsAt);
 
-  const day = starts.toLocaleDateString('en-US', { weekday: 'short' });
+  const day = starts.toLocaleDateString('en-US', {
+    weekday: 'short',
+    timeZone: PROPERTY_TIME_ZONE,
+  });
   // Lowercase, unspaced meridiem ("9am") is both the listing-sheet convention and materially
   // narrower — the badge sits on the image next to the save control and has little room.
+  //
+  // The separator before the meridiem is stripped with `\s`, not a literal space: ICU 72 (Node
+  // 18.13+) switched `en-US` to U+202F NARROW NO-BREAK SPACE there, so matching a plain space
+  // silently stops working on a runtime upgrade and leaves "5 pm" in a badge sized for "5pm".
   const hour = (d: Date) =>
     d
-      .toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+      .toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZone: PROPERTY_TIME_ZONE,
+      })
       .replace(':00', '')
-      .replace(' ', '')
+      .replace(/\s/g, '')
       .toLowerCase();
 
   // The meridiem is dropped from the start when both ends share it, the way a listing sheet reads.
@@ -171,9 +182,16 @@ export function formatOpenHouse(openHouse: OpenHouse): string {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
+    timeZone: PROPERTY_TIME_ZONE,
   });
   const time = (d: Date) =>
-    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).replace(':00', '');
+    d
+      .toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZone: PROPERTY_TIME_ZONE,
+      })
+      .replace(':00', '');
 
   return `${day}, ${time(starts)}–${time(ends)}`;
 }

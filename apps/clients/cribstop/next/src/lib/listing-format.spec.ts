@@ -178,4 +178,33 @@ describe('formatOpenHouseBadge', () => {
     expect(text).toMatch(/am/);
     expect(text).toMatch(/pm/);
   });
+
+  /*
+   * These two pin the *property's* clock rather than the runtime's. Without an explicit
+   * `timeZone` the same instant rendered "9am–1pm" on an Eastern dev machine and "1–5pm" in UTC
+   * CI: green locally, red on the PR. Asserting the exact string is the point — a looser matcher
+   * is what let the drift through in the first place.
+   */
+  it("renders the property's local hour, not the runtime's", () => {
+    expect(
+      formatOpenHouseBadge({
+        startsAt: '2026-09-05T13:00:00.000Z',
+        endsAt: '2026-09-05T17:00:00.000Z',
+        remarks: null,
+      }),
+    ).toBe('Open Sat 9am–1pm');
+  });
+
+  it("keeps a late-evening open house on the property's calendar day", () => {
+    // 00:00Z Sun Sep 6 is 8pm Sat Sep 5 in Eastern. Rendered in a UTC runtime this open house
+    // lands on the wrong *day*, which sends a buyer to the property 24 hours out — a worse
+    // failure than the wrong hour, and invisible to any test that only checks for "am"/"pm".
+    expect(
+      formatOpenHouseBadge({
+        startsAt: '2026-09-06T00:00:00.000Z',
+        endsAt: '2026-09-06T02:00:00.000Z',
+        remarks: null,
+      }),
+    ).toBe('Open Sat 8–10pm');
+  });
 });
