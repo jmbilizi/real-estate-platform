@@ -178,15 +178,27 @@ runs:
         ALLOWED_COUNT=$(echo "$ALLOWED_SERVICES" | tr ',' '\n' | wc -w)
 
         if [ "$INPUT_STRATEGY" = "all" ] || [ "$INPUT_SERVICES" = "all" ]; then
+          # Always hand the deploy action an EXPLICIT service list, never the bare "all".
+          #
+          # "all" makes the deploy action run one unfiltered
+          #   kubectl apply -f manifests.yaml --prune -l app.kubernetes.io/managed-by=kustomize
+          # instead of the per-service, label-scoped applies with parallel rollout monitoring.
+          # That bypasses this very allowlist: workloads present in the manifests but with NO
+          # entry under environments.<env>.services — currently `jaeger` and
+          # `ingress-nginx-controller` — were never granted deploy permission, yet an unfiltered
+          # apply deploys them and then blocks the run waiting for their rollout. Re-applying the
+          # ingress controller is how the whole environment serves traffic, so it must be an
+          # explicit choice, not a side effect of the enabled-service count reaching parity.
+          #
+          # This branch used to trigger only when every service was enabled, so it had gone
+          # unexercised while any service was gated off. Enabling the last one (#71) would have
+          # silently flipped dev onto it. Enumerating the allowlist is correct at any count.
+          FINAL_STRATEGY="single"
+          FINAL_SERVICES="$ALLOWED_SERVICES"
+          echo ""
           if [ "$ALLOWED_COUNT" -eq "$TOTAL_SERVICES" ]; then
-            FINAL_STRATEGY="all"
-            FINAL_SERVICES="all"
-            echo ""
-            echo "✅ All $TOTAL_SERVICES services enabled — deploying ALL"
+            echo "✅ All $TOTAL_SERVICES services enabled — deploying: $ALLOWED_SERVICES"
           else
-            FINAL_STRATEGY="single"
-            FINAL_SERVICES="$ALLOWED_SERVICES"
-            echo ""
             echo "⚠️  $ALLOWED_COUNT/$TOTAL_SERVICES services enabled — deploying: $ALLOWED_SERVICES"
             if [ -n "$BLOCKED_SERVICES" ]; then
               echo "  Blocked: $BLOCKED_SERVICES"
