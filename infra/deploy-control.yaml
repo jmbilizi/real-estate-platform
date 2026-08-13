@@ -74,12 +74,14 @@ environments:
 
       property-service:
         enabled: true
-        # Temporarily manual: the #21 schema is being reshaped in place, and dev's property_db is
-        # persistent. Auto-deploying would apply the whole migration chain to it in one unreviewed
-        # CI run, after which the migration files are immutable (node-pg-migrate keys applied
-        # migrations by filename, so a correction cannot re-run). Restore auto_deploy: true once
-        # the schema has been reviewed and dev has been migrated deliberately.
-        auto_deploy: false
+        # Gate opened deliberately on 2026-08-12 (#71). The earlier hold existed because the #21
+        # schema was being reshaped in place and auto-deploying would have replayed the migration
+        # chain over an already-migrated property_db — node-pg-migrate keys applied migrations by
+        # filename, so a correction cannot re-run. That risk needed migrations to have already run
+        # here; they never had. dev is migrated from empty: the chain applies fresh and in order,
+        # the same way it does locally. Keeping the gate shut only meant the gateway advertised
+        # /property/listings and /swagger/docs/v1/Property against a service with no pod (#71).
+        auto_deploy: true
         require_approval: false # No approval needed
         rollback_on_failure: false # Disabled in dev for manual investigation
 
