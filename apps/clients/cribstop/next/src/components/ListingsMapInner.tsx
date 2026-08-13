@@ -10,8 +10,19 @@ import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { createRoot, type Root } from 'react-dom/client';
-import { Listing } from '@/lib/types';
-import { formatPrice } from '@/lib/format';
+import { ListingCardRow } from '@/lib/types';
+import {
+  formatClosePrice,
+  formatDwellingStats,
+  formatListingLocation,
+  formatListingPrice,
+  formatLotSize,
+  formatStreetAddress,
+  hasMapCoordinates,
+} from '@/lib/listing-format';
+import ListingImage from '@/components/listing/ListingImage';
+import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges';
+import ListingAttribution from '@/components/listing/ListingAttribution';
 
 // Module-level callback set by ListingsMapInner so MarkerPopup
 // (rendered in a separate createRoot) can still trigger modal navigation.
@@ -19,6 +30,44 @@ let _openListing: ((id: string) => void) | null = null;
 
 const PILL_W = 70;
 const PILL_H = 30;
+
+/**
+ * Which rows may produce a map pin.
+ *
+ * A row whose seller opted out of address display has `address`, `latitude` and `longitude` null
+ * together — there is deliberately no city/ZIP centroid fallback anywhere in this file, because a
+ * centroid is fabricated precision that partially re-identifies the address the seller withheld.
+ * The excluded row is NOT dropped from anything else: it stays in `listings` (the result count, the
+ * list view) and only disappears from the pin set built here.
+ *
+ * Exported and pure (no mutation, no reordering) so pin selection can be unit-tested without
+ * mounting Leaflet, which does not run under jsdom.
+ */
+export function selectMappableListings(listings: ListingCardRow[]): ListingCardRow[] {
+  return listings.filter(hasMapCoordinates);
+}
+
+/** Coordinate pairs for the rows that have them — used for map bounds, never for pin placement itself. */
+function toLatLngPairs(listings: ListingCardRow[]): [number, number][] {
+  const pairs: [number, number][] = [];
+  for (const listing of listings) {
+    if (hasMapCoordinates(listing)) pairs.push([listing.latitude, listing.longitude]);
+  }
+  return pairs;
+}
+
+/**
+ * Compact label for the price pill on the marker itself. A null price (seller-directed withholding)
+ * must never render as `$0` or an empty pill — "Withheld" is the honest, compact alternative; the
+ * popup renders the full withheld sentence via `formatListingPrice`.
+ */
+function pinPriceLabel(listing: ListingCardRow): string {
+  const { price, listingType } = listing;
+  if (price === null) return 'Withheld';
+  if (listingType === 'rent') return `$${(price / 1000).toFixed(1)}k`;
+  if (price >= 1_000_000) return `$${(price / 1_000_000).toFixed(1)}M`;
+  return `$${Math.round(price / 1000)}k`;
+}
 
 function buildPriceIcon(price: string, active: boolean, saved: boolean) {
   // Red: #FF385C, Black: #222, White: #fff
@@ -68,7 +117,8 @@ function ClusteredMarkers({
   savedIds,
   onMarkerHover,
 }: {
-  listings: Listing[];
+  /** Expected to already be pin-eligible (see `selectMappableListings`); re-checked defensively below. */
+  listings: ListingCardRow[];
   activeId: string | null;
   savedIds?: Set<string>;
   onMarkerHover?: (id: string | null) => void;
@@ -108,15 +158,12 @@ function ClusteredMarkers({
     });
 
     listings.forEach((l) => {
-      const priceLabel =
-        l.listingType === 'rent'
-          ? `$${(l.price / 1000).toFixed(1)}k`
-          : l.price >= 1000000
-            ? `$${(l.price / 1000000).toFixed(1)}M`
-            : `$${Math.round(l.price / 1000)}k`;
+      // No pin without coordinates — defensive re-check even though the caller already filters
+      // with `selectMappableListings`. Never fall back to a city/ZIP centroid here.
+      if (!hasMapCoordinates(l)) return;
 
       const marker = L.marker([l.latitude, l.longitude], {
-        icon: buildPriceIcon(priceLabel, activeId === l.id, !!savedIds?.has(l.id)),
+        icon: buildPriceIcon(pinPriceLabel(l), activeId === l.id, !!savedIds?.has(l.id)),
         // @ts-expect-error: custom property for cluster highlight
         listingId: l.id, // for cluster highlight
       });
@@ -168,13 +215,7 @@ function ClusteredMarkers({
     listings.forEach((l) => {
       const marker = markersRef.current.get(l.id);
       if (!marker) return;
-      const priceLabel =
-        l.listingType === 'rent'
-          ? `$${(l.price / 1000).toFixed(1)}k`
-          : l.price >= 1000000
-            ? `$${(l.price / 1000000).toFixed(1)}M`
-            : `$${Math.round(l.price / 1000)}k`;
-      marker.setIcon(buildPriceIcon(priceLabel, activeId === l.id, !!savedIds?.has(l.id)));
+      marker.setIcon(buildPriceIcon(pinPriceLabel(l), activeId === l.id, !!savedIds?.has(l.id)));
       if (activeId === l.id) {
         marker.setZIndexOffset(1000);
       } else {
@@ -190,68 +231,48 @@ function ClusteredMarkers({
   return null;
 }
 
-function MarkerPopup({ listing }: { listing: Listing }) {
+/**
+ * The map popup is a listing display surface, so it carries the same obligations the card does:
+ * sample labelling wherever the row is visible, sponsored disclosure, and NAR 7.58 attribution
+ * (agent name + a contact method + office name). Every nullable field is run through the shared
+ * `lib/listing-format` helpers rather than read raw, so a null never reaches the DOM as a blank,
+ * a bare comma, or a fabricated `$0`.
+ */
+function MarkerPopup({ listing }: { listing: ListingCardRow }) {
+  const isSold = listing.listingType === 'sold' || listing.status === 'Sold';
+  const isParcel = listing.propertyType === 'Land';
+
+  const title = formatListingLocation(listing.neighborhood, listing.city, listing.state);
+  const address = formatStreetAddress(listing.address, listing.city, listing.state, listing.zip);
+  const statsLine = isParcel
+    ? formatLotSize(listing.lotSqft)
+    : formatDwellingStats(listing.beds, listing.baths, listing.sqft);
+  const price = formatListingPrice(listing.price, listing.listingType);
+  const soldLine = isSold ? formatClosePrice(listing.closePrice, listing.closeDate) : null;
+
   return (
     <div
       onClick={() => _openListing?.(listing.id)}
-      style={{
-        cursor: 'pointer',
-        textDecoration: 'none',
-        color: 'inherit',
-        borderRadius: 18,
-        boxShadow: '0 4px 24px rgba(34,34,34,0.13)',
-        overflow: 'hidden',
-        background: '#fff',
-        border: '1px solid #ececec',
-        minWidth: 240,
-        maxWidth: 260,
-      }}
+      className="min-w-[240px] max-w-[260px] cursor-pointer overflow-hidden rounded-[18px] border border-surface-border bg-surface shadow-card"
+      style={{ textDecoration: 'none', color: 'inherit' }}
     >
-      {}
-      <img
-        src={listing.imageUrls[0]}
-        alt={listing.title}
-        style={{
-          width: '100%',
-          height: 130,
-          objectFit: 'cover',
-          borderTopLeftRadius: 18,
-          borderTopRightRadius: 18,
-        }}
-      />
-      <div style={{ padding: '12px 16px 14px' }}>
-        <p
-          style={{
-            margin: 0,
-            fontWeight: 700,
-            fontSize: 14,
-            color: '#222',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            letterSpacing: 0.1,
-          }}
-        >
-          {listing.neighborhood}, {listing.city}
-        </p>
-        <p
-          style={{
-            margin: '2px 0 0',
-            fontSize: 12,
-            color: '#717171',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {listing.address}
-        </p>
-        <p style={{ margin: '2px 0 0', fontSize: 12, color: '#717171' }}>
-          {listing.beds} bd · {listing.baths} ba · {listing.sqft.toLocaleString()} sqft
-        </p>
-        <p style={{ margin: '8px 0 0', fontWeight: 800, fontSize: 15, color: '#222' }}>
-          {formatPrice(listing.price, listing.listingType)}
-        </p>
+      <div className="relative h-[130px] w-full bg-surface-soft">
+        <ListingImage media={listing.primaryMedia} className="h-full w-full object-cover" />
+        {/* Required disclosure labels — never crowded out, shown whenever the row is. */}
+        {(listing.isSample || listing.sponsored) && (
+          <div className="absolute left-2 top-2 flex flex-wrap items-center gap-1">
+            {listing.isSample && <SampleBadge />}
+            {listing.sponsored && <SponsoredBadge />}
+          </div>
+        )}
+      </div>
+      <div className="px-4 py-3">
+        <p className="truncate text-sm font-bold tracking-wide text-ink">{title}</p>
+        {address && <p className="mt-0.5 truncate text-xs text-ink-muted">{address}</p>}
+        {statsLine && <p className="mt-0.5 text-xs text-ink-muted">{statsLine}</p>}
+        <p className="mt-2 text-[15px] font-extrabold text-ink">{soldLine ?? price.text}</p>
+        {/* NAR 7.58 applies to every display surface, this popup included. */}
+        <ListingAttribution attribution={listing} className="mt-2" />
       </div>
     </div>
   );
@@ -309,11 +330,12 @@ function ClickToActivateScroll({ onChange }: { onChange?: (active: boolean) => v
 // Fires whenever the search polygon, listings, or center changes.
 function FitView({
   geojson,
-  listings,
+  coords,
   center,
 }: {
   geojson: object | null;
-  listings: Listing[];
+  /** Pin coordinates only — rows without them never contribute a fabricated centroid to the fit. */
+  coords: [number, number][];
   center: [number, number] | null;
 }) {
   const map = useMap();
@@ -327,11 +349,9 @@ function FitView({
         return;
       }
     }
-    if (listings.length) {
-      // Fall back to fitting listing marker positions
-      const bounds = L.latLngBounds(
-        listings.map((l) => [l.latitude, l.longitude] as [number, number]),
-      );
+    if (coords.length) {
+      // Fall back to fitting the pinned marker positions
+      const bounds = L.latLngBounds(coords);
       if (bounds.isValid()) {
         map.fitBounds(bounds, { padding: [60, 60], maxZoom: 14, animate: true });
         return;
@@ -341,7 +361,7 @@ function FitView({
       // Last resort: just pan to the geocoded point
       map.setView(center, 13, { animate: true });
     }
-  }, [geojson, listings, center]);
+  }, [geojson, coords, center]);
   return null;
 }
 
@@ -379,7 +399,7 @@ function BoundaryLayer({ geojson }: { geojson: object | null }) {
 }
 
 interface Props {
-  listings: Listing[];
+  listings: ListingCardRow[];
   activeId?: string | null;
   savedIds?: Set<string>;
   onMarkerHover?: (id: string | null) => void;
@@ -411,15 +431,22 @@ export default function ListingsMapInner({
     };
   }, [router, pathname, searchParams]);
 
+  // Pins only ever come from rows that have coordinates — a seller-suppressed row (address,
+  // latitude and longitude null together) is excluded here and nowhere else: it stays in
+  // `listings` for the result count and the list view, it just never gets a marker.
+  const pins = useMemo(() => selectMappableListings(listings), [listings]);
+  const pinCoords = useMemo(() => toLatLngPairs(pins), [pins]);
+  const hiddenPinCount = listings.length - pins.length;
+
   const center = useMemo<[number, number]>(() => {
     if (searchCenter) return searchCenter;
-    if (listings.length) {
-      const lat = listings.reduce((s, l) => s + l.latitude, 0) / listings.length;
-      const lng = listings.reduce((s, l) => s + l.longitude, 0) / listings.length;
+    if (pinCoords.length) {
+      const lat = pinCoords.reduce((s, [lat]) => s + lat, 0) / pinCoords.length;
+      const lng = pinCoords.reduce((s, [, lng]) => s + lng, 0) / pinCoords.length;
       return [lat, lng];
     }
     return [38.9072, -77.0369];
-  }, [searchCenter, listings]);
+  }, [searchCenter, pinCoords]);
 
   const [scrollActive, setScrollActive] = useState(false);
 
@@ -448,21 +475,23 @@ export default function ListingsMapInner({
         <InvalidateOnMount />
         <CustomMapControls />
         <ClickToActivateScroll onChange={setScrollActive} />
-        {/* Fit view to boundary, then listings, then center — in priority order */}
-        <FitView
-          geojson={searchPolygon ?? null}
-          listings={listings}
-          center={searchCenter ?? null}
-        />
+        {/* Fit view to boundary, then pinned listings, then center — in priority order */}
+        <FitView geojson={searchPolygon ?? null} coords={pinCoords} center={searchCenter ?? null} />
         {/* Searched area boundary outline */}
         <BoundaryLayer geojson={searchPolygon ?? null} />
         <ClusteredMarkers
-          listings={listings}
+          listings={pins}
           activeId={activeId ?? null}
           savedIds={savedIds}
           onMarkerHover={onMarkerHover}
         />
       </MapContainer>
+      {hiddenPinCount > 0 && (
+        <div className="pointer-events-none absolute left-3 right-3 top-3 z-[400] rounded-2xl bg-surface/95 px-3 py-1.5 text-center text-[11px] font-medium text-ink-muted shadow-card backdrop-blur">
+          Some sellers have chosen not to display their home’s location, so those homes appear in
+          your results but not as pins on this map.
+        </div>
+      )}
       {!scrollActive && (
         <div className="pointer-events-none absolute bottom-6 left-1/2 z-[400] -translate-x-1/2 rounded-full bg-ink/85 px-4 py-1.5 text-xs font-semibold text-white shadow-card backdrop-blur">
           Click map to zoom with scroll

@@ -1,10 +1,10 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { Listing } from '@/lib/types';
+import { ListingCardRow } from '@/lib/types';
 
 interface Props {
-  listings: Listing[];
+  listings: ListingCardRow[];
   activeId?: string | null;
   savedIds?: Set<string>;
   onMarkerHover?: (id: string | null) => void;

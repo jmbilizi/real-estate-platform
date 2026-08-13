@@ -3,30 +3,22 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import ListingCard from '@/components/ListingCard';
 import ListingsMap from '@/components/ListingsMap';
-import listings from '@/lib/listings';
 import { useApp } from '@/lib/context';
 
-import { applyFilters } from '@/lib/filters';
 import type { SearchFilters } from '@/lib/types';
 import SortDropdown from '@/components/SortDropdown';
 import FilterModal, { countActiveFilters } from '@/components/FilterModal';
+import {
+  applyLandInterlock,
+  parseFiltersFromSearchParams,
+  parsePageFromSearchParams,
+} from '@/lib/listing-filters';
+import { useListingSearch } from '@/lib/useListingSearch';
+import { ListingErrorState, ListingGridSkeleton } from '@/components/listing/ListingStates';
 
 function parseFiltersFromUrl(): SearchFilters {
   if (typeof window === 'undefined') return {};
-  const params = new URLSearchParams(window.location.search);
-  const filters: SearchFilters = {};
-  if (params.get('q')) filters.query = params.get('q')!;
-  if (params.get('zip')) filters.zip = params.get('zip')!;
-  if (params.get('street')) filters.street = params.get('street')!;
-  if (params.get('type') && params.get('type') !== 'all')
-    filters.listingType = params.get('type') as any;
-  if (params.get('minPrice')) filters.minPrice = Number(params.get('minPrice'));
-  if (params.get('maxPrice')) filters.maxPrice = Number(params.get('maxPrice'));
-  if (params.get('beds')) filters.beds = Number(params.get('beds'));
-  if (params.get('baths')) filters.baths = Number(params.get('baths'));
-  if (params.get('sort')) filters.sort = params.get('sort') as any;
-  // Add more params as needed
-  return filters;
+  return parseFiltersFromSearchParams(new URLSearchParams(window.location.search));
 }
 
 function SearchContent() {
@@ -52,6 +44,7 @@ function SearchContent() {
           setSearchSuggestion(null);
         }
         setFilters(parseFiltersFromUrl());
+        setPage(parsePageFromSearchParams(params));
       };
       updateFromUrl();
       window.addEventListener('popstate', updateFromUrl);
@@ -185,14 +178,24 @@ function SearchContent() {
   // Filter modal open state
   const [filterOpen, setFilterOpen] = useState(false);
 
-  // Sort state
+  // Filter, sort and pagination are all enforced server-side now; the page holds only the
+  // request. `total` and `pageCount` come from the response envelope rather than from the length
+  // of the current page — which is the whole point of paging server-side.
   const [page, setPage] = useState(1);
-  const PAGE_SIZE = 20;
-  // Apply filters to listings
-  const filtered = applyFilters(listings, filters);
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const pagedResults = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const _heading = 'Search results';
+  const { results, total, pageCount, status, error, retry } = useListingSearch(filters, page);
+
+  const isLoading = status === 'loading';
+  const isError = status === 'error';
+
+  /** Keeps the URL the shareable source of truth for the current result set. */
+  const pushPage = (next: number) => {
+    setPage(next);
+    const params = new URLSearchParams(window.location.search);
+    if (next === 1) params.delete('page');
+    else params.set('page', String(next));
+    const qs = params.toString();
+    window.history.pushState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
+  };
 
   return (
     <div className="flex flex-col">
@@ -202,10 +205,13 @@ function SearchContent() {
         onClose={() => setFilterOpen(false)}
         filters={filters}
         onChange={(f) => {
-          setFilters(f);
-          setPage(1);
+          // A parcel has no bedrooms, bathrooms or living area, and dwelling predicates exclude
+          // parcels server-side — so a stale `beds` alongside the Lot/Land chip would return an
+          // unexplained zero. The values are cleared here, not dropped from the request.
+          setFilters(applyLandInterlock(f));
+          pushPage(1);
         }}
-        resultCount={filtered.length}
+        resultCount={total}
       />
 
       {/* Body: Airbnb-style split layout.
@@ -225,7 +231,7 @@ function SearchContent() {
         >
           <div className="sticky top-[65px] h-[45vh] search-map-sticky md:py-6 md:pl-3 md:pr-10 lg:pl-5 lg:pr-20">
             <ListingsMap
-              listings={pagedResults}
+              listings={results}
               savedIds={savedIds}
               activeId={hoveredId}
               className="h-full w-full md:rounded-2xl"
@@ -253,9 +259,17 @@ function SearchContent() {
 
           {/* Slim sticky bar */}
           <div className="search-results-bar sticky top-[65px] z-20 bg-white flex items-center justify-between gap-3 px-5 py-2 md:px-0 border-b border-surface-border mb-6">
-            <p className="text-sm text-ink-muted">
-              <span className="font-semibold text-ink">{filtered.length.toLocaleString()}</span>{' '}
-              results
+            <p className="text-sm text-ink-muted" aria-live="polite">
+              {isLoading ? (
+                <span className="inline-block h-4 w-24 animate-pulse rounded-xs bg-surface-soft align-middle" />
+              ) : isError ? (
+                <span className="text-ink">Results unavailable</span>
+              ) : (
+                <>
+                  <span className="font-semibold text-ink">{total.toLocaleString()}</span>{' '}
+                  {total === 1 ? 'result' : 'results'}
+                </>
+              )}
             </p>
             <div className="flex items-center gap-4 relative">
               <button
@@ -296,6 +310,7 @@ function SearchContent() {
                   setFilters((prev) => ({ ...prev, sort: v }));
                   const params = new URLSearchParams(window.location.search);
                   params.set('sort', String(v));
+                  params.delete('page');
                   window.history.pushState(
                     {},
                     '',
@@ -308,12 +323,24 @@ function SearchContent() {
           </div>
 
           <div className="px-5 pb-10 md:px-0 md:pb-0">
-            {pagedResults.length === 0 ? (
+            {isLoading ? (
+              <ListingGridSkeleton count={6} />
+            ) : isError ? (
+              /*
+               * A failed search is not "no homes match". The API rejects some filter combinations
+               * with a 400 and can be unavailable entirely; both must read as a problem the user
+               * can respond to rather than as an empty result set.
+               */
+              <ListingErrorState
+                message={error ?? 'We could not load listings just now. Please try again.'}
+                onRetry={retry}
+              />
+            ) : results.length === 0 ? (
               <EmptyState onClear={() => window.location.reload()} />
             ) : (
               <>
                 <div className="grid gap-8 gap-y-12 grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3">
-                  {pagedResults.map((l) => (
+                  {results.map((l) => (
                     <div
                       key={l.id}
                       onMouseEnter={() => setHoveredId(l.id)}
@@ -328,7 +355,7 @@ function SearchContent() {
                     <nav className="inline-flex items-center gap-1 rounded-full bg-white/90 px-4 py-2 shadow-lg border border-surface-border">
                       <button
                         className="px-3 py-1.5 rounded-full font-semibold text-ink-muted hover:text-ink disabled:opacity-40"
-                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        onClick={() => pushPage(Math.max(1, page - 1))}
                         disabled={page === 1}
                         aria-label="Previous page"
                       >
@@ -343,7 +370,7 @@ function SearchContent() {
                                 ? 'bg-ink text-white shadow'
                                 : 'text-ink-muted hover:text-ink'
                             }`}
-                            onClick={() => setPage(p)}
+                            onClick={() => pushPage(p)}
                             aria-current={p === page ? 'page' : undefined}
                           >
                             {p}
@@ -356,7 +383,7 @@ function SearchContent() {
                       )}
                       <button
                         className="px-3 py-1.5 rounded-full font-semibold text-ink-muted hover:text-ink disabled:opacity-40"
-                        onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                        onClick={() => pushPage(Math.min(pageCount, page + 1))}
                         disabled={page === pageCount}
                         aria-label="Next page"
                       >

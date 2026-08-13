@@ -1,86 +1,46 @@
-export type ListingType = 'sale' | 'rent' | 'sold';
-export type ListingSource = 'brightMLS' | 'internal' | 'other';
-export type PropertyType =
-  | 'Single Family'
-  | 'Condo'
-  | 'Townhome'
-  | 'Multi-Family'
-  | 'Loft'
-  | 'Land'
-  | 'New Construction';
+/**
+ * Client-side listing types.
+ *
+ * These are re-exports of `@cribstop/property-contracts`, not a second declaration of the same
+ * shapes. The hand-rolled `Listing` interface that used to live here described the mock array, and
+ * it disagreed with the wire contract in ways that mattered: it declared `beds`, `baths` and `sqft`
+ * required (they are legitimately null for a parcel), it carried `imageUrls` (a field the contract
+ * structurally forbids), it spelled the office lead email `officeBrokerLeadMail`, and it had no
+ * `isSample`, `sponsored`, `closePrice` or `closeDate` at all — so three compliance obligations had
+ * no way to reach the UI.
+ *
+ * Search and detail are two different shapes from one service: `ListingCardRow` is the flat card
+ * projection the list endpoint returns, and `ListingDetailView` (in `lib/api/listings.ts`) is the
+ * flattened form of the nested detail graph. Neither is forced to serve both.
+ */
+import type { ListingCardRow, SearchRequest } from '@cribstop/property-contracts';
 
-export type Amenity =
-  | 'Pool'
-  | 'Garage'
-  | 'Gym'
-  | 'Elevator'
-  | 'Balcony'
-  | 'Fireplace'
-  | 'Washer/Dryer'
-  | 'Pet Friendly'
-  | 'Waterfront'
-  | 'Office'
-  | 'Rooftop'
-  | 'Garden'
-  | 'Smart Home'
-  | 'Solar'
-  | 'EV Charging';
+export type {
+  Amenity,
+  Attribution,
+  ListingCardRow,
+  ListingDetail,
+  ListingsEnvelope,
+  ListingsMeta,
+  ListingSource,
+  ListingType,
+  Media,
+  OpenHouse,
+  PropertyType,
+  SearchRequest,
+} from '@cribstop/property-contracts';
 
-export interface Listing {
-  id: string;
-  title: string;
-  address: string;
-  city: string;
-  state: string;
-  zip: string;
-  neighborhood: string;
-  price: number;
-  status: 'Active' | 'Pending' | 'Coming Soon' | 'Sold';
-  listingType: ListingType;
-  source: ListingSource;
-  propertyType: PropertyType;
-  beds: number;
-  baths: number;
-  sqft: number;
-  lotSqft?: number;
-  yearBuilt?: number;
-  imageUrls: string[];
-  brokerName: string;
-  brokerPhone: string;
-  brokerEmail: string;
-  officeName: string;
-  officeBrokerLeadPhone?: string;
-  officeBrokerLeadMail?: string;
-  lastUpdated: string;
-  description: string;
-  amenities: Amenity[];
-  latitude: number;
-  longitude: number;
-  featured: boolean;
-  openHouse?: { date: string; startTime: string; endTime: string } | null;
-  priceReduced?: boolean;
-  newConstruction?: boolean;
-  listedBy: string;
-  isSaved?: boolean;
-  isFavorited?: boolean;
-}
+/** The consumer-visible statuses a row can carry, taken from the contract. */
+export type ListingStatus = ListingCardRow['status'];
 
-export interface SearchFilters {
-  query?: string;
-  zip?: string;
-  street?: string;
-  listingType?: ListingType | 'all';
-  propertyType?: PropertyType | 'all';
-  minPrice?: number;
-  maxPrice?: number;
-  beds?: number;
-  baths?: number;
-  minSqft?: number;
-  neighborhood?: string;
-  openHouse?: boolean;
-  newConstruction?: boolean;
-  waterfront?: boolean;
-  petFriendly?: boolean;
-  amenities?: Amenity[];
-  sort?: 'recommended' | 'newest' | 'price-asc' | 'price-desc';
-}
+/** Sort options, taken from the contract so the dropdown cannot offer one the API rejects. */
+export type ListingSort = SearchRequest['sort'];
+
+/**
+ * The filter set the search UI holds and puts in the URL.
+ *
+ * Derived from the contract's parsed request type, which is what keeps the UI and the API from
+ * drifting — and is why no occupancy field can be added here (#34): the contract has none, so this
+ * type cannot express one.
+ */
+export type SearchFilters = Partial<SearchRequest>;

@@ -3,18 +3,25 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import ListingCard from './ListingCard';
-import type { Listing } from '@/lib/types';
+import { ListingCardSkeleton } from '@/components/listing/ListingStates';
+import type { ListingCardRow } from '@/lib/types';
 
 interface Props {
   title: string;
   subtitle?: string;
   href?: string;
-  listings: Listing[];
+  listings: ListingCardRow[];
   /** Max number of listing cards to render before the "See all" tile. Defaults to 4. */
   max?: number;
   /** Override the section's outer padding class. Defaults to "px-6 pt-6 sm:px-10 lg:px-20" */
   sectionClassName?: string;
+  /** Renders `max` skeleton cards in the carousel shape instead of `listings`. */
+  loading?: boolean;
 }
+
+/** The carousel's per-card width breakpoints, shared by real cards and their loading skeletons. */
+const CARD_WIDTH_CLASS =
+  'w-[calc((100%-1.25rem)/2)] flex-shrink-0 snap-start [scroll-snap-stop:always] sm:w-[calc((100%-2.5rem)/3)] md:w-[calc((100%-3.75rem)/4)] lg:w-[calc((100%-5rem)/5)] xl:w-[calc((100%-6.25rem)/6)] 2xl:w-[calc((100%-7.5rem)/7)]';
 
 export default function ListingRow({
   title,
@@ -23,10 +30,11 @@ export default function ListingRow({
   listings,
   max = 4,
   sectionClassName,
+  loading = false,
 }: Props) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   // Show max+1 cards so See all is always after scroll
-  const showSeeAll = listings.length > max;
+  const showSeeAll = !loading && listings.length > max;
   const visible = showSeeAll ? listings.slice(0, max + 1) : listings;
 
   const [atStart, setAtStart] = useState(true);
@@ -130,66 +138,70 @@ export default function ListingRow({
         ref={scrollerRef}
         className="mt-4 flex snap-x snap-mandatory gap-5 overflow-x-auto pb-3 scrollbar-none"
       >
-        {visible.map((l, i) => {
-          // If this is the last card and See all should be shown, render See all tile
-          if (showSeeAll && i === max) {
-            return (
-              <Link
-                key="see-all"
-                href={href!}
-                className="group flex w-[calc((100%-1.25rem)/2)] flex-shrink-0 snap-start flex-col items-center justify-center gap-3 rounded-md border border-surface-border bg-surface-alt/40 p-6 text-center transition hover:bg-surface-alt hover:shadow-card [scroll-snap-stop:always] sm:w-[calc((100%-2.5rem)/3)] md:w-[calc((100%-3.75rem)/4)] lg:w-[calc((100%-5rem)/5)] xl:w-[calc((100%-6.25rem)/6)] 2xl:w-[calc((100%-7.5rem)/7)]"
-                prefetch
-              >
-                <div className="relative aspect-square w-[80px] mx-auto rounded-md overflow-visible flex items-center justify-center">
-                  {/* Airbnb-style stacked preview: 3 images, visually overlapped, center stack */}
-                  {[0, 1, 2].map((offset) => {
-                    const card = visible[offset] || listings[offset];
-                    const img = card?.imageUrls?.[0] || '';
-                    // Center the middle card, overlap left/right
-                    const base = 32; // px size for overlap
-                    const positions = [
-                      { z: 1, x: -base, y: 8, rot: -8 },
-                      { z: 2, x: 0, y: 0, rot: 0 },
-                      { z: 3, x: base, y: 8, rot: 8 },
-                    ];
-                    const pos = positions[offset];
-                    return (
-                      <span
-                        key={offset}
-                        className="absolute rounded-md border-2 border-white shadow-card bg-white overflow-hidden"
-                        style={{
-                          left: '50%',
-                          top: '50%',
-                          width: '56px',
-                          height: '56px',
-                          zIndex: pos.z,
-                          transform: `translate(-50%, -50%) translate(${pos.x}px, ${pos.y}px) rotate(${pos.rot}deg)`,
-                        }}
-                      >
-                        {}
-                        {img && <img src={img} alt="" className="h-full w-full object-cover" />}
-                      </span>
-                    );
-                  })}
-                </div>
-                <div>
-                  <p className="font-display text-base font-bold text-ink group-hover:underline">
-                    See all
-                  </p>
-                </div>
-              </Link>
-            );
-          }
-          // Otherwise, render a normal listing card
-          return (
-            <div
-              key={l.id}
-              className="w-[calc((100%-1.25rem)/2)] flex-shrink-0 snap-start [scroll-snap-stop:always] sm:w-[calc((100%-2.5rem)/3)] md:w-[calc((100%-3.75rem)/4)] lg:w-[calc((100%-5rem)/5)] xl:w-[calc((100%-6.25rem)/6)] 2xl:w-[calc((100%-7.5rem)/7)]"
-            >
-              <ListingCard listing={l} />
+        {loading &&
+          Array.from({ length: max }, (_, i) => (
+            <div key={i} className={CARD_WIDTH_CLASS}>
+              <ListingCardSkeleton />
             </div>
-          );
-        })}
+          ))}
+        {!loading &&
+          visible.map((l, i) => {
+            // If this is the last card and See all should be shown, render See all tile
+            if (showSeeAll && i === max) {
+              return (
+                <Link
+                  key="see-all"
+                  href={href!}
+                  className="group flex w-[calc((100%-1.25rem)/2)] flex-shrink-0 snap-start flex-col items-center justify-center gap-3 rounded-md border border-surface-border bg-surface-alt/40 p-6 text-center transition hover:bg-surface-alt hover:shadow-card [scroll-snap-stop:always] sm:w-[calc((100%-2.5rem)/3)] md:w-[calc((100%-3.75rem)/4)] lg:w-[calc((100%-5rem)/5)] xl:w-[calc((100%-6.25rem)/6)] 2xl:w-[calc((100%-7.5rem)/7)]"
+                  prefetch
+                >
+                  <div className="relative aspect-square w-[80px] mx-auto rounded-md overflow-visible flex items-center justify-center">
+                    {/* Airbnb-style stacked preview: 3 images, visually overlapped, center stack */}
+                    {[0, 1, 2].map((offset) => {
+                      const card = visible[offset] || listings[offset];
+                      const img = card?.primaryMedia?.url || '';
+                      // Center the middle card, overlap left/right
+                      const base = 32; // px size for overlap
+                      const positions = [
+                        { z: 1, x: -base, y: 8, rot: -8 },
+                        { z: 2, x: 0, y: 0, rot: 0 },
+                        { z: 3, x: base, y: 8, rot: 8 },
+                      ];
+                      const pos = positions[offset];
+                      return (
+                        <span
+                          key={offset}
+                          className="absolute rounded-md border-2 border-white shadow-card bg-white overflow-hidden"
+                          style={{
+                            left: '50%',
+                            top: '50%',
+                            width: '56px',
+                            height: '56px',
+                            zIndex: pos.z,
+                            transform: `translate(-50%, -50%) translate(${pos.x}px, ${pos.y}px) rotate(${pos.rot}deg)`,
+                          }}
+                        >
+                          {}
+                          {img && <img src={img} alt="" className="h-full w-full object-cover" />}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <div>
+                    <p className="font-display text-base font-bold text-ink group-hover:underline">
+                      See all
+                    </p>
+                  </div>
+                </Link>
+              );
+            }
+            // Otherwise, render a normal listing card
+            return (
+              <div key={l.id} className={CARD_WIDTH_CLASS}>
+                <ListingCard listing={l} />
+              </div>
+            );
+          })}
       </div>
     </section>
   );
