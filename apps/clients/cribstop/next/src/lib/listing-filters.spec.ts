@@ -197,3 +197,60 @@ describe('enum parameters are validated against the contract before being forwar
     ).toEqual(['Pool', 'Garage']);
   });
 });
+
+describe('numeric parameters are validated against the contract string forms', () => {
+  // The service parses these with `^\d+$` (and `^\d+(\.5)?$` for baths) inside a strict object, so
+  // forwarding a merely-finite number manufactures a 400 that reads to the user as a broken API.
+  it.each([
+    ['minPrice', '1.5'],
+    ['minPrice', '-500'],
+    ['maxPrice', '1e6'],
+    ['beds', '2.5'],
+    ['minSqft', '-1'],
+  ])('drops %s=%s rather than forwarding a value the API rejects', (key, value) => {
+    const filters = parseFiltersFromSearchParams(new URLSearchParams(`${key}=${value}`));
+    expect(filters[key as 'minPrice' | 'maxPrice' | 'beds' | 'minSqft']).toBeUndefined();
+  });
+
+  it('accepts whole numbers', () => {
+    const filters = parseFiltersFromSearchParams(
+      new URLSearchParams('minPrice=250000&maxPrice=900000&beds=3&minSqft=1200'),
+    );
+    expect(filters).toEqual({ minPrice: 250000, maxPrice: 900000, beds: 3, minSqft: 1200 });
+  });
+
+  it('accepts baths on a half step and rejects any other fraction', () => {
+    expect(parseFiltersFromSearchParams(new URLSearchParams('baths=2')).baths).toBe(2);
+    expect(parseFiltersFromSearchParams(new URLSearchParams('baths=2.5')).baths).toBe(2.5);
+    expect(parseFiltersFromSearchParams(new URLSearchParams('baths=1.7')).baths).toBeUndefined();
+    expect(parseFiltersFromSearchParams(new URLSearchParams('baths=2%2B')).baths).toBeUndefined();
+  });
+});
+
+describe('the listing type reaches the API from every link the app builds', () => {
+  it('reads the canonical type spelling', () => {
+    expect(parseFiltersFromSearchParams(new URLSearchParams('type=sale')).listingType).toBe('sale');
+  });
+
+  it('accepts listingType as an alias, so bookmarked and in-app links still filter', () => {
+    // "Homes for Sale" in the footer used this spelling; the parser read only `type`, so the link
+    // produced an unfiltered search that silently mixed sale and rent inventory.
+    expect(parseFiltersFromSearchParams(new URLSearchParams('listingType=rent')).listingType).toBe(
+      'rent',
+    );
+  });
+
+  it('prefers the canonical spelling when both are present', () => {
+    expect(
+      parseFiltersFromSearchParams(new URLSearchParams('type=sale&listingType=rent')).listingType,
+    ).toBe('sale');
+  });
+
+  it('drops the search bar tab vocabulary, which is not a contract value', () => {
+    // The bar now translates 'for-sale' -> 'sale' before building the URL; this guards the case
+    // where an old bookmark still carries the tab identity.
+    expect(
+      parseFiltersFromSearchParams(new URLSearchParams('type=for-sale')).listingType,
+    ).toBeUndefined();
+  });
+});

@@ -131,10 +131,37 @@ describe('ListingCard', () => {
     it('renders the agent name, a contact method and the office name', () => {
       render(<ListingCard listing={aListingCardRow()} />);
 
+      // `listedBy` is derived server-side as "<agent> – <office>", so it carries both the
+      // participant name and the listing firm.
       expect(screen.getByText('Sample Agent 1 – Real Broker, LLC')).toBeInTheDocument();
       expect(screen.getByText('(301) 555-0101')).toBeInTheDocument();
       expect(screen.getByText('sample.agent1@example.com')).toBeInTheDocument();
+    });
+
+    it('names the listing firm separately when listedBy does not already carry it', () => {
+      // 7.58 requires the listing firm to be identified, and `listedBy` is not guaranteed to end
+      // with the office name — so the explicit line appears exactly when it is needed.
+      render(
+        <ListingCard
+          listing={aListingCardRow({ listedBy: 'Jane Agent', officeName: 'Real Broker, LLC' })}
+        />,
+      );
+
+      expect(screen.getByText('Jane Agent')).toBeInTheDocument();
       expect(screen.getByText(/Listing courtesy of Real Broker, LLC/)).toBeInTheDocument();
+    });
+
+    it('does not repeat the office name when listedBy already ends with it', () => {
+      render(
+        <ListingCard
+          listing={aListingCardRow({
+            listedBy: 'Jane Agent – Real Broker, LLC',
+            officeName: 'Real Broker, LLC',
+          })}
+        />,
+      );
+
+      expect(screen.queryByText(/Listing courtesy of/)).not.toBeInTheDocument();
     });
 
     it('renders listedBy as delivered rather than reassembling it from parts', () => {
@@ -148,7 +175,7 @@ describe('ListingCard', () => {
       // Listing data on the card renders at 14px (location), 12px (stats) and 14px (price), so the
       // median is 14px — `text-sm`. Anything smaller fails 7.58's typeface floor.
       const { container } = render(<ListingCard listing={aListingCardRow()} />);
-      const attribution = screen.getByText(/Listing courtesy of/).parentElement;
+      const attribution = screen.getByText('Sample Agent 1 – Real Broker, LLC').parentElement;
 
       expect(attribution?.className).toContain('text-sm');
       expect(attribution?.className).not.toMatch(/text-\[1[0-3]px\]|text-xs/);

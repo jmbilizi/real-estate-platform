@@ -270,7 +270,16 @@ function MarkerPopup({ listing }: { listing: ListingCardRow }) {
         <p className="truncate text-sm font-bold tracking-wide text-ink">{title}</p>
         {address && <p className="mt-0.5 truncate text-xs text-ink-muted">{address}</p>}
         {statsLine && <p className="mt-0.5 text-xs text-ink-muted">{statsLine}</p>}
-        <p className="mt-2 text-[15px] font-extrabold text-ink">{soldLine ?? price.text}</p>
+        {/* The withheld sentence is prose, not a figure — styling it as a number reads as one. */}
+        <p
+          className={
+            soldLine || !price.isWithheld
+              ? 'mt-2 text-[15px] font-extrabold text-ink'
+              : 'mt-2 text-xs text-ink-body'
+          }
+        >
+          {soldLine ?? price.text}
+        </p>
         {/* NAR 7.58 applies to every display surface, this popup included. */}
         <ListingAttribution attribution={listing} className="mt-2" />
       </div>
@@ -486,8 +495,24 @@ export default function ListingsMapInner({
           onMarkerHover={onMarkerHover}
         />
       </MapContainer>
+      {/*
+       * The map itself is a listing display surface: a price pin and a cluster count are the row
+       * being shown, before anyone clicks. So the sample label cannot live only in the popup —
+       * PRD §6.3's rule is that if a sample row is visible, its label is visible, and today every
+       * row is a sample, which makes the default map view a field of illustrative prices. This
+       * overlay is persistent and needs no interaction, which is what the popup badge cannot be.
+       */}
+      {pins.some((listing) => listing.isSample) && (
+        <div className="pointer-events-none absolute left-3 right-3 top-3 z-[400] rounded-2xl bg-ink/85 px-3 py-1.5 text-center text-[11px] font-semibold text-white shadow-card backdrop-blur">
+          Sample data — prices shown on this map are illustrative.
+        </div>
+      )}
       {hiddenPinCount > 0 && (
-        <div className="pointer-events-none absolute left-3 right-3 top-3 z-[400] rounded-2xl bg-surface/95 px-3 py-1.5 text-center text-[11px] font-medium text-ink-muted shadow-card backdrop-blur">
+        <div
+          className={`pointer-events-none absolute left-3 right-3 z-[400] rounded-2xl bg-surface/95 px-3 py-1.5 text-center text-[11px] font-medium text-ink-muted shadow-card backdrop-blur ${
+            pins.some((listing) => listing.isSample) ? 'top-12' : 'top-3'
+          }`}
+        >
           Some sellers have chosen not to display their home’s location, so those homes appear in
           your results but not as pins on this map.
         </div>

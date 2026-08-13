@@ -38,9 +38,19 @@ export class ListingsApiError extends Error {
     this.name = 'ListingsApiError';
   }
 
-  /** A 404 on detail is "this listing is not available", not a failure the user should retry. */
+  /**
+   * "This listing is not available" — not a failure the user should retry.
+   *
+   * Requires **both** the 404 status and the contract's `not_found` code, deliberately. A gateway
+   * route miss also returns 404, but with no contract body, so the proxy labels it
+   * `internal_error`; treating status alone as "not found" made a misrouted gateway look like a
+   * withdrawn listing, and made the favorites page skip every saved home and render "No saved homes
+   * yet" instead of an error the user could act on. Silently emptying someone's saved list on an
+   * infrastructure fault is the worst available outcome. The service's only listing-level 404 always
+   * carries `code: 'not_found'`, so nothing legitimate is lost by requiring both.
+   */
   get isNotFound(): boolean {
-    return this.status === 404 || this.code === 'not_found';
+    return this.status === 404 && this.code === 'not_found';
   }
 }
 
@@ -200,7 +210,14 @@ export function toListingDetailView(detail: ListingDetail): ListingDetailView {
     unitId: unit ? unit.id : null,
     unitNumber: unit ? unit.unitNumber : null,
     isSubdivided: unit !== null,
-    isParcel: property.propertyType === 'Land',
+    /*
+     * From the advertised snapshot, not the durable site record, because this gates a *display*
+     * decision (suppressing the dwelling stat block) and every other displayed value on this view
+     * comes from `listing`. Sourcing it from `property` meant a re-classified property could show
+     * "Single Family" while hiding the bed/bath/sqft block, and could disagree with its own card,
+     * which reads the snapshot.
+     */
+    isParcel: listing.propertyType === 'Land',
 
     title: listing.title,
     address: listing.address,

@@ -131,6 +131,41 @@ describe('ListingDetailContent — suppressed address', () => {
     expect(map.getAttribute('data-lat')).toBe('');
     expect(map.getAttribute('data-lng')).toBe('');
   });
+
+  it('does not fall back to the listing title, which is not covered by address suppression', async () => {
+    // Server-side suppression masks address/latitude/longitude/unitNumber but NOT the free-text
+    // `title` (#59). A real feed's title routinely carries the street line, so heading-falls-back-
+    // to-title would hand back precisely the address the seller withheld.
+    const view = toListingDetailView(
+      aListingDetail({
+        listing: {
+          address: null,
+          latitude: null,
+          longitude: null,
+          title: '742 Evergreen Terrace — Rare Find (Sample)',
+          neighborhood: 'Downtown',
+          city: 'Bethesda',
+          state: 'MD',
+        },
+      }),
+    );
+    await renderAndSettle(<ListingDetailContent listing={view} />);
+
+    expect(screen.queryByText(/742 Evergreen Terrace/)).toBeNull();
+    expect(screen.queryByText(/Evergreen/)).toBeNull();
+
+    // The heading falls back to location, which has no street component by construction.
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Downtown, Bethesda');
+  });
+
+  it('still renders the street address when the seller did not opt out', async () => {
+    const view = toListingDetailView(aListingDetail());
+    await renderAndSettle(<ListingDetailContent listing={view} />);
+
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+      '100 Test St, Bethesda, MD 20814',
+    );
+  });
 });
 
 describe('ListingDetailContent — sample labelling', () => {

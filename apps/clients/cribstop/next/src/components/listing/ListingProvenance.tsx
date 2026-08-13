@@ -35,7 +35,15 @@ export default function ListingProvenance({
     <p className={`text-xs leading-relaxed text-ink-muted ${className}`}>
       {source === 'brightMLS'
         ? `Information provided by Bright MLS. Deemed reliable but not guaranteed. ${updated}`
-        : `Listing information provided by ${BRAND.brokerage}. Deemed reliable but not guaranteed. ${updated}`}
+        : /*
+           * `internal` covers listings we hold directly, which per PRD §6.2 includes owner-claimed
+           * and FSBO rows. Naming the brokerage as the source would assert that Real Broker, LLC
+           * supplied a listing its owner supplied — true for some internal rows, not all, and the
+           * whole point of driving provenance off the row is not to overclaim. The site is the
+           * accurate answer for every `internal` row. Brokerage identification is a separate
+           * obligation and is carried unconditionally by the attribution block and the footer.
+           */
+          `Listing information provided by ${BRAND.siteDomain}. Deemed reliable but not guaranteed. ${updated}`}
     </p>
   );
 }

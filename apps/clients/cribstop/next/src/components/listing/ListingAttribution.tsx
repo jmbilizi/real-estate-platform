@@ -49,7 +49,14 @@ export default function ListingAttribution({
           )}
         </p>
       )}
-      <p>Listing courtesy of {officeName}</p>
+      {/*
+       * `listedBy` is derived server-side as `<agent or broker> – <office>`, so it usually already
+       * names the office and repeating it reads as a stutter ("Jane Agent – Real Broker, LLC /
+       * Listing courtesy of Real Broker, LLC"). The line is still rendered whenever `listedBy` does
+       * NOT already end with the office name, because 7.58 requires the listing firm to be
+       * identified and `listedBy` is not guaranteed to carry it.
+       */}
+      {!listedBy.endsWith(officeName) && <p>Listing courtesy of {officeName}</p>}
     </div>
   );
 }

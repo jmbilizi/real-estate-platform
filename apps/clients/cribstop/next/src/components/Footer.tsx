@@ -53,12 +53,12 @@ export default function Footer() {
             <h4 className="mb-3 text-sm font-semibold text-ink">Explore</h4>
             <ul className="space-y-2 text-sm text-ink-muted">
               <li>
-                <a href="/search?listingType=sale" className="hover:text-ink">
+                <a href="/search?type=sale" className="hover:text-ink">
                   Homes for Sale
                 </a>
               </li>
               <li>
-                <a href="/search?listingType=rent" className="hover:text-ink">
+                <a href="/search?type=rent" className="hover:text-ink">
                   Rentals
                 </a>
               </li>

@@ -104,6 +104,22 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
     listing.state,
     listing.zip,
   );
+  /**
+   * The heading for a listing whose seller opted out of address display.
+   *
+   * It must NOT fall back to `listing.title`. Address suppression currently masks `address`,
+   * `latitude` and `longitude` (and `unit.unitNumber`), but **not** the free-text `title`, which is
+   * an open server-side gap tracked as #59 — sample titles like "Alexandria Waterfront Penthouse"
+   * are harmless, but a real feed's title routinely contains the street line. Rendering it here
+   * would hand back exactly the address the seller withheld, which is the whole point of the
+   * suppression. Location has no street component by construction, so it is safe whatever #59 does.
+   */
+  const suppressedAddressHeading = formatListingLocation(
+    listing.neighborhood,
+    listing.city,
+    listing.state,
+  );
+
   const dwellingStats = formatDwellingStats(listing.beds, listing.baths, listing.sqft);
   const lotSizeText = formatLotSize(listing.lotSqft);
   const priceDisplay = formatListingPrice(listing.price, listing.listingType);
@@ -147,7 +163,7 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
         )}
         <div className="min-w-0 flex-1">
           <h1 className="font-display text-xs font-semibold tracking-tight text-ink sm:text-sm md:text-base lg:text-lg xl:text-xl">
-            {streetAddress ?? listing.title}
+            {streetAddress ?? suppressedAddressHeading}
           </h1>
           <p className="mt-1 text-xs text-ink-muted lg:text-sm">
             {[dwellingStats, listing.propertyType].filter(Boolean).join(' · ')}
@@ -448,14 +464,19 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
       <div className="flex-shrink-0 border-t border-surface-border bg-white/95 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] backdrop-blur-sm lg:hidden">
         <div className="flex items-center justify-between gap-3 px-4 py-3">
           <div className="min-w-0">
+            {/*
+             * `priceDisplay.text` rather than a re-format through `formatPrice`, which took a
+             * non-null `number` and so needed an `as number` cast here. The cast was unreachable
+             * behind the ternary, but `formatPrice(null)` renders `$0` via `Intl.NumberFormat` —
+             * exactly the fabricated price the withheld copy exists to prevent — so the cast was one
+             * refactor away from being the bug. There is now no path that can format a null price.
+             */}
             <p className="font-display text-lg font-extrabold leading-tight text-ink">
-              {closePriceText
-                ? closePriceText
-                : priceDisplay.isWithheld
-                  ? priceDisplay.text
-                  : formatPrice(listing.price as number, listing.listingType).split('/')[0]}
+              {closePriceText ?? priceDisplay.text.split('/')[0]}
             </p>
-            {listing.listingType === 'rent' && <p className="text-xs text-ink-muted">/month</p>}
+            {!priceDisplay.isWithheld && listing.listingType === 'rent' && (
+              <p className="text-xs text-ink-muted">/month</p>
+            )}
           </div>
           <div className="flex shrink-0 gap-2">
             <button className="btn-secondary py-2 text-sm">Message</button>

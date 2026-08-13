@@ -1,7 +1,10 @@
-import { AMENITIES, LISTING_TYPES, PROPERTY_TYPES } from '@cribstop/property-contracts';
+import {
+  AMENITIES,
+  LISTING_TYPES,
+  PROPERTY_TYPES,
+  SORT_VALUES,
+} from '@cribstop/property-contracts';
 import type { SearchFilters } from '@/lib/types';
-
-const SORT_VALUES = ['recommended', 'newest', 'price-asc', 'price-desc'] as const;
 
 /**
  * URL ↔ filter-state translation and the Lot/Land interlock.
@@ -55,11 +58,24 @@ export function parseFiltersFromSearchParams(params: URLSearchParams): SearchFil
   const filters: SearchFilters = {};
 
   const str = (key: string) => params.get(key)?.trim() || undefined;
-  const num = (key: string) => {
+
+  /**
+   * Numeric parameters are validated against the **contract's string forms**, not merely against
+   * "is this a number".
+   *
+   * `minPrice`/`maxPrice`/`beds`/`minSqft` are `^\d+$` server-side and `baths` is `^\d+(\.5)?$`, so
+   * `?minPrice=1.5`, `?minPrice=-500` and `?baths=1.7` are all 400s. Forwarding them would
+   * manufacture exactly the error this function exists to avoid — see the note on `oneOf` below.
+   */
+  const int = (key: string) => {
     const raw = str(key);
-    if (raw === undefined) return undefined;
-    const parsed = Number(raw);
-    return Number.isFinite(parsed) ? parsed : undefined;
+    if (raw === undefined || !/^\d+$/.test(raw)) return undefined;
+    return Number(raw);
+  };
+  const halfStep = (key: string) => {
+    const raw = str(key);
+    if (raw === undefined || !/^\d+(\.5)?$/.test(raw)) return undefined;
+    return Number(raw);
   };
   const bool = (key: string) => (params.get(key) === 'true' ? true : undefined);
 
@@ -84,9 +100,16 @@ export function parseFiltersFromSearchParams(params: URLSearchParams): SearchFil
       : undefined;
   };
 
-  const listingType = str('type');
-  if (listingType && listingType !== 'all') {
-    filters.listingType = oneOf('type', LISTING_TYPES);
+  /**
+   * `type` is the canonical spelling the search bar builds. `listingType` is accepted as an alias
+   * because several in-app links and any bookmarked URL use it; without this, "Homes for Sale" in
+   * the footer produced an unfiltered search that silently mixed sale and rent inventory.
+   */
+  const listingTypeRaw = str('type') ?? str('listingType');
+  if (listingTypeRaw && listingTypeRaw !== 'all') {
+    filters.listingType = (LISTING_TYPES as readonly string[]).includes(listingTypeRaw)
+      ? (listingTypeRaw as SearchFilters['listingType'])
+      : undefined;
   }
 
   /**
@@ -101,11 +124,11 @@ export function parseFiltersFromSearchParams(params: URLSearchParams): SearchFil
     filters.propertyType = oneOf('propertyType', PROPERTY_TYPES);
   }
 
-  filters.minPrice = num('minPrice');
-  filters.maxPrice = num('maxPrice');
-  filters.beds = num('beds');
-  filters.baths = num('baths');
-  filters.minSqft = num('minSqft');
+  filters.minPrice = int('minPrice');
+  filters.maxPrice = int('maxPrice');
+  filters.beds = int('beds');
+  filters.baths = halfStep('baths');
+  filters.minSqft = int('minSqft');
 
   filters.openHouse = bool('openHouse');
   filters.newConstruction = bool('newConstruction');

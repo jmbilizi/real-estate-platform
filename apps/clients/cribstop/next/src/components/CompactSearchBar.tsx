@@ -12,6 +12,31 @@ import {
 } from '@/lib/search-utils';
 import { isParcelOnlySelection, PARCEL_INTERLOCK_HINT, SearchPanel } from '@/lib/store/types';
 import { BED_OPTIONS, DateRangePanel } from './DateRangePanel';
+import { PROPERTY_TYPES } from '@cribstop/property-contracts';
+import type { ListingType } from '@/lib/types';
+
+/**
+ * The bar's tab vocabulary is UI state; the contract's is what may go in a URL.
+ *
+ * These are deliberately separate: `'for-sale'`/`'for-rent'` is the `ListingTab` identity the
+ * header tabs and `uiSlice` share, while the API's `listingType` is `sale`/`rent`/`sold`. The bar
+ * used to put the tab value straight into `?type=`, which the search page then dropped as an
+ * unrecognised enum — so every "For Sale" search silently returned sale *and* rent inventory.
+ * Translating here keeps the tab identity intact and the URL contract-valid.
+ */
+const LISTING_TYPE_FOR_TAB: Record<'for-sale' | 'for-rent', ListingType> = {
+  'for-sale': 'sale',
+  'for-rent': 'rent',
+};
+
+/**
+ * `'2+'` is a label, not a value. The contract's `baths` is `^\d+(\.5)?$`, so the label was dropped
+ * client-side (and would have been a 400 if forwarded) — the bathrooms filter never applied.
+ */
+function bathsParamValue(label: string): string | undefined {
+  const numeric = label.replace('+', '').trim();
+  return /^\d+(\.5)?$/.test(numeric) ? numeric : undefined;
+}
 
 // Shape/position transition for the dock wrapper below. Only pill <-> expanded
 // is handed to Framer's `layout` (not `layoutId` — no shared/cross-tree
@@ -991,16 +1016,6 @@ export default function CompactSearchBar({
   }
 
   function renderWhatPanelContent(_highlightRef: React.RefObject<HTMLDivElement | null>) {
-    const PROPERTY_TYPES = [
-      'House',
-      'Townhome',
-      'Condo',
-      'Co-op',
-      'Lot/Land',
-      'Mobile Homes',
-      'Multi-Family',
-      'Other',
-    ];
     const BATHS_OPTS = ['Any', '1+', '2+', '3+', '4+', '5+'];
     const bathIdx = baths === '' ? 0 : BATHS_OPTS.indexOf(baths);
     const bedsOpts = BED_OPTIONS.map((b) => (b.value ? b.value + '+' : 'Any'));
@@ -1593,10 +1608,11 @@ export default function CompactSearchBar({
     if (searchMaxPrice > 0) params.set('maxPrice', String(searchMaxPrice));
     const beds = BED_OPTIONS[bedsIdx].value;
     if (beds) params.set('beds', beds);
-    if (baths) params.set('baths', baths);
+    const bathsValue = baths ? bathsParamValue(baths) : undefined;
+    if (bathsValue) params.set('baths', bathsValue);
     if (selectedPropertyTypes.length > 0)
       params.set('propertyType', selectedPropertyTypes.join(','));
-    params.set('type', listingType);
+    params.set('type', LISTING_TYPE_FOR_TAB[listingType]);
     setIsSearching(true);
     router.push(`/search?${params.toString()}`);
     setIsDropdownOpen(false);
@@ -1668,10 +1684,11 @@ export default function CompactSearchBar({
               if (searchMaxPrice > 0) params.set('maxPrice', String(searchMaxPrice));
               const beds = BED_OPTIONS[bedsIdx].value;
               if (beds) params.set('beds', beds);
-              if (baths) params.set('baths', baths);
+              const bathsValue = baths ? bathsParamValue(baths) : undefined;
+              if (bathsValue) params.set('baths', bathsValue);
               if (selectedPropertyTypes.length > 0)
                 params.set('propertyType', selectedPropertyTypes.join(','));
-              params.set('type', listingType);
+              params.set('type', LISTING_TYPE_FOR_TAB[listingType]);
               router.push(`/search?${params.toString()}`);
               resolve();
             })();
@@ -1691,10 +1708,11 @@ export default function CompactSearchBar({
             if (searchMaxPrice > 0) params.set('maxPrice', String(searchMaxPrice));
             const beds = BED_OPTIONS[bedsIdx].value;
             if (beds) params.set('beds', beds);
-            if (baths) params.set('baths', baths);
+            const bathsValue = baths ? bathsParamValue(baths) : undefined;
+            if (bathsValue) params.set('baths', bathsValue);
             if (selectedPropertyTypes.length > 0)
               params.set('propertyType', selectedPropertyTypes.join(','));
-            params.set('type', listingType);
+            params.set('type', LISTING_TYPE_FOR_TAB[listingType]);
             router.push(`/search?${params.toString()}`);
             resolve();
           },
@@ -1707,10 +1725,11 @@ export default function CompactSearchBar({
         if (searchMaxPrice > 0) params.set('maxPrice', String(searchMaxPrice));
         const beds = BED_OPTIONS[bedsIdx].value;
         if (beds) params.set('beds', beds);
-        if (baths) params.set('baths', baths);
+        const bathsValue = baths ? bathsParamValue(baths) : undefined;
+        if (bathsValue) params.set('baths', bathsValue);
         if (selectedPropertyTypes.length > 0)
           params.set('propertyType', selectedPropertyTypes.join(','));
-        params.set('type', listingType);
+        params.set('type', LISTING_TYPE_FOR_TAB[listingType]);
         router.push(`/search?${params.toString()}`);
         resolve();
       }
@@ -1836,7 +1855,7 @@ export default function CompactSearchBar({
       } else if ((location || '').trim()) {
         params.set('q', (location || '').trim());
       }
-      params.set('type', listingType);
+      params.set('type', LISTING_TYPE_FOR_TAB[listingType]);
       if (dateRange.start) params.set('moveIn', dateRange.start);
       if (dateRange.end && dateRange.end !== dateRange.start)
         params.set('moveInEnd', dateRange.end);

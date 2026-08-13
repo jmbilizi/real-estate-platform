@@ -1,10 +1,11 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { aListingCardRow } from '@/test/fixtures';
-import { searchListings } from '@/lib/api/listings';
+import { getListingsMeta, searchListings } from '@/lib/api/listings';
 import HomePageContent from './HomePageContent';
 
 jest.mock('@/lib/api/listings', () => ({
   searchListings: jest.fn(),
+  getListingsMeta: jest.fn(),
 }));
 
 jest.mock('@/lib/context', () => ({
@@ -12,6 +13,7 @@ jest.mock('@/lib/context', () => ({
 }));
 
 const mockedSearchListings = searchListings as jest.Mock;
+const mockedGetListingsMeta = getListingsMeta as jest.Mock;
 
 function envelope(rows: ReturnType<typeof aListingCardRow>[]) {
   return {
@@ -25,8 +27,63 @@ function envelope(rows: ReturnType<typeof aListingCardRow>[]) {
 }
 
 describe('HomePageContent', () => {
+  beforeEach(() => {
+    mockedGetListingsMeta.mockResolvedValue({
+      dataUpdatedAt: '2026-04-20T18:00:00.000Z',
+      sources: ['internal'],
+      listingCount: 13,
+    });
+  });
+
   afterEach(() => {
     mockedSearchListings.mockReset();
+    mockedGetListingsMeta.mockReset();
+  });
+
+  describe('hero statistics', () => {
+    it('renders the real dataset count rather than a hardcoded figure', async () => {
+      mockedSearchListings.mockResolvedValue(envelope([aListingCardRow()]));
+
+      render(<HomePageContent />);
+
+      await waitFor(() => expect(screen.getByText('13')).toBeInTheDocument());
+      expect(screen.getByText('Homes listed')).toBeInTheDocument();
+      // The old tile asserted "12k+ Active listings", which was a fabricated inventory figure.
+      expect(screen.queryByText(/12k\+/)).not.toBeInTheDocument();
+    });
+
+    it('makes no MLS claim, because every row is internal and there is no Bright licence yet', async () => {
+      mockedSearchListings.mockResolvedValue(envelope([aListingCardRow()]));
+
+      render(<HomePageContent />);
+
+      await waitFor(() => expect(screen.getByText('States licensed')).toBeInTheDocument());
+      expect(screen.queryByText('MLS')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Daily updates/)).not.toBeInTheDocument();
+    });
+
+    it('omits the count tile entirely when the dataset count is unavailable', async () => {
+      mockedGetListingsMeta.mockRejectedValue(new Error('unavailable'));
+      mockedSearchListings.mockResolvedValue(envelope([aListingCardRow()]));
+
+      render(<HomePageContent />);
+
+      await waitFor(() => expect(screen.getByText('States licensed')).toBeInTheDocument());
+      expect(screen.queryByText('Homes listed')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('neighborhood tiles', () => {
+    it('asserts no per-neighborhood inventory count', async () => {
+      mockedSearchListings.mockResolvedValue(envelope([aListingCardRow()]));
+
+      render(<HomePageContent />);
+
+      await waitFor(() => expect(screen.getByText('Explore neighborhoods')).toBeInTheDocument());
+      // These were hardcoded ("24 homes", "18 homes", …) — fabricated, and verifiably wrong beside
+      // carousels that now come from the real API.
+      expect(screen.queryByText(/\d+ homes/)).not.toBeInTheDocument();
+    });
   });
 
   it('fires every carousel query in parallel rather than one after another', () => {

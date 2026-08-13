@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import ListingRow from '@/components/ListingRow';
 import NeighborhoodRow from '@/components/NeighborhoodRow';
-import { searchListings } from '@/lib/api/listings';
+import { getListingsMeta, searchListings } from '@/lib/api/listings';
 import type { ListingSearchQuery } from '@/lib/api/listings';
 import type { ListingCardRow } from '@/lib/types';
 import Link from 'next/link';
@@ -61,55 +61,71 @@ const NEIGHBORHOODS = [
   {
     name: 'Penn Quarter',
     city: 'Washington, DC',
-    count: 24,
     img: 'https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=900&auto=format&fit=crop&q=75',
   },
   {
     name: 'Federal Hill',
     city: 'Baltimore, MD',
-    count: 18,
     img: 'https://images.unsplash.com/photo-1449157291145-7efd050a4d0e?w=900&auto=format&fit=crop&q=75',
   },
   {
     name: 'Old Town',
     city: 'Alexandria, VA',
-    count: 31,
     img: 'https://images.unsplash.com/photo-1486325212027-8081e485255e?w=900&auto=format&fit=crop&q=75',
   },
   {
     name: 'Downtown Bethesda',
     city: 'Bethesda, MD',
-    count: 15,
     img: 'https://images.unsplash.com/photo-1460317442991-0ec209397118?w=900&auto=format&fit=crop&q=75',
   },
   {
     name: 'Logan Circle',
     city: 'Washington, DC',
-    count: 22,
     img: 'https://images.unsplash.com/photo-1464983953574-0892a716854b?w=900&auto=format&fit=crop&q=75',
   },
   {
     name: 'Fells Point',
     city: 'Baltimore, MD',
-    count: 17,
     img: 'https://images.unsplash.com/photo-1465101046530-73398c7f28ca?w=900&auto=format&fit=crop&q=75',
   },
   {
     name: 'Del Ray',
     city: 'Alexandria, VA',
-    count: 19,
     img: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=900&auto=format&fit=crop&q=75',
   },
   {
     name: 'Chevy Chase',
     city: 'Bethesda, MD',
-    count: 13,
     img: 'https://images.unsplash.com/photo-1460474647541-4edd0cd0c746?w=900&auto=format&fit=crop&q=75',
   },
 ];
 
+/**
+ * The dataset's own listing count, for the hero stat tile.
+ *
+ * Deliberately the dataset endpoint rather than a search envelope's `total`: a filtered total would
+ * make the headline figure mean "listings matching whatever the last carousel asked for". `null`
+ * means "not known" and the tile is omitted — never a fallback number.
+ */
+function useDatasetListingCount(): number | null {
+  const [count, setCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getListingsMeta(controller.signal)
+      .then((meta) => setCount(meta.listingCount))
+      .catch(() => {
+        // Chrome, not a task: the tile simply does not render.
+      });
+    return () => controller.abort();
+  }, []);
+
+  return count;
+}
+
 export default function HomePageContent() {
   const { listingType } = useApp();
+  const datasetCount = useDatasetListingCount();
 
   // `listingType=all` (the default when this query key is omitted) already excludes sold rows
   // server-side, so there is deliberately no separate "sold" carousel here.
@@ -143,13 +159,17 @@ export default function HomePageContent() {
 
   return (
     <>
+      {/*
+       * Subtitle is not "Hand-picked". This row is `sort: 'recommended'`, which orders by
+       * `featured DESC`, and `sponsored` is `featured_reason = 'paid'` — so the row can lead with
+       * paid placement. Each card discloses its own Sponsored label, but framing the row as
+       * editorial curation would understate that at the section level (FTC / PRD §6).
+       */}
       {showFeatured && (
         <ListingRow
           title={listingType === 'sale' ? 'Featured homes for sale' : 'Featured homes for rent'}
-          subtitle={
-            listingType === 'sale' ? 'Hand-picked homes for sale' : 'Hand-picked homes for rent'
-          }
-          href={listingType === 'sale' ? '/search?listingType=sale' : '/search?listingType=rent'}
+          subtitle="Featured and sponsored listings, shown first"
+          href={listingType === 'sale' ? '/search?type=sale' : '/search?type=rent'}
           listings={featured.listings}
           loading={featured.loading}
           max={7}
@@ -164,16 +184,21 @@ export default function HomePageContent() {
               ? 'Trending in Washington, Baltimore, and Northern Virginia'
               : 'Move-in ready across the DMV'
           }
-          href={listingType === 'sale' ? '/search?listingType=sale' : '/search?listingType=rent'}
+          href={listingType === 'sale' ? '/search?type=sale' : '/search?type=rent'}
           listings={primary.listings}
           loading={primary.loading}
           max={7}
         />
       )}
 
+      {/*
+       * "Popular areas across the DMV" replaced: ranking areas by popularity edges toward
+       * area-desirability framing on a housing product, which is the shape a steering claim takes.
+       * A plain geographic statement carries the same navigational value with none of that.
+       */}
       <NeighborhoodRow
         title="Explore neighborhoods"
-        subtitle="Popular areas across the DMV"
+        subtitle="Neighborhoods across Maryland, DC, and Virginia"
         href="/search?group=neighborhoods"
         neighborhoods={NEIGHBORHOODS}
         max={6}
@@ -208,7 +233,7 @@ export default function HomePageContent() {
               ? "Fresh inventory you don't want to miss"
               : 'Newly available homes for rent'
           }
-          href={listingType === 'sale' ? '/search?listingType=sale' : '/search?listingType=rent'}
+          href={listingType === 'sale' ? '/search?type=sale' : '/search?type=rent'}
           listings={recent.listings}
           loading={recent.loading}
           max={7}
@@ -220,7 +245,7 @@ export default function HomePageContent() {
           <div className="grid gap-8 px-8 py-12 sm:grid-cols-[1.4fr_1fr] sm:items-center sm:px-12 sm:py-16 lg:px-16">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-400">
-                Real Broker LLC
+                {BRAND.brokerageShort}
               </p>
               <h2 className="mt-3 font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
                 Trusted by buyers, sellers, and renters across the DMV.
@@ -245,17 +270,37 @@ export default function HomePageContent() {
                 </Link>
               </div>
             </div>
-            <dl className="grid grid-cols-3 gap-6 sm:gap-8">
-              {[
-                ['12k+', 'Active listings'],
-                ['3', 'States covered'],
-                ['MLS', 'Daily updates'],
-              ].map(([big, label]) => (
-                <div key={label}>
-                  <dt className="font-display text-3xl font-extrabold sm:text-4xl">{big}</dt>
-                  <dd className="mt-1 text-xs uppercase tracking-wider text-ink/60">{label}</dd>
+            {/*
+             * Both of the figures that used to sit here were fabricated facts (PRD §6.3):
+             *
+             * - "12k+ Active listings" was a hardcoded number, wrong by orders of magnitude against
+             *   the real dataset the carousels below now render.
+             * - "MLS / Daily updates" claimed MLS-sourced, daily-refreshed data. Every row is
+             *   `source: 'internal'` and there is no Bright content licence yet (#33), so it was the
+             *   same misrepresentation of MLS provenance that `ListingProvenance` exists to prevent
+             *   — asserted 200px away from it.
+             *
+             * The listing count now comes from the dataset endpoint and the tile is omitted
+             * entirely when that value is unavailable, rather than falling back to a guess. The
+             * licensure figure is the one claim here that was always true.
+             */}
+            <dl className="grid grid-cols-2 gap-6 sm:gap-8">
+              {datasetCount !== null && (
+                <div>
+                  <dt className="font-display text-3xl font-extrabold sm:text-4xl">
+                    {datasetCount.toLocaleString()}
+                  </dt>
+                  <dd className="mt-1 text-xs uppercase tracking-wider text-ink/60">
+                    {datasetCount === 1 ? 'Home listed' : 'Homes listed'}
+                  </dd>
                 </div>
-              ))}
+              )}
+              <div>
+                <dt className="font-display text-3xl font-extrabold sm:text-4xl">3</dt>
+                <dd className="mt-1 text-xs uppercase tracking-wider text-ink/60">
+                  States licensed
+                </dd>
+              </div>
             </dl>
           </div>
         </div>
