@@ -91,6 +91,17 @@ pnpm run infra:validate:dev            # Kustomize validation per env
   `infra/deploy-control.yaml` (CI/CD, enumerated by `yq` key lookup). A service missing from either
   never deploys, with no error. The CI image-build matrix is auto-derived from the `container-build`
   target — don't hardcode it.
+- **The inverse is just as silent: a gateway can advertise a service that is gated off.**
+  `apps/api-gateway/Startup.cs` loads every `Configuration/Routes/*.json` unconditionally, so a
+  route file ships routes _and_ a `SwaggerEndPoints` entry regardless of whether
+  `infra/deploy-control.yaml` will deploy that service to the target environment. Nothing
+  cross-checks the two. The failure mode is not "never deploys" but **"advertised but never
+  deployed"**: SwaggerForOcelot cannot fetch the downstream document, so
+  `/swagger/docs/v1/<Service>` returns **500** (taking out the whole aggregation endpoint, not just
+  that one document) and the service's routes return **502** — discovered by a human in a browser,
+  never by CI. Cost a dev outage on #22/#71. When adding a gateway route, check the service's
+  `enabled`/`auto_deploy` in **every** environment block, not just the one you're testing.
+  Guard-rail check tracked in #72.
 - **An image is rebuilt only when its own Dockerfile inputs change.** Nx marks _every_ project
   affected when `pnpm-lock.yaml`, `nx.json` or the root `package.json` changes, which any
   service-adding branch does — so `tools/ci/affected-images.js` narrows the matrix using each
