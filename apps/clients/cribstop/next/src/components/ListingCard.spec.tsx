@@ -226,60 +226,59 @@ describe('ListingCard', () => {
       remarks: null,
     };
 
-    it('renders exactly one open-house affordance, carrying the when', () => {
+    it('renders the whole statement — label, weekday, calendar date and time range', () => {
       const { container } = render(<ListingCard listing={aListingCardRow({ openHouse })} />);
 
-      // One badge on the image, not three affordances (badge + star chip + date row).
-      expect(screen.getByText(/^Open Sat/)).toBeInTheDocument();
-      expect(container.textContent?.match(/Open Sat/g)).toHaveLength(1);
-      // The old star chip is gone.
-      expect(screen.queryByText('Open')).not.toBeInTheDocument();
-    });
+      // The date is the point. "Open Sat" never said *which* Saturday, and an open house is the
+      // one listing fact where being off by a week is a wasted trip to a house. Asserted as exact
+      // visible strings: this used to be abbreviated in a pill with the real value hidden behind
+      // `title`, which is not the same as a consumer being able to read it.
+      expect(screen.getByText('Open house')).toBeInTheDocument();
+      expect(screen.getByText('Sat, Sep 5 · 11am–1pm')).toBeInTheDocument();
 
-    it('keeps the full time range reachable when the badge abbreviates it', () => {
-      render(<ListingCard listing={aListingCardRow({ openHouse })} />);
-
-      const badge = screen.getByText(/^Open Sat/);
-      expect(badge.getAttribute('title')).toMatch(/Open house .*Sep 5/);
-      expect(badge.querySelector('.sr-only')?.textContent).toMatch(/Sep 5/);
+      // Still exactly one affordance, not the old three (pill + star chip + date row).
+      expect(container.textContent?.match(/Open house/g)).toHaveLength(1);
     });
 
     it('renders no open-house affordance when the API sent none', () => {
       render(<ListingCard listing={aListingCardRow({ openHouse: null })} />);
 
-      expect(screen.queryByText(/Open Sat/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Open house/)).not.toBeInTheDocument();
       expect(screen.queryByText('Open')).not.toBeInTheDocument();
     });
 
-    it('never shows an open-house badge on a sold row, where it would mislead', () => {
+    it('never shows an open house on a sold row, where it would mislead', () => {
       render(
         <ListingCard
           listing={aListingCardRow({ openHouse, listingType: 'sold', status: 'Sold' })}
         />,
       );
 
-      expect(screen.queryByText(/Open Sat/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Open house/)).not.toBeInTheDocument();
       expect(screen.getByText('Sold')).toBeInTheDocument();
     });
 
-    it('lets the open-house badge win the slot over a marketing badge', () => {
+    it('no longer contends with a marketing badge, now that it has its own band', () => {
       render(
         <ListingCard
           listing={aListingCardRow({ openHouse, priceReduced: true, newConstruction: true })}
         />,
       );
 
-      expect(screen.getByText(/^Open Sat/)).toBeInTheDocument();
-      expect(screen.queryByText('Price reduced')).not.toBeInTheDocument();
+      // Open house used to win the single corner slot and suppress these outright. It sits at the
+      // foot of the image now, so both can be true at once — which they are.
+      expect(screen.getByText(/^Open house/)).toBeInTheDocument();
+      expect(screen.getByText('Price reduced')).toBeInTheDocument();
+      // The pill itself is still one slot, filled by priority.
       expect(screen.queryByText('New construction')).not.toBeInTheDocument();
     });
 
-    it('never lets the badge slot displace a required disclosure label', () => {
+    it('never lets either image affordance displace a required disclosure label', () => {
       render(
         <ListingCard listing={aListingCardRow({ openHouse, isSample: true, sponsored: true })} />,
       );
 
-      expect(screen.getByText(/^Open Sat/)).toBeInTheDocument();
+      expect(screen.getByText(/^Open house/)).toBeInTheDocument();
       expect(screen.getByText(/sample data/i)).toBeInTheDocument();
       expect(screen.getByText('Sponsored')).toBeInTheDocument();
     });

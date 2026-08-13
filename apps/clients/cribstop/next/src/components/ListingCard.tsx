@@ -9,8 +9,7 @@ import {
   formatListingLocation,
   formatListingPrice,
   formatLotSize,
-  formatOpenHouse,
-  formatOpenHouseBadge,
+  formatOpenHouseWhen,
 } from '@/lib/listing-format';
 import ListingAttribution from '@/components/listing/ListingAttribution';
 import ListingImage from '@/components/listing/ListingImage';
@@ -44,32 +43,37 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
   const soldLine = isSold ? formatClosePrice(listing.closePrice, listing.closeDate) : null;
 
   /**
-   * One badge slot on the image, filled by priority.
+   * Open house gets its own full-width band across the foot of the image, not the corner pill.
    *
-   * Open house is consolidated here and carries the *when* ("Open Sat 1–3 PM"), replacing what used
-   * to be three separate affordances on one card: this badge, a star chip beside the title, and a
-   * full date/time text row. That text row was also the only row open-house cards had and other
-   * cards did not, which is what made tiles in a grid different heights.
+   * A card once carried three separate open-house affordances (a corner badge, a star chip beside
+   * the title, and a full date/time text row). The text row was the only row open-house cards had
+   * and other cards did not, which is what made tiles in a grid different heights — so it had to
+   * go. Collapsing everything into the corner pill fixed the height but cost the date, and "Open
+   * Sat" does not say *which* Saturday. An open house is the one listing fact where being off by a
+   * week means a wasted trip to a house, so the whole statement has to be legible.
    *
-   * Priority is deliberate rather than incidental:
-   * - Open house outranks the rest because it is time-bound and actionable — it expires, the others
-   *   do not.
-   * - A **sold** row never shows an open-house badge. The API only sends upcoming occurrences, but
-   *   a sold listing with one would be actively misleading, so the sold ribbon wins outright.
-   * - The required disclosure labels (sample, sponsored) are NOT in this rotation and never compete
-   *   for this slot — they have their own guaranteed row below the image. A marketing badge must
-   *   never be able to displace a label that has to be shown.
+   * The band solves both: it spans the card and stacks the label over the when, so the calendar
+   * date survives instead of being truncated away, and it sits inside the fixed-aspect image, so it
+   * costs no card height at all.
+   *
+   * A **sold** row never shows one. The API only sends upcoming occurrences, but a sold listing
+   * with one would be actively misleading, so the sold ribbon wins outright.
    */
-  const openHouseBadge = !isSold && listing.openHouse ? listing.openHouse : null;
-  const marketingBadge = openHouseBadge
-    ? formatOpenHouseBadge(openHouseBadge)
-    : listing.priceReduced
-      ? 'Price reduced'
-      : listing.newConstruction
-        ? 'New construction'
-        : listing.featured
-          ? 'Featured'
-          : null;
+  const openHouse = !isSold && listing.openHouse ? listing.openHouse : null;
+
+  /**
+   * The corner pill is now purely marketing, and no longer contends with open house — moving open
+   * house out is what freed it. The required disclosure labels (sample, sponsored) were never in
+   * this rotation and still are not: they have their own guaranteed row below the image, because a
+   * marketing badge must never be able to displace a label that has to be shown.
+   */
+  const marketingBadge = listing.priceReduced
+    ? 'Price reduced'
+    : listing.newConstruction
+      ? 'New construction'
+      : listing.featured
+        ? 'Featured'
+        : null;
 
   return (
     <div className="group block cursor-pointer" onClick={openModal}>
@@ -91,20 +95,34 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
 
         {marketingBadge && (
           <span
-            // Width is capped so the badge can never run under the save control at `right-3`;
-            // 3.5rem is that control plus its gutter. Beyond that it truncates, and the `title` and
-            // screen-reader text below keep the full range reachable.
+            // Width is capped so the pill can never run under the save control at `right-3`;
+            // 3.5rem is that control plus its gutter.
             className={`absolute left-3 max-w-[calc(100%-3.5rem)] truncate rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-ink shadow-card ${
               isSold ? 'top-9' : 'top-3'
             }`}
-            // The badge abbreviates the time, so the full range stays reachable.
-            title={openHouseBadge ? `Open house ${formatOpenHouse(openHouseBadge)}` : undefined}
           >
             {marketingBadge}
-            {openHouseBadge && (
-              <span className="sr-only"> — open house {formatOpenHouse(openHouseBadge)}</span>
-            )}
           </span>
+        )}
+
+        {/*
+         * Two lines, because one does not fit: a grid card is ~181px wide and the label plus the
+         * when need ~187px on a single 11px line. Stacking them is what lets the calendar date
+         * survive instead of being truncated away.
+         *
+         * The scrim is what makes this legible over an arbitrary photo — white text on an unknown
+         * image is a coin flip otherwise. It fades rather than sitting as a hard bar so it reads
+         * as part of the image, and `pt-6` gives the gradient room to do that.
+         */}
+        {openHouse && (
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink/90 via-ink/70 to-transparent px-3 pb-2 pt-6">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-white/85">
+              Open house
+            </p>
+            <p className="truncate text-[11px] font-semibold text-white">
+              {formatOpenHouseWhen(openHouse)}
+            </p>
+          </div>
         )}
 
         <button

@@ -5,7 +5,7 @@ import {
   formatListingPrice,
   formatLotSize,
   formatOpenHouse,
-  formatOpenHouseBadge,
+  formatOpenHouseWhen,
   formatStreetAddress,
   hasMapCoordinates,
   PRICE_WITHHELD_COPY,
@@ -148,20 +148,22 @@ describe('formatOpenHouse', () => {
   });
 });
 
-describe('formatOpenHouseBadge', () => {
-  it('renders one compact string carrying the day and the range', () => {
+describe('formatOpenHouseWhen', () => {
+  it('carries the weekday, the calendar date and the range', () => {
+    // The date is not decoration: "Open Sat" does not say which Saturday, and an open house is an
+    // appointment at an address.
     expect(
-      formatOpenHouseBadge({
+      formatOpenHouseWhen({
         startsAt: '2026-09-05T13:00:00.000Z',
         endsAt: '2026-09-05T15:00:00.000Z',
         remarks: null,
       }),
-    ).toMatch(/^Open Sat \d/);
+    ).toBe('Sat, Sep 5 · 9–11am');
   });
 
   it('drops the meridiem from the start when both ends share it', () => {
-    // 1pm–3pm reads better than 1pm–3pm spelled out twice, and the badge has little room.
-    const text = formatOpenHouseBadge({
+    // 1pm–3pm reads better than 1pm–3pm spelled out twice, and the band still has to fit a card.
+    const text = formatOpenHouseWhen({
       startsAt: '2026-09-05T17:00:00.000Z',
       endsAt: '2026-09-05T19:00:00.000Z',
       remarks: null,
@@ -170,7 +172,7 @@ describe('formatOpenHouseBadge', () => {
   });
 
   it('keeps both when the range crosses midday', () => {
-    const text = formatOpenHouseBadge({
+    const text = formatOpenHouseWhen({
       startsAt: '2026-09-05T13:00:00.000Z',
       endsAt: '2026-09-05T17:00:00.000Z',
       remarks: null,
@@ -187,12 +189,12 @@ describe('formatOpenHouseBadge', () => {
    */
   it("renders the property's local hour, not the runtime's", () => {
     expect(
-      formatOpenHouseBadge({
+      formatOpenHouseWhen({
         startsAt: '2026-09-05T13:00:00.000Z',
         endsAt: '2026-09-05T17:00:00.000Z',
         remarks: null,
       }),
-    ).toBe('Open Sat 9am–1pm');
+    ).toBe('Sat, Sep 5 · 9am–1pm');
   });
 
   it("keeps a late-evening open house on the property's calendar day", () => {
@@ -200,11 +202,11 @@ describe('formatOpenHouseBadge', () => {
     // lands on the wrong *day*, which sends a buyer to the property 24 hours out — a worse
     // failure than the wrong hour, and invisible to any test that only checks for "am"/"pm".
     expect(
-      formatOpenHouseBadge({
+      formatOpenHouseWhen({
         startsAt: '2026-09-06T00:00:00.000Z',
         endsAt: '2026-09-06T02:00:00.000Z',
         remarks: null,
       }),
-    ).toBe('Open Sat 8–10pm');
+    ).toBe('Sat, Sep 5 · 8–10pm');
   });
 });

@@ -129,24 +129,33 @@ export function hasMapCoordinates(listing: {
 }
 
 /**
- * Renders the API's open-house occurrence. The API populates `openHouse` **only** from an upcoming
- * occurrence (`ends_at > now()`), so "upcoming" is never re-derived here and an occurrence the API
- * did not send is never displayed.
- */
-/**
- * The compact form for a card badge — "Open Sat 1–3 PM".
+ * The *when* of an open house, for the card — "Sat, Sep 5 · 9am–1pm".
+ *
+ * The API populates `openHouse` **only** from an upcoming occurrence (`ends_at > now()`), so
+ * "upcoming" is never re-derived here and an occurrence the API did not send is never displayed.
  *
  * A card used to carry three separate open-house affordances (a badge, a star chip beside the title,
  * and a full date/time line). The line was also the only text row that existed on open-house cards
- * and nowhere else, so it made tiles in a grid different heights. One badge on the image carries
- * both the fact and the when; `formatOpenHouse` remains the long form for the detail page.
+ * and nowhere else, so it made tiles in a grid different heights, and collapsing all three into a
+ * corner pill then lost the date: "Open Sat" does not tell a consumer *which* Saturday, and an open
+ * house is the one listing fact where being off by a week wastes a trip to a house.
+ *
+ * The card now gives it a band across the foot of the image, with "Open house" as a label above
+ * this string. Measured rather than assumed: a grid card is ~181px wide, and the label and the when
+ * on one 11px line need ~187px, so a single line could only ever have been truncated — which is how
+ * the date got lost the first time. Two lines fit, and cost no card height because the band sits
+ * inside the fixed-aspect image.
+ *
+ * `formatOpenHouse` remains the long form for the detail page.
  */
-export function formatOpenHouseBadge(openHouse: OpenHouse): string {
+export function formatOpenHouseWhen(openHouse: OpenHouse): string {
   const starts = new Date(openHouse.startsAt);
   const ends = new Date(openHouse.endsAt);
 
   const day = starts.toLocaleDateString('en-US', {
     weekday: 'short',
+    month: 'short',
+    day: 'numeric',
     timeZone: PROPERTY_TIME_ZONE,
   });
   // Lowercase, unspaced meridiem ("9am") is both the listing-sheet convention and materially
@@ -171,7 +180,7 @@ export function formatOpenHouseBadge(openHouse: OpenHouse): string {
   const endText = hour(ends);
   const sameMeridiem = startText.slice(-2) === endText.slice(-2);
 
-  return `Open ${day} ${sameMeridiem ? startText.slice(0, -2) : startText}–${endText}`;
+  return `${day} · ${sameMeridiem ? startText.slice(0, -2) : startText}–${endText}`;
 }
 
 export function formatOpenHouse(openHouse: OpenHouse): string {
