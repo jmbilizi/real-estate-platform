@@ -165,22 +165,33 @@ describe('ListingCard', () => {
       );
 
       expect(screen.getByText('Jane Agent')).toBeInTheDocument();
-      expect(screen.getByText(/Listing courtesy of Bright Partner Realty/)).toBeInTheDocument();
+      expect(screen.getByText(/Listing by Bright Partner Realty/)).toBeInTheDocument();
     });
 
     it('reduces to the office attribution for our own inventory, where 7.58 does not attach', () => {
       render(<ListingCard listing={aListingCardRow({ source: 'internal' })} />);
 
-      expect(screen.getByText(/Listing courtesy of Real Broker, LLC/)).toBeInTheDocument();
+      expect(screen.getByText(/Listing by Real Broker, LLC/)).toBeInTheDocument();
       // No contact block — the IDX contact requirement does not apply to a non-IDX display.
       expect(screen.queryByText('(301) 555-0101')).not.toBeInTheDocument();
       expect(screen.queryByText('sample.agent1@example.com')).not.toBeInTheDocument();
     });
 
+    it('keeps a long office name on one line so the tile cannot outgrow its neighbours', () => {
+      const officeName = 'Long & Foster Real Estate, Inc. — Bethesda Gateway';
+      render(<ListingCard listing={aListingCardRow({ source: 'internal', officeName })} />);
+
+      const line = screen.getByText(/Listing by Long & Foster/);
+      expect(line).toHaveClass('truncate');
+      // Clipped visually, never lost: `truncate` is CSS only, so the full name stays in the DOM
+      // for screen readers, and `title` surfaces it on hover.
+      expect(line).toHaveAttribute('title', officeName);
+    });
+
     it('reduces an `other` row the same way', () => {
       render(<ListingCard listing={aListingCardRow({ source: 'other' })} />);
 
-      expect(screen.getByText(/Listing courtesy of Real Broker, LLC/)).toBeInTheDocument();
+      expect(screen.getByText(/Listing by Real Broker, LLC/)).toBeInTheDocument();
       expect(screen.queryByText('(301) 555-0101')).not.toBeInTheDocument();
     });
 

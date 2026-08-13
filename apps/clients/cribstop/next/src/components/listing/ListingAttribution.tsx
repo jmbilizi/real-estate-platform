@@ -19,9 +19,15 @@ import type { Attribution, ListingSource } from '@cribstop/property-contracts';
  *   the office name, at the 14px median floor (the card's listing data is 14px location / 12px
  *   stats / 14px price, so the median is 14px). This branch is non-negotiable and must be what
  *   ships the moment #33 lands.
- * - `source === 'internal' | 'other'` → `Listing courtesy of {officeName}`. Still attributed on
- *   every card and detail view per PRD §6.2, just without the IDX-specific contact requirements
- *   that do not apply to our own inventory.
+ * - `source === 'internal' | 'other'` → `Listing by {officeName}`. Still attributed on every card
+ *   and detail view per PRD §6.2, just without the IDX-specific contact requirements that do not
+ *   apply to our own inventory.
+ *
+ * The wording is "Listing by" rather than the IDX-conventional "Listing courtesy of". For our own
+ * inventory that is a free choice. For `brightMLS` rows it is not necessarily: Bright's display
+ * rules may prescribe the attribution wording, and confirming that is #33's job along with the rest
+ * of the display rules and broker sign-off. No Bright row exists yet, so nothing is misattributed
+ * today — but do not treat this string as settled for the `brightMLS` branch.
  *
  * `density="full"` overrides the reduction for surfaces that are not height-constrained (the detail
  * page), where more attribution is never the risk.
@@ -47,8 +53,18 @@ export default function ListingAttribution({
 
   if (!showFullBlock) {
     return (
-      <p className={`text-xs leading-snug text-ink-muted ${className}`}>
-        Listing courtesy of {officeName}
+      <p
+        /*
+         * Office names run long ("Long & Foster Real Estate, Inc. — Bethesda Gateway"), and a
+         * wrapped second line makes this card taller than every other tile in the grid, which is
+         * the uniform-height problem all over again. One line, ellipsized. `truncate` is CSS only,
+         * so the full name stays in the DOM and screen readers still read it whole; `title` exposes
+         * it on hover for sighted users.
+         */
+        className={`truncate text-xs leading-snug text-ink-muted ${className}`}
+        title={officeName}
+      >
+        Listing by {officeName}
       </p>
     );
   }
@@ -79,11 +95,15 @@ export default function ListingAttribution({
       {/*
        * `listedBy` is derived server-side as `<agent or broker> – <office>`, so it usually already
        * names the office and repeating it reads as a stutter ("Jane Agent – Real Broker, LLC /
-       * Listing courtesy of Real Broker, LLC"). The line is still rendered whenever `listedBy` does
-       * NOT already end with the office name, because 7.58 requires the listing firm to be
-       * identified and `listedBy` is not guaranteed to carry it.
+       * Listing by Real Broker, LLC"). The line is still rendered whenever `listedBy` does NOT
+       * already end with the office name, because 7.58 requires the listing firm to be identified
+       * and `listedBy` is not guaranteed to carry it.
+       *
+       * Deliberately NOT truncated, unlike the reduced branch above: 7.58 requires the listing firm
+       * to be identified and reasonably prominent, and an ellipsized firm name is arguably neither.
+       * This branch is the one carrying that obligation, so it wraps rather than clips.
        */}
-      {!listedBy.endsWith(officeName) && <p>Listing courtesy of {officeName}</p>}
+      {!listedBy.endsWith(officeName) && <p>Listing by {officeName}</p>}
     </div>
   );
 }
