@@ -10,6 +10,7 @@ import {
   formatListingPrice,
   formatLotSize,
   formatOpenHouse,
+  formatOpenHouseBadge,
 } from '@/lib/listing-format';
 import ListingAttribution from '@/components/listing/ListingAttribution';
 import ListingImage from '@/components/listing/ListingImage';
@@ -42,11 +43,26 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
   const price = formatListingPrice(listing.price, listing.listingType);
   const soldLine = isSold ? formatClosePrice(listing.closePrice, listing.closeDate) : null;
 
-  // Marketing badges rotate through a single slot. The required disclosure labels (sample,
-  // sponsored) are deliberately NOT in this rotation — a marketing badge must never be able to
-  // win the slot from a label that has to be shown.
-  const marketingBadge = listing.openHouse
-    ? 'Open house'
+  /**
+   * One badge slot on the image, filled by priority.
+   *
+   * Open house is consolidated here and carries the *when* ("Open Sat 1–3 PM"), replacing what used
+   * to be three separate affordances on one card: this badge, a star chip beside the title, and a
+   * full date/time text row. That text row was also the only row open-house cards had and other
+   * cards did not, which is what made tiles in a grid different heights.
+   *
+   * Priority is deliberate rather than incidental:
+   * - Open house outranks the rest because it is time-bound and actionable — it expires, the others
+   *   do not.
+   * - A **sold** row never shows an open-house badge. The API only sends upcoming occurrences, but
+   *   a sold listing with one would be actively misleading, so the sold ribbon wins outright.
+   * - The required disclosure labels (sample, sponsored) are NOT in this rotation and never compete
+   *   for this slot — they have their own guaranteed row below the image. A marketing badge must
+   *   never be able to displace a label that has to be shown.
+   */
+  const openHouseBadge = !isSold && listing.openHouse ? listing.openHouse : null;
+  const marketingBadge = openHouseBadge
+    ? formatOpenHouseBadge(openHouseBadge)
     : listing.priceReduced
       ? 'Price reduced'
       : listing.newConstruction
@@ -75,11 +91,19 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
 
         {marketingBadge && (
           <span
-            className={`absolute left-3 rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-ink shadow-card ${
+            // Width is capped so the badge can never run under the save control at `right-3`;
+            // 3.5rem is that control plus its gutter. Beyond that it truncates, and the `title` and
+            // screen-reader text below keep the full range reachable.
+            className={`absolute left-3 max-w-[calc(100%-3.5rem)] truncate rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-ink shadow-card ${
               isSold ? 'top-9' : 'top-3'
             }`}
+            // The badge abbreviates the time, so the full range stays reachable.
+            title={openHouseBadge ? `Open house ${formatOpenHouse(openHouseBadge)}` : undefined}
           >
             {marketingBadge}
+            {openHouseBadge && (
+              <span className="sr-only"> — open house {formatOpenHouse(openHouseBadge)}</span>
+            )}
           </span>
         )}
 
@@ -106,46 +130,38 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
         </button>
       </div>
 
-      {/* Info */}
+      {/*
+       * Info block with **reserved slots**, so every tile in a grid is the same height regardless of
+       * which optional rows a row happens to have. Each variable row keeps its box whether or not it
+       * has content:
+       *
+       * - the label row (sample / sponsored) — `h-5`, always present
+       * - the stats line (absent for a parcel with unknown lot size, or an all-null dwelling) — `h-4`
+       * - attribution, which is one line for `internal`/`other` rows (see `ListingAttribution`)
+       *
+       * The open-house date row is gone entirely — it moved onto the image badge, and it was the
+       * row that only some cards had. Attribution height still varies between an IDX row and one of
+       * ours, which is uniform within any single-source result set; today every row is `internal`.
+       */}
       <div className="pt-2">
         {/*
-         * Required labels, in their own row so they cannot be crowded out by a filter, a sort or a
-         * viewport. If the row is visible, these are visible.
+         * Required labels get a guaranteed slot that is reserved even when empty. They are never
+         * what gets truncated or crowded out to make heights match — that is why they sit outside
+         * the image's single badge slot in the first place. If the row is visible, these are visible.
          */}
-        {(listing.isSample || listing.sponsored) && (
-          <div className="mb-1 flex flex-wrap items-center gap-1">
-            {listing.isSample && <SampleBadge />}
-            {listing.sponsored && <SponsoredBadge />}
-          </div>
-        )}
-
-        <div className="flex items-start justify-between gap-1.5">
-          <h3 className="truncate text-sm font-semibold text-ink">
-            {formatListingLocation(listing.neighborhood, listing.city, listing.state)}
-          </h3>
-          {listing.openHouse && (
-            <span className="flex flex-shrink-0 items-center gap-1 text-[11px] text-ink-muted">
-              <svg className="h-2.5 w-2.5 fill-ink" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-              </svg>
-              Open
-            </span>
-          )}
+        <div className="mb-1 flex h-5 flex-wrap items-center gap-1 overflow-hidden">
+          {listing.isSample && <SampleBadge />}
+          {listing.sponsored && <SponsoredBadge />}
         </div>
 
-        {/*
-         * The date/time of the occurrence the API sent. "Upcoming" is never re-derived
-         * client-side — the API populates `openHouse` only from an occurrence that has not ended,
-         * so an open house it did not send is never displayed. The badge above already carries the
-         * words "Open house", so this line is just the when.
-         */}
-        {listing.openHouse && (
-          <p className="truncate text-xs text-ink-body">{formatOpenHouse(listing.openHouse)}</p>
-        )}
+        <h3 className="truncate text-sm font-semibold text-ink">
+          {formatListingLocation(listing.neighborhood, listing.city, listing.state)}
+        </h3>
 
-        {statsLine && <p className="truncate text-xs text-ink-muted">{statsLine}</p>}
+        {/* Reserved whether or not there are stats to show, so the price never shifts up a row. */}
+        <p className="h-4 truncate text-xs text-ink-muted">{statsLine ?? ' '}</p>
 
-        <p className="mt-0.5 text-sm text-ink">
+        <p className="mt-0.5 truncate text-sm text-ink">
           {soldLine ? (
             <span className="font-semibold">{soldLine}</span>
           ) : (
@@ -161,12 +177,15 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
         </p>
 
         {/*
-         * NAR 7.58 applies to search results, not only detail pages: the listing agent's name, at
-         * least one contact method, and the office name, at or above the median type size used for
-         * the listing data on this card.
+         * Density follows the row's `source`. NAR 7.58 governs IDX displays — other participants'
+         * listings from an MLS feed — so a `brightMLS` row gets the full block (agent name, a contact
+         * method, the office name, at the 14px median floor) on search results as well as detail,
+         * while our own inventory carries the office attribution PRD §6.2 requires. #33 turns the
+         * full block on as data rather than as a card rewrite.
          */}
         <ListingAttribution
           attribution={listing}
+          source={listing.source}
           className="mt-1 rounded-sm bg-surface-alt px-1.5 py-1"
         />
       </div>

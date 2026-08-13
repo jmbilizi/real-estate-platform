@@ -15,8 +15,9 @@ describe('ListingRow', () => {
 
     render(<ListingRow title="Featured" listings={rows} />);
 
-    // Both cards render their server-derived attribution line, a reliable per-card marker.
-    expect(screen.getAllByText(/Sample Agent 1 – Real Broker, LLC/)).toHaveLength(2);
+    // Both cards render their office attribution, a reliable per-card marker. Fixture rows are
+    // `internal`, so this is the reduced form — see ListingAttribution.
+    expect(screen.getAllByText(/Listing courtesy of Real Broker, LLC/)).toHaveLength(2);
   });
 
   it('renders `max` skeleton placeholders instead of cards when loading, even if listings is non-empty', () => {
@@ -25,7 +26,7 @@ describe('ListingRow', () => {
     const { container } = render(<ListingRow title="Featured" listings={rows} max={4} loading />);
 
     // No real card content should have rendered while loading.
-    expect(screen.queryByText(/Sample Agent 1 – Real Broker, LLC/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Listing courtesy of Real Broker, LLC/)).not.toBeInTheDocument();
     expect(container.querySelectorAll('.animate-pulse')).toHaveLength(4);
   });
 

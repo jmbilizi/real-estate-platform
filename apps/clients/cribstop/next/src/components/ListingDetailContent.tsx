@@ -325,7 +325,17 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
             {/* Listing disclosure — provenance is driven off this row's own `source`, never a
                 build flag, env var or default (rule #6). */}
             <div className="mt-10 rounded-2xl border border-surface-border bg-surface-alt p-5 text-xs leading-relaxed text-ink-muted">
-              <ListingAttribution attribution={listing} className="text-ink-body" />
+              {/*
+               * `density="full"` regardless of source. The detail page is not height-constrained,
+               * and more attribution is never the risk — so it carries the complete block even for
+               * our own inventory, where NAR 7.58 does not attach.
+               */}
+              <ListingAttribution
+                attribution={listing}
+                source={listing.source}
+                density="full"
+                className="text-ink-body"
+              />
               <ListingProvenance
                 source={listing.source}
                 lastUpdated={listing.lastUpdated}

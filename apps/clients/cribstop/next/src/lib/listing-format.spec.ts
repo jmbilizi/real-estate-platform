@@ -5,6 +5,7 @@ import {
   formatListingPrice,
   formatLotSize,
   formatOpenHouse,
+  formatOpenHouseBadge,
   formatStreetAddress,
   hasMapCoordinates,
   PRICE_WITHHELD_COPY,
@@ -144,5 +145,37 @@ describe('formatOpenHouse', () => {
 
     expect(text).toMatch(/Sep 5/);
     expect(text).toMatch(/–/);
+  });
+});
+
+describe('formatOpenHouseBadge', () => {
+  it('renders one compact string carrying the day and the range', () => {
+    expect(
+      formatOpenHouseBadge({
+        startsAt: '2026-09-05T13:00:00.000Z',
+        endsAt: '2026-09-05T15:00:00.000Z',
+        remarks: null,
+      }),
+    ).toMatch(/^Open Sat \d/);
+  });
+
+  it('drops the meridiem from the start when both ends share it', () => {
+    // 1pm–3pm reads better than 1pm–3pm spelled out twice, and the badge has little room.
+    const text = formatOpenHouseBadge({
+      startsAt: '2026-09-05T17:00:00.000Z',
+      endsAt: '2026-09-05T19:00:00.000Z',
+      remarks: null,
+    });
+    expect(text.match(/pm/g)).toHaveLength(1);
+  });
+
+  it('keeps both when the range crosses midday', () => {
+    const text = formatOpenHouseBadge({
+      startsAt: '2026-09-05T13:00:00.000Z',
+      endsAt: '2026-09-05T17:00:00.000Z',
+      remarks: null,
+    });
+    expect(text).toMatch(/am/);
+    expect(text).toMatch(/pm/);
   });
 });

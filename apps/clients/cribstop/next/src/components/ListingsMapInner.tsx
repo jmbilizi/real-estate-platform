@@ -281,7 +281,8 @@ function MarkerPopup({ listing }: { listing: ListingCardRow }) {
           {soldLine ?? price.text}
         </p>
         {/* NAR 7.58 applies to every display surface, this popup included. */}
-        <ListingAttribution attribution={listing} className="mt-2" />
+        {/* Source-driven, like the card: a popup is a cramped surface, and 7.58 attaches to IDX rows. */}
+        <ListingAttribution attribution={listing} source={listing.source} className="mt-2" />
       </div>
     </div>
   );

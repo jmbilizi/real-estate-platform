@@ -128,86 +128,197 @@ describe('ListingCard', () => {
   });
 
   describe('NAR 7.58 attribution — applies to search results, not only detail pages', () => {
-    it('renders the agent name, a contact method and the office name', () => {
-      render(<ListingCard listing={aListingCardRow()} />);
-
-      // `listedBy` is derived server-side as "<agent> – <office>", so it carries both the
-      // participant name and the listing firm.
-      expect(screen.getByText('Sample Agent 1 – Real Broker, LLC')).toBeInTheDocument();
-      expect(screen.getByText('(301) 555-0101')).toBeInTheDocument();
-      expect(screen.getByText('sample.agent1@example.com')).toBeInTheDocument();
-    });
-
-    it('names the listing firm separately when listedBy does not already carry it', () => {
-      // 7.58 requires the listing firm to be identified, and `listedBy` is not guaranteed to end
-      // with the office name — so the explicit line appears exactly when it is needed.
+    /**
+     * 7.58 governs **IDX displays** — other participants' listings from an MLS feed. A brokerage
+     * displaying its own inventory is not making an IDX display, so density follows the row's
+     * `source`. This is the regression that would otherwise ship silently the moment #33 lands.
+     */
+    it('renders the full block for a brightMLS row: agent name, a contact method and the office', () => {
       render(
         <ListingCard
-          listing={aListingCardRow({ listedBy: 'Jane Agent', officeName: 'Real Broker, LLC' })}
+          listing={aListingCardRow({
+            source: 'brightMLS',
+            listedBy: 'Jane Q. Agent – Bright Partner Realty',
+            listingAgentName: 'Jane Q. Agent',
+            officeName: 'Bright Partner Realty',
+            brokerPhone: '(301) 555-0199',
+            brokerEmail: 'jane.agent@example.com',
+          })}
+        />,
+      );
+
+      expect(screen.getByText('Jane Q. Agent – Bright Partner Realty')).toBeInTheDocument();
+      expect(screen.getByText('(301) 555-0199')).toBeInTheDocument();
+      expect(screen.getByText('jane.agent@example.com')).toBeInTheDocument();
+      expect(screen.getByText(/Bright Partner Realty/)).toBeInTheDocument();
+    });
+
+    it('names the listing firm separately for an IDX row whose listedBy omits it', () => {
+      render(
+        <ListingCard
+          listing={aListingCardRow({
+            source: 'brightMLS',
+            listedBy: 'Jane Agent',
+            officeName: 'Bright Partner Realty',
+          })}
         />,
       );
 
       expect(screen.getByText('Jane Agent')).toBeInTheDocument();
-      expect(screen.getByText(/Listing courtesy of Real Broker, LLC/)).toBeInTheDocument();
+      expect(screen.getByText(/Listing courtesy of Bright Partner Realty/)).toBeInTheDocument();
     });
 
-    it('does not repeat the office name when listedBy already ends with it', () => {
-      render(
-        <ListingCard
-          listing={aListingCardRow({
-            listedBy: 'Jane Agent – Real Broker, LLC',
-            officeName: 'Real Broker, LLC',
-          })}
-        />,
-      );
+    it('reduces to the office attribution for our own inventory, where 7.58 does not attach', () => {
+      render(<ListingCard listing={aListingCardRow({ source: 'internal' })} />);
 
-      expect(screen.queryByText(/Listing courtesy of/)).not.toBeInTheDocument();
+      expect(screen.getByText(/Listing courtesy of Real Broker, LLC/)).toBeInTheDocument();
+      // No contact block — the IDX contact requirement does not apply to a non-IDX display.
+      expect(screen.queryByText('(301) 555-0101')).not.toBeInTheDocument();
+      expect(screen.queryByText('sample.agent1@example.com')).not.toBeInTheDocument();
+    });
+
+    it('reduces an `other` row the same way', () => {
+      render(<ListingCard listing={aListingCardRow({ source: 'other' })} />);
+
+      expect(screen.getByText(/Listing courtesy of Real Broker, LLC/)).toBeInTheDocument();
+      expect(screen.queryByText('(301) 555-0101')).not.toBeInTheDocument();
     });
 
     it('renders listedBy as delivered rather than reassembling it from parts', () => {
       render(
-        <ListingCard listing={aListingCardRow({ listedBy: 'Jane Q. Agent – Real Broker, LLC' })} />,
+        <ListingCard
+          listing={aListingCardRow({
+            source: 'brightMLS',
+            listedBy: 'Jane Q. Agent – Real Broker, LLC',
+          })}
+        />,
       );
       expect(screen.getByText('Jane Q. Agent – Real Broker, LLC')).toBeInTheDocument();
     });
 
-    it('keeps the attribution at or above the median type size used for the listing data', () => {
+    it('keeps an IDX row at or above the median type size used for the listing data', () => {
       // Listing data on the card renders at 14px (location), 12px (stats) and 14px (price), so the
-      // median is 14px — `text-sm`. Anything smaller fails 7.58's typeface floor.
-      const { container } = render(<ListingCard listing={aListingCardRow()} />);
+      // median is 14px — `text-sm`. Anything smaller fails 7.58's typeface floor, which is why the
+      // floor is asserted on the branch 7.58 actually governs.
+      render(<ListingCard listing={aListingCardRow({ source: 'brightMLS' })} />);
       const attribution = screen.getByText('Sample Agent 1 – Real Broker, LLC').parentElement;
 
       expect(attribution?.className).toContain('text-sm');
       expect(attribution?.className).not.toMatch(/text-\[1[0-3]px\]|text-xs/);
-      expect(container).toBeTruthy();
     });
   });
 
   describe('open house', () => {
-    it('renders the occurrence the API sent', () => {
-      render(
-        <ListingCard
-          listing={aListingCardRow({
-            openHouse: {
-              startsAt: '2026-09-05T15:00:00.000Z',
-              endsAt: '2026-09-05T17:00:00.000Z',
-              remarks: null,
-            },
-          })}
-        />,
-      );
+    const openHouse = {
+      startsAt: '2026-09-05T15:00:00.000Z',
+      endsAt: '2026-09-05T17:00:00.000Z',
+      remarks: null,
+    };
 
-      // The badge carries the words; the line carries the when. Both are driven by `openHouse`.
-      expect(screen.getByText('Open house')).toBeInTheDocument();
-      expect(screen.getByText('Open')).toBeInTheDocument();
-      expect(screen.getByText(/Sep 5/)).toBeInTheDocument();
+    it('renders exactly one open-house affordance, carrying the when', () => {
+      const { container } = render(<ListingCard listing={aListingCardRow({ openHouse })} />);
+
+      // One badge on the image, not three affordances (badge + star chip + date row).
+      expect(screen.getByText(/^Open Sat/)).toBeInTheDocument();
+      expect(container.textContent?.match(/Open Sat/g)).toHaveLength(1);
+      // The old star chip is gone.
+      expect(screen.queryByText('Open')).not.toBeInTheDocument();
+    });
+
+    it('keeps the full time range reachable when the badge abbreviates it', () => {
+      render(<ListingCard listing={aListingCardRow({ openHouse })} />);
+
+      const badge = screen.getByText(/^Open Sat/);
+      expect(badge.getAttribute('title')).toMatch(/Open house .*Sep 5/);
+      expect(badge.querySelector('.sr-only')?.textContent).toMatch(/Sep 5/);
     });
 
     it('renders no open-house affordance when the API sent none', () => {
       render(<ListingCard listing={aListingCardRow({ openHouse: null })} />);
 
-      expect(screen.queryByText(/Open house/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Open Sat/)).not.toBeInTheDocument();
       expect(screen.queryByText('Open')).not.toBeInTheDocument();
+    });
+
+    it('never shows an open-house badge on a sold row, where it would mislead', () => {
+      render(
+        <ListingCard
+          listing={aListingCardRow({ openHouse, listingType: 'sold', status: 'Sold' })}
+        />,
+      );
+
+      expect(screen.queryByText(/Open Sat/)).not.toBeInTheDocument();
+      expect(screen.getByText('Sold')).toBeInTheDocument();
+    });
+
+    it('lets the open-house badge win the slot over a marketing badge', () => {
+      render(
+        <ListingCard
+          listing={aListingCardRow({ openHouse, priceReduced: true, newConstruction: true })}
+        />,
+      );
+
+      expect(screen.getByText(/^Open Sat/)).toBeInTheDocument();
+      expect(screen.queryByText('Price reduced')).not.toBeInTheDocument();
+      expect(screen.queryByText('New construction')).not.toBeInTheDocument();
+    });
+
+    it('never lets the badge slot displace a required disclosure label', () => {
+      render(
+        <ListingCard listing={aListingCardRow({ openHouse, isSample: true, sponsored: true })} />,
+      );
+
+      expect(screen.getByText(/^Open Sat/)).toBeInTheDocument();
+      expect(screen.getByText(/sample data/i)).toBeInTheDocument();
+      expect(screen.getByText('Sponsored')).toBeInTheDocument();
+    });
+  });
+
+  /**
+   * Uniform tile height in a grid. The variable rows each keep a reserved box, so a parcel, a sold
+   * row, a withheld-price row and an open-house row all occupy the same number of rows.
+   */
+  describe('grid uniformity', () => {
+    it('reserves the disclosure-label slot even when a row has no labels', () => {
+      const { container } = render(
+        <ListingCard listing={aListingCardRow({ isSample: false, sponsored: false })} />,
+      );
+      expect(container.querySelector('.h-5')).toBeTruthy();
+    });
+
+    it('reserves the stats row even when there are no stats to show', () => {
+      // A parcel with unknown lot size has neither a dwelling triplet nor a lot size.
+      const { container } = render(<ListingCard listing={aLandParcelRow({ lotSqft: null })} />);
+      expect(container.querySelector('.h-4')).toBeTruthy();
+    });
+
+    it('renders the same row structure across a mixed set', () => {
+      const rows = [
+        aListingCardRow(),
+        aLandParcelRow(),
+        aListingCardRow({ price: null }),
+        aListingCardRow({ listingType: 'sold', status: 'Sold', closePrice: 500000 }),
+        aListingCardRow({ sponsored: true }),
+        aListingCardRow({
+          openHouse: {
+            startsAt: '2026-09-05T15:00:00.000Z',
+            endsAt: '2026-09-05T17:00:00.000Z',
+            remarks: null,
+          },
+        }),
+      ];
+
+      const infoRowCounts = rows.map((row) => {
+        const { container, unmount } = render(<ListingCard listing={row} />);
+        // The info block's direct children are the reserved slots: label row, title, stats, price,
+        // attribution. Every card must have the same number of them.
+        const info = container.querySelector('.pt-2');
+        const count = info?.children.length ?? 0;
+        unmount();
+        return count;
+      });
+
+      expect(new Set(infoRowCounts).size).toBe(1);
     });
   });
 });

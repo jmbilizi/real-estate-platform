@@ -133,6 +133,36 @@ export function hasMapCoordinates(listing: {
  * occurrence (`ends_at > now()`), so "upcoming" is never re-derived here and an occurrence the API
  * did not send is never displayed.
  */
+/**
+ * The compact form for a card badge — "Open Sat 1–3 PM".
+ *
+ * A card used to carry three separate open-house affordances (a badge, a star chip beside the title,
+ * and a full date/time line). The line was also the only text row that existed on open-house cards
+ * and nowhere else, so it made tiles in a grid different heights. One badge on the image carries
+ * both the fact and the when; `formatOpenHouse` remains the long form for the detail page.
+ */
+export function formatOpenHouseBadge(openHouse: OpenHouse): string {
+  const starts = new Date(openHouse.startsAt);
+  const ends = new Date(openHouse.endsAt);
+
+  const day = starts.toLocaleDateString('en-US', { weekday: 'short' });
+  // Lowercase, unspaced meridiem ("9am") is both the listing-sheet convention and materially
+  // narrower — the badge sits on the image next to the save control and has little room.
+  const hour = (d: Date) =>
+    d
+      .toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+      .replace(':00', '')
+      .replace(' ', '')
+      .toLowerCase();
+
+  // The meridiem is dropped from the start when both ends share it, the way a listing sheet reads.
+  const startText = hour(starts);
+  const endText = hour(ends);
+  const sameMeridiem = startText.slice(-2) === endText.slice(-2);
+
+  return `Open ${day} ${sameMeridiem ? startText.slice(0, -2) : startText}–${endText}`;
+}
+
 export function formatOpenHouse(openHouse: OpenHouse): string {
   const starts = new Date(openHouse.startsAt);
   const ends = new Date(openHouse.endsAt);

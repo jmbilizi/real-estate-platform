@@ -1,30 +1,57 @@
-import type { Attribution } from '@cribstop/property-contracts';
+import type { Attribution, ListingSource } from '@cribstop/property-contracts';
 
 /**
- * NAR Policy Statement 7.58 attribution.
+ * Listing attribution, at the density the row's provenance actually requires.
  *
- * IDX displays must identify the listing firm and a listing-participant-supplied email or phone,
- * reasonably prominent and in a typeface **not smaller than the median** used for the listing data
- * — and the policy applies to **search results**, not only detail pages. The card previously
- * rendered `Listing courtesy of {officeName}` at 11px with no agent name and no contact method,
- * which met none of those three requirements.
+ * **NAR Policy Statement 7.58 governs IDX displays** — displays of *other participants'* listings
+ * obtained through an MLS IDX feed. It requires the listing firm plus a listing-participant-supplied
+ * email or phone, reasonably prominent, in a typeface not smaller than the median used for the
+ * listing data, and it applies to search results rather than only detail pages.
  *
- * Typeface floor: the card's listing data renders at 14px (location), 12px (the bed/bath/sqft
- * line) and 14px (price). The median of those is **14px**, so this component renders at `text-sm`
- * and no variant may go below it. That is why there is no `compact`/`dense` size prop here: a
- * denser card is a layout decision, and this floor is not a layout decision.
+ * A brokerage displaying **its own** listings is not making an IDX display, so 7.58 does not attach.
+ * Every row today is `source: 'internal'` and there is no Bright content licence yet (#33), which is
+ * why the full block is not currently required — and why this is driven off the row's `source`, the
+ * same way `ListingProvenance` is. When Bright content starts flowing, the full block turns on as
+ * **data**, not as a card rewrite. That is the whole point of the split: the obligation is switched
+ * on by the thing that creates it.
  *
- * `listedBy` is derived server-side and is rendered as delivered — never reassembled from parts
- * here, or the display string could disagree with the attribution it came from.
+ * - `source === 'brightMLS'` → the full block: listing agent name, at least one contact method, and
+ *   the office name, at the 14px median floor (the card's listing data is 14px location / 12px
+ *   stats / 14px price, so the median is 14px). This branch is non-negotiable and must be what
+ *   ships the moment #33 lands.
+ * - `source === 'internal' | 'other'` → `Listing courtesy of {officeName}`. Still attributed on
+ *   every card and detail view per PRD §6.2, just without the IDX-specific contact requirements
+ *   that do not apply to our own inventory.
+ *
+ * `density="full"` overrides the reduction for surfaces that are not height-constrained (the detail
+ * page), where more attribution is never the risk.
+ *
+ * `listedBy` is derived server-side and rendered as delivered — never reassembled from parts here,
+ * or the display string could disagree with the attribution it came from.
  */
 export default function ListingAttribution({
   attribution,
+  source,
+  density = 'auto',
   className = '',
 }: {
   attribution: Attribution;
+  source: ListingSource;
+  /** `auto` follows the row's source; `full` always renders the complete block. */
+  density?: 'auto' | 'full';
   className?: string;
 }) {
   const { listedBy, officeName, listingAgentName, brokerPhone, brokerEmail } = attribution;
+
+  const showFullBlock = density === 'full' || source === 'brightMLS';
+
+  if (!showFullBlock) {
+    return (
+      <p className={`text-xs leading-snug text-ink-muted ${className}`}>
+        Listing courtesy of {officeName}
+      </p>
+    );
+  }
 
   // At least one contact method is required. The contract guarantees `brokerPhone` and
   // `brokerEmail` are non-nullable on every row, so this is a floor, not a best effort.
