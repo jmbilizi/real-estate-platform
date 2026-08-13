@@ -131,69 +131,71 @@ export default function Footer() {
         </div>
 
         {/*
-         * Three separate disclosures with three separate conditions. They were previously one
-         * block, which conflated them:
+         * One card, but its paragraphs are not one claim — they answer to three different
+         * conditions, and the original block conflated them:
          *
-         * 1. The Bright IDX claim is a statement about where the data came from, so it renders only
-         *    when the dataset actually contains a Bright-sourced row. The sentences are
-         *    byte-identical to what shipped before — #33's display rules plus broker sign-off own
-         *    any rewording, not this ticket; only the gating condition is new.
-         * 2. Dataset freshness is true of *our* data whatever its source, so it must not be gated on
-         *    Bright. Nesting it inside the Bright block meant an internal-only dataset — which is
-         *    every dataset today — showed no freshness at all despite having a real value. It is
-         *    still omitted entirely when there is no usable timestamp, and never backfilled with
-         *    "now": a fabricated fact on a compliance disclosure is worse than a missing one.
-         * 3. Brokerage identification is unconditional. It was inside the Bright block too, so
-         *    Real Broker, LLC's prominence (PRD §6.1) disappeared along with the MLS claim.
+         * 1. **Bright-branded claims** state where the data came from ("provided by BRIGHT through
+         *    a licensing agreement", the Bright copyright, and the IDX-participation sentence,
+         *    which only means anything if we display IDX data at all). These render solely when the
+         *    dataset actually contains a Bright-sourced row. Every row is `internal` today and
+         *    there is no Bright licence (#33), so asserting them now is a false statement of MLS
+         *    provenance. The sentences themselves are byte-identical to what shipped before —
+         *    #33's display rules plus broker sign-off own any rewording, not this ticket; only the
+         *    condition is new.
+         * 2. **Source-neutral disclaimers** ("deemed reliable but not guaranteed", "some properties
+         *    may no longer be available") are true of our own inventory exactly as they are of
+         *    Bright's. Gating them was a mistake: it hid accurate, useful disclosure and left the
+         *    card a single sentence tall.
+         * 3. **Brokerage identification and freshness** are unconditional facts about us and our
+         *    dataset. Real Broker, LLC's prominence (PRD §6.1) must never depend on a data source,
+         *    and freshness is still omitted entirely when there is no usable timestamp rather than
+         *    backfilled with "now" — a fabricated fact on a compliance disclosure is worse than a
+         *    missing one.
+         *
+         * Because 2 and 3 always render, the card always has a body and needs no outer guard.
          */}
-        {(showBrightDisclosure || lastUpdatedFormatted) && (
-          <div className="mt-10 rounded-md border border-surface-border bg-white p-6">
-            <h5 className="mb-3 text-xs font-semibold uppercase tracking-wider text-ink-muted">
-              {showBrightDisclosure ? 'MLS Disclosure' : 'Data Disclosure'}
-            </h5>
-            <div className="space-y-2 text-xs leading-relaxed text-ink-muted">
-              {showBrightDisclosure && (
-                <>
-                  <p>
-                    The data relating to real estate for sale on this website appears in part
-                    through the BRIGHT Internet Data Exchange program, a voluntary cooperative
-                    exchange of property listing data between licensed real estate brokerage firms
-                    in which Real Broker LLC participates, and is provided by BRIGHT through a
-                    licensing agreement.
-                  </p>
-                  <p>
-                    Information Deemed Reliable But Not Guaranteed. The information provided by this
-                    website is for the personal, non-commercial use of consumers and may not be used
-                    for any purpose other than to identify prospective properties consumers may be
-                    interested in purchasing.
-                  </p>
-                  <p>
-                    Some properties which appear for sale on this website may no longer be available
-                    because they are under contract, have Closed or are no longer being offered for
-                    sale.
-                  </p>
-                  <p>
-                    Some real estate firms do not participate in IDX and their listings do not
-                    appear on this website. Some properties listed with participating firms do not
-                    appear on this website at the request of the seller.
-                  </p>
-                </>
-              )}
-              {lastUpdatedFormatted && <p>Data last updated: {lastUpdatedFormatted}.</p>}
-              {showBrightDisclosure && (
-                <p className="pt-1 text-ink-subtle">
-                  &copy;{new Date().getFullYear()} Bright, All Rights Reserved. Bright MLS is the
-                  source of this listing data and is not a real estate broker.
-                </p>
-              )}
-            </div>
+        <div className="mt-10 rounded-md border border-surface-border bg-white p-6">
+          <h5 className="mb-3 text-xs font-semibold uppercase tracking-wider text-ink-muted">
+            {showBrightDisclosure ? 'MLS Disclosure' : 'Data Disclosure'}
+          </h5>
+          <div className="space-y-2 text-xs leading-relaxed text-ink-muted">
+            {showBrightDisclosure && (
+              <p>
+                The data relating to real estate for sale on this website appears in part through
+                the BRIGHT Internet Data Exchange program, a voluntary cooperative exchange of
+                property listing data between licensed real estate brokerage firms in which Real
+                Broker LLC participates, and is provided by BRIGHT through a licensing agreement.
+              </p>
+            )}
+            <p>
+              Information Deemed Reliable But Not Guaranteed. The information provided by this
+              website is for the personal, non-commercial use of consumers and may not be used for
+              any purpose other than to identify prospective properties consumers may be interested
+              in purchasing.
+            </p>
+            <p>
+              Some properties which appear for sale on this website may no longer be available
+              because they are under contract, have Closed or are no longer being offered for sale.
+            </p>
+            {showBrightDisclosure && (
+              <p>
+                Some real estate firms do not participate in IDX and their listings do not appear on
+                this website. Some properties listed with participating firms do not appear on this
+                website at the request of the seller.
+              </p>
+            )}
+            {lastUpdatedFormatted && <p>Data last updated: {lastUpdatedFormatted}.</p>}
+            <p className="font-medium text-ink">
+              Brokered by {BRAND.brokerageShort} &middot; Licensed in {BRAND.licensedStates}.
+            </p>
+            {showBrightDisclosure && (
+              <p className="pt-1 text-ink-subtle">
+                &copy;{new Date().getFullYear()} Bright, All Rights Reserved. Bright MLS is the
+                source of this listing data and is not a real estate broker.
+              </p>
+            )}
           </div>
-        )}
-
-        {/* Brokerage identification — never conditional on a data source (PRD §6.1). */}
-        <p className="mt-6 text-xs font-medium leading-relaxed text-ink">
-          Brokered by {BRAND.brokerageShort} &middot; Licensed in {BRAND.licensedStates}.
-        </p>
+        </div>
 
         {/* Bottom bar */}
         <div className="mt-8 flex flex-col items-center justify-between gap-4 border-t border-surface-border pt-6 text-xs text-ink-muted sm:flex-row">

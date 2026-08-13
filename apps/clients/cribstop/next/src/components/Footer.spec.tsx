@@ -56,19 +56,28 @@ describe('Footer', () => {
 
     render(<Footer />);
 
-    // Wait on the block that SHOULD appear. Waiting only for the mock to have been called would
-    // assert the absences before React had committed the resolved state, so they would pass
-    // trivially against the pre-fetch render.
+    // Wait on something that exists ONLY after the resolved meta commits, or the absence
+    // assertions below pass trivially against the pre-fetch render. The card heading is no longer
+    // that signal: its source-neutral body renders immediately, before any fetch resolves. The
+    // freshness line is, because it needs a timestamp.
     //
     // Freshness is a fact about our dataset whatever its source, so it must NOT be gated on
     // Bright. Every row is `internal` today, so gating it there would mean the app never showed a
     // freshness value at all despite having a real one.
-    await waitFor(() => expect(screen.getByText('Data Disclosure')).toBeInTheDocument());
-    expect(screen.getByText(/Data last updated/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/Data last updated/)).toBeInTheDocument());
+    expect(screen.getByText('Data Disclosure')).toBeInTheDocument();
 
     expect(screen.queryByText('MLS Disclosure')).not.toBeInTheDocument();
     expect(screen.queryByText(/BRIGHT Internet Data Exchange/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Bright, All Rights Reserved/)).not.toBeInTheDocument();
+    // The IDX-participation sentence is a Bright-branded claim too — it only means anything if we
+    // display IDX data at all — so it goes with them.
+    expect(screen.queryByText(/do not participate in IDX/)).not.toBeInTheDocument();
+
+    // But the source-neutral disclaimers are as true of our own inventory as of Bright's, so they
+    // render whatever the source. Gating these was what left the card one sentence tall.
+    expect(screen.getByText(/Information Deemed Reliable But Not Guaranteed/)).toBeInTheDocument();
+    expect(screen.getByText(/Some properties which appear for sale/)).toBeInTheDocument();
   });
 
   it('keeps brokerage identification unconditional, whatever the data source (PRD §6.1)', async () => {
@@ -83,9 +92,12 @@ describe('Footer', () => {
     await waitFor(() => expect(mockedGetListingsMeta).toHaveBeenCalled());
     await Promise.resolve();
 
-    // Neither disclosure block renders in this state; brand prominence must survive it anyway.
+    // Empty dataset, no timestamp, no sources: the Bright-branded claims cannot render, but the
+    // card still does — its source-neutral body does not depend on the fetch at all. Brand
+    // prominence lives inside that card and must survive every one of these states.
     expect(screen.queryByText('MLS Disclosure')).not.toBeInTheDocument();
-    expect(screen.queryByText('Data Disclosure')).not.toBeInTheDocument();
+    expect(screen.getByText('Data Disclosure')).toBeInTheDocument();
+    expect(screen.getByText(/Information Deemed Reliable But Not Guaranteed/)).toBeInTheDocument();
     expect(screen.getByText(/Brokered by Real Broker LLC/)).toBeInTheDocument();
     expect(screen.getByText(/Licensed in MD, DC, and VA/)).toBeInTheDocument();
   });
