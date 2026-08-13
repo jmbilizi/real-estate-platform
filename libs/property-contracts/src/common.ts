@@ -79,3 +79,17 @@ export const ATTRIBUTION_KEYS = Object.keys(attributionSchema.shape) as Array<
 export type Media = z.infer<typeof mediaSchema>;
 export type OpenHouse = z.infer<typeof openHouseSchema>;
 export type Attribution = z.infer<typeof attributionSchema>;
+
+/**
+ * The closed value sets as TypeScript types.
+ *
+ * The `*_TYPES` arrays and `*Schema` validators were already exported, but the inferred types were
+ * not — so a consumer wanting to type a property-type filter chip or a `source`-driven condition had
+ * to redeclare the union by hand, which is the exact drift this package exists to prevent. Inferring
+ * them from the schemas keeps one definition; adding a value to an array widens the type with it.
+ */
+export type ListingType = z.infer<typeof listingTypeSchema>;
+export type PropertyType = z.infer<typeof propertyTypeSchema>;
+export type Amenity = z.infer<typeof amenitySchema>;
+export type ConsumerStatus = z.infer<typeof consumerStatusSchema>;
+export type ListingSource = z.infer<typeof listingSourceSchema>;
