@@ -190,9 +190,9 @@ runs:
           # ingress controller is how the whole environment serves traffic, so it must be an
           # explicit choice, not a side effect of the enabled-service count reaching parity.
           #
-          # This branch used to trigger only when every service was enabled, so it had gone
-          # unexercised while any service was gated off. Enabling the last one (#71) would have
-          # silently flipped dev onto it. Enumerating the allowlist is correct at any count.
+          # The "deploy_strategy=all" behavior used to activate only when every service was enabled, so it stayed unexercised.
+          # Enabling the last one (#71) would have silently flipped dev onto that unfiltered apply path.
+          # Enumerating the allowlist is correct at any count.
           FINAL_STRATEGY="single"
           FINAL_SERVICES="$ALLOWED_SERVICES"
           echo ""
