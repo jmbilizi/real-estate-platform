@@ -154,7 +154,9 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
        * has content:
        *
        * - the label row (sample / sponsored) — `h-5`, always present
-       * - the stats line (absent for a parcel with unknown lot size, or an all-null dwelling) — `h-4`
+       * - the stats line (absent for a parcel with unknown lot size, or an all-null dwelling) —
+       *   `h-[18px]`, which is `caption-sm`'s line box; a slot sized for the old 12px text would
+       *   clip the 13px it now holds
        * - attribution, which is one line for `internal`/`other` rows (see `ListingAttribution`)
        *
        * The open-house date row is gone entirely — it moved onto the image badge, and it was the
@@ -172,14 +174,19 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
           {listing.sponsored && <SponsoredBadge />}
         </div>
 
-        <h3 className="truncate text-sm font-semibold text-ink">
+        {/* `caption` (14px/500). Was 14/600, a pairing the scale does not define. */}
+        <h3 className="truncate text-sm font-medium text-ink">
           {formatListingLocation(listing.neighborhood, listing.city, listing.state)}
         </h3>
 
         {/* Reserved whether or not there are stats to show, so the price never shifts up a row. */}
-        <p className="h-4 truncate text-xs text-ink-muted">{statsLine ?? ' '}</p>
+        <p className="h-[18px] truncate text-[13px] leading-[18px] text-ink-muted">
+          {statsLine ?? ' '}
+        </p>
 
-        <p className="mt-0.5 truncate text-sm text-ink">
+        {/* `title-md` (16px/600) on the figure, `body-md` (16/400) on the qualifiers. Was 14/600,
+            which the scale does not pair — and it left the price no louder than the title. */}
+        <p className="mt-0.5 truncate text-base text-ink">
           {soldLine ? (
             <span className="font-semibold">{soldLine}</span>
           ) : (

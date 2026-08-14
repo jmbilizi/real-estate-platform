@@ -42,7 +42,9 @@ export default function SingleListingMapInner({
   const pinLabel = priceDisplay.isWithheld ? 'View listing' : priceDisplay.text;
   const icon = L.divIcon({
     className: 'cribstop-price-marker',
-    html: `<span style="background:#FF385C;color:#fff;display:inline-flex;align-items:center;justify-content:center;min-width:${PILL_W}px;height:${PILL_H}px;padding:0 12px;border-radius:9999px;border:2px solid #fff;font:700 13px/1 Inter,system-ui,sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.25);white-space:nowrap;">${pinLabel}</span>`,
+    // `micro-label` (12px/700) in the app's own typeface — this was 13px in hardcoded `Inter`,
+    // the stack's fallback rather than the face the app ships. See `ListingsMapInner`.
+    html: `<span style="background:#FF385C;color:#fff;display:inline-flex;align-items:center;justify-content:center;min-width:${PILL_W}px;height:${PILL_H}px;padding:0 12px;border-radius:9999px;border:2px solid #fff;font:700 12px/1 'Manrope Variable','Inter Variable',system-ui,sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.25);white-space:nowrap;">${pinLabel}</span>`,
     iconSize: [PILL_W, PILL_H],
     iconAnchor: [PILL_W / 2, PILL_H / 2],
   });

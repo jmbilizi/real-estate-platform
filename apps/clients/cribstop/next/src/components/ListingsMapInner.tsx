@@ -69,6 +69,17 @@ function pinPriceLabel(listing: ListingCardRow): string {
   return `$${Math.round(price / 1000)}k`;
 }
 
+/**
+ * `micro-label` (12px/700) from DESIGN.md, in the app's own typeface.
+ *
+ * These markers are built as raw HTML strings, so they get no Tailwind and no inherited font —
+ * every one of them hardcoded `Inter`, which is the *fallback* in the font stack, not the face the
+ * app ships. Every price pin and cluster on every map was therefore rendering in a different
+ * typeface from the rest of the product, and the cluster badge was 800 weight, which the type scale
+ * does not define at any size.
+ */
+const MARKER_FONT = "700 12px/1 'Manrope Variable','Inter Variable',system-ui,sans-serif";
+
 function buildPriceIcon(price: string, active: boolean, saved: boolean) {
   // Red: #FF385C, Black: #222, White: #fff
   let tone;
@@ -81,7 +92,7 @@ function buildPriceIcon(price: string, active: boolean, saved: boolean) {
   }
   return L.divIcon({
     className: 'cribstop-price-marker',
-    html: `<span style="${tone}display:inline-flex;align-items:center;justify-content:center;min-width:${PILL_W}px;height:${PILL_H}px;padding:0 10px;border-radius:9999px;border:1.5px solid;font:700 12px/1 Inter,system-ui,sans-serif;box-shadow:0 4px 16px rgba(34,34,34,0.18),0 1.5px 8px rgba(0,0,0,0.08);white-space:nowrap;cursor:pointer;transition:transform .15s;">${price}</span>`,
+    html: `<span style="${tone}display:inline-flex;align-items:center;justify-content:center;min-width:${PILL_W}px;height:${PILL_H}px;padding:0 10px;border-radius:9999px;border:1.5px solid;font:${MARKER_FONT};box-shadow:0 4px 16px rgba(34,34,34,0.18),0 1.5px 8px rgba(0,0,0,0.08);white-space:nowrap;cursor:pointer;transition:transform .15s;">${price}</span>`,
     iconSize: [PILL_W, PILL_H],
     iconAnchor: [PILL_W / 2, PILL_H / 2],
     popupAnchor: [0, -PILL_H / 2 - 2],
@@ -105,7 +116,7 @@ function clusterIconFactory(cluster: any, highlightId: string | null) {
   const color = highlight ? '#FF385C' : '#222';
   return L.divIcon({
     className: 'cribstop-cluster',
-    html: `<span style="background:${bg};color:${color};display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:9999px;border:${border};font:800 13px/1 Inter,system-ui,sans-serif;box-shadow:${boxShadow};">${count}</span>`,
+    html: `<span style="background:${bg};color:${color};display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:9999px;border:${border};font:${MARKER_FONT};box-shadow:${boxShadow};">${count}</span>`,
     iconSize: [42, 42],
     iconAnchor: [21, 21],
   });

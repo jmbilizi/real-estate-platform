@@ -298,8 +298,12 @@ describe('ListingCard', () => {
 
     it('reserves the stats row even when there are no stats to show', () => {
       // A parcel with unknown lot size has neither a dwelling triplet nor a lot size.
+      //
+      // The slot is `h-[18px]`, which is `caption-sm`'s line box — it tracks the type. When the
+      // stats line moved from an off-scale 12px to 13px, a box still sized for 12px would have
+      // clipped it, so this assertion has to move with the type rather than be loosened.
       const { container } = render(<ListingCard listing={aLandParcelRow({ lotSqft: null })} />);
-      expect(container.querySelector('.h-4')).toBeTruthy();
+      expect(container.querySelector('.h-\\[18px\\]')).toBeTruthy();
     });
 
     it('renders the same row structure across a mixed set', () => {
