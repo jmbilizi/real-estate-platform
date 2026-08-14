@@ -22,11 +22,12 @@ import type { ListingDetailView } from './listings';
  * through the gateway. This removes the round trip, for one tab, for the few minutes someone spends
  * comparing homes. The two are complementary, and this is the smaller of them.
  *
- * It would already be smaller if the app's own proxy did not throw away what the service sends: the
- * Property API returns `Cache-Control: public, max-age=60` and a weak ETag, and
- * `app/api/_lib/listings-gateway.ts` re-serializes the body through `NextResponse.json` without
- * either, so the browser never gets the chance to revalidate. Fixing that hop is the prerequisite
- * for shrinking this.
+ * `app/api/_lib/listings-gateway.ts` now forwards the service's `Cache-Control: public, max-age=60`
+ * and its ETag, so the browser's own HTTP cache already absorbs a repeat detail request inside that
+ * window and this saves no bytes there. What it still saves is the *asynchrony*: an HTTP cache hit
+ * is a fetch that resolves in a microtask, which is a render through `status: 'loading'` and a
+ * skeleton before the listing appears. Reading synchronously during the first render is what makes
+ * reopening a listing show the listing, not a flash of skeleton and then the listing.
  *
  * Deliberately module-level and client-only. It is per-tab, dies with the page, and never sees the
  * server, where a module-level Map would be shared across every visitor and grow without bound.

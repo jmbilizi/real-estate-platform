@@ -38,16 +38,17 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
    * is what makes closing continuous with what was already on screen. A listing that failed to
    * load has no city to search, so there is nothing to put behind it and close falls back.
    *
-   * The **city alone**, deliberately, not "City, ST". `query` is free text matched against title,
-   * address, city, neighborhood and zip *individually*, so a value spanning two fields matches
-   * none of them and comes back empty. (The search bar builds exactly that shape today and returns
-   * zero results for every city suggestion — #80, with #81 adding real city/state filters. Not a
-   * bug to reproduce here.) The cost is that a city name
-   * shared across states matches both; the brokerage is MD/DC/VA only, and an occasional extra
-   * result behind the panel is far cheaper than a backdrop that is reliably empty.
+   * `"City, ST"` — the same label the search bar writes for a location suggestion, so the bar reads
+   * the way it would if the search had been typed, and the close destination is a URL a person
+   * would recognise as theirs. Matching it is `buildListingsQuery`'s job: the API has no state
+   * field to match against yet (#81), so the proxy drops the state before forwarding (#80). Do not
+   * shorten this to the city to compensate — the display and the match are two different concerns,
+   * and collapsing them here is what made the search bar's own URLs return nothing.
    */
   const cityQuery =
-    initialState.status === 'ready' ? `q=${encodeURIComponent(initialState.listing.city)}` : null;
+    initialState.status === 'ready'
+      ? `q=${encodeURIComponent(`${initialState.listing.city}, ${initialState.listing.state}`)}`
+      : null;
 
   return (
     <>
