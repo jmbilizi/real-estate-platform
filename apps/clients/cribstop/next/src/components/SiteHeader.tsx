@@ -10,7 +10,7 @@ import NavBar from './NavBar';
  */
 export default function SiteHeader() {
   return (
-    <div className="site-header-wrapper sticky top-0 z-50 bg-white overflow-visible">
+    <div className="site-header-wrapper sticky top-0 z-chrome bg-white overflow-visible">
       <NavBar />
     </div>
   );

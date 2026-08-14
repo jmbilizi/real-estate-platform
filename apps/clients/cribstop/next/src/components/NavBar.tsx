@@ -101,7 +101,7 @@ export default function NavBar() {
 
       {/* Click-catcher backdrop */}
       {headerExpanded && showHeaderPill && (
-        <div className="fixed inset-0 z-[49]" onClick={() => setHeaderExpanded(false)} />
+        <div className="fixed inset-0 z-nav-backdrop" onClick={() => setHeaderExpanded(false)} />
       )}
 
       <header className="relative bg-white overflow-visible">

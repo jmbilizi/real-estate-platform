@@ -11,6 +11,7 @@ import {
   highlightMatch,
 } from '@/lib/search-utils';
 import { isParcelOnlySelection, PARCEL_INTERLOCK_HINT, SearchPanel } from '@/lib/store/types';
+import { Z_LAYERS } from '@/lib/z-layers';
 import { BED_OPTIONS, DateRangePanel } from './DateRangePanel';
 import { PROPERTY_TYPES } from '@cribstop/property-contracts';
 import type { ListingType } from '@/lib/types';
@@ -235,10 +236,10 @@ function mountGhost(node: HTMLElement, box: MorphBox, holds: boolean) {
     width: `${box.width}px`,
     height: `${box.height}px`,
     margin: '0',
-    // ABOVE the real bar (z 55). The incoming capsule is solid from the first
+    // Directly above the real bar. The incoming capsule is solid from the first
     // frame, so the ghost has to cover it while it dissolves — that's what keeps
     // the two layouts' labels from ever being legible at the same time.
-    zIndex: '56',
+    zIndex: String(Z_LAYERS.searchBarMorphGhost),
     pointerEvents: 'none',
     transformOrigin: 'center center',
     willChange: 'transform, opacity',
@@ -277,7 +278,7 @@ const DOCK_STYLE: Record<'pill' | 'expanded', React.CSSProperties> = {
     marginLeft: 'auto',
     marginRight: 'auto',
     width: 'min(480px, calc(100vw - 160px))',
-    zIndex: 55,
+    zIndex: Z_LAYERS.searchBar,
   },
   expanded: {
     position: 'fixed',
@@ -287,7 +288,7 @@ const DOCK_STYLE: Record<'pill' | 'expanded', React.CSSProperties> = {
     marginLeft: 'auto',
     marginRight: 'auto',
     width: 'min(768px, calc(100vw - 48px))',
-    zIndex: 55,
+    zIndex: Z_LAYERS.searchBar,
   },
 };
 
@@ -1865,7 +1866,7 @@ export default function CompactSearchBar({
 
     return (
       <div
-        className="fixed inset-0 z-[60] bg-surface-alt flex flex-col"
+        className="fixed inset-0 z-search-overlay bg-surface-alt flex flex-col"
         style={{ animation: 'mss-in 220ms ease both' }}
       >
         <style>

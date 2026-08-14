@@ -181,7 +181,10 @@ export default function Modal({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex justify-center overflow-hidden bg-black/30 ${backdropAlign}`}
+      /* `z-dialog`, not `z-50` — see `lib/z-layers`. At 50 this tied with the sticky header and sat
+         *below* the docked search bar's 55, so scrolling a results page far enough to dock the pill
+         and then opening a listing put the pill on top of the panel's own header row. */
+      className={`fixed inset-0 z-dialog flex justify-center overflow-hidden bg-black/30 ${backdropAlign}`}
     >
       <div
         className={`relative w-full flex flex-col

@@ -65,7 +65,7 @@ export default function FilterModal({ isOpen, onClose, filters, onChange, result
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+      className="fixed inset-0 z-dialog flex items-end sm:items-center justify-center"
       role="dialog"
       aria-modal="true"
       aria-label="Filters"
