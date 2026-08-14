@@ -19,7 +19,8 @@ import SearchExperience from '@/components/SearchExperience';
  * out with a header, a search bar and the words "Loading search…", and every one of this page's
  * pieces (the split layout, the map panel, the card skeletons) waited for the client. Measured with
  * a production build, not just `next dev`: removing the boundary took the first-HTML body from 3,455
- * bytes to 8,985.
+ * bytes to 8,985. (It is larger again now — the card skeletons carry more — so treat the shape as
+ * the invariant, not the number: the body itself must be in the first HTML, never a fallback.)
  *
  * Nothing here needs a boundary. There is no `useSearchParams()` in the subtree — that is exactly
  * what reading `searchParams` above avoids — and no async work: the results arrive from a client

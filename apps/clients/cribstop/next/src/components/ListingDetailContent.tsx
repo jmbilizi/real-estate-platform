@@ -9,7 +9,7 @@ import SingleListingMap from '@/components/SingleListingMap';
 import ListingAttribution from '@/components/listing/ListingAttribution';
 import ListingProvenance from '@/components/listing/ListingProvenance';
 import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges';
-import { ListingCardSkeleton } from '@/components/listing/ListingStates';
+import { SimilarHomesSkeleton } from '@/components/listing/ListingStates';
 import { formatNumber, formatPrice } from '@/lib/format';
 import {
   formatClosePrice,
@@ -55,24 +55,6 @@ const PANEL = 'rounded-2xl border border-surface-border bg-white';
 type SimilarState =
   | { status: 'loading'; results: [] }
   | { status: 'ready' | 'error'; results: ListingCardRow[] };
-
-function SimilarHomesSkeleton() {
-  return (
-    <section className="px-6 py-6" aria-hidden="true">
-      <div className="h-7 w-40 rounded-xs bg-surface-soft" />
-      <div className="mt-4 flex gap-5 overflow-x-hidden">
-        {Array.from({ length: 4 }, (_, i) => (
-          <div
-            key={i}
-            className="w-[calc((100%-1.25rem)/2)] flex-shrink-0 sm:w-[calc((100%-2.5rem)/3)] md:w-[calc((100%-3.75rem)/4)]"
-          >
-            <ListingCardSkeleton />
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
 
 export default function ListingDetailContent({ listing, onClose }: Props) {
   const { toggleSave, isSaved } = useApp();

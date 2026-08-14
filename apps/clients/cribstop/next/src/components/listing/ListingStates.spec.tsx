@@ -152,4 +152,101 @@ describe('ListingDetailSkeleton', () => {
       expect(container.querySelectorAll('[data-gallery-tile-placeholder]')).toHaveLength(0);
     });
   });
+
+  /**
+   * Every section of the loaded page needs a counterpart here, or that section arrives with no
+   * warning and shoves everything below it down the page.
+   *
+   * The list is the loaded page's own section stack, read off `ListingDetailContent`. Measured at
+   * the time these were added: the skeleton's body was 946px against a loaded 2220px, so more than
+   * half the page appeared with nothing holding its place — and the map panel alone is ~500px of
+   * that. Afterwards the two measured 2215px and 2220px, with every section's top offset equal.
+   */
+  describe('section coverage', () => {
+    const SECTIONS = [
+      'gallery',
+      'price',
+      'stats',
+      'description',
+      'amenities',
+      'map',
+      'disclosure',
+      'agent',
+      'mortgage',
+      'similar-homes',
+    ];
+
+    it.each(SECTIONS)('reserves the %s section', (section) => {
+      const { container } = render(<ListingDetailSkeleton preview={aListingCardRow()} />);
+
+      expect(container.querySelector(`[data-skeleton-section="${section}"]`)).not.toBeNull();
+    });
+
+    it('reserves every section on a hard load too, where there is no row at all', () => {
+      const { container } = render(<ListingDetailSkeleton />);
+
+      const found = [...container.querySelectorAll('[data-skeleton-section]')].map((el) =>
+        el.getAttribute('data-skeleton-section'),
+      );
+      expect(found).toEqual(SECTIONS);
+    });
+
+    /**
+     * The loaded page renders the mortgage estimate only for a sale with a price. With a row in hand
+     * that is knowable, so reserving it for a rental would be reserving space for a panel that never
+     * comes.
+     */
+    it('drops the mortgage panel for a rental, which will not render one', () => {
+      const { container } = render(
+        <ListingDetailSkeleton preview={aListingCardRow({ listingType: 'rent' })} />,
+      );
+
+      expect(container.querySelector('[data-skeleton-section="mortgage"]')).toBeNull();
+    });
+
+    it('drops it for a withheld price too, for the same reason', () => {
+      const { container } = render(
+        <ListingDetailSkeleton preview={aListingCardRow({ price: null })} />,
+      );
+
+      expect(container.querySelector('[data-skeleton-section="mortgage"]')).toBeNull();
+    });
+  });
+
+  /**
+   * One fill for placeholders, and the distinction that makes the rule meaningful.
+   *
+   * A **container** legitimately carries the loaded page's own surface — the detail panels are white
+   * cards, the canvas is `surface-alt`, the mortgage panel is brand-tinted — because the skeleton
+   * has to reproduce the loaded layout. A **placeholder**, meaning a leaf standing in for content,
+   * must always be the one fill. The regression this guards was exactly that confusion: the stats,
+   * agent and mortgage stand-ins were bare white panels with nothing inside them, which read as
+   * empty panels rather than as content arriving.
+   */
+  describe('placeholder fill', () => {
+    const leaves = (container: HTMLElement) =>
+      [...container.querySelectorAll('div, span')].filter((el) => el.children.length === 0);
+
+    it.each([
+      ['with a row', aListingCardRow()],
+      ['without a row', undefined],
+    ])('paints no placeholder white (%s)', (_label, preview) => {
+      const { container } = render(<ListingDetailSkeleton preview={preview} />);
+
+      const whiteLeaves = leaves(container).filter(
+        (el) => el.className.includes('bg-white') && el.textContent?.trim() === '',
+      );
+
+      expect(whiteLeaves.map((el) => el.className)).toEqual([]);
+    });
+
+    it('uses the one fill for the placeholders it does draw', () => {
+      const { container } = render(<ListingDetailSkeleton />);
+
+      const filled = leaves(container).filter((el) => el.className.includes('bg-surface-soft'));
+
+      // Sanity: the rule above is only meaningful if placeholders are actually being drawn.
+      expect(filled.length).toBeGreaterThan(10);
+    });
+  });
 });
