@@ -17,11 +17,16 @@ import type { ListingDetailView } from './listings';
  * everything up front.
  *
  * **This is not the platform's caching layer, and is not trying to be.** Caching listings belongs
- * in the Property API, on Redis, where it is shared by every visitor and invalidated by writes.
- * What that cannot do is remove the request: a warm server cache still costs a round trip through
- * the gateway. This removes the round trip, for one tab, for the few minutes someone spends
- * comparing homes. The two are complementary, and this is the smaller of them — when the API grows
- * proper cache headers, most of this can go.
+ * in the Property API, on Redis, where it is shared by every visitor and invalidated by writes
+ * (#82). What that cannot do is remove the request: a warm server cache still costs a round trip
+ * through the gateway. This removes the round trip, for one tab, for the few minutes someone spends
+ * comparing homes. The two are complementary, and this is the smaller of them.
+ *
+ * It would already be smaller if the app's own proxy did not throw away what the service sends: the
+ * Property API returns `Cache-Control: public, max-age=60` and a weak ETag, and
+ * `app/api/_lib/listings-gateway.ts` re-serializes the body through `NextResponse.json` without
+ * either, so the browser never gets the chance to revalidate. Fixing that hop is the prerequisite
+ * for shrinking this.
  *
  * Deliberately module-level and client-only. It is per-tab, dies with the page, and never sees the
  * server, where a module-level Map would be shared across every visitor and grow without bound.

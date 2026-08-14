@@ -40,9 +40,9 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
    *
    * The **city alone**, deliberately, not "City, ST". `query` is free text matched against title,
    * address, city, neighborhood and zip *individually*, so a value spanning two fields matches
-   * none of them and comes back empty. (The search bar builds exactly that shape today, which is
-   * its own bug, filed separately — but it is not one to reproduce here.) The cost is that a city
-   * name
+   * none of them and comes back empty. (The search bar builds exactly that shape today and returns
+   * zero results for every city suggestion — #80, with #81 adding real city/state filters. Not a
+   * bug to reproduce here.) The cost is that a city name
    * shared across states matches both; the brokerage is MD/DC/VA only, and an occasional extra
    * result behind the panel is far cheaper than a backdrop that is reliably empty.
    */

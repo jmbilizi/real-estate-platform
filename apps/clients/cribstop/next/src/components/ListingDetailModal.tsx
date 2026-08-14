@@ -114,13 +114,7 @@ export default function ListingDetailModal({
   const handleRetry = () => setRetryCount((c) => c + 1);
 
   return (
-    <ListingModalFrame
-      open={open}
-      onClose={handleClose}
-      /* A server-resolved state means this modal *is* the page rather than a dialog over one, so it
-         belongs in the first paint instead of appearing after hydration. */
-      instant={initialState !== undefined}
-    >
+    <ListingModalFrame open={open} onClose={handleClose}>
       {state.status === 'loading' && <ListingDetailSkeleton />}
 
       {state.status === 'ready' && (

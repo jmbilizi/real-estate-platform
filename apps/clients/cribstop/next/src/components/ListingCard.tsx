@@ -30,7 +30,23 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
    * shipped and started fetching its own data. A real route renders on the server, so a reload of
    * this URL renders the listing and nothing else.
    */
-  const openModal = () => router.push(`/listing/${listing.id}`, { scroll: false });
+  const href = `/listing/${listing.id}`;
+  const openModal = () => router.push(href, { scroll: false });
+
+  /**
+   * Warms the listing route before the click that needs it.
+   *
+   * Intercepting a route is still a navigation, and an un-prefetched one cannot show its
+   * `loading.tsx` until the payload arrives — the loading boundary is *part of* that payload. So
+   * the panel appeared only after a full round trip, and a click read as if it had not registered.
+   * Prefetching on approach means the boundary is already in hand and the skeleton paints on the
+   * click itself.
+   *
+   * Pointer entry rather than viewport, deliberately: a results page holds twenty of these, and
+   * prefetching all twenty on render would fire twenty requests to open one listing. `touchstart`
+   * covers the case with no hover to approach with — it still lands ahead of the tap.
+   */
+  const prefetch = () => router.prefetch(href);
 
   const isSold = listing.listingType === 'sold' || listing.status === 'Sold';
   const isParcel = listing.propertyType === 'Land';
@@ -81,7 +97,12 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
         : null;
 
   return (
-    <div className="group block cursor-pointer" onClick={openModal}>
+    <div
+      className="group block cursor-pointer"
+      onClick={openModal}
+      onMouseEnter={prefetch}
+      onTouchStart={prefetch}
+    >
       {/* Image */}
       <div className="relative aspect-square overflow-hidden rounded-md bg-surface-soft">
         <ListingImage

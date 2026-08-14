@@ -11,7 +11,7 @@ import { ListingDetailSkeleton } from '@/components/listing/ListingStates';
  */
 export default function LoadingListing() {
   return (
-    <ListingModalFrame instant>
+    <ListingModalFrame>
       <ListingDetailSkeleton />
     </ListingModalFrame>
   );
