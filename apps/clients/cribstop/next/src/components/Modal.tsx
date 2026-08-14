@@ -59,6 +59,15 @@ interface ModalProps {
   squareBottom?: boolean;
   /** Disable scrolling on the content div — let children manage their own scroll */
   noScroll?: boolean;
+  /**
+   * Open at full size instead of scaling up from 95% (sm+ only; the mobile slide-up is unaffected).
+   *
+   * The scale-in reads well on a small centred dialog, where it looks like the card arrives. On a
+   * panel that fills the viewport it does not: it opens 37px short of full height and 19px down
+   * from the top, then grows into place, which reads as the modal resizing itself rather than
+   * appearing. Opt-in so existing dialogs keep the animation they were designed with.
+   */
+  noScaleIn?: boolean;
 }
 
 export default function Modal({
@@ -75,6 +84,7 @@ export default function Modal({
   noPadding,
   squareBottom,
   noScroll,
+  noScaleIn,
 }: ModalProps) {
   // mounted: controls DOM presence; visible: drives CSS transition
   const [mounted, setMounted] = useState(false);
@@ -144,8 +154,15 @@ export default function Modal({
   const slideFrom =
     mobileStyle === 'center'
       ? '' // no slide on mobile for center
-      : 'translate-y-full sm:translate-y-0 sm:scale-95 sm:opacity-0';
-  const slideTo = mobileStyle === 'center' ? '' : 'translate-y-0 sm:scale-100 sm:opacity-100';
+      : noScaleIn
+        ? 'translate-y-full sm:translate-y-0 sm:opacity-0'
+        : 'translate-y-full sm:translate-y-0 sm:scale-95 sm:opacity-0';
+  const slideTo =
+    mobileStyle === 'center'
+      ? ''
+      : noScaleIn
+        ? 'translate-y-0 sm:opacity-100'
+        : 'translate-y-0 sm:scale-100 sm:opacity-100';
 
   return (
     <div

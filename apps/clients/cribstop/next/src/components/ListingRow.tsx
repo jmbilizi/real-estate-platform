@@ -15,6 +15,14 @@ interface Props {
   max?: number;
   /** Override the section's outer padding class. Defaults to "px-6 pt-6 sm:px-10 lg:px-20" */
   sectionClassName?: string;
+  /**
+   * Override the heading's type classes. Defaults to the page-level section size (20/24px).
+   *
+   * A row nested inside a panel is not a page-level section: on the listing detail page the row's
+   * 24px heading outranked that page's own 20px section headings ("About this home", "Where you'll
+   * live"), so the same rank rendered at two sizes depending on which component drew it.
+   */
+  titleClassName?: string;
   /** Renders `max` skeleton cards in the carousel shape instead of `listings`. */
   loading?: boolean;
 }
@@ -30,6 +38,7 @@ export default function ListingRow({
   listings,
   max = 4,
   sectionClassName,
+  titleClassName,
   loading = false,
 }: Props) {
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -74,7 +83,13 @@ export default function ListingRow({
       <div className="flex flex-col gap-1 pb-1">
         <div className="flex items-center gap-2 justify-between">
           <div className="flex items-center gap-2">
-            <h2 className="font-display text-xl font-bold tracking-tight sm:text-2xl">{title}</h2>
+            <h2
+              className={
+                titleClassName ?? 'font-display text-xl font-bold tracking-tight sm:text-2xl'
+              }
+            >
+              {title}
+            </h2>
             {href && (
               <Link
                 href={href}

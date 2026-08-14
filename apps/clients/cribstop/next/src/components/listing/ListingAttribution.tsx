@@ -43,11 +43,34 @@ export default function ListingAttribution({
 }: {
   attribution: Attribution;
   source: ListingSource;
-  /** `auto` follows the row's source; `full` always renders the complete block. */
-  density?: 'auto' | 'full';
+  /**
+   * `auto` follows the row's source; `full` always renders the complete block; `courtesy` renders
+   * the one-sentence disclosure form (firm + who listed it, no contact details).
+   */
+  density?: 'auto' | 'full' | 'courtesy';
   className?: string;
 }) {
   const { listedBy, officeName, listingAgentName, brokerPhone, brokerEmail } = attribution;
+
+  /*
+   * The disclosure form, for a surface that already identifies the agent elsewhere.
+   *
+   * The detail page carries a Listing Agent card with the name, office, phone and email, so
+   * repeating all of it in the disclosure block below was duplication, not compliance. NAR 7.58
+   * asks that the **display** identify the listing firm and a participant-supplied contact
+   * method, not that every block on the page do so independently — and the agent card satisfies
+   * it in a far more prominent position than a footnote. What belongs here is the courtesy
+   * attribution itself: which firm the listing came from, and who listed it.
+   *
+   * `listedBy` is rendered as delivered, never reassembled from parts.
+   */
+  if (density === 'courtesy') {
+    return (
+      <p className={className}>
+        Listing courtesy of {officeName}. Listed by {listedBy}.
+      </p>
+    );
+  }
 
   const showFullBlock = density === 'full' || source === 'brightMLS';
 
@@ -61,7 +84,7 @@ export default function ListingAttribution({
          * so the full name stays in the DOM and screen readers still read it whole; `title` exposes
          * it on hover for sighted users.
          */
-        className={`truncate text-xs leading-snug text-ink-muted ${className}`}
+        className={`truncate text-[13px] leading-snug text-ink-muted ${className}`}
         title={officeName}
       >
         Listing by {officeName}

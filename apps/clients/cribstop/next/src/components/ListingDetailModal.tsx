@@ -72,6 +72,9 @@ export default function ListingDetailModal({ id }: { id: string }) {
       noPadding
       squareBottom
       noScroll
+      /* Full height from the first frame — this panel fills the viewport, so scaling it up from
+         95% reads as the modal resizing itself rather than arriving. */
+      noScaleIn
     >
       {state.status === 'loading' && <ListingDetailSkeleton />}
 

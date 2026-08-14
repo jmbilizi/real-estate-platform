@@ -9,10 +9,16 @@ export default function MortgageTeaser({ price }: { price: number }) {
 
   return (
     <div className="rounded-2xl border border-surface-border bg-brand-50/50 p-6">
-      <h3 className="font-display text-base font-bold text-ink">Estimated Monthly Payment</h3>
-      <p className="mt-2 font-display text-3xl font-extrabold text-brand-700">
+      {/* `title-md` (16px/600) per DESIGN.md. */}
+      <h3 className="text-base font-semibold text-ink">Estimated monthly payment</h3>
+      {/*
+       * `display-sm` (20px/600) — one step below the price's `display-md` (21px/700). This was
+       * 30px/800: a size and a weight the design system does not define, on a figure derived from
+       * a guessed 6.8% rate. An estimate should not outrank the fact it is estimated from.
+       */}
+      <p className="mt-2 text-xl font-semibold text-brand-700">
         ${monthly.toLocaleString()}
-        <span className="text-base font-normal text-ink-muted">/mo</span>
+        <span className="text-sm font-normal text-ink-muted">/mo</span>
       </p>
       <div className="mt-3 space-y-1 text-sm text-ink-muted">
         <p>20% down &middot; 6.8% rate &middot; 30-yr fixed</p>

@@ -31,6 +31,25 @@ interface Props {
   onClose?: () => void;
 }
 
+/**
+ * One panel primitive, used by every section on this page.
+ *
+ * The loading skeleton makes a promise the loaded page used to break: in the skeleton every block
+ * is the same object — a rounded, bordered panel with a consistent gutter — so the page reads as a
+ * calm stack of equal-weight cards. The loaded page then rendered *some* sections as panels (stats,
+ * map, disclosure, agent, open houses) and others as bare text floating on the canvas (price,
+ * description, amenities), so the layout appeared to come apart at the exact moment the data
+ * arrived.
+ *
+ * Both halves of the fix matter. Applying one primitive everywhere is the obvious half; the other
+ * is the canvas. These panels were already white on a white page, where a hairline border does
+ * almost no work — the body is `surface-alt` now, which is what lets a panel actually read as one.
+ *
+ * Values are the existing system's (`rounded-2xl`, `surface-border`, `surface-alt`), not new ones:
+ * the brief is to make what we already have consistent, not to introduce another visual language.
+ */
+const PANEL = 'rounded-2xl border border-surface-border bg-white';
+
 /** "Similar Homes" fetch lifecycle. A failed nice-to-have must not break the page, so a failure
  *  renders the same as "no results" — nothing — rather than an error banner. */
 type SimilarState =
@@ -39,7 +58,7 @@ type SimilarState =
 
 function SimilarHomesSkeleton() {
   return (
-    <section className="mt-4 px-6 pt-6 sm:px-8" aria-hidden="true">
+    <section className="px-6 py-6" aria-hidden="true">
       <div className="h-7 w-40 rounded-xs bg-surface-soft" />
       <div className="mt-4 flex gap-5 overflow-x-hidden">
         {Array.from({ length: 4 }, (_, i) => (
@@ -143,7 +162,7 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Airbnb-style: address + key stats left · Share/Save right — above gallery */}
-      <div className="flex-shrink-0 flex items-center gap-3 px-6 sm:px-8 pt-4 pb-3 bg-white">
+      <div className="flex-shrink-0 flex items-center gap-3 border-b border-surface-border px-6 sm:px-8 pt-4 pb-3 bg-white">
         {onClose && (
           <button
             onClick={onClose}
@@ -162,10 +181,16 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
           </button>
         )}
         <div className="min-w-0 flex-1">
-          <h1 className="font-display text-xs font-semibold tracking-tight text-ink sm:text-sm md:text-base lg:text-lg xl:text-xl">
+          {/*
+           * `title-md` (16px/600) flat, replacing a `text-xs`→`text-xl` ladder that rendered this
+           * heading at 12/14/16/18/20px depending on viewport — four of those five are not steps
+           * in the DESIGN.md scale. If this changes, the skeleton's placeholder in
+           * `ListingStates` must change with it or the two states stop measuring the same.
+           */}
+          <h1 className="text-base font-semibold tracking-tight text-ink">
             {streetAddress ?? suppressedAddressHeading}
           </h1>
-          <p className="mt-1 text-xs text-ink-muted lg:text-sm">
+          <p className="mt-1 text-sm text-ink-muted">
             {[dwellingStats, listing.propertyType].filter(Boolean).join(' · ')}
           </p>
         </div>
@@ -203,16 +228,18 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
         </div>
       </div>
 
-      {/* Scrollable body */}
-      <div className="flex-1 min-h-0 scrollbar-overlay px-6 sm:px-8 pb-8">
-        {/* Gallery */}
-        <PropertyGallery media={listing.media} />
+      {/* Scrollable body — `surface-alt` is the canvas that makes a white panel read as a panel. */}
+      <div className="flex-1 min-h-0 scrollbar-overlay bg-surface-alt px-6 sm:px-8 py-4 pb-8">
+        {/* Gallery — the first panel, exactly the block the skeleton opens with. */}
+        <div className={`overflow-hidden ${PANEL}`}>
+          <PropertyGallery media={listing.media} />
+        </div>
 
-        <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_380px]">
+        <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_380px] lg:items-start">
           {/* Main column */}
-          <div>
-            {/* Badges + price + address — below gallery */}
-            <div>
+          <div className="space-y-4">
+            {/* Badges + price + address */}
+            <div className={`${PANEL} p-6`}>
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="badge bg-surface-border text-ink">{listing.status}</span>
                 {listing.isSample && <SampleBadge />}
@@ -230,7 +257,7 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
                     Sold
                   </p>
-                  <p className="mt-1 font-display text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
+                  <p className="mt-1 text-[21px] font-bold tracking-tight text-ink">
                     {closePriceText}
                   </p>
                   {listing.price !== null && (
@@ -240,11 +267,20 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
                   )}
                 </div>
               ) : (
+                /*
+                 * `display-md` (21px/700) from DESIGN.md — not a bespoke size.
+                 *
+                 * This was 36px/800, then 30px/700; both were off-scale. The system's largest
+                 * style is `display-xl` at 28px/700 and it has no 800 weight at all, so the price
+                 * was rendering larger and heavier than anything the design system defines. One
+                 * step above the 20px section headings, distinguished by weight rather than bulk,
+                 * is the Airbnb-style restraint the spec describes.
+                 */
                 <p
                   className={
                     priceDisplay.isWithheld
-                      ? 'mt-3 text-lg font-medium italic text-ink-muted'
-                      : 'mt-3 font-display text-3xl font-extrabold tracking-tight text-ink sm:text-4xl'
+                      ? 'mt-3 text-base font-medium italic text-ink-muted'
+                      : 'mt-3 text-[21px] font-bold tracking-tight text-ink'
                   }
                 >
                   {priceDisplay.text}
@@ -260,15 +296,17 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
             {/* Stats — suppressed entirely for a parcel, which shows lot size instead */}
             {listing.isParcel
               ? lotSizeText && (
-                  <div className="mt-6 max-w-xs rounded-2xl border border-surface-border bg-white px-5 py-4">
+                  <div className={`max-w-xs ${PANEL} px-5 py-4`}>
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
                       Lot Size
                     </p>
-                    <p className="mt-1 font-display text-lg font-bold text-ink">{lotSizeText}</p>
+                    <p className="mt-1 text-base font-semibold text-ink">{lotSizeText}</p>
                   </div>
                 )
               : statTiles.length > 0 && (
-                  <div className="mt-6 grid grid-cols-2 gap-0 overflow-hidden rounded-2xl border border-surface-border bg-white sm:grid-cols-3 lg:grid-cols-6">
+                  <div
+                    className={`grid grid-cols-2 gap-0 overflow-hidden ${PANEL} sm:grid-cols-3 lg:grid-cols-6`}
+                  >
                     {statTiles.map((s, i, arr) => (
                       <div
                         key={s.label}
@@ -277,7 +315,7 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
                         <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
                           {s.label}
                         </p>
-                        <p className="mt-1 font-display text-lg font-bold text-ink">{s.value}</p>
+                        <p className="mt-1 text-base font-semibold text-ink">{s.value}</p>
                       </div>
                     ))}
                   </div>
@@ -285,18 +323,16 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
 
             {/* Description */}
             {listing.description && (
-              <div className="mt-10">
-                <h2 className="font-display text-xl font-bold tracking-tight">About this home</h2>
+              <div className={`${PANEL} p-6`}>
+                <h2 className="text-xl font-semibold tracking-tight">About this home</h2>
                 <p className="mt-3 leading-relaxed text-ink-muted">{listing.description}</p>
               </div>
             )}
 
             {/* Amenities */}
             {listing.amenities.length > 0 && (
-              <div className="mt-10">
-                <h2 className="font-display text-xl font-bold tracking-tight">
-                  Features & Amenities
-                </h2>
+              <div className={`${PANEL} p-6`}>
+                <h2 className="text-xl font-semibold tracking-tight">Features &amp; amenities</h2>
                 <div className="mt-4">
                   <AmenityChips amenities={listing.amenities} />
                 </div>
@@ -304,14 +340,14 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
             )}
 
             {/* Where you'll live */}
-            <div className="mt-10">
-              <h2 className="font-display text-xl font-bold tracking-tight">
-                Where you&apos;ll live
-              </h2>
+            <div className={`${PANEL} p-6`}>
+              <h2 className="text-xl font-semibold tracking-tight">Where you&apos;ll live</h2>
               <p className="mt-2 text-sm text-ink-muted">
                 {formatListingLocation(listing.neighborhood, listing.city, listing.state)}
               </p>
-              <div className="mt-4 overflow-hidden rounded-2xl border border-surface-border">
+              {/* Inset from the panel's edge rather than bleeding to it, so the map reads as
+                  content inside the section and not as a second, competing panel. */}
+              <div className="mt-4 overflow-hidden rounded-xl border border-surface-border">
                 <SingleListingMap
                   latitude={listing.latitude}
                   longitude={listing.longitude}
@@ -324,16 +360,18 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
 
             {/* Listing disclosure — provenance is driven off this row's own `source`, never a
                 build flag, env var or default (rule #6). */}
-            <div className="mt-10 rounded-2xl border border-surface-border bg-surface-alt p-5 text-xs leading-relaxed text-ink-muted">
+            <div className={`${PANEL} p-6 text-[13px] leading-relaxed text-ink-muted`}>
               {/*
-               * `density="full"` regardless of source. The detail page is not height-constrained,
-               * and more attribution is never the risk — so it carries the complete block even for
-               * our own inventory, where NAR 7.58 does not attach.
+               * `courtesy`, not `full`: the Listing Agent card alongside this already carries the
+               * agent's name, office, phone and email, so the full block repeated all of it a few
+               * hundred pixels away. 7.58 asks that the display identify the listing firm and a
+               * participant-supplied contact method — the agent card does that, more prominently
+               * than a footnote can. This block is the courtesy attribution and the provenance.
                */}
               <ListingAttribution
                 attribution={listing}
                 source={listing.source}
-                density="full"
+                density="courtesy"
                 className="text-ink-body"
               />
               <ListingProvenance
@@ -341,7 +379,7 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
                 lastUpdated={listing.lastUpdated}
                 className="mt-2"
               />
-              <p className="mt-1">
+              <p className="mt-2">
                 This information is for personal, non-commercial use. Some properties may no longer
                 be available.
               </p>
@@ -350,8 +388,9 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
 
           {/* Sidebar */}
           <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-            {/* Agent card */}
-            <div className="rounded-2xl border border-surface-border bg-white p-6 shadow-card">
+            {/* Agent card — the one panel carrying elevation. Everything else on the page is flat,
+                so the single shadow reads as "this is the thing to act on" rather than as noise. */}
+            <div className={`${PANEL} p-6 shadow-card`}>
               <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
                 Listing Agent
               </p>
@@ -363,7 +402,7 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
                   <p className="truncate font-semibold text-ink">
                     {listing.listingAgentName ?? listing.brokerName}
                   </p>
-                  <p className="truncate text-xs text-ink-muted">{listing.officeName}</p>
+                  <p className="truncate text-[13px] text-ink-muted">{listing.officeName}</p>
                 </div>
               </div>
               <div className="mt-4 space-y-1.5 text-sm">
@@ -432,7 +471,7 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
                 <ul className="mt-2 space-y-3">
                   {listing.openHouses.map((openHouse, i) => (
                     <li key={i}>
-                      <p className="font-display text-lg font-bold text-ink">
+                      <p className="text-base font-semibold text-ink">
                         {formatOpenHouse(openHouse)}
                       </p>
                       {openHouse.remarks && (
@@ -454,16 +493,25 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
           </aside>
         </div>
 
-        {/* Similar homes */}
-        {similar.status === 'loading' && <SimilarHomesSkeleton />}
+        {/* Similar homes — the last panel, so the stack closes the way it opened. */}
+        {similar.status === 'loading' && (
+          <div className={`mt-4 ${PANEL}`}>
+            <SimilarHomesSkeleton />
+          </div>
+        )}
         {similar.status === 'ready' && similar.results.length > 0 && (
-          <div className="mt-4">
+          <div className={`mt-4 ${PANEL}`}>
+            {/* `ListingRow` defaults to the page-level gutter (`px-6 sm:px-10 lg:px-20`), which is
+                a full-bleed section's padding, not a panel's — inside a panel it put the heading
+                and cards hard against the border. This is the panel's own inset. */}
             <ListingRow
-              title="Similar Homes"
+              title="Similar homes"
               listings={similar.results}
               max={6}
               href={similarHref}
-              sectionClassName="pt-6"
+              sectionClassName="px-6 py-6"
+              /* Matches this page's other section headings exactly — see `titleClassName`. */
+              titleClassName="text-xl font-semibold tracking-tight"
             />
           </div>
         )}
@@ -481,7 +529,9 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
              * exactly the fabricated price the withheld copy exists to prevent — so the cast was one
              * refactor away from being the bug. There is now no path that can format a null price.
              */}
-            <p className="font-display text-lg font-extrabold leading-tight text-ink">
+            {/* `title-md` (16px/600). Was 18px/800 — the last `extrabold` on the page, and the
+                system defines no 800 weight at any size. */}
+            <p className="text-base font-semibold leading-tight text-ink">
               {closePriceText ?? priceDisplay.text.split('/')[0]}
             </p>
             {!priceDisplay.isWithheld && listing.listingType === 'rent' && (

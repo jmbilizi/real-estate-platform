@@ -36,13 +36,92 @@ export function ListingGridSkeleton({ count = 8 }: { count?: number }) {
   );
 }
 
+/**
+ * Mirrors the loaded detail layout — header bar, gallery panel, then the two-column stack of
+ * panels — rather than approximating it with three loose blocks.
+ *
+ * The point of a skeleton is that nothing jumps when the data lands. A skeleton whose shape
+ * disagrees with the real page is a worse lie than no skeleton: it promises one layout and
+ * delivers another. Same panel primitive, same gutter, same canvas as `ListingDetailContent`.
+ */
 export function ListingDetailSkeleton() {
+  const panel = 'rounded-2xl border border-surface-border bg-white';
+
   return (
-    <div className="animate-pulse p-4" role="status" aria-label="Loading listing">
-      <div className="aspect-[16/9] rounded-md bg-surface-soft" />
-      <div className="mt-4 h-6 w-1/2 rounded-xs bg-surface-soft" />
-      <div className="mt-2 h-4 w-2/3 rounded-xs bg-surface-soft" />
-      <div className="mt-6 h-24 w-full rounded-md bg-surface-soft" />
+    <div className="flex h-full min-h-0 flex-col" role="status" aria-label="Loading listing">
+      {/*
+       * Header bar, matching the loaded page's back / address / actions row.
+       *
+       * The title and subtitle placeholders carry the **same type classes** as the real `h1` and
+       * `p` and are filled with a non-breaking space, so their boxes are set by the type scale
+       * rather than by a guessed pixel height. Sized by hand (`h-4`/`h-3`) this header measured
+       * 73px against the loaded header's 81px, and every element below jumped 8px the instant the
+       * data landed — against a modal whose rounded corners stay put, which reads as the border
+       * itself flickering. Tying the boxes to the type scale keeps them equal at every breakpoint,
+       * including the ones this header changes size at (`sm`/`md`/`lg`/`xl`).
+       */}
+      <div className="flex flex-shrink-0 animate-pulse items-center gap-3 border-b border-surface-border bg-white px-6 pb-3 pt-4 sm:px-8">
+        <div className="h-11 w-11 flex-shrink-0 rounded-full bg-surface-soft" />
+        <div className="min-w-0 flex-1">
+          {/* `block`, not `inline-block`: an inline-block sits on the text baseline and reserves
+              descender space below it, which made this header 86px against the real 81px. As a
+              block the placeholder's height is exactly the inherited line-height — the same box
+              the real text occupies. */}
+          <h1 className="text-base font-semibold tracking-tight">
+            <span className="block w-2/5 rounded-xs bg-surface-soft">&nbsp;</span>
+          </h1>
+          <p className="mt-1 text-sm">
+            <span className="block w-1/4 rounded-xs bg-surface-soft">&nbsp;</span>
+          </p>
+        </div>
+        <div className="hidden shrink-0 items-center gap-1.5 sm:flex">
+          <div className="h-10 w-24 rounded-full bg-surface-soft" />
+          <div className="h-10 w-24 rounded-full bg-surface-soft" />
+        </div>
+      </div>
+
+      {/* `min-h-0` so the body fits the panel and scrolls like the loaded one. Without it this
+          measured 999px inside a 750px panel and was simply clipped. */}
+      <div className="min-h-0 flex-1 animate-pulse overflow-hidden bg-surface-alt px-6 py-4 sm:px-8">
+        {/* Written out rather than `${panel} bg-surface-soft`: both fills are the same specificity,
+            so which one wins is decided by stylesheet order, not by the order written here. */}
+        <div className="aspect-[16/9] rounded-2xl border border-surface-border bg-surface-soft" />
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_380px] lg:items-start">
+          <div className="space-y-4">
+            {/* Price panel */}
+            <div className={`${panel} p-6`}>
+              <div className="h-5 w-24 rounded-full bg-surface-soft" />
+              <div className="mt-3 h-9 w-1/2 rounded-xs bg-surface-soft" />
+              <div className="mt-2 h-4 w-1/3 rounded-xs bg-surface-soft" />
+            </div>
+            {/* Stats panel */}
+            <div className={`h-20 ${panel}`} />
+            {/* Description panel */}
+            <div className={`${panel} p-6`}>
+              <div className="h-5 w-40 rounded-xs bg-surface-soft" />
+              <div className="mt-4 h-3 w-full rounded-xs bg-surface-soft" />
+              <div className="mt-2 h-3 w-11/12 rounded-xs bg-surface-soft" />
+              <div className="mt-2 h-3 w-4/5 rounded-xs bg-surface-soft" />
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className={`h-64 ${panel}`} />
+            <div className={`h-32 ${panel}`} />
+          </div>
+        </div>
+      </div>
+
+      {/* The loaded page has a sticky CTA bar below `lg`. Without a placeholder of the same height
+          the mobile layout shifts on load the same way the header did on desktop. */}
+      <div className="flex flex-shrink-0 animate-pulse items-center justify-between gap-3 border-t border-surface-border bg-white px-4 py-3 lg:hidden">
+        <div className="h-7 w-28 rounded-xs bg-surface-soft" />
+        <div className="flex shrink-0 gap-2">
+          <div className="h-9 w-24 rounded-full bg-surface-soft" />
+          <div className="h-9 w-28 rounded-full bg-surface-soft" />
+        </div>
+      </div>
     </div>
   );
 }

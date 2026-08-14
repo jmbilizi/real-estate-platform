@@ -67,7 +67,7 @@ export default function PropertyGallery({ media }: { media: Media[] }) {
           className="relative block aspect-video w-full overflow-hidden rounded-2xl bg-surface-soft md:hidden"
         >
           <ListingImage media={media[0]} className="h-full w-full object-cover" />
-          <span className="absolute bottom-3 right-3 rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-ink shadow-card">
+          <span className="absolute bottom-3 right-3 rounded-full bg-white/95 px-3 py-1.5 text-[11px] font-semibold text-ink shadow-card">
             See all {media.length} {media.length === 1 ? 'photo' : 'photos'}
           </span>
         </button>
@@ -105,7 +105,7 @@ export default function PropertyGallery({ media }: { media: Media[] }) {
               setActiveIdx(0);
               setOpen(true);
             }}
-            className="absolute bottom-4 right-4 hidden items-center gap-1.5 rounded-lg border border-ink/15 bg-white px-4 py-2 text-sm font-semibold text-ink shadow-card transition hover:shadow-card md:inline-flex"
+            className="absolute bottom-4 right-4 hidden items-center gap-1.5 rounded-lg border border-ink/15 bg-white px-4 py-2 text-sm font-medium text-ink shadow-card transition hover:shadow-card md:inline-flex"
           >
             <svg
               className="h-4 w-4"
