@@ -32,18 +32,20 @@ function seedState(id: string, initialState?: ListingDetailState): ListingDetail
 
 export default function ListingDetailModal({
   id,
-  closeHref,
+  onClosed,
   initialState,
 }: {
   id: string;
   /**
-   * Where "back" goes on a hard navigation to `/listing/[id]`.
+   * What to do once the close animation has finished, for the case where stepping back through
+   * history is not the answer.
    *
    * An intercepted open has the page you came from sitting in history, so closing is just
-   * `router.back()`. A direct load — a shared link, a bookmark, a reload — has no such entry, and
-   * calling `back()` there would leave the app entirely. Only that case passes this.
+   * `router.back()` and the page underneath is restored exactly as it was. A direct load — a shared
+   * link, a bookmark, a reload — has no such entry; that case passes this, and handles closing by
+   * revealing the results it already rendered behind the panel rather than by navigating anywhere.
    */
-  closeHref?: string;
+  onClosed?: () => void;
   /**
    * The listing, already resolved server-side. Supplied only by the standalone `/listing/[id]`
    * route; the intercepted route leaves it out and lets the modal open instantly on a skeleton,
@@ -103,12 +105,14 @@ export default function ListingDetailModal({
 
   /**
    * Intercepted: step back through history, which unwinds the interception and restores the page
-   * underneath exactly as it was — its filters, its results, its scroll position. Standalone: there
-   * is no history entry to step back to, so go where `closeHref` says.
+   * underneath exactly as it was — its filters, its results, its scroll position. Standalone:
+   * `onClosed` does the equivalent for a page that was never in history.
+   *
+   * The delay lets the panel finish animating out before either happens.
    */
   const handleClose = () => {
     setOpen(false);
-    setTimeout(() => (closeHref ? router.push(closeHref) : router.back()), 310);
+    setTimeout(() => (onClosed ? onClosed() : router.back()), 310);
   };
 
   const handleRetry = () => setRetryCount((c) => c + 1);

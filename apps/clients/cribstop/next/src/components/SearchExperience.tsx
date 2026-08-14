@@ -18,16 +18,30 @@ import { ListingErrorState, ListingGridSkeleton } from '@/components/listing/Lis
 
 export interface SearchExperienceProps {
   /**
-   * A query string to take filters from **instead of the browser URL** — e.g. `q=Bethesda%2C+MD`.
+   * The query string to start from — e.g. `q=Bethesda%2C+MD`.
    *
-   * Search normally treats its own URL as the source of truth: it parses filters out of it on
-   * mount, follows history events, and writes paging and sort back into it. None of that holds
-   * when the experience is rendered as the backdrop behind a standalone listing. The URL there is
-   * the listing's, so reading it would yield an unfiltered nationwide search, and writing to it
-   * would overwrite the listing's own address. Passing this supplies the filters *and* switches
-   * the URL coupling off — the two always travel together, which is why it is one prop.
+   * On the search route this is the server's own `searchParams`, which is what makes the very first
+   * render search for the right thing. It used to start empty and get filled in from
+   * `window.location.search` after mount, so every load of a filtered URL fetched twice: once
+   * nationwide, once for real.
+   *
+   * Behind a standalone listing it is the listing's city instead, because the URL there belongs to
+   * the listing rather than to a search.
    */
-  query?: string;
+  initialQuery?: string;
+  /**
+   * Whether this instance owns the browser URL: parses filters back out of it, follows history
+   * events, and writes paging and sort into it.
+   *
+   * False behind an open listing modal — the URL there is the listing's, so reading it would yield
+   * an unfiltered nationwide search and writing to it would overwrite the listing's own address.
+   *
+   * This used to be inferred from `initialQuery` being present, on the reasoning that the two
+   * always travel together. They do not: closing a directly-loaded listing hands the URL *back* to
+   * the search results already mounted behind it, which need to start owning it from that moment on
+   * without remounting. That is exactly the case the inference could not express.
+   */
+  ownsUrl?: boolean;
 }
 
 /**
@@ -37,24 +51,21 @@ export interface SearchExperienceProps {
  * the same experience behind its modal. A route file should not be imported from another route, so
  * the experience moved here and the route became a thin wrapper around it.
  */
-export default function SearchExperience({ query }: SearchExperienceProps) {
-  /** True when this instance renders as a backdrop and must not touch the browser URL. */
-  const detached = query !== undefined;
-
+export default function SearchExperience({ initialQuery, ownsUrl = true }: SearchExperienceProps) {
   const {
     savedIds,
     searchLocation: location,
     setSearchLocation: setLocation,
     setSearchSuggestion,
   } = useApp();
-  // Seed location and filters, then keep them in step with the URL. A detached instance takes its
-  // parameters from the prop and stops there: there is no history for it to follow, and the events
-  // it would listen for belong to a different page.
+  // Seed location and filters, then keep them in step with the URL. An instance that does not own
+  // the URL takes its parameters from the prop and stops there: there is no history for it to
+  // follow, and the events it would listen for belong to a different page.
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     const updateFromParams = () => {
-      const params = new URLSearchParams(detached ? query : window.location.search);
+      const params = new URLSearchParams(ownsUrl ? window.location.search : initialQuery);
       const q = params.get('q') || '';
       const lat = params.get('lat');
       const lon = params.get('lon');
@@ -70,7 +81,7 @@ export default function SearchExperience({ query }: SearchExperienceProps) {
     };
 
     updateFromParams();
-    if (detached) return;
+    if (!ownsUrl) return;
 
     window.addEventListener('popstate', updateFromParams);
     window.addEventListener('pushstate', updateFromParams);
@@ -80,7 +91,7 @@ export default function SearchExperience({ query }: SearchExperienceProps) {
       window.removeEventListener('pushstate', updateFromParams);
       window.removeEventListener('replacestate', updateFromParams);
     };
-  }, [detached, query]);
+  }, [ownsUrl, initialQuery]);
   // Track hovered property for map highlight
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   // Map center for search location (lat/lng)
@@ -122,19 +133,18 @@ export default function SearchExperience({ query }: SearchExperienceProps) {
   }, []);
 
   /*
-   * Filters state.
+   * Filters state, seeded synchronously from `initialQuery` on the very first render.
    *
-   * On the search route this starts empty and the effect above fills it in after mount, because
-   * the URL it parses does not exist during server rendering — seeding from `window` there would
-   * make the server and the client disagree about the active filter count.
+   * This is what stops a filtered URL from being fetched twice. It used to start `{}` on the search
+   * route and be filled in by the effect above after mount, so the first render searched with no
+   * filters at all: `/search?q=Alexandria,+VA` fired a nationwide query, then superseded it with
+   * the real one a tick later — two full result sets fetched to display one.
    *
-   * A detached instance has neither problem: its parameters arrive as a prop, and it never renders
-   * on the server at all. Seeding it is what stops the backdrop from firing an **unfiltered
-   * nationwide search** on its first render and then immediately superseding it with the city's —
-   * two full result sets fetched to display one.
+   * Seeding from a prop rather than from `window` is what makes it safe to do during server
+   * rendering: both sides read the same string, so they agree about the active filter count.
    */
   const [filters, setFilters] = useState<SearchFilters>(() =>
-    detached ? parseFiltersFromSearchParams(new URLSearchParams(query)) : {},
+    parseFiltersFromSearchParams(new URLSearchParams(initialQuery)),
   );
   // Two-phase geocode:
   //   Phase 1 — no polygon, ~300 bytes → sets map center immediately so tiles load fast
@@ -219,7 +229,7 @@ export default function SearchExperience({ query }: SearchExperienceProps) {
   // request. `total` and `pageCount` come from the response envelope rather than from the length
   // of the current page — which is the whole point of paging server-side.
   const [page, setPage] = useState(() =>
-    detached ? parsePageFromSearchParams(new URLSearchParams(query)) : 1,
+    parsePageFromSearchParams(new URLSearchParams(initialQuery)),
   );
   const { results, total, pageCount, status, error, retry } = useListingSearch(filters, page);
 
@@ -229,7 +239,7 @@ export default function SearchExperience({ query }: SearchExperienceProps) {
   /** Keeps the URL the shareable source of truth for the current result set. */
   const pushPage = (next: number) => {
     setPage(next);
-    if (detached) return; // not our URL to write — see `query`
+    if (!ownsUrl) return; // not our URL to write — see `ownsUrl`
     const params = new URLSearchParams(window.location.search);
     if (next === 1) params.delete('page');
     else params.set('page', String(next));
@@ -352,7 +362,7 @@ export default function SearchExperience({ query }: SearchExperienceProps) {
                   if (!v) return;
                   setFilters((prev) => ({ ...prev, sort: v }));
                   setPage(1);
-                  if (detached) return; // not our URL to write — see `query`
+                  if (!ownsUrl) return; // not our URL to write — see `ownsUrl`
                   const params = new URLSearchParams(window.location.search);
                   params.set('sort', String(v));
                   params.delete('page');

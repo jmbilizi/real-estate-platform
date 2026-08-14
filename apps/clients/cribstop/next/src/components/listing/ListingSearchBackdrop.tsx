@@ -16,7 +16,22 @@ import SearchExperience from '@/components/SearchExperience';
  * geocode calls, the map tiles — can start until the listing has been painted. That ordering is
  * the whole point: the thing the user asked for renders first, and the context fills in behind it.
  */
-export default function ListingSearchBackdrop({ query }: { query: string }) {
+export default function ListingSearchBackdrop({
+  query,
+  live = false,
+}: {
+  query: string;
+  /**
+   * Whether the modal in front has closed and this is now the page.
+   *
+   * The two things this switches are the same thing said twice: a backdrop is inert and does not
+   * own the URL, a page is interactive and does. Flipping it is what lets closing a directly-loaded
+   * listing *reveal* these results rather than navigate to a second copy of them — which threw away
+   * a fully-loaded search and rebuilt it, refetching the results, re-geocoding the city twice over
+   * and reloading every map tile.
+   */
+  live?: boolean;
+}) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -40,14 +55,20 @@ export default function ListingSearchBackdrop({ query }: { query: string }) {
 
   return (
     /*
-     * Inert, not merely visually behind. The panel over it covers most of the viewport, so every
-     * control down here — the filter button, the sort menu, each card — is either hidden or a
-     * sliver at the edge of the screen. `inert` takes the whole subtree out of the tab order,
-     * out of the accessibility tree and out of pointer handling in one step, so the backdrop
-     * cannot be clicked, focused or read out from behind the listing.
+     * Inert while the listing is over it, not merely visually behind. The panel covers most of the
+     * viewport, so every control down here — the filter button, the sort menu, each card — is either
+     * hidden or a sliver at the edge of the screen. `inert` takes the whole subtree out of the tab
+     * order, out of the accessibility tree and out of pointer handling in one step.
+     *
+     * Both attributes have to come off together once this is the page, or the results would be
+     * visible and unusable.
      */
-    <div inert aria-hidden="true">
-      <SearchExperience query={query} />
+    <div
+      data-search-backdrop={live ? 'live' : 'inert'}
+      inert={!live}
+      aria-hidden={!live || undefined}
+    >
+      <SearchExperience initialQuery={query} ownsUrl={live} />
     </div>
   );
 }

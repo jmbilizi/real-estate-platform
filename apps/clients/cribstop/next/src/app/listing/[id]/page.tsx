@@ -1,5 +1,4 @@
-import ListingDetailModal from '@/components/ListingDetailModal';
-import ListingSearchBackdrop from '@/components/listing/ListingSearchBackdrop';
+import StandaloneListingView from '@/components/listing/StandaloneListingView';
 import { loadListingState } from '@/lib/api/listings-server';
 
 /**
@@ -23,8 +22,9 @@ import { loadListingState } from '@/lib/api/listings-server';
  *
  * Soft navigation does not land here: a card click pushes this same URL and
  * `@modal/(.)listing/[id]` intercepts it into a modal over the page you were on, which stays
- * mounted underneath. Only a hard navigation reaches this file, which is why it passes `closeHref`
- * — there is no history entry behind it to step back to.
+ * mounted underneath. Only a hard navigation reaches this file — which is why closing is
+ * `StandaloneListingView`'s business rather than `router.back()`'s: there is no history entry
+ * behind this one to step back to.
  */
 export default async function ListingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -34,9 +34,9 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
    * The search that would have produced this listing.
    *
    * `q` is the same parameter the search bar builds, so this is the city's real result set rather
-   * than a decorative approximation — and the same string serves as the close destination, which
-   * is what makes closing continuous with what was already on screen. A listing that failed to
-   * load has no city to search, so there is nothing to put behind it and close falls back.
+   * than a decorative approximation — and the same string becomes the URL when the panel closes,
+   * which is what makes closing continuous with what was already on screen. A listing that failed
+   * to load has no city to search, so there is nothing to put behind it and close falls back.
    *
    * `"City, ST"` — the same label the search bar writes for a location suggestion, so the bar reads
    * the way it would if the search had been typed, and the close destination is a URL a person
@@ -50,14 +50,5 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
       ? `q=${encodeURIComponent(`${initialState.listing.city}, ${initialState.listing.state}`)}`
       : null;
 
-  return (
-    <>
-      {cityQuery && <ListingSearchBackdrop query={cityQuery} />}
-      <ListingDetailModal
-        id={id}
-        initialState={initialState}
-        closeHref={cityQuery ? `/search?${cityQuery}` : '/search'}
-      />
-    </>
-  );
+  return <StandaloneListingView id={id} initialState={initialState} cityQuery={cityQuery} />;
 }
