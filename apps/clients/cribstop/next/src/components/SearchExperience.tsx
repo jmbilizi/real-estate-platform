@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import ListingCard from '@/components/ListingCard';
 import ListingsMap from '@/components/ListingsMap';
 import { useApp } from '@/lib/context';
+import { listingIdFromPath } from '@/lib/listing-panel';
 
 import type { SearchFilters } from '@/lib/types';
 import SortDropdown from '@/components/SortDropdown';
@@ -58,19 +59,74 @@ export default function SearchExperience({ initialQuery, ownsUrl = true }: Searc
     setSearchLocation: setLocation,
     setSearchSuggestion,
   } = useApp();
-  // Seed location and filters, then keep them in step with the URL. An instance that does not own
-  // the URL takes its parameters from the prop and stops there: there is no history for it to
-  // follow, and the events it would listen for belong to a different page.
+  /**
+   * Seeds the search bar's location from the parameters this instance was given.
+   *
+   * Deliberately keyed on `initialQuery` alone, and deliberately **not** on `ownsUrl`.
+   *
+   * `ownsUrl` is a live value behind a standalone listing — `ListingSearchBackdrop` derives it from
+   * whether a panel is open — and re-seeding when it flips throws away everything the user has done
+   * to these results. The flip that matters is true → false, when a listing opens over results the
+   * user has already revealed and started using: re-seeding there reset sort and paging back to the
+   * listing's original city query and **refetched**, measured at two extra `/api/listings` requests
+   * per open. Filters set through the modal were lost outright rather than reset, because only
+   * `page` and `sort` are ever written to the URL, so there was nothing to restore them from on the
+   * way back.
+   *
+   * Nothing needed that re-seed. On the way back — false → true, the close — the URL has just been
+   * rewritten to the same query this instance was seeded with, so re-reading it could only ever
+   * produce the values already held.
+   */
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
+    const params = new URLSearchParams(initialQuery);
+    const q = params.get('q') || '';
+    const lat = params.get('lat');
+    const lon = params.get('lon');
+    setLocation(q);
+    // Restore the suggestion object so CompactSearchBar can search again without re-typing
+    if (q && lat && lon) {
+      setSearchSuggestion({ display_name: q, lat, lon });
+    } else if (!q) {
+      setSearchSuggestion(null);
+    }
+    // `filters` and `page` are seeded from this same string in their own `useState` initialisers,
+    // synchronously on the first render, so they are deliberately not set again here.
+  }, [initialQuery, setLocation, setSearchSuggestion]);
+
+  /**
+   * Follows the Back and Forward buttons, but only while this instance owns the URL.
+   *
+   * Separate from the seeding above because the two answer different questions, and merging them is
+   * what made an `ownsUrl` flip destructive. Subscribing and unsubscribing is idempotent; re-seeding
+   * is not.
+   *
+   * `popstate` is the only event worth listening for. This also listened for `pushstate` and
+   * `replacestate`, which nothing in the app has ever dispatched — the same-page writes below use
+   * the native History API directly, which fires no event, and Next.js does not synthesise one. They
+   * were dead listeners, and their presence implied a notification path that does not exist.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined' || !ownsUrl) return;
+
     const updateFromParams = () => {
-      const params = new URLSearchParams(ownsUrl ? window.location.search : initialQuery);
+      /*
+       * A listing panel's URL is not a search, and must never be parsed as one.
+       *
+       * Forward-navigating back into an open panel lands here with `/listing/<id>` and an empty
+       * query string, which would read as "no filters" and silently swap the user's results for an
+       * unfiltered nationwide search sitting behind the panel — visible the moment they close it.
+       * The panel is transient state over this page, so the right response is to leave the results
+       * exactly as they are and wait for the pathname to come back.
+       */
+      if (listingIdFromPath(window.location.pathname) !== null) return;
+
+      const params = new URLSearchParams(window.location.search);
       const q = params.get('q') || '';
       const lat = params.get('lat');
       const lon = params.get('lon');
       setLocation(q);
-      // Restore the suggestion object so CompactSearchBar can search again without re-typing
       if (q && lat && lon) {
         setSearchSuggestion({ display_name: q, lat, lon });
       } else if (!q) {
@@ -80,18 +136,9 @@ export default function SearchExperience({ initialQuery, ownsUrl = true }: Searc
       setPage(parsePageFromSearchParams(params));
     };
 
-    updateFromParams();
-    if (!ownsUrl) return;
-
     window.addEventListener('popstate', updateFromParams);
-    window.addEventListener('pushstate', updateFromParams);
-    window.addEventListener('replacestate', updateFromParams);
-    return () => {
-      window.removeEventListener('popstate', updateFromParams);
-      window.removeEventListener('pushstate', updateFromParams);
-      window.removeEventListener('replacestate', updateFromParams);
-    };
-  }, [ownsUrl, initialQuery]);
+    return () => window.removeEventListener('popstate', updateFromParams);
+  }, [ownsUrl, setLocation, setSearchSuggestion]);
   // Track hovered property for map highlight
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   // Map center for search location (lat/lng)
