@@ -49,7 +49,7 @@ export default function ListingPanelHost() {
     <ListingDetailModal
       key={panel.id}
       id={panel.id}
-      previewRow={panel.row}
+      layoutRow={panel.row}
       onClosed={closeListingPanel}
     />
   );

@@ -35,7 +35,7 @@ export default function ListingDetailModal({
   id,
   onClosed,
   initialState,
-  previewRow,
+  layoutRow,
 }: {
   id: string;
   /**
@@ -58,11 +58,13 @@ export default function ListingDetailModal({
   /**
    * The card row this open started from, when it started from one.
    *
-   * Purely a rendering aid for the loading state: it never becomes `state`, because a card row is
-   * not a detail and must never be mistaken for one. It lets the skeleton show the listing's own
-   * address, badges, price and photo in the beat before the fetch lands, instead of grey blocks.
+   * **Measurement only.** Nothing from it is ever drawn — the loading state is uniformly skeletal.
+   * It lets that state reserve the right boxes: whether the mortgage panel is held at all (the
+   * loaded page renders it only for a sale with a price), how many amenity chips to hold room for,
+   * and whether the gallery is the mosaic or the single block a listing with no media gets. It
+   * never becomes `state`, because a card row is not a detail and must not be mistaken for one.
    */
-  previewRow?: ListingCardRow;
+  layoutRow?: ListingCardRow;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(true);
@@ -127,7 +129,7 @@ export default function ListingDetailModal({
 
   return (
     <ListingModalFrame open={open} onClose={handleClose}>
-      {state.status === 'loading' && <ListingDetailSkeleton preview={previewRow} />}
+      {state.status === 'loading' && <ListingDetailSkeleton layoutRow={layoutRow} />}
 
       {state.status === 'ready' && (
         <ListingDetailContent listing={state.listing} onClose={handleClose} />

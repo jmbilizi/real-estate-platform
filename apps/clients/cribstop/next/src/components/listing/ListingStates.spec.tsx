@@ -3,150 +3,119 @@ import { aLandParcelRow, aListingCardRow, aSuppressedAddressRow } from '@/test/f
 import { ListingDetailSkeleton } from './ListingStates';
 
 /**
- * The detail skeleton, and the preview it becomes when the open started from a card.
+ * The detail skeleton: a uniformly skeletal loading state, however the panel was opened.
  *
- * The preview exists because a listing opened from a results page is opened from a row that is
- * already in hand — so the beat before the detail fetch lands can show the listing itself instead of
- * grey blocks. The risk it introduces is the one these cases guard: a card row is a *card* row, and
- * anything detail-only must stay absent rather than be invented or rendered as an empty string.
+ * An earlier version drew the clicked card's real address, price and primary photo during the
+ * loading beat, on the reasoning that a card click already has them. Product decided against it —
+ * half-real and half-grey reads as a broken render rather than as a page arriving. These cases pin
+ * the decision, because the row is still passed in (`layoutRow`) and the temptation to draw from it
+ * is exactly what they exist to catch.
  */
 describe('ListingDetailSkeleton', () => {
-  describe('without a row, every region is a placeholder', () => {
-    it('renders no listing text at all', () => {
-      render(<ListingDetailSkeleton />);
+  describe('draws no listing data, whichever way the panel was opened', () => {
+    it.each([
+      ['without a row', undefined],
+      ['with a row in hand', aListingCardRow()],
+      ['with a suppressed-address row', aSuppressedAddressRow()],
+      ['with a parcel row', aLandParcelRow()],
+    ])('renders no text and no photo from the listing (%s)', (_label, layoutRow) => {
+      const { container } = render(<ListingDetailSkeleton layoutRow={layoutRow} />);
 
       expect(screen.getByRole('status', { name: /loading listing/i })).toBeInTheDocument();
+      // The row's own values, none of which may reach the DOM.
+      expect(container.textContent).not.toMatch(/Test St|Bethesda|MD|bd\b|sqft/);
       expect(screen.queryByText(/\$/)).not.toBeInTheDocument();
       expect(screen.queryByRole('img')).not.toBeInTheDocument();
     });
-  });
 
-  describe('with a row, the panel opens on the listing', () => {
-    it('shows the address, the dwelling line and the price from the row', () => {
-      render(<ListingDetailSkeleton preview={aListingCardRow()} />);
+    /**
+     * The heading keeps its `h1` and its type classes — the placeholder lives *inside* them — because
+     * that is what makes the header measure the same before and after the data lands. Sized by hand
+     * it stood 73px against the loaded 81px and shifted everything below it by 8px.
+     */
+    it('keeps the real heading element, with a placeholder inside it rather than text', () => {
+      render(<ListingDetailSkeleton layoutRow={aListingCardRow()} />);
 
-      expect(screen.getByText('100 Test St, Bethesda, MD 20814')).toBeInTheDocument();
-      expect(screen.getByText(/3 bd/)).toBeInTheDocument();
-      expect(screen.getByText(/\$/)).toBeInTheDocument();
-    });
-
-    it('shows the row photo, which is how the user knows it opened on the home they clicked', () => {
-      render(<ListingDetailSkeleton preview={aListingCardRow()} />);
-
-      // Two: the below-`md` single image and the mosaic's large cell. Exactly one is ever visible;
-      // which one is a media query, which jsdom does not evaluate.
-      expect(screen.getAllByRole('img').length).toBeGreaterThan(0);
+      const heading = screen.getByRole('heading', { level: 1 });
+      expect(heading.className).toContain('text-base');
+      expect(heading.textContent?.trim()).toBe('');
     });
 
     /**
-     * A disclosure label is owed on every surface its row appears on. A panel showing that row's
-     * address, photo and price is unambiguously such a surface, even for the second it is up.
+     * The disclosure rule is "labelled on every surface a sample row appears on" and "wherever it
+     * renders". This surface renders no part of the row, so there is nothing being disclosed about —
+     * a label here would be labelling a blank panel. It attaches the instant the row does, in
+     * `ListingDetailContent`. What would be a violation is the reverse, and it cannot happen now:
+     * showing the row's address and price here without the labels.
      */
-    it('carries the sample and sponsored labels rather than deferring them to the loaded page', () => {
+    it('carries no disclosure label, because it shows no row to disclose about', () => {
       render(
-        <ListingDetailSkeleton preview={aListingCardRow({ isSample: true, sponsored: true })} />,
+        <ListingDetailSkeleton layoutRow={aListingCardRow({ isSample: true, sponsored: true })} />,
       );
 
-      expect(screen.getByText(/sample/i)).toBeInTheDocument();
-      expect(screen.getByText(/sponsored/i)).toBeInTheDocument();
-    });
-
-    it('states a withheld price as withheld — never blank, never $0', () => {
-      render(<ListingDetailSkeleton preview={aListingCardRow({ price: null })} />);
-
-      expect(screen.getByText(/withheld/i)).toBeInTheDocument();
-      expect(screen.queryByText(/\$0\b/)).not.toBeInTheDocument();
-    });
-
-    it('shows no street line for a suppressed address, and no centroid standing in for one', () => {
-      render(<ListingDetailSkeleton preview={aSuppressedAddressRow()} />);
-
-      expect(screen.queryByText(/\d+ .*(St|Ave|Rd|Ln)\b/)).not.toBeInTheDocument();
-      // Falls back to the same location heading the loaded page uses, never to `title`.
-      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/\w/);
-    });
-
-    it('omits the dwelling triplet for a parcel instead of rendering zeroes', () => {
-      render(<ListingDetailSkeleton preview={aLandParcelRow()} />);
-
-      expect(screen.queryByText(/\bbd\b/)).not.toBeInTheDocument();
-      expect(screen.queryByText(/NaN|undefined|null/)).not.toBeInTheDocument();
-    });
-
-    /**
-     * The preview must not leak detail-only content. Description, open houses and full attribution
-     * are absent from a card row, so they stay skeletal — rendering them as empty strings would
-     * assert that the listing has none.
-     */
-    it('leaves the detail-only regions skeletal', () => {
-      const { container } = render(<ListingDetailSkeleton preview={aListingCardRow()} />);
-
-      expect(container.querySelectorAll('.bg-surface-soft').length).toBeGreaterThan(0);
+      expect(screen.queryByText(/sample/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/sponsored/i)).not.toBeInTheDocument();
     });
   });
 
   /**
    * The gallery placeholder's shape.
    *
-   * The preview's first version put the primary photo in one full-width block, which is the shape
-   * the loaded gallery has only when a listing has **no** photos. With any media the desktop gallery
-   * is a 4x2 mosaic, so the panel opened on one big photo and then snapped into five tiles — the
-   * exact "does not reflect the gallery's look" the user reported.
+   * An early version was one full-width block, which is the shape the loaded gallery has only when a
+   * listing has **no** photos. With any media the desktop gallery is a 4x2 mosaic, so the panel
+   * opened on one big block and then snapped into five tiles.
    *
    * jsdom evaluates no media queries, so these assert the structure that produces the right shape;
-   * the pixel equality behind it was measured in a browser (preview and loaded both 1206x482 at
-   * desktop with 295px columns and 236px rows, and both 332x187 at 390px wide).
+   * the pixel equality behind it was measured in a browser — skeleton and loaded both 1206x482 at
+   * desktop with 295px columns, 236px rows and an 8px gap, and both 332x187 at 390px wide.
    */
   describe('the gallery placeholder mirrors PropertyGallery, not a single image', () => {
     const gallery = (c: HTMLElement) => c.querySelector('[class*="grid-cols-4"]');
 
-    it('lays the desktop placeholder out as the mosaic the loaded gallery uses', () => {
-      const { container } = render(<ListingDetailSkeleton preview={aListingCardRow()} />);
+    it.each([
+      ['with a row', aListingCardRow()],
+      ['without one', undefined],
+    ])('lays the desktop placeholder out as the loaded mosaic (%s)', (_label, layoutRow) => {
+      const { container } = render(<ListingDetailSkeleton layoutRow={layoutRow} />);
 
       const grid = gallery(container);
       expect(grid).not.toBeNull();
       expect(grid?.className).toContain('md:grid-rows-2');
       expect(grid?.className).toContain('md:h-[480px]');
-      // The primary photo spans the mosaic's large cell rather than the whole block.
+      // The large cell is a placeholder like the rest, spanning 2x2 as the primary photo will.
       expect(grid?.querySelector('.col-span-2.row-span-2')).not.toBeNull();
     });
 
     /**
-     * Four, and it is not a guess about photo count: `PropertyGallery` pads to five tiles by
-     * repeating (`i % media.length`), so every listing with at least one photo renders five.
+     * Five, and not a guess about photo count: `PropertyGallery` pads to five tiles by repeating
+     * (`i % media.length`), so every listing with at least one photo renders five.
      */
-    it('holds four tile placeholders for the photos still in flight', () => {
-      const { container } = render(<ListingDetailSkeleton preview={aListingCardRow()} />);
+    it('holds five tile placeholders — the large cell and the four beside it', () => {
+      const { container } = render(<ListingDetailSkeleton layoutRow={aListingCardRow()} />);
 
-      expect(container.querySelectorAll('[data-gallery-tile-placeholder]')).toHaveLength(4);
+      expect(container.querySelectorAll('[data-gallery-tile-placeholder]')).toHaveLength(5);
     });
 
     it('keeps the gallery in the same bordered panel the loaded page wraps it in', () => {
-      const withPreview = render(<ListingDetailSkeleton preview={aListingCardRow()} />);
+      const withRow = render(<ListingDetailSkeleton layoutRow={aListingCardRow()} />);
       const bare = render(<ListingDetailSkeleton />);
       const wrapper = (c: HTMLElement) =>
         c.querySelector('.scrollbar-overlay')?.firstElementChild?.className;
 
       // Identical wrappers is what makes the block measure the same in both states.
-      expect(wrapper(withPreview.container)).toBe(wrapper(bare.container));
-      expect(wrapper(withPreview.container)).toContain('border-surface-border');
+      expect(wrapper(withRow.container)).toBe(wrapper(bare.container));
+      expect(wrapper(withRow.container)).toContain('border-surface-border');
     });
 
     /**
-     * A row with no primary photo is the one case where the loaded gallery is genuinely a single
-     * block, so the mosaic must not be drawn — four tiles would be promising photos that never come.
+     * The one case only `layoutRow` can know, and the reason it is still consulted: a listing with
+     * no media loads a single branded block, so drawing the mosaic would promise five photos that
+     * never arrive.
      */
-    it('drops the mosaic for a row with no photo, rather than promising tiles that never arrive', () => {
+    it('drops the mosaic for a row with no photo, rather than promising tiles that never come', () => {
       const { container } = render(
-        <ListingDetailSkeleton preview={aListingCardRow({ primaryMedia: null })} />,
+        <ListingDetailSkeleton layoutRow={aListingCardRow({ primaryMedia: null })} />,
       );
-
-      expect(gallery(container)).toBeNull();
-      expect(container.querySelectorAll('[data-gallery-tile-placeholder]')).toHaveLength(0);
-    });
-
-    it('draws no mosaic at all when there is no row', () => {
-      const { container } = render(<ListingDetailSkeleton />);
 
       expect(gallery(container)).toBeNull();
       expect(container.querySelectorAll('[data-gallery-tile-placeholder]')).toHaveLength(0);
@@ -177,7 +146,7 @@ describe('ListingDetailSkeleton', () => {
     ];
 
     it.each(SECTIONS)('reserves the %s section', (section) => {
-      const { container } = render(<ListingDetailSkeleton preview={aListingCardRow()} />);
+      const { container } = render(<ListingDetailSkeleton layoutRow={aListingCardRow()} />);
 
       expect(container.querySelector(`[data-skeleton-section="${section}"]`)).not.toBeNull();
     });
@@ -198,7 +167,7 @@ describe('ListingDetailSkeleton', () => {
      */
     it('drops the mortgage panel for a rental, which will not render one', () => {
       const { container } = render(
-        <ListingDetailSkeleton preview={aListingCardRow({ listingType: 'rent' })} />,
+        <ListingDetailSkeleton layoutRow={aListingCardRow({ listingType: 'rent' })} />,
       );
 
       expect(container.querySelector('[data-skeleton-section="mortgage"]')).toBeNull();
@@ -206,7 +175,7 @@ describe('ListingDetailSkeleton', () => {
 
     it('drops it for a withheld price too, for the same reason', () => {
       const { container } = render(
-        <ListingDetailSkeleton preview={aListingCardRow({ price: null })} />,
+        <ListingDetailSkeleton layoutRow={aListingCardRow({ price: null })} />,
       );
 
       expect(container.querySelector('[data-skeleton-section="mortgage"]')).toBeNull();
@@ -230,8 +199,8 @@ describe('ListingDetailSkeleton', () => {
     it.each([
       ['with a row', aListingCardRow()],
       ['without a row', undefined],
-    ])('paints no placeholder white (%s)', (_label, preview) => {
-      const { container } = render(<ListingDetailSkeleton preview={preview} />);
+    ])('paints no placeholder white (%s)', (_label, layoutRow) => {
+      const { container } = render(<ListingDetailSkeleton layoutRow={layoutRow} />);
 
       const whiteLeaves = leaves(container).filter(
         (el) => el.className.includes('bg-white') && el.textContent?.trim() === '',

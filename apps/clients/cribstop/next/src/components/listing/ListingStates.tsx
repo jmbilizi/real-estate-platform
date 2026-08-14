@@ -7,14 +7,6 @@
  * fetch-failure state anywhere. Both are now real states on every listing surface.
  */
 
-import ListingImage from '@/components/listing/ListingImage';
-import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges';
-import {
-  formatDwellingStats,
-  formatListingLocation,
-  formatListingPrice,
-  formatStreetAddress,
-} from '@/lib/listing-format';
 import type { ListingCardRow } from '@/lib/types';
 
 /**
@@ -150,53 +142,38 @@ export function ListingGridSkeleton({ count = 8 }: { count?: number }) {
  * disagrees with the real page is a worse lie than no skeleton: it promises one layout and
  * delivers another. Same panel primitive, same gutter, same canvas as `ListingDetailContent`.
  *
- * ## The `preview` row
+ * ## `layoutRow` — a shape, never content
  *
- * When a listing is opened from a card or a map pin, the row behind it is already in hand — and a
- * `ListingCardRow` carries rather more of this page than the grey blocks suggest: the street
- * address, the dwelling line, the status and disclosure badges, the price and the primary photo.
- * Passing it turns the first frame from "something is loading" into the listing itself, with only
- * the genuinely detail-only regions (the rest of the gallery, the description, the map, the agent
- * block) still skeletal.
+ * This state is **uniformly skeletal**: no listing data is drawn in it, whichever way the panel was
+ * opened. An earlier version filled the header and the gallery's large cell with the clicked card's
+ * real address, price and primary photo, on the reasoning that a card click already has them. That
+ * is not what a loading state should look like — half-real and half-grey reads as a broken render
+ * rather than as a page arriving, and it made the swap to the loaded page a series of small
+ * substitutions instead of one clean transition. Product decided against it; the panel now loads the
+ * same way from a card click, a map pin and a cold URL.
  *
- * Two rules hold this honest, and both are load-bearing:
+ * What survives is the *use of the row for measurement*. `layoutRow` decides **which boxes to
+ * reserve**, never what to draw in them:
  *
- * 1. **Nothing is invented.** Every field rendered from `preview` is a field the card row actually
- *    has, formatted through `lib/listing-format` exactly as `ListingDetailContent` formats it — so
- *    a withheld price still reads as withheld and a suppressed address still shows no street line.
- *    Detail-only fields are absent from this shape, not null, and stay skeletal. The disclosure
- *    badges (`isSample`, `sponsored`) come along deliberately: they are obligations on every
- *    surface a row appears on, and this is now a surface it appears on.
- * 2. **Every filled region keeps the box the skeleton gave it.** The placeholders here were sized
- *    against the loaded page a measurement at a time (see the notes below); the preview reuses
- *    those same elements and classes rather than introducing its own, so the two states cannot
- *    disagree about height.
+ * - whether the mortgage estimate is reserved at all (the loaded page renders it only for a sale
+ *   with a price, so reserving it for a rental would hold space for a panel that never comes);
+ * - how many amenity chips to reserve, which sets that section's height and therefore the offset of
+ *   everything below it;
+ * - whether the gallery is the mosaic or the single block a listing with no media gets.
+ *
+ * Nothing else reads it, and a test asserts that none of the row's text ever reaches the DOM. Every
+ * placeholder is sized from the loaded page's own type classes rather than by hand — sized by hand
+ * this header measured 73px against the real 81px and everything below it jumped 8px on load.
  */
-export function ListingDetailSkeleton({ preview }: { preview?: ListingCardRow }) {
+export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRow }) {
   const panel = 'rounded-2xl border border-surface-border bg-white';
 
-  const streetAddress = preview
-    ? formatStreetAddress(preview.address, preview.city, preview.state, preview.zip)
-    : null;
-  /* Same fallback rule as the loaded header: a suppressed address shows location, never `title`. */
-  const heading = preview
-    ? (streetAddress ?? formatListingLocation(preview.neighborhood, preview.city, preview.state))
-    : null;
-  const subheading = preview
-    ? [formatDwellingStats(preview.beds, preview.baths, preview.sqft), preview.propertyType]
-        .filter(Boolean)
-        .join(' · ')
-    : null;
-  const price = preview ? formatListingPrice(preview.price, preview.listingType) : null;
-
   /*
-   * The pulse moves off the containers and onto the individual grey blocks once there is a preview.
-   * Pulsing a container is only right when everything in it is a placeholder; with real content in
-   * the same box it would breathe the address and the photo in and out, which reads as a rendering
-   * fault rather than as loading.
+   * One pulse, on the containers. Everything inside them is a placeholder now, so there is no real
+   * content for the animation to breathe in and out — which is why it had to move onto the
+   * individual blocks while the header and gallery carried real data.
    */
-  const pulse = preview ? '' : 'animate-pulse';
-  const blockPulse = preview ? 'animate-pulse' : '';
+  const pulse = 'animate-pulse';
 
   return (
     <div className="flex h-full min-h-0 flex-col" role="status" aria-label="Loading listing">
@@ -214,27 +191,22 @@ export function ListingDetailSkeleton({ preview }: { preview?: ListingCardRow })
       <div
         className={`flex flex-shrink-0 items-center gap-3 border-b border-surface-border bg-white px-6 pb-3 pt-4 sm:px-8 ${pulse}`}
       >
-        <div className={`h-11 w-11 flex-shrink-0 rounded-full ${FILL} ${blockPulse}`} />
+        <div className={`h-11 w-11 flex-shrink-0 rounded-full ${FILL}`} />
         <div className="min-w-0 flex-1">
-          {/* `block`, not `inline-block`: an inline-block sits on the text baseline and reserves
-              descender space below it, which made this header 86px against the real 81px. As a
-              block the placeholder's height is exactly the inherited line-height — the same box
-              the real text occupies. The preview writes into these same two elements rather than
-              bringing its own, so the header measures the same with text as without. */}
+          {/* The placeholders stay *inside* the real `h1` and `p`, so their boxes come from the
+              type scale rather than from a guessed height. Sized by hand (`h-4`/`h-3`) this header
+              measured 73px against the loaded 81px and everything below it jumped 8px on load —
+              against a modal whose corners stay put, which reads as the border flickering. */}
           <h1 className="truncate text-base font-semibold tracking-tight text-ink">
-            {heading ?? (
-              <span className={`block w-2/5 rounded-xs ${FILL} ${blockPulse}`}>&nbsp;</span>
-            )}
+            <Bar className="w-2/5" />
           </h1>
           <p className="mt-1 truncate text-sm text-ink-muted">
-            {subheading || (
-              <span className={`block w-1/4 rounded-xs ${FILL} ${blockPulse}`}>&nbsp;</span>
-            )}
+            <Bar className="w-1/4" />
           </p>
         </div>
         <div className="hidden shrink-0 items-center gap-1.5 sm:flex">
-          <div className={`h-10 w-24 rounded-full ${FILL} ${blockPulse}`} />
-          <div className={`h-10 w-24 rounded-full ${FILL} ${blockPulse}`} />
+          <div className={`h-10 w-24 rounded-full ${FILL}`} />
+          <div className={`h-10 w-24 rounded-full ${FILL}`} />
         </div>
       </div>
 
@@ -246,118 +218,67 @@ export function ListingDetailSkeleton({ preview }: { preview?: ListingCardRow })
         className={`scrollbar-overlay min-h-0 flex-1 bg-surface-alt px-6 py-4 pb-8 sm:px-8 ${pulse}`}
       >
         {/*
-         * The gallery's real shape: `aspect-video` on mobile, a fixed 480px grid from `md` up —
-         * see `PropertyGallery`. This was `aspect-[16/9]` at every width, which is right on mobile
-         * and wrong on desktop: it stood 551px tall against the real gallery's 482px, so the whole
-         * page jumped 70px upwards the moment the photos arrived. The photo block is the tallest
-         * thing on the page, so getting its shape wrong moves everything below it.
-         *
-         * Written out rather than `${panel} bg-surface-soft`: both fills are the same specificity,
-         * so which one wins is decided by stylesheet order, not by the order written here.
-         */}
-        {/*
          * The gallery, in the same bordered panel the loaded page wraps `PropertyGallery` in, so
-         * the block measures 482px at `md` and up in every state — placeholder, preview and loaded.
+         * the block measures 482px at `md` and up in both states. Getting this shape wrong is the
+         * most expensive mistake on the page: it is the tallest thing below the header, and an
+         * early version at `aspect-[16/9]` on every width stood 551px against the real 482px, so
+         * everything under it jumped 70px when the photos arrived.
          *
-         * The preview's first attempt put the primary photo in one full-width block, on the
-         * reasoning that this was "the shape `PropertyGallery` gives a single image". That is only
-         * the shape it gives a listing with **no** photos: with any media at all the desktop gallery
-         * is a mosaic, so the panel opened on one big photo and then snapped into five tiles. The
-         * placeholder has to reflect the gallery's actual layout, which is two layouts:
+         * `PropertyGallery` has two layouts and this mirrors both:
          *
-         * - **Below `md`** the loaded gallery is a single `aspect-video` image, whatever the photo
-         *   count. So the primary photo alone is not an approximation there — it is exactly what
-         *   arrives, and nothing is guessed.
-         * - **From `md` up** it is the 4x2 mosaic: the primary photo across `col-span-2 row-span-2`
-         *   and four smaller tiles. The tile count is **not** a guess about how many photos exist
-         *   either: `PropertyGallery` pads to five tiles by repeating (`i % media.length`), so a
-         *   listing with one photo still renders five. Four placeholders is what will arrive for
-         *   every listing that has a photo at all.
+         * - **Below `md`** it is a single `aspect-video` image, whatever the photo count.
+         * - **From `md` up** it is the 4x2 mosaic — one `col-span-2 row-span-2` cell and four
+         *   tiles. Five is not a guess about how many photos exist: the gallery pads to five by
+         *   repeating (`i % media.length`), so a one-photo listing still renders five.
          *
-         * The one case that genuinely differs is a listing with no media, where the loaded gallery
-         * is a single branded placeholder rather than a mosaic. A row whose `primaryMedia` is null
-         * is that case, so it takes the plain block below — which asserts nothing about the photos
-         * and occupies the identical box either way, rather than declaring "no photo available"
-         * before the detail has confirmed it.
+         * The single exception is a listing with no media at all, whose loaded gallery is one
+         * branded placeholder rather than a mosaic. Only `layoutRow` can know that, which is one of
+         * the three things it is still consulted for.
          */}
         <div className={`overflow-hidden ${panel}`} data-skeleton-section="gallery">
-          {preview?.primaryMedia ? (
+          {layoutRow && !layoutRow.primaryMedia ? (
+            /* The one listing whose loaded gallery really is a single block. */
+            <div className={`aspect-video ${FILL} md:aspect-auto md:h-[480px]`} />
+          ) : (
             <>
-              <ListingImage
-                media={preview.primaryMedia}
-                className="aspect-video w-full object-cover md:hidden"
-              />
+              {/* Below `md` the loaded gallery is one `aspect-video` image, whatever the count. */}
+              <div className={`aspect-video w-full ${FILL} md:hidden`} />
+              {/* From `md` up, the 4x2 mosaic: a `col-span-2 row-span-2` cell and four tiles. */}
               <div className="hidden md:grid md:h-[480px] md:grid-cols-4 md:grid-rows-2 md:gap-2 md:overflow-hidden">
-                <div className={`relative col-span-2 row-span-2 overflow-hidden ${FILL}`}>
-                  <ListingImage
-                    media={preview.primaryMedia}
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-                {/* The four tiles still in flight. Sized by the grid, so they cannot disagree with
-                    the photos that replace them. */}
+                <div
+                  className={`col-span-2 row-span-2 overflow-hidden ${FILL}`}
+                  data-gallery-tile-placeholder
+                />
                 {Array.from({ length: 4 }, (_, i) => (
                   <div
                     key={i}
-                    className={`overflow-hidden ${FILL} ${blockPulse}`}
+                    className={`overflow-hidden ${FILL}`}
                     data-gallery-tile-placeholder
                   />
                 ))}
               </div>
             </>
-          ) : (
-            <div className={`aspect-video ${FILL} md:aspect-auto md:h-[480px] ${blockPulse}`} />
           )}
         </div>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_380px] lg:items-start">
           <div className="space-y-4">
             {/*
-             * Price panel. Every part of it is on the card row, so with a preview this panel is
-             * simply the finished panel — badges, price and location line, in the loaded page's own
-             * markup and type classes rather than in placeholders shaped like them.
+             * Price panel: the status/disclosure badge row, the price, the location line.
              *
-             * `isSample` and `sponsored` ride along because they must: a disclosure label is owed
-             * on every surface its row appears on, and a panel showing that row's address, photo
-             * and price for a second or two before the fetch lands is unambiguously such a surface.
+             * No disclosure label is rendered here, and that is the correct reading of the rule
+             * rather than an omission. `isSample` is owed "on every surface a sample row appears
+             * on" and `sponsored` "wherever it renders" — this surface now renders no part of the
+             * row at all, so there is nothing being disclosed about and a `SAMPLE DATA` chip on a
+             * blank panel would be labelling nothing. The labels attach the instant the row does,
+             * in `ListingDetailContent`, which carries both. What would be a violation is the
+             * reverse: showing the row's address and price here without them, which is exactly what
+             * this state no longer does.
              */}
             <div className={`${panel} p-6`} data-skeleton-section="price">
-              {preview && price ? (
-                <>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="badge bg-surface-border text-ink">{preview.status}</span>
-                    {preview.isSample && <SampleBadge />}
-                    {preview.sponsored && <SponsoredBadge />}
-                    {preview.priceReduced && (
-                      <span className="badge bg-amber-100 text-amber-800">Price Reduced</span>
-                    )}
-                    {preview.newConstruction && (
-                      <span className="badge bg-emerald-100 text-emerald-800">
-                        New Construction
-                      </span>
-                    )}
-                  </div>
-                  <p
-                    className={
-                      price.isWithheld
-                        ? 'mt-3 text-base font-medium italic text-ink-muted'
-                        : 'mt-3 text-xl font-semibold tracking-[-0.18px] text-ink'
-                    }
-                  >
-                    {price.text}
-                  </p>
-                  <p className="mt-2 text-ink-muted">
-                    {formatListingLocation(preview.neighborhood, preview.city, preview.state)}{' '}
-                    {preview.zip}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div className={`h-5 w-24 rounded-full ${FILL} ${blockPulse}`} />
-                  <div className={`mt-3 h-9 w-1/2 rounded-xs ${FILL} ${blockPulse}`} />
-                  <div className={`mt-2 h-4 w-1/3 rounded-xs ${FILL} ${blockPulse}`} />
-                </>
-              )}
+              <div className={`h-5 w-24 rounded-full ${FILL}`} />
+              <div className={`mt-3 h-9 w-1/2 rounded-xs ${FILL}`} />
+              <div className={`mt-2 h-4 w-1/3 rounded-xs ${FILL}`} />
             </div>
             {/*
              * Stats tiles. A shell with the tiles' own grid rather than a bare `h-20` card: the
@@ -374,10 +295,10 @@ export function ListingDetailSkeleton({ preview }: { preview?: ListingCardRow })
                   className={`px-5 py-4 ${i !== 5 ? 'border-b border-surface-border sm:border-b-0 sm:border-r' : ''}`}
                 >
                   <p className="text-[11px] font-semibold uppercase tracking-wider">
-                    <Bar className={`w-12 ${blockPulse}`} />
+                    <Bar className="w-12" />
                   </p>
                   <p className="mt-1 text-base font-semibold">
-                    <Bar className={`w-10 ${blockPulse}`} />
+                    <Bar className="w-10" />
                   </p>
                 </div>
               ))}
@@ -386,12 +307,12 @@ export function ListingDetailSkeleton({ preview }: { preview?: ListingCardRow })
             {/* "About this home" — detail-only text, absent from a card row by design. */}
             <div className={`${panel} p-6`} data-skeleton-section="description">
               <h2 className="text-xl font-semibold tracking-tight">
-                <Bar className={`w-44 ${blockPulse}`} />
+                <Bar className="w-44" />
               </h2>
               <p className="mt-3 leading-relaxed">
-                <Bar className={blockPulse} />
-                <Bar className={`w-11/12 ${blockPulse}`} />
-                <Bar className={`w-4/5 ${blockPulse}`} />
+                <Bar />
+                <Bar className="w-11/12" />
+                <Bar className="w-4/5" />
               </p>
             </div>
 
@@ -403,17 +324,26 @@ export function ListingDetailSkeleton({ preview }: { preview?: ListingCardRow })
              */}
             <div className={`${panel} p-6`} data-skeleton-section="amenities">
               <h2 className="text-xl font-semibold tracking-tight">
-                <Bar className={`w-56 ${blockPulse}`} />
+                <Bar className="w-56" />
               </h2>
               <div className="mt-4 flex flex-wrap gap-2">
                 {Array.from(
-                  { length: preview ? Math.min(preview.amenities.length, 12) || 8 : 8 },
+                  { length: layoutRow ? Math.min(layoutRow.amenities.length, 12) || 8 : 8 },
                   (_, i) => (
+                    /*
+                     * `&nbsp;` sets the line box from `text-sm`, exactly as `AmenityChips` gets its
+                     * height from its label; the width comes from a class rather than from dummy
+                     * text. It carried the literal word "Placeholder" hidden with `invisible`, which
+                     * was inert to the eye but real text inside a `role="status"` live region.
+                     * Widths alternate so a row of chips does not read as a single bar.
+                     */
                     <span
                       key={i}
-                      className={`inline-flex items-center rounded-full border border-surface-border px-3 py-1.5 text-sm ${FILL} ${blockPulse}`}
+                      className={`inline-flex items-center rounded-full border border-surface-border px-3 py-1.5 text-sm ${FILL} ${
+                        ['w-24', 'w-32', 'w-20', 'w-28'][i % 4]
+                      }`}
                     >
-                      <span className="invisible">Placeholder</span>
+                      &nbsp;
                     </span>
                   ),
                 )}
@@ -432,13 +362,13 @@ export function ListingDetailSkeleton({ preview }: { preview?: ListingCardRow })
              */}
             <div className={`${panel} p-6`} data-skeleton-section="map">
               <h2 className="text-xl font-semibold tracking-tight">
-                <Bar className={`w-48 ${blockPulse}`} />
+                <Bar className="w-48" />
               </h2>
               <p className="mt-2 text-sm">
-                <Bar className={`w-40 ${blockPulse}`} />
+                <Bar className="w-40" />
               </p>
               <div className="mt-4 overflow-hidden border border-surface-border">
-                <div className={`h-[380px] w-full ${FILL} ${blockPulse}`} />
+                <div className={`h-[380px] w-full ${FILL}`} />
               </div>
             </div>
 
@@ -447,9 +377,9 @@ export function ListingDetailSkeleton({ preview }: { preview?: ListingCardRow })
               className={`${panel} p-6 text-[13px] leading-relaxed`}
               data-skeleton-section="disclosure"
             >
-              <Bar className={`w-2/3 ${blockPulse}`} />
-              <Bar className={`mt-2 w-1/2 ${blockPulse}`} />
-              <Bar className={`mt-2 w-3/4 ${blockPulse}`} />
+              <Bar className="w-2/3" />
+              <Bar className="mt-2 w-1/2" />
+              <Bar className="mt-2 w-3/4" />
             </div>
           </div>
 
@@ -458,31 +388,31 @@ export function ListingDetailSkeleton({ preview }: { preview?: ListingCardRow })
             {/* Listing agent: label, avatar row, three contact lines, two buttons. */}
             <div className={`${panel} p-6`} data-skeleton-section="agent">
               <p className="text-[11px] font-semibold uppercase tracking-wider">
-                <Bar className={`w-24 ${blockPulse}`} />
+                <Bar className="w-24" />
               </p>
               <div className="mt-3 flex items-center gap-3">
-                <div className={`h-12 w-12 flex-shrink-0 rounded-full ${FILL} ${blockPulse}`} />
+                <div className={`h-12 w-12 flex-shrink-0 rounded-full ${FILL}`} />
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold">
-                    <Bar className={`w-2/3 ${blockPulse}`} />
+                    <Bar className="w-2/3" />
                   </p>
                   <p className="text-[13px]">
-                    <Bar className={`mt-1 w-1/2 ${blockPulse}`} />
+                    <Bar className="mt-1 w-1/2" />
                   </p>
                 </div>
               </div>
               {/* Four contact rows, not three: the loaded card lists agent phone, agent email,
                   office phone and office email. Counted from the rendered card, not guessed. */}
               <div className="mt-4 space-y-1.5 text-sm">
-                <Bar className={`w-3/4 ${blockPulse}`} />
-                <Bar className={`w-4/5 ${blockPulse}`} />
-                <Bar className={`w-2/3 ${blockPulse}`} />
-                <Bar className={`w-3/5 ${blockPulse}`} />
+                <Bar className="w-3/4" />
+                <Bar className="w-4/5" />
+                <Bar className="w-2/3" />
+                <Bar className="w-3/5" />
               </div>
               {/* `btn-primary` measures 40px and `btn-secondary` 42px — they are not the same
                   height, and averaging them left this card 12px short of the loaded one. */}
-              <div className={`mt-5 h-10 w-full rounded-full ${FILL} ${blockPulse}`} />
-              <div className={`mt-2 h-[42px] w-full rounded-full ${FILL} ${blockPulse}`} />
+              <div className={`mt-5 h-10 w-full rounded-full ${FILL}`} />
+              <div className={`mt-2 h-[42px] w-full rounded-full ${FILL}`} />
             </div>
 
             {/*
@@ -492,23 +422,23 @@ export function ListingDetailSkeleton({ preview }: { preview?: ListingCardRow })
              * being wrong about it moves nothing. `bg-brand-50/50` because a container matches the
              * loaded surface — this panel is tinted, and a white one would flash to tint on load.
              */}
-            {(!preview || (preview.listingType === 'sale' && preview.price !== null)) && (
+            {(!layoutRow || (layoutRow.listingType === 'sale' && layoutRow.price !== null)) && (
               <div
                 className="rounded-2xl border border-surface-border bg-brand-50/50 p-6"
                 data-skeleton-section="mortgage"
               >
                 <p className="text-base font-semibold">
-                  <Bar className={`w-3/5 ${blockPulse}`} />
+                  <Bar className="w-3/5" />
                 </p>
                 <p className="mt-2 text-xl font-semibold">
-                  <Bar className={`w-2/5 ${blockPulse}`} />
+                  <Bar className="w-2/5" />
                 </p>
                 <div className="mt-3 space-y-1 text-sm">
-                  <Bar className={`w-4/5 ${blockPulse}`} />
-                  <Bar className={`w-3/5 ${blockPulse}`} />
+                  <Bar className="w-4/5" />
+                  <Bar className="w-3/5" />
                 </div>
                 <p className="mt-3 text-xs">
-                  <Bar className={`w-full ${blockPulse}`} />
+                  <Bar className="w-full" />
                 </p>
               </div>
             )}
@@ -534,10 +464,10 @@ export function ListingDetailSkeleton({ preview }: { preview?: ListingCardRow })
       <div
         className={`flex flex-shrink-0 items-center justify-between gap-3 border-t border-surface-border bg-white px-4 py-3 lg:hidden ${pulse}`}
       >
-        <div className={`h-7 w-28 rounded-xs ${FILL} ${blockPulse}`} />
+        <div className={`h-7 w-28 rounded-xs ${FILL}`} />
         <div className="flex shrink-0 gap-2">
-          <div className={`h-9 w-24 rounded-full ${FILL} ${blockPulse}`} />
-          <div className={`h-9 w-28 rounded-full ${FILL} ${blockPulse}`} />
+          <div className={`h-9 w-24 rounded-full ${FILL}`} />
+          <div className={`h-9 w-28 rounded-full ${FILL}`} />
         </div>
       </div>
     </div>
