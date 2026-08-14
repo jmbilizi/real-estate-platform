@@ -68,6 +68,20 @@ interface ModalProps {
    * appearing. Opt-in so existing dialogs keep the animation they were designed with.
    */
   noScaleIn?: boolean;
+  /**
+   * Render open on the very first paint, with no enter transition.
+   *
+   * By default a modal is invisible until an effect has run — `mounted` starts `false`, so the
+   * server renders nothing and the dialog appears only after hydration. That is right for a dialog
+   * summoned from a page that is already on screen. It is wrong when the modal *is* the page: a
+   * direct load of `/listing/[id]` served an empty document, painted a bare header and footer, and
+   * only then popped the listing in. Starting mounted puts the panel in the server HTML, so the
+   * thing the user asked for is the first thing they see.
+   *
+   * Both states are seeded from the same props on server and client, so there is no hydration
+   * mismatch; the effect below still runs and takes over scroll locking and Escape as usual.
+   */
+  instant?: boolean;
 }
 
 export default function Modal({
@@ -85,10 +99,11 @@ export default function Modal({
   squareBottom,
   noScroll,
   noScaleIn,
+  instant,
 }: ModalProps) {
   // mounted: controls DOM presence; visible: drives CSS transition
-  const [mounted, setMounted] = useState(false);
-  const [visible, setVisible] = useState(false);
+  const [mounted, setMounted] = useState(Boolean(instant) && open);
+  const [visible, setVisible] = useState(Boolean(instant) && open);
 
   // Keep a stable ref so the Escape handler always calls the latest onClose
   // without adding onClose to the effect's dependency array.

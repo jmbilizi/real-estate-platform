@@ -1,35 +1,84 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import Modal from './Modal';
+import { useRouter } from 'next/navigation';
 import ListingDetailContent from './ListingDetailContent';
+import ListingModalFrame from '@/components/listing/ListingModalFrame';
 import { ListingDetailSkeleton, ListingErrorState } from '@/components/listing/ListingStates';
 import { getListing, ListingsApiError } from '@/lib/api/listings';
-import type { ListingDetailView } from '@/lib/api/listings';
+import type { ListingDetailState } from '@/lib/api/listings';
+import { cacheListing, readCachedListing } from '@/lib/api/listings-cache';
 
-type FetchState =
-  | { status: 'loading' }
-  | { status: 'ready'; listing: ListingDetailView }
-  /** A 404 is "this listing is not available", not a failure the user should retry — a distinct,
-   *  calm state rather than the generic error banner. */
-  | { status: 'not-found' }
-  | { status: 'error'; message: string };
+/**
+ * The state to start from, or `null` when the listing has to be fetched.
+ *
+ * Two things can resolve a listing before the modal ever renders. A direct load of `/listing/[id]`
+ * resolves it on the server and passes it down, so the panel arrives populated in the first HTML.
+ * A listing opened earlier in the session is in the detail cache, so reopening it costs nothing.
+ * Either way there is no request and no skeleton.
+ *
+ * Client-only on purpose: the cache is a per-tab module, so reading it while rendering on the
+ * server would both consult the wrong process's memory and risk a hydration mismatch. The direct
+ * load — the one path that does render this on the server — always supplies `initialState`, which
+ * takes precedence, so the cache is never the thing the two sides could disagree about.
+ */
+function seedState(id: string, initialState?: ListingDetailState): ListingDetailState | null {
+  if (initialState) return initialState;
+  if (typeof window === 'undefined') return null;
 
-export default function ListingDetailModal({ id }: { id: string }) {
+  const cached = readCachedListing(id);
+  return cached ? { status: 'ready', listing: cached } : null;
+}
+
+export default function ListingDetailModal({
+  id,
+  closeHref,
+  initialState,
+}: {
+  id: string;
+  /**
+   * Where "back" goes on a hard navigation to `/listing/[id]`.
+   *
+   * An intercepted open has the page you came from sitting in history, so closing is just
+   * `router.back()`. A direct load — a shared link, a bookmark, a reload — has no such entry, and
+   * calling `back()` there would leave the app entirely. Only that case passes this.
+   */
+  closeHref?: string;
+  /**
+   * The listing, already resolved server-side. Supplied only by the standalone `/listing/[id]`
+   * route; the intercepted route leaves it out and lets the modal open instantly on a skeleton,
+   * which is the right trade when the page behind it is already on screen.
+   */
+  initialState?: ListingDetailState;
+}) {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
   const [open, setOpen] = useState(true);
-  const [state, setState] = useState<FetchState>({ status: 'loading' });
+  const [state, setState] = useState<ListingDetailState>(
+    () => seedState(id, initialState) ?? { status: 'loading' },
+  );
   const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
+    // A retry must always go back to the API — that is what the user is asking for — so it ignores
+    // both the server-supplied state and the cache.
+    const seeded = retryCount === 0 ? seedState(id, initialState) : null;
+
+    if (seeded) {
+      setState(seeded);
+      // Seeding from the server still populates the cache, so closing and reopening this listing
+      // is free even though the first render never went through the client fetch path.
+      if (seeded.status === 'ready') cacheListing(seeded.listing);
+      return;
+    }
+
     const controller = new AbortController();
     setState({ status: 'loading' });
 
     getListing(id, controller.signal)
-      .then((listing) => setState({ status: 'ready', listing }))
+      .then((listing) => {
+        cacheListing(listing);
+        setState({ status: 'ready', listing });
+      })
       .catch((err) => {
         // A fast modal close aborts the in-flight fetch — never set state on an unmounted /
         // superseded component for that case.
@@ -50,31 +99,27 @@ export default function ListingDetailModal({ id }: { id: string }) {
       });
 
     return () => controller.abort();
-  }, [id, retryCount]);
+  }, [id, retryCount, initialState]);
 
+  /**
+   * Intercepted: step back through history, which unwinds the interception and restores the page
+   * underneath exactly as it was — its filters, its results, its scroll position. Standalone: there
+   * is no history entry to step back to, so go where `closeHref` says.
+   */
   const handleClose = () => {
     setOpen(false);
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete('listing');
-    const url = params.toString() ? `${pathname}?${params.toString()}` : pathname;
-    setTimeout(() => router.replace(url, { scroll: false }), 310);
+    setTimeout(() => (closeHref ? router.push(closeHref) : router.back()), 310);
   };
 
   const handleRetry = () => setRetryCount((c) => c + 1);
 
   return (
-    <Modal
+    <ListingModalFrame
       open={open}
       onClose={handleClose}
-      mobileStyle="full-screen"
-      widthClass="sm:max-w-7xl"
-      heightClass="sm:h-screen"
-      noPadding
-      squareBottom
-      noScroll
-      /* Full height from the first frame — this panel fills the viewport, so scaling it up from
-         95% reads as the modal resizing itself rather than arriving. */
-      noScaleIn
+      /* A server-resolved state means this modal *is* the page rather than a dialog over one, so it
+         belongs in the first paint instead of appearing after hydration. */
+      instant={initialState !== undefined}
     >
       {state.status === 'loading' && <ListingDetailSkeleton />}
 
@@ -100,6 +145,6 @@ export default function ListingDetailModal({ id }: { id: string }) {
       {state.status === 'error' && (
         <ListingErrorState message={state.message} onRetry={handleRetry} className="my-16" />
       )}
-    </Modal>
+    </ListingModalFrame>
   );
 }

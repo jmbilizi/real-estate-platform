@@ -266,3 +266,18 @@ export async function getListing(id: string, signal?: AbortSignal): Promise<List
     await getJson<ListingDetail>(`/api/listings/${encodeURIComponent(id)}`, signal),
   );
 }
+
+/**
+ * The outcome of loading one listing's detail.
+ *
+ * It lives here rather than in the modal because the modal is no longer the only thing that
+ * produces one: a direct load of `/listing/[id]` resolves the listing on the server and hands the
+ * result down as a prop, so the shape has to be plain, serializable data that both sides agree on.
+ */
+export type ListingDetailState =
+  | { status: 'loading' }
+  | { status: 'ready'; listing: ListingDetailView }
+  /** A 404 is "this listing is not available", not a failure the user should retry — a distinct,
+   *  calm state rather than the generic error banner. */
+  | { status: 'not-found' }
+  | { status: 'error'; message: string };

@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { aListingDetail } from '@/test/fixtures';
 import { getListing, ListingsApiError, toListingDetailView } from '@/lib/api/listings';
+import { clearListingCache } from '@/lib/api/listings-cache';
 import ListingDetailModal from './ListingDetailModal';
 
 jest.mock('@/lib/api/listings', () => {
@@ -25,6 +26,10 @@ const mockedGetListing = getListing as jest.Mock;
 
 beforeEach(() => {
   mockedGetListing.mockReset();
+  // The detail cache is a module-level map that outlives a render, which is the whole point of it
+  // — but it also outlives a *test*. Without this, the first case to resolve a listing serves every
+  // later case from cache and the mock is never called again.
+  clearListingCache();
 });
 
 describe('ListingDetailModal', () => {
@@ -105,5 +110,67 @@ describe('ListingDetailModal', () => {
 
     expect(await screen.findByTestId('listing-detail-content')).toBeInTheDocument();
     expect(mockedGetListing).toHaveBeenCalledTimes(2);
+  });
+
+  /*
+   * The cheap-list / rich-detail split is only a good trade if opening the same listing twice costs
+   * one fetch. These two cover the paths that make it so.
+   */
+
+  it('serves a listing opened earlier in the session from cache, without refetching', async () => {
+    const view = toListingDetailView(aListingDetail());
+    mockedGetListing.mockResolvedValue(view);
+
+    const first = render(<ListingDetailModal id={view.id} />);
+    expect(await screen.findByTestId('listing-detail-content')).toBeInTheDocument();
+    first.unmount();
+
+    render(<ListingDetailModal id={view.id} />);
+
+    // Present on the first render rather than found asynchronously — a cached listing never passes
+    // through the skeleton.
+    expect(screen.getByTestId('listing-detail-content')).toHaveTextContent(view.id);
+    expect(mockedGetListing).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders a server-resolved listing without fetching at all', () => {
+    const view = toListingDetailView(aListingDetail());
+
+    render(<ListingDetailModal id={view.id} initialState={{ status: 'ready', listing: view }} />);
+
+    expect(screen.getByTestId('listing-detail-content')).toHaveTextContent(view.id);
+    expect(mockedGetListing).not.toHaveBeenCalled();
+  });
+
+  it('renders a server-resolved 404 as the "no longer available" state, without fetching', () => {
+    render(
+      <ListingDetailModal
+        id="11111111-1111-4111-8111-111111111111"
+        initialState={{ status: 'not-found' }}
+      />,
+    );
+
+    expect(screen.getByText(/no longer available/i)).toBeInTheDocument();
+    expect(mockedGetListing).not.toHaveBeenCalled();
+  });
+
+  it('retries against the API even when the server supplied the failure', async () => {
+    const view = toListingDetailView(aListingDetail());
+    mockedGetListing.mockResolvedValue(view);
+
+    render(
+      <ListingDetailModal
+        id={view.id}
+        initialState={{ status: 'error', message: 'We could not load this listing just now.' }}
+      />,
+    );
+
+    const retryButton = await screen.findByRole('button', { name: /try again/i });
+    await act(async () => {
+      retryButton.click();
+    });
+
+    expect(await screen.findByTestId('listing-detail-content')).toBeInTheDocument();
+    expect(mockedGetListing).toHaveBeenCalledTimes(1);
   });
 });

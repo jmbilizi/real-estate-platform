@@ -12,13 +12,17 @@ export default function MortgageTeaser({ price }: { price: number }) {
       {/* `title-md` (16px/600) per DESIGN.md. */}
       <h3 className="text-base font-semibold text-ink">Estimated monthly payment</h3>
       {/*
-       * `display-sm` (20px/600) — one step below the price's `display-md` (21px/700). This was
-       * 30px/800: a size and a weight the design system does not define, on a figure derived from
-       * a guessed 6.8% rate. An estimate should not outrank the fact it is estimated from.
+       * `display-sm` (20px/600, -0.18px) — the same style the listing price uses, deliberately.
+       * This was 30px/800: a size and a weight the design system does not define, on a figure
+       * derived from a guessed 6.8% rate.
+       *
+       * The tracking matters as much as the size here: the price carried `tracking-tight`
+       * (-0.5px) and this carried none, so at identical size and weight the two figures still had
+       * visibly different letterforms. -0.18px is the spec value for `display-sm`; neither was it.
        */}
-      <p className="mt-2 text-xl font-semibold text-brand-700">
+      <p className="mt-2 text-xl font-semibold tracking-[-0.18px] text-brand-700">
         ${monthly.toLocaleString()}
-        <span className="text-sm font-normal text-ink-muted">/mo</span>
+        <span className="text-sm font-normal text-ink-muted"> / month</span>
       </p>
       <div className="mt-3 space-y-1 text-sm text-ink-muted">
         <p>20% down &middot; 6.8% rate &middot; 30-yr fixed</p>

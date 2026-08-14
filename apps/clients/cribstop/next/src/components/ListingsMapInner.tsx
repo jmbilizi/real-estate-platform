@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { CustomMapControls } from '@/components/CustomMapControls';
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -439,18 +439,13 @@ export default function ListingsMapInner({
   searchPolygon,
 }: Props) {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
 
   // Keep the module-level callback up to date so MarkerPopup popups
   // (rendered in separate React roots) can open the listing modal.
   useEffect(() => {
-    _openListing = (id: string) => {
-      const params = new URLSearchParams(searchParams.toString());
-      params.set('listing', id);
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
-    };
-  }, [router, pathname, searchParams]);
+    // The listing's own URL, intercepted into a modal over the map — same as a card click.
+    _openListing = (id: string) => router.push(`/listing/${id}`, { scroll: false });
+  }, [router]);
 
   // Pins only ever come from rows that have coordinates — a seller-suppressed row (address,
   // latitude and longitude null together) is excluded here and nowhere else: it stays in

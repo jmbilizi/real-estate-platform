@@ -27,6 +27,17 @@ pnpm exec nx lint cribstop-next        # Also: test, type-check
   `ListingCardRow` (flat, what `GET /property/listings` returns) and `ListingDetailView` (the
   flattened form of the nested `{ property, unit, listing }` detail graph, produced by
   `toListingDetailView` in `lib/api/listings.ts`). Never force one to serve both.
+- **Lean list, rich detail — the payload split is a design rule, not an accident.** A search or
+  home-page request fetches only what a _card_ draws, `primaryMedia` alone rather than the gallery,
+  because a results page renders ~20 rows and every added field is paid 20 times. The full graph
+  (all media, description, open houses, complete NAR 7.58 attribution) is fetched only when a user
+  opens a listing, which is when it is worth paying for. Consequences to respect: never widen
+  `ListingCardRow` to spare a detail fetch, never render a card from a detail payload "because we
+  have it", and never assume a card row carries a detail-only field — it is absent, not null.
+  Opening the same listing twice should still cost one fetch: `lib/api/listings-cache.ts` is a
+  per-tab, 5-minute detail cache that exists to make that true. It is **not** the platform's caching
+  layer — service-side Redis caching on the Property API is, and is tracked separately; this only
+  removes the round trip a warm server cache would still cost.
 - `next/src/lib/contracts.check.ts` — a **type-only** conformance file against
   `@cribstop/property-contracts` (`libs/property-contracts`), the single definition of the listings
   wire contract. It emits no runtime code and touches no component. If a contract change breaks

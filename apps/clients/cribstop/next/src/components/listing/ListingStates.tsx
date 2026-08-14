@@ -82,10 +82,22 @@ export function ListingDetailSkeleton() {
 
       {/* `min-h-0` so the body fits the panel and scrolls like the loaded one. Without it this
           measured 999px inside a 750px panel and was simply clipped. */}
-      <div className="min-h-0 flex-1 animate-pulse overflow-hidden bg-surface-alt px-6 py-4 sm:px-8">
-        {/* Written out rather than `${panel} bg-surface-soft`: both fills are the same specificity,
-            so which one wins is decided by stylesheet order, not by the order written here. */}
-        <div className="aspect-[16/9] rounded-2xl border border-surface-border bg-surface-soft" />
+      {/* Same scroll classes as the loaded body. With `overflow-hidden` the skeleton had no
+          scrollbar while the loaded page did, so the content column was 10px wider during load. */}
+      <div className="scrollbar-overlay min-h-0 flex-1 animate-pulse bg-surface-alt px-6 py-4 pb-8 sm:px-8">
+        {/*
+         * The gallery's real shape: `aspect-video` on mobile, a fixed 480px grid from `md` up —
+         * see `PropertyGallery`. This was `aspect-[16/9]` at every width, which is right on mobile
+         * and wrong on desktop: it stood 551px tall against the real gallery's 482px, so the whole
+         * page jumped 70px upwards the moment the photos arrived. The photo block is the tallest
+         * thing on the page, so getting its shape wrong moves everything below it.
+         *
+         * Written out rather than `${panel} bg-surface-soft`: both fills are the same specificity,
+         * so which one wins is decided by stylesheet order, not by the order written here.
+         */}
+        <div className="overflow-hidden rounded-2xl border border-surface-border">
+          <div className="aspect-video bg-surface-soft md:aspect-auto md:h-[480px]" />
+        </div>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_380px] lg:items-start">
           <div className="space-y-4">

@@ -257,7 +257,7 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
                     Sold
                   </p>
-                  <p className="mt-1 text-[21px] font-bold tracking-tight text-ink">
+                  <p className="mt-1 text-xl font-semibold tracking-[-0.18px] text-ink">
                     {closePriceText}
                   </p>
                   {listing.price !== null && (
@@ -268,19 +268,19 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
                 </div>
               ) : (
                 /*
-                 * `display-md` (21px/700) from DESIGN.md — not a bespoke size.
+                 * `display-sm` (20px/600) — the same style as the monthly estimate, deliberately.
                  *
-                 * This was 36px/800, then 30px/700; both were off-scale. The system's largest
-                 * style is `display-xl` at 28px/700 and it has no 800 weight at all, so the price
-                 * was rendering larger and heavier than anything the design system defines. One
-                 * step above the 20px section headings, distinguished by weight rather than bulk,
-                 * is the Airbnb-style restraint the spec describes.
+                 * It has been 36px/800, then 30px/700, then 21px/700. Each step was still asking
+                 * the price to dominate the page. It does not need to: it sits alone in a panel
+                 * directly under the gallery, which is placement enough, and the surrounding
+                 * section headings are the same size. Matching the estimate's weight rather than
+                 * outranking it takes the last of the shout out of it.
                  */
                 <p
                   className={
                     priceDisplay.isWithheld
                       ? 'mt-3 text-base font-medium italic text-ink-muted'
-                      : 'mt-3 text-[21px] font-bold tracking-tight text-ink'
+                      : 'mt-3 text-xl font-semibold tracking-[-0.18px] text-ink'
                   }
                 >
                   {priceDisplay.text}
@@ -345,9 +345,10 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
               <p className="mt-2 text-sm text-ink-muted">
                 {formatListingLocation(listing.neighborhood, listing.city, listing.state)}
               </p>
-              {/* Inset from the panel's edge rather than bleeding to it, so the map reads as
-                  content inside the section and not as a second, competing panel. */}
-              <div className="mt-4 overflow-hidden rounded-xl border border-surface-border">
+              {/* Square, not rounded: the panel around it is already a rounded card, and a second
+                  radius inside the first reads as a card within a card. Keeping the hairline gives
+                  the map an edge without repeating the container's shape. */}
+              <div className="mt-4 overflow-hidden border border-surface-border">
                 <SingleListingMap
                   latitude={listing.latitude}
                   longitude={listing.longitude}
@@ -388,9 +389,14 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
 
           {/* Sidebar */}
           <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-            {/* Agent card — the one panel carrying elevation. Everything else on the page is flat,
-                so the single shadow reads as "this is the thing to act on" rather than as noise. */}
-            <div className={`${PANEL} p-6 shadow-card`}>
+            {/*
+             * Flat, like every other panel. This carried `shadow-card` as the page's single point
+             * of elevation, but the shadow darkens the card's own edges enough that it reads as a
+             * slightly off-white surface beside its flat neighbours — the fill was always
+             * identical `#ffffff`. Emphasis here comes from the primary button, not from the
+             * container.
+             */}
+            <div className={`${PANEL} p-6`}>
               <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
                 Listing Agent
               </p>

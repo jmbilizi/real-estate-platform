@@ -1,18 +1,15 @@
-import { Suspense } from 'react';
 import ListingDetailModal from '@/components/ListingDetailModal';
-import { ListingDetailSkeleton } from '@/components/listing/ListingStates';
 
 /**
- * `ListingDetailModal` reads `useSearchParams()` (to preserve the rest of the query string when it
- * closes), so it needs a Suspense boundary the same way the auth modals do. The fallback is the
- * detail skeleton rather than `null`: this route is reached by a real navigation to a listing, so
- * there is something worth showing while it resolves.
+ * A **soft** navigation to a listing — a card click, a map pin.
+ *
+ * The page you came from stays mounted underneath, so this deliberately does *not* resolve the
+ * listing server-side the way `/listing/[id]` does. Waiting on the API here would delay the modal
+ * opening at all, which is the one thing a click has to feel instant; opening straight onto the
+ * skeleton and filling it in is the better trade when there is already a page on screen. Reopening
+ * a listing looked at earlier costs nothing either way — the detail cache serves it.
  */
 export default async function ListingModalPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return (
-    <Suspense fallback={<ListingDetailSkeleton />}>
-      <ListingDetailModal id={id} />
-    </Suspense>
-  );
+  return <ListingDetailModal id={id} />;
 }

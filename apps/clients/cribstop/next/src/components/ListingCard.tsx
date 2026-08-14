@@ -1,6 +1,6 @@
 'use client';
 
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import type { ListingCardRow } from '@/lib/types';
 import { useApp } from '@/lib/context';
 import {
@@ -19,13 +19,18 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
   const { toggleSave, isSaved } = useApp();
   const saved = isSaved(listing.id);
   const router = useRouter();
-  const pathname = usePathname();
 
-  const openModal = () => {
-    const params = new URLSearchParams(window.location.search);
-    params.set('listing', listing.id);
-    router.push(`${pathname}?${params.toString()}`, { scroll: false });
-  };
+  /**
+   * Navigates to the listing's own URL, which `@modal/(.)listing/[id]` intercepts and renders as a
+   * modal over whatever page you are on.
+   *
+   * This used to push `?listing=<id>` onto the current route. That made the modal a *client-only*
+   * thing — it was rendered by a listener in the root layout reading `useSearchParams()` — so on a
+   * reload it could not exist until hydration, which is necessarily after the background page had
+   * shipped and started fetching its own data. A real route renders on the server, so a reload of
+   * this URL renders the listing and nothing else.
+   */
+  const openModal = () => router.push(`/listing/${listing.id}`, { scroll: false });
 
   const isSold = listing.listingType === 'sold' || listing.status === 'Sold';
   const isParcel = listing.propertyType === 'Land';

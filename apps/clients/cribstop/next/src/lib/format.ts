@@ -20,7 +20,7 @@ export function formatPrice(value: number, listingType?: 'sale' | 'rent' | 'sold
     currency: 'USD',
     maximumFractionDigits: 0,
   }).format(value);
-  return listingType === 'rent' ? `${formatted}/mo` : formatted;
+  return listingType === 'rent' ? `${formatted} / month` : formatted;
 }
 
 export function formatNumber(value: number): string {
