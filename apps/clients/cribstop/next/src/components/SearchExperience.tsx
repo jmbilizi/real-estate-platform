@@ -274,7 +274,10 @@ export default function SearchExperience({ query }: SearchExperienceProps) {
               listings={results}
               savedIds={savedIds}
               activeId={hoveredId}
-              className="h-full w-full md:rounded-2xl"
+              // Sizing only. The radius used to be asserted here as `md:rounded-2xl` and had no
+              // effect — an inline style inside the map overrode it at every breakpoint — so the
+              // panel has always been 28px. It stays 28px, defined once in `map-panel.ts`.
+              className="h-full w-full"
               searchCenter={searchCenter}
               searchPolygon={searchPolygon}
             />

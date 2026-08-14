@@ -424,7 +424,6 @@ interface Props {
   activeId?: string | null;
   savedIds?: Set<string>;
   onMarkerHover?: (id: string | null) => void;
-  className?: string;
   searchCenter?: [number, number] | null;
   searchPolygon?: object | null;
 }
@@ -434,7 +433,6 @@ export default function ListingsMapInner({
   activeId,
   savedIds,
   onMarkerHover,
-  className,
   searchCenter,
   searchPolygon,
 }: Props) {
@@ -466,14 +464,10 @@ export default function ListingsMapInner({
 
   const [scrollActive, setScrollActive] = useState(false);
 
+  // The frame — radius, border, shadow, fill — belongs to the wrapper in `ListingsMap`, so that the
+  // loading placeholder wears it too. This fills that frame and positions the overlays below.
   return (
-    <div
-      className={`relative z-0 rounded-3xl overflow-hidden shadow-[0_8px_32px_rgba(34,34,34,0.18)] border border-neutral-200 bg-[#f7f7f7] ${className ?? ''}`}
-      style={{
-        boxShadow: '0 8px 32px rgba(34,34,34,0.18), 0 1.5px 8px rgba(0,0,0,0.08)',
-        borderRadius: 28,
-      }}
-    >
+    <div className="relative h-full w-full">
       <MapContainer
         center={center}
         zoom={11}
