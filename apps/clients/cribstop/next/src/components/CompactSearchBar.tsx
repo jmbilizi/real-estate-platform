@@ -634,14 +634,8 @@ export default function CompactSearchBar({
             } else {
               try {
                 const resp = await fetch(
-                  `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10&addressdetails=1`,
-                  {
-                    headers: {
-                      Accept: 'application/json',
-                      'User-Agent': 'real-estate-platform/1.0',
-                    },
-                    signal,
-                  },
+                  `/api/geocode/reverse?lat=${latitude}&lon=${longitude}&zoom=10&addressdetails=1`,
+                  { signal },
                 );
                 if (resp.ok) {
                   const data = await resp.json();
@@ -682,14 +676,8 @@ export default function CompactSearchBar({
                   results.map(async (loc) => {
                     try {
                       const resp = await fetch(
-                        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${loc.lat}&lon=${loc.lon}&zoom=10&addressdetails=1`,
-                        {
-                          headers: {
-                            Accept: 'application/json',
-                            'User-Agent': 'real-estate-platform/1.0',
-                          },
-                          signal,
-                        },
+                        `/api/geocode/reverse?lat=${loc.lat}&lon=${loc.lon}&zoom=10&addressdetails=1`,
+                        { signal },
                       );
                       if (resp.ok) {
                         const data = await resp.json();
@@ -741,11 +729,8 @@ export default function CompactSearchBar({
           results.map(async (loc) => {
             try {
               const resp = await fetch(
-                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${loc.lat}&lon=${loc.lon}&zoom=10&addressdetails=1`,
-                {
-                  headers: { Accept: 'application/json', 'User-Agent': 'real-estate-platform/1.0' },
-                  signal,
-                },
+                `/api/geocode/reverse?lat=${loc.lat}&lon=${loc.lon}&zoom=10&addressdetails=1`,
+                { signal },
               );
               if (resp.ok) {
                 const data = await resp.json();
@@ -1642,14 +1627,8 @@ export default function CompactSearchBar({
               let displayName = `Current Location (${latitude.toFixed(5)}, ${longitude.toFixed(5)})`;
               try {
                 const response = await fetch(
-                  `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10&addressdetails=1`,
-                  {
-                    headers: {
-                      Accept: 'application/json',
-                      'User-Agent': 'real-estate-platform/1.0',
-                    },
-                    signal,
-                  },
+                  `/api/geocode/reverse?lat=${latitude}&lon=${longitude}&zoom=10&addressdetails=1`,
+                  { signal },
                 );
                 // error handling is in the correct handler, not here
                 if (response.ok) {

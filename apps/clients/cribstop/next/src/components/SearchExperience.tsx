@@ -205,16 +205,25 @@ export default function SearchExperience({ initialQuery, ownsUrl = true }: Searc
     let cancelled = false;
     const zip = (location.match(/\b(\d{5})\b/) ?? [])[1];
 
-    // Both requests fire immediately — phase 1 just resolves first (no polygon payload)
-    const base = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us';
+    /*
+     * Both requests fire immediately — phase 1 just resolves first (no polygon payload).
+     *
+     * Through our own proxy, not `nominatim.openstreetmap.org` directly. Called from the browser
+     * these were blocked by CORS, so the map never centred and never drew a boundary — four console
+     * errors per search and no other symptom. They also tried to set a `User-Agent`, which a browser
+     * silently drops, so they were anonymous to an upstream whose terms require identification. See
+     * `app/api/_lib/nominatim.ts`.
+     */
+    const base = '/api/geocode?limit=1&addressdetails=0';
     const qParam = zip
       ? `postalcode=${zip}` // exact zip boundary, not the city that contains it
       : `q=${encodeURIComponent(location)}`;
 
     // Phase 1: center only
     const centerUrl = `${base}&${qParam}`;
-    // Phase 2: same query + simplified polygon (polygon_threshold removes ~85% of vertices)
-    const polyUrl = `${base}&${qParam}&polygon_geojson=1&polygon_threshold=0.005`;
+    // Phase 2: same query + the boundary. `polygon=1` is the proxy's own flag; it applies the
+    // vertex simplification too, so no caller can ask for the unsimplified geometry.
+    const polyUrl = `${base}&${qParam}&polygon=1`;
 
     fetch(centerUrl)
       .then((r) => r.json())
