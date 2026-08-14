@@ -8,6 +8,7 @@ import { ListingDetailSkeleton, ListingErrorState } from '@/components/listing/L
 import { getListing, ListingsApiError } from '@/lib/api/listings';
 import type { ListingDetailState } from '@/lib/api/listings';
 import { cacheListing, readCachedListing } from '@/lib/api/listings-cache';
+import type { ListingCardRow } from '@/lib/types';
 
 /**
  * The state to start from, or `null` when the listing has to be fetched.
@@ -34,16 +35,18 @@ export default function ListingDetailModal({
   id,
   onClosed,
   initialState,
+  previewRow,
 }: {
   id: string;
   /**
-   * What to do once the close animation has finished, for the case where stepping back through
-   * history is not the answer.
+   * What to do once the close animation has finished.
    *
-   * An intercepted open has the page you came from sitting in history, so closing is just
-   * `router.back()` and the page underneath is restored exactly as it was. A direct load — a shared
-   * link, a bookmark, a reload — has no such entry; that case passes this, and handles closing by
-   * revealing the results it already rendered behind the panel rather than by navigating anywhere.
+   * The two ways a listing opens undo themselves differently, and neither is a navigation. A **soft**
+   * open pushed a history entry (`lib/listing-panel`), so closing steps back and the page underneath
+   * — never unmounted — is simply revealed again. A **direct load** has no entry behind it; that case
+   * reveals the results it rendered behind the panel and rewrites the URL in place. Both are supplied
+   * by the caller; the `router.back()` below is only the fallback for a bare render, which today is
+   * tests.
    */
   onClosed?: () => void;
   /**
@@ -52,6 +55,14 @@ export default function ListingDetailModal({
    * which is the right trade when the page behind it is already on screen.
    */
   initialState?: ListingDetailState;
+  /**
+   * The card row this open started from, when it started from one.
+   *
+   * Purely a rendering aid for the loading state: it never becomes `state`, because a card row is
+   * not a detail and must never be mistaken for one. It lets the skeleton show the listing's own
+   * address, badges, price and photo in the beat before the fetch lands, instead of grey blocks.
+   */
+  previewRow?: ListingCardRow;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(true);
@@ -104,11 +115,8 @@ export default function ListingDetailModal({
   }, [id, retryCount, initialState]);
 
   /**
-   * Intercepted: step back through history, which unwinds the interception and restores the page
-   * underneath exactly as it was — its filters, its results, its scroll position. Standalone:
-   * `onClosed` does the equivalent for a page that was never in history.
-   *
-   * The delay lets the panel finish animating out before either happens.
+   * The delay is the exit animation: the panel finishes sliding out, and only then does `onClosed`
+   * take the URL and the panel's mount with it. Reversing the order would snap it off the screen.
    */
   const handleClose = () => {
     setOpen(false);
@@ -119,7 +127,7 @@ export default function ListingDetailModal({
 
   return (
     <ListingModalFrame open={open} onClose={handleClose}>
-      {state.status === 'loading' && <ListingDetailSkeleton />}
+      {state.status === 'loading' && <ListingDetailSkeleton preview={previewRow} />}
 
       {state.status === 'ready' && (
         <ListingDetailContent listing={state.listing} onClose={handleClose} />

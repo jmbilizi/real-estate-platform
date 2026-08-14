@@ -6,6 +6,7 @@ import { AppProvider } from '@/lib/context';
 import SiteHeader from '@/components/SiteHeader';
 import Footer from '@/components/Footer';
 import AuthModalListener from '@/components/AuthModalListener';
+import ListingPanelHost from '@/components/listing/ListingPanelHost';
 import OnboardingListener from '@/components/OnboardingListener';
 import Toast from '@/components/Toast';
 import { BRAND } from '@/lib/brand';
@@ -34,14 +35,23 @@ export default function RootLayout({
             <AuthModalListener />
           </Suspense>
           {/*
-           * There is deliberately no listing equivalent of `AuthModalListener` here.
+           * The listing panel mounts here, and deliberately not as a route.
            *
-           * Listings used to open via `?listing=<id>` read by a client component in this layout,
-           * which meant the modal could not exist until hydration — on a reload it always arrived
-           * after the background page had shipped and begun fetching its own data. Listings are a
-           * real route now (`/listing/[id]`, intercepted by `@modal/(.)listing/[id]`), so the
-           * server renders them and `{modal}` below mounts them.
+           * It has been both other things. It was `?listing=<id>` read by a client component in
+           * this layout, which could not exist until hydration. Then it was a real route
+           * (`/listing/[id]`) intercepted by `@modal/(.)listing/[id]`, which fixed reloads but made
+           * *opening* a listing wait on an RSC payload and a chunk — measured at 519ms of nothing
+           * after the click, on a page whose data the panel did not even use.
+           *
+           * Both entry paths are now served by the thing that suits each. A **hard** load of
+           * `/listing/[id]` is still a route, still resolved on the server, so the listing is in the
+           * first HTML. A **soft** open is client state (`lib/listing-panel`) rendered by the host
+           * below, so it paints on the click. `ListingPanelHost` renders null until something opens
+           * a listing, so this costs nothing on every other page.
+           *
+           * `AuthModalListener` and `{modal}` are unaffected: `@modal` still carries login/signup.
            */}
+          <ListingPanelHost />
           <OnboardingListener />
           <Toast />
           {modal}

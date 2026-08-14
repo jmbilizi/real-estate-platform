@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { CustomMapControls } from '@/components/CustomMapControls';
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -11,6 +10,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { createRoot, type Root } from 'react-dom/client';
 import { ListingCardRow } from '@/lib/types';
+import { openListingPanel } from '@/lib/listing-panel';
 import {
   formatClosePrice,
   formatDwellingStats,
@@ -436,14 +436,24 @@ export default function ListingsMapInner({
   searchCenter,
   searchPolygon,
 }: Props) {
-  const router = useRouter();
-
   // Keep the module-level callback up to date so MarkerPopup popups
   // (rendered in separate React roots) can open the listing modal.
   useEffect(() => {
-    // The listing's own URL, intercepted into a modal over the map — same as a card click.
-    _openListing = (id: string) => router.push(`/listing/${id}`, { scroll: false });
-  }, [router]);
+    /*
+     * The same instant open a card click performs, and it must stay the same: a pin and a card are
+     * two views of one row, so opening them by different mechanisms is how they drift.
+     *
+     * The row is looked up rather than passed, because these popups render in their own React roots
+     * outside this tree and can only reach back through a module-level callback. It is the row that
+     * lets the panel open populated; `selectMappableListings` already guarantees every pin came
+     * from `listings`, so the lookup is a formality rather than a fallback.
+     */
+    _openListing = (id: string) =>
+      openListingPanel(
+        id,
+        listings.find((l) => l.id === id),
+      );
+  }, [listings]);
 
   // Pins only ever come from rows that have coordinates — a seller-suppressed row (address,
   // latitude and longitude null together) is excluded here and nowhere else: it stays in

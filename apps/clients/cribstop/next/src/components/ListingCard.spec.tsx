@@ -1,6 +1,7 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { aLandParcelRow, aListingCardRow, aSuppressedAddressRow } from '@/test/fixtures';
 import ListingCard from './ListingCard';
+import { getListingPanel, resetListingPanel } from '@/lib/listing-panel';
 
 jest.mock('@/lib/context', () => ({
   useApp: () => ({ toggleSave: jest.fn(), isSaved: () => false }),
@@ -333,6 +334,70 @@ describe('ListingCard', () => {
       });
 
       expect(new Set(infoRowCounts).size).toBe(1);
+    });
+  });
+  /**
+   * Opening a listing is the interaction this card exists for, and it has twice shipped gated on a
+   * request — first on hydration, then on an intercepted route's RSC payload and chunk (measured at
+   * 519ms of blank screen after the click). These cases pin the property that fixes it: the open is
+   * settled in the click handler itself, synchronously, with no navigation and nothing awaited.
+   */
+  describe('opening the listing panel', () => {
+    beforeEach(() => {
+      resetListingPanel();
+      window.history.replaceState(null, '', '/search?q=Bethesda%2C+MD');
+    });
+
+    it('opens the panel during the click, not after a round trip', () => {
+      const row = aListingCardRow({ id: 'row-1' });
+      render(<ListingCard listing={row} />);
+
+      fireEvent.click(screen.getByRole('link'));
+
+      // Asserted immediately after the event, with no `await` and no timer: had this gone through
+      // a navigation, nothing would be open yet.
+      expect(getListingPanel()).toEqual({ id: 'row-1', row });
+    });
+
+    it('hands the whole row over, so the panel can open on the listing rather than on a skeleton', () => {
+      render(<ListingCard listing={aListingCardRow({ id: 'row-1', address: '9 Elm St' })} />);
+
+      fireEvent.click(screen.getByRole('link'));
+
+      expect(getListingPanel()?.row?.address).toBe('9 Elm St');
+    });
+
+    it('puts the listing in the address bar without leaving the page', () => {
+      render(<ListingCard listing={aListingCardRow({ id: 'row-1' })} />);
+
+      fireEvent.click(screen.getByRole('link'));
+
+      expect(window.location.pathname).toBe('/listing/row-1');
+    });
+
+    // The card was a plain `onClick` div, so a keyboard user could not open a listing at all.
+    it.each(['Enter', ' '])('opens on %s, so the card is not mouse-only', (key) => {
+      render(<ListingCard listing={aListingCardRow({ id: 'row-1' })} />);
+
+      fireEvent.keyDown(screen.getByRole('link'), { key });
+
+      expect(getListingPanel()?.id).toBe('row-1');
+    });
+
+    it('is reachable by keyboard at all — focusable, named, and announced as a link', () => {
+      render(<ListingCard listing={aListingCardRow({ neighborhood: 'Downtown' })} />);
+
+      const card = screen.getByRole('link');
+      expect(card).toHaveAttribute('tabIndex', '0');
+      expect(card).toHaveAccessibleName(/Downtown/);
+    });
+
+    it('does not open the panel when the save control inside it is pressed', () => {
+      render(<ListingCard listing={aListingCardRow({ id: 'row-1' })} />);
+
+      fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+      expect(getListingPanel()).toBeNull();
     });
   });
 });

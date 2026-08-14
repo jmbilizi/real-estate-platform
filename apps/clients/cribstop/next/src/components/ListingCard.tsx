@@ -1,8 +1,8 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import type { ListingCardRow } from '@/lib/types';
 import { useApp } from '@/lib/context';
+import { openListingPanel } from '@/lib/listing-panel';
 import {
   formatClosePrice,
   formatDwellingStats,
@@ -18,35 +18,24 @@ import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges'
 export default function ListingCard({ listing }: { listing: ListingCardRow }) {
   const { toggleSave, isSaved } = useApp();
   const saved = isSaved(listing.id);
-  const router = useRouter();
 
   /**
-   * Navigates to the listing's own URL, which `@modal/(.)listing/[id]` intercepts and renders as a
-   * modal over whatever page you are on.
+   * Opens the detail panel on this row, on the click, with no network in the way.
    *
-   * This used to push `?listing=<id>` onto the current route. That made the modal a *client-only*
-   * thing — it was rendered by a listener in the root layout reading `useSearchParams()` — so on a
-   * reload it could not exist until hydration, which is necessarily after the background page had
-   * shipped and started fetching its own data. A real route renders on the server, so a reload of
-   * this URL renders the listing and nothing else.
+   * This has been through two designs that both put a request between the click and the first
+   * frame. It pushed `?listing=<id>` and let a listener in the root layout read it, which meant the
+   * modal could not exist until hydration. Then it pushed `/listing/<id>` for
+   * `@modal/(.)listing/[id]` to intercept, with a `loading.tsx` to cover the gap — but a loading
+   * boundary belongs to the segment it sits in, so the browser had to fetch that segment's RSC
+   * payload *and* its chunk before it could draw anything. Measured on the search page: 519ms from
+   * click to skeleton, of which the first 451ms was the payload alone, and the hover prefetch meant
+   * to hide it does nothing in `next dev` and never fires for a tap or a keypress.
+   *
+   * Neither round trip bought anything: the intercepted route resolved no data. So the open is now
+   * local state — see `lib/listing-panel` — and the whole row goes with it, which is what lets the
+   * panel open on this listing's own address, badges, price and photo instead of on grey blocks.
    */
-  const href = `/listing/${listing.id}`;
-  const openModal = () => router.push(href, { scroll: false });
-
-  /**
-   * Warms the listing route before the click that needs it.
-   *
-   * Intercepting a route is still a navigation, and an un-prefetched one cannot show its
-   * `loading.tsx` until the payload arrives — the loading boundary is *part of* that payload. So
-   * the panel appeared only after a full round trip, and a click read as if it had not registered.
-   * Prefetching on approach means the boundary is already in hand and the skeleton paints on the
-   * click itself.
-   *
-   * Pointer entry rather than viewport, deliberately: a results page holds twenty of these, and
-   * prefetching all twenty on render would fire twenty requests to open one listing. `touchstart`
-   * covers the case with no hover to approach with — it still lands ahead of the tap.
-   */
-  const prefetch = () => router.prefetch(href);
+  const openPanel = () => openListingPanel(listing.id, listing);
 
   const isSold = listing.listingType === 'sold' || listing.status === 'Sold';
   const isParcel = listing.propertyType === 'Land';
@@ -97,11 +86,27 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
         : null;
 
   return (
+    /*
+     * `role="link"` with a key handler rather than a bare `onClick` div: the card was reachable by
+     * mouse and touch only, so a keyboard user could not open a listing at all. It is not a real
+     * `<a>` because the save control is a `<button>` inside this box, and interactive content
+     * nested in an anchor is invalid HTML — the accessible-name and focus behaviour of the pair
+     * stops being defined. Enter and Space both activate, which is what a link and a button
+     * respectively lead a user to try.
+     */
     <div
-      className="group block cursor-pointer"
-      onClick={openModal}
-      onMouseEnter={prefetch}
-      onTouchStart={prefetch}
+      role="link"
+      tabIndex={0}
+      aria-label={`View listing in ${formatListingLocation(listing.neighborhood, listing.city, listing.state)}`}
+      className="group block cursor-pointer rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2"
+      onClick={openPanel}
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        // Space scrolls the page by default, which would move the results out from under the panel
+        // that is about to open over them.
+        e.preventDefault();
+        openPanel();
+      }}
     >
       {/* Image */}
       <div className="relative aspect-square overflow-hidden rounded-md bg-surface-soft">
