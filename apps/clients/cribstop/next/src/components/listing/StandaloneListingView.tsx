@@ -35,28 +35,40 @@ export default function StandaloneListingView({
   const router = useRouter();
 
   /**
-   * One-way latch: has *this* panel been dismissed?
-   *
-   * Only ever set, never cleared, because it answers a question about this render of the standalone
-   * route and nothing that happens afterwards can un-dismiss it. A listing opened later comes from
-   * the intercepted route instead, over the top.
-   */
-  const [dismissed, setDismissed] = useState(false);
-
-  /**
    * Whether the results behind are the page the user is looking at, as opposed to a backdrop with
    * something over it.
    *
-   * The latch alone is not enough. Once dismissed, clicking a card on the revealed results opens the
-   * *intercepted* listing modal above this same tree — so the results would be left interactive and
-   * in the accessibility tree underneath an open panel, which is the exact thing `inert` is there to
-   * prevent, and they would go on owning a URL that had become a listing's.
-   *
-   * The pathname answers both. It tracks `history.replaceState` below, because Next.js keeps
-   * `usePathname` in step with the native History API.
+   * The pathname is what answers it, and it tracks `history.replaceState` below because Next.js
+   * keeps `usePathname` in step with the native History API. It matters beyond the panel's own
+   * visibility: once dismissed, clicking a card on the revealed results opens a listing panel above
+   * this same tree, and these results must go inert for that — otherwise they stay interactive and
+   * in the accessibility tree underneath an open panel, which is the thing `inert` exists to stop.
    */
   const pathname = usePathname();
-  const showingResults = dismissed && !pathname.startsWith('/listing/');
+  const onListingUrl = pathname.startsWith('/listing/');
+
+  /**
+   * Has *this* panel been dismissed?
+   *
+   * **Seeded from the URL rather than starting `false`**, and that is a bug fix rather than a
+   * flourish. `handleClosed` rewrites the address bar with `history.replaceState`, which changes the
+   * URL of the current history entry but *not* the route tree Next has stored against it — that
+   * entry still points at `/listing/[id]`. So navigating away with an in-app `Link` and pressing
+   * Back restored this component fresh, with a `false` latch, and it drew the listing panel again
+   * over an address bar reading `/search?q=…`. Reproduced: direct-load a listing, close it, soft-nav
+   * to `/favorites`, press Back — the panel was on screen with the search URL behind it, every time.
+   *
+   * Deriving the initial value from the pathname makes the latch survive that round trip, because
+   * the URL is the thing `replaceState` *did* update. It is still one-way within a mount: nothing
+   * that happens afterwards can un-dismiss it.
+   *
+   * No hydration hazard: on a genuine direct load the server and the first client render both see
+   * `/listing/[id]`, so both start `false`. Only a restored entry — which is a client-side render
+   * with no server pass to disagree with — starts `true`.
+   */
+  const [dismissed, setDismissed] = useState(() => !onListingUrl);
+
+  const showingResults = dismissed && !onListingUrl;
 
   const handleClosed = () => {
     /*
