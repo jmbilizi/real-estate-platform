@@ -160,23 +160,61 @@ export function ListingDetailSkeleton({ preview }: { preview?: ListingCardRow })
          * so which one wins is decided by stylesheet order, not by the order written here.
          */}
         {/*
-         * With a row in hand the first photo goes straight in, at the exact shape `PropertyGallery`
-         * gives a single image. A card row carries `primaryMedia` and nothing else of the gallery,
-         * so this is the whole of what can honestly be shown — the mosaic's remaining four tiles
-         * appear with the fetch. It is also the single highest-value thing on this screen: it is
-         * how the user knows the panel opened on the home they clicked.
+         * The gallery, in the same bordered panel the loaded page wraps `PropertyGallery` in, so
+         * the block measures 482px at `md` and up in every state — placeholder, preview and loaded.
+         *
+         * The preview's first attempt put the primary photo in one full-width block, on the
+         * reasoning that this was "the shape `PropertyGallery` gives a single image". That is only
+         * the shape it gives a listing with **no** photos: with any media at all the desktop gallery
+         * is a mosaic, so the panel opened on one big photo and then snapped into five tiles. The
+         * placeholder has to reflect the gallery's actual layout, which is two layouts:
+         *
+         * - **Below `md`** the loaded gallery is a single `aspect-video` image, whatever the photo
+         *   count. So the primary photo alone is not an approximation there — it is exactly what
+         *   arrives, and nothing is guessed.
+         * - **From `md` up** it is the 4x2 mosaic: the primary photo across `col-span-2 row-span-2`
+         *   and four smaller tiles. The tile count is **not** a guess about how many photos exist
+         *   either: `PropertyGallery` pads to five tiles by repeating (`i % media.length`), so a
+         *   listing with one photo still renders five. Four placeholders is what will arrive for
+         *   every listing that has a photo at all.
+         *
+         * The one case that genuinely differs is a listing with no media, where the loaded gallery
+         * is a single branded placeholder rather than a mosaic. A row whose `primaryMedia` is null
+         * is that case, so it takes the plain block below — which asserts nothing about the photos
+         * and occupies the identical box either way, rather than declaring "no photo available"
+         * before the detail has confirmed it.
          */}
-        {preview ? (
-          <ListingImage
-            media={preview.primaryMedia}
-            sizeHint="detail"
-            className="aspect-video w-full overflow-hidden rounded-2xl md:h-[480px]"
-          />
-        ) : (
-          <div className="overflow-hidden rounded-2xl border border-surface-border">
-            <div className="aspect-video bg-surface-soft md:aspect-auto md:h-[480px]" />
-          </div>
-        )}
+        <div className={`overflow-hidden ${panel}`}>
+          {preview?.primaryMedia ? (
+            <>
+              <ListingImage
+                media={preview.primaryMedia}
+                className="aspect-video w-full object-cover md:hidden"
+              />
+              <div className="hidden md:grid md:h-[480px] md:grid-cols-4 md:grid-rows-2 md:gap-2 md:overflow-hidden">
+                <div className="relative col-span-2 row-span-2 overflow-hidden bg-surface-soft">
+                  <ListingImage
+                    media={preview.primaryMedia}
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+                {/* The four tiles still in flight. Sized by the grid, so they cannot disagree with
+                    the photos that replace them. */}
+                {Array.from({ length: 4 }, (_, i) => (
+                  <div
+                    key={i}
+                    className={`overflow-hidden bg-surface-soft ${blockPulse}`}
+                    data-gallery-tile-placeholder
+                  />
+                ))}
+              </div>
+            </>
+          ) : (
+            <div
+              className={`aspect-video bg-surface-soft md:aspect-auto md:h-[480px] ${blockPulse}`}
+            />
+          )}
+        </div>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_380px] lg:items-start">
           <div className="space-y-4">

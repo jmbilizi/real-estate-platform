@@ -33,7 +33,9 @@ describe('ListingDetailSkeleton', () => {
     it('shows the row photo, which is how the user knows it opened on the home they clicked', () => {
       render(<ListingDetailSkeleton preview={aListingCardRow()} />);
 
-      expect(screen.getByRole('img')).toBeInTheDocument();
+      // Two: the below-`md` single image and the mosaic's large cell. Exactly one is ever visible;
+      // which one is a media query, which jsdom does not evaluate.
+      expect(screen.getAllByRole('img').length).toBeGreaterThan(0);
     });
 
     /**
@@ -80,6 +82,74 @@ describe('ListingDetailSkeleton', () => {
       const { container } = render(<ListingDetailSkeleton preview={aListingCardRow()} />);
 
       expect(container.querySelectorAll('.bg-surface-soft').length).toBeGreaterThan(0);
+    });
+  });
+
+  /**
+   * The gallery placeholder's shape.
+   *
+   * The preview's first version put the primary photo in one full-width block, which is the shape
+   * the loaded gallery has only when a listing has **no** photos. With any media the desktop gallery
+   * is a 4x2 mosaic, so the panel opened on one big photo and then snapped into five tiles — the
+   * exact "does not reflect the gallery's look" the user reported.
+   *
+   * jsdom evaluates no media queries, so these assert the structure that produces the right shape;
+   * the pixel equality behind it was measured in a browser (preview and loaded both 1206x482 at
+   * desktop with 295px columns and 236px rows, and both 332x187 at 390px wide).
+   */
+  describe('the gallery placeholder mirrors PropertyGallery, not a single image', () => {
+    const gallery = (c: HTMLElement) => c.querySelector('[class*="grid-cols-4"]');
+
+    it('lays the desktop placeholder out as the mosaic the loaded gallery uses', () => {
+      const { container } = render(<ListingDetailSkeleton preview={aListingCardRow()} />);
+
+      const grid = gallery(container);
+      expect(grid).not.toBeNull();
+      expect(grid?.className).toContain('md:grid-rows-2');
+      expect(grid?.className).toContain('md:h-[480px]');
+      // The primary photo spans the mosaic's large cell rather than the whole block.
+      expect(grid?.querySelector('.col-span-2.row-span-2')).not.toBeNull();
+    });
+
+    /**
+     * Four, and it is not a guess about photo count: `PropertyGallery` pads to five tiles by
+     * repeating (`i % media.length`), so every listing with at least one photo renders five.
+     */
+    it('holds four tile placeholders for the photos still in flight', () => {
+      const { container } = render(<ListingDetailSkeleton preview={aListingCardRow()} />);
+
+      expect(container.querySelectorAll('[data-gallery-tile-placeholder]')).toHaveLength(4);
+    });
+
+    it('keeps the gallery in the same bordered panel the loaded page wraps it in', () => {
+      const withPreview = render(<ListingDetailSkeleton preview={aListingCardRow()} />);
+      const bare = render(<ListingDetailSkeleton />);
+      const wrapper = (c: HTMLElement) =>
+        c.querySelector('.scrollbar-overlay')?.firstElementChild?.className;
+
+      // Identical wrappers is what makes the block measure the same in both states.
+      expect(wrapper(withPreview.container)).toBe(wrapper(bare.container));
+      expect(wrapper(withPreview.container)).toContain('border-surface-border');
+    });
+
+    /**
+     * A row with no primary photo is the one case where the loaded gallery is genuinely a single
+     * block, so the mosaic must not be drawn — four tiles would be promising photos that never come.
+     */
+    it('drops the mosaic for a row with no photo, rather than promising tiles that never arrive', () => {
+      const { container } = render(
+        <ListingDetailSkeleton preview={aListingCardRow({ primaryMedia: null })} />,
+      );
+
+      expect(gallery(container)).toBeNull();
+      expect(container.querySelectorAll('[data-gallery-tile-placeholder]')).toHaveLength(0);
+    });
+
+    it('draws no mosaic at all when there is no row', () => {
+      const { container } = render(<ListingDetailSkeleton />);
+
+      expect(gallery(container)).toBeNull();
+      expect(container.querySelectorAll('[data-gallery-tile-placeholder]')).toHaveLength(0);
     });
   });
 });
