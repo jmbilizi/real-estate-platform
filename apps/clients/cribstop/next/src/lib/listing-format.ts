@@ -191,13 +191,12 @@ function openHouseTimeRange(starts: Date, ends: Date): string {
 /**
  * The open-house date alone — `11/22`.
  *
- * What the badge falls back to on a card too narrow for the full schedule, which on the search grid
- * is most of them: a two- or three-column card is 139–189px, and the full string needs 229px of card
- * to fit. Which form renders is decided by a container query on the card, not here — see
- * `.open-house-full` in `globals.css`.
+ * The last thing standing on a card too narrow for anything else, which on the search grid at a
+ * 768px viewport means a 139px card with 83px of room. The date is what survives every squeeze,
+ * because it is the part that costs a wasted trip to a house if it is wrong.
  *
- * The date is the part that survives, because it is the part that costs a wasted trip if it is
- * wrong. The time is on the detail page.
+ * `numeric` rather than `2-digit` throughout: "9/5", not "09/05" — the padding buys nothing at this
+ * size and costs two characters in the one place characters are scarce.
  */
 export function formatOpenHouseDate(openHouse: OpenHouse): string {
   return new Date(openHouse.startsAt).toLocaleDateString('en-US', {
@@ -207,24 +206,29 @@ export function formatOpenHouseDate(openHouse: OpenHouse): string {
   });
 }
 
-export function formatOpenHouseBadge(openHouse: OpenHouse): string {
+/**
+ * Time and date, without the weekday — `7–9am (8/16)`.
+ *
+ * The middle of the badge's three forms. The weekday is the first thing dropped because it is the
+ * only part that carries no information the rest does not: `8/16` already determines it. The time
+ * only goes at the narrowest widths, where even this does not fit.
+ */
+export function formatOpenHouseTimeAndDate(openHouse: OpenHouse): string {
   const starts = new Date(openHouse.startsAt);
   const ends = new Date(openHouse.endsAt);
+
+  return `${openHouseTimeRange(starts, ends)} (${formatOpenHouseDate(openHouse)})`;
+}
+
+export function formatOpenHouseBadge(openHouse: OpenHouse): string {
+  const starts = new Date(openHouse.startsAt);
 
   const weekday = starts.toLocaleDateString('en-US', {
     weekday: 'short',
     timeZone: PROPERTY_TIME_ZONE,
   });
 
-  // `numeric` rather than `2-digit`: "9/5", not "09/05" — the padding buys nothing at this size and
-  // costs two characters in the one place characters are scarce.
-  const date = starts.toLocaleDateString('en-US', {
-    month: 'numeric',
-    day: 'numeric',
-    timeZone: PROPERTY_TIME_ZONE,
-  });
-
-  return `${weekday} ${openHouseTimeRange(starts, ends)} (${date})`;
+  return `${weekday} ${formatOpenHouseTimeAndDate(openHouse)}`;
 }
 
 /**

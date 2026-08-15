@@ -530,14 +530,40 @@ body {
 .listing-card-media {
   container-type: inline-size;
 }
-.open-house-full {
+
+/*
+ * Three forms, each dropping the least valuable part still present. Measured at 11px, against a cap
+ * of the card's width less 24px of gutters and 32px reserved for the save control:
+ *
+ *   full     "Open: Sun 7–9am (8/16)"   136px typical, 173px longest  -> needs a 229px card
+ *   no day   "Open: 7–9am (8/16)"       114px typical, 154px longest  -> needs a 170px card typical
+ *   date     "Open: 8/16"                71px                         -> fits everything
+ *
+ * The weekday goes first because the numeric date already carries it — "Sun" and "8/16" are the same
+ * fact — so it is the only part that can be dropped without losing information. The time goes next.
+ * The date never goes, because being a week out on an open house is a wasted trip to a house.
+ *
+ * The 172px step is sized for a typical schedule rather than the longest, so that the 189px search
+ * card shows a time at all; on the longest schedules there `truncate` clips the tail. The 232px step
+ * is sized for the longest, so the full form never clips.
+ */
+.open-house-full,
+.open-house-no-day {
   display: none;
+}
+@container (min-width: 172px) {
+  .open-house-no-day {
+    display: inline;
+  }
+  .open-house-date {
+    display: none;
+  }
 }
 @container (min-width: 232px) {
   .open-house-full {
     display: inline;
   }
-  .open-house-compact {
+  .open-house-no-day {
     display: none;
   }
 }

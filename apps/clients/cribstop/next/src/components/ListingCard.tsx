@@ -11,6 +11,7 @@ import {
   formatLotSize,
   formatOpenHouseBadge,
   formatOpenHouseDate,
+  formatOpenHouseTimeAndDate,
 } from '@/lib/listing-format';
 import ListingAttribution from '@/components/listing/ListingAttribution';
 import ListingImage from '@/components/listing/ListingImage';
@@ -204,7 +205,8 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
                  */}
                 <span className="font-bold">Open:</span>{' '}
                 <span className="open-house-full">{formatOpenHouseBadge(openHouse)}</span>
-                <span className="open-house-compact">{formatOpenHouseDate(openHouse)}</span>
+                <span className="open-house-no-day">{formatOpenHouseTimeAndDate(openHouse)}</span>
+                <span className="open-house-date">{formatOpenHouseDate(openHouse)}</span>
               </span>
             )}
           </div>

@@ -237,15 +237,17 @@ describe('ListingCard', () => {
      * sees.
      */
     const fullForm = () => document.querySelector('.open-house-full') as HTMLElement;
-    const compactForm = () => document.querySelector('.open-house-compact') as HTMLElement;
+    const noDayForm = () => document.querySelector('.open-house-no-day') as HTMLElement;
+    const compactForm = () => document.querySelector('.open-house-date') as HTMLElement;
 
-    it('offers a full form and a date-only form, and the date is in both', () => {
+    it('offers three forms, each dropping the least valuable part still present', () => {
       const { container } = render(<ListingCard listing={aListingCardRow({ openHouse })} />);
 
-      // The date is the point. "Open Sat" never said *which* Saturday, and an open house is the
-      // one listing fact where being off by a week is a wasted trip to a house — so it is the one
-      // part that survives into the narrow form, where the schedule cannot fit.
+      // The weekday goes first because `9/5` already determines it; the time goes next; the date
+      // never goes. "Open Sat" never said *which* Saturday, and an open house is the one listing
+      // fact where being off by a week is a wasted trip to a house.
       expect(fullForm().textContent).toBe('Sat 11am–1pm (9/5)');
+      expect(noDayForm().textContent).toBe('11am–1pm (9/5)');
       expect(compactForm().textContent).toBe('9/5');
 
       // Exactly one affordance — not the old three (pill + star chip + date row), and not the
