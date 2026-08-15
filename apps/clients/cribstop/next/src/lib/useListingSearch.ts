@@ -28,8 +28,18 @@ export interface ListingSearchResult {
  * The mock array resolved synchronously, so the search page had no loading or error states at all.
  * Both are real now: a filter combination the API rejects comes back 400 and must surface as an
  * error state rather than a blank page that looks like "no homes match".
+ *
+ * `enabled` holds the request without changing what the caller renders: the state stays `loading`,
+ * so a held search draws the same skeleton an in-flight one does. That is what lets the results
+ * behind a directly-loaded listing occupy their space from the first paint while their fetch waits
+ * for the listing to be on screen — a caller that has to render nothing to delay a request is a
+ * caller that flashes an empty page.
  */
-export function useListingSearch(filters: SearchFilters, page: number): ListingSearchResult {
+export function useListingSearch(
+  filters: SearchFilters,
+  page: number,
+  enabled = true,
+): ListingSearchResult {
   const [state, setState] = useState<Omit<ListingSearchResult, 'retry'>>({
     results: [],
     total: 0,
@@ -55,6 +65,8 @@ export function useListingSearch(filters: SearchFilters, page: number): ListingS
   toastRef.current = toast;
 
   useEffect(() => {
+    if (!enabled) return;
+
     const controller = new AbortController();
     let active = true;
 
@@ -90,7 +102,7 @@ export function useListingSearch(filters: SearchFilters, page: number): ListingS
       active = false;
       controller.abort();
     };
-  }, [filterKey, page, attempt]);
+  }, [filterKey, page, attempt, enabled]);
 
   return { ...state, retry };
 }

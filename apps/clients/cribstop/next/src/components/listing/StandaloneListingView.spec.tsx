@@ -15,8 +15,12 @@ jest.mock('next/navigation', () => ({
 // keeps these tests off leaflet, the geocode calls and the search fetch.
 jest.mock('@/components/SearchExperience', () => ({
   __esModule: true,
-  default: ({ ownsUrl }: { ownsUrl?: boolean }) => (
-    <div data-testid="search-results" data-owns-url={String(ownsUrl)} />
+  default: ({ ownsUrl, deferred }: { ownsUrl?: boolean; deferred?: boolean }) => (
+    <div
+      data-testid="search-results"
+      data-owns-url={String(ownsUrl)}
+      data-deferred={String(deferred)}
+    />
   ),
 }));
 
@@ -57,10 +61,19 @@ afterEach(() => {
 });
 
 describe('StandaloneListingView', () => {
+  it('renders the results shell immediately, with its work held rather than absent', () => {
+    render(<StandaloneListingView id={ID} initialState={readyState()} cityQuery={CITY_QUERY} />);
+
+    // Deliberately before the double rAF. The backdrop used to render `null` here, which left a
+    // directly-loaded listing with an empty body behind it that filled in a few frames later.
+    expect(screen.getByTestId('search-results')).toHaveAttribute('data-deferred', 'true');
+  });
+
   it('mounts the results behind the panel, inert and not owning the URL', async () => {
     render(<StandaloneListingView id={ID} initialState={readyState()} cityQuery={CITY_QUERY} />);
 
-    // The backdrop mounts from a double rAF so it cannot compete with the listing.
+    // The backdrop's requests are released from a double rAF so they cannot compete with the
+    // listing.
     await act(async () => {
       jest.advanceTimersByTime(100);
     });
@@ -69,6 +82,7 @@ describe('StandaloneListingView', () => {
     expect(backdrop).toHaveAttribute('data-search-backdrop', 'inert');
     expect(backdrop).toHaveAttribute('aria-hidden', 'true');
     expect(screen.getByTestId('search-results')).toHaveAttribute('data-owns-url', 'false');
+    expect(screen.getByTestId('search-results')).toHaveAttribute('data-deferred', 'false');
   });
 
   it('reveals the results it already rendered instead of navigating to them', async () => {

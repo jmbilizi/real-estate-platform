@@ -13,6 +13,16 @@ interface Props {
   className?: string;
   searchCenter?: [number, number] | null;
   searchPolygon?: object | null;
+  /**
+   * Whether the map may start loading, as opposed to being deliberately held on its placeholder.
+   *
+   * Separate from the mount gate below because they answer different questions: `mounted` is "does
+   * `window` exist yet", this is "should this map be competing for the network right now". The
+   * backdrop behind a directly-loaded listing needs the second one — the panel is the thing the
+   * user asked for, and the tiles must not queue up in front of it — while still drawing the frame
+   * so the layout is not a hole.
+   */
+  active?: boolean;
 }
 
 /** The one placeholder, used both before mount and while the map chunk is in flight. */
@@ -50,7 +60,7 @@ const Inner = dynamic(() => import('./ListingsMapInner'), {
   loading: () => <MapLoadingLabel />,
 });
 
-export default function ListingsMap({ className, ...rest }: Props) {
+export default function ListingsMap({ className, active = true, ...rest }: Props) {
   /*
    * False on the server and on the first client render, so the two agree; true from the effect
    * onwards, which is the first moment `window` exists.
@@ -66,7 +76,7 @@ export default function ListingsMap({ className, ...rest }: Props) {
    */
   return (
     <div className={`${MAP_PANEL_CLASS} ${className ?? ''}`}>
-      {mounted ? <Inner {...rest} /> : <MapLoadingLabel />}
+      {mounted && active ? <Inner {...rest} /> : <MapLoadingLabel />}
     </div>
   );
 }

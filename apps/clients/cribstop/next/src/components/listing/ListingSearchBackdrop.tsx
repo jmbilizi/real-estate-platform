@@ -11,16 +11,34 @@ import SearchExperience from '@/components/SearchExperience';
  * it at all: a bare header and footer, and a close button that navigated off to a generic search.
  * This puts the listing's own city back there, so both ways of arriving look and behave the same.
  *
- * **It must never compete with the listing for anything.** It mounts from an effect, so it is
- * absent from the server HTML entirely and none of its requests — the results query, the two
- * geocode calls, the map tiles — can start until the listing has been painted. That ordering is
- * the whole point: the thing the user asked for renders first, and the context fills in behind it.
+ * **It must never compete with the listing for anything** — but "not competing" is about requests,
+ * not about pixels, and conflating the two is what this used to get wrong. It rendered `null` until
+ * two frames after hydration, which kept its requests off the critical path by not existing at all:
+ * a directly-loaded listing went out with an *empty body* behind the panel, and the results later
+ * appeared as a page popping into being. Reported exactly that way — the body disappears, then
+ * reappears — and it is the one thing a skeleton exists to prevent. Worse, the search already had
+ * good loading states (card skeletons, a framed map placeholder) and none of them could be seen,
+ * because the component that owns them had not mounted.
+ *
+ * So the two requirements are separated. The shell renders from the first paint, server-side and
+ * fully shaped; `deferred` is what holds the work — the results query, the two geocode calls, the
+ * map chunk and its tiles — until the listing has been painted. The listing still renders first;
+ * what fills in behind it is now content arriving into a space that was already there.
  */
 export default function ListingSearchBackdrop({
   query,
   live = false,
 }: {
-  query: string;
+  /**
+   * The search to run behind the listing — or omitted, which holds the shell open forever.
+   *
+   * Omitted is the route's `loading.tsx`, which is on screen precisely while the server is still
+   * resolving the listing and therefore does not yet know its city. It has no search to run, but it
+   * does have a shape to hold: without one, the streamed HTML is a modal skeleton over an empty
+   * body, and the results appear only when the page itself arrives. That was the second half of
+   * the blank flash, and it is the half that survived fixing the first.
+   */
+  query?: string;
   /**
    * Whether the modal in front has closed and this is now the page.
    *
@@ -32,26 +50,26 @@ export default function ListingSearchBackdrop({
    */
   live?: boolean;
 }) {
-  const [mounted, setMounted] = useState(false);
+  const [released, setReleased] = useState(false);
 
   useEffect(() => {
+    if (query === undefined) return;
+
     /*
      * Two frames, not one. A callback scheduled in an effect runs *before* the browser has painted
-     * the listing; the frame after that runs once it has. Mounting on the second is what keeps the
+     * the listing; the frame after that runs once it has. Releasing on the second is what keeps the
      * backdrop's work off the critical path rather than merely late in it.
      */
     let second = 0;
     const first = requestAnimationFrame(() => {
-      second = requestAnimationFrame(() => setMounted(true));
+      second = requestAnimationFrame(() => setReleased(true));
     });
 
     return () => {
       cancelAnimationFrame(first);
       cancelAnimationFrame(second);
     };
-  }, []);
-
-  if (!mounted) return null;
+  }, [query]);
 
   return (
     /*
@@ -68,7 +86,7 @@ export default function ListingSearchBackdrop({
       inert={!live}
       aria-hidden={!live || undefined}
     >
-      <SearchExperience initialQuery={query} ownsUrl={live} />
+      <SearchExperience initialQuery={query} ownsUrl={live} deferred={!released} />
     </div>
   );
 }

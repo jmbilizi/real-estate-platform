@@ -43,6 +43,27 @@ export interface SearchExperienceProps {
    * without remounting. That is exactly the case the inference could not express.
    */
   ownsUrl?: boolean;
+  /**
+   * Render the experience, but hold every request it would make.
+   *
+   * This exists because "do not compete with the listing panel for the network" and "do not leave a
+   * hole where the page is" were being treated as the same requirement. The backdrop satisfied the
+   * first by rendering `null` until two frames after hydration, which satisfied it by *not existing*
+   * — so a directly-loaded listing went out with an empty body behind it, and the results appeared
+   * later as a page popping into being rather than as content arriving. The user's description was
+   * exact: the body disappears and reappears.
+   *
+   * They are different requirements and they now have different mechanisms. The shell — split
+   * layout, results bar, map frame, card skeletons — is server-rendered and in the first HTML, so
+   * the shape is there from the first paint. This flag is what keeps the *work* off the critical
+   * path: no results fetch, no geocode, no map chunk, no tiles, until the caller clears it.
+   *
+   * Nothing about the rendered output is conditional on it, deliberately. A held search is
+   * indistinguishable from an in-flight one — `status` stays `loading` and the map stays on its
+   * placeholder — so clearing the flag is a continuation of a load already visibly underway, not a
+   * second render of a different page.
+   */
+  deferred?: boolean;
 }
 
 /**
@@ -52,7 +73,11 @@ export interface SearchExperienceProps {
  * the same experience behind its modal. A route file should not be imported from another route, so
  * the experience moved here and the route became a thin wrapper around it.
  */
-export default function SearchExperience({ initialQuery, ownsUrl = true }: SearchExperienceProps) {
+export default function SearchExperience({
+  initialQuery,
+  ownsUrl = true,
+  deferred = false,
+}: SearchExperienceProps) {
   const {
     savedIds,
     searchLocation: location,
@@ -76,9 +101,13 @@ export default function SearchExperience({ initialQuery, ownsUrl = true }: Searc
    * Nothing needed that re-seed. On the way back — false → true, the close — the URL has just been
    * rewritten to the same query this instance was seeded with, so re-reading it could only ever
    * produce the values already held.
+   *
+   * Held instances skip it outright. `setLocation` and `setSearchSuggestion` are shared app state —
+   * the header's search bar reads them — so a shell rendered purely to hold the layout's shape
+   * would otherwise blank the bar it is sitting under.
    */
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || deferred) return;
 
     const params = new URLSearchParams(initialQuery);
     const q = params.get('q') || '';
@@ -93,7 +122,7 @@ export default function SearchExperience({ initialQuery, ownsUrl = true }: Searc
     }
     // `filters` and `page` are seeded from this same string in their own `useState` initialisers,
     // synchronously on the first render, so they are deliberately not set again here.
-  }, [initialQuery, setLocation, setSearchSuggestion]);
+  }, [initialQuery, deferred, setLocation, setSearchSuggestion]);
 
   /**
    * Follows the Back and Forward buttons, but only while this instance owns the URL.
@@ -201,6 +230,7 @@ export default function SearchExperience({ initialQuery, ownsUrl = true }: Searc
     // Clear stale state immediately so old boundary/center don't linger
     setSearchCenter(null);
     setSearchPolygon(null);
+    if (deferred) return; // held: the map is on its placeholder, so there is nothing to centre yet
     if (!location || !location.trim()) return;
     let cancelled = false;
     const zip = (location.match(/\b(\d{5})\b/) ?? [])[1];
@@ -276,7 +306,7 @@ export default function SearchExperience({ initialQuery, ownsUrl = true }: Searc
     return () => {
       cancelled = true;
     };
-  }, [location]);
+  }, [location, deferred]);
 
   // Filter modal open state
   const [filterOpen, setFilterOpen] = useState(false);
@@ -287,7 +317,11 @@ export default function SearchExperience({ initialQuery, ownsUrl = true }: Searc
   const [page, setPage] = useState(() =>
     parsePageFromSearchParams(new URLSearchParams(initialQuery)),
   );
-  const { results, total, pageCount, status, error, retry } = useListingSearch(filters, page);
+  const { results, total, pageCount, status, error, retry } = useListingSearch(
+    filters,
+    page,
+    !deferred,
+  );
 
   const isLoading = status === 'loading';
   const isError = status === 'error';
@@ -346,6 +380,7 @@ export default function SearchExperience({ initialQuery, ownsUrl = true }: Searc
               className="h-full w-full"
               searchCenter={searchCenter}
               searchPolygon={searchPolygon}
+              active={!deferred}
             />
           </div>
         </div>
