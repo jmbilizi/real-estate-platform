@@ -227,35 +227,25 @@ describe('ListingCard', () => {
       remarks: null,
     };
 
-    /** The pill, as a whole: the label is its own element, so read the text off the parent. */
-    const openHousePill = () => screen.getByText('Open:').parentElement as HTMLElement;
-
-    it('renders one pill carrying the weekday, time range and calendar date', () => {
+    it('renders the whole statement — label, weekday, calendar date and time range', () => {
       const { container } = render(<ListingCard listing={aListingCardRow({ openHouse })} />);
 
       // The date is the point. "Open Sat" never said *which* Saturday, and an open house is the
-      // one listing fact where being off by a week is a wasted trip to a house. Asserted as an
-      // exact visible string: this was once abbreviated with the real value hidden behind `title`,
-      // which is not the same as a consumer being able to read it.
-      expect(openHousePill().textContent).toBe('Open: Sat 11am–1pm (9/5)');
+      // one listing fact where being off by a week is a wasted trip to a house. Asserted as exact
+      // visible strings: this used to be abbreviated in a pill with the real value hidden behind
+      // `title`, which is not the same as a consumer being able to read it.
+      expect(screen.getByText('Open house')).toBeInTheDocument();
+      expect(screen.getByText('Sat, Sep 5 · 11am–1pm')).toBeInTheDocument();
 
-      // Exactly one affordance — not the old three (pill + star chip + date row), and not the
-      // pill-plus-row this briefly became.
-      expect(container.textContent?.match(/Open:/g)).toHaveLength(1);
-    });
-
-    /** Only the word is bold; the schedule beside it is not. */
-    it('bolds the label alone', () => {
-      render(<ListingCard listing={aListingCardRow({ openHouse })} />);
-
-      expect(screen.getByText('Open:').className).toContain('font-bold');
-      expect(openHousePill().className).not.toContain('font-bold');
+      // Still exactly one affordance, not the old three (pill + star chip + date row).
+      expect(container.textContent?.match(/Open house/g)).toHaveLength(1);
     });
 
     it('renders no open-house affordance when the API sent none', () => {
       render(<ListingCard listing={aListingCardRow({ openHouse: null })} />);
 
-      expect(screen.queryByText('Open:')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Open house/)).not.toBeInTheDocument();
+      expect(screen.queryByText('Open')).not.toBeInTheDocument();
     });
 
     it('never shows an open house on a sold row, where it would mislead', () => {
@@ -265,95 +255,23 @@ describe('ListingCard', () => {
         />,
       );
 
-      expect(screen.queryByText('Open:')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Open house/)).not.toBeInTheDocument();
       expect(screen.getByText('Sold')).toBeInTheDocument();
     });
 
-    it('does not contend with a marketing badge — they stack', () => {
-      const { container } = render(
+    it('no longer contends with a marketing badge, now that it has its own band', () => {
+      render(
         <ListingCard
           listing={aListingCardRow({ openHouse, priceReduced: true, newConstruction: true })}
         />,
       );
 
-      // Open house used to win the single corner slot and suppress these outright. Both pills now
-      // sit in one top-left stack, so both can be true at once — which they are.
-      expect(openHousePill().textContent).toBe('Open: Sat 11am–1pm (9/5)');
+      // Open house used to win the single corner slot and suppress these outright. It sits at the
+      // foot of the image now, so both can be true at once — which they are.
+      expect(screen.getByText(/^Open house/)).toBeInTheDocument();
       expect(screen.getByText('Price reduced')).toBeInTheDocument();
-      // The marketing pill itself is still one slot, filled by priority.
+      // The pill itself is still one slot, filled by priority.
       expect(screen.queryByText('New construction')).not.toBeInTheDocument();
-
-      // Marketing takes the top row, open house follows.
-      const stack = container.querySelector('.absolute.inset-x-3.flex.flex-col');
-      expect([...(stack?.children ?? [])].map((el) => el.textContent)).toEqual([
-        'Price reduced',
-        'Open: Sat 11am–1pm (9/5)',
-      ]);
-    });
-
-    /** Brand fill, and no trace of the full-width gradient band this used to be. */
-    it('fills the pill with the brand colour', () => {
-      const { container } = render(<ListingCard listing={aListingCardRow({ openHouse })} />);
-
-      const pill = openHousePill();
-      expect(pill.className).toContain('bg-brand');
-      expect(pill.className).toContain('text-white');
-      expect(container.querySelector('.bg-gradient-to-t')).toBeNull();
-    });
-
-    /**
-     * The two badges share their sizing and share the width cap that keeps them clear of the save
-     * control; they deliberately differ in fill, weight and shape.
-     *
-     * Asserted as shared classes rather than as a set difference, because the difference is no
-     * longer a short list: this badge wraps and the marketing pill truncates, which is the point of
-     * it. What must not drift is the geometry — padding, type size and the width reservation — so
-     * that is what is pinned.
-     */
-    it('shares the marketing pill’s sizing and width cap', () => {
-      const withBoth = render(
-        <ListingCard listing={aListingCardRow({ openHouse, priceReduced: true })} />,
-      );
-
-      const classes = (el: HTMLElement) => new Set(el.className.split(/\s+/).filter(Boolean));
-      const marketing = classes(withBoth.getByText('Price reduced'));
-      const openHouseClasses = classes(withBoth.getByText('Open:').parentElement as HTMLElement);
-
-      for (const shared of ['max-w-[calc(100%-2rem)]', 'px-2', 'py-1', 'shadow-card'])
-        expect([shared, marketing.has(shared), openHouseClasses.has(shared)]).toEqual([
-          shared,
-          true,
-          true,
-        ]);
-
-      expect(openHouseClasses.has('bg-brand')).toBe(true);
-      expect(marketing.has('bg-white')).toBe(true);
-    });
-
-    /**
-     * The one thing this badge may never do is cut its own text: the date is the reason it exists,
-     * and at 11px it needed up to 173px against the 133px it is allowed. The type size is what
-     * gives, so it stays on one line — this pins the size, because raising it back onto the card's
-     * usual scale silently clips the date again.
-     */
-    it('sets its type small enough that the date is never cut', () => {
-      render(<ListingCard listing={aListingCardRow({ openHouse })} />);
-
-      expect(openHousePill().className).toContain('text-[8px]');
-    });
-
-    /**
-     * The whole affordance lives inside the fixed-aspect image. This is the constraint that shaped
-     * every version of it: an open-house row *below* the image was the only row those cards had and
-     * others did not, and it made tiles in a grid different heights.
-     */
-    it('keeps the whole affordance inside the image, where it costs no card height', () => {
-      const { container } = render(<ListingCard listing={aListingCardRow({ openHouse })} />);
-
-      const image = container.querySelector('.aspect-square');
-      expect(image).toContainElement(screen.getByText('Open:'));
-      // Nothing about it leaked into the info block below the image.
-      expect(container.querySelector('.pt-2')?.textContent).not.toMatch(/Open:/);
     });
 
     it('never lets either image affordance displace a required disclosure label', () => {
@@ -361,7 +279,7 @@ describe('ListingCard', () => {
         <ListingCard listing={aListingCardRow({ openHouse, isSample: true, sponsored: true })} />,
       );
 
-      expect(screen.getByText('Open:')).toBeInTheDocument();
+      expect(screen.getByText(/^Open house/)).toBeInTheDocument();
       expect(screen.getByText(/sample data/i)).toBeInTheDocument();
       expect(screen.getByText('Sponsored')).toBeInTheDocument();
     });
@@ -416,46 +334,6 @@ describe('ListingCard', () => {
       });
 
       expect(new Set(infoRowCounts).size).toBe(1);
-    });
-
-    /**
-     * The invariant most likely to be broken by a future change to the image overlays, asserted
-     * structurally because jsdom computes no layout.
-     *
-     * A card's height is the image (fixed `aspect-square`) plus the info block. Nothing an overlay
-     * does may add to either — every badge is absolutely positioned inside the image, so it is out
-     * of flow and contributes no height. This has been got wrong once already: the open-house
-     * date/time began as a text row below the image and made open-house tiles taller than their
-     * neighbours in the grid.
-     */
-    it('adds no in-flow element to a card for any image overlay', () => {
-      const plain = render(<ListingCard listing={aListingCardRow()} />);
-      const busy = render(
-        <ListingCard
-          listing={aListingCardRow({
-            featured: true,
-            openHouse: {
-              startsAt: '2026-09-05T15:00:00.000Z',
-              endsAt: '2026-09-05T17:00:00.000Z',
-              remarks: null,
-            },
-          })}
-        />,
-      );
-
-      const shape = (c: HTMLElement) => {
-        const image = c.querySelector('.aspect-square');
-        const inFlowOverlays = [...(image?.children ?? [])].filter(
-          (el) => !el.className.includes('absolute'),
-        );
-        return {
-          // The image's only in-flow child is the photo itself, however many badges are stacked.
-          inFlowChildrenOfImage: inFlowOverlays.length,
-          infoRows: c.querySelector('.pt-2')?.children.length ?? 0,
-        };
-      };
-
-      expect(shape(busy.container)).toEqual(shape(plain.container));
     });
   });
   /**

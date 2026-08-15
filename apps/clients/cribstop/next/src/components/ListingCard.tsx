@@ -9,7 +9,7 @@ import {
   formatListingLocation,
   formatListingPrice,
   formatLotSize,
-  formatOpenHouseBadge,
+  formatOpenHouseWhen,
 } from '@/lib/listing-format';
 import ListingAttribution from '@/components/listing/ListingAttribution';
 import ListingImage from '@/components/listing/ListingImage';
@@ -53,18 +53,18 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
   const soldLine = isSold ? formatClosePrice(listing.closePrice, listing.closeDate) : null;
 
   /**
-   * Open house is a pill in the top-left stack, with its date and time on the row beneath it.
+   * Open house gets its own full-width band across the foot of the image, not the corner pill.
    *
-   * Three shapes have been tried and each failed on one of two things — card height, or the date.
-   * A card once carried three separate affordances, including a full date/time **text row below the
-   * image**: that row was the only one open-house cards had and other cards did not, so tiles in a
-   * grid came out different heights. Collapsing it into a single corner pill fixed the height and
-   * cost the date, and "Open Sat" does not say *which* Saturday — for an open house that is a
-   * wasted trip to a house. A full-width band across the foot of the image kept both, but put a
-   * gradient scrim over the photo to stay legible.
+   * A card once carried three separate open-house affordances (a corner badge, a star chip beside
+   * the title, and a full date/time text row). The text row was the only row open-house cards had
+   * and other cards did not, which is what made tiles in a grid different heights — so it had to
+   * go. Collapsing everything into the corner pill fixed the height but cost the date, and "Open
+   * Sat" does not say *which* Saturday. An open house is the one listing fact where being off by a
+   * week means a wasted trip to a house, so the whole statement has to be legible.
    *
-   * This keeps both and drops the scrim: two rows in the same top-left stack as the marketing pill,
-   * inside the fixed-aspect image, so the card height is untouched and the whole statement fits.
+   * The band solves both: it spans the card and stacks the label over the when, so the calendar
+   * date survives instead of being truncated away, and it sits inside the fixed-aspect image, so it
+   * costs no card height at all.
    *
    * A **sold** row never shows one. The API only sends upcoming occurrences, but a sold listing
    * with one would be actively misleading, so the sold ribbon wins outright.
@@ -72,11 +72,10 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
   const openHouse = !isSold && listing.openHouse ? listing.openHouse : null;
 
   /**
-   * The marketing pill shares the top-left stack with open house rather than contending for one
-   * slot — it takes the top row when both are present. The required disclosure labels (sample,
-   * sponsored) are not in this rotation and never have been: they have their own guaranteed row
-   * below the image, because a marketing badge must never be able to displace a label that has to
-   * be shown.
+   * The corner pill is now purely marketing, and no longer contends with open house — moving open
+   * house out is what freed it. The required disclosure labels (sample, sponsored) were never in
+   * this rotation and still are not: they have their own guaranteed row below the image, because a
+   * marketing badge must never be able to displace a label that has to be shown.
    */
   const marketingBadge = listing.priceReduced
     ? 'Price reduced'
@@ -125,81 +124,35 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
           </span>
         )}
 
-        {/*
-         * The image's badge stack: marketing pill, then open house, then its date and time.
-         *
-         * **One positioned container holding all of them**, rather than each badge placing itself.
-         * A listing can be Featured *and* have an open house, so as separate absolutes they would
-         * have needed hand-computed `top` offsets that stayed correct for every combination — the
-         * kind of arithmetic that is right when written and wrong after the next addition. Stacked
-         * in a flex column they cannot collide by construction, whatever subset is present.
-         *
-         * The whole stack is absolutely positioned inside the fixed-aspect image, so it costs **no
-         * card height**. That is the constraint that shaped this: an open house once had a text row
-         * below the image, which was the only row those cards had and others did not, and it made
-         * tiles in a grid different heights (#79a90aa).
-         */}
-        {(marketingBadge || openHouse) && (
-          <div
-            /*
-             * `inset-x-3`, not `left-3` alone: the children cap themselves with percentage widths,
-             * and a percentage against a shrink-to-fit parent is a cyclic dependency the browser
-             * resolves by collapsing it — measured, the "Featured" pill came out 28px wide and
-             * truncated to nothing. Pinning both edges gives this box a definite width (the image
-             * less its two gutters) for those percentages to resolve against. `items-start` keeps
-             * each pill sized to its own content inside it.
-             */
-            className={`absolute inset-x-3 flex flex-col items-start gap-1 ${
+        {marketingBadge && (
+          <span
+            // Width is capped so the pill can never run under the save control at `right-3`;
+            // 3.5rem is that control plus its gutter.
+            className={`absolute left-3 max-w-[calc(100%-3.5rem)] truncate rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-ink shadow-card ${
               isSold ? 'top-9' : 'top-3'
             }`}
           >
-            {marketingBadge && (
-              <span
-                // Only the top row shares the save control's band, so only it is capped short of
-                // `right-3`. 2rem of this container is that control plus its gutter.
-                className="max-w-[calc(100%-2rem)] truncate rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-ink shadow-card"
-              >
-                {marketingBadge}
-              </span>
-            )}
+            {marketingBadge}
+          </span>
+        )}
 
-            {openHouse && (
-              /*
-               * One pill, carrying its own date: `Open (8/16)`.
-               *
-               * The date is the part that must survive. A corner badge saying "Open Sat" was tried
-               * and does not say *which* Saturday, and for an open house being off by a week is a
-               * wasted trip to a house — which is why this spent time as a two-line band and then
-               * as a pill with a second row under it. Both were the full string looking for room.
-               *
-               * **The type size is set by what has to fit, not by the type scale.** Measured at a
-               * 189px grid card, this badge has 133px once the save control's band is reserved, and
-               * at the card's usual 11px the string needs 136px at its shortest and 173px at its
-               * longest ("Open: Sat 12:30–4:30pm (11/22)") — so the date, the whole reason this
-               * badge exists, was clipped in every realistic case. 10px and 9px do not close it
-               * either (still over by 26px and 11px on the longest), and neither does trimming the
-               * padding. 8px is the first size where every realistic schedule fits on one line,
-               * with 3px to spare on the worst of them.
-               *
-               * `truncate` stays as a backstop rather than as the mechanism: nothing realistic
-               * reaches it, but without it a pathological string would spill across the save
-               * control instead of clipping.
-               *
-               * Brand fill, deliberately not the marketing pill's white. An open house is
-               * time-bound in a way nothing else on the card is — it is the only badge that expires
-               * — so the fill separates it at a glance from "Featured", which is a standing
-               * property of the listing. `bg-brand` with `text-white` is the pairing used for
-               * brand-filled controls throughout the app.
-               */
-              <span className="max-w-[calc(100%-2rem)] truncate rounded-full bg-brand px-2 py-1 text-[8px] font-medium text-white shadow-card">
-                {/*
-                 * Only the word is bold, so this reads as a label and its value rather than as one
-                 * undifferentiated string — at 11px on a colour fill, a uniform weight makes
-                 * "Open Sat 11am" scan as a single run of text.
-                 */}
-                <span className="font-bold">Open:</span> {formatOpenHouseBadge(openHouse)}
-              </span>
-            )}
+        {/*
+         * Two lines, because one does not fit: a grid card is ~181px wide and the label plus the
+         * when need ~187px on a single 11px line. Stacking them is what lets the calendar date
+         * survive instead of being truncated away.
+         *
+         * The scrim is what makes this legible over an arbitrary photo — white text on an unknown
+         * image is a coin flip otherwise. It fades rather than sitting as a hard bar so it reads
+         * as part of the image, and `pt-6` gives the gradient room to do that.
+         */}
+        {openHouse && (
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink/90 via-ink/70 to-transparent px-3 pb-2 pt-6">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-white/85">
+              Open house
+            </p>
+            <p className="truncate text-[11px] font-semibold text-white">
+              {formatOpenHouseWhen(openHouse)}
+            </p>
           </div>
         )}
 
