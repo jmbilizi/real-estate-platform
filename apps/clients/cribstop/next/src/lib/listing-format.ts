@@ -129,35 +129,14 @@ export function hasMapCoordinates(listing: {
 }
 
 /**
- * The *when* of an open house, for the card — "Sat, Sep 5 · 9am–1pm".
+ * An open house's time range — "11am–1pm".
  *
- * The API populates `openHouse` **only** from an upcoming occurrence (`ends_at > now()`), so
- * "upcoming" is never re-derived here and an occurrence the API did not send is never displayed.
- *
- * A card used to carry three separate open-house affordances (a badge, a star chip beside the title,
- * and a full date/time line). The line was also the only text row that existed on open-house cards
- * and nowhere else, so it made tiles in a grid different heights, and collapsing all three into a
- * corner pill then lost the date: "Open Sat" does not tell a consumer *which* Saturday, and an open
- * house is the one listing fact where being off by a week wastes a trip to a house.
- *
- * The card now gives it a band across the foot of the image, with "Open house" as a label above
- * this string. Measured rather than assumed: a grid card is ~181px wide, and the label and the when
- * on one 11px line need ~187px, so a single line could only ever have been truncated — which is how
- * the date got lost the first time. Two lines fit, and cost no card height because the band sits
- * inside the fixed-aspect image.
- *
- * `formatOpenHouse` remains the long form for the detail page.
+ * Shared by the card's pill and the card's long form, because the two differ in what surrounds the
+ * range, never in the range itself. It was duplicated once and the copies are exactly the kind that
+ * drift: every rule below is a bug that was fixed in one place and would have to be re-fixed in the
+ * other.
  */
-export function formatOpenHouseWhen(openHouse: OpenHouse): string {
-  const starts = new Date(openHouse.startsAt);
-  const ends = new Date(openHouse.endsAt);
-
-  const day = starts.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    timeZone: PROPERTY_TIME_ZONE,
-  });
+function openHouseTimeRange(starts: Date, ends: Date): string {
   // Lowercase, unspaced meridiem ("9am") is both the listing-sheet convention and materially
   // narrower — the badge sits on the image next to the save control and has little room.
   //
@@ -180,7 +159,73 @@ export function formatOpenHouseWhen(openHouse: OpenHouse): string {
   const endText = hour(ends);
   const sameMeridiem = startText.slice(-2) === endText.slice(-2);
 
-  return `${day} · ${sameMeridiem ? startText.slice(0, -2) : startText}–${endText}`;
+  return `${sameMeridiem ? startText.slice(0, -2) : startText}–${endText}`;
+}
+
+/**
+ * The *schedule* inside the card's open-house pill — `Sat 11am–1pm (9/5)`.
+ *
+ * The pill reads `Open: Sat 11am–1pm (9/5)`, but the `Open:` label is the card's own markup rather
+ * than part of this string: it is bold and the schedule is not, so the two cannot be one text node.
+ * This function owns everything derived from the listing; the card owns the word.
+ *
+ * The API populates `openHouse` **only** from an upcoming occurrence (`ends_at > now()`), so
+ * "upcoming" is never re-derived here and an occurrence the API did not send is never displayed.
+ *
+ * Everything about this string is width. A card tile is ~189px and this pill shares its row with
+ * the save control, which is why the affordance has been rebuilt so many times: three separate
+ * pieces once (a badge, a star chip, a date row), then a corner pill that fit by dropping the date,
+ * then a band across the image, then a pill with a second row beneath it.
+ *
+ * The **numeric date in parentheses** is what finally makes one pill work. `Sat, Sep 5` and `(9/5)`
+ * say the same thing, and the second costs a third of the width — so the weekday and the time range
+ * fit alongside it rather than being traded away for it. That matters because the date is the part
+ * that must survive: "Open Sat" does not say *which* Saturday, and for an open house being off by a
+ * week is a wasted trip to a house.
+ *
+ * Formatted in the property's time zone, not the viewer's, for the same reason as every other date
+ * here: an open house happens where the house is.
+ *
+ * `formatOpenHouse` remains the long form for the detail page.
+ */
+export function formatOpenHouseBadge(openHouse: OpenHouse): string {
+  const starts = new Date(openHouse.startsAt);
+  const ends = new Date(openHouse.endsAt);
+
+  const weekday = starts.toLocaleDateString('en-US', {
+    weekday: 'short',
+    timeZone: PROPERTY_TIME_ZONE,
+  });
+
+  // `numeric` rather than `2-digit`: "9/5", not "09/05" — the padding buys nothing at this size and
+  // costs two characters in the one place characters are scarce.
+  const date = starts.toLocaleDateString('en-US', {
+    month: 'numeric',
+    day: 'numeric',
+    timeZone: PROPERTY_TIME_ZONE,
+  });
+
+  return `${weekday} ${openHouseTimeRange(starts, ends)} (${date})`;
+}
+
+/**
+ * The *when* of an open house in full — "Sat, Sep 5 · 11am–1pm".
+ *
+ * Kept for surfaces with room to spell it out. The card no longer uses it: see
+ * `formatOpenHouseBadge` for why a tile cannot afford this string.
+ */
+export function formatOpenHouseWhen(openHouse: OpenHouse): string {
+  const starts = new Date(openHouse.startsAt);
+  const ends = new Date(openHouse.endsAt);
+
+  const day = starts.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    timeZone: PROPERTY_TIME_ZONE,
+  });
+
+  return `${day} · ${openHouseTimeRange(starts, ends)}`;
 }
 
 export function formatOpenHouse(openHouse: OpenHouse): string {
