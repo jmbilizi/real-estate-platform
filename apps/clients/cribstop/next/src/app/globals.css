@@ -504,3 +504,40 @@ body {
   overflow: hidden;
   pointer-events: none;
 }
+
+/*
+ * The open-house badge sizes itself off the **card**, not the viewport.
+ *
+ * A viewport breakpoint is the wrong axis here, and measurably so. The same `ListingCard` renders at
+ * very different widths depending on where it sits: on the search grid it is 335px at a 390px
+ * viewport (one column, full width) but only 139px at 768px and 189px at 1536px, because there it is
+ * two or three columns inside a 48%-wide results panel — so the card is *widest* on a phone and
+ * narrowest on a laptop. It renders at different widths again in the home-page carousels
+ * (`CARD_WIDTH_CLASS`) and on the favourites grid. Any `sm:`/`md:` scale tuned for one of those
+ * surfaces is wrong on the others, and silently wrong the next time a grid changes.
+ *
+ * A container query asks the only question that matters: how much room does *this* card have?
+ *
+ * The threshold is measured rather than guessed. The full string needs 173px at 11px, and the badge
+ * is capped at the card's width less 24px of gutters and the 32px reserved for the save control — so
+ * the full form needs a card of at least 229px, and 232px leaves a little margin. Below that the
+ * compact form shows the date alone, which fits every card down to the 139px worst case.
+ *
+ * The date is what survives the squeeze, deliberately: "Open Sat" does not say *which* Saturday, and
+ * being a week out on an open house is a wasted trip to a house. The time is the part a consumer
+ * checks on the listing itself.
+ */
+.listing-card-media {
+  container-type: inline-size;
+}
+.open-house-full {
+  display: none;
+}
+@container (min-width: 232px) {
+  .open-house-full {
+    display: inline;
+  }
+  .open-house-compact {
+    display: none;
+  }
+}

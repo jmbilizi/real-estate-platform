@@ -10,6 +10,7 @@ import {
   formatListingPrice,
   formatLotSize,
   formatOpenHouseBadge,
+  formatOpenHouseDate,
 } from '@/lib/listing-format';
 import ListingAttribution from '@/components/listing/ListingAttribution';
 import ListingImage from '@/components/listing/ListingImage';
@@ -109,8 +110,8 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
         openPanel();
       }}
     >
-      {/* Image */}
-      <div className="relative aspect-square overflow-hidden rounded-md bg-surface-soft">
+      {/* Image. `listing-card-media` makes this the container the open-house badge measures. */}
+      <div className="listing-card-media relative aspect-square overflow-hidden rounded-md bg-surface-soft">
         <ListingImage
           media={listing.primaryMedia}
           className={`h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04] ${
@@ -172,18 +173,19 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
                * wasted trip to a house — which is why this spent time as a two-line band and then
                * as a pill with a second row under it. Both were the full string looking for room.
                *
-               * **The type size is set by what has to fit, not by the type scale.** Measured at a
-               * 189px grid card, this badge has 133px once the save control's band is reserved, and
-               * at the card's usual 11px the string needs 136px at its shortest and 173px at its
-               * longest ("Open: Sat 12:30–4:30pm (11/22)") — so the date, the whole reason this
-               * badge exists, was clipped in every realistic case. 10px and 9px do not close it
-               * either (still over by 26px and 11px on the longest), and neither does trimming the
-               * padding. 8px is the first size where every realistic schedule fits on one line,
-               * with 3px to spare on the worst of them.
+               * **The content gives, not the type size.** This was briefly 8px, on the reasoning
+               * that the string had to fit — and it was unreadable. It also does not generalise:
+               * measured across the search grid, this badge has 133px of room at a 1536px viewport
+               * but only 83px at 768px, where the card is 139px wide, and the full string needs
+               * 173px at 11px. There is no font size that fits every card and stays legible.
                *
-               * `truncate` stays as a backstop rather than as the mechanism: nothing realistic
-               * reaches it, but without it a pathological string would spill across the save
-               * control instead of clipping.
+               * So the type stays at the card's own 11px and the *content* adapts to the card: the
+               * schedule below a measured threshold, the date always. Which one renders is a
+               * container query rather than a `md:` breakpoint, because the card's width does not
+               * follow the viewport's — see the note on `.listing-card-media` in `globals.css`.
+               *
+               * `truncate` stays as a backstop rather than as the mechanism: neither form reaches
+               * it, but without it a pathological string would spill across the save control.
                *
                * Brand fill, deliberately not the marketing pill's white. An open house is
                * time-bound in a way nothing else on the card is — it is the only badge that expires
@@ -191,13 +193,18 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
                * property of the listing. `bg-brand` with `text-white` is the pairing used for
                * brand-filled controls throughout the app.
                */
-              <span className="max-w-[calc(100%-2rem)] truncate rounded-full bg-brand px-2 py-1 text-[8px] font-medium text-white shadow-card">
+              <span className="max-w-[calc(100%-2rem)] truncate rounded-full bg-brand px-2 py-1 text-[11px] font-medium text-white shadow-card">
                 {/*
                  * Only the word is bold, so this reads as a label and its value rather than as one
                  * undifferentiated string — at 11px on a colour fill, a uniform weight makes
                  * "Open Sat 11am" scan as a single run of text.
+                 *
+                 * Both forms are rendered and the container query shows exactly one. `display: none`
+                 * rather than visual hiding, so a screen reader is never handed the date twice.
                  */}
-                <span className="font-bold">Open:</span> {formatOpenHouseBadge(openHouse)}
+                <span className="font-bold">Open:</span>{' '}
+                <span className="open-house-full">{formatOpenHouseBadge(openHouse)}</span>
+                <span className="open-house-compact">{formatOpenHouseDate(openHouse)}</span>
               </span>
             )}
           </div>

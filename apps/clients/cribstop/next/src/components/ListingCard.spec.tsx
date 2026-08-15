@@ -230,14 +230,23 @@ describe('ListingCard', () => {
     /** The pill, as a whole: the label is its own element, so read the text off the parent. */
     const openHousePill = () => screen.getByText('Open:').parentElement as HTMLElement;
 
-    it('renders one pill carrying the weekday, time range and calendar date', () => {
+    /**
+     * Both forms are in the DOM and a container query shows exactly one, so these read the two
+     * spans rather than the pill's combined text — jsdom applies no stylesheet, so `textContent`
+     * here is both forms concatenated and asserting on it would be asserting on a thing no user
+     * sees.
+     */
+    const fullForm = () => document.querySelector('.open-house-full') as HTMLElement;
+    const compactForm = () => document.querySelector('.open-house-compact') as HTMLElement;
+
+    it('offers a full form and a date-only form, and the date is in both', () => {
       const { container } = render(<ListingCard listing={aListingCardRow({ openHouse })} />);
 
       // The date is the point. "Open Sat" never said *which* Saturday, and an open house is the
-      // one listing fact where being off by a week is a wasted trip to a house. Asserted as an
-      // exact visible string: this was once abbreviated with the real value hidden behind `title`,
-      // which is not the same as a consumer being able to read it.
-      expect(openHousePill().textContent).toBe('Open: Sat 11am–1pm (9/5)');
+      // one listing fact where being off by a week is a wasted trip to a house — so it is the one
+      // part that survives into the narrow form, where the schedule cannot fit.
+      expect(fullForm().textContent).toBe('Sat 11am–1pm (9/5)');
+      expect(compactForm().textContent).toBe('9/5');
 
       // Exactly one affordance — not the old three (pill + star chip + date row), and not the
       // pill-plus-row this briefly became.
@@ -278,17 +287,17 @@ describe('ListingCard', () => {
 
       // Open house used to win the single corner slot and suppress these outright. Both pills now
       // sit in one top-left stack, so both can be true at once — which they are.
-      expect(openHousePill().textContent).toBe('Open: Sat 11am–1pm (9/5)');
+      expect(fullForm().textContent).toBe('Sat 11am–1pm (9/5)');
       expect(screen.getByText('Price reduced')).toBeInTheDocument();
       // The marketing pill itself is still one slot, filled by priority.
       expect(screen.queryByText('New construction')).not.toBeInTheDocument();
 
       // Marketing takes the top row, open house follows.
       const stack = container.querySelector('.absolute.inset-x-3.flex.flex-col');
-      expect([...(stack?.children ?? [])].map((el) => el.textContent)).toEqual([
-        'Price reduced',
-        'Open: Sat 11am–1pm (9/5)',
-      ]);
+      const rows = [...(stack?.children ?? [])];
+      expect(rows).toHaveLength(2);
+      expect(rows[0].textContent).toBe('Price reduced');
+      expect(rows[1]).toContainElement(screen.getByText('Open:'));
     });
 
     /** Brand fill, and no trace of the full-width gradient band this used to be. */
@@ -331,15 +340,15 @@ describe('ListingCard', () => {
     });
 
     /**
-     * The one thing this badge may never do is cut its own text: the date is the reason it exists,
-     * and at 11px it needed up to 173px against the 133px it is allowed. The type size is what
-     * gives, so it stays on one line — this pins the size, because raising it back onto the card's
-     * usual scale silently clips the date again.
+     * The badge stays on the card's own type scale. It was briefly 8px — the only size at which the
+     * full string fit a narrow card — and that was unreadable; the content adapts instead, which is
+     * what the two forms above are for. Pinned because dropping the size is the tempting fix the
+     * next time this does not fit.
      */
-    it('sets its type small enough that the date is never cut', () => {
+    it('stays at the card’s readable type size', () => {
       render(<ListingCard listing={aListingCardRow({ openHouse })} />);
 
-      expect(openHousePill().className).toContain('text-[8px]');
+      expect(openHousePill().className).toContain('text-[11px]');
     });
 
     /**

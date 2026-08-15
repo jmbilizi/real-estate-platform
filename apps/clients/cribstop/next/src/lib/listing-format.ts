@@ -188,6 +188,25 @@ function openHouseTimeRange(starts: Date, ends: Date): string {
  *
  * `formatOpenHouse` remains the long form for the detail page.
  */
+/**
+ * The open-house date alone — `11/22`.
+ *
+ * What the badge falls back to on a card too narrow for the full schedule, which on the search grid
+ * is most of them: a two- or three-column card is 139–189px, and the full string needs 229px of card
+ * to fit. Which form renders is decided by a container query on the card, not here — see
+ * `.open-house-full` in `globals.css`.
+ *
+ * The date is the part that survives, because it is the part that costs a wasted trip if it is
+ * wrong. The time is on the detail page.
+ */
+export function formatOpenHouseDate(openHouse: OpenHouse): string {
+  return new Date(openHouse.startsAt).toLocaleDateString('en-US', {
+    month: 'numeric',
+    day: 'numeric',
+    timeZone: PROPERTY_TIME_ZONE,
+  });
+}
+
 export function formatOpenHouseBadge(openHouse: OpenHouse): string {
   const starts = new Date(openHouse.startsAt);
   const ends = new Date(openHouse.endsAt);
