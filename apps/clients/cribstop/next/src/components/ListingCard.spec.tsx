@@ -305,26 +305,27 @@ describe('ListingCard', () => {
       expect(rows[1]).toContainElement(screen.getByText('Open:'));
     });
 
-    /** Brand fill, and no trace of the full-width gradient band this used to be. */
-    it('fills the pill with the brand colour', () => {
+    /** The same fill as the marketing pill, and no trace of the full-width gradient band. */
+    it('fills the pill with the shared badge colour', () => {
       const { container } = render(<ListingCard listing={aListingCardRow({ openHouse })} />);
 
       const pill = openHousePill();
-      expect(pill.className).toContain('bg-brand');
-      expect(pill.className).toContain('text-white');
+      expect(pill.className).toContain('bg-white');
+      expect(pill.className).toContain('text-ink');
+      expect(pill.className).not.toContain('bg-brand');
       expect(container.querySelector('.bg-gradient-to-t')).toBeNull();
     });
 
     /**
-     * The two badges share their sizing and share the width cap that keeps them clear of the save
-     * control; they deliberately differ in fill, weight and shape.
+     * The two badges share their sizing, their fill and the width cap that keeps them clear of the
+     * save control; they deliberately differ in weight and in wrapping behaviour.
      *
      * Asserted as shared classes rather than as a set difference, because the difference is no
      * longer a short list: this badge wraps and the marketing pill truncates, which is the point of
      * it. What must not drift is the geometry — padding, type size and the width reservation — so
      * that is what is pinned.
      */
-    it('shares the marketing pill’s sizing and width cap', () => {
+    it('shares the marketing pill’s sizing, fill and width cap', () => {
       const withBoth = render(
         <ListingCard listing={aListingCardRow({ openHouse, priceReduced: true })} />,
       );
@@ -333,15 +334,12 @@ describe('ListingCard', () => {
       const marketing = classes(withBoth.getByText('Price reduced'));
       const openHouseClasses = classes(withBoth.getByText('Open:').parentElement as HTMLElement);
 
-      for (const shared of ['max-w-[calc(100%-2rem)]', 'px-2', 'py-1', 'shadow-card'])
+      for (const shared of ['max-w-[calc(100%-2rem)]', 'px-2', 'py-1', 'shadow-card', 'bg-white'])
         expect([shared, marketing.has(shared), openHouseClasses.has(shared)]).toEqual([
           shared,
           true,
           true,
         ]);
-
-      expect(openHouseClasses.has('bg-brand')).toBe(true);
-      expect(marketing.has('bg-white')).toBe(true);
     });
 
     /**

@@ -188,17 +188,18 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
                * `truncate` stays as a backstop rather than as the mechanism: neither form reaches
                * it, but without it a pathological string would spill across the save control.
                *
-               * Brand fill, deliberately not the marketing pill's white. An open house is
-               * time-bound in a way nothing else on the card is — it is the only badge that expires
-               * — so the fill separates it at a glance from "Featured", which is a standing
-               * property of the listing. `bg-brand` with `text-white` is the pairing used for
-               * brand-filled controls throughout the app.
+               * Same white fill as the marketing pill above it. This was `bg-brand`/`text-white`,
+               * on the reasoning that an open house expires and a standing property like "Featured"
+               * does not, so the two should not look alike. Two differently-coloured pills stacked
+               * three pixels apart in one corner read as a colour clash rather than as a
+               * distinction, and the brand fill pulled the eye off the photo. The bold `Open:`
+               * label already separates them.
                */
-              <span className="max-w-[calc(100%-2rem)] truncate rounded-full bg-brand px-2 py-1 text-[11px] font-medium text-white shadow-card">
+              <span className="max-w-[calc(100%-2rem)] truncate rounded-full bg-white px-2 py-1 text-[11px] font-medium text-ink shadow-card">
                 {/*
                  * Only the word is bold, so this reads as a label and its value rather than as one
-                 * undifferentiated string — at 11px on a colour fill, a uniform weight makes
-                 * "Open Sat 11am" scan as a single run of text.
+                 * undifferentiated string — at 11px, a uniform weight makes "Open Sat 11am" scan as
+                 * a single run of text.
                  *
                  * Both forms are rendered and the container query shows exactly one. `display: none`
                  * rather than visual hiding, so a screen reader is never handed the date twice.
