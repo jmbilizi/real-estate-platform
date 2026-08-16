@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ListingDetailContent from './ListingDetailContent';
 import ListingModalFrame from '@/components/listing/ListingModalFrame';
@@ -119,10 +119,32 @@ export default function ListingDetailModal({
   /**
    * The delay is the exit animation: the panel finishes sliding out, and only then does `onClosed`
    * take the URL and the panel's mount with it. Reversing the order would snap it off the screen.
+   *
+   * The timer is held and guarded because it moves history. `onClosed` steps back an entry for a
+   * soft open, so firing it twice runs `history.back()` twice: the second pop leaves the search page
+   * altogether, and returning to it is a fresh mount and a full refetch — precisely the round trip
+   * this panel exists to avoid. Two ways in: double-clicking the back chevron, and pressing browser
+   * Back within the 310ms window, which unmounts this component while the timer is still pending.
+   * The `open` guard closes the first, the cleanup closes the second.
    */
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+    },
+    [],
+  );
+
   const handleClose = () => {
+    // Already closing — the timer from the first call still owns the history step.
+    if (!open) return;
     setOpen(false);
-    setTimeout(() => (onClosed ? onClosed() : router.back()), 310);
+    closeTimer.current = setTimeout(() => {
+      closeTimer.current = null;
+      if (onClosed) onClosed();
+      else router.back();
+    }, 310);
   };
 
   const handleRetry = () => setRetryCount((c) => c + 1);

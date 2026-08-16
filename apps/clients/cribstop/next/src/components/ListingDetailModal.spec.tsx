@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { aListingDetail } from '@/test/fixtures';
 import { getListing, ListingsApiError, toListingDetailView } from '@/lib/api/listings';
 import { clearListingCache } from '@/lib/api/listings-cache';
@@ -14,11 +14,15 @@ jest.mock('@/lib/api/listings', () => {
 
 // The fetch lifecycle is what this suite tests, not the detail page's own rendering — that's
 // ListingDetailContent's own spec. A stub keeps these tests from depending on the redux store,
-// SingleListingMap/leaflet, and the similar-homes fetch that component owns.
+// SingleListingMap/leaflet, and the similar-homes fetch that component owns. The close button
+// exercises the same `onClose` (= `handleClose`) the real chevron would.
 jest.mock('@/components/ListingDetailContent', () => ({
   __esModule: true,
-  default: ({ listing }: { listing: { id: string } }) => (
-    <div data-testid="listing-detail-content">{listing.id}</div>
+  default: ({ listing, onClose }: { listing: { id: string }; onClose: () => void }) => (
+    <div data-testid="listing-detail-content">
+      {listing.id}
+      <button onClick={onClose}>Close listing</button>
+    </div>
   ),
 }));
 
@@ -172,5 +176,55 @@ describe('ListingDetailModal', () => {
 
     expect(await screen.findByTestId('listing-detail-content')).toBeInTheDocument();
     expect(mockedGetListing).toHaveBeenCalledTimes(1);
+  });
+
+  /*
+   * Regression coverage for the close-timer fix: firing the close control twice used to schedule
+   * the `onClosed` callback (which steps `history.back()` for a soft open) twice, popping the user
+   * off the search page entirely. Fake timers are only switched on after the async render settles,
+   * so the earlier `await`/`findBy*` calls above still run on real timers.
+   */
+  describe('close timer', () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('calls onClosed exactly once when the close control fires twice in a row', async () => {
+      const view = toListingDetailView(aListingDetail());
+      mockedGetListing.mockResolvedValue(view);
+      const onClosed = jest.fn();
+
+      render(<ListingDetailModal id={view.id} onClosed={onClosed} />);
+      const closeButton = await screen.findByText('Close listing');
+
+      jest.useFakeTimers();
+      fireEvent.click(closeButton);
+      fireEvent.click(closeButton); // second call while open is already false — must be a no-op
+
+      act(() => {
+        jest.advanceTimersByTime(310);
+      });
+
+      expect(onClosed).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not call onClosed after unmounting while the close timer is still pending', async () => {
+      const view = toListingDetailView(aListingDetail());
+      mockedGetListing.mockResolvedValue(view);
+      const onClosed = jest.fn();
+
+      const { unmount } = render(<ListingDetailModal id={view.id} onClosed={onClosed} />);
+      const closeButton = await screen.findByText('Close listing');
+
+      jest.useFakeTimers();
+      fireEvent.click(closeButton);
+      unmount();
+
+      act(() => {
+        jest.advanceTimersByTime(310);
+      });
+
+      expect(onClosed).not.toHaveBeenCalled();
+    });
   });
 });
