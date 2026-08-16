@@ -136,6 +136,19 @@ export function highlightMatch(text: string, query: string): React.ReactNode {
   );
 }
 
+/**
+ * How many nearby places one lookup may return.
+ *
+ * Every row costs a reverse-geocode call at each call site, which enriches them with
+ * `Promise.all` — so an uncapped result set is an uncapped burst of concurrent upstream requests
+ * from a single server IP, against a service whose policy is 1 req/s. Capping here rather than at
+ * the two call sites means the bound cannot be forgotten by a third one.
+ *
+ * Eight is comfortably more than the dropdown shows before it scrolls; Overpass returns them in the
+ * order the query produced, which for a radius search is near enough to "closest first".
+ */
+const MAX_NEARBY_PLACES = 8;
+
 // Fetch nearby cities/towns/villages via the internal Overpass proxy (`/api/overpass`).
 // Overpass doesn't reliably emit CORS headers, so this can't hit the upstream API directly
 // from the browser — see src/app/api/overpass/route.ts.
@@ -160,7 +173,7 @@ export async function fetchNearbyLocationsByType(
     }
     const data = await response.json();
     if (!data.elements) return [];
-    return data.elements.map((el: any) => ({
+    return data.elements.slice(0, MAX_NEARBY_PLACES).map((el: any) => ({
       display_name: el.tags?.name || 'Unnamed',
       lat: el.lat,
       lon: el.lon,
