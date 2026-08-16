@@ -9,7 +9,7 @@ import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { createRoot, type Root } from 'react-dom/client';
-import { ListingCardRow } from '@/lib/types';
+import type { ListingCardRow } from '@/lib/types';
 import { openListingPanel } from '@/lib/listing-panel';
 import {
   formatClosePrice,

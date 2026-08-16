@@ -1,6 +1,6 @@
 'use client';
 
-import { Amenity, PropertyType, SearchFilters } from '@/lib/types';
+import type { Amenity, PropertyType, SearchFilters } from '@/lib/types';
 import { isParcelOnlySelection, PARCEL_INTERLOCK_HINT } from '@/lib/store/types';
 import { useEffect, useState } from 'react';
 

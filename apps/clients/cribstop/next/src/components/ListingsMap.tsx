@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
-import { ListingCardRow } from '@/lib/types';
+import type { ListingCardRow } from '@/lib/types';
 import { MAP_PANEL_CLASS } from './map-panel';
 
 interface Props {

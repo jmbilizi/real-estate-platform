@@ -1,17 +1,21 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { PAGE_SIZE_DEFAULT } from '@cribstop/property-contracts';
 import type { ListingCardRow } from '@/lib/types';
 import type { SearchFilters } from '@/lib/types';
 import { ListingsApiError, searchListings } from '@/lib/api/listings';
 import { useToast } from '@/lib/useToast';
 
-const PAGE_SIZE = 20;
-
 export interface ListingSearchResult {
   results: ListingCardRow[];
   /** The exact count of the full filtered set — what the headline count and paging are built on. */
   total: number;
+  /**
+   * The page this hook is currently searching for — not the last one that happened to succeed.
+   * A resolved response may override it (the server clamps an out-of-range page), and only for as
+   * long as that response answers the page being asked for.
+   */
   page: number;
   pageCount: number;
   /** Echoed back by the API so the UI can reconcile what it asked for with what was applied. */
@@ -20,6 +24,25 @@ export interface ListingSearchResult {
   /** A user-facing message from the API error, not one invented here. */
   error: string | null;
   retry: () => void;
+}
+
+/**
+ * What the hook stores, as opposed to what it reports.
+ *
+ * The difference is `page`. State only ever learns a page when a request *resolves*, so storing the
+ * reported page here is what made it stale: a new search spread the previous state while it flipped
+ * to `loading`, and a failed one spread it forever, so a paging UI highlighted the last page that
+ * succeeded rather than the one being fetched — permanently, after an error. The requested page is
+ * an argument this hook already has on every render, so it is reported from there and the response's
+ * page is kept only as an `echo` of the request it answered.
+ */
+interface SearchState extends Omit<ListingSearchResult, 'retry' | 'page'> {
+  /**
+   * The page a resolved response reported, paired with the page that request asked for — so a
+   * server-clamped page can win without outliving the request it belongs to. `null` until the first
+   * response settles.
+   */
+  echo: { requested: number; applied: number } | null;
 }
 
 /**
@@ -40,10 +63,10 @@ export function useListingSearch(
   page: number,
   enabled = true,
 ): ListingSearchResult {
-  const [state, setState] = useState<Omit<ListingSearchResult, 'retry'>>({
+  const [state, setState] = useState<SearchState>({
     results: [],
     total: 0,
-    page,
+    echo: null,
     pageCount: 1,
     appliedFilters: {},
     status: 'loading',
@@ -72,13 +95,13 @@ export function useListingSearch(
 
     setState((prev) => ({ ...prev, status: 'loading', error: null }));
 
-    searchListings({ ...filtersRef.current, page, pageSize: PAGE_SIZE }, controller.signal)
+    searchListings({ ...filtersRef.current, page, pageSize: PAGE_SIZE_DEFAULT }, controller.signal)
       .then((envelope) => {
         if (!active) return;
         setState({
           results: envelope.results,
           total: envelope.total,
-          page: envelope.page,
+          echo: { requested: page, applied: envelope.page },
           pageCount: envelope.pageCount,
           appliedFilters: envelope.appliedFilters,
           status: 'ready',
@@ -104,7 +127,15 @@ export function useListingSearch(
     };
   }, [filterKey, page, attempt, enabled]);
 
-  return { ...state, retry };
-}
+  const { echo, ...rest } = state;
 
-export { PAGE_SIZE };
+  /*
+   * The requested page is the answer except in the one case the server knows better: it resolved
+   * *this* request and clamped the page (an out-of-range page comes back as the last real one).
+   * Anything else — in flight, held, failed, or an echo left over from a page no longer being
+   * asked for — reports what is being searched for now.
+   */
+  const appliedPage = rest.status === 'ready' && echo?.requested === page ? echo.applied : page;
+
+  return { ...rest, page: appliedPage, retry };
+}
