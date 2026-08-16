@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { aListingDetail } from '@/test/fixtures';
 import { searchListings, toListingDetailView } from '@/lib/api/listings';
 import ListingDetailContent from './ListingDetailContent';
@@ -174,5 +174,60 @@ describe('ListingDetailContent — sample labelling', () => {
     await renderAndSettle(<ListingDetailContent listing={view} />);
 
     expect(screen.getByText(/sample data/i)).toBeInTheDocument();
+  });
+});
+
+describe('ListingDetailContent — NAR 7.58 attribution', () => {
+  /**
+   * The disclosure panel always asks `ListingAttribution` for the reduced `courtesy` density — the
+   * Listing Agent card in the sidebar already carries the name, office, phone and email, so the
+   * courtesy line exists to avoid repeating all of it. But `showFullBlock` in `ListingAttribution`
+   * is computed off the row's own `source` before the `courtesy` density is honoured, so a
+   * `brightMLS` row still gets the full block regardless of the density this surface asks for. Before
+   * that ordering was fixed, this was the one path in the app where an IDX row could render with no
+   * contact method at all. Scoped to the disclosure panel because the sidebar's Listing Agent card
+   * independently renders the same agent name, phone and email as plain text.
+   */
+  it('renders the full block for a brightMLS row even though the detail page requests courtesy density', async () => {
+    const view = toListingDetailView(
+      aListingDetail({
+        listing: {
+          source: 'brightMLS',
+          listedBy: 'Jane Q. Agent – Bright Partner Realty',
+          listingAgentName: 'Jane Q. Agent',
+          officeName: 'Bright Partner Realty',
+          brokerPhone: '(301) 555-0199',
+          brokerEmail: 'jane.agent@example.com',
+        },
+      }),
+    );
+    const { container } = await renderAndSettle(<ListingDetailContent listing={view} />);
+
+    const disclosure = container.querySelector(
+      '.text-\\[13px\\].leading-relaxed.text-ink-muted',
+    ) as HTMLElement;
+
+    expect(
+      within(disclosure).getByText('Jane Q. Agent – Bright Partner Realty'),
+    ).toBeInTheDocument();
+    expect(within(disclosure).getByText('Jane Q. Agent')).toBeInTheDocument();
+    expect(within(disclosure).getByRole('link', { name: '(301) 555-0199' })).toBeInTheDocument();
+    expect(
+      within(disclosure).getByRole('link', { name: 'jane.agent@example.com' }),
+    ).toBeInTheDocument();
+    expect(within(disclosure).getByText(/Bright Partner Realty/)).toBeInTheDocument();
+  });
+
+  it('carries the median type-size floor on the attribution line explicitly, rather than inheriting the disclosure panel’s smaller size', async () => {
+    // The disclosure panel itself is `text-[13px]`. Attribution must not fall below the median type
+    // size used for the listing data — `text-sm` (14px) on the rebuilt detail page — so the line has
+    // to set it explicitly rather than inherit the panel's 13px, a floor missed by a pixel that a
+    // future layout change could silently reintroduce.
+    const view = toListingDetailView(aListingDetail({ listing: { source: 'internal' } }));
+    await renderAndSettle(<ListingDetailContent listing={view} />);
+
+    const attribution = screen.getByText(/Listing courtesy of/i);
+    expect(attribution.className).toContain('text-sm');
+    expect(attribution.className).not.toMatch(/text-\[1[0-3]px\]|text-xs/);
   });
 });

@@ -23,11 +23,14 @@ import type { Attribution, ListingSource } from '@cribstop/property-contracts';
  *   and detail view per PRD §6.2, just without the IDX-specific contact requirements that do not
  *   apply to our own inventory.
  *
- * The wording is "Listing by" rather than the IDX-conventional "Listing courtesy of". For our own
- * inventory that is a free choice. For `brightMLS` rows it is not necessarily: Bright's display
- * rules may prescribe the attribution wording, and confirming that is #33's job along with the rest
- * of the display rules and broker sign-off. No Bright row exists yet, so nothing is misattributed
- * today — but do not treat this string as settled for the `brightMLS` branch.
+ * **The two branches word the firm line differently, on purpose.** The reduced branch says "Listing
+ * by {officeName}"; the full block says "Listing courtesy of {officeName}". Wording our own
+ * inventory is a free choice, so the reduced branch uses plain English. Wording an IDX display is
+ * not necessarily ours to make — Bright's display rules may prescribe it — so the full block keeps
+ * the conventional IDX phrasing, which is what an MLS rulebook is most likely to expect, and the
+ * invented wording stays on the branch where inventing is allowed. Settling the IDX string for good
+ * is #33's job, along with the rest of the display rules and broker sign-off. No Bright row exists
+ * yet, so nothing is misattributed today — but do not treat the full block's string as settled.
  *
  * `density="full"` overrides the reduction for surfaces that are not height-constrained (the detail
  * page), where more attribution is never the risk.
@@ -53,6 +56,17 @@ export default function ListingAttribution({
   const { listedBy, officeName, listingAgentName, brokerPhone, brokerEmail } = attribution;
 
   /*
+   * An IDX row always gets the full block, whatever density the surface asked for.
+   *
+   * This check comes **before** `courtesy` on purpose. When `courtesy` was evaluated first it was
+   * the one path in the app where a `brightMLS` row rendered without a contact method — the exact
+   * branch this file's header calls non-negotiable — and because every row is `internal` today the
+   * omission would not have shown up until #33 shipped it to production. A density is a request
+   * about layout; it cannot waive an obligation the row's own `source` creates.
+   */
+  const showFullBlock = density === 'full' || source === 'brightMLS';
+
+  /*
    * The disclosure form, for a surface that already identifies the agent elsewhere.
    *
    * The detail page carries a Listing Agent card with the name, office, phone and email, so
@@ -62,17 +76,21 @@ export default function ListingAttribution({
    * it in a far more prominent position than a footnote. What belongs here is the courtesy
    * attribution itself: which firm the listing came from, and who listed it.
    *
+   * `text-sm` is set here rather than inherited. Attribution must not fall below the median type
+   * size used for the listing data, and inheriting left this line at the enclosing panel's 13px
+   * against a measured median of 14px on the rebuilt detail page — a floor missed by a pixel is
+   * still missed, and one that depends on an ancestor's font size is one the next layout change
+   * breaks silently.
+   *
    * `listedBy` is rendered as delivered, never reassembled from parts.
    */
-  if (density === 'courtesy') {
+  if (density === 'courtesy' && !showFullBlock) {
     return (
-      <p className={className}>
+      <p className={`text-sm leading-snug ${className}`}>
         Listing courtesy of {officeName}. Listed by {listedBy}.
       </p>
     );
   }
-
-  const showFullBlock = density === 'full' || source === 'brightMLS';
 
   if (!showFullBlock) {
     return (
@@ -125,8 +143,15 @@ export default function ListingAttribution({
        * Deliberately NOT truncated, unlike the reduced branch above: 7.58 requires the listing firm
        * to be identified and reasonably prominent, and an ellipsized firm name is arguably neither.
        * This branch is the one carrying that obligation, so it wraps rather than clips.
+       *
+       * "Listing courtesy of" rather than the "Listing by" used in the reduced branch. On our own
+       * inventory the wording is a free choice; on an IDX display it is not necessarily ours to
+       * make — Bright's display rules may prescribe it, and settling that is #33's job with broker
+       * sign-off. So this branch keeps the conventional IDX phrasing, which is what an MLS rulebook
+       * is most likely to expect, and the invented wording stays on the branch where inventing is
+       * allowed.
        */}
-      {!listedBy.endsWith(officeName) && <p>Listing by {officeName}</p>}
+      {!listedBy.endsWith(officeName) && <p>Listing courtesy of {officeName}</p>}
     </div>
   );
 }

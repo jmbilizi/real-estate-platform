@@ -166,7 +166,10 @@ describe('ListingCard', () => {
       );
 
       expect(screen.getByText('Jane Agent')).toBeInTheDocument();
-      expect(screen.getByText(/Listing by Bright Partner Realty/)).toBeInTheDocument();
+      // "Listing courtesy of", not the reduced branch's "Listing by": the full block is the IDX
+      // display, where the conventional phrasing is what Bright's display rules are most likely to
+      // prescribe, so it is not ours to reword ahead of #33. See `ListingAttribution`'s header.
+      expect(screen.getByText(/Listing courtesy of Bright Partner Realty/)).toBeInTheDocument();
     });
 
     it('reduces to the office attribution for our own inventory, where 7.58 does not attach', () => {
