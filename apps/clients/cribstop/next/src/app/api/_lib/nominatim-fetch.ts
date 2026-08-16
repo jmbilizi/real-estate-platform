@@ -1,4 +1,5 @@
 import type { BuiltUrl } from './nominatim';
+import { BRAND } from '@/lib/brand';
 
 /**
  * The one way this app talks to Nominatim.
@@ -38,8 +39,14 @@ export async function proxyNominatim(built: BuiltUrl, label: string): Promise<Re
   try {
     const upstream = await fetch(built.url, {
       headers: {
-        // The policy's requirement, and the thing a browser physically cannot do — see `nominatim`.
-        'User-Agent': 'real-estate-platform/1.0 (https://cribstop.com)',
+        /*
+         * The policy's requirement, and the thing a browser physically cannot do — see `nominatim`.
+         *
+         * The domain comes from `lib/brand`, which owns it: a hardcoded copy is one more place to
+         * miss on a rename, and the identity we present to an upstream whose terms require
+         * identification is a poor place to be out of date.
+         */
+        'User-Agent': `real-estate-platform/1.0 (https://${BRAND.siteDomain.toLowerCase()})`,
         Accept: 'application/json',
       },
       signal: AbortSignal.timeout(NOMINATIM_TIMEOUT_MS),

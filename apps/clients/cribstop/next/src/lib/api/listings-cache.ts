@@ -42,6 +42,20 @@ import type { ListingDetailView } from './listings';
  */
 const TTL_MS = 5 * 60_000;
 
+/**
+ * How many details may be held at once.
+ *
+ * The TTL alone does not bound this. Entries expire only when they are *read* — nothing sweeps —
+ * so a session that opens a hundred listings without reopening any of them holds a hundred full
+ * detail graphs, gallery media and all, for as long as the tab lives. That is the browse pattern
+ * this cache is least useful for and costs the most on.
+ *
+ * Thirty is comfortably past the point where someone is still comparing rather than browsing, which
+ * is the pattern the cache exists to serve. Eviction is least-recently-*stored*, which `Map` gives
+ * for free: iteration order is insertion order, so the oldest key is the first one.
+ */
+const MAX_ENTRIES = 30;
+
 const cache = new Map<string, { listing: ListingDetailView; storedAt: number }>();
 
 /** The cached detail for `id`, or `undefined` if absent or past its TTL. */
@@ -59,7 +73,16 @@ export function readCachedListing(id: string): ListingDetailView | undefined {
 
 /** Records a freshly loaded detail. Keyed on the listing's own id, which is what the URL carries. */
 export function cacheListing(listing: ListingDetailView): void {
+  // Re-storing an existing id must move it to the back of the eviction order, and `Map.set` alone
+  // does not — it keeps the original insertion position — so delete first.
+  cache.delete(listing.id);
   cache.set(listing.id, { listing, storedAt: Date.now() });
+
+  while (cache.size > MAX_ENTRIES) {
+    const oldest = cache.keys().next();
+    if (oldest.done) break;
+    cache.delete(oldest.value);
+  }
 }
 
 /** Empties the cache. For tests, and for anything that invalidates listing data wholesale. */

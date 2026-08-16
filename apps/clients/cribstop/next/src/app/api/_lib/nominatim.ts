@@ -111,8 +111,21 @@ export function buildReverseUrl(params: URLSearchParams): BuiltUrl {
   if (!Number.isFinite(lat) || lat < -90 || lat > 90) return { ok: false, error: 'Invalid lat' };
   if (!Number.isFinite(lon) || lon < -180 || lon > 180) return { ok: false, error: 'Invalid lon' };
 
+  /*
+   * Capped at 10 — settlement level — rather than Nominatim's own maximum of 18.
+   *
+   * 18 is address level. This route is unauthenticated, so accepting it published a
+   * coordinate-to-street-address lookup that anything on the internet could drive through our egress
+   * IP and our identifying `User-Agent`, and that nothing in the app has ever asked for: all four
+   * call sites in `CompactSearchBar` pass `zoom=10`, because what they want is the name of a place,
+   * not a doorstep. It also cuts against this app's own posture on precision — a suppressed listing
+   * withholds `address`, `latitude` and `longitude` together precisely so a coordinate cannot be
+   * turned back into the address the seller withheld, and an open address-level reverse geocoder is
+   * a way to do exactly that. Accept what the callers use; widen it deliberately if a caller ever
+   * genuinely needs to.
+   */
   const zoom = params.get('zoom') ?? '10';
-  if (!/^([0-9]|1[0-8])$/.test(zoom)) return { ok: false, error: 'Invalid zoom' };
+  if (!/^([0-9]|10)$/.test(zoom)) return { ok: false, error: 'Invalid zoom' };
 
   const addressdetails = params.get('addressdetails') ?? '1';
   if (addressdetails !== '0' && addressdetails !== '1') {
