@@ -1,5 +1,24 @@
-import React, { ReactNode, useEffect, useRef, useState } from 'react';
+import React, { ReactNode, useEffect, useId, useRef, useState } from 'react';
 import DismissButton from '@/components/DismissButton';
+
+/**
+ * What counts as a tab stop inside the dialog, for the focus trap below.
+ *
+ * `[tabindex="-1"]` is deliberately excluded: it means "focusable by script, not by Tab", which is
+ * exactly what the dialog card itself carries so it can receive initial focus without becoming a
+ * stop in the cycle.
+ */
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'area[href]',
+  'button:not([disabled])',
+  'input:not([disabled]):not([type="hidden"])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  'iframe',
+  '[contenteditable]',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
 
 // Module-level: survives React Strict Mode unmount/remount cycles (unlike useRef)
 let scheduledScrollUnlock: ReturnType<typeof setTimeout> | null = null;
@@ -82,6 +101,14 @@ interface ModalProps {
    * mismatch; the effect below still runs and takes over scroll locking and Escape as usual.
    */
   instant?: boolean;
+  /**
+   * Names the dialog for assistive technology when it has no visible `title`.
+   *
+   * A dialog must have an accessible name. When `title` is given it supplies one automatically via
+   * `aria-labelledby`; a chrome-less panel that draws its own heading inside `children` — the
+   * listing panel is the one that matters — has to say what it is here instead.
+   */
+  ariaLabel?: string;
 }
 
 export default function Modal({
@@ -100,6 +127,7 @@ export default function Modal({
   noScroll,
   noScaleIn,
   instant,
+  ariaLabel,
 }: ModalProps) {
   // mounted: controls DOM presence; visible: drives CSS transition
   const [mounted, setMounted] = useState(Boolean(instant) && open);
@@ -114,13 +142,65 @@ export default function Modal({
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
+  const cardRef = useRef<HTMLDivElement>(null);
+  const returnFocusTo = useRef<HTMLElement | null>(null);
+  const titleId = useId();
+
   useEffect(() => {
     if (open) {
       lockScroll();
       setMounted(true);
       const raf = requestAnimationFrame(() => setVisible(true));
       const handleKey = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') onCloseRef.current();
+        if (e.key === 'Escape') {
+          onCloseRef.current();
+          return;
+        }
+
+        /*
+         * The focus trap.
+         *
+         * Without it the page behind stays in the tab order: measured at 17 still-reachable controls
+         * with a listing panel open over the search results. Pointer input was already handled — the
+         * backdrop covers the viewport — and `aria-modal` below takes the background out of the
+         * accessibility tree, but neither of those touches Tab, so a keyboard user tabbed straight
+         * out of the dialog into a page they could not see.
+         *
+         * The sibling path (`ListingSearchBackdrop`) solves the same problem with `inert`, and that
+         * is the right tool there: it renders the very subtree that has to go quiet. This one cannot
+         * — a dialog mounted in the root layout does not own `main`, the header or the footer — so
+         * the equivalent guarantee comes from `aria-modal` plus this trap, which is the pairing the
+         * ARIA authoring practices define for exactly this case.
+         */
+        if (e.key !== 'Tab') return;
+        const card = cardRef.current;
+        if (!card) return;
+
+        const stops = Array.from(card.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+          // `offsetParent` is null for anything `display:none`, which is how the responsive variants
+          // hide chrome that is still in the DOM.
+          (el) => el.offsetParent !== null || el === document.activeElement,
+        );
+        const active = document.activeElement as HTMLElement | null;
+
+        if (stops.length === 0) {
+          // Nothing to cycle through; keep focus on the dialog rather than letting it escape.
+          e.preventDefault();
+          card.focus();
+          return;
+        }
+
+        const first = stops[0];
+        const last = stops[stops.length - 1];
+        const outside = !active || !card.contains(active);
+
+        if (e.shiftKey && (outside || active === first || active === card)) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && (outside || active === last)) {
+          e.preventDefault();
+          first.focus();
+        }
       };
       window.addEventListener('keydown', handleKey);
 
@@ -151,6 +231,33 @@ export default function Modal({
       };
     }
   }, [open]); // onClose intentionally excluded — accessed via ref above
+
+  /**
+   * Moves focus into the dialog on open and puts it back where it was on close.
+   *
+   * Separate from the effect above, and keyed on `mounted` as well as `open`, because that effect is
+   * what *sets* `mounted` — so on a non-`instant` dialog the card does not exist in the DOM yet when
+   * it runs, and `cardRef` would still be null.
+   *
+   * Restoring matters as much as trapping: without it, closing a listing panel dropped focus back to
+   * `<body>`, so the next Tab restarted from the top of the page rather than from the card the user
+   * opened. `document.contains` guards the case where the element that had focus was itself removed
+   * while the dialog was open.
+   */
+  useEffect(() => {
+    if (!open || !mounted) return;
+    const card = cardRef.current;
+    if (!card) return;
+
+    returnFocusTo.current = document.activeElement as HTMLElement | null;
+    if (!card.contains(document.activeElement)) card.focus();
+
+    return () => {
+      const target = returnFocusTo.current;
+      returnFocusTo.current = null;
+      if (target && document.contains(target)) target.focus();
+    };
+  }, [open, mounted]);
 
   if (!mounted) return null;
 
@@ -187,7 +294,18 @@ export default function Modal({
       className={`fixed inset-0 z-dialog flex justify-center overflow-hidden bg-black/30 ${backdropAlign}`}
     >
       <div
-        className={`relative w-full flex flex-col
+        ref={cardRef}
+        role="dialog"
+        aria-modal="true"
+        /* One or the other, never neither: a dialog without an accessible name is announced as an
+           unlabelled group. `title` supplies it when there is one; `ariaLabel` covers the panels
+           that draw their own heading inside `children`. */
+        aria-labelledby={title ? titleId : undefined}
+        aria-label={title ? undefined : ariaLabel}
+        /* Script-focusable, not a tab stop — it is where initial focus lands, and where the trap
+           parks focus for a dialog that contains no controls at all. */
+        tabIndex={-1}
+        className={`relative w-full flex flex-col outline-none
           transition-[transform,opacity] duration-300 ease-out
           ${cardClassName ?? 'bg-white shadow-xl'}
           ${cardMobile}
@@ -203,7 +321,9 @@ export default function Modal({
         )}
         {title && (
           <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-surface-border relative flex-shrink-0">
-            <h2 className="text-lg font-semibold mx-auto">{title}</h2>
+            <h2 id={titleId} className="text-lg font-semibold mx-auto">
+              {title}
+            </h2>
             <DismissButton onClick={onClose} className="absolute right-4 top-4" />
           </div>
         )}

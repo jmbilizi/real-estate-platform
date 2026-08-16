@@ -6,11 +6,11 @@ import Modal from '@/components/Modal';
 /**
  * The one definition of the listing detail modal's chrome.
  *
- * Three things render this panel — the modal itself, the route-level loading state, and the
- * intercepted open — and the user notices immediately when they disagree: the skeleton and the
- * loaded listing sit at the same place on screen, so a single differing dimension reads as the
- * border flashing or the photo jumping as data arrives. Keeping the props in one place is what
- * stops that from being a thing anyone has to remember.
+ * Two things render this panel — `ListingDetailModal` and the `/listing/[id]` route's `loading.tsx`
+ * — and the user notices immediately when they disagree: the skeleton and the loaded listing sit at
+ * the same place on screen, so a single differing dimension reads as the border flashing or the
+ * photo jumping as data arrives. Keeping the props in one place is what stops that from being a
+ * thing anyone has to remember.
  */
 export default function ListingModalFrame({
   children,
@@ -33,6 +33,9 @@ export default function ListingModalFrame({
       noPadding
       squareBottom
       noScroll
+      /* This panel has no `title` — it draws the listing's own heading inside `children` — so the
+         dialog's accessible name has to be supplied here, or it announces as unlabelled. */
+      ariaLabel="Listing details"
       /* Full height from the first frame — this panel fills the viewport, so scaling it up from
          95% reads as the modal resizing itself rather than arriving. */
       noScaleIn
