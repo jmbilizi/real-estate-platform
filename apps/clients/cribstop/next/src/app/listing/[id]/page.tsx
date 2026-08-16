@@ -20,11 +20,14 @@ import { loadListingState } from '@/lib/api/listings-server';
  * The ordering is deliberate and one-way: the listing cannot wait on the backdrop, only the
  * reverse. `loading.tsx` covers the server fetch.
  *
- * Soft navigation does not land here: a card click pushes this same URL and
- * `@modal/(.)listing/[id]` intercepts it into a modal over the page you were on, which stays
- * mounted underneath. Only a hard navigation reaches this file — which is why closing is
- * `StandaloneListingView`'s business rather than `router.back()`'s: there is no history entry
- * behind this one to step back to.
+ * Soft navigation does not land here, and no longer navigates at all. A card click opens the panel
+ * as client state (`lib/listing-panel`, rendered by `ListingPanelHost` in the root layout) and
+ * pushes this same URL with `history.pushState`, so the page you were on stays mounted underneath
+ * and nothing is fetched to draw the panel. The intercepting route that used to do this job —
+ * `@modal/(.)listing/[id]` — was removed for that reason; see the root layout's note.
+ *
+ * So only a hard navigation reaches this file, which is why closing is `StandaloneListingView`'s
+ * business rather than `router.back()`'s: there is no history entry behind this one to step back to.
  */
 export default async function ListingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
