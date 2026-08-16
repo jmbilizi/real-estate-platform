@@ -10,7 +10,34 @@ import {
   formatLocationLabel,
   highlightMatch,
 } from '@/lib/search-utils';
+import { isParcelOnlySelection, PARCEL_INTERLOCK_HINT, SearchPanel } from '@/lib/store/types';
+import { Z_LAYERS } from '@/lib/z-layers';
 import { BED_OPTIONS, DateRangePanel } from './DateRangePanel';
+import { PROPERTY_TYPES } from '@cribstop/property-contracts';
+import type { ListingType } from '@/lib/types';
+
+/**
+ * The bar's tab vocabulary is UI state; the contract's is what may go in a URL.
+ *
+ * These are deliberately separate: `'for-sale'`/`'for-rent'` is the `ListingTab` identity the
+ * header tabs and `uiSlice` share, while the API's `listingType` is `sale`/`rent`/`sold`. The bar
+ * used to put the tab value straight into `?type=`, which the search page then dropped as an
+ * unrecognised enum — so every "For Sale" search silently returned sale *and* rent inventory.
+ * Translating here keeps the tab identity intact and the URL contract-valid.
+ */
+const LISTING_TYPE_FOR_TAB: Record<'for-sale' | 'for-rent', ListingType> = {
+  'for-sale': 'sale',
+  'for-rent': 'rent',
+};
+
+/**
+ * `'2+'` is a label, not a value. The contract's `baths` is `^\d+(\.5)?$`, so the label was dropped
+ * client-side (and would have been a 400 if forwarded) — the bathrooms filter never applied.
+ */
+function bathsParamValue(label: string): string | undefined {
+  const numeric = label.replace('+', '').trim();
+  return /^\d+(\.5)?$/.test(numeric) ? numeric : undefined;
+}
 
 // Shape/position transition for the dock wrapper below. Only pill <-> expanded
 // is handed to Framer's `layout` (not `layoutId` — no shared/cross-tree
@@ -147,6 +174,10 @@ const BAR_MORPH_PROPS = [
 const SHELL_ATTR = 'data-search-bar-shell';
 const GHOST_ATTR = 'data-search-bar-ghost';
 
+// Ties the disabled beds/baths steppers to their visible explanation. One id is enough: only one
+// "What" panel is mounted at a time (the three render paths are mutually exclusive branches).
+const PARCEL_HINT_ID = 'search-parcel-interlock-hint';
+
 type DockMode = 'large' | 'pill' | 'expanded';
 type MorphBox = { left: number; top: number; width: number; height: number };
 
@@ -205,10 +236,10 @@ function mountGhost(node: HTMLElement, box: MorphBox, holds: boolean) {
     width: `${box.width}px`,
     height: `${box.height}px`,
     margin: '0',
-    // ABOVE the real bar (z 55). The incoming capsule is solid from the first
+    // Directly above the real bar. The incoming capsule is solid from the first
     // frame, so the ghost has to cover it while it dissolves — that's what keeps
     // the two layouts' labels from ever being legible at the same time.
-    zIndex: '56',
+    zIndex: String(Z_LAYERS.searchBarMorphGhost),
     pointerEvents: 'none',
     transformOrigin: 'center center',
     willChange: 'transform, opacity',
@@ -247,7 +278,7 @@ const DOCK_STYLE: Record<'pill' | 'expanded', React.CSSProperties> = {
     marginLeft: 'auto',
     marginRight: 'auto',
     width: 'min(480px, calc(100vw - 160px))',
-    zIndex: 55,
+    zIndex: Z_LAYERS.searchBar,
   },
   expanded: {
     position: 'fixed',
@@ -257,7 +288,7 @@ const DOCK_STYLE: Record<'pill' | 'expanded', React.CSSProperties> = {
     marginLeft: 'auto',
     marginRight: 'auto',
     width: 'min(768px, calc(100vw - 48px))',
-    zIndex: 55,
+    zIndex: Z_LAYERS.searchBar,
   },
 };
 
@@ -311,8 +342,6 @@ export default function CompactSearchBar({
     setSearchMoveInDate,
     searchDateRange,
     setSearchDateRange,
-    searchOccupants,
-    setSearchOccupants,
     searchBedsIdx,
     setSearchBedsIdx,
     searchPropertyTypes,
@@ -478,7 +507,7 @@ export default function CompactSearchBar({
   // field's panel already open — activePanel is set immediately, but panels
   // only render in 'large'/'expanded' JSX, so it has no visible effect until
   // the grow (or expand) actually finishes.
-  function openFromPill(panel: 'where' | 'when' | 'who' | 'what') {
+  function openFromPill(panel: SearchPanel) {
     setActivePanel(panel);
     if (alwaysPill) {
       setHeaderExpanded(true);
@@ -503,8 +532,6 @@ export default function CompactSearchBar({
   const [rangePickStep, setRangePickStep] = useState<'start' | 'end'>('start');
   // hovered date for visual range preview
   const [hoveredDate, setHoveredDate] = useState<string | null>(null);
-  const occupants = searchOccupants;
-  const setOccupants = setSearchOccupants;
   const bedsIdx = searchBedsIdx;
   const listingTab = ctxTab;
   // State for nearby locations and loading
@@ -607,14 +634,8 @@ export default function CompactSearchBar({
             } else {
               try {
                 const resp = await fetch(
-                  `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10&addressdetails=1`,
-                  {
-                    headers: {
-                      Accept: 'application/json',
-                      'User-Agent': 'real-estate-platform/1.0',
-                    },
-                    signal,
-                  },
+                  `/api/geocode/reverse?lat=${latitude}&lon=${longitude}&zoom=10&addressdetails=1`,
+                  { signal },
                 );
                 if (resp.ok) {
                   const data = await resp.json();
@@ -655,14 +676,8 @@ export default function CompactSearchBar({
                   results.map(async (loc) => {
                     try {
                       const resp = await fetch(
-                        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${loc.lat}&lon=${loc.lon}&zoom=10&addressdetails=1`,
-                        {
-                          headers: {
-                            Accept: 'application/json',
-                            'User-Agent': 'real-estate-platform/1.0',
-                          },
-                          signal,
-                        },
+                        `/api/geocode/reverse?lat=${loc.lat}&lon=${loc.lon}&zoom=10&addressdetails=1`,
+                        { signal },
                       );
                       if (resp.ok) {
                         const data = await resp.json();
@@ -714,11 +729,8 @@ export default function CompactSearchBar({
           results.map(async (loc) => {
             try {
               const resp = await fetch(
-                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${loc.lat}&lon=${loc.lon}&zoom=10&addressdetails=1`,
-                {
-                  headers: { Accept: 'application/json', 'User-Agent': 'real-estate-platform/1.0' },
-                  signal,
-                },
+                `/api/geocode/reverse?lat=${loc.lat}&lon=${loc.lon}&zoom=10&addressdetails=1`,
+                { signal },
               );
               if (resp.ok) {
                 const data = await resp.json();
@@ -771,7 +783,7 @@ export default function CompactSearchBar({
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const [isCommittedSelection, setIsCommittedSelection] = useState(false);
   const isCommittedSelectionRef = useRef(false);
-  const [activePanel, setActivePanel] = useState<'where' | 'when' | 'who' | 'what' | null>(
+  const [activePanel, setActivePanel] = useState<SearchPanel | null>(
     mobileSheetMode ? 'where' : null,
   );
   const [isSearching, setIsSearching] = useState(false);
@@ -789,12 +801,17 @@ export default function CompactSearchBar({
 
   const whereRef = useRef<HTMLButtonElement>(null);
   const whenRef = useRef<HTMLButtonElement>(null);
-  const whoRef = useRef<HTMLButtonElement>(null);
   const whatRef = useRef<HTMLButtonElement>(null);
   const searchBtnRef = useRef<HTMLDivElement>(null);
   const getIndicatorStyle = (): React.CSSProperties => {
     if (!activePanel) return {};
-    const refs = { where: whereRef, when: whenRef, who: whoRef, what: whatRef };
+    // Keyed by SearchPanel, so the focus indicator can only ever be asked for a segment that
+    // exists — there is no 'who' slot to point at (#34).
+    const refs: Record<SearchPanel, React.RefObject<HTMLButtonElement | null>> = {
+      where: whereRef,
+      when: whenRef,
+      what: whatRef,
+    };
     const btn = refs[activePanel]?.current;
     if (!btn) return {};
     if (activePanel === 'what' && searchBtnRef.current) {
@@ -932,6 +949,24 @@ export default function CompactSearchBar({
   const whereHighlightRef2 = useRef<HTMLDivElement>(null);
   const whatHighlightRef2 = useRef<HTMLDivElement>(null);
 
+  // --- Lot/Land interlock (#24) --------------------------------------------
+  //
+  // A parcel has no dwelling, so `beds`/`baths` are NULL on it and any dwelling predicate the API
+  // is handed excludes every parcel — a stale `beds=2` next to a Lot/Land chip returns zero results
+  // with nothing on screen to explain why. The fix is in the UI, not in the request builder: the
+  // controls are cleared and disabled, so the API still receives exactly what the user asked for.
+  const parcelOnly = isParcelOnlySelection(selectedPropertyTypes);
+  const parcelHintId = parcelOnly ? PARCEL_HINT_ID : undefined;
+
+  // Clearing on the chip's own click would miss the other way in: state restored from a URL that
+  // already carries both (`?propertyType=Lot/Land&beds=2`). Reconciling here catches every path,
+  // and the guard makes it a single converging pass rather than a loop.
+  useEffect(() => {
+    if (!parcelOnly) return;
+    if (searchBedsIdx !== 0) setSearchBedsIdx(0);
+    if (baths !== '') setBaths('');
+  }, [parcelOnly, searchBedsIdx, baths]);
+
   const SLIDE_TRANSITION =
     'top 0.22s cubic-bezier(0.4,0,0.2,1), height 0.22s cubic-bezier(0.4,0,0.2,1), opacity 0.12s';
   const FADE_ONLY_TRANSITION = 'opacity 0.12s';
@@ -966,91 +1001,21 @@ export default function CompactSearchBar({
     el.style.opacity = '0';
   }
 
-  function renderWhoPanel() {
-    return (
-      <div
-        className="search-panel-enter absolute left-0 right-0 z-[200] bg-white rounded-xl shadow-card border border-surface-border"
-        style={{ top: 'calc(100% + 6px)' }}
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <div className="p-5">
-          <p className="text-[13px] text-ink-muted mb-4">How many people will live here?</p>
-          <div className="grid grid-cols-2 gap-x-8">
-            {(
-              [
-                { key: 'seniors', label: 'Older adults', desc: 'Ages 55+' },
-                { key: 'adults', label: 'Adults', desc: 'Ages 18–54' },
-                { key: 'teens', label: 'Teens', desc: 'Ages 13–17' },
-                { key: 'children', label: 'Children', desc: 'Ages 2–12' },
-                { key: 'infants', label: 'Infants', desc: 'Under 2' },
-                { key: 'pets', label: 'Pets', desc: 'Bringing pets?' },
-              ] as const
-            ).map(({ key, label, desc }, i) => (
-              <div
-                key={key}
-                className={`flex items-center justify-between py-4 ${
-                  i < 4 ? 'border-b border-surface-border' : ''
-                }`}
-              >
-                <div>
-                  <div className="font-semibold text-[15px]">{label}</div>
-                  <div className="text-[13px] text-ink-muted">{desc}</div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    disabled={occupants[key] === 0}
-                    onClick={() =>
-                      setOccupants({ ...occupants, [key]: Math.max(0, occupants[key] - 1) })
-                    }
-                    className={`h-8 w-8 rounded-full border flex items-center justify-center text-lg transition-colors ${occupants[key] === 0 ? 'border-[rgba(0,0,0,0.12)] text-[rgba(0,0,0,0.2)] cursor-default' : 'border-[rgba(0,0,0,0.4)] text-ink hover:border-ink'}`}
-                  >
-                    -
-                  </button>
-                  <span className="w-4 text-center text-[15px] font-medium">{occupants[key]}</span>
-                  <button
-                    type="button"
-                    onClick={() => setOccupants({ ...occupants, [key]: occupants[key] + 1 })}
-                    className="h-8 w-8 rounded-full border border-[rgba(0,0,0,0.4)] flex items-center justify-center text-lg hover:border-ink transition-colors"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="mt-4 flex justify-end">
-            <button
-              type="button"
-              onClick={() => setActivePanel(null)}
-              className="rounded-full bg-ink text-white px-6 py-2 text-sm font-semibold hover:bg-ink/90"
-            >
-              Done
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   function renderWhatPanelContent(_highlightRef: React.RefObject<HTMLDivElement | null>) {
-    const PROPERTY_TYPES = [
-      'House',
-      'Townhome',
-      'Condo',
-      'Co-op',
-      'Lot/Land',
-      'Mobile Homes',
-      'Multi-Family',
-      'Other',
-    ];
     const BATHS_OPTS = ['Any', '1+', '2+', '3+', '4+', '5+'];
     const bathIdx = baths === '' ? 0 : BATHS_OPTS.indexOf(baths);
     const bedsOpts = BED_OPTIONS.map((b) => (b.value ? b.value + '+' : 'Any'));
-    const stepperBtn = (disabled: boolean, onClick: () => void, label: string) => (
+    const stepperBtn = (
+      disabled: boolean,
+      onClick: () => void,
+      label: string,
+      describedBy?: string,
+    ) => (
       <button
         type="button"
         disabled={disabled}
+        aria-disabled={disabled}
+        aria-describedby={describedBy}
         onClick={onClick}
         className={`h-8 w-8 rounded-full border inline-flex items-center justify-center leading-none select-none transition-colors ${
           disabled
@@ -1093,11 +1058,31 @@ export default function CompactSearchBar({
         </div>
 
         {/* Property Type */}
+        {/*
+         * One property type at a time, because that is what the API can apply: the wire contract's
+         * `propertyType` is a single enum value under a strict-parsed request. These were checkboxes
+         * emitting `propertyType=Condo,Townhome`, which the search page never read before #24 — so
+         * the control looked multi-select and filtered nothing at all. Reading the parameter makes
+         * it real, and a comma-joined value would now be rejected outright with a 400. Radios keep
+         * the UI able to express only what the request can carry.
+         *
+         * Multi-select is a genuine product capability, not a regression being papered over: it
+         * needs `searchRequestSchema` to accept a set, the repository predicate to match on it, and
+         * the Lot/Land interlock to keep firing only for a parcels-and-nothing-else selection.
+         * Flagged to the product owner on #24 rather than assumed here.
+         */}
         <div>
-          <p className="text-xs font-semibold text-ink uppercase tracking-wider mb-2">
+          <p
+            className="text-xs font-semibold text-ink uppercase tracking-wider mb-2"
+            id="property-type-label"
+          >
             Property Type
           </p>
-          <div className="grid grid-cols-3 gap-x-4 gap-y-1.5">
+          <div
+            className="grid grid-cols-3 gap-x-4 gap-y-1.5"
+            role="radiogroup"
+            aria-labelledby="property-type-label"
+          >
             {PROPERTY_TYPES.map((type) => {
               const active = selectedPropertyTypes.includes(type);
               return (
@@ -1106,16 +1091,13 @@ export default function CompactSearchBar({
                   className="flex items-center gap-2 text-sm text-ink cursor-pointer select-none py-0.5"
                 >
                   <input
-                    type="checkbox"
+                    type="radio"
+                    name="propertyType"
                     checked={active}
-                    onChange={() =>
-                      setSelectedPropertyTypes(
-                        selectedPropertyTypes.includes(type)
-                          ? selectedPropertyTypes.filter((v) => v !== type)
-                          : [...selectedPropertyTypes, type],
-                      )
-                    }
-                    className="h-4 w-4 rounded border-gray-300 text-brand focus:ring-brand/30"
+                    // Clicking the active type clears it, which is how "any type" is expressed.
+                    onClick={() => setSelectedPropertyTypes(active ? [] : [type])}
+                    onChange={() => undefined}
+                    className="h-4 w-4 border-gray-300 text-brand focus:ring-brand/30"
                   />
                   <span className="font-normal">{type}</span>
                 </label>
@@ -1126,35 +1108,56 @@ export default function CompactSearchBar({
 
         {/* Beds, Baths & Price */}
         <div className="border-t border-surface-border pt-4">
+          {parcelOnly && (
+            <p id={PARCEL_HINT_ID} className="text-[13px] text-ink-muted pb-2">
+              {PARCEL_INTERLOCK_HINT}
+            </p>
+          )}
           <div className="flex items-center justify-between py-1">
-            <span className="text-sm font-medium text-ink">Bedrooms</span>
+            <span className={`text-sm font-medium ${parcelOnly ? 'text-ink-subtle' : 'text-ink'}`}>
+              Bedrooms
+            </span>
             <div className="flex items-center gap-4">
-              {stepperBtn(bedsIdx === 0, () => setSearchBedsIdx(bedsIdx - 1), '–')}
-              <span className="w-8 text-center text-[15px] font-normal text-ink">
-                {bedsOpts[bedsIdx]}
+              {stepperBtn(
+                parcelOnly || bedsIdx === 0,
+                () => setSearchBedsIdx(bedsIdx - 1),
+                '–',
+                parcelHintId,
+              )}
+              <span
+                className={`w-8 text-center text-[15px] font-normal ${parcelOnly ? 'text-ink-subtle' : 'text-ink'}`}
+              >
+                {parcelOnly ? 'Any' : bedsOpts[bedsIdx]}
               </span>
               {stepperBtn(
-                bedsIdx === BED_OPTIONS.length - 1,
+                parcelOnly || bedsIdx === BED_OPTIONS.length - 1,
                 () => setSearchBedsIdx(bedsIdx + 1),
                 '+',
+                parcelHintId,
               )}
             </div>
           </div>
           <div className="flex items-center justify-between py-1 mt-2">
-            <span className="text-sm font-medium text-ink">Bathrooms</span>
+            <span className={`text-sm font-medium ${parcelOnly ? 'text-ink-subtle' : 'text-ink'}`}>
+              Bathrooms
+            </span>
             <div className="flex items-center gap-4">
               {stepperBtn(
-                bathIdx === 0,
+                parcelOnly || bathIdx === 0,
                 () => setBaths(bathIdx === 1 ? '' : BATHS_OPTS[bathIdx - 1]),
                 '–',
+                parcelHintId,
               )}
-              <span className="w-8 text-center text-[15px] font-normal text-ink">
-                {bathIdx === 0 ? 'Any' : BATHS_OPTS[bathIdx]}
+              <span
+                className={`w-8 text-center text-[15px] font-normal ${parcelOnly ? 'text-ink-subtle' : 'text-ink'}`}
+              >
+                {parcelOnly || bathIdx === 0 ? 'Any' : BATHS_OPTS[bathIdx]}
               </span>
               {stepperBtn(
-                bathIdx === BATHS_OPTS.length - 1,
+                parcelOnly || bathIdx === BATHS_OPTS.length - 1,
                 () => setBaths(BATHS_OPTS[bathIdx + 1]),
                 '+',
+                parcelHintId,
               )}
             </div>
           </div>
@@ -1591,10 +1594,11 @@ export default function CompactSearchBar({
     if (searchMaxPrice > 0) params.set('maxPrice', String(searchMaxPrice));
     const beds = BED_OPTIONS[bedsIdx].value;
     if (beds) params.set('beds', beds);
-    if (baths) params.set('baths', baths);
+    const bathsValue = baths ? bathsParamValue(baths) : undefined;
+    if (bathsValue) params.set('baths', bathsValue);
     if (selectedPropertyTypes.length > 0)
       params.set('propertyType', selectedPropertyTypes.join(','));
-    params.set('type', listingType);
+    params.set('type', LISTING_TYPE_FOR_TAB[listingType]);
     setIsSearching(true);
     router.push(`/search?${params.toString()}`);
     setIsDropdownOpen(false);
@@ -1623,14 +1627,8 @@ export default function CompactSearchBar({
               let displayName = `Current Location (${latitude.toFixed(5)}, ${longitude.toFixed(5)})`;
               try {
                 const response = await fetch(
-                  `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10&addressdetails=1`,
-                  {
-                    headers: {
-                      Accept: 'application/json',
-                      'User-Agent': 'real-estate-platform/1.0',
-                    },
-                    signal,
-                  },
+                  `/api/geocode/reverse?lat=${latitude}&lon=${longitude}&zoom=10&addressdetails=1`,
+                  { signal },
                 );
                 // error handling is in the correct handler, not here
                 if (response.ok) {
@@ -1666,10 +1664,11 @@ export default function CompactSearchBar({
               if (searchMaxPrice > 0) params.set('maxPrice', String(searchMaxPrice));
               const beds = BED_OPTIONS[bedsIdx].value;
               if (beds) params.set('beds', beds);
-              if (baths) params.set('baths', baths);
+              const bathsValue = baths ? bathsParamValue(baths) : undefined;
+              if (bathsValue) params.set('baths', bathsValue);
               if (selectedPropertyTypes.length > 0)
                 params.set('propertyType', selectedPropertyTypes.join(','));
-              params.set('type', listingType);
+              params.set('type', LISTING_TYPE_FOR_TAB[listingType]);
               router.push(`/search?${params.toString()}`);
               resolve();
             })();
@@ -1689,10 +1688,11 @@ export default function CompactSearchBar({
             if (searchMaxPrice > 0) params.set('maxPrice', String(searchMaxPrice));
             const beds = BED_OPTIONS[bedsIdx].value;
             if (beds) params.set('beds', beds);
-            if (baths) params.set('baths', baths);
+            const bathsValue = baths ? bathsParamValue(baths) : undefined;
+            if (bathsValue) params.set('baths', bathsValue);
             if (selectedPropertyTypes.length > 0)
               params.set('propertyType', selectedPropertyTypes.join(','));
-            params.set('type', listingType);
+            params.set('type', LISTING_TYPE_FOR_TAB[listingType]);
             router.push(`/search?${params.toString()}`);
             resolve();
           },
@@ -1705,10 +1705,11 @@ export default function CompactSearchBar({
         if (searchMaxPrice > 0) params.set('maxPrice', String(searchMaxPrice));
         const beds = BED_OPTIONS[bedsIdx].value;
         if (beds) params.set('beds', beds);
-        if (baths) params.set('baths', baths);
+        const bathsValue = baths ? bathsParamValue(baths) : undefined;
+        if (bathsValue) params.set('baths', bathsValue);
         if (selectedPropertyTypes.length > 0)
           params.set('propertyType', selectedPropertyTypes.join(','));
-        params.set('type', listingType);
+        params.set('type', LISTING_TYPE_FOR_TAB[listingType]);
         router.push(`/search?${params.toString()}`);
         resolve();
       }
@@ -1717,22 +1718,6 @@ export default function CompactSearchBar({
 
   // --- helpers (used in both render paths) ---------------------------------
 
-  function occupantSummary(occ: {
-    adults: number;
-    seniors: number;
-    teens: number;
-    children: number;
-    infants: number;
-    pets: number;
-  }): string {
-    const total = occ.adults + occ.seniors + occ.teens + occ.children;
-    if (total === 0 && occ.infants === 0 && occ.pets === 0) return '';
-    const parts: string[] = [];
-    if (total > 0) parts.push(`${total} occupant${total !== 1 ? 's' : ''}`);
-    if (occ.infants > 0) parts.push(`${occ.infants} infant${occ.infants !== 1 ? 's' : ''}`);
-    if (occ.pets > 0) parts.push(`${occ.pets} pet${occ.pets !== 1 ? 's' : ''}`);
-    return parts.join(', ');
-  }
   function _formatMoveInDate(d: string): string {
     if (!d) return '';
     const parts = d.split('-');
@@ -1808,9 +1793,6 @@ export default function CompactSearchBar({
   // --- mobileSheetMode: full-screen mobile search sheet reusing all panels --
 
   if (mobileSheetMode) {
-    const whoLabel =
-      occupantSummary(occupants) ||
-      (occupants.infants ? `${occupants.infants} infant${occupants.infants !== 1 ? 's' : ''}` : '');
     const flexLabelMap: Record<string, string> = {
       '1': '± 1 day',
       '3': '± 3 days',
@@ -1837,7 +1819,6 @@ export default function CompactSearchBar({
       setSuggestions([]);
       setDateRange({ start: '', end: '', flexibility: 'exact' });
       setRangePickStep('start');
-      setOccupants({ adults: 0, seniors: 0, teens: 0, children: 0, infants: 0, pets: 0 });
       setSelectedPropertyTypes([]);
       setBaths('');
       setDescription('');
@@ -1854,19 +1835,17 @@ export default function CompactSearchBar({
       } else if ((location || '').trim()) {
         params.set('q', (location || '').trim());
       }
-      params.set('type', listingType);
+      params.set('type', LISTING_TYPE_FOR_TAB[listingType]);
       if (dateRange.start) params.set('moveIn', dateRange.start);
       if (dateRange.end && dateRange.end !== dateRange.start)
         params.set('moveInEnd', dateRange.end);
-      const total = occupants.adults + occupants.seniors + occupants.teens + occupants.children;
-      if (total > 0) params.set('guests', String(total));
       router.push(`/search?${params.toString()}`);
       onClose?.();
     };
 
     return (
       <div
-        className="fixed inset-0 z-[60] bg-surface-alt flex flex-col"
+        className="fixed inset-0 z-search-overlay bg-surface-alt flex flex-col"
         style={{ animation: 'mss-in 220ms ease both' }}
       >
         <style>
@@ -2261,71 +2240,14 @@ export default function CompactSearchBar({
                   setHoveredDate={setHoveredDate}
                   calendarBaseMonth={calendarBaseMonth}
                   setCalendarBaseMonth={setCalendarBaseMonth}
-                  onClose={() => setActivePanel('who')}
+                  // Next card in the sheet's cycle. Was 'who' until that segment was removed
+                  // (#34) — the chain now runs where → when → what.
+                  onClose={() => setActivePanel('what')}
                   listingType={listingType}
                   inline
                 />
               ) : (
                 <p className="text-[14px] text-ink-muted mt-1">{whenLabel || 'Anytime'}</p>
-              )}
-            </div>
-          </div>
-
-          {/* WHO card */}
-          <div
-            className={`bg-white rounded-md shadow-card transition-all duration-200 overflow-hidden ${
-              activePanel === 'who' ? 'ring-2 ring-ink' : 'cursor-pointer'
-            }`}
-            onClick={() => activePanel !== 'who' && setActivePanel('who')}
-          >
-            <div className="px-5 pt-4 pb-4">
-              <p className="text-[11px] font-bold text-ink uppercase tracking-wider">Who?</p>
-              {activePanel === 'who' ? (
-                <div className="mt-3 space-y-4">
-                  {(
-                    [
-                      { key: 'adults', label: 'Adults', sub: 'Ages 18–54' },
-                      { key: 'seniors', label: 'Older adults', sub: '55+' },
-                      { key: 'teens', label: 'Teens', sub: 'Ages 13–17' },
-                      { key: 'children', label: 'Children', sub: 'Ages 2–12' },
-                      { key: 'infants', label: 'Infants', sub: 'Under 2' },
-                      { key: 'pets', label: 'Pets', sub: 'Bringing a service animal?' },
-                    ] as const
-                  ).map(({ key, label, sub }) => (
-                    <div key={key} className="flex items-center justify-between">
-                      <div>
-                        <span className="text-[14px] font-medium text-ink">{label}</span>
-                        <span className="block text-[12px] text-ink-muted">{sub}</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setOccupants({ ...occupants, [key]: Math.max(0, occupants[key] - 1) });
-                          }}
-                          disabled={occupants[key] === 0}
-                          className="h-8 w-8 rounded-full border border-surface-border flex items-center justify-center text-lg text-ink-muted hover:border-ink hover:text-ink disabled:opacity-30 transition-colors"
-                        >
-                          –
-                        </button>
-                        <span className="w-5 text-center text-[14px] font-medium text-ink">
-                          {occupants[key]}
-                        </span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setOccupants({ ...occupants, [key]: occupants[key] + 1 });
-                          }}
-                          className="h-8 w-8 rounded-full border border-surface-border flex items-center justify-center text-lg text-ink-muted hover:border-ink hover:text-ink transition-colors"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-[14px] text-ink-muted mt-1">{whoLabel || 'Add occupants'}</p>
               )}
             </div>
           </div>
@@ -2438,23 +2360,6 @@ export default function CompactSearchBar({
             className={`text-[13px] leading-snug ${dateRange.start ? 'text-ink font-bold' : 'text-ink-muted'}`}
           >
             {dateRange.start ? formatDateRangeLabel(dateRange) : 'Anytime'}
-          </span>
-        </button>
-        <div className="my-auto h-5 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)]" />
-        {/* Who */}
-        <button
-          type="button"
-          onClick={() => openFromPill('who')}
-          aria-label="Who — edit search"
-          className="flex flex-col justify-center px-4 py-2 text-left whitespace-nowrap hover:bg-surface-alt/60 transition-colors"
-        >
-          <span className="text-[10px] font-medium text-ink-muted leading-none mb-1 select-none">
-            Who
-          </span>
-          <span
-            className={`text-[13px] leading-snug ${occupantSummary(occupants) ? 'text-ink font-bold' : 'text-ink-muted'}`}
-          >
-            {occupantSummary(occupants) || 'Add occupants'}
           </span>
         </button>
         <div className="my-auto h-5 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)]" />
@@ -2642,28 +2547,7 @@ export default function CompactSearchBar({
             </span>
           </button>
           <div
-            className={`h-6 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)] transition-opacity ${activePanel === 'when' || activePanel === 'who' ? 'opacity-0' : ''}`}
-          />
-          {/* WHO */}
-          <button
-            ref={whoRef}
-            type="button"
-            onClick={() => setActivePanel('who')}
-            className={`relative z-[1] flex-1 min-w-0 flex flex-col justify-center text-left px-2 sm:px-3 py-2.5 sm:py-3.5 rounded-full transition-colors duration-150 focus:outline-none ${
-              activePanel !== 'who' ? 'hover:bg-surface-alt/60' : ''
-            }`}
-          >
-            <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
-              Who
-            </span>
-            <span
-              className={`text-[11px] sm:text-[13px] leading-snug truncate ${occupantSummary(occupants) ? 'text-ink font-bold' : 'text-ink-subtle'}`}
-            >
-              {occupantSummary(occupants) || 'Add occupants'}
-            </span>
-          </button>
-          <div
-            className={`hidden md:block h-6 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)] transition-opacity ${activePanel === 'who' || activePanel === 'what' ? 'opacity-0' : ''}`}
+            className={`hidden md:block h-6 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)] transition-opacity ${activePanel === 'when' || activePanel === 'what' ? 'opacity-0' : ''}`}
           />
           {/* WHAT — hidden on mobile, visible md+ */}
           <button
@@ -2733,9 +2617,6 @@ export default function CompactSearchBar({
 
         {/* WHEN panel */}
         {activePanel === 'when' && renderWhenPanel()}
-
-        {/* WHO panel */}
-        {activePanel === 'who' && renderWhoPanel()}
 
         {/* WHAT panel */}
         {activePanel === 'what' && renderWhatPanel(whatHighlightRef)}
@@ -2884,30 +2765,7 @@ export default function CompactSearchBar({
               </button>
 
               <div
-                className={`h-6 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)] transition-opacity duration-150 ${activePanel === 'when' || activePanel === 'who' ? 'opacity-0' : ''}`}
-              />
-
-              {/* WHO slot */}
-              <button
-                ref={whoRef}
-                type="button"
-                onClick={() => setActivePanel('who')}
-                className={`relative z-[1] flex-1 min-w-0 flex flex-col justify-center text-left px-2 sm:px-3 py-2.5 sm:py-3.5 rounded-full transition-colors duration-150 focus:outline-none ${
-                  activePanel !== 'who' ? 'hover:bg-surface-alt/60' : ''
-                }`}
-              >
-                <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
-                  Who
-                </span>
-                <span
-                  className={`text-[11px] sm:text-[13px] leading-snug truncate ${occupantSummary(occupants) ? 'text-ink font-bold' : 'text-ink-subtle'}`}
-                >
-                  {occupantSummary(occupants) || 'Add occupants'}
-                </span>
-              </button>
-
-              <div
-                className={`hidden sm:block h-6 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)] transition-opacity duration-150 ${activePanel === 'who' || activePanel === 'what' ? 'opacity-0' : ''}`}
+                className={`hidden sm:block h-6 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)] transition-opacity duration-150 ${activePanel === 'when' || activePanel === 'what' ? 'opacity-0' : ''}`}
               />
 
               {/* WHAT slot — hidden on mobile, visible sm+ */}
@@ -3005,9 +2863,6 @@ export default function CompactSearchBar({
 
             {/* WHEN panel */}
             {activePanel === 'when' && !morphing && renderWhenPanel()}
-
-            {/* -- PANEL: WHO (occupant steppers) ------------------------------ */}
-            {activePanel === 'who' && !morphing && renderWhoPanel()}
 
             {/* -- PANEL: WHAT (property criteria) ----------------------------- */}
             {activePanel === 'what' && !morphing && renderWhatPanel(whatHighlightRef2)}

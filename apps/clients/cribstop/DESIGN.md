@@ -838,12 +838,13 @@ business" sub-CTA) - 9999px radius, 10x20px padding, 14px label.
 (`{component.search-bar-homes}` / `{component.search-bar-services}` /
 `{component.search-bar-connect}`). White fill, 9999px radius, 64px height, 1px hairline 1px-shadow
 border. Internally divided by vertical hairline rules into `{component.search-field-segment}` cells
-— Homes: Location / Price / Home Type / Intent. Each segment holds an uppercase caption label above
-a placeholder line in `{typography.caption}`. The bar keeps its white fill in every state: focus is
-carried by the open segment alone, which takes a `{colors.surface-strong}` (#f2f2f2) fill inset 1px
-inside the border, sliding between segments as focus moves. Segment hover is `{colors.surface-soft}`
-at 60% (≈#fafafa), so ground → hover → focus reads as one deepening scale, and the hairline rules
-flanking the focused segment drop out.
+— Homes: Location / Price / Home Type / Intent (three cells as built: Where / When / What, the
+location cell taking 40% of the bar below `lg` and half of it above). Each segment holds an
+uppercase caption label above a placeholder line in `{typography.caption}`. The bar keeps its white
+fill in every state: focus is carried by the open segment alone, which takes a
+`{colors.surface-strong}` (#f2f2f2) fill inset 1px inside the border, sliding between segments as
+focus moves. Segment hover is `{colors.surface-soft}` at 60% (≈#fafafa), so ground → hover → focus
+reads as one deepening scale, and the hairline rules flanking the focused segment drop out.
 
 The fill sits at #f2f2f2 for a reason, having been wrong in both directions:
 `{colors.hairline-soft}` (#ebebeb) is a stroke tone and as a fill reads as a pressed button, while
@@ -853,10 +854,16 @@ indistinguishable. #f2f2f2 is the only step that leaves both gaps legible.
 **`search-dropdown`** - The panel that hangs off an open segment, 6px below the bar and flush with
 its left and right edges. `{rounded.xl}` (32px) - the most rounded surface in the system after a
 full pill, which is what keeps it reading as part of the search bar rather than a generic menu -
-plus a 1px `{colors.hairline}` border and the system's single shadow tier. All four segment panels
-(Where / When / Who / What) share these exactly; the date panel used to carry a bespoke
+plus a 1px `{colors.hairline}` border and the system's single shadow tier. All three segment panels
+(Where / When / What) share these exactly; the date panel used to carry a bespoke
 `0 4px 24px rgba(0,0,0,0.13)` shadow and a 16px radius, which is the kind of drift this entry exists
 to prevent.
+
+There is no occupancy ("Who") segment. It was removed in full, not hidden: on a housing search an
+age-band and children/infants occupancy picker collects familial status, age and family
+responsibilities, and its pets counter was labelled "Bringing a service animal?", which adds
+disability — four protected classes in one panel. Recorded decision on #34, 2026-08-13. Nothing in
+Homes prices on occupancy, so the cost was a control, not a capability; do not reintroduce one.
 
 **`search-field-input`** - The rounded input inside an open segment's dropdown. Deliberately
 indistinguishable from the bar itself: white fill, `{rounded.full}`, 1px `{colors.hairline}` border,
@@ -963,7 +970,7 @@ picker (globe icon + "English (US)" link), and social icons. All text in muted `
 | ------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Mobile  | < 744px     | Top nav collapses to logo + hamburger; product tabs hide behind a sheet; search bar collapses to a single tappable pill; listing cards stack 1-up; neighborhood grid 1-column; listing detail collapses inquiry card to a sticky bottom bar. |
 | Tablet  | 744-1128px  | Top nav keeps product tabs but search bar narrows; listing cards 2-up; neighborhood grid 2-3 column; inquiry card stays sticky right-rail at narrower width.                                                                                 |
-| Desktop | 1128-1440px | Full top nav with three product tabs centered; search bar at full pill width with all 4 Homes segments visible; listing cards 4-up; neighborhood grid 6-column; listing detail 2-column with inquiry rail.                                   |
+| Desktop | 1128-1440px | Full top nav with three product tabs centered; search bar at full pill width with all 3 Homes segments visible; listing cards 4-up; neighborhood grid 6-column; listing detail 2-column with inquiry rail.                                   |
 | Wide    | > 1440px    | Content width caps at 1440px on listing/search pages and ~1280px on editorial; gutters absorb the rest.                                                                                                                                      |
 
 ### Touch Targets

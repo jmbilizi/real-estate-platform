@@ -1,12 +1,19 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { SearchDateRange, SearchOccupants, SearchSuggestion } from '@/lib/store/types';
+import { SearchDateRange, SearchSuggestion } from '@/lib/store/types';
 
+/**
+ * There is deliberately no occupancy field here (#34). The removed "Who" picker collected age
+ * bands, a children/infants count and a "service animal" flag — familial status, age, family
+ * responsibilities and disability. Nothing about the searcher's household belongs in search state,
+ * and nothing may ever be transmitted, logged, persisted, put in analytics or ranked on. Keeping
+ * the shape free of it makes that structural rather than a convention to remember. Asserted by
+ * `searchSlice.spec.ts`.
+ */
 interface SearchState {
   searchLocation: string;
   searchSuggestion: SearchSuggestion;
   searchMoveInDate: string;
   searchDateRange: SearchDateRange;
-  searchOccupants: SearchOccupants;
   searchPriceIdx: number;
   searchBedsIdx: number;
   searchPropertyTypes: string[];
@@ -20,14 +27,6 @@ const initialState: SearchState = {
   searchSuggestion: null,
   searchMoveInDate: '',
   searchDateRange: { start: '', end: '', flexibility: 'exact' },
-  searchOccupants: {
-    adults: 0,
-    seniors: 0,
-    teens: 0,
-    children: 0,
-    infants: 0,
-    pets: 0,
-  },
   searchPriceIdx: 0,
   searchBedsIdx: 0,
   searchPropertyTypes: [],
@@ -51,9 +50,6 @@ const searchSlice = createSlice({
     },
     setSearchDateRange: (state, action: PayloadAction<SearchDateRange>) => {
       state.searchDateRange = action.payload;
-    },
-    setSearchOccupants: (state, action: PayloadAction<SearchOccupants>) => {
-      state.searchOccupants = action.payload;
     },
     setSearchPriceIdx: (state, action: PayloadAction<number>) => {
       state.searchPriceIdx = action.payload;
@@ -81,7 +77,6 @@ export const {
   setSearchSuggestion,
   setSearchMoveInDate,
   setSearchDateRange,
-  setSearchOccupants,
   setSearchPriceIdx,
   setSearchBedsIdx,
   setSearchPropertyTypes,

@@ -1,4 +1,5 @@
 import type { Config } from 'tailwindcss';
+import { Z_LAYERS } from './src/lib/z-layers';
 
 // Layout breakpoint — single source of truth for nav/search-bar ↔ desktop transition
 // and map+grid column split. Keep this in sync with globals.css `--layout-break`.
@@ -14,6 +15,17 @@ const config: Config = {
         // makes the intent explicit and ties back to LAYOUT_BREAK above.
         layout: LAYOUT_BREAK,
       },
+      // Named stacking layers, generated from `src/lib/z-layers.ts` so the classes here and the
+      // inline `position: fixed` styles the docked search bar needs cannot drift apart. Use
+      // `z-dialog` / `z-chrome` and never a bare `z-50` on a fixed overlay: the number alone does
+      // not say what it is meant to sit above, which is how a dialog ended up under the search bar.
+      zIndex: Object.fromEntries(
+        Object.entries(Z_LAYERS).map(([name, value]) => [
+          // camelCase → kebab-case, so `searchBar` reads as `z-search-bar`.
+          name.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`),
+          String(value),
+        ]),
+      ),
       colors: {
         // Primary: Coral Red — the single brand voltage (DESIGN.md `colors.primary`).
         // Numeric tints/shades below aren't part of DESIGN.md (hover states are intentionally

@@ -3,8 +3,14 @@
  *
  * This file exists so that renaming, adding or removing a contract field FAILS
  * `pnpm exec nx type-check cribstop-next` instead of silently shipping a card that stopped
- * rendering an attribution field. It emits no runtime code and deliberately touches no component —
- * reconciling the rendering code with this contract is #24.
+ * rendering an attribution field. It emits no runtime code and deliberately touches no component.
+ *
+ * As of #24 the rendering code *is* reconciled with this contract: `lib/types.ts` re-exports these
+ * types rather than redeclaring them, so a contract change now breaks the components directly too.
+ * These assertions are still worth keeping, and are not redundant with that: they pin the expected
+ * key set and the `| null` branch of every nullable field by name, so a field quietly losing its
+ * null branch — the drift the rendering guards exist to survive — fails here with the field named,
+ * rather than silently widening what the guards are protecting against.
  */
 import type {
   ListingCardRow,

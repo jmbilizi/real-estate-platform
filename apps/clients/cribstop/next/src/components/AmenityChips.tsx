@@ -1,4 +1,4 @@
-import { Amenity } from '@/lib/types';
+import type { Amenity } from '@/lib/types';
 
 const ICONS: Record<Amenity, string> = {
   Pool: '🏊',

@@ -1,14 +1,18 @@
 'use client';
 
-import { Amenity, PropertyType, SearchFilters } from '@/lib/types';
-import { useState } from 'react';
+import type { Amenity, PropertyType, SearchFilters } from '@/lib/types';
+import { isParcelOnlySelection, PARCEL_INTERLOCK_HINT } from '@/lib/store/types';
+import { useEffect, useState } from 'react';
 
+// The contract's full `PROPERTY_TYPES` set. `Land` was missing here, which made the dwelling
+// filters look universally applicable and left the parcel interlock below unreachable.
 const PROPERTY_TYPES: PropertyType[] = [
   'Single Family',
   'Condo',
   'Townhome',
   'Multi-Family',
   'Loft',
+  'Land',
   'New Construction',
 ];
 const AMENITIES: Amenity[] = [
@@ -29,6 +33,9 @@ const AMENITIES: Amenity[] = [
   'EV Charging',
 ];
 
+/** Ties the disabled dwelling controls to their single visible explanation. */
+const PARCEL_HINT_ID = 'filter-panel-parcel-interlock-hint';
+
 interface Props {
   filters: SearchFilters;
   onChange: (f: SearchFilters) => void;
@@ -42,6 +49,28 @@ export default function FilterPanel({ filters, onChange }: Props) {
     const current = filters.amenities || [];
     set({ amenities: current.includes(a) ? current.filter((x) => x !== a) : [...current, a] });
   };
+
+  // --- Lot/Land interlock (#24) --------------------------------------------
+  //
+  // Parcels carry no beds/baths/sqft, so the API's dwelling predicates exclude every one of them:
+  // `propertyType=Land&beds=2` is a guaranteed empty page with nothing to explain it. The controls
+  // are cleared and disabled here rather than stripped from the outgoing request, so the API still
+  // gets exactly what was asked for.
+  const parcelOnly = isParcelOnlySelection(filters.propertyType);
+  const parcelHintId = parcelOnly ? PARCEL_HINT_ID : undefined;
+
+  // Covers the entry path a click handler cannot: filters restored from a URL that already carries
+  // both. Guarded, so it converges in one pass instead of looping.
+  useEffect(() => {
+    if (!parcelOnly) return;
+    if (
+      filters.beds !== undefined ||
+      filters.baths !== undefined ||
+      filters.minSqft !== undefined
+    ) {
+      onChange({ ...filters, beds: undefined, baths: undefined, minSqft: undefined });
+    }
+  }, [parcelOnly, filters, onChange]);
 
   return (
     <div className="rounded-md border border-surface-border bg-white p-5 shadow-card">
@@ -95,11 +124,16 @@ export default function FilterPanel({ filters, onChange }: Props) {
             {[0, 1, 2, 3, 4, 5].map((n) => (
               <button
                 key={n}
+                disabled={parcelOnly}
+                aria-disabled={parcelOnly}
+                aria-describedby={parcelHintId}
                 onClick={() => set({ beds: n })}
                 className={`flex-1 rounded-sm py-2 text-xs font-medium transition ${
-                  (filters.beds ?? 0) === n
-                    ? 'bg-brand text-white'
-                    : 'bg-surface-alt text-ink-muted hover:text-ink'
+                  parcelOnly
+                    ? 'cursor-not-allowed bg-surface-alt text-ink-subtle'
+                    : (filters.beds ?? 0) === n
+                      ? 'bg-brand text-white'
+                      : 'bg-surface-alt text-ink-muted hover:text-ink'
                 }`}
               >
                 {n === 0 ? 'Any' : `${n}+`}
@@ -113,11 +147,16 @@ export default function FilterPanel({ filters, onChange }: Props) {
             {[0, 1, 2, 3, 4].map((n) => (
               <button
                 key={n}
+                disabled={parcelOnly}
+                aria-disabled={parcelOnly}
+                aria-describedby={parcelHintId}
                 onClick={() => set({ baths: n })}
                 className={`flex-1 rounded-sm py-2 text-xs font-medium transition ${
-                  (filters.baths ?? 0) === n
-                    ? 'bg-brand text-white'
-                    : 'bg-surface-alt text-ink-muted hover:text-ink'
+                  parcelOnly
+                    ? 'cursor-not-allowed bg-surface-alt text-ink-subtle'
+                    : (filters.baths ?? 0) === n
+                      ? 'bg-brand text-white'
+                      : 'bg-surface-alt text-ink-muted hover:text-ink'
                 }`}
               >
                 {n === 0 ? 'Any' : `${n}+`}
@@ -126,6 +165,12 @@ export default function FilterPanel({ filters, onChange }: Props) {
           </div>
         </div>
       </div>
+
+      {parcelOnly && (
+        <p id={PARCEL_HINT_ID} className="mt-2 text-xs text-ink-muted">
+          {PARCEL_INTERLOCK_HINT}
+        </p>
+      )}
 
       {/* Property type */}
       <div className="mt-4">
@@ -199,12 +244,18 @@ export default function FilterPanel({ filters, onChange }: Props) {
 
           {/* Sqft */}
           <div className="mt-4">
-            <label className="mb-1 block text-xs font-medium text-ink-muted">Min Sqft</label>
+            <label className="mb-1 block text-xs font-medium text-ink-muted" htmlFor="min-sqft">
+              Min Sqft
+            </label>
             <input
+              id="min-sqft"
               type="number"
-              className="input-field"
-              placeholder="No min"
-              value={filters.minSqft ?? ''}
+              className="input-field disabled:cursor-not-allowed disabled:bg-surface-alt disabled:text-ink-subtle"
+              placeholder={parcelOnly ? 'Not applicable to land' : 'No min'}
+              disabled={parcelOnly}
+              aria-disabled={parcelOnly}
+              aria-describedby={parcelHintId}
+              value={parcelOnly ? '' : (filters.minSqft ?? '')}
               onChange={(e) =>
                 set({ minSqft: e.target.value ? Number(e.target.value) : undefined })
               }

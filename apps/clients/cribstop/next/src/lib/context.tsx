@@ -26,7 +26,6 @@ import {
   selectSearchLocation,
   selectSearchMaxPrice,
   selectSearchMoveInDate,
-  selectSearchOccupants,
   selectSearchPriceIdx,
   selectSearchPropertyTypes,
   selectSearchSuggestion,
@@ -55,7 +54,6 @@ import {
   setSearchLocation,
   setSearchMaxPrice,
   setSearchMoveInDate,
-  setSearchOccupants,
   setSearchPriceIdx,
   setSearchPropertyTypes,
   setSearchSuggestion,
@@ -73,7 +71,6 @@ import {
   ListingType,
   NavTab,
   SearchDateRange,
-  SearchOccupants,
   SearchSuggestion,
   User,
 } from '@/lib/store/types';
@@ -107,8 +104,6 @@ interface AppContextValue {
   setSearchMoveInDate: (v: string) => void;
   searchDateRange: SearchDateRange;
   setSearchDateRange: (v: SearchDateRange) => void;
-  searchOccupants: SearchOccupants;
-  setSearchOccupants: (v: SearchOccupants) => void;
   searchPriceIdx: number;
   setSearchPriceIdx: (v: number) => void;
   searchBedsIdx: number;
@@ -226,7 +221,6 @@ export function useApp(): AppContextValue {
   const searchSuggestion = useAppSelector(selectSearchSuggestion);
   const searchMoveInDate = useAppSelector(selectSearchMoveInDate);
   const searchDateRange = useAppSelector(selectSearchDateRange);
-  const searchOccupants = useAppSelector(selectSearchOccupants);
   const searchPriceIdx = useAppSelector(selectSearchPriceIdx);
   const searchBedsIdx = useAppSelector(selectSearchBedsIdx);
   const searchPropertyTypes = useAppSelector(selectSearchPropertyTypes);
@@ -385,13 +379,6 @@ export function useApp(): AppContextValue {
     [dispatch],
   );
 
-  const setOccupants = useCallback(
-    (v: SearchOccupants) => {
-      dispatch(setSearchOccupants(v));
-    },
-    [dispatch],
-  );
-
   const setPriceIdx = useCallback(
     (v: number) => {
       dispatch(setSearchPriceIdx(v));
@@ -463,8 +450,6 @@ export function useApp(): AppContextValue {
     setSearchMoveInDate: setMoveInDate,
     searchDateRange,
     setSearchDateRange: setDateRange,
-    searchOccupants,
-    setSearchOccupants: setOccupants,
     searchPriceIdx,
     setSearchPriceIdx: setPriceIdx,
     searchBedsIdx,

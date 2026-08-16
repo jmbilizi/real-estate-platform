@@ -91,7 +91,7 @@ export default function Toast() {
   return (
     <div
       aria-label="Notifications"
-      className="pointer-events-none fixed inset-x-0 top-5 z-[9999] flex flex-col items-center gap-2.5 px-4"
+      className="pointer-events-none fixed inset-x-0 top-5 z-toast flex flex-col items-center gap-2.5 px-4"
     >
       {toasts.map((t) => (
         <ToastCard key={t.id} toast={t} />

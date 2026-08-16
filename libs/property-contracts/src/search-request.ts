@@ -59,6 +59,17 @@ const amenityList = z
   .describe(`Comma-separated or repeated values from the closed set: ${AMENITIES.join(', ')}.`);
 
 /**
+ * The sort options, as a value array so a consumer can validate a URL parameter against them.
+ *
+ * Exported for the same reason as `LISTING_TYPES` and `AMENITIES`: a client parsing `?sort=` needs
+ * the runtime list, and hand-listing it there means adding a sort here would silently leave that
+ * client unable to accept it.
+ */
+export const SORT_VALUES = ['recommended', 'newest', 'price-asc', 'price-desc'] as const;
+export const sortSchema = z.enum(SORT_VALUES);
+export type ListingSort = z.infer<typeof sortSchema>;
+
+/**
  * Strict on purpose. An unknown parameter is rejected rather than ignored, which kills the
  * silent-typo'd-filter bug (`?bed=3` quietly returning unfiltered results) and, more importantly,
  * leaves no room for a future field-selection parameter that could strip attribution.
@@ -84,7 +95,7 @@ export const searchRequestSchema = z.strictObject({
   waterfront: queryBoolean.optional(),
   petFriendly: queryBoolean.optional(),
   amenities: amenityList.optional(),
-  sort: z.enum(['recommended', 'newest', 'price-asc', 'price-desc']).default('recommended'),
+  sort: sortSchema.default('recommended'),
   page: queryPage.default(1),
   pageSize: queryPageSize.default(PAGE_SIZE_DEFAULT),
 });

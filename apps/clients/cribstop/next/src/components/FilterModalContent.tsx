@@ -1,4 +1,8 @@
-import React, { forwardRef, useImperativeHandle, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
+import { isParcelOnlySelection, PARCEL_INTERLOCK_HINT } from '@/lib/store/types';
+
+/** Ties the disabled dwelling steppers to their single visible explanation. */
+const PARCEL_HINT_ID = 'filter-modal-parcel-interlock-hint';
 
 export interface FilterModalContentHandle {
   clear: () => void;
@@ -70,6 +74,21 @@ const FilterModalContent = forwardRef<
   const toggleArrayValue = (arr: string[], value: string) =>
     arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value];
 
+  // --- Lot/Land interlock (#24) --------------------------------------------
+  //
+  // A parcel has no beds or baths, so the API's dwelling predicates exclude every parcel: asking
+  // for Lot/Land AND 2+ beds returns nothing, with no explanation on screen. Both controls are
+  // cleared and disabled while land is the only home type selected. The interlock lives in the UI,
+  // never in the request builder — the API is meant to receive exactly what the user asked for.
+  const parcelOnly = isParcelOnlySelection(selectedPropertyTypes);
+  const parcelHintId = parcelOnly ? PARCEL_HINT_ID : undefined;
+
+  useEffect(() => {
+    if (!parcelOnly) return;
+    if (beds !== '') setBeds('');
+    if (baths !== '') setBaths('');
+  }, [parcelOnly, beds, baths]);
+
   const handleShow = () => {
     onShow({
       selectedPropertyTypes,
@@ -78,8 +97,10 @@ const FilterModalContent = forwardRef<
       selectedListingTypes,
       minPrice: luxury ? '1000000' : minPrice,
       maxPrice,
-      beds,
-      baths,
+      // Belt and braces: land-only can never carry a dwelling count out of here even if some
+      // future entry path sets one without going through the interlock above.
+      beds: parcelOnly ? '' : beds,
+      baths: parcelOnly ? '' : baths,
       yearBuiltMin,
       yearBuiltMax,
       storiesMin,
@@ -294,6 +315,8 @@ const FilterModalContent = forwardRef<
             <button
               type="button"
               disabled={disabled}
+              aria-disabled={disabled}
+              aria-describedby={parcelHintId}
               onClick={onClick}
               className={`h-8 w-8 rounded-full border inline-flex items-center justify-center leading-none select-none transition-colors ${
                 disabled
@@ -305,39 +328,45 @@ const FilterModalContent = forwardRef<
               {label}
             </button>
           );
+          const labelTone = parcelOnly ? 'text-ink-subtle' : 'text-ink';
           return (
             <div className="flex flex-col gap-3">
+              {parcelOnly && (
+                <p id={PARCEL_HINT_ID} className="text-xs text-ink-muted">
+                  {PARCEL_INTERLOCK_HINT}
+                </p>
+              )}
               <div className="flex items-center justify-between py-1">
-                <span className="text-sm font-medium text-ink">Bedrooms</span>
+                <span className={`text-sm font-medium ${labelTone}`}>Bedrooms</span>
                 <div className="flex items-center gap-5">
                   {stepperBtn(
-                    bedIdx === 0,
+                    parcelOnly || bedIdx === 0,
                     () => setBeds(bedIdx === 1 ? '' : bedsOpts[bedIdx - 1]),
                     '–',
                   )}
-                  <span className="w-8 text-center text-[15px] font-normal text-ink">
-                    {bedIdx === 0 ? 'Any' : bedsOpts[bedIdx]}
+                  <span className={`w-8 text-center text-[15px] font-normal ${labelTone}`}>
+                    {parcelOnly || bedIdx === 0 ? 'Any' : bedsOpts[bedIdx]}
                   </span>
                   {stepperBtn(
-                    bedIdx === bedsOpts.length - 1,
+                    parcelOnly || bedIdx === bedsOpts.length - 1,
                     () => setBeds(bedsOpts[bedIdx + 1]),
                     '+',
                   )}
                 </div>
               </div>
               <div className="flex items-center justify-between py-1">
-                <span className="text-sm font-medium text-ink">Bathrooms</span>
+                <span className={`text-sm font-medium ${labelTone}`}>Bathrooms</span>
                 <div className="flex items-center gap-5">
                   {stepperBtn(
-                    bathIdx === 0,
+                    parcelOnly || bathIdx === 0,
                     () => setBaths(bathIdx === 1 ? '' : bathsOpts[bathIdx - 1]),
                     '–',
                   )}
-                  <span className="w-8 text-center text-[15px] font-normal text-ink">
-                    {bathIdx === 0 ? 'Any' : bathsOpts[bathIdx]}
+                  <span className={`w-8 text-center text-[15px] font-normal ${labelTone}`}>
+                    {parcelOnly || bathIdx === 0 ? 'Any' : bathsOpts[bathIdx]}
                   </span>
                   {stepperBtn(
-                    bathIdx === bathsOpts.length - 1,
+                    parcelOnly || bathIdx === bathsOpts.length - 1,
                     () => setBaths(bathsOpts[bathIdx + 1]),
                     '+',
                   )}

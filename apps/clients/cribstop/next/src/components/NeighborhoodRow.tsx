@@ -6,7 +6,6 @@ import Link from 'next/link';
 interface Neighborhood {
   name: string;
   city: string;
-  count: number;
   img: string;
 }
 
@@ -137,8 +136,16 @@ export default function NeighborhoodRow({ title, subtitle, href, neighborhoods, 
             <div className="absolute inset-x-0 bottom-0 p-5 text-white">
               <h3 className="font-display text-xl font-bold">{n.name}</h3>
               <p className="mt-0.5 text-sm text-white/85">{n.city}</p>
+              {/*
+               * No inventory count. These tiles used to render a hardcoded `count` as "24 homes",
+               * which was a fabricated fact (PRD §6.3) — and once the carousels beside it started
+               * coming from the real API, it was also verifiably wrong. A true per-neighbourhood
+               * count would need a search request per tile, which is not worth six more gateway
+               * calls on the busiest page, so the affordance states what it does instead of
+               * asserting a number.
+               */}
               <p className="mt-3 inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-white/95">
-                {n.count} homes
+                Browse homes
                 <span aria-hidden>→</span>
               </p>
             </div>

@@ -3,8 +3,12 @@ import {
   amenitySchema,
   ATTRIBUTION_KEYS,
   attributionSchema,
+  LISTING_SOURCES,
+  LISTING_TYPES,
   mediaSchema,
+  PROPERTY_TYPES,
 } from './common';
+import type { Amenity, ListingSource, ListingType, PropertyType } from './common';
 
 describe('common schemas', () => {
   it('locks the amenity set to the 15 values the database CHECK allows', () => {
@@ -77,5 +81,39 @@ describe('common schemas', () => {
       'officeBrokerLeadPhone',
       'officeName',
     ]);
+  });
+});
+
+/**
+ * The exported enum types are what `cribstop-next` types its filter controls and its
+ * `source`-driven provenance condition against. A type-only export is invisible to a runtime
+ * assertion, so each one is exercised here by assigning a value through it: if the type is dropped
+ * or its union narrows, this file stops compiling under `nx type-check`, which is the signal.
+ */
+describe('exported enum types stay in step with their value sets', () => {
+  it('accepts every declared listing type and nothing else', () => {
+    const all: ListingType[] = [...LISTING_TYPES];
+    expect(all).toHaveLength(LISTING_TYPES.length);
+    // @ts-expect-error — 'lease' is not a listing type, and the type must be what rejects it.
+    const invalid: ListingType = 'lease';
+    expect(invalid).toBe('lease');
+  });
+
+  it('accepts every declared property type', () => {
+    const all: PropertyType[] = [...PROPERTY_TYPES];
+    expect(all).toContain('Land');
+  });
+
+  it('accepts every declared amenity', () => {
+    const all: Amenity[] = [...AMENITIES];
+    expect(all).toContain('Pet Friendly');
+  });
+
+  it('accepts every declared source, which is what per-listing provenance branches on', () => {
+    const all: ListingSource[] = [...LISTING_SOURCES];
+    expect(all).toEqual(['brightMLS', 'internal', 'other']);
+    // @ts-expect-error — an unlisted source must not type-check; provenance branches on this union.
+    const invalid: ListingSource = 'mls';
+    expect(invalid).toBe('mls');
   });
 });

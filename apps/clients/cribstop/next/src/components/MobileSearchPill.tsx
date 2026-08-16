@@ -10,14 +10,7 @@ import { useApp } from '@/lib/context';
  * The caller is responsible for the outer container / positioning wrapper.
  */
 export default function MobileSearchPill() {
-  const {
-    searchLocation,
-    listingType,
-    activeTab,
-    searchDateRange,
-    searchOccupants,
-    setMobileSearchOpen,
-  } = useApp();
+  const { searchLocation, listingType, activeTab, searchDateRange, setMobileSearchOpen } = useApp();
 
   const summary = (() => {
     if (activeTab === 'services') return 'Find services';
@@ -79,8 +72,6 @@ export default function MobileSearchPill() {
     } else {
       parts.push('Any dates');
     }
-    const total = searchOccupants.adults + searchOccupants.children;
-    if (total > 0) parts.push(`${total} occupant${total !== 1 ? 's' : ''}`);
     return parts.join(' · ');
   })();
 

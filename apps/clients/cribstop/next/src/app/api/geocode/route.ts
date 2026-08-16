@@ -1,24 +1,16 @@
 import { NextRequest } from 'next/server';
+import { buildForwardUrl } from '../_lib/nominatim';
+import { proxyNominatim } from '../_lib/nominatim-fetch';
 
+/**
+ * Forward geocoding — a place name or ZIP to a coordinate, optionally with a boundary polygon.
+ *
+ * This used to hardcode `limit=5&addressdetails=1&q=…` and nothing else, which is exactly why the
+ * search page did not use it: it needs `limit=1`, a `postalcode` lookup for a ZIP, and the boundary
+ * polygon, none of which this could express. So it called Nominatim from the browser instead, where
+ * CORS blocked it and no `User-Agent` could be sent. Widening the proxy — through an allowlist, not
+ * a pass-through — is what let those calls come back here where they belong.
+ */
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const q = searchParams.get('q');
-  if (!q || typeof q !== 'string') {
-    return new Response(JSON.stringify({ error: 'Missing query' }), { status: 400 });
-  }
-  const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&countrycodes=us&q=${encodeURIComponent(q)}`;
-  const response = await fetch(url, {
-    headers: {
-      'User-Agent': 'real-estate-platform/1.0',
-      Accept: 'application/json',
-    },
-  });
-  if (!response.ok) {
-    return new Response(JSON.stringify({ error: 'Upstream error' }), { status: 502 });
-  }
-  const data = await response.json();
-  return new Response(JSON.stringify(data), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  });
+  return proxyNominatim(buildForwardUrl(req.nextUrl.searchParams), 'forward search');
 }
