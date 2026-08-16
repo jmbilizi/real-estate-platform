@@ -78,51 +78,7 @@ export default function SearchExperience({
   ownsUrl = true,
   deferred = false,
 }: SearchExperienceProps) {
-  const {
-    savedIds,
-    searchLocation: location,
-    setSearchLocation: setLocation,
-    setSearchSuggestion,
-  } = useApp();
-  /**
-   * Seeds the search bar's location from the parameters this instance was given.
-   *
-   * Deliberately keyed on `initialQuery` alone, and deliberately **not** on `ownsUrl`.
-   *
-   * `ownsUrl` is a live value behind a standalone listing — `ListingSearchBackdrop` derives it from
-   * whether a panel is open — and re-seeding when it flips throws away everything the user has done
-   * to these results. The flip that matters is true → false, when a listing opens over results the
-   * user has already revealed and started using: re-seeding there reset sort and paging back to the
-   * listing's original city query and **refetched**, measured at two extra `/api/listings` requests
-   * per open. Filters set through the modal were lost outright rather than reset, because only
-   * `page` and `sort` are ever written to the URL, so there was nothing to restore them from on the
-   * way back.
-   *
-   * Nothing needed that re-seed. On the way back — false → true, the close — the URL has just been
-   * rewritten to the same query this instance was seeded with, so re-reading it could only ever
-   * produce the values already held.
-   *
-   * Held instances skip it outright. `setLocation` and `setSearchSuggestion` are shared app state —
-   * the header's search bar reads them — so a shell rendered purely to hold the layout's shape
-   * would otherwise blank the bar it is sitting under.
-   */
-  useEffect(() => {
-    if (typeof window === 'undefined' || deferred) return;
-
-    const params = new URLSearchParams(initialQuery);
-    const q = params.get('q') || '';
-    const lat = params.get('lat');
-    const lon = params.get('lon');
-    setLocation(q);
-    // Restore the suggestion object so CompactSearchBar can search again without re-typing
-    if (q && lat && lon) {
-      setSearchSuggestion({ display_name: q, lat, lon });
-    } else if (!q) {
-      setSearchSuggestion(null);
-    }
-    // `filters` and `page` are seeded from this same string in their own `useState` initialisers,
-    // synchronously on the first render, so they are deliberately not set again here.
-  }, [initialQuery, deferred, setLocation, setSearchSuggestion]);
+  const { savedIds, setSearchLocation: setLocation, setSearchSuggestion } = useApp();
 
   /**
    * Follows the Back and Forward buttons, but only while this instance owns the URL.
@@ -226,13 +182,28 @@ export default function SearchExperience({
   //   Phase 1 — no polygon, ~300 bytes → sets map center immediately so tiles load fast
   //   Phase 2 — same query with polygon_geojson + aggressive simplification (~5-15 KB)
   //             fires in parallel to tile loading, boundary appears ~500ms later
+  //
+  // Keyed on the **committed** query — the `q` this instance was given — and deliberately not on
+  // `location`, which is the search bar's live input value in shared app state and therefore changes
+  // on every keystroke. Keying on it fired both phases per character: typing "Washington" issued 20
+  // upstream requests, and Nominatim (1 req/s, absolute) answered `429` to all of them, which the
+  // proxy surfaces as `502`. The bar then showed "No locations found" for a real city and the search
+  // could not be run at all.
+  //
+  // This was latent until geocoding moved server-side. Called from the browser these requests were
+  // blocked by CORS and never reached Nominatim, so an undebounced dependency cost nothing visible;
+  // routing them through our own origin under an identifying `User-Agent` is what turned it into a
+  // flood from a single egress IP. The committed query is also simply the correct key: the map
+  // centres on the search that ran, exactly like the results do.
+  const committedLocation = filters.query ?? '';
   useEffect(() => {
     // Clear stale state immediately so old boundary/center don't linger
     setSearchCenter(null);
     setSearchPolygon(null);
     if (deferred) return; // held: the map is on its placeholder, so there is nothing to centre yet
-    if (!location || !location.trim()) return;
+    if (!committedLocation.trim()) return;
     let cancelled = false;
+    const location = committedLocation;
     const zip = (location.match(/\b(\d{5})\b/) ?? [])[1];
 
     /*
@@ -306,7 +277,7 @@ export default function SearchExperience({
     return () => {
       cancelled = true;
     };
-  }, [location, deferred]);
+  }, [committedLocation, deferred]);
 
   // Filter modal open state
   const [filterOpen, setFilterOpen] = useState(false);
@@ -317,6 +288,56 @@ export default function SearchExperience({
   const [page, setPage] = useState(() =>
     parsePageFromSearchParams(new URLSearchParams(initialQuery)),
   );
+
+  /**
+   * Re-seeds everything derived from the URL whenever this instance is handed a different one.
+   *
+   * Placed after the state it seeds, and keyed on `initialQuery` alone — deliberately **not** on
+   * `ownsUrl`.
+   *
+   * `ownsUrl` is a live value behind a standalone listing (`ListingSearchBackdrop` derives it from
+   * whether a panel is open) and re-seeding on its flip throws away everything the user has done to
+   * these results: sort and paging reset to the listing's original city query, two extra
+   * `/api/listings` requests per open, and modal filters lost outright because only `page` and
+   * `sort` are ever written to the URL. `initialQuery` does not change on that flip, so keying on it
+   * alone keeps that fixed while still following a genuinely new query.
+   *
+   * **Filters and page must be re-seeded here, not only in their `useState` initialisers.** Next
+   * does not remount a segment when only its search parameters change — `createRouterCacheKey`
+   * excludes them by design — so `router.push('/search?q=…')` from the search bar re-renders this
+   * same instance with a new `initialQuery` prop and no initialiser runs again. Seeding the location
+   * but not the filters moved the search bar and the map to the new city while the grid, the result
+   * count and the request all stayed on the old one: searching a new city appeared to do nothing.
+   * Verified against a live service — Alexandria → Washington, DC left "1 result / Old Town,
+   * Alexandria" on screen and issued no request at all, because `useListingSearch` keys on the
+   * filters' value and that value had not changed.
+   *
+   * Re-seeding on mount is a no-op rather than a double fetch: the values parse from the same string
+   * the initialisers used, so `useListingSearch`'s value-derived key is unchanged and nothing
+   * refetches.
+   *
+   * Held instances skip it outright. `setLocation` and `setSearchSuggestion` are shared app state —
+   * the header's search bar reads them — so a shell rendered purely to hold the layout's shape
+   * would otherwise blank the bar it is sitting under.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined' || deferred) return;
+
+    const params = new URLSearchParams(initialQuery);
+    const q = params.get('q') || '';
+    const lat = params.get('lat');
+    const lon = params.get('lon');
+    setLocation(q);
+    // Restore the suggestion object so CompactSearchBar can search again without re-typing
+    if (q && lat && lon) {
+      setSearchSuggestion({ display_name: q, lat, lon });
+    } else if (!q) {
+      setSearchSuggestion(null);
+    }
+    setFilters(parseFiltersFromSearchParams(params));
+    setPage(parsePageFromSearchParams(params));
+  }, [initialQuery, deferred, setLocation, setSearchSuggestion]);
+
   const { results, total, pageCount, status, error, retry } = useListingSearch(
     filters,
     page,
