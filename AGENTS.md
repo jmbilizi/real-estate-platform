@@ -1455,7 +1455,12 @@ project — Projects v2 permissions for a user-owned board are granted per-user,
   what was descoped); due dates are optional context. Milestones live on the issue (one per issue,
   GitHub-enforced); the board's `Milestone` field reflects them automatically, and
   `gh:milestone -- list` reports delivered/total per epic. Engineers treat a ticket's milestone as
-  read-only context.
+  read-only context. **Milestone descriptions are also the durable release-direction record**: the
+  first line of every open milestone description is a release marker — `Release: MVP` (first-release
+  gating) or `Release: post-MVP` — and the set of `Release: MVP` epics is the current first-release
+  scope (stakeholder ruling 2026-08-17: Homes-first MVP; Services/Connect as waitlist/gated
+  preview). The product owner reads these before re-deriving direction and records scope/sequencing
+  rulings by updating the description, never only in a session report.
 - **Implementation Plan & branching**: one ticket = one branch (`<issue>-short-slug`, always cut
   from `dev`) = one PR (targeting `dev`). Before coding, the engineer writes an ordered checklist
   into a marker-delimited `## Implementation Plan` section of the ticket body

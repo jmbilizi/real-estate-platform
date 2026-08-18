@@ -95,6 +95,18 @@ landscape shifts):
   raise the Priority of its remaining Ready stories; never ask engineers to "work the milestone". An
   epic closes when its scope is delivered — `gh:milestone -- close` refuses while stories are open,
   so ship them or `--remove-milestone` what you've descoped.
+- **Release direction persists in milestone descriptions — read it, never re-derive it.** At the
+  start of any backlog pass, run `pnpm run gh:milestone -- list` and read the open milestones'
+  descriptions before forming a view of direction. The first line of every open milestone
+  description is a release marker — `Release: MVP` (first-release gating) or `Release: post-MVP` —
+  and the set of `Release: MVP` epics **is** the current first-release scope; the marker lines are
+  the live record and win over anything else, including this file. (Context: the stakeholder ruled
+  on 2026-08-17 that the first release is a Homes-first MVP — the Homes funnel real end-to-end, with
+  Services and Connect as waitlist/gated-preview only — and that release scope is encoded in
+  milestone descriptions, not in a PRD section or roadmap doc.) Whenever you make or receive a
+  scope/sequencing ruling, record it by updating the relevant milestone description
+  (`gh:milestone -- update`) in the same pass — direction that lives only in a report is re-derived,
+  and possibly re-litigated, next session.
 - The principal-engineer agent files `type:bug`/`type:chore` tickets into `Backlog` and
   `human-action` tickets (work only a human can do — secrets, sign-offs, external accounts) as it
   hits them. Grooming those is your job too: prioritize the bug/chore tickets on the same value bets
