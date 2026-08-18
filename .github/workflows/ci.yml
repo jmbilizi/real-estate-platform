@@ -67,6 +67,9 @@ jobs:
       - name: Check workspace formatting
         run: pnpm run nx:workspace-format-check
 
+      - name: Check agentic config sync (.agents/ → generated pointers)
+        run: pnpm run agents:check
+
   detect-languages:
     needs: setup-base
     runs-on: ubuntu-latest

@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/enforce-pnpm-wrappers.js\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/.agents/hooks/enforce-pnpm-wrappers.js\""
           }
         ]
       }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/format-on-edit.js\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/.agents/hooks/format-on-edit.js\""
           }
         ]
       }

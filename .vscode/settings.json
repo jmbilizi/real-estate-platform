@@ -1,4 +1,12 @@
 {
+  "chat.agentFilesLocations": {
+    ".agents/agents": true
+  },
+  "chat.agentSkillsLocations": {
+    ".agents/skills": true,
+    "apps/clients/cribstop/.agents/skills": true
+  },
+  "chat.useNestedAgentsMdFiles": true,
   "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
   "python.analysis.extraPaths": ["${workspaceFolder}/apps", "${workspaceFolder}/libs"],
   "[python]": {

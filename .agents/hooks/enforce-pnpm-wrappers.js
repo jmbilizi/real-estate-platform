@@ -2,7 +2,7 @@
 /**
  * PreToolUse hook (Bash): enforces repo rule #1 — never run raw tool
  * commands; always use pnpm run / pnpm exec nx wrappers.
- * See .github/copilot-instructions.md "Always Use Project Scripts".
+ * See AGENTS.md "Always Use Project Scripts".
  *
  * Exit 0 = allow, exit 2 = block (stderr is shown to Claude).
  *
@@ -74,7 +74,7 @@ process.stdin.on('end', () => {
     for (const rule of rules) {
       if (rule.pattern.test(segment)) {
         process.stderr.write(
-          `Blocked by repo convention (.github/copilot-instructions.md): raw tool command detected.\n` +
+          `Blocked by repo convention (AGENTS.md): raw tool command detected.\n` +
             `Command: ${command}\n` +
             `Use instead: ${rule.fix}\n`,
         );

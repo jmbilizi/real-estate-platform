@@ -563,6 +563,18 @@ function checkInfrastructure() {
   return true;
 }
 
+// Verify generated provider pointers (.claude/) match canonical .agents/ sources
+function checkAgentsSync() {
+  logStep('Validating Agentic Config Sync');
+  const result = run('node tools/agents/sync-providers.js --check');
+  if (!result.success) {
+    logError('Agentic config drift — run "pnpm run agents:sync" and stage the result');
+    return false;
+  }
+  logSuccess('Agentic config in sync');
+  return true;
+}
+
 function main() {
   log('\n⚡ Pre-Commit Quick Checks', 'bright');
   log('='.repeat(80), 'cyan');
@@ -686,6 +698,10 @@ function main() {
   // Check infrastructure files (Kustomize) if changed
   const infraResult = checkInfrastructure();
   allPassed = allPassed && infraResult;
+
+  // Check generated agentic config is in sync with .agents/ (fast, always runs)
+  const agentsResult = checkAgentsSync();
+  allPassed = allPassed && agentsResult;
 
   // Final summary
   logStep('Summary');
