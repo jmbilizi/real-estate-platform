@@ -216,14 +216,15 @@ deduplication requirement in Section 6.2.
 Beyond the management hierarchy above, the consumer marketplace requires a richer listing shape,
 shared by the web client and the Property API.
 
-> **This section defines the consumer/API DTO shape:** the flattened listing object exchanged by
-> the web client and the `listings` resource of the **Property API**. Both remain normative: the DTO
-> must expose the fields below, while storage locates each fact at the level whose lifetime it shares
-> across properties, units, and listings; the schema need not co-locate them.
+> **This section defines the consumer/API DTO shape:** the flattened listing object exchanged by the
+> web client and the `listings` resource of the **Property API**. Both remain normative: the DTO
+> must expose the fields below, while storage locates each fact at the level whose lifetime it
+> shares across properties, units, and listings; the schema need not co-locate them.
 >
 > Dwelling facts resolve as `COALESCE(unit, property)` one level deep, and each listing carries a
 > point-in-time snapshot of those resolved values. For the storage rationale, see the property
-> service's ["Data model — durable home vs. listing episode"](apps/services/property-service/CLAUDE.md).
+> service's
+> ["Data model — durable home vs. listing episode"](apps/services/property-service/CLAUDE.md).
 
 - **Listing type:** `sale` | `rent` | `sold` (the platform supports buy, sell, and rent — not
   rentals only). `sold` is a **lifecycle state projected into this union for display**, not a kind
