@@ -163,14 +163,17 @@ environments:
         require_approval: false # Optional approval
         rollback_on_failure: false # Disabled for manual validation
 
+      # Platform infrastructure, not an application still being stood up: the test overlay
+      # renders both from ../../base with no removals. Same shape as postgres/redis —
+      # deployable, but only on an explicit dispatch.
       jaeger:
-        enabled: false # Not yet deployed to test
+        enabled: true
         auto_deploy: false # Manual deployment in test
         require_approval: false
         rollback_on_failure: false
 
       ingress-nginx:
-        enabled: false # Not yet deployed to test
+        enabled: true # The Ingresses in this overlay are unreachable without the controller
         auto_deploy: false # Manual deployment in test
         require_approval: false
         rollback_on_failure: false
@@ -232,14 +235,17 @@ environments:
         require_approval: true # Always require approval
         rollback_on_failure: false # Manual review recommended for production
 
+      # Platform infrastructure, not an application still being stood up. `enabled: false`
+      # here would be self-contradictory: prod's own api-gateway and cribstop-web Ingresses
+      # are served by this controller, and its admission webhook validates them.
       jaeger:
-        enabled: false # Not yet deployed to production
+        enabled: true
         auto_deploy: false # Manual deployment only
         require_approval: true
         rollback_on_failure: false
 
       ingress-nginx:
-        enabled: false # Not yet deployed to production
+        enabled: true
         auto_deploy: false # Manual deployment only
         require_approval: true
         rollback_on_failure: false
