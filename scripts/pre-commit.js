@@ -493,17 +493,25 @@ function checkDotNetProjects(isAffected, base) {
   return true; // All checks passed
 }
 
-// Check if infrastructure files (Kustomize) have changed
+// Files whose change makes `pnpm run infra:validate` meaningful.
+//
+// Not just infra/k8s/: infra:validate also cross-checks every rendered environment against
+// infra/deploy-control.yaml, and a commit touching ONLY deploy-control.yaml is exactly the
+// change that can leave a workload with no entry. tools/infra/*.js is the checker itself.
+function isInfraPath(file) {
+  return (
+    (file.startsWith('infra/k8s/') && (file.endsWith('.yaml') || file.endsWith('.yml'))) ||
+    file === 'infra/deploy-control.yaml' ||
+    (file.startsWith('tools/infra/') && file.endsWith('.js'))
+  );
+}
+
+// Check if infrastructure files (Kustomize / deploy-control) have changed
 function hasInfraFilesChanged() {
   try {
-    // Check if any infra/k8s files are staged
     const result = run('git diff --cached --name-only', { silent: true });
     if (result.success && result.output) {
-      const changedFiles = result.output.split('\n').filter(Boolean);
-      return changedFiles.some(
-        (file) =>
-          file.startsWith('infra/k8s/') && (file.endsWith('.yaml') || file.endsWith('.yml')),
-      );
+      return result.output.split('\n').filter(Boolean).some(isInfraPath);
     }
     return false;
   } catch (error) {

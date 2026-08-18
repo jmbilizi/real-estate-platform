@@ -171,6 +171,39 @@ jobs:
               - '**/global.json'
               - 'tools/dotnet/**'
 
+  # Unit tests for the repo's own automation (tools/**/*.test.js): the GitHub Projects
+  # issue-body splicer and the deploy-scope resolver that infra/deploy-control.yaml and the
+  # deploy action both depend on. Deliberately NOT gated on detect-languages: these guard
+  # CI/CD behaviour, not an Nx project, and `pnpm run tools:test` previously ran only in
+  # scripts/pre-push.js — which exits immediately on feature branches, so it never ran
+  # before a merge to dev.
+  tools:
+    needs: setup-base
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.19.5"
+          cache: "pnpm"
+
+      - name: Restore node_modules
+        uses: actions/cache/restore@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Node.js dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tools tests
+        run: pnpm run tools:test
+
   node:
     needs: [setup-base, detect-languages]
     if: needs.detect-languages.outputs.node == 'true'
@@ -555,13 +588,38 @@ jobs:
             BASE="${{ github.event.before }}"
           fi
 
-          if git diff --name-only "$BASE" "${{ github.sha }}" | grep -qE '^infra/k8s/.*\.(yaml|yml)$|^infra/deploy-control\.yaml$|^infra/smart-deployment-config\.yaml$'; then
+          # deploy-control.yaml and the resolver under tools/infra/ are as much a part of
+          # this validation as the manifests: a commit touching only deploy-control.yaml is
+          # precisely the change that can strand a workload with no entry.
+          if git diff --name-only "$BASE" "${{ github.sha }}" | grep -qE '^infra/k8s/.*\.(yaml|yml)$|^infra/deploy-control\.yaml$|^infra/smart-deployment-config\.yaml$|^tools/infra/.*\.js$'; then
             echo "infra-changed=true" >> $GITHUB_OUTPUT
             echo "✅ Infrastructure files changed — running Kustomize validation"
           else
             echo "infra-changed=false" >> $GITHUB_OUTPUT
             echo "ℹ️  No infrastructure files changed — skipping Kustomize validation"
           fi
+
+      - name: Install pnpm
+        if: steps.detect.outputs.infra-changed == 'true'
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        if: steps.detect.outputs.infra-changed == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.19.5"
+          cache: "pnpm"
+
+      - name: Restore node_modules
+        if: steps.detect.outputs.infra-changed == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Node.js dependencies
+        if: steps.detect.outputs.infra-changed == 'true'
+        run: pnpm install --frozen-lockfile
 
       - name: Install kustomize
         if: steps.detect.outputs.infra-changed == 'true'
@@ -573,33 +631,15 @@ jobs:
           sudo install -o root -g root -m 0755 /tmp/kustomize /usr/local/bin/kustomize
           kustomize version
 
-      - name: Validate Hetzner dev
+      # `pnpm run infra:validate`, not four bare `kustomize build` calls. The wrapper
+      # discovers every provider/environment itself AND cross-checks each rendered
+      # environment against infra/deploy-control.yaml (tools/infra/deploy-scope.js), so a
+      # workload with no deploy-control entry is caught here — on the PR — instead of
+      # being discovered as one informational line in a deploy log.
+      # It is also the repo rule: never run raw tool commands, always the pnpm wrapper.
+      - name: Validate Kustomize manifests and deploy-control coverage
         if: steps.detect.outputs.infra-changed == 'true'
-        run: |
-          echo "▶ kustomize build infra/k8s/hetzner/dev"
-          kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins > /dev/null
-          echo "✅ hetzner/dev passed"
-
-      - name: Validate Hetzner test
-        if: steps.detect.outputs.infra-changed == 'true'
-        run: |
-          echo "▶ kustomize build infra/k8s/hetzner/test"
-          kustomize build infra/k8s/hetzner/test --enable-alpha-plugins > /dev/null
-          echo "✅ hetzner/test passed"
-
-      - name: Validate Hetzner prod
-        if: steps.detect.outputs.infra-changed == 'true'
-        run: |
-          echo "▶ kustomize build infra/k8s/hetzner/prod"
-          kustomize build infra/k8s/hetzner/prod --enable-alpha-plugins > /dev/null
-          echo "✅ hetzner/prod passed"
-
-      - name: Validate Podman local
-        if: steps.detect.outputs.infra-changed == 'true'
-        run: |
-          echo "▶ kustomize build infra/k8s/podman/local"
-          kustomize build infra/k8s/podman/local --enable-alpha-plugins > /dev/null
-          echo "✅ podman/local passed"
+        run: pnpm run infra:validate
 
   # Validate container image builds on PRs (no push) after quality checks pass.
   # Catches broken Dockerfiles before merge without polluting the registry.
@@ -618,7 +658,7 @@ jobs:
 
   # Detect which infrastructure workflows need to be triggered
   detect-infra-changes:
-    needs: [node, python, dotnet, validate-infra] # Wait for all quality checks to pass
+    needs: [node, python, dotnet, tools, validate-infra] # Wait for all quality checks to pass
     if: |
       always() &&
       github.event_name == 'push' &&
