@@ -37,7 +37,11 @@ runs:
       shell: bash
       run: |
         echo "Installing yq and jq"
-        sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+        # Pinned, not `releases/latest`. The scope step relies on documented yq behaviour
+        # (`-e` exiting non-zero when a multi-document `select` matches nothing, `ea '[.]'`
+        # slurping every document); an unpinned install would silently take that behaviour
+        # from whatever shipped that morning.
+        sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
         sudo chmod +x /usr/local/bin/yq
         sudo apt-get update && sudo apt-get install -y jq
         echo "Installing kubectl"
@@ -226,57 +230,51 @@ runs:
         # those steps waited on a workload the job had deliberately never applied, reported
         # "rollout failed", and rolled back every healthy service in the cluster.
         #
-        # scope.txt is now the one list they all read. Format: KIND|NAMESPACE|NAME
-        STRATEGY="${{ inputs.deployStrategy }}"
-        SERVICES=$(printf '%s' "${{ inputs.services }}" | tr -d '[:space:]')
+        # The rule itself lives in tools/infra/deploy-scope.js and is shared with
+        # `pnpm run infra:validate`, so CI cannot certify a configuration this step then
+        # rejects. Crucially it keys off deploy-control KEYS, not `enabled`/`auto_deploy`,
+        # and so tells four different things apart that one "not in scope" list cannot:
+        #
+        #   unregistered workload → fatal, this is the drift #45 is about
+        #   registered but gated off → informational, that is a deliberate decision
+        #   claimed by two keys → fatal, it would be applied and rolled back twice
+        #   key with no workload → fatal when requested, warning otherwise
+        #
+        # This workflow never runs `pnpm install`, so the manifests and the control file
+        # are handed over as JSON produced by yq rather than parsed with js-yaml.
+        yq -o=json -I=0 ea '[.] | map(select(. != null))' manifests.yaml > manifests.json
+        yq -o=json '.' infra/deploy-control.yaml > deploy-control.json
 
-        workloads_all() {
-          yq -N e 'select(.kind == "StatefulSet" or .kind == "Deployment" or .kind == "DaemonSet")
-                   | .kind + "|" + (.metadata.namespace // "default") + "|" + .metadata.name' \
-            manifests.yaml 2>/dev/null || true
-        }
-        workloads_for_service() {
-          yq -N e "select((.kind == \"StatefulSet\" or .kind == \"Deployment\" or .kind == \"DaemonSet\")
-                          and .metadata.labels.app == \"$1\")
-                   | .kind + \"|\" + (.metadata.namespace // \"default\") + \"|\" + .metadata.name" \
-            manifests.yaml 2>/dev/null || true
-        }
-        # yq emits a bare '---' for documents the filter rejects; drop those and blanks.
-        clean() { grep -vE '^(---)?$' || true; }
-
-        : > scope.raw
-        if [ "$STRATEGY" = "all" ] || [ -z "$SERVICES" ] || [ "$SERVICES" = "all" ]; then
-          echo "📦 Scope: ALL workloads in the manifests (strategy=all)"
-          workloads_all >> scope.raw
-        else
-          echo "📦 Scope: workloads labelled app=<service> for: $SERVICES"
-          IFS=',' read -ra SCOPE_SVCS <<< "$SERVICES"
-          for svc in "${SCOPE_SVCS[@]}"; do
-            [ -z "$svc" ] && continue
-            workloads_for_service "$svc" >> scope.raw
-          done
-        fi
-        clean < scope.raw | sort -u > scope.txt
-
-        SCOPE_COUNT=$(wc -l < scope.txt | tr -d ' ')
-        if [ "$SCOPE_COUNT" -eq 0 ]; then
-          echo "❌ Deploy scope is empty — no workload in the manifests matches: $SERVICES"
-          echo "   Service names must match a workload's metadata.labels.app value."
+        # Assert the conversion rather than trust it. yq is pinned, but this is the one hop
+        # that cannot be exercised outside CI, so it fails loudly instead of handing the
+        # resolver an empty list and "deploying" nothing.
+        if ! jq -e 'type == "array" and length > 0 and (map(select(.kind == null)) | length == 0)' \
+             manifests.json > /dev/null; then
+          echo "❌ manifests.json is not a non-empty array of Kubernetes documents."
+          echo "   The yq conversion of manifests.yaml did not produce what this step expects."
           exit 1
         fi
-        echo "\n✅ In scope ($SCOPE_COUNT workloads):"
-        sed 's/|/ /g; s/^/     - /' scope.txt
-
-        # Never let a workload drop out of the pipeline silently. Anything in the manifests
-        # but outside the scope was not applied, so it is intentionally not restarted,
-        # waited on, or rolled back — but say so out loud.
-        workloads_all | clean | sort -u > scope.all
-        if OUT_OF_SCOPE=$(comm -23 scope.all scope.txt) && [ -n "$OUT_OF_SCOPE" ]; then
-          echo "\nℹ️  NOT in scope this run (present in the manifests, not applied):"
-          echo "$OUT_OF_SCOPE" | sed 's/|/ /g; s/^/     - /'
-          echo "   These are workloads with no enabled deploy-control entry. They are"
-          echo "   skipped by every later step, not treated as failures."
+        if ! jq -e '.environments | type == "object"' deploy-control.json > /dev/null; then
+          echo "❌ deploy-control.json has no .environments object — check the yq conversion."
+          exit 1
         fi
+        echo "📄 $(jq 'length' manifests.json) manifest documents, $(jq '.environments | keys | length' deploy-control.json) environments"
+
+        SCOPE_SERVICES=$(printf '%s' "${{ inputs.services }}" | tr -d '[:space:]')
+        if [ "${{ inputs.deployStrategy }}" = "all" ] || [ -z "$SCOPE_SERVICES" ]; then
+          SCOPE_SERVICES="all"
+        fi
+
+        # Writes, for the steps that follow:
+        #   scope.txt                KIND|NAMESPACE|NAME, one line per in-scope workload
+        #   scope-plan.json          per-service selector + workloads + ordered lane phases
+        #   restart-deployments.txt  NAMESPACE|NAME of first-party Deployments only
+        node tools/infra/deploy-scope.js \
+          --manifests-json manifests.json \
+          --control-json deploy-control.json \
+          --environment "$(basename "${{ inputs.kustomizePath }}")" \
+          --services "$SCOPE_SERVICES" \
+          --first-party-image-prefix "ghcr.io/${GITHUB_REPOSITORY}/"
 
     - name: PVC cleanup (BadgerDB corruption handling)
       id: pvc_cleanup
@@ -325,344 +323,313 @@ runs:
           echo "✅ No pods with persistent failures - new config working!"
         fi
 
-    - name: Apply manifests with prune + immutable handling
+    - name: Apply manifests (phased, label-scoped, immutable-safe)
       shell: bash
       run: |
         set -e
         STRATEGY="${{ inputs.deployStrategy }}"
-        SERVICES="${{ inputs.services }}"
 
-        echo "Deployment strategy: $STRATEGY"
-        echo "Services to deploy: $SERVICES"
+        # ── Helpers ─────────────────────────────────────────────────────────────────────
 
+        resource_namespace() {
+          jq -r --arg k "$1" --arg n "$2" \
+            'map(select(.kind == $k and .metadata.name == $n)) | .[0].metadata.namespace // "default"' \
+            manifests.json
+        }
+
+        # Apply one label-scoped slice, recovering from immutable-field rejections.
+        #
+        # Every apply path goes through here, including each parallel service lane. The
+        # multi-service path used to short-circuit with APPLY_CMD="echo 'Parallel
+        # deployment completed'", which made the recovery below unreachable in exactly the
+        # case that needs it: an ingress-nginx version bump changes the admission Jobs'
+        # spec.template, which is immutable, and those Jobs have no ttlSecondsAfterFinished
+        # so they are still there from the previous deploy.
+        apply_slice() {
+          local selector="$1" log="$2"
+          local -a cmd
+          if [ -z "$selector" ]; then
+            cmd=(kubectl apply -f manifests.yaml --prune -l app.kubernetes.io/managed-by=kustomize)
+          else
+            cmd=(kubectl apply -f manifests.yaml -l "$selector")
+          fi
+
+          if "${cmd[@]}" > "$log" 2>&1; then
+            cat "$log"
+            return 0
+          fi
+
+          if ! grep -qE 'field is immutable|are forbidden|cannot be decreased' "$log"; then
+            echo "❌ Apply failed with a non-immutable-field error"
+            cat "$log"
+            return 1
+          fi
+
+          # kubectl reports every immutable rejection in one shape, whatever the kind:
+          #   The <Kind> "<name>" is invalid: <field>: Invalid value: ...: field is immutable
+          #   The <Kind> "<name>" is invalid: spec: Forbidden: updates to <kind> spec ...
+          # The previous five-branch grep matched neither the Job case (spec.template ...
+          # field is immutable) nor anything outside the default namespace, because the
+          # delete that followed passed no -n.
+          local pairs
+          pairs=$(grep -oP 'The \K[A-Za-z]+ "[^"]+" is invalid' "$log" \
+                    | sed 's/ is invalid$//; s/"//g' | sort -u || true)
+          if [ -z "$pairs" ]; then
+            echo "❌ Immutable field conflict detected, but no resource could be identified"
+            cat "$log"
+            return 1
+          fi
+
+          echo "⚠️  Immutable field conflicts — recreating:"
+          echo "$pairs" | sed 's/^/     - /'
+          local kind name ns delete_args
+          while read -r kind name; do
+            [ -z "$kind" ] && continue
+            ns=$(resource_namespace "$kind" "$name")
+            delete_args=""
+            case "$kind" in
+              StatefulSet | Deployment | DaemonSet) delete_args="--cascade=orphan" ;;
+            esac
+            echo "  Deleting $kind/$name in namespace $ns${delete_args:+ (preserving dependents)}"
+            kubectl delete "$(echo "$kind" | tr '[:upper:]' '[:lower:]')" "$name" \
+              -n "$ns" $delete_args --ignore-not-found || true
+          done <<< "$pairs"
+
+          echo "🔄 Retrying apply..."
+          if "${cmd[@]}" >> "$log" 2>&1; then
+            cat "$log"
+            return 0
+          fi
+          cat "$log"
+          return 1
+        }
+
+        deployment_is_ready() {
+          local ns="$1"
+          local name="$2"
+
+          if ! kubectl get deployment "$name" -n "$ns" >/dev/null 2>&1; then
+            return 1
+          fi
+
+          local spec_replicas current_revision current_rs_ready
+          spec_replicas=$(kubectl get deployment "$name" -n "$ns" -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "")
+          spec_replicas=${spec_replicas:-1}
+
+          # Get the current revision so we inspect only the desired ReplicaSet.
+          current_revision=$(kubectl get deployment "$name" -n "$ns" \
+            -o jsonpath='{.metadata.annotations.deployment\.kubernetes\.io/revision}' 2>/dev/null || echo "")
+          if [ -z "$current_revision" ]; then
+            return 1
+          fi
+
+          # Check readyReplicas on the current (desired) ReplicaSet.
+          # Using deployment-level updatedReplicas + availableReplicas gives false positives when
+          # the new pod is stuck in Init:Error (counted as updatedReplicas=1) while the old pod
+          # is still serving (counted as availableReplicas=1). The RS readyReplicas is authoritative.
+          current_rs_ready=$(kubectl get rs -n "$ns" -o json 2>/dev/null | jq -r \
+            --arg deploy_name "$name" \
+            --arg revision "$current_revision" \
+            '[.items[] |
+              select(
+                (.metadata.ownerReferences // [] | map(select(.kind == "Deployment" and .name == $deploy_name)) | length) > 0 and
+                (.metadata.annotations["deployment.kubernetes.io/revision"] // "") == $revision
+              ) | (.status.readyReplicas // 0)
+            ] | if length > 0 then .[0] else 0 end' 2>/dev/null || echo "0")
+          current_rs_ready=${current_rs_ready:-0}
+
+          if [ "$current_rs_ready" -ge "$spec_replicas" ]; then
+            return 0
+          fi
+
+          return 1
+        }
+
+        # Workloads come from scope-plan.json, never from a re-derived yq label query, so
+        # the lane, the validator and the rollout wait cannot disagree about ownership.
+        service_workloads() {
+          jq -r --arg s "$1" \
+            '.services[] | select(.name == $s) | .workloads[] | .kind + "|" + .namespace + "|" + .name' \
+            scope-plan.json
+        }
+
+        deploy_service() {
+          local service="$1"
+          local log="/tmp/deploy-$service.log"
+          local selector
+          selector=$(jq -r --arg s "$service" '.services[] | select(.name == $s) | .selector' scope-plan.json)
+          if [ -z "$selector" ] || [ "$selector" = "null" ]; then
+            echo "❌ $service: no selector in the deploy plan"
+            return 1
+          fi
+
+          echo "📦 $service: applying with -l $selector"
+          if ! apply_slice "$selector" "$log"; then
+            echo "❌ $service: kubectl apply failed"
+            return 1
+          fi
+
+          echo "⏳ $service: waiting for rollout..."
+          local failed=false kind ns name
+          while IFS='|' read -r kind ns name; do
+            [ -z "$kind" ] && continue
+            case "$kind" in
+              StatefulSet)
+                if ! kubectl rollout status statefulset/"$name" -n "$ns" \
+                     --timeout=${{ inputs.statefulset_timeout }} >> "$log" 2>&1; then
+                  echo "❌ $service: StatefulSet $name rollout failed"
+                  failed=true
+                fi
+                ;;
+              Deployment)
+                if deployment_is_ready "$ns" "$name"; then
+                  echo "✅ $service: Deployment $name already Available - skipping rollout wait" >> "$log"
+                elif ! kubectl rollout status deployment/"$name" -n "$ns" \
+                       --timeout=${{ inputs.deployment_timeout }} >> "$log" 2>&1; then
+                  if deployment_is_ready "$ns" "$name"; then
+                    echo "✅ $service: Deployment $name is Available despite rollout warning" >> "$log"
+                  else
+                    echo "❌ $service: Deployment $name rollout failed"
+                    failed=true
+                  fi
+                fi
+                ;;
+              DaemonSet)
+                if ! kubectl rollout status daemonset/"$name" -n "$ns" \
+                     --timeout=${{ inputs.daemonset_timeout }} >> "$log" 2>&1; then
+                  echo "❌ $service: DaemonSet $name rollout failed"
+                  failed=true
+                fi
+                ;;
+            esac
+          done < <(service_workloads "$service")
+
+          if [ "$failed" = "true" ]; then
+            cat "$log"
+            return 1
+          fi
+          echo "✅ $service: all workloads ready"
+        }
+
+        # ── Unfiltered path (strategy=all) ──────────────────────────────────────────────
+        # load-deploy-control always hands this action an explicit service list, so this
+        # branch is only reachable when the action is called directly.
         if [ "$STRATEGY" = "all" ]; then
           echo "Applying ALL manifests (with prune)"
-          APPLY_CMD="kubectl apply -f manifests.yaml --prune -l app.kubernetes.io/managed-by=kustomize"
-        else
-          echo "Applying FILTERED manifests (single service strategy)"
-          
-          # Validate services list is not empty
-          if [ -z "$SERVICES" ] || [ "$SERVICES" = "all" ]; then
-            echo "❌ Deployment strategy is 'single' but no specific services provided"
-            echo "Services value: '$SERVICES'"
-            echo ""
-            echo "Please provide comma-separated service names, for example:"
-            echo "  - Single service: services=postgres"
-            echo "  - Multiple services: services=postgres,redis,jaeger"
-            echo ""
-            echo "Or change strategy to 'all' to deploy all services"
-            exit 1
-          fi
-          
-          SERVICES_TRIMMED=$(echo "$SERVICES" | tr -d ' ')  # Remove any whitespace
-          
-          # Check if multiple services (enables parallel deployment)
-          SERVICE_COUNT=$(echo "$SERVICES_TRIMMED" | tr ',' '\n' | wc -l)
-          
-          if [ "$SERVICE_COUNT" -gt 1 ]; then
-            echo "📦 Multiple services detected: $SERVICE_COUNT services"
-            echo "🚀 Deploying services in PARALLEL with rollout monitoring"
-            echo ""
-
-            deployment_is_ready() {
-              local ns="$1"
-              local name="$2"
-
-              if ! kubectl get deployment "$name" -n "$ns" >/dev/null 2>&1; then
-                return 1
-              fi
-
-              local spec_replicas current_revision current_rs_ready
-              spec_replicas=$(kubectl get deployment "$name" -n "$ns" -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "")
-              spec_replicas=${spec_replicas:-1}
-
-              # Get the current revision so we inspect only the desired ReplicaSet.
-              current_revision=$(kubectl get deployment "$name" -n "$ns" \
-                -o jsonpath='{.metadata.annotations.deployment\.kubernetes\.io/revision}' 2>/dev/null || echo "")
-              if [ -z "$current_revision" ]; then
-                return 1
-              fi
-
-              # Check readyReplicas on the current (desired) ReplicaSet.
-              # Using deployment-level updatedReplicas + availableReplicas gives false positives when
-              # the new pod is stuck in Init:Error (counted as updatedReplicas=1) while the old pod
-              # is still serving (counted as availableReplicas=1). The RS readyReplicas is authoritative.
-              current_rs_ready=$(kubectl get rs -n "$ns" -o json 2>/dev/null | jq -r \
-                --arg deploy_name "$name" \
-                --arg revision "$current_revision" \
-                '[.items[] |
-                  select(
-                    (.metadata.ownerReferences // [] | map(select(.kind == "Deployment" and .name == $deploy_name)) | length) > 0 and
-                    (.metadata.annotations["deployment.kubernetes.io/revision"] // "") == $revision
-                  ) | (.status.readyReplicas // 0)
-                ] | if length > 0 then .[0] else 0 end' 2>/dev/null || echo "0")
-              current_rs_ready=${current_rs_ready:-0}
-
-              if [ "$current_rs_ready" -ge "$spec_replicas" ]; then
-                return 0
-              fi
-
-              return 1
-            }
-            
-            # Deploy each service in parallel with rollout monitoring
-            PIDS=()
-            FAILED_SERVICES=()
-            SUCCEEDED_SERVICES=()
-            
-            IFS=',' read -ra SERVICE_ARRAY <<< "$SERVICES_TRIMMED"
-            for service in "${SERVICE_ARRAY[@]}"; do
-              echo "Starting deployment: $service"
-              (
-                # Apply the service
-                if ! kubectl apply -f manifests.yaml -l "app=$service" > "/tmp/deploy-$service.log" 2>&1; then
-                  echo "❌ $service: kubectl apply failed"
-                  cat "/tmp/deploy-$service.log"
-                  exit 1
-                fi
-                
-                # Wait for rollout status
-                echo "⏳ $service: Waiting for rollout..."
-                ROLLOUT_FAILED=false
-                
-                # Check StatefulSets for this service
-                STATEFULSETS=$(yq -N e "select(.kind == \"StatefulSet\" and .metadata.labels.app == \"$service\") | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-                for sts in $STATEFULSETS; do
-                  if ! kubectl rollout status statefulset/$sts --timeout=${{ inputs.statefulset_timeout }} >> "/tmp/deploy-$service.log" 2>&1; then
-                    echo "❌ $service: StatefulSet $sts rollout failed"
-                    ROLLOUT_FAILED=true
-                  fi
-                done
-                
-                # Check Deployments for this service
-                DEPLOYMENTS=$(yq -N e "select(.kind == \"Deployment\" and .metadata.labels.app == \"$service\") | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-                for deploy in $DEPLOYMENTS; do
-                  DEPLOY_NS=$(yq -N e "select(.kind == \"Deployment\" and .metadata.name == \"$deploy\") | .metadata.namespace // \"default\"" manifests.yaml 2>/dev/null | head -1)
-                  if deployment_is_ready "$DEPLOY_NS" "$deploy"; then
-                    echo "✅ $service: Deployment $deploy already Available - skipping rollout wait" >> "/tmp/deploy-$service.log" 2>&1
-                    continue
-                  fi
-
-                  if ! kubectl rollout status deployment/$deploy -n "$DEPLOY_NS" --timeout=${{ inputs.deployment_timeout }} >> "/tmp/deploy-$service.log" 2>&1; then
-                    echo "⚠️  $service: Deployment $deploy rollout status reported failure - re-checking availability" >> "/tmp/deploy-$service.log" 2>&1
-                    if deployment_is_ready "$DEPLOY_NS" "$deploy"; then
-                      echo "✅ $service: Deployment $deploy is Available despite rollout warning" >> "/tmp/deploy-$service.log" 2>&1
-                    else
-                      echo "❌ $service: Deployment $deploy rollout failed"
-                      ROLLOUT_FAILED=true
-                    fi
-                  fi
-                done
-                
-                # Check DaemonSets for this service
-                DAEMONSETS=$(yq -N e "select(.kind == \"DaemonSet\" and .metadata.labels.app == \"$service\") | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-                for ds in $DAEMONSETS; do
-                  if ! kubectl rollout status daemonset/$ds --timeout=${{ inputs.daemonset_timeout }} >> "/tmp/deploy-$service.log" 2>&1; then
-                    echo "❌ $service: DaemonSet $ds rollout failed"
-                    ROLLOUT_FAILED=true
-                  fi
-                done
-                
-                if [ "$ROLLOUT_FAILED" = "true" ]; then
-                  cat "/tmp/deploy-$service.log"
-                  exit 1
-                fi
-                
-                echo "✅ $service: All workloads ready"
-              ) &
-              PIDS+=("$!:$service")
-            done
-            
-            echo ""
-            echo "⏳ Waiting for all services to complete rollout..."
-            
-            # Wait for all background jobs and collect results
-            for pid_service in "${PIDS[@]}"; do
-              PID="${pid_service%%:*}"
-              SERVICE="${pid_service##*:}"
-              if wait "$PID"; then
-                echo "  ✅ $SERVICE: Deployment + rollout succeeded"
-                SUCCEEDED_SERVICES+=("$SERVICE")
-              else
-                echo "  ❌ $SERVICE: Deployment or rollout failed"
-                FAILED_SERVICES+=("$SERVICE")
-              fi
-            done
-            
-            # Trigger rollback for failed services (if enabled)
-            if [ ${#FAILED_SERVICES[@]} -gt 0 ]; then
-              echo ""
-              echo "❌ Parallel deployment completed with failures:"
-              printf '  - %s\n' "${FAILED_SERVICES[@]}"
-              
-              # `statefulset_rollback` comes from deployment_strategies.statefulset, whose own
-              # comment reads "Combined OR logic with service.rollback_on_failure". That OR is
-              # intended — but only for StatefulSets. ORing it in for every kind made each
-              # environment's per-service `rollback_on_failure: false` unreachable.
-              RB_DEPLOY="${{ inputs.rollback_on_failure }}"
-              RB_STS="${{ inputs.rollback_on_failure }}"
-              [ "${{ inputs.statefulset_rollback }}" = "true" ] && RB_STS="true"
-
-              if [ "$RB_DEPLOY" = "true" ] || [ "$RB_STS" = "true" ]; then
-                echo ""
-                echo "🔄 Auto-rollback enabled - rolling back FAILED services only"
-                echo "   StatefulSets: $RB_STS | Deployments & DaemonSets: $RB_DEPLOY"
-                for service in "${FAILED_SERVICES[@]}"; do
-                  echo ""
-                  echo "🔄 Rolling back service: $service"
-
-                  # Rollback StatefulSets
-                  STATEFULSETS=$(yq -N e "select(.kind == \"StatefulSet\" and .metadata.labels.app == \"$service\") | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-                  for sts in $STATEFULSETS; do
-                    if [ "$RB_STS" != "true" ]; then
-                      echo "  ⏭️  StatefulSet/$sts: rollback disabled - left failed for investigation"
-                      continue
-                    fi
-                    echo "  🔄 Rolling back StatefulSet/$sts..."
-                    kubectl rollout undo statefulset/$sts || true
-                    kubectl rollout status statefulset/$sts --timeout=${{ inputs.statefulset_timeout }} || true
-                  done
-
-                  # Rollback Deployments
-                  DEPLOYMENTS=$(yq -N e "select(.kind == \"Deployment\" and .metadata.labels.app == \"$service\") | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-                  for deploy in $DEPLOYMENTS; do
-                    if [ "$RB_DEPLOY" != "true" ]; then
-                      echo "  ⏭️  Deployment/$deploy: rollback disabled - left failed for investigation"
-                      continue
-                    fi
-                    DEPLOY_NS=$(yq -N e "select(.kind == \"Deployment\" and .metadata.name == \"$deploy\") | .metadata.namespace // \"default\"" manifests.yaml 2>/dev/null | head -1)
-                    echo "  🔄 Rolling back Deployment/$deploy (namespace: $DEPLOY_NS)..."
-                    if kubectl rollout history deployment/$deploy -n "$DEPLOY_NS" >/dev/null 2>&1; then
-                      kubectl rollout undo deployment/$deploy -n "$DEPLOY_NS" || true
-                    else
-                      echo "  ℹ️  No rollout history for Deployment/$deploy - skipping undo"
-                    fi
-                    kubectl rollout status deployment/$deploy -n "$DEPLOY_NS" --timeout=${{ inputs.deployment_timeout }} || true
-                  done
-
-                  # Rollback DaemonSets
-                  DAEMONSETS=$(yq -N e "select(.kind == \"DaemonSet\" and .metadata.labels.app == \"$service\") | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-                  for ds in $DAEMONSETS; do
-                    if [ "$RB_DEPLOY" != "true" ]; then
-                      echo "  ⏭️  DaemonSet/$ds: rollback disabled - left failed for investigation"
-                      continue
-                    fi
-                    echo "  🔄 Rolling back DaemonSet/$ds..."
-                    kubectl rollout undo daemonset/$ds || true
-                    kubectl rollout status daemonset/$ds --timeout=${{ inputs.daemonset_timeout }} || true
-                  done
-                done
-
-                echo ""
-                echo "✅ Rollback completed for failed services"
-              else
-                echo ""
-                echo "ℹ️  Auto-rollback disabled - failed services remain in failed state"
-              fi
-              
-              if [ ${#SUCCEEDED_SERVICES[@]} -gt 0 ]; then
-                echo ""
-                echo "✅ Successfully deployed services (remain active):"
-                printf '  - %s\n' "${SUCCEEDED_SERVICES[@]}"
-              fi
-              
-              exit 1
-            fi
-            
-            echo ""
-            echo "✅ All services deployed successfully in parallel"
-            
-            # Skip the regular apply command (already done in parallel)
-            APPLY_CMD="echo 'Parallel deployment completed'"
-          else
-            # Single service - use standard deployment
-            echo "📦 Single service deployment: $SERVICES_TRIMMED"
-            LABEL_SELECTOR="app=$SERVICES_TRIMMED"
-            echo "Label selector: $LABEL_SELECTOR"
-            APPLY_CMD="kubectl apply -f manifests.yaml -l $LABEL_SELECTOR"
-          fi
+          apply_slice "" apply.log
+          echo "✅ Deployment successful"
+          exit 0
         fi
 
-        if ! $APPLY_CMD 2>&1 | tee apply.log; then
-          echo "❌ Apply failed - checking for immutable field conflicts"
-          RESOURCE_TYPE=""
-          DISPLAY_NAME=""
-          DELETE_ARGS=""
-          NAME_PATTERN=""
+        # ── Phased, label-scoped path ───────────────────────────────────────────────────
+        # Phases come from the deploy plan. Services inside a phase run in parallel;
+        # phases run in order, because a lane must not apply a resource while another
+        # lane's admission webhook is still being created or patched.
+        # ValidatingWebhookConfiguration/ingress-nginx-admission is failurePolicy: Fail on
+        # Ingress CREATE/UPDATE, so applying the jaeger / api-gateway / cribstop-web
+        # Ingresses concurrently with the ingress-nginx lane is a rejection waiting to
+        # happen.
+        PHASE_COUNT=$(jq -r '.phases | length' scope-plan.json)
+        FAILED_SERVICES=()
+        SUCCEEDED_SERVICES=()
+        SKIPPED_SERVICES=()
 
-          if grep -q "Forbidden.*updates to statefulset spec.*are forbidden" apply.log; then
-            RESOURCE_TYPE="statefulset"
-            DISPLAY_NAME="StatefulSet"
-            DELETE_ARGS="--cascade=orphan"
-            # Support multiple kubectl error formats; prefer explicit resource name line
-            NAME_PATTERN='The StatefulSet "\K[^\"]+'
-          elif grep -q "Forbidden.*updates to deployment spec.*are forbidden" apply.log; then
-            RESOURCE_TYPE="deployment"
-            DISPLAY_NAME="Deployment"
-            DELETE_ARGS="--cascade=orphan"
-            NAME_PATTERN='Resource=deployments.*?Name: "\K[^\"]+'
-          elif grep -qE "spec\\.clusterIP.*immutable|spec\\.type.*immutable" apply.log; then
-            RESOURCE_TYPE="service"
-            DISPLAY_NAME="Service"
-            DELETE_ARGS=""
-            NAME_PATTERN='Resource=services.*?Name: "\K[^\"]+'
-          elif grep -q "Forbidden.*updates to daemonset spec.*are forbidden" apply.log; then
-            RESOURCE_TYPE="daemonset"
-            DISPLAY_NAME="DaemonSet"
-            DELETE_ARGS="--cascade=orphan"
-            NAME_PATTERN='Resource=daemonsets.*?Name: "\K[^\"]+'
-          elif grep -qE "spec\\.selector.*immutable|spec\\.completions.*cannot be decreased" apply.log; then
-            RESOURCE_TYPE="job"
-            DISPLAY_NAME="Job"
-            DELETE_ARGS=""
-            NAME_PATTERN='Resource=jobs.*?Name: "\K[^\"]+'
+        for ((phase = 0; phase < PHASE_COUNT; phase++)); do
+          mapfile -t PHASE_SERVICES < <(jq -r ".phases[$phase].services[]" scope-plan.json)
+          PHASE_NOTE=$(jq -r ".phases[$phase].note" scope-plan.json)
+
+          if [ ${#FAILED_SERVICES[@]} -gt 0 ]; then
+            SKIPPED_SERVICES+=("${PHASE_SERVICES[@]}")
+            echo ""
+            echo "⏭️  Phase $phase not attempted (${PHASE_SERVICES[*]}) — an earlier phase failed"
+            continue
           fi
 
-          if [ -n "$RESOURCE_TYPE" ]; then
-            echo "\n⚠️  Detected immutable $DISPLAY_NAME field changes"
-            echo "🔍 Identifying affected ${DISPLAY_NAME}s..."
-            # Try to extract resource names from apply log; fallback to manifests list
-            FAILED_RESOURCES=$(grep -oP "$NAME_PATTERN" apply.log || echo "")
-            if [ -z "$FAILED_RESOURCES" ]; then
-              if [ "$RESOURCE_TYPE" = "statefulset" ]; then
-                FAILED_RESOURCES=$(yq -N e 'select(.kind == "StatefulSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-              elif [ "$RESOURCE_TYPE" = "deployment" ]; then
-                FAILED_RESOURCES=$(yq -N e 'select(.kind == "Deployment") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-              elif [ "$RESOURCE_TYPE" = "daemonset" ]; then
-                FAILED_RESOURCES=$(yq -N e 'select(.kind == "DaemonSet") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-              elif [ "$RESOURCE_TYPE" = "service" ]; then
-                FAILED_RESOURCES=$(yq -N e 'select(.kind == "Service") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-              elif [ "$RESOURCE_TYPE" = "job" ]; then
-                FAILED_RESOURCES=$(yq -N e 'select(.kind == "Job") | .metadata.name' manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
-              fi
+          echo ""
+          echo "🚀 Phase $phase: ${PHASE_SERVICES[*]}  ($PHASE_NOTE)"
+          PIDS=()
+          for service in "${PHASE_SERVICES[@]}"; do
+            deploy_service "$service" &
+            PIDS+=("$!:$service")
+          done
+          for pid_service in "${PIDS[@]}"; do
+            PID="${pid_service%%:*}"
+            SERVICE="${pid_service##*:}"
+            if wait "$PID"; then
+              echo "  ✅ $SERVICE: deployment + rollout succeeded"
+              SUCCEEDED_SERVICES+=("$SERVICE")
+            else
+              echo "  ❌ $SERVICE: deployment or rollout failed"
+              FAILED_SERVICES+=("$SERVICE")
             fi
-            if [ -z "$FAILED_RESOURCES" ]; then
-              echo "❌ Could not identify failed ${DISPLAY_NAME}s from error message or manifests"
-              echo "Error log:"
-              cat apply.log
-              exit 1
-            fi
-            echo "📋 ${DISPLAY_NAME}s requiring recreation:"
-            for res in $FAILED_RESOURCES; do echo "  - $res"; done
-            CASCADE_INFO=""
-            [ "$DELETE_ARGS" = "--cascade=orphan" ] && CASCADE_INFO=" (preserving dependent resources)"
-            echo "\n🗑️  Deleting ${DISPLAY_NAME}s with immutable field conflicts${CASCADE_INFO}..."
-            for res in $FAILED_RESOURCES; do
-              if [ -n "$res" ]; then
-                echo "  Deleting $DISPLAY_NAME: $res"
-                kubectl delete "$RESOURCE_TYPE" "$res" $DELETE_ARGS || true
-              fi
-            done
-            echo "\n🔄 Retrying deployment with recreated ${DISPLAY_NAME}s..."
-            $APPLY_CMD
-          else
-            echo "❌ Deployment failed with non-immutable-field error:"
-            cat apply.log
-            exit 1
-          fi
-        else
-          echo "✅ Deployment successful (no immutable field conflicts)"
+          done
+        done
+
+        if [ ${#FAILED_SERVICES[@]} -eq 0 ]; then
+          echo ""
+          echo "✅ All services deployed successfully (${#SUCCEEDED_SERVICES[@]} services, $PHASE_COUNT phase(s))"
+          exit 0
         fi
+
+        echo ""
+        echo "❌ Deployment completed with failures:"
+        printf '  - %s\n' "${FAILED_SERVICES[@]}"
+        if [ ${#SKIPPED_SERVICES[@]} -gt 0 ]; then
+          echo "⏭️  Not attempted (a later phase, blocked by the failure above):"
+          printf '  - %s\n' "${SKIPPED_SERVICES[@]}"
+        fi
+
+        # `statefulset_rollback` comes from deployment_strategies.statefulset, whose own
+        # comment reads "Combined OR logic with service.rollback_on_failure". That OR is
+        # intended — but only for StatefulSets. ORing it in for every kind made each
+        # environment's per-service `rollback_on_failure: false` unreachable.
+        RB_DEPLOY="${{ inputs.rollback_on_failure }}"
+        RB_STS="${{ inputs.rollback_on_failure }}"
+        [ "${{ inputs.statefulset_rollback }}" = "true" ] && RB_STS="true"
+
+        if [ "$RB_DEPLOY" = "true" ] || [ "$RB_STS" = "true" ]; then
+          echo ""
+          echo "🔄 Auto-rollback enabled - rolling back FAILED services only"
+          echo "   StatefulSets: $RB_STS | Deployments & DaemonSets: $RB_DEPLOY"
+          for service in "${FAILED_SERVICES[@]}"; do
+            echo ""
+            echo "🔄 Rolling back service: $service"
+            while IFS='|' read -r KIND NS NAME; do
+              [ -z "$KIND" ] && continue
+              case "$KIND" in
+                StatefulSet) ENABLED="$RB_STS"; TIMEOUT="${{ inputs.statefulset_timeout }}" ;;
+                Deployment)  ENABLED="$RB_DEPLOY"; TIMEOUT="${{ inputs.deployment_timeout }}" ;;
+                DaemonSet)   ENABLED="$RB_DEPLOY"; TIMEOUT="${{ inputs.daemonset_timeout }}" ;;
+                *)           continue ;;
+              esac
+              if [ "$ENABLED" != "true" ]; then
+                echo "  ⏭️  $KIND/$NAME: rollback disabled - left failed for investigation"
+                continue
+              fi
+              RES=$(echo "$KIND" | tr '[:upper:]' '[:lower:]')
+              echo "  🔄 Rolling back $KIND/$NAME (namespace: $NS)..."
+              if kubectl rollout history "$RES/$NAME" -n "$NS" >/dev/null 2>&1; then
+                kubectl rollout undo "$RES/$NAME" -n "$NS" || true
+              else
+                echo "  ℹ️  No rollout history for $KIND/$NAME - skipping undo"
+              fi
+              kubectl rollout status "$RES/$NAME" -n "$NS" --timeout=$TIMEOUT || true
+            done < <(service_workloads "$service")
+          done
+          echo ""
+          echo "✅ Rollback completed for failed services"
+        else
+          echo ""
+          echo "ℹ️  Auto-rollback disabled - failed services remain in failed state"
+        fi
+
+        if [ ${#SUCCEEDED_SERVICES[@]} -gt 0 ]; then
+          echo ""
+          echo "✅ Successfully deployed services (remain active):"
+          printf '  - %s\n' "${SUCCEEDED_SERVICES[@]}"
+        fi
+
+        exit 1
 
     - name: Restart only on template change (StatefulSets)
       shell: bash
@@ -732,17 +699,32 @@ runs:
         echo "🔄 Restarting Deployments to pull latest images (mutable tags)..."
         # Scope, not manifests — restarting a Deployment this run never applied is what
         # produced "Error from server (NotFound)" and a cluster-wide rollback.
-        EXPECTED_DEPLOYS=$(awk -F'|' '$1 == "Deployment" { print $2 "/" $3 }' scope.txt)
-        if [ -z "$EXPECTED_DEPLOYS" ]; then
-          echo "ℹ️  No Deployments in this deploy's scope — skipping restart"
+        #
+        # And only OUR images. The rationale for this step is mutable tags: our images are
+        # pushed as :latest, so the tag alone does not change and the kubelet must be told
+        # to re-pull. Upstream images (ingress-nginx-controller) are pinned by digest, so a
+        # restart can never pull anything new — it just bounces the single ingress
+        # controller replica, and with it all external traffic, on every unrelated deploy.
+        # restart-deployments.txt is filtered to ghcr.io/$GITHUB_REPOSITORY/* by
+        # tools/infra/deploy-scope.js.
+        if [ ! -s restart-deployments.txt ]; then
+          IN_SCOPE_DEPLOYS=$(awk -F'|' '$1 == "Deployment" { print $2 "/" $3 }' scope.txt | tr '\n' ' ')
+          if [ -n "$IN_SCOPE_DEPLOYS" ]; then
+            # Deployments are in scope but none matched ghcr.io/$GITHUB_REPOSITORY/*. That is
+            # correct for an all-upstream scope, and a symptom of failed image substitution
+            # otherwise — so name them rather than skipping quietly.
+            echo "⚠️  No Deployment in scope uses a ghcr.io/${GITHUB_REPOSITORY}/ image."
+            echo "   In scope but not restarted: $IN_SCOPE_DEPLOYS"
+          else
+            echo "ℹ️  No Deployments in this deploy's scope — skipping restart"
+          fi
           exit 0
         fi
-        for deploy_ref in $EXPECTED_DEPLOYS; do
-          DEPLOY_NS="${deploy_ref%%/*}"
-          DEPLOY_NAME="${deploy_ref##*/}"
+        while IFS='|' read -r DEPLOY_NS DEPLOY_NAME; do
+          [ -z "$DEPLOY_NAME" ] && continue
           echo "  🔄 Restarting Deployment/$DEPLOY_NAME (namespace: $DEPLOY_NS)..."
           kubectl rollout restart deployment/"$DEPLOY_NAME" -n "$DEPLOY_NS" || true
-        done
+        done < restart-deployments.txt
         echo "⏳ Waiting 10s for rollout restart to initiate..."
         sleep 10
 

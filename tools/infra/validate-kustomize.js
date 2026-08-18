@@ -18,6 +18,7 @@ const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const yaml = require('js-yaml');
+const { resolveDeployScope, describeProblems } = require('./deploy-scope');
 
 const colors = {
   reset: '\x1b[0m',
@@ -106,6 +107,25 @@ function validateEnvironment(provider, env) {
 
   if (result.success) {
     logSuccess(`${provider}/${env}: Kustomize build successful`);
+
+    if (provider === 'hetzner') {
+      const problems = findDeployControlProblems(result.output, env);
+      if (problems.length > 0) {
+        logError(`${provider}/${env}: manifests and infra/deploy-control.yaml disagree`);
+        for (const problem of problems) {
+          log(`  ${problem.headline}:`, 'red');
+          for (const item of problem.items) {
+            log(`    - ${item}`, 'red');
+          }
+          for (const line of problem.detail) {
+            log(`    ${line}`, 'yellow');
+          }
+        }
+        return false;
+      }
+      logSuccess(`${provider}/${env}: deploy-control accounts for every workload`);
+    }
+
     return true;
   } else {
     logError(`${provider}/${env}: Kustomize build failed`);
@@ -114,6 +134,46 @@ function validateEnvironment(provider, env) {
     }
     return false;
   }
+}
+
+function loadManifestDocuments(manifest) {
+  const documents = [];
+  yaml.loadAll(manifest, (document) => {
+    if (document) {
+      documents.push(document);
+    }
+  });
+  return documents;
+}
+
+/**
+ * Cross-check a rendered environment against infra/deploy-control.yaml using the SAME
+ * rule the deploy action applies (tools/infra/deploy-scope.js). Deliberately ignores
+ * `enabled` / `auto_deploy`: a service being switched off is a decision, not drift — only
+ * the registry KEYS matter here. Both directions are checked, so a stale or typo'd key is
+ * caught before it fails a lane in the cluster with a misleading diagnosis.
+ */
+function findDeployControlProblems(manifest, environment) {
+  const controlPath = path.resolve(__dirname, '../..', 'infra/deploy-control.yaml');
+  const control = yaml.load(fs.readFileSync(controlPath, 'utf-8'));
+  const registeredKeys = Object.keys(control?.environments?.[environment]?.services ?? {});
+
+  if (registeredKeys.length === 0) {
+    return [
+      {
+        headline: `deploy-control.yaml has no environments.${environment}.services entries`,
+        detail: ['Every environment rendered under infra/k8s/hetzner must declare its services.'],
+        items: [environment],
+      },
+    ];
+  }
+
+  const result = resolveDeployScope({
+    documents: loadManifestDocuments(manifest),
+    registeredKeys,
+  });
+
+  return describeProblems(result, { mode: 'validate' });
 }
 
 function validateHetznerLocation(env) {
@@ -296,4 +356,8 @@ function main() {
   }
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = { findDeployControlProblems, loadManifestDocuments };

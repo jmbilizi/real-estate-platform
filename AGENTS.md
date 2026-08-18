@@ -107,7 +107,26 @@ pnpm run infra:validate:dev            # Kustomize validation per env
 - **Deployment is gated in two registries, and omission is silent**: `skaffold.yaml` (local) and
   `infra/deploy-control.yaml` (CI/CD, enumerated by `yq` key lookup). A service missing from either
   never deploys, with no error. The CI image-build matrix is auto-derived from the `container-build`
-  target — don't hardcode it.
+  target — don't hardcode it. For `deploy-control.yaml` the omission is no longer silent:
+  `pnpm run infra:validate` (run by CI's `validate-infra` job and both git hooks) fails when a
+  rendered Hetzner workload has no entry, or an entry has no workload.
+- **A deploy-control key is a LABEL value, never a resource name.** `tools/infra/deploy-scope.js` is
+  the single source of truth: a resource belongs to the key named by `app`, else
+  `app.kubernetes.io/name`. There is no `metadata.name` fallback, because the deploy applies each
+  service with one `kubectl apply -l <label>=<key>` — a name-derived identity validates green and
+  then selects nothing (`error: no objects passed to apply`). Consequences worth knowing before
+  adding a workload: every resource of a service must carry the _same_ identity label (upstream
+  ingress-nginx carries only `app.kubernetes.io/name`, everything in `infra/k8s/base` carries only
+  `app`), and a workload whose two labels name two different keys is rejected rather than applied by
+  two lanes. **`enabled`/`auto_deploy` are not part of identity** — a switched-off service is
+  reported out of scope, never confused with an unregistered one. Conflating the two is what made a
+  single `auto_deploy: false` abort an entire deploy (#45).
+- **Deploy lanes are phased, derived from the manifests, not hardcoded.** A service owning an
+  admission webhook that intercepts writes to a resource another service owns runs in an earlier
+  phase. Today that means the `ingress-nginx` lane completes before the jaeger / api-gateway /
+  cribstop-web lanes, because `ValidatingWebhookConfiguration/ingress-nginx-admission` is
+  `failurePolicy: Fail` on Ingress `CREATE,UPDATE`. Add a webhook and the ordering follows
+  automatically; nothing needs editing in the action.
 - **The inverse is just as silent: a gateway can advertise a service that is gated off.**
   `apps/api-gateway/Startup.cs` loads every `Configuration/Routes/*.json` unconditionally, so a
   route file ships routes _and_ a `SwaggerEndPoints` entry regardless of whether

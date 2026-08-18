@@ -595,19 +595,37 @@ function checkDotNetProjects(isAffected, base) {
   return true; // All checks passed
 }
 
-// Check if infrastructure files (Kustomize) have changed
-function hasInfraFilesChanged() {
+// Files whose change makes `pnpm run infra:validate` meaningful.
+//
+// Not just infra/k8s/: infra:validate also cross-checks every rendered environment against
+// infra/deploy-control.yaml, and a commit touching ONLY deploy-control.yaml is exactly the
+// change that can leave a workload with no entry. tools/infra/*.js is the checker itself.
+function isInfraPath(file) {
+  return (
+    (file.startsWith('infra/k8s/') && (file.endsWith('.yaml') || file.endsWith('.yml'))) ||
+    file === 'infra/deploy-control.yaml' ||
+    (file.startsWith('tools/infra/') && file.endsWith('.js'))
+  );
+}
+
+// Check if infrastructure files have changed in what is about to be pushed.
+//
+// This used to read `git diff --cached`, i.e. the index — which at push time is empty,
+// because the changes are already committed. The check therefore reported "no
+// infrastructure files changed" on every push and never ran. Compare against the base
+// branch instead, falling back to validating rather than skipping.
+function hasInfraFilesChanged(base) {
+  // No base means full-suite mode (a protected branch): validate unconditionally, the same
+  // way every other check runs over everything there.
+  if (!base) {
+    return true;
+  }
   try {
-    // Check if any infra/k8s files are staged
-    const result = run('git diff --cached --name-only', { silent: true });
-    if (result.success && result.output) {
-      const changedFiles = result.output.split('\n').filter(Boolean);
-      return changedFiles.some(
-        (file) =>
-          file.startsWith('infra/k8s/') && (file.endsWith('.yaml') || file.endsWith('.yml')),
-      );
+    const result = run(`git diff --name-only ${base}...HEAD`, { silent: true });
+    if (!result.success) {
+      return true; // Cannot tell — validate rather than skip.
     }
-    return false;
+    return (result.output || '').split('\n').filter(Boolean).some(isInfraPath);
   } catch (error) {
     // If we can't determine, assume true to be safe
     return true;
@@ -615,8 +633,8 @@ function hasInfraFilesChanged() {
 }
 
 // Validate infrastructure (Kustomize) files
-function checkInfrastructure() {
-  if (!hasInfraFilesChanged()) {
+function checkInfrastructure(base) {
+  if (!hasInfraFilesChanged(base)) {
     log('\nℹ No infrastructure files changed - skipping Kustomize validation', 'cyan');
     return true;
   }
@@ -777,8 +795,8 @@ function main() {
     log('\nℹ No .NET projects affected - skipping .NET checks', 'cyan');
   }
 
-  // Check infrastructure files (Kustomize) if changed
-  const infraResult = checkInfrastructure();
+  // Check infrastructure files (Kustomize + deploy-control) if changed
+  const infraResult = checkInfrastructure(base);
   allPassed = allPassed && infraResult;
 
   // Already run above, before the empty-workspace early exit — just fold the result in.
