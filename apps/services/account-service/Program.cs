@@ -87,6 +87,9 @@ internal static class Program
                 return Task.CompletedTask;
             });
 
+        // Resolves a forwarded cookie/bearer/API-key credential to an account id (see Routes/CredentialIntrospection.cs).
+        builder.Services.AddScoped<CredentialIntrospector>();
+
         var app = builder.Build();
 
         // Seed platform roles after the app starts listening so the readiness probe
