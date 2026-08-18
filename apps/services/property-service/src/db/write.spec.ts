@@ -139,7 +139,7 @@ describe('upsertListing column coverage for the suppression flags', () => {
       .size;
 
     // A literal such as now() inside the VALUES list consumes no placeholder and silently shifts
-    // every later column onto the wrong value — the exact trap this project's CLAUDE.md warns about.
+    // every later column onto the wrong value — the exact trap this project's AGENTS.md warns about.
     expect(placeholderCount).toBe(columnCount);
   });
 });

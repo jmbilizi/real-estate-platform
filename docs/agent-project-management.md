@@ -2,9 +2,8 @@
 
 > **Superseded.** This draft's good ideas (the real board reference, the Status-includes-Ready
 > model, `scope:`-prefixed labels, role-scoped scripts) were merged into the actual implementation.
-> See `.github/copilot-instructions.md` → "Product Backlog (GitHub Issues & Projects)" and
-> `tools/github/` for what's actually built and current. Kept here as historical context, not as a
-> guide to follow.
+> See `AGENTS.md` → "Product Backlog (GitHub Issues & Projects)" and `tools/github/` for what's
+> actually built and current. Kept here as historical context, not as a guide to follow.
 
 **Status: design proposal — not yet implemented.**
 

@@ -1,7 +1,7 @@
 # Build context is the workspace root, so pnpm resolves catalog: versions and hoisted deps.
 
 # Debian (glibc), NOT alpine — musl fails cluster-DNS lookups (`EAI_AGAIN postgres-svc`); see the
-# root CLAUDE.md gotcha. An alpine build crash-looped this service's migrate initContainer 7 times.
+# root AGENTS.md gotcha. An alpine build crash-looped this service's migrate initContainer 7 times.
 FROM node:20-slim AS base
 
 # ── Stage 1: Install workspace dependencies ───────────────────────────────────
@@ -53,7 +53,7 @@ COPY libs/property-contracts ./libs/property-contracts
 
 # Required, not an optimization: Nx does not recognise podman/BuildKit as a container, so it leaves
 # its daemon on and the daemon's file watcher poisons the project graph mid-build — see the
-# NX_DAEMON gotcha in the root CLAUDE.md. Removing this line fails this RUN ~50% of the time with a
+# NX_DAEMON gotcha in the root AGENTS.md. Removing this line fails this RUN ~50% of the time with a
 # webpack config-load error that names nothing relevant (#69).
 ENV NX_DAEMON=false
 

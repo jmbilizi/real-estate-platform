@@ -239,7 +239,7 @@ exist: `kubectl get endpoints jaeger-svc`
 ## 📖 Related Documentation
 
 - [PRD.md](../../PRD.md) - Architecture overview
-- [copilot-instructions.md](../../.github/copilot-instructions.md) - Kubernetes section
+- [AGENTS.md](../../AGENTS.md) - Kubernetes section
 - [infra/k8s/readme.md](readme.md) - Infrastructure documentation
 - [infra/k8s/operations.md](operations.md) - Daily operations
 

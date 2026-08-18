@@ -10,7 +10,7 @@ import { searchRequestSchema } from './search-request';
  * `unrepresentable` is deliberately left at its default (`'throw'`), not `'any'`. `'any'` would
  * make the next schema change that adds a transform on an output path render as a silent `{}` in
  * this frozen contract instead of failing the test run — exactly the trap this package's own
- * CLAUDE.md warns about. If a future schema genuinely can't be represented, the fix is to reshape
+ * AGENTS.md warns about. If a future schema genuinely can't be represented, the fix is to reshape
  * the schema (as `queryInt`/`queryBathCount` already do for coerced query params), not to paper
  * over it here.
  */

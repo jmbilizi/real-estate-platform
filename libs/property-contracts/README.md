@@ -7,7 +7,7 @@ document the gateway aggregates are all derived — so none of the three can dri
 Consumed via pnpm workspaces: declare `"@cribstop/property-contracts": "workspace:*"` in a
 consumer's `package.json`. Never add a `tsconfig` `paths` entry for it.
 
-See `CLAUDE.md` in this directory for what belongs here, the structural prohibitions the schemas
+See `AGENTS.md` in this directory for what belongs here, the structural prohibitions the schemas
 enforce, and why the Nx project name is scoped to match the npm package name.
 
 ## Commands

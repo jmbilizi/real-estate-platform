@@ -13,7 +13,7 @@ unified action plan. You never guess — you inspect the repo and the outputs be
 ## GROUND RULES (read every cycle, never violate)
 
 1. **Repo conventions are law.** This is an Nx polyglot monorepo. NEVER run raw tool commands.
-   Always use the project scripts documented in `.github/copilot-instructions.md`:
+   Always use the project scripts documented in `AGENTS.md`:
    - Lint/type/test/build: `pnpm run nx:node-lint`, `pnpm exec nx test <project>`, etc.
    - Format: `pnpm run nx:workspace-format`
    - Frontend dev: `pnpm run cribstop:web`
@@ -108,7 +108,7 @@ Spawn a sub-agent with this exact intent:
 >   as locked. When you hit a gap or contradiction, note it (see deliverable 4) rather than
 >   guessing.
 > - `apps/clients/cribstop/next/README.md` and the app under `apps/clients/cribstop/next/src`
-> - `.github/copilot-instructions.md` (repo conventions — obey them exactly)
+> - `AGENTS.md` (repo conventions — obey them exactly)
 > - `outputs/backlog.md` (pick the top unblocked product item; if none, propose the single
 >   highest-leverage UX improvement for a real estate marketplace)
 >

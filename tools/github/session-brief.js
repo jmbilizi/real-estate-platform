@@ -125,7 +125,7 @@ function main() {
 
   lines.push(
     'Start work with the `pick-next-ticket` skill (or dispatch the principal-engineer agent).',
-    'Board: https://github.com/users/jmbilizi/projects/7 — reference: .github/copilot-instructions.md → "Product Backlog".',
+    'Board: https://github.com/users/jmbilizi/projects/7 — reference: AGENTS.md → "Product Backlog".',
   );
   return lines;
 }

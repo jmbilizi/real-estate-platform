@@ -146,7 +146,7 @@ GiST index on `properties.geog`, a GIN index on `amenities`, and a `pg_trgm` GIN
 `validateAmenities()` in `src/seed/constants.ts` — a Fair Housing surface is not left to application
 code alone. Widening it is a deliberate migration, which is the point.
 
-See the project `CLAUDE.md` for the migration rules and the columns that must never be added.
+See the project `AGENTS.md` for the migration rules and the columns that must never be added.
 
 ## Seed data and compliance
 

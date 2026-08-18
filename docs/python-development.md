@@ -201,4 +201,4 @@ If not, run `uv sync` to re-link.
 ## Additional References
 
 - [Python Tools README](../tools/python/README.md) — Directory structure and config files
-- [Copilot Instructions](../.github/copilot-instructions.md) — Full architecture overview
+- [Repo Agent Guide](../AGENTS.md) — Full architecture overview
