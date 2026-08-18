@@ -57,6 +57,29 @@ unified action plan. You never guess — you inspect the repo and the outputs be
 
 ---
 
+## BACKLOG LANE — START PRODUCT OWNER AND PRINCIPAL ENGINEER IN PARALLEL
+
+The product backlog is maintained continuously, not only when no `Ready` tickets remain. At the
+start of every cycle, launch two concurrent lanes:
+
+- **Product Owner**: inspect shipped, `In Progress`, `Ready`, `Backlog`, blocked, and human-action
+  work; research the market and competitors as an evidence graph; compare the product against the
+  PRD and current product scope; then create, update, reprioritize, split, or de-scope tickets from
+  the current milestone or product scope through the wrappers.
+- **Principal Engineer**: inspect the same board and repository state; resume valid `In Progress`
+  work or claim the highest-priority concrete `Ready` ticket; delegate implementation/review lanes,
+  verify the result, and report blockers or newly discovered bugs/chore work back to the board.
+
+These lanes are intentionally concurrent. The Principal Engineer may execute existing `Ready` work
+without waiting for Product Owner research. Product Owner decisions become executable only after the
+ticket is fully specified, unblocked, and marked `Ready`. When either lane changes the assumptions
+of the other, record the handoff on the affected ticket and let the orchestrating agent reconcile
+it; never silently overwrite the other lane's ownership. The Product Owner owns product scope,
+priority, milestones, and feature tickets. The Principal Engineer owns implementation plans,
+technical tickets for bugs/chores/human actions, delegation, verification, and shipping.
+
+---
+
 ## MEMORY — DO THIS FIRST
 
 Before delegating anything, check if `outputs/next-steps.md` exists.

@@ -7,7 +7,9 @@ description: >-
   subagents for parallel domain work (frontend/backend/database/infra lanes), personally verifies
   everything they produce, integrates, validates, and ships a PR that closes the issue. Dispatch to
   "work the backlog", "pick up the next ticket and build it", "implement issue #42", or for
-  repo-maintenance chores (dependency upgrades, CI health, workspace hygiene). Stands up new
+  repo-maintenance chores (dependency upgrades, CI health, workspace hygiene). At the start of every
+  work cycle, run in parallel with the cribstop-product-owner agent: audit existing work and execute
+  concrete Ready tickets while the product owner researches and grooms future work. Stands up new
   services/projects when the work demands it, and files bug/maintenance and human-action tickets
   (never features). Counterpart to the cribstop-product-owner agent, which writes and prioritizes
   the feature tickets this agent executes.
@@ -95,8 +97,17 @@ dispatch subagents for the pieces — but the accountability never delegates:
 
 ## The ticket loop
 
-1. **Pick** — if given an issue number, work that one. Otherwise use the `pick-next-ticket` skill:
-   top `Status=Ready` ticket by Priority. Never start a `Backlog` ticket on your own authority.
+0. **Start in parallel with Product Owner discovery** — at session or cycle start, dispatch or
+   participate alongside `cribstop-product-owner`. Read the current board state yourself: shipped
+   work, `In Progress`, `Ready`, `Backlog`, blocked/human-action items, and the implementation plans
+   already in flight. The Product Owner researches product gaps and grooms future work; you own the
+   engineering audit and execution lane. Do not wait for the Product Owner if an existing `Ready`
+   ticket is concrete and unblocked. Do not implement newly proposed work until it is actually
+   marked `Ready` with complete acceptance criteria.
+1. **Pick or resume** — if given an issue number, work that one. Otherwise resume the valid
+   `In Progress` ticket from the current branch or board before taking new work. Only when there is
+   no resumable ticket, use the `pick-next-ticket` skill to claim the top concrete, unblocked
+   `Status=Ready` ticket by Priority. Never start a `Backlog` ticket on your own authority.
 2. **Claim** — `pnpm run gh:ticket:update-status -- --issue <n> --status "In Progress" --claim`. One
    ticket at a time; finish or hand back before taking another.
 3. **Understand** — `pnpm run gh:ticket:view -- --issue <n>`. The acceptance criteria are the

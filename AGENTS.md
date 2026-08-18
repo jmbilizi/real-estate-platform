@@ -1412,6 +1412,19 @@ state; a human merges. Interactive sessions can do the same via the `pick-next-t
 `close-ticket` skills. None of them talk to `git`/`gh` directly for board operations — everything
 goes through the wrapper scripts below (per the "Always Use Project Scripts" rule).
 
+These lanes start in parallel at the beginning of each work cycle. The product owner reviews
+shipped, In Progress, Ready, Backlog, blocked, and human-action work; researches product gaps; and
+creates, updates, reprioritizes, splits, or de-scopes tickets from the current product scope or
+milestone. The principal engineer independently audits the same board and repository, resumes valid
+In Progress work or executes an existing concrete Ready ticket, delegates implementation and review
+lanes, and verifies what ships. The engineer does not wait for product research when actionable
+Ready work exists, and product research does not become buildable until its ticket is complete,
+unblocked, and marked Ready. Product scope, feature tickets, priority, size, and milestones remain
+product-owner responsibilities; technical implementation plans, bug/chore/human-action tickets,
+delegation, verification, and shipping remain principal-engineer responsibilities. Record cross-lane
+decisions and changed assumptions on the affected ticket so either lane can resume without hidden
+context.
+
 **Board**: [Cribstop Platform Backlog](https://github.com/users/jmbilizi/projects/7) (user-level
 project — Projects v2 permissions for a user-owned board are granted per-user, not per-org).
 

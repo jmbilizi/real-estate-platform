@@ -116,7 +116,7 @@ function main() {
     if (ready.length > READY_LIMIT) lines.push(`…and ${ready.length - READY_LIMIT} more Ready.`);
   } else {
     lines.push(
-      'No Ready tickets — dispatch the cribstop-product-owner agent to groom the backlog.',
+      'No Ready tickets — Product Owner discovery and Principal Engineer audit can still run in parallel; groom before building new work.',
     );
   }
 
@@ -124,7 +124,7 @@ function main() {
   if (progress) lines.push(progress);
 
   lines.push(
-    'Start work with the `pick-next-ticket` skill (or dispatch the principal-engineer agent).',
+    'Start the `cribstop-product-owner` and `principal-engineer` lanes in parallel: groom product gaps while the engineer audits and executes existing Ready work. Resume the current ticket before picking another.',
     'Board: https://github.com/users/jmbilizi/projects/7 — reference: AGENTS.md → "Product Backlog".',
   );
   return lines;
