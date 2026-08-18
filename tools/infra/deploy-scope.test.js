@@ -356,6 +356,44 @@ test('CLI writes scope.txt and a lane plan, and exits 0 with a service opted out
   assert.ok(!restarts.includes('ingress-nginx-controller'));
 });
 
+test('scope-plan.json has exactly the shape the deploy action jq-queries', () => {
+  const { code, dir } = runCli(devDocuments(), 'dev', allowedServices('dev').join(','));
+  assert.equal(code, 0);
+  const plan = JSON.parse(fs.readFileSync(path.join(dir, 'scope-plan.json'), 'utf-8'));
+
+  // .github/actions/deploy-k8s-resources/action.yml reads these paths and nothing else.
+  // If a rename here silently breaks a jq query, the lane applies nothing and reports
+  // success — so the contract is asserted rather than assumed.
+  //   jq '.phases | length'
+  //   jq ".phases[$phase].services[]"      / jq ".phases[$phase].note"
+  //   jq '.services[] | select(.name == $s) | .selector'
+  //   jq '.services[] | select(.name == $s) | .workloads[] | .kind + "|" + .namespace + "|" + .name'
+  assert.ok(Array.isArray(plan.phases) && plan.phases.length > 0);
+  for (const phase of plan.phases) {
+    assert.ok(Array.isArray(phase.services) && phase.services.length > 0);
+    assert.equal(typeof phase.note, 'string');
+  }
+  assert.ok(Array.isArray(plan.services));
+  for (const service of plan.services) {
+    assert.equal(typeof service.name, 'string');
+    assert.match(service.selector, /^[^=]+=[^=]+$/);
+    assert.ok(Array.isArray(service.workloads));
+    for (const workload of service.workloads) {
+      assert.ok(['StatefulSet', 'Deployment', 'DaemonSet'].includes(workload.kind));
+      assert.equal(typeof workload.namespace, 'string');
+      assert.equal(typeof workload.name, 'string');
+    }
+  }
+
+  // Every phase entry must name a service the lane can then look a selector up for.
+  const known = new Set(plan.services.map((service) => service.name));
+  for (const phase of plan.phases) {
+    for (const name of phase.services) {
+      assert.ok(known.has(name), `phase names '${name}', which has no selector`);
+    }
+  }
+});
+
 test('CLI exits 1 only for real drift, and names the cause', () => {
   const documents = devDocuments();
   documents.push(IDENTITY_ONLY('Deployment', 'messaging-service', { app: 'messaging-service' }));
