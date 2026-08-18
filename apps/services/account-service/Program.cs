@@ -112,6 +112,9 @@ internal static class Program
         // API Keys: POST/GET/DELETE /account/api-keys
         app.MapApiKeyRoutes();
 
+        // Internal identity resolution: forwarded cookie/bearer/api-key -> account id
+        app.MapCredentialIntrospectionRoutes();
+
         await app.RunAsync().ConfigureAwait(false);
     }
 

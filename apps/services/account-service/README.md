@@ -188,6 +188,19 @@ window.
 | `GET`    | `/account/api-keys`      | Self          | List own API keys (prefix visible, hash never returned) |
 | `DELETE` | `/account/api-keys/{id}` | Self          | Revoke an API key                                       |
 
+### Internal Credential Introspection (service-to-service)
+
+| Method | Path                         | Auth shape (forwarded as-is)                 | Description                                                        |
+| ------ | ---------------------------- | --------------------------------------------- | ------------------------------------------------------------------ |
+| `POST` | `/internal/account/introspect` | `Cookie`, `Authorization: Bearer ...`, or `X-Api-Key` | Resolves forwarded credentials to `accountId` + validity flags only |
+
+This endpoint is intentionally **not** consumer-facing. The API gateway only routes
+`/account/**` upstream, and this endpoint is on `/internal/**`, so browsers and third parties cannot
+reach it through the public route surface.
+
+Response cache semantics are explicit: `Cache-Control: no-store, no-cache, max-age=0`.
+Callers must treat introspection responses as non-cacheable so revocation remains immediate.
+
 ### Health
 
 | Method | Path                    | Description     |
