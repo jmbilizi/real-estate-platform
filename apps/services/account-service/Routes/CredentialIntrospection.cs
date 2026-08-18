@@ -95,8 +95,7 @@ internal static class CredentialIntrospection
             return (IdentityConstants.BearerScheme, "bearer");
         }
 
-        if (request.Headers.TryGetValue("Cookie", out var cookieValue) &&
-            !string.IsNullOrWhiteSpace(cookieValue.ToString()))
+        if (request.Cookies.ContainsKey(".AspNetCore.Identity.Application"))
         {
             return (IdentityConstants.ApplicationScheme, "cookie");
         }
