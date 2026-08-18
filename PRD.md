@@ -224,7 +224,7 @@ shared by the web client and the Property API.
 > Dwelling facts resolve as `COALESCE(unit, property)` one level deep, and each listing carries a
 > point-in-time snapshot of those resolved values. For the storage rationale, see the property
 > service's
-> ["Data model — durable home vs. listing episode"](apps/services/property-service/CLAUDE.md).
+> ["Data model — durable home vs. listing episode"](apps/services/property-service/AGENTS.md).
 
 - **Listing type:** `sale` | `rent` | `sold` (the platform supports buy, sell, and rent — not
   rentals only). `sold` is a **lifecycle state projected into this union for display**, not a kind
