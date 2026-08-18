@@ -41,32 +41,16 @@ internal sealed class ApiKeyAuthenticationHandler(
         var db = scope.ServiceProvider.GetRequiredService<AccountDbContext>();
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
 
-        var keyHash = Routes.ApiKeys.HashKey(rawKey);
+        var validation = await ApiKeyValidation.ValidateAsync(db, rawKey).ConfigureAwait(false);
 
-        var apiKey = await db.ApiKeys
-            .Include(k => k.User)
-            .FirstOrDefaultAsync(k => k.KeyHash == keyHash)
-            .ConfigureAwait(false);
-
-        if (apiKey is null)
+        if (validation.Status != ApiKeyValidationStatus.Valid)
         {
-            return AuthenticateResult.Fail("Invalid API key.");
+            return AuthenticateResult.Fail(ApiKeyValidation.FailureMessage(validation.Status));
         }
 
-        if (apiKey.RevokedAt.HasValue)
-        {
-            return AuthenticateResult.Fail("API key has been revoked.");
-        }
-
-        if (apiKey.ExpiresAt.HasValue && apiKey.ExpiresAt.Value <= DateTime.UtcNow)
-        {
-            return AuthenticateResult.Fail("API key has expired.");
-        }
-
-        if (apiKey.User is null || apiKey.User.DeletedAt.HasValue)
-        {
-            return AuthenticateResult.Fail("Account associated with this API key is unavailable.");
-        }
+        // Valid implies both are non-null; the local aliases keep the rest of the method readable.
+        var apiKey = validation.ApiKey!;
+        var keyOwner = apiKey.User!;
 
         // Update LastUsedAt and record app usage — non-critical; exceptions are logged, not thrown.
         try
@@ -76,14 +60,14 @@ internal sealed class ApiKeyAuthenticationHandler(
             if (!string.IsNullOrEmpty(apiKey.AppId))
             {
                 var existing = await db.UserApps
-                    .FirstOrDefaultAsync(ua => ua.UserId == apiKey.User.Id && ua.AppId == apiKey.AppId)
+                    .FirstOrDefaultAsync(ua => ua.UserId == keyOwner.Id && ua.AppId == apiKey.AppId)
                     .ConfigureAwait(false);
 
                 if (existing is null)
                 {
                     db.UserApps.Add(new UserApp
                     {
-                        UserId = apiKey.User.Id,
+                        UserId = keyOwner.Id,
                         AppId = apiKey.AppId,
                         FirstSeenAt = DateTime.UtcNow,
                         LastSeenAt = DateTime.UtcNow,
@@ -107,13 +91,13 @@ internal sealed class ApiKeyAuthenticationHandler(
         // Build claims principal with the user's identity and roles
         var claims = new List<Claim>
         {
-            new(ClaimTypes.NameIdentifier, apiKey.User.Id),
-            new(ClaimTypes.Name, apiKey.User.UserName ?? apiKey.User.Email ?? apiKey.User.Id),
-            new(ClaimTypes.Email, apiKey.User.Email ?? string.Empty),
+            new(ClaimTypes.NameIdentifier, keyOwner.Id),
+            new(ClaimTypes.Name, keyOwner.UserName ?? keyOwner.Email ?? keyOwner.Id),
+            new(ClaimTypes.Email, keyOwner.Email ?? string.Empty),
             new("api_key_id", apiKey.Id),
         };
 
-        var roles = await userManager.GetRolesAsync(apiKey.User).ConfigureAwait(false);
+        var roles = await userManager.GetRolesAsync(keyOwner).ConfigureAwait(false);
         foreach (var role in roles)
         {
             claims.Add(new Claim(ClaimTypes.Role, role));
