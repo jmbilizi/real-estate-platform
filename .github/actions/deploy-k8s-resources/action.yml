@@ -237,7 +237,8 @@ runs:
         }
         workloads_for_service() {
           yq -N e "select((.kind == \"StatefulSet\" or .kind == \"Deployment\" or .kind == \"DaemonSet\")
-                          and .metadata.labels.app == \"$1\")
+                          and ((.metadata.labels.app // \"\") == \"$1\"
+                            or (.metadata.labels.\"app.kubernetes.io/name\" // \"\") == \"$1\"))
                    | .kind + \"|\" + (.metadata.namespace // \"default\") + \"|\" + .metadata.name" \
             manifests.yaml 2>/dev/null || true
         }
@@ -272,10 +273,11 @@ runs:
         # waited on, or rolled back — but say so out loud.
         workloads_all | clean | sort -u > scope.all
         if OUT_OF_SCOPE=$(comm -23 scope.all scope.txt) && [ -n "$OUT_OF_SCOPE" ]; then
-          echo "\nℹ️  NOT in scope this run (present in the manifests, not applied):"
+          echo "\n❌ Unmanaged workloads detected (present in the manifests but absent from deploy-control):"
           echo "$OUT_OF_SCOPE" | sed 's/|/ /g; s/^/     - /'
-          echo "   These are workloads with no enabled deploy-control entry. They are"
-          echo "   skipped by every later step, not treated as failures."
+          echo "   Add each workload identity to environments.<env>.services in infra/deploy-control.yaml."
+          echo "   Refusing deployment so a new workload cannot be silently omitted."
+          exit 1
         fi
 
     - name: PVC cleanup (BadgerDB corruption handling)
@@ -415,7 +417,12 @@ runs:
               echo "Starting deployment: $service"
               (
                 # Apply the service
-                if ! kubectl apply -f manifests.yaml -l "app=$service" > "/tmp/deploy-$service.log" 2>&1; then
+                if yq -e "select((.kind == \"StatefulSet\" or .kind == \"Deployment\" or .kind == \"DaemonSet\") and .metadata.labels.app == \"$service\")" manifests.yaml >/dev/null 2>&1; then
+                  LABEL_SELECTOR="app=$service"
+                else
+                  LABEL_SELECTOR="app.kubernetes.io/name=$service"
+                fi
+                if ! kubectl apply -f manifests.yaml -l "$LABEL_SELECTOR" > "/tmp/deploy-$service.log" 2>&1; then
                   echo "❌ $service: kubectl apply failed"
                   cat "/tmp/deploy-$service.log"
                   exit 1
@@ -426,7 +433,7 @@ runs:
                 ROLLOUT_FAILED=false
                 
                 # Check StatefulSets for this service
-                STATEFULSETS=$(yq -N e "select(.kind == \"StatefulSet\" and .metadata.labels.app == \"$service\") | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+                STATEFULSETS=$(yq -N e "select(.kind == \"StatefulSet\" and ((.metadata.labels.app // \"\") == \"$service\" or (.metadata.labels.\"app.kubernetes.io/name\" // \"\") == \"$service\")) | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
                 for sts in $STATEFULSETS; do
                   if ! kubectl rollout status statefulset/$sts --timeout=${{ inputs.statefulset_timeout }} >> "/tmp/deploy-$service.log" 2>&1; then
                     echo "❌ $service: StatefulSet $sts rollout failed"
@@ -435,7 +442,7 @@ runs:
                 done
                 
                 # Check Deployments for this service
-                DEPLOYMENTS=$(yq -N e "select(.kind == \"Deployment\" and .metadata.labels.app == \"$service\") | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+                DEPLOYMENTS=$(yq -N e "select(.kind == \"Deployment\" and ((.metadata.labels.app // \"\") == \"$service\" or (.metadata.labels.\"app.kubernetes.io/name\" // \"\") == \"$service\")) | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
                 for deploy in $DEPLOYMENTS; do
                   DEPLOY_NS=$(yq -N e "select(.kind == \"Deployment\" and .metadata.name == \"$deploy\") | .metadata.namespace // \"default\"" manifests.yaml 2>/dev/null | head -1)
                   if deployment_is_ready "$DEPLOY_NS" "$deploy"; then
@@ -455,7 +462,7 @@ runs:
                 done
                 
                 # Check DaemonSets for this service
-                DAEMONSETS=$(yq -N e "select(.kind == \"DaemonSet\" and .metadata.labels.app == \"$service\") | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+                DAEMONSETS=$(yq -N e "select(.kind == \"DaemonSet\" and ((.metadata.labels.app // \"\") == \"$service\" or (.metadata.labels.\"app.kubernetes.io/name\" // \"\") == \"$service\")) | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
                 for ds in $DAEMONSETS; do
                   if ! kubectl rollout status daemonset/$ds --timeout=${{ inputs.daemonset_timeout }} >> "/tmp/deploy-$service.log" 2>&1; then
                     echo "❌ $service: DaemonSet $ds rollout failed"
@@ -512,7 +519,7 @@ runs:
                   echo "🔄 Rolling back service: $service"
 
                   # Rollback StatefulSets
-                  STATEFULSETS=$(yq -N e "select(.kind == \"StatefulSet\" and .metadata.labels.app == \"$service\") | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+                  STATEFULSETS=$(yq -N e "select(.kind == \"StatefulSet\" and ((.metadata.labels.app // \"\") == \"$service\" or (.metadata.labels.\"app.kubernetes.io/name\" // \"\") == \"$service\")) | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
                   for sts in $STATEFULSETS; do
                     if [ "$RB_STS" != "true" ]; then
                       echo "  ⏭️  StatefulSet/$sts: rollback disabled - left failed for investigation"
@@ -524,7 +531,7 @@ runs:
                   done
 
                   # Rollback Deployments
-                  DEPLOYMENTS=$(yq -N e "select(.kind == \"Deployment\" and .metadata.labels.app == \"$service\") | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+                  DEPLOYMENTS=$(yq -N e "select(.kind == \"Deployment\" and ((.metadata.labels.app // \"\") == \"$service\" or (.metadata.labels.\"app.kubernetes.io/name\" // \"\") == \"$service\")) | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
                   for deploy in $DEPLOYMENTS; do
                     if [ "$RB_DEPLOY" != "true" ]; then
                       echo "  ⏭️  Deployment/$deploy: rollback disabled - left failed for investigation"
@@ -541,7 +548,7 @@ runs:
                   done
 
                   # Rollback DaemonSets
-                  DAEMONSETS=$(yq -N e "select(.kind == \"DaemonSet\" and .metadata.labels.app == \"$service\") | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
+                  DAEMONSETS=$(yq -N e "select(.kind == \"DaemonSet\" and ((.metadata.labels.app // \"\") == \"$service\" or (.metadata.labels.\"app.kubernetes.io/name\" // \"\") == \"$service\")) | .metadata.name" manifests.yaml 2>/dev/null | grep -v '^---$' | tr '\n' ' ' || echo "")
                   for ds in $DAEMONSETS; do
                     if [ "$RB_DEPLOY" != "true" ]; then
                       echo "  ⏭️  DaemonSet/$ds: rollback disabled - left failed for investigation"
@@ -577,7 +584,11 @@ runs:
           else
             # Single service - use standard deployment
             echo "📦 Single service deployment: $SERVICES_TRIMMED"
-            LABEL_SELECTOR="app=$SERVICES_TRIMMED"
+            if yq -e "select((.kind == \"StatefulSet\" or .kind == \"Deployment\" or .kind == \"DaemonSet\") and .metadata.labels.app == \"$SERVICES_TRIMMED\")" manifests.yaml >/dev/null 2>&1; then
+              LABEL_SELECTOR="app=$SERVICES_TRIMMED"
+            else
+              LABEL_SELECTOR="app.kubernetes.io/name=$SERVICES_TRIMMED"
+            fi
             echo "Label selector: $LABEL_SELECTOR"
             APPLY_CMD="kubectl apply -f manifests.yaml -l $LABEL_SELECTOR"
           fi

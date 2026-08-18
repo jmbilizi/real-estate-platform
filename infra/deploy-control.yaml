@@ -91,6 +91,18 @@ environments:
         require_approval: false # No approval needed
         rollback_on_failure: false # Disabled in dev for manual investigation
 
+      jaeger:
+        enabled: true
+        auto_deploy: true # Keep observability in scope when an app opts out
+        require_approval: false
+        rollback_on_failure: false
+
+      ingress-nginx:
+        enabled: true
+        auto_deploy: true # Keep cluster ingress in scope for resource deploys
+        require_approval: false
+        rollback_on_failure: false
+
   # ────────────────────────────────────────────────────────────────────────────
   # TEST/STAGING ENVIRONMENT
   # Moderate controls - test safety features before production
@@ -150,6 +162,18 @@ environments:
         auto_deploy: false # Manual deployment in test
         require_approval: false # Optional approval
         rollback_on_failure: false # Disabled for manual validation
+
+      jaeger:
+        enabled: false # Not yet deployed to test
+        auto_deploy: false # Manual deployment in test
+        require_approval: false
+        rollback_on_failure: false
+
+      ingress-nginx:
+        enabled: false # Not yet deployed to test
+        auto_deploy: false # Manual deployment in test
+        require_approval: false
+        rollback_on_failure: false
   # Strictest controls - all safety features enabled when workflows support them
   # ────────────────────────────────────────────────────────────────────────────
   prod:
@@ -207,6 +231,18 @@ environments:
         auto_deploy: false # Manual deployment only
         require_approval: true # Always require approval
         rollback_on_failure: false # Manual review recommended for production
+
+      jaeger:
+        enabled: false # Not yet deployed to production
+        auto_deploy: false # Manual deployment only
+        require_approval: true
+        rollback_on_failure: false
+
+      ingress-nginx:
+        enabled: false # Not yet deployed to production
+        auto_deploy: false # Manual deployment only
+        require_approval: true
+        rollback_on_failure: false
 # Defines how different resource types should be deployed
 # All StatefulSet settings are actively enforced by deployment workflows:
 #  - timeout: Controls kubectl rollout status timeout (overrides hardcoded values)

@@ -106,6 +106,19 @@ function validateEnvironment(provider, env) {
 
   if (result.success) {
     logSuccess(`${provider}/${env}: Kustomize build successful`);
+
+    if (provider === 'hetzner') {
+      const unmanaged = findUnmanagedWorkloads(result.output, env);
+      if (unmanaged.length > 0) {
+        logError(`${provider}/${env}: unmanaged workloads are missing from deploy-control.yaml`);
+        for (const workload of unmanaged) {
+          log(`  - ${workload}`, 'red');
+        }
+        return false;
+      }
+      logSuccess(`${provider}/${env}: deploy-control accounts for every workload`);
+    }
+
     return true;
   } else {
     logError(`${provider}/${env}: Kustomize build failed`);
@@ -114,6 +127,34 @@ function validateEnvironment(provider, env) {
     }
     return false;
   }
+}
+
+function workloadIdentity(document) {
+  const labels = document.metadata?.labels ?? {};
+  return labels.app || labels['app.kubernetes.io/name'] || document.metadata?.name;
+}
+
+function findUnmanagedWorkloads(manifest, environment) {
+  const controlPath = path.resolve(__dirname, '../..', 'infra/deploy-control.yaml');
+  const control = yaml.load(fs.readFileSync(controlPath, 'utf-8'));
+  const configuredServices = new Set(
+    Object.keys(control.environments?.[environment]?.services ?? {}),
+  );
+  const documents = [];
+  yaml.loadAll(manifest, (document) => {
+    if (document) {
+      documents.push(document);
+    }
+  });
+
+  return documents
+    .filter((document) => ['StatefulSet', 'Deployment', 'DaemonSet'].includes(document.kind))
+    .map((document) => ({
+      identity: workloadIdentity(document),
+      resource: `${document.kind}|${document.metadata?.namespace ?? 'default'}|${document.metadata?.name}`,
+    }))
+    .filter(({ identity }) => !configuredServices.has(identity))
+    .map(({ resource }) => resource);
 }
 
 function validateHetznerLocation(env) {
@@ -296,4 +337,8 @@ function main() {
   }
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = { findUnmanagedWorkloads, workloadIdentity };
