@@ -246,8 +246,11 @@ it is developed. Defence in depth belongs with the first real caller (#23).
 
 **Caller guidance.**
 
-- Cache semantics are explicit: `Cache-Control: no-store, no-cache, max-age=0`. Any caller-side
-  caching defeats the immediate revocation this endpoint exists to provide.
+- Cache semantics are explicit: the endpoint sets `Cache-Control: no-store, no-cache, max-age=0`. On
+  a cookie-carrying request the cookie handler overwrites this with its own `no-cache,no-store` when
+  it renews the session, so the exact string varies — `no-store` is always present, which is the
+  part that matters. Any caller-side caching defeats the immediate revocation this endpoint exists
+  to provide.
 - Discard the response headers. `UseAuthentication()` authenticates the cookie scheme on every
   request to every endpoint, and with `ValidationInterval = TimeSpan.Zero` the security-stamp
   validator re-signs the principal in — so a cookie-carrying introspection response also carries a
