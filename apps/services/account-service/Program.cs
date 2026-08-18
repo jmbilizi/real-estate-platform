@@ -9,6 +9,7 @@ using AccountService.Helpers;
 using AccountService.Models;
 using AccountService.Routes;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.BearerToken;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -73,6 +74,18 @@ internal static class Program
         // ValidationInterval = Zero re-checks the stamp against the DB on every authenticated request.
         builder.Services.Configure<SecurityStampValidatorOptions>(options =>
             options.ValidationInterval = TimeSpan.Zero);
+
+        // BearerTokenHandler matches the "Bearer " prefix with StringComparison.Ordinal, so a token
+        // sent as "authorization: bearer <token>" is rejected even though RFC 7235 §2.1 makes the
+        // auth-scheme token case-insensitive — and Ocelot forwards headers verbatim. Parse the header
+        // ourselves so the service, and the introspection endpoint that reports on it, agree.
+        builder.Services.Configure<BearerTokenOptions>(IdentityConstants.BearerScheme, options =>
+            options.Events.OnMessageReceived = messageContext =>
+            {
+                messageContext.Token = BearerTokenHeader.Parse(
+                    messageContext.Request.Headers.Authorization.ToString());
+                return Task.CompletedTask;
+            });
 
         var app = builder.Build();
 
