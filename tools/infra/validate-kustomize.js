@@ -18,6 +18,7 @@ const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const yaml = require('js-yaml');
+const { resolveDeployScope, describeProblems } = require('./deploy-scope');
 
 const colors = {
   reset: '\x1b[0m',
@@ -108,11 +109,17 @@ function validateEnvironment(provider, env) {
     logSuccess(`${provider}/${env}: Kustomize build successful`);
 
     if (provider === 'hetzner') {
-      const unmanaged = findUnmanagedWorkloads(result.output, env);
-      if (unmanaged.length > 0) {
-        logError(`${provider}/${env}: unmanaged workloads are missing from deploy-control.yaml`);
-        for (const workload of unmanaged) {
-          log(`  - ${workload}`, 'red');
+      const problems = findDeployControlProblems(result.output, env);
+      if (problems.length > 0) {
+        logError(`${provider}/${env}: manifests and infra/deploy-control.yaml disagree`);
+        for (const problem of problems) {
+          log(`  ${problem.headline}:`, 'red');
+          for (const item of problem.items) {
+            log(`    - ${item}`, 'red');
+          }
+          for (const line of problem.detail) {
+            log(`    ${line}`, 'yellow');
+          }
         }
         return false;
       }
@@ -129,32 +136,44 @@ function validateEnvironment(provider, env) {
   }
 }
 
-function workloadIdentity(document) {
-  const labels = document.metadata?.labels ?? {};
-  return labels.app || labels['app.kubernetes.io/name'] || document.metadata?.name;
-}
-
-function findUnmanagedWorkloads(manifest, environment) {
-  const controlPath = path.resolve(__dirname, '../..', 'infra/deploy-control.yaml');
-  const control = yaml.load(fs.readFileSync(controlPath, 'utf-8'));
-  const configuredServices = new Set(
-    Object.keys(control.environments?.[environment]?.services ?? {}),
-  );
+function loadManifestDocuments(manifest) {
   const documents = [];
   yaml.loadAll(manifest, (document) => {
     if (document) {
       documents.push(document);
     }
   });
+  return documents;
+}
 
-  return documents
-    .filter((document) => ['StatefulSet', 'Deployment', 'DaemonSet'].includes(document.kind))
-    .map((document) => ({
-      identity: workloadIdentity(document),
-      resource: `${document.kind}|${document.metadata?.namespace ?? 'default'}|${document.metadata?.name}`,
-    }))
-    .filter(({ identity }) => !configuredServices.has(identity))
-    .map(({ resource }) => resource);
+/**
+ * Cross-check a rendered environment against infra/deploy-control.yaml using the SAME
+ * rule the deploy action applies (tools/infra/deploy-scope.js). Deliberately ignores
+ * `enabled` / `auto_deploy`: a service being switched off is a decision, not drift — only
+ * the registry KEYS matter here. Both directions are checked, so a stale or typo'd key is
+ * caught before it fails a lane in the cluster with a misleading diagnosis.
+ */
+function findDeployControlProblems(manifest, environment) {
+  const controlPath = path.resolve(__dirname, '../..', 'infra/deploy-control.yaml');
+  const control = yaml.load(fs.readFileSync(controlPath, 'utf-8'));
+  const registeredKeys = Object.keys(control?.environments?.[environment]?.services ?? {});
+
+  if (registeredKeys.length === 0) {
+    return [
+      {
+        headline: `deploy-control.yaml has no environments.${environment}.services entries`,
+        detail: ['Every environment rendered under infra/k8s/hetzner must declare its services.'],
+        items: [environment],
+      },
+    ];
+  }
+
+  const result = resolveDeployScope({
+    documents: loadManifestDocuments(manifest),
+    registeredKeys,
+  });
+
+  return describeProblems(result, { mode: 'validate' });
 }
 
 function validateHetznerLocation(env) {
@@ -341,4 +360,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { findUnmanagedWorkloads, workloadIdentity };
+module.exports = { findDeployControlProblems, loadManifestDocuments };
