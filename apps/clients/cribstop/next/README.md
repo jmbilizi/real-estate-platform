@@ -1,10 +1,16 @@
 # Cribstop Next.js
 
-A high-fidelity **Next.js** mockup for a real estate marketplace called **Cribstop.com**, owned by
-an agent from **Real Broker LLC**. The site feels like **Airbnb for real estate** — clean, modern,
-premium, image-forward, and highly searchable — focused on buying, selling, and renting homes. It
-uses **static JSON data** as the only data source; it does not connect to any backend, API, CMS, or
-live MLS feed.
+A high-fidelity **Next.js** consumer app for a real estate marketplace called **Cribstop.com**,
+brokered by **Real Broker LLC**. The site feels like **Airbnb for real estate** — clean, modern,
+premium, image-forward, and highly searchable — focused on buying, selling, and renting homes.
+
+Listing data comes from the **Property API** through the API gateway: the browser calls this app's
+route handlers (`src/app/api/listings/*`, `src/app/api/account/*`), which make the hop server-side
+via `src/app/api/_lib/gateway.ts`. The wire contract is `@cribstop/property-contracts`. The mock
+listings array (`src/lib/listings.ts`) was deleted in #24 — sections below that reference it, or say
+"static JSON data as the only data source", are the **original mockup spec kept for historical
+context**; where this document and the code disagree, trust the code and see `AGENTS.md` in
+`apps/clients/cribstop/`.
 
 ## Goal
 
