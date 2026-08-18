@@ -45,6 +45,13 @@ POST /account/login
 
 Tokens are opaque (DataProtection-based, not JWT). Refresh via `POST /account/refresh`.
 
+The `Authorization` auth-scheme token is matched **case-insensitively** (`Bearer`, `bearer`,
+`BEARER` all work), per RFC 7235 §2.1. The framework's `BearerTokenHandler` matches `"Bearer "` with
+`StringComparison.Ordinal`, so `Program.cs` supplies the token via
+`BearerTokenEvents.OnMessageReceived` using the shared `BearerTokenHeader` parser. That same parser
+backs credential introspection, so what the service accepts and what introspection reports can never
+drift apart.
+
 ### 3. API Key (`ApiKey`)
 
 Used for service-to-service calls and CI/CD pipelines. Sent in the `X-Api-Key` header.
@@ -187,6 +194,69 @@ window.
 | `POST`   | `/account/api-keys`      | Self          | Create an API key (raw key returned once)               |
 | `GET`    | `/account/api-keys`      | Self          | List own API keys (prefix visible, hash never returned) |
 | `DELETE` | `/account/api-keys/{id}` | Self          | Revoke an API key                                       |
+
+### Internal Credential Introspection (service-to-service)
+
+| Method | Path                           | Auth shape (forwarded as-is)                          | Description                                                         |
+| ------ | ------------------------------ | ----------------------------------------------------- | ------------------------------------------------------------------- |
+| `POST` | `/internal/account/introspect` | `Cookie`, `Authorization: Bearer ...`, or `X-Api-Key` | Resolves forwarded credentials to `accountId` + validity flags only |
+
+Resolves a credential the gateway forwarded verbatim to the account it belongs to. Response body:
+
+```json
+{
+  "isValid": true,
+  "credentialType": "cookie",
+  "accountId": "9f3c…",
+  "isRevoked": false,
+  "isExpired": false
+}
+```
+
+`credentialType` is one of `cookie`, `bearer`, `apiKey`, or `none`. `accountId` is `null` whenever
+`isValid` is `false`. There is deliberately **no** role or `user_type` field — accounts are
+multi-role (PRD §11.2) and identity resolution must not invent a persona. An unparseable or unknown
+credential is a definitive `200` negative, never a `500`.
+
+**Multiple credentials.** Shapes are tried in the order API key → bearer → cookie and the **first
+one that resolves wins**; the endpoint does not stop at the highest-precedence shape present. This
+mirrors how account-service authorizes its own endpoints (the default policy lists all three
+schemes), so a stale `Authorization` header travelling alongside a live session cookie cannot
+silently defeat the cookie. When nothing resolves, the highest-precedence shape that was present
+supplies the reported `credentialType` and flags.
+
+**How the flags are derived.** `isRevoked` and `isExpired` are computed from typed checks, never
+from framework failure messages: the ticket is unprotected with the scheme's own protector,
+`ExpiresUtc` supplies `isExpired`, and the security stamp — re-read from the database on every call,
+because `ValidationInterval = TimeSpan.Zero` — supplies `isRevoked`. API keys share
+`ApiKeyValidation` with the authentication handler, so both agree on why a key was rejected.
+
+**Not consumer-facing.** Two separate properties, both required:
+
+- _Unreachable_ — the gateway's broadest route is `/account/{everything}`, so `/internal/**` has no
+  public route, and `account-service-svc` is a ClusterIP Service with no Ingress.
+- _Unadvertised_ — the endpoint is `ExcludeFromDescription()`, because the OpenAPI document is
+  aggregated into the gateway's publicly served Swagger UI.
+
+There is deliberately **no** caller authentication, rate limiting, or NetworkPolicy today: the AC
+permits an unrouted path as the mechanism, a shared secret would need provisioning in three
+environments before any caller exists to use it, and NetworkPolicy enforcement differs between the
+local Kind cluster (not enforced) and k3s (enforced), so one shipped now could not be verified where
+it is developed. Defence in depth belongs with the first real caller (#23).
+
+**Caller guidance.**
+
+- Cache semantics are explicit: the endpoint sets `Cache-Control: no-store, no-cache, max-age=0`. On
+  a cookie-carrying request the cookie handler overwrites this with its own `no-cache,no-store` when
+  it renews the session, so the exact string varies — `no-store` is always present, which is the
+  part that matters. Any caller-side caching defeats the immediate revocation this endpoint exists
+  to provide.
+- Discard the response headers. `UseAuthentication()` authenticates the cookie scheme on every
+  request to every endpoint, and with `ValidationInterval = TimeSpan.Zero` the security-stamp
+  validator re-signs the principal in — so a cookie-carrying introspection response also carries a
+  refreshed `Set-Cookie` for the end user. Never relay or persist it.
+- Introspection does not update an API key's `LastUsedAt`; only calls to account-service's own
+  endpoints do. Resolution is a read.
 
 ### Health
 

@@ -9,6 +9,7 @@ using AccountService.Helpers;
 using AccountService.Models;
 using AccountService.Routes;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.BearerToken;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -74,6 +75,21 @@ internal static class Program
         builder.Services.Configure<SecurityStampValidatorOptions>(options =>
             options.ValidationInterval = TimeSpan.Zero);
 
+        // BearerTokenHandler matches the "Bearer " prefix with StringComparison.Ordinal, so a token
+        // sent as "authorization: bearer <token>" is rejected even though RFC 7235 §2.1 makes the
+        // auth-scheme token case-insensitive — and Ocelot forwards headers verbatim. Parse the header
+        // ourselves so the service, and the introspection endpoint that reports on it, agree.
+        builder.Services.Configure<BearerTokenOptions>(IdentityConstants.BearerScheme, options =>
+            options.Events.OnMessageReceived = messageContext =>
+            {
+                messageContext.Token = BearerTokenHeader.Parse(
+                    messageContext.Request.Headers.Authorization.ToString());
+                return Task.CompletedTask;
+            });
+
+        // Resolves a forwarded cookie/bearer/API-key credential to an account id (see Routes/CredentialIntrospection.cs).
+        builder.Services.AddScoped<CredentialIntrospector>();
+
         var app = builder.Build();
 
         // Seed platform roles after the app starts listening so the readiness probe
@@ -111,6 +127,9 @@ internal static class Program
 
         // API Keys: POST/GET/DELETE /account/api-keys
         app.MapApiKeyRoutes();
+
+        // Internal identity resolution: forwarded cookie/bearer/api-key -> account id
+        app.MapCredentialIntrospectionRoutes();
 
         await app.RunAsync().ConfigureAwait(false);
     }
