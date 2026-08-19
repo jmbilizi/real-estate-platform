@@ -78,6 +78,12 @@ export interface ComplianceFixtureIds {
   suppressedAddressUnitNumber: string;
   /** The real street line, so a spec can assert `street=` does NOT match it. */
   suppressedAddressStreetLine: string;
+  /**
+   * The real point, so a spec can assert NO column of the view carries it. Distinct from every
+   * other fixture's 0/0 precisely so that assertion cannot pass vacuously.
+   */
+  suppressedAddressLatitude: number;
+  suppressedAddressLongitude: number;
   suppressedListingId: string;
   unapprovedDescriptionListingId: string;
   /** So a spec can assert `query=` never matches it. */
@@ -144,6 +150,21 @@ const FIXTURE_ZIP = '00000';
 const FIXTURE_LATITUDE = 0;
 const FIXTURE_LONGITUDE = 0;
 
+/**
+ * The suppressed-address fixture gets its OWN coordinates, distinct from the shared 0/0 above.
+ *
+ * `tests/listing-search-view.e2e.spec.ts` proves the coordinate half of the address opt-out by
+ * scanning EVERY column of the view's row for the property's real point. At 0/0 that scan is
+ * vacuous — "0" appears in half the columns of any listing row, so it would pass whether the view
+ * masked the point or not, which is precisely the failure mode `fixture-ids.ts` exists to prevent.
+ *
+ * Repeated digits in the middle of the Pacific keep guard 3 (self-labelling shape) intact: still
+ * unmistakably synthetic, and nowhere near the MD/DC/VA footprint, while being distinctive enough
+ * that a substring scan over the whole row actually means something.
+ */
+const SUPPRESSED_ADDRESS_LATITUDE = 11.111111;
+const SUPPRESSED_ADDRESS_LONGITUDE = -155.555555;
+
 // Attribution to the real brokerage is compliance-CORRECT (NAR 7.58) — only the contact channels
 // below are the RFC 2606 / reserved-range fakes, so a leaked row cannot be dialed or emailed.
 const FIXTURE_BROKER_NAME = 'Real Broker, LLC';
@@ -182,6 +203,9 @@ function buildFixtureProperty(input: {
   bathsHalf: number | null;
   livingSqft: number | null;
   lotSqft: number | null;
+  /** Defaults to the shared 0/0; only the suppressed-address scenario needs its own point. */
+  latitude?: number;
+  longitude?: number;
 }): PropertyRow {
   return {
     id: input.id,
@@ -196,8 +220,8 @@ function buildFixtureProperty(input: {
       state: FIXTURE_STATE,
       zip5: FIXTURE_ZIP,
     }),
-    latitude: FIXTURE_LATITUDE,
-    longitude: FIXTURE_LONGITUDE,
+    latitude: input.latitude ?? FIXTURE_LATITUDE,
+    longitude: input.longitude ?? FIXTURE_LONGITUDE,
     neighborhood: null,
     property_type: input.propertyType,
     year_built: 1990,
@@ -331,14 +355,27 @@ export async function loadComplianceFixtures(pool: FixturesPool): Promise<Compli
         bathsHalf: 0,
         livingSqft: 1200,
         lotSqft: null,
+        // Distinct from every other fixture's 0/0 so the whole-row coordinate scan in
+        // listing-search-view.e2e.spec.ts is not vacuous. See the constants' own comment.
+        latitude: SUPPRESSED_ADDRESS_LATITUDE,
+        longitude: SUPPRESSED_ADDRESS_LONGITUDE,
       }),
     );
-    const suppressedAddressUnitNumber = '4B';
+    // A LONG, DISTINCTIVE designator, not a bare `4B` — this value is used as a SUBSTRING NEEDLE by
+    // four assertions across three spec files (listing-search-view's whole-row scan, and the
+    // whole-payload scans in listings-search and listings-detail). A two-character needle scanned
+    // across a whole row or a serialised payload collides with unrelated text and produces a false
+    // PASS, which is the one failure mode this fixture module exists to prevent. `PH-1207` is a real
+    // building's style of unit designator, so the row stays realistic, and it cannot collide.
+    // Keep it above the length floor asserted in listing-search-view.e2e.spec.ts.
+    const suppressedAddressUnitNumber = 'PH-1207';
     const suppressedAddressUnitId = await getOrCreateUnit(client, {
       id: randomUUID(),
       property_id: suppressedAddressPropertyId,
       unit_number: suppressedAddressUnitNumber,
-      floor: 4,
+      // Coupled to the designator above: `PH-1207` reads as penthouse level, floor 12. A fixture
+      // whose unit number and floor disagree is a distraction for whoever debugs it next.
+      floor: 12,
       beds: 2,
       baths_full: 2,
       baths_half: 0,
@@ -793,6 +830,8 @@ export async function loadComplianceFixtures(pool: FixturesPool): Promise<Compli
       suppressedAddressListingId,
       suppressedAddressUnitNumber,
       suppressedAddressStreetLine: FIXTURE_STREETS.suppressedAddress,
+      suppressedAddressLatitude: SUPPRESSED_ADDRESS_LATITUDE,
+      suppressedAddressLongitude: SUPPRESSED_ADDRESS_LONGITUDE,
       suppressedListingId,
       unapprovedDescriptionListingId,
       unapprovedDescriptionText,

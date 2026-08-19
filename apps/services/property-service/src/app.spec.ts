@@ -10,7 +10,8 @@ import { cardDbRowFixture } from './listings/test-fixtures';
  * The fake records every statement it is handed, which is what lets these tests assert the two
  * properties no downstream test can recover: that every read goes through `listing_search_v`, and that
  * no statement uses a wildcard projection. Both are compliance invariants (the view enforces the
- * display rules; the wildcard would read the unmasked `street_line`, #48), not style preferences.
+ * display rules; a wildcard reads whatever the view happens to project, including its compliance
+ * predicate inputs and anything a future migration adds), not style preferences.
  */
 interface FakePool extends ReadPool {
   statements: string[];
@@ -75,7 +76,7 @@ describe('read-model invariants, asserted against the SQL actually issued', () =
     }
   });
 
-  it('never issues a wildcard projection, so the unmasked street_line (#48) is never read', async () => {
+  it('never issues a wildcard projection, and never names street_line (#48)', async () => {
     const pool = createSearchPool();
     const app = createApp({ pool });
 

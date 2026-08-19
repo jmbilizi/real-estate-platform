@@ -43,10 +43,11 @@ request parser silently.
   carrying flags for callers to remember. There is no parameter, header or flag that bypasses it,
   and none of its predicates is restated in a handler's `WHERE` clause — a second copy of a
   compliance rule is a second place for it to drift.
-- **Columns are enumerated** (`src/listings/columns.ts`), never `SELECT *`. The view still carries
-  the unmasked `street_line` beside the masked `address` (**#48**), so enumerating keeps that value
-  out of this process entirely instead of reading it and dropping it later. `FORBIDDEN_COLUMNS`
-  names it and a unit test enforces the absence.
+- **Columns are enumerated** (`src/listings/columns.ts`), never `SELECT *`. The view no longer
+  projects the unmasked `street_line` beside the masked `address` (**#48**, closed by migration
+  `1785801600010`), so enumerating is now defence in depth rather than the sole barrier — `SELECT *`
+  would still pick up the view's compliance predicate inputs and whatever a future migration adds.
+  `FORBIDDEN_COLUMNS` still names `street_line` and a unit test enforces the absence.
 - **No `COALESCE` on `beds`/`baths`/`sqft`.** NULL must fail the predicate, so a land parcel is
   excluded by `beds>=2` rather than coerced to a fabricated `0`. `minSqft` is **living area**, never
   lot size. Equally: no `COALESCE(neighborhood, city)`, which would make the neighborhood filter
