@@ -396,12 +396,21 @@ export async function loadComplianceFixtures(pool: FixturesPool): Promise<Compli
         longitude: SUPPRESSED_ADDRESS_LONGITUDE,
       }),
     );
-    const suppressedAddressUnitNumber = '4B';
+    // A LONG, DISTINCTIVE designator, not a bare `4B` — this value is used as a SUBSTRING NEEDLE by
+    // four assertions across three spec files (listing-search-view's whole-row scan, and the
+    // whole-payload scans in listings-search and listings-detail). A two-character needle scanned
+    // across a whole row or a serialised payload collides with unrelated text and produces a false
+    // PASS, which is the one failure mode this fixture module exists to prevent. `PH-1207` is a real
+    // building's style of unit designator, so the row stays realistic, and it cannot collide.
+    // Keep it above the length floor asserted in listing-search-view.e2e.spec.ts.
+    const suppressedAddressUnitNumber = 'PH-1207';
     const suppressedAddressUnitId = await getOrCreateUnit(client, {
       id: randomUUID(),
       property_id: suppressedAddressPropertyId,
       unit_number: suppressedAddressUnitNumber,
-      floor: 4,
+      // Coupled to the designator above: `PH-1207` reads as penthouse level, floor 12. A fixture
+      // whose unit number and floor disagree is a distraction for whoever debugs it next.
+      floor: 12,
       beds: 2,
       baths_full: 2,
       baths_half: 0,
