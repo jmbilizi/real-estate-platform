@@ -38,3 +38,11 @@ spec:
               value: "0.5" # 50% sampling for test
             - name: GEOIP_ENABLED # GeoIP geographic enrichment
               value: "true" # Uses standard path: /opt/geoip/GeoLite2-City.mmdb
+            # Derived from infra/deploy-control.yaml, NOT hand-authored: account-service and
+            # property-service are both `enabled: false` for test, so advertising their routes
+            # would serve 502 on the routes and 500 on /swagger/docs/v1/<Service> — which takes
+            # out the whole Swagger aggregation endpoint (#22, #71). `pnpm run infra:validate`
+            # recomputes this set and fails if this value is not exactly right, in either
+            # direction. Delete an entry here when its service is enabled for test.
+            - name: GATEWAY_DISABLED_SERVICES
+              value: "Account,Property"
