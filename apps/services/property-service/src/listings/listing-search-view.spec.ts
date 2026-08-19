@@ -214,3 +214,56 @@ describe('seller address suppression is structural, not a rule callers must reme
     }
   });
 });
+
+describe('the opt-out covers the free-text fields too (#59)', () => {
+  /**
+   * `title`, `description` and `open_house_remarks` were not conditioned on the opt-out at all —
+   * `description` only on `description_moderation`, the other two on nothing. A feed-authored
+   * title of the form "142 Oak St — Colonial" on a suppressed listing would both display the
+   * withheld street line and restore the confirmation oracle that routing `street=` through the
+   * masked `address` column was built to close.
+   */
+  it.each(['title', 'description', 'open_house_remarks'])(
+    'gates %s on address_display_allowed',
+    (name) => {
+      const projection = projections.find((candidate) => candidate.outputName === name);
+
+      expect(projection).toBeDefined();
+      expect(projection?.expression).toMatch(/CASE\s+WHEN[\s\S]*address_display_allowed/i);
+    },
+  );
+
+  it('keeps the moderation gate on description rather than replacing it', () => {
+    // The two withhold copy for unrelated reasons — a seller's address opt-out and a moderation
+    // verdict on third-party MLS remarks — so BOTH must hold before a description publishes.
+    // Swapping one for the other would silently republish every unmoderated description.
+    const description = projections.find((candidate) => candidate.outputName === 'description');
+
+    expect(description?.expression).toMatch(/description_moderation\s*=\s*'approved'/i);
+    expect(description?.expression).toMatch(/address_display_allowed/i);
+  });
+
+  it('substitutes the title rather than nulling it', () => {
+    // The contract declares `title: z.string()` — NOT nullable — so a CASE with no ELSE would fail
+    // listingCardSchema.parse() in map-row.ts and turn every suppressed listing into a 500. And a
+    // card with no title does not render, which is why AC 2 required this decision to be explicit.
+    const title = projections.find((candidate) => candidate.outputName === 'title');
+
+    expect(title?.expression).toMatch(/\bELSE\b/i);
+    // The substitute is built only from columns this same row already publishes unmasked, so it
+    // discloses nothing new — and never from the street line, which would defeat the whole point.
+    expect(title?.expression).not.toContain('street_line');
+  });
+
+  it('does NOT suppress the open-house times, only the remarks', () => {
+    // A time does not identify an address, and withholding a showing a consumer can attend removes
+    // inventory from the market rather than masking it. Asserted so a later "tighten the opt-out"
+    // change has to argue with a test instead of silently going further than the rule requires.
+    for (const name of ['open_house_starts_at', 'open_house_ends_at']) {
+      const projection = projections.find((candidate) => candidate.outputName === name);
+
+      expect(projection).toBeDefined();
+      expect(projection?.expression).not.toContain('address_display_allowed');
+    }
+  });
+});

@@ -58,7 +58,11 @@ request parser silently.
 - **Two compliance decisions have exactly one named function each**, so a rule change is one edit:
   `visibleListingTypesFor()` (`src/listings/sold-gate.ts`) decides sold visibility —
   `listingType=all` means sale + rent and sold is opt-in — and `applyAddressSuppression()`
-  (`src/listings/suppression.ts`) nulls `unit.unitNumber` whenever the view masked the address.
+  (`src/listings/suppression.ts`) nulls `unit.unitNumber` **and every
+  `listing.openHouses[].remarks`** whenever the view masked the address. Both live there rather than
+  in the view because the view structurally cannot reach them: `unit_number` is on `units`, and the
+  detail response's `openHouses[]` array is built by `getListingById()`'s own `json_agg` over
+  `listing_open_houses`, a query that never passes through `listing_search_v` (#59).
 - **`404` is byte-identical** for an unknown id, a soft-deleted id, a view-excluded id and a
   malformed id. A 403 or a distinct message is a confirmation oracle that defeats the seller's
   opt-out.

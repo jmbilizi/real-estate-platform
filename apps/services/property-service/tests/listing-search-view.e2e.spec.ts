@@ -99,6 +99,18 @@ describe('the fixture these guards depend on', () => {
   it('exposes enough columns that the scan below is meaningful', () => {
     expect(Object.keys(row).length).toBeGreaterThan(30);
   });
+
+  it('stores the street line in the title, description and open-house remarks (#59)', () => {
+    // This is what makes the whole-row scan below cover #59 as well as #48 without naming a single
+    // one of those three columns — and what makes it cover the NEXT free-text column too.
+    for (const stored of [
+      fixtures.suppressedAddressStoredTitle,
+      fixtures.suppressedAddressStoredDescription,
+      fixtures.suppressedAddressStoredOpenHouseRemarks,
+    ]) {
+      expect(stored).toContain(fixtures.suppressedAddressStreetLine);
+    }
+  });
 });
 
 describe('listing_search_v withholds the address from every column, not just the masked ones (#48)', () => {
@@ -117,6 +129,21 @@ describe('listing_search_v withholds the address from every column, not just the
     // Belt to the scan's braces: the scan catches a leak under ANY column name, this catches the
     // specific regression #48 fixed even if a future fixture's street line changed shape.
     expect(Object.keys(row)).not.toContain('street_line');
+  });
+
+  it('substitutes the title and withholds the description and open-house remarks (#59)', () => {
+    // The whole-row scan above already proves no column carries the street line. These name the
+    // three columns so a regression says WHICH rule broke instead of just "something leaked".
+    expect(row.title).not.toBe(fixtures.suppressedAddressStoredTitle);
+    expect(row.description).toBeNull();
+    expect(row.open_house_remarks).toBeNull();
+  });
+
+  it('keeps the open-house TIMES, because a time does not identify an address (#59)', () => {
+    // Guards the other direction: over-suppressing removes a showing a consumer can attend, which
+    // takes inventory off the market rather than masking an address.
+    expect(row.open_house_starts_at).not.toBeNull();
+    expect(row.open_house_ends_at).not.toBeNull();
   });
 
   it('masks the address and BOTH coordinates together', () => {

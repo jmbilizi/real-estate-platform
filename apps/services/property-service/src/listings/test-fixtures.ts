@@ -161,6 +161,12 @@ export interface DetailFixtureOverrides {
   readonly address?: string | null;
   readonly unitNumber?: string | null;
   readonly unit?: null;
+  /**
+   * `listing.openHouses`. Built by the detail query's OWN `json_agg` over `listing_open_houses`,
+   * not by `listing_search_v` — which is why the remarks need suppressing at the response boundary
+   * (#59) and why a test needs to be able to put text in them.
+   */
+  readonly openHouses?: readonly { startsAt: string; endsAt: string; remarks: string | null }[];
 }
 
 export function detailFixture(overrides: DetailFixtureOverrides = {}): ListingDetail {
@@ -183,7 +189,7 @@ export function detailFixture(overrides: DetailFixtureOverrides = {}): ListingDe
       address,
       description: null,
       media: [],
-      openHouses: [],
+      openHouses: overrides.openHouses ?? [],
     },
   });
 }

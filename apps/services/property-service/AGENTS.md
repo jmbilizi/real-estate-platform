@@ -107,10 +107,21 @@ and no audience/segment column on anything holding consumer-visible copy. `ameni
 15-value set enforced by a DB CHECK as well as `validateAmenities()`.
 
 `listing_search_v` **enforces** the display rules rather than carrying flags for callers to
-remember: it masks the address _and_ the coordinates together when `address_display_allowed` is
-false (the point re-identifies the address) and projects **no** unmasked street line beside them
-(#48), withholds suppressed descriptions, excludes statuses with no `consumer_status`, and gates
-solds on `close_date`.
+remember. When `address_display_allowed` is false it masks, on that one predicate: the address, the
+coordinates (the point re-identifies the address), the **description**, the **open-house remarks**,
+and it substitutes a neutral derived **title** (#59) — while projecting **no** unmasked street line
+beside any of them (#48). It also withholds unmoderated descriptions, excludes statuses with no
+`consumer_status`, and gates solds on `close_date`.
+
+**The free-text fields are the half that gets forgotten.** A feed-authored title like
+`"142 Oak St — Colonial"` publishes the withheld street line _and_ — because `title` is a free-text
+`query` target — restores the confirmation oracle that routing `street=` through the masked
+`address` was built to close. `title` is **substituted, not nulled**: the contract declares
+`title: z.string()` (non-nullable), so nulling it 500s at the mapper's `.parse()` and a card with no
+title does not render. The substitute is `property_type || ' in ' || city || ', ' || state` — only
+columns the same row already publishes unmasked. Open-house **times** are deliberately not masked: a
+time does not identify an address, and withholding a showing removes inventory from the market
+rather than masking it.
 
 ## Database
 
@@ -229,15 +240,16 @@ consequences that bite:
 One file per responsibility, and the split is deliberate — the pure ones are unit-testable with no
 database, which is why nearly all of the logic lives in them:
 
-| File              | Responsibility                                                           |
-| ----------------- | ------------------------------------------------------------------------ |
-| `columns.ts`      | The enumerated projections and `FORBIDDEN_COLUMNS`                       |
-| `sold-gate.ts`    | `visibleListingTypesFor()` — THE sold-visibility decision                |
-| `suppression.ts`  | `applyAddressSuppression()` — THE response-boundary suppression          |
-| `search-query.ts` | `buildSearchQuery()` — validated request to `{ where, params, orderBy }` |
-| `map-row.ts`      | DB row to wire shape, each ending in the contract's own `.parse()`       |
-| `repository.ts`   | The only module executing read SQL                                       |
-| `routes.ts`       | Express wiring, strict parse, status codes, cache headers                |
+| File                          | Responsibility                                                           |
+| ----------------------------- | ------------------------------------------------------------------------ |
+| `columns.ts`                  | The enumerated projections and `FORBIDDEN_COLUMNS`                       |
+| `sold-gate.ts`                | `visibleListingTypesFor()` — THE sold-visibility decision                |
+| `suppression.ts`              | `applyAddressSuppression()` — THE response-boundary suppression          |
+| `listing-search-view.spec.ts` | The CI guard over the view's own SQL (#48/#59)                           |
+| `search-query.ts`             | `buildSearchQuery()` — validated request to `{ where, params, orderBy }` |
+| `map-row.ts`                  | DB row to wire shape, each ending in the contract's own `.parse()`       |
+| `repository.ts`               | The only module executing read SQL                                       |
+| `routes.ts`                   | Express wiring, strict parse, status codes, cache headers                |
 
 ### Rules with teeth (each one is a compliance failure if broken, not a style lapse)
 
