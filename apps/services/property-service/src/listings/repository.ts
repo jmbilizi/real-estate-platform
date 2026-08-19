@@ -28,9 +28,10 @@ import { applyAddressSuppression } from './suppression';
  * its predicates is restated in a WHERE clause here: a second copy of a compliance rule is a second
  * place for it to drift.
  *
- * Columns are enumerated from `columns.ts`, never `SELECT *` — the view still carries the unmasked
- * `street_line` beside the masked `address` (#48), and enumerating keeps that value out of this
- * process rather than reading it and dropping it later.
+ * Columns are enumerated from `columns.ts`, never `SELECT *`. The view no longer projects the
+ * unmasked `street_line` beside the masked `address` (#48, closed), so this is now defence in depth
+ * rather than the sole barrier: `SELECT *` would still pick up the view's compliance predicate
+ * inputs, and whatever a future migration adds, without anyone reviewing the change.
  */
 
 /** The narrow seam the repository needs, so tests pass a fake instead of opening a socket. */

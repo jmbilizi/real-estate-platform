@@ -1,13 +1,18 @@
 /**
  * The enumerated read-model projections. There is deliberately no `SELECT *` anywhere in this
- * service: `listing_search_v` still carries the unmasked `street_line` beside the masked `address`
- * (#48, open), and enumerating is what keeps that value out of this process entirely rather than
- * relying on a mapper to drop it after it has already been read, logged and buffered.
+ * service.
+ *
+ * `listing_search_v` no longer projects the unmasked `street_line` at all (#48, closed by migration
+ * `1785801600010_replace-listing-search-view-drop-street-line.js`), so enumerating is no longer the
+ * only thing standing between a suppressed address and this process. It stays anyway: the view
+ * still projects the compliance predicate inputs below, `SELECT *` would silently pick up whatever
+ * a future migration adds, and defence in depth on a seller opt-out is worth one line per column.
  */
 
 /** Columns that must never appear in a projection, with the reason each one is barred. */
 export const FORBIDDEN_COLUMNS = [
-  // #48: the raw street line, unmasked, beside the masked `address`. Reading it at all would put a
+  // #48: the raw street line. The view no longer exposes it, and this entry is what keeps a future
+  // migration from re-adding it and a projection from picking it up — reading it at all would put a
   // seller-suppressed address into this process's memory and its query logs.
   'street_line',
   // The view's own compliance predicate inputs. A handler that reads them is a handler that can be

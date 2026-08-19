@@ -5,7 +5,7 @@ describe('read-model columns', () => {
     expect(select).not.toMatch(/\*/);
   });
 
-  it('never selects street_line — the view still carries it unmasked (#48)', () => {
+  it('never selects street_line — kept barred so a future migration cannot re-expose it (#48)', () => {
     expect(FORBIDDEN_COLUMNS).toContain('street_line');
     for (const select of [LISTING_CARD_SELECT, LISTING_DETAIL_SELECT]) {
       for (const forbidden of FORBIDDEN_COLUMNS) {

@@ -108,8 +108,9 @@ and no audience/segment column on anything holding consumer-visible copy. `ameni
 
 `listing_search_v` **enforces** the display rules rather than carrying flags for callers to
 remember: it masks the address _and_ the coordinates together when `address_display_allowed` is
-false (the point re-identifies the address), withholds suppressed descriptions, excludes statuses
-with no `consumer_status`, and gates solds on `close_date`.
+false (the point re-identifies the address) and projects **no** unmasked street line beside them
+(#48), withholds suppressed descriptions, excludes statuses with no `consumer_status`, and gates
+solds on `close_date`.
 
 ## Database
 
@@ -243,10 +244,12 @@ database, which is why nearly all of the logic lives in them:
 - **Every read goes through `listing_search_v`.** It _enforces_ the display rules rather than
   carrying flags for callers to remember. No parameter, header or flag bypasses it, and none of its
   predicates is restated in a handler's `WHERE` clause.
-- **Enumerate columns, never `SELECT *`.** The view still carries the unmasked `street_line` beside
-  the masked `address` (**#48**, open); enumerating keeps that value out of this process rather than
-  reading it and dropping it after it has already been buffered and logged. `app.spec.ts` asserts no
-  statement contains a wildcard or that column name.
+- **Enumerate columns, never `SELECT *`.** The view no longer projects the unmasked `street_line`
+  beside the masked `address` (**#48**, closed by migration `1785801600010`), so this is now defence
+  in depth rather than the sole barrier: `SELECT *` would still read the view's compliance predicate
+  inputs, and whatever a future migration adds, with no review. `app.spec.ts` asserts no statement
+  contains a wildcard or that column name; `src/listings/listing-search-view.spec.ts` asserts the
+  view itself never projects a street line outside the `address_display_allowed` mask.
 - **No `COALESCE` on `beds`/`baths`/`sqft`** — NULL must fail the predicate so a land parcel is
   excluded by `beds>=2` instead of matching a fabricated `0`. `minSqft` is **living area**. No
   `COALESCE(neighborhood, city)` either: it would make the neighborhood filter match city names.
