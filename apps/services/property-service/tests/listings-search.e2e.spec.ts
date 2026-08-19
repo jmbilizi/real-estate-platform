@@ -103,6 +103,10 @@ describe('suppressed address (address_display_allowed = false)', () => {
       // Whole-row, not field-by-field, for the same reason listing-search-view.e2e.spec.ts scans
       // the view's whole row: a card field added later that carried the street line would fail here
       // rather than needing someone to remember to assert it.
+      //
+      // #105 is the known live example — `primaryMedia.altText` reaches this card from a LATERAL
+      // over `listing_media` that bypasses the view, suppressed by nothing. It cannot leak today
+      // because `insertMedia()` never binds `alt_text`, so the column is NULL everywhere.
       const results = await fetchAllResults();
       const row = results.find((result) => result.id === fixtures.suppressedAddressListingId);
 

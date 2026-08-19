@@ -94,6 +94,12 @@ describe('suppressed address on detail (address_display_allowed = false)', () =>
     it('carries no part of the withheld address anywhere in the serialised payload', async () => {
       // Whole-payload, not field-by-field: a field added to the detail graph later that carried the
       // street line would fail here rather than needing someone to remember to assert it.
+      //
+      // #105 is the known live example. `media[].altText` reaches this payload from a LATERAL over
+      // `listing_media` that bypasses the view, and nothing suppresses it — but `insertMedia()`
+      // never binds `alt_text`, so the column is NULL everywhere and this fixture has no media at
+      // all. Giving the fixture a media row with a street line in its alt text is expected to turn
+      // THIS assertion red until #105 lands; that is the intended sequencing.
       const response = await axios.get(`/listings/${fixtures.suppressedAddressListingId}`);
 
       const serialised = JSON.stringify(response.data);
