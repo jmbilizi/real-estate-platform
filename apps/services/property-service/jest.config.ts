@@ -16,5 +16,14 @@ export default {
   // as regex escapes and the pattern silently never matches. Same trap applies to testMatch
   // globs. This is why the stock `/node_modules/` default is written without it.
   testPathIgnorePatterns: ['/node_modules/', '/tests/'],
+  // `src/listings/listing-search-view.spec.ts` requires a migration to capture the SQL its `up()`
+  // emits. Migrations are plain CommonJS `.js` and need no transform, but the `^.+\.[tj]s$`
+  // transform above matches them and ts-jest then warns on every run that `allowJs` is off.
+  // Skipping the transform for that directory is narrower than turning `allowJs` on repo-wide, and
+  // the files run as-is because they were never TypeScript to begin with.
+  //
+  // Note the absence of `<rootDir>`, for the same Windows reason as testPathIgnorePatterns above.
+  // The `/node_modules/` entry restates the Jest default, which is replaced rather than merged.
+  transformIgnorePatterns: ['/node_modules/', '/migrations/'],
   coverageDirectory: '../../../coverage/apps/services/property-service',
 };
