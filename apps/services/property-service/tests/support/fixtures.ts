@@ -207,6 +207,17 @@ function fixtureTitle(subject: string): string {
 }
 
 /**
+ * A LONG, DISTINCTIVE unit designator, not a bare `4B`. This value is used as a SUBSTRING NEEDLE by
+ * four assertions across three spec files (listing-search-view's whole-row scan, and the
+ * whole-payload scans in listings-search and listings-detail). A two-character needle scanned
+ * across a whole row or a serialised payload collides with unrelated text and produces a false
+ * PASS, which is the one failure mode this fixture module exists to prevent. `PH-1207` is a real
+ * building's style of designator, so the row stays realistic, and it cannot collide. Keep it above
+ * the length floor asserted in listing-search-view.e2e.spec.ts.
+ */
+const SUPPRESSED_ADDRESS_UNIT_NUMBER = 'PH-1207';
+
+/**
  * #59's free-text payload for the suppressed-address scenario: the street line appears in the
  * title, the description AND the open-house remarks, the way a real MLS feed writes them.
  *
@@ -223,7 +234,7 @@ const SUPPRESSED_ADDRESS_TITLE_SUBJECT = `${FIXTURE_STREETS.suppressedAddress} â
 const SUPPRESSED_ADDRESS_STORED_TITLE = fixtureTitle(SUPPRESSED_ADDRESS_TITLE_SUBJECT);
 const SUPPRESSED_ADDRESS_DESCRIPTION =
   'This E2E Fixture (Sample) listing is a 2 bedroom, 2 bathroom condo unit of 1,200 square feet ' +
-  `at ${FIXTURE_STREETS.suppressedAddress}, unit 4B.`;
+  `at ${FIXTURE_STREETS.suppressedAddress}, unit ${SUPPRESSED_ADDRESS_UNIT_NUMBER}.`;
 const SUPPRESSED_ADDRESS_OPEN_HOUSE_REMARKS =
   'E2E Fixture (Sample) remarks: park on the corner and use the rear entrance of ' +
   `${FIXTURE_STREETS.suppressedAddress}.`;
@@ -396,14 +407,10 @@ export async function loadComplianceFixtures(pool: FixturesPool): Promise<Compli
         longitude: SUPPRESSED_ADDRESS_LONGITUDE,
       }),
     );
-    // A LONG, DISTINCTIVE designator, not a bare `4B` â€” this value is used as a SUBSTRING NEEDLE by
-    // four assertions across three spec files (listing-search-view's whole-row scan, and the
-    // whole-payload scans in listings-search and listings-detail). A two-character needle scanned
-    // across a whole row or a serialised payload collides with unrelated text and produces a false
-    // PASS, which is the one failure mode this fixture module exists to prevent. `PH-1207` is a real
-    // building's style of unit designator, so the row stays realistic, and it cannot collide.
-    // Keep it above the length floor asserted in listing-search-view.e2e.spec.ts.
-    const suppressedAddressUnitNumber = 'PH-1207';
+    // Module-level (see its own comment) because SUPPRESSED_ADDRESS_DESCRIPTION embeds it too: the
+    // address is `street_line || ' ' || unit_number`, so the description leaks BOTH halves and both
+    // have to be proven unreachable.
+    const suppressedAddressUnitNumber = SUPPRESSED_ADDRESS_UNIT_NUMBER;
     const suppressedAddressUnitId = await getOrCreateUnit(client, {
       id: randomUUID(),
       property_id: suppressedAddressPropertyId,
