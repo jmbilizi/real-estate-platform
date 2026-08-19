@@ -102,7 +102,13 @@ namespace ApiGateway
 
             string baseOcelotConfigurationFilePath = "Configuration/Ocelot.Settings.json";
 
-            string ocelotConfigurationJsonString = JsonMerger.MergeJsonRoutesFolderWithTheBaseOcelotConfigurationSettings(serviceRoutesFolderPath, baseOcelotConfigurationFilePath);
+            // Services this environment does not deploy are dropped here rather than advertised and
+            // then answered with 502/500 (#22, #71). The value is derived from
+            // infra/deploy-control.yaml and enforced by pnpm run infra:validate.
+            ISet<string> disabledServices = JsonMerger.ParseDisabledServices(
+                Environment.GetEnvironmentVariable(JsonMerger.DisabledServicesEnvironmentVariable));
+
+            string ocelotConfigurationJsonString = JsonMerger.MergeJsonRoutesFolderWithTheBaseOcelotConfigurationSettings(serviceRoutesFolderPath, baseOcelotConfigurationFilePath, disabledServices);
 
             MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes(ocelotConfigurationJsonString));
 

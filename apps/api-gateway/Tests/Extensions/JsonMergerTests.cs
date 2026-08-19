@@ -205,6 +205,121 @@ namespace ApiGateway.Tests.Extensions
             routes[0]!["UpstreamPathTemplate"]!.ToString().Should().Be("/api/listings/{everything}");
         }
 
+        [Fact]
+        public void Merge_WithSuppressedService_ShouldDropRoutesAndSwaggerEndpoint()
+        {
+            // The #22/#71 shape: an Active route file whose service this environment does not
+            // deploy. Dropping the routes alone would still leave SwaggerForOcelot fetching a
+            // downstream document that does not exist — which 500s the whole aggregation endpoint.
+            WriteBaseConfig();
+            Directory.CreateDirectory(routesDir);
+            WriteServiceConfig("property", "Property", "/property/listings");
+
+            var result = JsonMerger.MergeJsonRoutesFolderWithTheBaseOcelotConfigurationSettings(
+                routesDir,
+                baseConfigPath,
+                JsonMerger.ParseDisabledServices("Property"));
+
+            var json = JObject.Parse(result);
+            ((JArray)json["Routes"]!).Should().BeEmpty();
+            ((JArray)json["SwaggerEndPoints"]!).Should().BeEmpty();
+        }
+
+        [Fact]
+        public void Merge_WithSuppressedService_ShouldLeaveOtherServicesAdvertised()
+        {
+            WriteBaseConfig();
+            Directory.CreateDirectory(routesDir);
+            WriteServiceConfig("property", "Property", "/property/listings");
+            WriteServiceConfig("inference", "Inference", "/inference/models");
+
+            var result = JsonMerger.MergeJsonRoutesFolderWithTheBaseOcelotConfigurationSettings(
+                routesDir,
+                baseConfigPath,
+                JsonMerger.ParseDisabledServices("Property"));
+
+            var json = JObject.Parse(result);
+            var routes = (JArray)json["Routes"]!;
+            routes.Should().HaveCount(1);
+            routes[0]!["SwaggerKey"]!.ToString().Should().Be("Inference");
+            ((JArray)json["SwaggerEndPoints"]!).Should().HaveCount(1);
+        }
+
+        [Fact]
+        public void Merge_WithNoDisabledServices_ShouldAdvertiseEverythingActive()
+        {
+            WriteBaseConfig();
+            Directory.CreateDirectory(routesDir);
+            WriteServiceConfig("property", "Property", "/property/listings");
+
+            // Null (variable unset) and empty (variable set but blank) must behave identically —
+            // dev and podman/local declare no suppression at all.
+            foreach (var disabled in new[] { null, JsonMerger.ParseDisabledServices(string.Empty) })
+            {
+                var result = JsonMerger.MergeJsonRoutesFolderWithTheBaseOcelotConfigurationSettings(
+                    routesDir,
+                    baseConfigPath,
+                    disabled);
+
+                ((JArray)JObject.Parse(result)["Routes"]!).Should().HaveCount(1);
+            }
+        }
+
+        [Theory]
+        [InlineData("property", "Property")]
+        [InlineData("PROPERTY", "Property")]
+        [InlineData(" Property , Account ", "Property")]
+        public void ParseDisabledServices_ShouldBeCaseInsensitiveAndTrimmed(string value, string expected)
+        {
+            JsonMerger.ParseDisabledServices(value).Should().Contain(expected);
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("   ")]
+        [InlineData(",,")]
+        public void ParseDisabledServices_WithNothingToSuppress_ShouldReturnEmpty(string? value)
+        {
+            JsonMerger.ParseDisabledServices(value).Should().BeEmpty();
+        }
+
+        private void WriteServiceConfig(string fileName, string serviceName, string upstreamPath)
+        {
+            var config = new JObject
+            {
+                ["Active"] = true,
+                ["ServiceName"] = serviceName,
+                ["Routes"] = new JArray
+                {
+                    new JObject
+                    {
+                        ["UpstreamPathTemplate"] = upstreamPath,
+                        ["DownstreamPathTemplate"] = upstreamPath,
+                        ["DownstreamScheme"] = "http",
+                    },
+                },
+                ["SwaggerEndPoints"] = new JArray
+                {
+                    new JObject
+                    {
+                        ["Key"] = serviceName,
+                        ["Config"] = new JArray
+                        {
+                            new JObject
+                            {
+                                ["Name"] = serviceName,
+                                ["Version"] = "v1",
+                                ["Url"] = $"http://{fileName}-svc:8080/openapi.json",
+                            },
+                        },
+                    },
+                },
+            };
+
+            File.WriteAllText(Path.Combine(routesDir, $"{fileName}.json"), config.ToString());
+        }
+
         private void WriteBaseConfig()
         {
             var baseConfig = new JObject
