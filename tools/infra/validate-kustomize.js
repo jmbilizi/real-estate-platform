@@ -12,6 +12,15 @@
  *   pnpm run infra:validate:dev             # All providers, dev only
  *   pnpm run infra:validate:test            # All providers, test only
  *   pnpm run infra:validate:prod            # All providers, prod only
+ *   pnpm run infra:validate:gateway-routes  # Only the gateway route ↔ deploy-control guard
+ *
+ * Two cross-checks run on top of the Kustomize build, and they are mirror images of each
+ * other (see tools/infra/deploy-scope.js and tools/infra/gateway-routes.js):
+ *
+ *   - "will this workload deploy without permission?" — a rendered workload with no
+ *     deploy-control entry.
+ *   - "does the gateway advertise something that will never deploy here?" — a route file
+ *     naming a service the target environment gates off (#22, #71).
  */
 
 const { execSync } = require('child_process');
@@ -19,6 +28,7 @@ const path = require('path');
 const fs = require('fs');
 const yaml = require('js-yaml');
 const { resolveDeployScope, describeProblems } = require('./deploy-scope');
+const { loadRouteFiles, resolveGatewayRouteProblems } = require('./gateway-routes');
 
 const colors = {
   reset: '\x1b[0m',
@@ -90,7 +100,7 @@ function discoverProviders() {
   return providers.sort();
 }
 
-function validateEnvironment(provider, env) {
+function validateEnvironment(provider, env, only = null) {
   const envPath = `infra/k8s/${provider}/${env}`;
 
   // Check if kustomization.yaml exists
@@ -108,23 +118,34 @@ function validateEnvironment(provider, env) {
   if (result.success) {
     logSuccess(`${provider}/${env}: Kustomize build successful`);
 
-    if (provider === 'hetzner') {
+    if (provider === 'hetzner' && only !== 'gateway-routes') {
       const problems = findDeployControlProblems(result.output, env);
-      if (problems.length > 0) {
-        logError(`${provider}/${env}: manifests and infra/deploy-control.yaml disagree`);
-        for (const problem of problems) {
-          log(`  ${problem.headline}:`, 'red');
-          for (const item of problem.items) {
-            log(`    - ${item}`, 'red');
-          }
-          for (const line of problem.detail) {
-            log(`    ${line}`, 'yellow');
-          }
-        }
+      if (
+        !reportProblems(
+          problems,
+          `${provider}/${env}`,
+          'manifests and infra/deploy-control.yaml disagree',
+        )
+      ) {
         return false;
       }
       logSuccess(`${provider}/${env}: deploy-control accounts for every workload`);
     }
+
+    // Runs for every provider: without a deploy-control block (podman/local) only the
+    // downstream host/port resolution applies, which is still the difference between a
+    // working local gateway and a 502.
+    const gatewayProblems = findGatewayRouteProblems(result.output, env);
+    if (
+      !reportProblems(
+        gatewayProblems,
+        `${provider}/${env}`,
+        'gateway routes and infra/deploy-control.yaml disagree',
+      )
+    ) {
+      return false;
+    }
+    logSuccess(`${provider}/${env}: every advertised gateway route is deployable`);
 
     return true;
   } else {
@@ -134,6 +155,24 @@ function validateEnvironment(provider, env) {
     }
     return false;
   }
+}
+
+/** Print a problem list. Returns true when there was nothing to print. */
+function reportProblems(problems, label, headline) {
+  if (problems.length === 0) {
+    return true;
+  }
+  logError(`${label}: ${headline}`);
+  for (const problem of problems) {
+    log(`  ${problem.headline}:`, 'red');
+    for (const item of problem.items) {
+      log(`    - ${item}`, 'red');
+    }
+    for (const line of problem.detail) {
+      log(`    ${line}`, 'yellow');
+    }
+  }
+  return false;
 }
 
 function loadManifestDocuments(manifest) {
@@ -174,6 +213,28 @@ function findDeployControlProblems(manifest, environment) {
   });
 
   return describeProblems(result, { mode: 'validate' });
+}
+
+/**
+ * Cross-check what the api-gateway ADVERTISES against what the environment DEPLOYS — the
+ * inverse of `findDeployControlProblems`, and the failure that only a human in a browser
+ * ever found (#22, #71). See tools/infra/gateway-routes.js for the resolution rule.
+ *
+ * `control` is passed as null for providers with no deploy-control block (podman/local), in
+ * which case only the downstream host/port resolution is enforced.
+ */
+function findGatewayRouteProblems(manifest, environment) {
+  const controlPath = path.resolve(__dirname, '../..', 'infra/deploy-control.yaml');
+  const control = yaml.load(fs.readFileSync(controlPath, 'utf-8'));
+  const hasEnvironmentBlock =
+    Object.keys(control?.environments?.[environment]?.services ?? {}).length > 0;
+
+  return resolveGatewayRouteProblems({
+    routeFiles: loadRouteFiles(),
+    documents: loadManifestDocuments(manifest),
+    control: hasEnvironmentBlock ? control : null,
+    environment,
+  });
 }
 
 function validateHetznerLocation(env) {
@@ -231,9 +292,21 @@ function validateHetznerLocation(env) {
 
 function main() {
   const args = process.argv.slice(2);
-  const targetEnv = args[0]; // dev, test, prod, or undefined (all)
+  // `--only gateway-routes` narrows the sweep to the gateway route ↔ deploy-control guard
+  // (pnpm run infra:validate:gateway-routes). Everything still renders through Kustomize —
+  // the guard reads the rendered Services and the api-gateway Deployment.
+  const onlyIndex = args.indexOf('--only');
+  const only = onlyIndex === -1 ? null : args[onlyIndex + 1];
+  const targetEnv = args.filter(
+    (arg, index) => !arg.startsWith('--') && index !== onlyIndex + 1,
+  )[0]; // dev, test, prod, or undefined (all)
 
-  log('\n🔍 Validating Kustomize manifests...', 'bright');
+  log(
+    only === 'gateway-routes'
+      ? '\n🔍 Validating gateway routes against infra/deploy-control.yaml...'
+      : '\n🔍 Validating Kustomize manifests...',
+    'bright',
+  );
 
   // Check if Kustomize is installed
   if (!checkKustomize()) {
@@ -281,13 +354,13 @@ function main() {
   // Loop through all providers and environments
   for (const provider of providers) {
     for (const env of envArray) {
-      const result = validateEnvironment(provider, env);
+      const result = validateEnvironment(provider, env, only);
       if (result !== null) {
         // null means environment doesn't exist, skip it
         results[`${provider}/${env}`] = result;
 
         // Hetzner-specific location validation
-        if (provider === 'hetzner') {
+        if (provider === 'hetzner' && only !== 'gateway-routes') {
           const locationResult = validateHetznerLocation(env);
           hetznerLocationResults[env] = locationResult;
         }
@@ -360,4 +433,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { findDeployControlProblems, loadManifestDocuments };
+module.exports = { findDeployControlProblems, findGatewayRouteProblems, loadManifestDocuments };

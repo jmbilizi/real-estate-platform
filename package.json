@@ -141,6 +141,7 @@
     "infra:validate:dev": "node tools/infra/validate-kustomize.js dev",
     "infra:validate:test": "node tools/infra/validate-kustomize.js test",
     "infra:validate:prod": "node tools/infra/validate-kustomize.js prod",
+    "infra:validate:gateway-routes": "node tools/infra/validate-kustomize.js --only gateway-routes",
     "// GitHub Tickets (Product Owner → Engineer handoff)": "",
     "// → One-time tool setup:  pnpm run gh:setup": "",
     "// → One-time board setup: pnpm run gh:project:sync-schema": "",
