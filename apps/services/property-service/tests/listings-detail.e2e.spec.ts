@@ -43,6 +43,64 @@ describe('suppressed address on detail (address_display_allowed = false)', () =>
     expect(detail.unit?.unitNumber).toBeNull();
     expect(detail.unit?.unitNumber).not.toBe(fixtures.suppressedAddressUnitNumber);
   });
+
+  describe('free-text fields (#59)', () => {
+    it('stores the street line in all three free-text fields — otherwise everything below is vacuous', () => {
+      for (const stored of [
+        fixtures.suppressedAddressStoredTitle,
+        fixtures.suppressedAddressStoredDescription,
+        fixtures.suppressedAddressStoredOpenHouseRemarks,
+      ]) {
+        expect(stored).toContain(fixtures.suppressedAddressStreetLine);
+      }
+    });
+
+    it('substitutes the title rather than emitting the seller-authored one, which names the street line', async () => {
+      const response = await axios.get(`/listings/${fixtures.suppressedAddressListingId}`);
+      const detail = listingDetailSchema.parse(response.data);
+
+      expect(detail.listing.title).not.toBe(fixtures.suppressedAddressStoredTitle);
+      expect(detail.listing.title).not.toContain(fixtures.suppressedAddressStreetLine);
+      // Substituted, NOT withheld: the contract's `title` is non-nullable and a card with no title
+      // does not render, which is why the view supplies a neutral derived form instead.
+      expect(detail.listing.title.length).toBeGreaterThan(0);
+    });
+
+    it('withholds the description, even though it passed moderation — the ADDRESS opt-out withholds it here, not the moderation gate', async () => {
+      const response = await axios.get(`/listings/${fixtures.suppressedAddressListingId}`);
+      const detail = listingDetailSchema.parse(response.data);
+
+      expect(detail.listing.description).toBeNull();
+    });
+
+    it('nulls the remarks on every occurrence of listing.openHouses[] while keeping the occurrences themselves', async () => {
+      // This array does NOT come from listing_search_v. `getListingById()` builds it with its own
+      // json_agg over listing_open_houses, so masking open_house_remarks in the view does not reach
+      // it — `applyAddressSuppression()` is what covers this endpoint. Before that, the detail
+      // response republished, verbatim, the street line the view had masked three fields above.
+      const response = await axios.get(`/listings/${fixtures.suppressedAddressListingId}`);
+      const detail = listingDetailSchema.parse(response.data);
+
+      expect(detail.listing.openHouses.length).toBeGreaterThan(0);
+      for (const openHouse of detail.listing.openHouses) {
+        expect(openHouse.remarks).toBeNull();
+        // The opt-out is a mask on display, not a removal from the market: a time does not identify
+        // an address, so the showing a consumer can attend is still published.
+        expect(typeof openHouse.startsAt).toBe('string');
+        expect(typeof openHouse.endsAt).toBe('string');
+      }
+    });
+
+    it('carries no part of the withheld address anywhere in the serialised payload', async () => {
+      // Whole-payload, not field-by-field: a field added to the detail graph later that carried the
+      // street line would fail here rather than needing someone to remember to assert it.
+      const response = await axios.get(`/listings/${fixtures.suppressedAddressListingId}`);
+
+      const serialised = JSON.stringify(response.data);
+      expect(serialised).not.toContain(fixtures.suppressedAddressStreetLine);
+      expect(serialised).not.toContain(fixtures.suppressedAddressUnitNumber);
+    });
+  });
 });
 
 describe('unapproved description on detail (description_moderation = suppressed)', () => {

@@ -84,6 +84,14 @@ export interface ComplianceFixtureIds {
    */
   suppressedAddressLatitude: number;
   suppressedAddressLongitude: number;
+  /**
+   * #59. The three free-text values AS STORED, each containing the real street line. A spec asserts
+   * they really do contain it (anti-vacuity) and then that none of them reaches the wire: the title
+   * is substituted, the description and the open-house remarks come back null.
+   */
+  suppressedAddressStoredTitle: string;
+  suppressedAddressStoredDescription: string;
+  suppressedAddressStoredOpenHouseRemarks: string;
   suppressedListingId: string;
   unapprovedDescriptionListingId: string;
   /** So a spec can assert `query=` never matches it. */
@@ -193,6 +201,33 @@ const FIXTURE_STREETS = {
   sample: '113 Fixture Test Lane',
 } as const;
 
+/** The label discipline (guard 3) every fixture title carries, in one place. */
+function fixtureTitle(subject: string): string {
+  return `${FIXTURE_TITLE_PREFIX}: ${subject} (Sample)`;
+}
+
+/**
+ * #59's free-text payload for the suppressed-address scenario: the street line appears in the
+ * title, the description AND the open-house remarks, the way a real MLS feed writes them.
+ *
+ * These are the strings the view must withhold or substitute. Before #59, `title` and
+ * `open_house_remarks` were conditioned on nothing and `description` only on
+ * `description_moderation`, so all three published the street line the row's masked `address`
+ * exists to withhold — and `title` is a free-text `query` target, which turned it back into a
+ * confirmation oracle for the exact address the seller opted out of.
+ *
+ * The unit number is deliberately in the description too: the address is
+ * `street_line || ' ' || unit_number`, so both halves have to be unreachable, not just the first.
+ */
+const SUPPRESSED_ADDRESS_TITLE_SUBJECT = `${FIXTURE_STREETS.suppressedAddress} — Suppressed Address`;
+const SUPPRESSED_ADDRESS_STORED_TITLE = fixtureTitle(SUPPRESSED_ADDRESS_TITLE_SUBJECT);
+const SUPPRESSED_ADDRESS_DESCRIPTION =
+  'This E2E Fixture (Sample) listing is a 2 bedroom, 2 bathroom condo unit of 1,200 square feet ' +
+  `at ${FIXTURE_STREETS.suppressedAddress}, unit 4B.`;
+const SUPPRESSED_ADDRESS_OPEN_HOUSE_REMARKS =
+  'E2E Fixture (Sample) remarks: park on the corner and use the rear entrance of ' +
+  `${FIXTURE_STREETS.suppressedAddress}.`;
+
 function buildFixtureProperty(input: {
   id: string;
   communityId: string;
@@ -267,7 +302,7 @@ function buildFixtureListingRow(input: {
     id: input.id,
     property_id: input.propertyId,
     unit_id: input.unitId ?? null,
-    title: `${FIXTURE_TITLE_PREFIX}: ${input.title} (Sample)`,
+    title: fixtureTitle(input.title),
     offer_kind: input.offerKind,
     consumer_status: input.consumerStatus,
     status: input.status,
@@ -380,13 +415,22 @@ export async function loadComplianceFixtures(pool: FixturesPool): Promise<Compli
         id: suppressedAddressListingId,
         propertyId: suppressedAddressPropertyId,
         unitId: suppressedAddressUnitId,
-        title: 'Suppressed Address',
+        // #59: title, description and open-house remarks ALL embed the real street line, which is
+        // exactly what a real MLS feed produces ("142 Oak St — Colonial", "entrance at the rear of
+        // 142"). Before #59 none of the three was conditioned on address_display_allowed, so this
+        // row would have displayed the withheld street line three times over and handed a caller a
+        // free-text `query` oracle for it. Written here rather than as a fourth fixture scenario so
+        // that listing-search-view.e2e.spec.ts's whole-row scan covers all three — and any future
+        // free-text column — with no further changes.
+        title: SUPPRESSED_ADDRESS_TITLE_SUBJECT,
         offerKind: 'sale',
         consumerStatus: 'Active',
         status: 'Active',
         listPrice: 350000,
-        description:
-          'This E2E Fixture (Sample) listing is a 2 bedroom, 2 bathroom condo unit of 1,200 square feet.',
+        description: SUPPRESSED_ADDRESS_DESCRIPTION,
+        // 'approved' deliberately: the description must be withheld by the ADDRESS opt-out alone,
+        // with the moderation gate already satisfied. Set it to 'suppressed' and the test passes
+        // for the wrong reason and would keep passing if #59 were reverted.
         descriptionModeration: 'approved',
         featuredReason: null,
         internetDisplayAllowed: true,
@@ -395,6 +439,17 @@ export async function loadComplianceFixtures(pool: FixturesPool): Promise<Compli
         addressDisplayAllowed: false,
       }),
     );
+    // Upcoming (in progress, ends_at in the future) so the view's LATERAL actually selects it and
+    // there is a live `open_house_remarks` value for the mask to have to withhold.
+    await insertOpenHouse(client, {
+      id: randomUUID(),
+      listing_id: suppressedAddressListingId,
+      starts_at: isoHoursFromNow(-1),
+      ends_at: isoHoursFromNow(1),
+      remarks: SUPPRESSED_ADDRESS_OPEN_HOUSE_REMARKS,
+      is_cancelled: false,
+      is_sample: true,
+    });
 
     // --- Suppressed listing: internet_display_allowed=false → absent everywhere, 404 on detail -----
     const suppressedListingPropertyId = randomUUID();
@@ -823,6 +878,9 @@ export async function loadComplianceFixtures(pool: FixturesPool): Promise<Compli
       suppressedAddressStreetLine: FIXTURE_STREETS.suppressedAddress,
       suppressedAddressLatitude: SUPPRESSED_ADDRESS_LATITUDE,
       suppressedAddressLongitude: SUPPRESSED_ADDRESS_LONGITUDE,
+      suppressedAddressStoredTitle: SUPPRESSED_ADDRESS_STORED_TITLE,
+      suppressedAddressStoredDescription: SUPPRESSED_ADDRESS_DESCRIPTION,
+      suppressedAddressStoredOpenHouseRemarks: SUPPRESSED_ADDRESS_OPEN_HOUSE_REMARKS,
       suppressedListingId,
       unapprovedDescriptionListingId,
       unapprovedDescriptionText,
