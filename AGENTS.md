@@ -150,8 +150,11 @@ pnpm run infra:validate:dev            # Kustomize validation per env
   any dependency change the gate is correctness, not style: `pnpm install --frozen-lockfile` must
   exit 0 (CI runs it in six places). Reconcile a failure with an install, never by hand-editing.
 - **No Alpine base images for anything doing in-cluster DNS.** musl fails Kubernetes service
-  resolution with `EAI_AGAIN`; use a Debian `-slim` base. (`cribstop-next` is still on Alpine and
-  has this latent bug.)
+  resolution with `EAI_AGAIN`; use a Debian `-slim` base. No Dockerfile in the repo is on Alpine any
+  more (`cribstop-next` was the last one — #74). **A `-slim` base ships no CA bundle at all**, where
+  the Alpine Node image shipped 145 certs, so any swap must `apt-get install ca-certificates` or it
+  silently strips TLS trust; install it in the shared `base` stage so the runtime image keeps it
+  too, not just the stage that runs `pnpm install`.
 - **Any Dockerfile that runs Nx must set `ENV NX_DAEMON=false`.** Nx turns its daemon off in CI and
   in Docker, but does not detect podman/buildah or BuildKit (`isDocker()` checks only `/.dockerenv`
   and cgroup `"docker"`; podman writes `/run/.containerenv`, and no build engine propagates `CI`).

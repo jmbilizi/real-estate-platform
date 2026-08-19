@@ -2,7 +2,18 @@
 # This Dockerfile is monorepo-aware — it installs from the workspace root
 # so pnpm can resolve catalog: versions and hoisted deps correctly.
 
-FROM node:20-alpine AS base
+# Debian (glibc), NOT alpine — musl fails cluster-DNS lookups (`EAI_AGAIN api-gateway-svc`); see the
+# root AGENTS.md gotcha. This app resolves the gateway in-cluster on every server-rendered request
+# (`src/app/api/_lib/gateway.ts`), so the whole Homes surface rides on that resolver, not just auth.
+FROM node:20-slim AS base
+
+# node:20-slim ships NO CA bundle at all (verified: node:20-alpine has 145 certs at
+# /etc/ssl/certs/ca-certificates.crt, node:20-slim has no such file). It is installed here in `base`
+# rather than in `deps` alone so that every stage — including the runtime image — keeps the TLS trust
+# the Alpine base used to provide for free. apt runs over HTTP, so no TLS is needed to bootstrap it.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
 # ── Stage 1: Install workspace dependencies ───────────────────────────────────
 FROM base AS deps
@@ -12,17 +23,18 @@ ARG COPY_CERTS=false
 # The .workspace-certs directory is auto-generated for local development only
 # and used when building behind corporate proxies with SSL inspection.
 # In CI/CD, this step is skipped as GitHub Actions doesn't require custom CAs.
-# NOTE: On Alpine, we append directly to the existing bundle — no apk call needed —
-# because apk itself needs TLS to fetch packages (chicken-and-egg with update-ca-certificates).
+# On Debian the root is registered the supported way — dropped into
+# /usr/local/share/ca-certificates/ and linked into the bundle by update-ca-certificates —
+# rather than appended to the bundle by hand as the Alpine build had to do.
 RUN --mount=type=bind,source=.workspace-certs,target=/tmp/certs,readonly \
     if [ "$COPY_CERTS" = "true" ] && [ -f /tmp/certs/workspace-enterprise-roots.pem ]; then \
       echo "Installing enterprise CA certificates for local development..." && \
-      cat /tmp/certs/workspace-enterprise-roots.pem >> /etc/ssl/certs/ca-certificates.crt && \
+      cp /tmp/certs/workspace-enterprise-roots.pem /usr/local/share/ca-certificates/workspace-roots.crt && \
+      update-ca-certificates && \
       echo "Enterprise CA certificates installed successfully"; \
     else \
       echo "Skipping enterprise CA setup (CI/CD mode or certs not available)"; \
-    fi && \
-    apk add --no-cache libc6-compat
+    fi
 
 # Point Node/pnpm at the system cert store so installs work behind corporate SSL inspection.
 # In CI/CD the file exists with standard CAs only — harmless.
@@ -77,8 +89,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
+# groupadd/useradd rather than busybox addgroup/adduser — this is a Debian base.
+# Same names and same uid/gid as before, so the standalone COPY --chown targets are unchanged.
+RUN groupadd --system --gid 1001 nodejs && \
+    useradd --system --uid 1001 --gid nodejs nextjs
 
 # In monorepo standalone builds, the .next/standalone dir mirrors the full workspace path.
 # So server.js lives at apps/clients/cribstop/next/server.js (not the root), and static/
