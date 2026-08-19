@@ -57,6 +57,12 @@ function realRouteFiles() {
   return loadRouteFiles();
 }
 
+function readRouteFileJson(file) {
+  return JSON.parse(
+    fs.readFileSync(path.join(REPO_ROOT, 'apps/api-gateway/Configuration/Routes', file), 'utf-8'),
+  );
+}
+
 /** Deep clone so a test can mutate one environment without leaking into the next. */
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -294,7 +300,9 @@ test('auto_deploy: false fails only when the environment is on an automated foot
   assert.deepEqual(manual, []);
 });
 
-test('an inactive route file is not advertised and is therefore not checked', () => {
+test('an inactive route file whose downstream does not resolve is left alone', () => {
+  // Deployability cannot be judged without resolving the host, and an inactive file is
+  // advertised nowhere, so there is nothing to report — and no host/port noise either.
   const inactive = parseRouteFile('widget-service-routes.json', {
     ServiceName: 'Widget',
     Active: false,
@@ -315,6 +323,154 @@ test('an inactive route file is not advertised and is therefore not checked', ()
     }),
     [],
   );
+});
+
+// ── Active: false is the other way to un-advertise, and is policed the same way ──────────
+
+/**
+ * Stakeholder finding, 2026-08-19. There are two switches that stop a route file being
+ * advertised — `Active: false` (global, in the route file) and GATEWAY_DISABLED_SERVICES
+ * (per-environment, on the Deployment) — and the guard policed only the second. Setting
+ * `Active: false` on property-service-routes.json while property-service is deployable in
+ * dev produced `hetzner/dev: PASSED`.
+ *
+ * That is the same defect the over-suppression rule already catches (a deployed service the
+ * gateway will not route to) reached through the other switch, and `Active` is the likelier
+ * one to be flipped because it sits in the route file itself.
+ *
+ * The rule is therefore uniform: `Active: false` means "suppressed in every environment",
+ * so it is a failure whenever the service is deployable in ANY environment.
+ */
+
+function widgetRouteFile(overrides = {}) {
+  return parseRouteFile('widget-service-routes.json', {
+    ServiceName: 'Widget',
+    Active: true,
+    Routes: [
+      {
+        UpstreamPathTemplate: '/widget/things',
+        DownstreamHostAndPorts: [{ Host: 'widget-svc', Port: 9100 }],
+      },
+    ],
+    ...overrides,
+  });
+}
+
+test('reproduces the stakeholder gap: Active: false while the service still deploys', () => {
+  const routeFiles = realRouteFiles().map((routeFile) =>
+    routeFile.file === 'property-service-routes.json'
+      ? parseRouteFile(routeFile.file, {
+          ...readRouteFileJson('property-service-routes.json'),
+          Active: false,
+        })
+      : routeFile,
+  );
+
+  const problems = resolveGatewayRouteProblems({
+    routeFiles,
+    documents: withDisabledServices(baseDocuments(), null),
+    control: realControl(),
+    environment: 'dev',
+  });
+
+  assert.equal(problems.length, 1, `expected exactly one problem, got ${JSON.stringify(problems)}`);
+  assert.match(problems[0].headline, /Active/);
+
+  const item = problems[0].items[0];
+  assert.match(item, /property-service-routes\.json/);
+  assert.match(item, /"Property"/);
+  assert.match(item, /property-service/);
+  // Must name which environments deploy it — dev does, test and prod do not.
+  assert.match(item, /dev/);
+  assert.doesNotMatch(item, /test/);
+});
+
+test('Active: false with the service deployable nowhere passes', () => {
+  assert.deepEqual(
+    resolveGatewayRouteProblems({
+      routeFiles: [widgetRouteFile({ Active: false })],
+      documents: SERVICE_DOCS,
+      control: control({ enabled: false }),
+      environment: 'dev',
+    }),
+    [],
+  );
+});
+
+test('a string "true" typo reads as inactive, and the message says so', () => {
+  // Both JsonMerger and this parser treat "true" (string), 1, and a missing key as
+  // inactive, so a typo strands a service with no divergence to notice. The new rule
+  // catches it because the service stays deployable — but the message has to explain that
+  // the file reads as inactive, or the author who thought they wrote `true` is lost.
+  for (const value of ['true', 1]) {
+    const problems = resolveGatewayRouteProblems({
+      routeFiles: [widgetRouteFile({ Active: value })],
+      documents: SERVICE_DOCS,
+      control: control(),
+      environment: 'dev',
+    });
+
+    assert.equal(problems.length, 1);
+    assert.match(problems[0].headline, /Active/);
+    assert.match(problems[0].items[0], /not the boolean/i);
+    assert.match(problems[0].items[0], new RegExp(JSON.stringify(value)));
+  }
+});
+
+test('a missing Active key reads as inactive and is reported as such', () => {
+  const problems = resolveGatewayRouteProblems({
+    routeFiles: [widgetRouteFile({ Active: undefined })],
+    documents: SERVICE_DOCS,
+    control: control(),
+    environment: 'dev',
+  });
+
+  assert.equal(problems.length, 1);
+  assert.match(problems[0].items[0], /no "Active" key/i);
+});
+
+// ── The two switches must not double-report one cause ───────────────────────────────────
+
+test('Active: false plus a GATEWAY_DISABLED_SERVICES entry yields ONE error, not two', () => {
+  // Before this rule existed, setting Active: false on Account immediately broke test and
+  // prod with a misleading "stale entry" message while dev — the environment that actually
+  // deploys it — passed. One cause must produce one error, and it must be the right one.
+  const documents = clone(SERVICE_DOCS);
+  documents[1].spec.template.spec.containers[0].env = [
+    { name: DISABLED_SERVICES_ENV, value: 'Widget' },
+  ];
+
+  const problems = resolveGatewayRouteProblems({
+    routeFiles: [widgetRouteFile({ Active: false })],
+    documents,
+    control: control(),
+    environment: 'dev',
+  });
+
+  assert.equal(problems.length, 1, `expected one problem, got ${JSON.stringify(problems)}`);
+  assert.equal(problems[0].items.length, 1);
+  assert.match(problems[0].headline, /Active/);
+});
+
+test('an inactive route file named in GATEWAY_DISABLED_SERVICES is redundant, not stale', () => {
+  // Deployable nowhere, so the Active rule stays quiet — but declaring it in both places is
+  // still two mechanisms for one decision, and "stale entry" would misdescribe it.
+  const documents = clone(SERVICE_DOCS);
+  documents[1].spec.template.spec.containers[0].env = [
+    { name: DISABLED_SERVICES_ENV, value: 'Widget' },
+  ];
+
+  const problems = resolveGatewayRouteProblems({
+    routeFiles: [widgetRouteFile({ Active: false })],
+    documents,
+    control: control({ enabled: false }),
+    environment: 'dev',
+  });
+
+  assert.equal(problems.length, 1);
+  assert.match(problems[0].items[0], /Widget/);
+  assert.match(problems[0].items[0], /one mechanism/i);
+  assert.doesNotMatch(problems[0].items[0], /stale/i);
 });
 
 // ── GATEWAY_DISABLED_SERVICES must equal the derived set, in both directions ─────────────

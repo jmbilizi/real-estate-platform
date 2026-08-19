@@ -38,17 +38,38 @@
  * each errors in their own right. A rename therefore breaks the check instead of slipping
  * through it.
  *
- * ── How a route file is switched off per environment ───────────────────────────────────
+ * ── The two switches that un-advertise a route file ────────────────────────────────────
  *
- * `Active` in the route file is global — it cannot express "not in prod yet". The
- * per-environment switch is the `GATEWAY_DISABLED_SERVICES` env var on the api-gateway
- * Deployment (comma-separated `ServiceName` values), which `JsonMerger` honours by dropping
- * that file's routes and its Swagger endpoint together.
+ * Both are policed here, by the same rule, because they cause the same defect:
  *
- * That value is NOT a fourth hand-maintained registry: this check derives the correct set
- * from `deploy-control.yaml` and requires the declared set to equal it **exactly**, in both
- * directions. Under-suppressing is the outage above; over-suppressing means a service that
- * is running is unreachable through the gateway, which is just as silent.
+ *   1. `Active: false` in the route file — GLOBAL. "Advertised in no environment, ever."
+ *   2. `GATEWAY_DISABLED_SERVICES` on the api-gateway Deployment (comma-separated
+ *      `ServiceName` values, honoured by `JsonMerger`) — PER-ENVIRONMENT.
+ *
+ * Either one used on a service that deploy-control still deploys produces the mirror image
+ * of the outage above: the pod runs, nothing routes to it, and its document is missing from
+ * the Swagger aggregation. The guard originally covered only (2), and a stakeholder proved
+ * the hole by setting `Active: false` on `property-service-routes.json` while
+ * property-service was deployable in dev — `hetzner/dev: PASSED`. `Active` is in fact the
+ * likelier of the two to be flipped by mistake, because it sits in the route file itself
+ * rather than in an overlay.
+ *
+ * So `Active: false` is judged against EVERY environment (it is a global switch, so a
+ * per-environment answer would be the wrong shape, and no single-environment invocation can
+ * be allowed to miss it), while `GATEWAY_DISABLED_SERVICES` is judged against the
+ * environment under validation. Only one of the two ever reports a given file, so one cause
+ * never yields two errors. Using both on one service is itself rejected — as redundant, not
+ * as a stale entry, so the message points at the real decision.
+ *
+ * `GATEWAY_DISABLED_SERVICES` is NOT a fourth hand-maintained registry: this check derives
+ * the correct set from `deploy-control.yaml` and requires the declared set to equal it
+ * **exactly**, in both directions. Under-suppressing is the outage above; over-suppressing
+ * means a service that is running is unreachable through the gateway, which is just as
+ * silent.
+ *
+ * Note that `Active` requires the boolean `true`: `"true"`, `1` and a missing key all read
+ * as inactive in `JsonMerger` AND here. The two agree, so a typo produces no divergence to
+ * notice — it is caught only because the service stays deployable.
  */
 
 const fs = require('fs');
@@ -112,9 +133,41 @@ function parseRouteFile(file, json) {
   return {
     file,
     serviceName: typeof json.ServiceName === 'string' ? json.ServiceName : null,
+    // JsonMerger requires the boolean `true`; a string "true", a 1, or a missing key are all
+    // inactive. `activeRaw` is kept so the guard can tell a deliberate `false` apart from a
+    // typo and say which it is — the two need very different fixes.
     active: json.Active === true,
+    activeRaw: json.Active,
     downstreams,
   };
+}
+
+/** Whether the file is inactive by accident rather than by decision. */
+function isActiveTypo(routeFile) {
+  return routeFile.activeRaw !== undefined && routeFile.activeRaw !== false;
+}
+
+/** Why a route file counts as inactive, phrased for whoever has to fix it. */
+function describeInactive(routeFile) {
+  const raw = routeFile.activeRaw;
+  if (raw === false) {
+    return 'Active: false';
+  }
+  if (raw === undefined) {
+    return 'no "Active" key';
+  }
+  return `"Active": ${JSON.stringify(raw)} is a ${typeof raw}, not the boolean true, so it reads as inactive`;
+}
+
+/** The fix depends on whether the author meant it. */
+function describeInactiveFix(routeFile) {
+  if (isActiveTypo(routeFile)) {
+    return 'If the service was meant to be advertised, write the boolean "Active": true.';
+  }
+  return (
+    'If it is meant to be advertised somewhere, set "Active": true and suppress the ' +
+    `environments that do not deploy it with ${DISABLED_SERVICES_ENV} instead.`
+  );
 }
 
 /** Glob the route directory the same way Startup.cs does. */
@@ -213,6 +266,19 @@ function deployabilityOf(control, environment, key) {
   return { deployable: true, reason: null };
 }
 
+/**
+ * Every environment that deploys all of `keys`.
+ *
+ * `Active: false` is a global switch, so judging it needs a global answer: a route file
+ * switched off while its service still runs somewhere is a defect no matter which
+ * environment happens to be under validation.
+ */
+function environmentsDeploying(control, keys) {
+  return Object.keys(control?.environments ?? {}).filter((environment) =>
+    [...keys].every((key) => deployabilityOf(control, environment, key).deployable),
+  );
+}
+
 // ── The check ───────────────────────────────────────────────────────────────────────────
 
 /**
@@ -227,8 +293,7 @@ function deployabilityOf(control, environment, key) {
  * @returns {{headline: string, detail: string[], items: string[]}[]}
  */
 function resolveGatewayRouteProblems({ routeFiles, documents, control, environment }) {
-  const active = routeFiles.filter((routeFile) => routeFile.active);
-  if (active.length === 0) {
+  if (routeFiles.length === 0) {
     return [];
   }
 
@@ -242,33 +307,47 @@ function resolveGatewayRouteProblems({ routeFiles, documents, control, environme
   /** file → Set of deploy-control keys, only for files whose every downstream resolved. */
   const keysByFile = new Map();
 
-  for (const routeFile of active) {
+  for (const routeFile of routeFiles) {
     const keys = new Set();
     let resolvedCleanly = true;
+
+    // An inactive file is advertised nowhere, so its downstreams cannot 502 and its
+    // host/port problems are not worth reporting. They are still RESOLVED, because that is
+    // the only way to learn which deploy-control key it names and therefore whether the
+    // service it fronts is still running somewhere.
+    const reportHostProblems = routeFile.active;
 
     for (const downstream of routeFile.downstreams) {
       const where = `${routeFile.file} ${downstream.origin}`;
 
       if (!downstream.host) {
-        unresolvedHosts.push(`${where}: unparseable downstream ${JSON.stringify(downstream.raw)}`);
+        if (reportHostProblems) {
+          unresolvedHosts.push(
+            `${where}: unparseable downstream ${JSON.stringify(downstream.raw)}`,
+          );
+        }
         resolvedCleanly = false;
         continue;
       }
 
       const serviceDocument = services.get(downstream.host);
       if (!serviceDocument) {
-        unresolvedHosts.push(
-          `${where}: host '${downstream.host}' — no rendered Service by that name`,
-        );
+        if (reportHostProblems) {
+          unresolvedHosts.push(
+            `${where}: host '${downstream.host}' — no rendered Service by that name`,
+          );
+        }
         resolvedCleanly = false;
         continue;
       }
 
       const ports = exposedPorts(serviceDocument);
       if (downstream.port !== null && !ports.includes(downstream.port)) {
-        portMismatches.push(
-          `${where}: '${downstream.host}:${downstream.port}' — Service exposes ${ports.join(', ') || '(no ports)'}`,
-        );
+        if (reportHostProblems) {
+          portMismatches.push(
+            `${where}: '${downstream.host}:${downstream.port}' — Service exposes ${ports.join(', ') || '(no ports)'}`,
+          );
+        }
         resolvedCleanly = false;
       }
 
@@ -279,13 +358,15 @@ function resolveGatewayRouteProblems({ routeFiles, documents, control, environme
 
       const key = ownerKeyOf(serviceDocument, registeredKeys);
       if (!key) {
-        const labels = IDENTITY_LABELS.map((label) => serviceDocument.metadata?.labels?.[label])
-          .filter(Boolean)
-          .join(', ');
-        unmappedHosts.push(
-          `${where}: Service '${downstream.host}' carries no identity label naming a deploy-control key` +
-            ` (has: ${labels || 'none'})`,
-        );
+        if (reportHostProblems) {
+          const labels = IDENTITY_LABELS.map((label) => serviceDocument.metadata?.labels?.[label])
+            .filter(Boolean)
+            .join(', ');
+          unmappedHosts.push(
+            `${where}: Service '${downstream.host}' carries no identity label naming a deploy-control key` +
+              ` (has: ${labels || 'none'})`,
+          );
+        }
         resolvedCleanly = false;
         continue;
       }
@@ -352,14 +433,34 @@ function resolveGatewayRouteProblems({ routeFiles, documents, control, environme
 
   const advertisedButUndeployable = [];
   const suppressedButDeployable = [];
+  const inactiveButDeployable = [];
+  /** ServiceNames the Active rule already reported, so nothing reports them twice. */
+  const reportedInactive = new Set();
 
   for (const [routeFile, keys] of keysByFile) {
     const blockers = [...keys]
       .map((key) => ({ key, ...deployabilityOf(control, environment, key) }))
       .filter((result) => !result.deployable);
-    const suppressed = routeFile.serviceName !== null && declared.has(routeFile.serviceName);
+    const declaredHere = routeFile.serviceName !== null && declared.has(routeFile.serviceName);
 
-    if (blockers.length > 0 && !suppressed) {
+    // `Active: false` un-advertises everywhere, so it is judged against every environment,
+    // not just this one — and it takes precedence over the per-environment rules below, so
+    // one cause never produces two errors.
+    if (!routeFile.active) {
+      const deploying = environmentsDeploying(control, keys);
+      if (deploying.length > 0) {
+        reportedInactive.add(routeFile.serviceName);
+        inactiveButDeployable.push(
+          `${routeFile.file} (ServiceName "${routeFile.serviceName}") is advertised in no environment ` +
+            `(${describeInactive(routeFile)}), but deploy-control deploys ${[...keys].join(', ')} in: ` +
+            `${deploying.join(', ')} — the service would run with no route through the gateway and no ` +
+            `entry in the Swagger aggregation. ${describeInactiveFix(routeFile)}`,
+        );
+      }
+      continue;
+    }
+
+    if (blockers.length > 0 && !declaredHere) {
       const hosts = [
         ...new Set(routeFile.downstreams.map((down) => `${down.host}:${down.port}`)),
       ].join(', ');
@@ -371,7 +472,7 @@ function resolveGatewayRouteProblems({ routeFiles, documents, control, environme
       );
     }
 
-    if (blockers.length === 0 && suppressed) {
+    if (blockers.length === 0 && declaredHere) {
       suppressedButDeployable.push(
         `${routeFile.file} (ServiceName "${routeFile.serviceName}") is listed in ${DISABLED_SERVICES_ENV} for ` +
           `'${environment}', but ${[...keys].join(', ')} is deployable there — the service would run unreachable`,
@@ -379,8 +480,17 @@ function resolveGatewayRouteProblems({ routeFiles, documents, control, environme
     }
   }
 
-  const knownServiceNames = new Set(
-    active.map((routeFile) => routeFile.serviceName).filter(Boolean),
+  // A declared name matching an INACTIVE route file is redundant, not stale: the file
+  // exists, it is just already switched off globally. Saying "stale" would send the reader
+  // hunting for a deleted file. Both mechanisms at once is still wrong — one decision,
+  // one switch — unless the Active rule already reported this file.
+  const inactiveServiceNames = new Set(
+    routeFiles.filter((routeFile) => !routeFile.active).map((routeFile) => routeFile.serviceName),
+  );
+  const knownServiceNames = new Set(routeFiles.map((routeFile) => routeFile.serviceName));
+
+  const redundant = [...declared].filter(
+    (name) => inactiveServiceNames.has(name) && !reportedInactive.has(name),
   );
   const stale = [...declared].filter((name) => !knownServiceNames.has(name));
 
@@ -399,7 +509,23 @@ function resolveGatewayRouteProblems({ routeFiles, documents, control, environme
     });
   }
 
-  if (suppressedButDeployable.length > 0 || stale.length > 0) {
+  if (inactiveButDeployable.length > 0) {
+    problems.push({
+      headline: 'Gateway route files switched off with Active: false while their service deploys',
+      detail: [
+        'Active is a GLOBAL kill switch inside the route file — it un-advertises the service',
+        'in every environment at once. Used on a service that deploy-control still deploys, it',
+        'produces the mirror image of the #22/#71 outage: the pod runs, but nothing routes to',
+        'it and its document is missing from the Swagger aggregation.',
+        `For "deployed here but not there", use ${DISABLED_SERVICES_ENV} on the api-gateway`,
+        'Deployment patch instead — that is the per-environment switch, and this check keeps it',
+        'in step with deploy-control automatically.',
+      ],
+      items: inactiveButDeployable,
+    });
+  }
+
+  if (suppressedButDeployable.length > 0 || redundant.length > 0 || stale.length > 0) {
     problems.push({
       headline: `${DISABLED_SERVICES_ENV} does not match what infra/deploy-control.yaml deploys`,
       detail: [
@@ -410,9 +536,15 @@ function resolveGatewayRouteProblems({ routeFiles, documents, control, environme
       ],
       items: [
         ...suppressedButDeployable,
+        ...redundant.map(
+          (name) =>
+            `'${name}' is listed in ${DISABLED_SERVICES_ENV} for '${environment}' AND its route file is ` +
+            `already inactive — pick one mechanism: Active for "never, anywhere", ` +
+            `${DISABLED_SERVICES_ENV} for "not in this environment"`,
+        ),
         ...stale.map(
           (name) =>
-            `'${name}' is listed in ${DISABLED_SERVICES_ENV} for '${environment}' but matches no active route file — stale entry`,
+            `'${name}' is listed in ${DISABLED_SERVICES_ENV} for '${environment}' but matches no route file — stale entry`,
         ),
       ],
     });

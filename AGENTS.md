@@ -141,15 +141,30 @@ pnpm run infra:validate:dev            # Kustomize validation per env
     manifests** — host → `Service.metadata.name` → that Service's identity label → deploy-control
     key — so a rename breaks the check instead of slipping past it. A host no Service provides, a
     Service with no identity label, and a port the Service does not expose are each failures.
-  - **The per-environment switch is `GATEWAY_DISABLED_SERVICES`** on the api-gateway Deployment
-    (comma-separated `ServiceName` values, honoured by `JsonMerger`, dropping that file's routes
-    _and_ its Swagger endpoint). `Active` in the route file is global and cannot express "not in
-    prod yet". The value is **derived, not authored**: the check recomputes it from deploy-control
-    and fails unless the overlay declares it exactly, in **both** directions — over-suppressing
-    hides a running service behind the gateway just as silently as under-suppressing exposes a
-    missing one. `hetzner/test` and `hetzner/prod` carry `Account,Property` today; `hetzner/dev` and
-    `podman/local` carry nothing. Enabling a service for an environment means deleting its entry
-    there in the same commit.
+  - **There are exactly two switches that un-advertise a route file, and the guard polices both.**
+    `Active: false` (in the route file) is **global** — it means "advertised in no environment,
+    ever". `GATEWAY_DISABLED_SERVICES` on the api-gateway Deployment (comma-separated `ServiceName`
+    values, honoured by `JsonMerger`, dropping that file's routes _and_ its Swagger endpoint) is
+    **per-environment**. Pick by scope: `Active` for "never, anywhere", `GATEWAY_DISABLED_SERVICES`
+    for "not in this environment". Never both for one service — the guard rejects that as redundant
+    rather than as a stale entry, so the message points at the real decision.
+  - `GATEWAY_DISABLED_SERVICES` is **derived, not authored**: the check recomputes it from
+    deploy-control and fails unless the overlay declares it exactly, in **both** directions —
+    over-suppressing hides a running service behind the gateway just as silently as
+    under-suppressing exposes a missing one. `hetzner/test` and `hetzner/prod` carry
+    `Account,Property` today; `hetzner/dev` and `podman/local` carry nothing. Enabling a service for
+    an environment means deleting its entry there in the same commit.
+  - **`Active: false` on a service that still deploys somewhere is a failure** (#72, stakeholder
+    review). It is the mirror image of the outage above — the pod runs, nothing routes to it, and
+    its document is missing from the Swagger aggregation — and because `Active` sits in the route
+    file rather than an overlay, it is the likelier of the two switches to be flipped by mistake.
+    The rule is global on purpose: it fails whenever _any_ environment deploys the service, so no
+    single-environment invocation can miss it (which means one flip is reported once per environment
+    run — same cause, not three problems). `Active: false` plus deployable nowhere passes.
+  - **`Active` requires the boolean `true`.** `"true"` (string), `1`, and a missing key are all read
+    as inactive by `JsonMerger` _and_ by the guard — they agree, so a typo produces no divergence to
+    notice. It is caught only because the service stays deployable, and the guard's message names
+    the offending value and its type rather than just saying "inactive".
   - `enabled: false` always blocks; `auto_deploy: false` blocks only when the environment is on an
     automated footing (`global.auto_deploy` && `environments.<env>.auto_deploy`), because in
     `test`/`prod` everything is `auto_deploy: false` by design and reaches the cluster by manual
