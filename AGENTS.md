@@ -130,14 +130,30 @@ pnpm run infra:validate:dev            # Kustomize validation per env
 - **The inverse is just as silent: a gateway can advertise a service that is gated off.**
   `apps/api-gateway/Startup.cs` loads every `Configuration/Routes/*.json` unconditionally, so a
   route file ships routes _and_ a `SwaggerEndPoints` entry regardless of whether
-  `infra/deploy-control.yaml` will deploy that service to the target environment. Nothing
-  cross-checks the two. The failure mode is not "never deploys" but **"advertised but never
-  deployed"**: SwaggerForOcelot cannot fetch the downstream document, so
-  `/swagger/docs/v1/<Service>` returns **500** (taking out the whole aggregation endpoint, not just
-  that one document) and the service's routes return **502** — discovered by a human in a browser,
-  never by CI. Cost a dev outage on #22/#71. When adding a gateway route, check the service's
-  `enabled`/`auto_deploy` in **every** environment block, not just the one you're testing.
-  Guard-rail check tracked in #72.
+  `infra/deploy-control.yaml` will deploy that service to the target environment. The failure mode
+  is not "never deploys" but **"advertised but never deployed"**: SwaggerForOcelot cannot fetch the
+  downstream document, so `/swagger/docs/v1/<Service>` returns **500** (taking out the whole
+  aggregation endpoint, not just that one document) and the service's routes return **502** —
+  discovered by a human in a browser, never by CI. Cost a dev outage on #22/#71.
+  - **This is now checked** (#72): `tools/infra/gateway-routes.js`, run by `pnpm run infra:validate`
+    (CI's `validate-infra` job and both git hooks) and standalone via
+    `pnpm run infra:validate:gateway-routes`. It resolves each downstream **through the rendered
+    manifests** — host → `Service.metadata.name` → that Service's identity label → deploy-control
+    key — so a rename breaks the check instead of slipping past it. A host no Service provides, a
+    Service with no identity label, and a port the Service does not expose are each failures.
+  - **The per-environment switch is `GATEWAY_DISABLED_SERVICES`** on the api-gateway Deployment
+    (comma-separated `ServiceName` values, honoured by `JsonMerger`, dropping that file's routes
+    _and_ its Swagger endpoint). `Active` in the route file is global and cannot express "not in
+    prod yet". The value is **derived, not authored**: the check recomputes it from deploy-control
+    and fails unless the overlay declares it exactly, in **both** directions — over-suppressing
+    hides a running service behind the gateway just as silently as under-suppressing exposes a
+    missing one. `hetzner/test` and `hetzner/prod` carry `Account,Property` today; `hetzner/dev` and
+    `podman/local` carry nothing. Enabling a service for an environment means deleting its entry
+    there in the same commit.
+  - `enabled: false` always blocks; `auto_deploy: false` blocks only when the environment is on an
+    automated footing (`global.auto_deploy` && `environments.<env>.auto_deploy`), because in
+    `test`/`prod` everything is `auto_deploy: false` by design and reaches the cluster by manual
+    dispatch.
 - **An image is rebuilt only when its own Dockerfile inputs change.** Nx marks _every_ project
   affected when `pnpm-lock.yaml`, `nx.json` or the root `package.json` changes, which any
   service-adding branch does — so `tools/ci/affected-images.js` narrows the matrix using each

@@ -591,7 +591,11 @@ jobs:
           # deploy-control.yaml and the resolver under tools/infra/ are as much a part of
           # this validation as the manifests: a commit touching only deploy-control.yaml is
           # precisely the change that can strand a workload with no entry.
-          if git diff --name-only "$BASE" "${{ github.sha }}" | grep -qE '^infra/k8s/.*\.(yaml|yml)$|^infra/deploy-control\.yaml$|^infra/smart-deployment-config\.yaml$|^tools/infra/.*\.js$'; then
+          #
+          # The gateway route files belong here for the mirror-image reason (#72): a commit
+          # adding or re-pointing a route file, with no manifest change at all, is exactly
+          # what advertises a service the target environment will never deploy.
+          if git diff --name-only "$BASE" "${{ github.sha }}" | grep -qE '^infra/k8s/.*\.(yaml|yml)$|^infra/deploy-control\.yaml$|^infra/smart-deployment-config\.yaml$|^tools/infra/.*\.js$|^apps/api-gateway/Configuration/Routes/.*\.json$'; then
             echo "infra-changed=true" >> $GITHUB_OUTPUT
             echo "✅ Infrastructure files changed — running Kustomize validation"
           else

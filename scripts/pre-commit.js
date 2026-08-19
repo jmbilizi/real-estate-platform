@@ -498,11 +498,14 @@ function checkDotNetProjects(isAffected, base) {
 // Not just infra/k8s/: infra:validate also cross-checks every rendered environment against
 // infra/deploy-control.yaml, and a commit touching ONLY deploy-control.yaml is exactly the
 // change that can leave a workload with no entry. tools/infra/*.js is the checker itself.
+// The gateway route files are the mirror image (#72): a commit that only adds or re-points a
+// route file is exactly what advertises a service the target environment will never deploy.
 function isInfraPath(file) {
   return (
     (file.startsWith('infra/k8s/') && (file.endsWith('.yaml') || file.endsWith('.yml'))) ||
     file === 'infra/deploy-control.yaml' ||
-    (file.startsWith('tools/infra/') && file.endsWith('.js'))
+    (file.startsWith('tools/infra/') && file.endsWith('.js')) ||
+    (file.startsWith('apps/api-gateway/Configuration/Routes/') && file.endsWith('.json'))
   );
 }
 
