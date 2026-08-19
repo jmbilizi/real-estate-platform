@@ -23,6 +23,12 @@ import { complianceFixtureIds } from './support/fixture-ids';
  */
 const fixtures = complianceFixtureIds();
 
+/**
+ * The shortest a needle may be before a substring scan across a whole row stops meaning anything.
+ * Enforced by the first describe below; the fixture values are chosen to clear it deliberately.
+ */
+const MIN_NEEDLE_LENGTH = 3;
+
 /** The strings that, appearing anywhere in the row, would mean the opt-out failed. */
 const IDENTIFYING_VALUES: ReadonlyArray<{ label: string; needle: string }> = [
   { label: 'the street line', needle: fixtures.suppressedAddressStreetLine },
@@ -67,13 +73,21 @@ describe('the fixture these guards depend on', () => {
   // ANTI-VACUITY, the same reason tests/support/fixture-ids.ts throws rather than skipping. Every
   // assertion below is "no column contains X". If X were empty, blank, or a value that never
   // existed in the database, they would all pass while testing nothing.
-  it('carries a real street line, unit number and point to search for', () => {
-    expect(fixtures.suppressedAddressStreetLine.length).toBeGreaterThan(5);
-    expect(fixtures.suppressedAddressUnitNumber.length).toBeGreaterThan(0);
-    for (const { needle } of IDENTIFYING_VALUES) {
-      expect(needle.length).toBeGreaterThan(3);
-    }
-  });
+  //
+  // The threshold is a floor on NEEDLE LENGTH, and it runs in the opposite direction to the usual
+  // anti-vacuity check: a needle that is too SHORT does not make the scan fail, it makes the scan
+  // pass for the wrong reason. `String(value).includes('4B')` across ~50 columns of a listing row
+  // is a coin flip against ids, remarks and free text, so a short needle reports "no leak" whether
+  // or not one exists. Every value in IDENTIFYING_VALUES is therefore held to the same bar, rather
+  // than each field getting its own — an earlier version of this test asserted the unit number was
+  // merely non-empty AND that every needle exceeded the floor, which contradicted itself and failed
+  // the moment it first ran against a real database (the fixture's unit number was `4B`).
+  it.each(IDENTIFYING_VALUES)(
+    'searches for $label with a needle long enough not to collide by accident',
+    ({ needle }) => {
+      expect(needle.length).toBeGreaterThan(MIN_NEEDLE_LENGTH);
+    },
+  );
 
   it('is the suppressed-address scenario, not some other row', () => {
     // `address_display_allowed` is in FORBIDDEN_COLUMNS for the SERVICE — a handler that reads it
