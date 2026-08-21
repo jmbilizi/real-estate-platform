@@ -41,10 +41,18 @@ spec:
             - name: PORT
               value: "3000"
             # Server-side only — used by Next.js API routes to reach the gateway.
-            # FQDN required: short names fail when corporate search domains
-            # inject SERVFAIL responses before cluster.local is tried (ndots:5).
+            # The TRAILING DOT is load-bearing, not a typo: it makes the name absolute.
+            # Without it the name has 4 dots, and `ndots:5` (see any pod's /etc/resolv.conf)
+            # makes the resolver walk the search list FIRST. On a workstation whose search
+            # list carries corporate domains, a wildcard record there answers
+            # `…cluster.local.<corp-domain>` with a PUBLIC IP, and every gateway call then
+            # hangs until it times out — observed as a 503 from /api/listings.
+            # Verified in-cluster on both libcs: the bare 4-dot form resolves correctly under
+            # musl (which ignores ndots) but is hijacked under glibc, while the short name
+            # behaves the other way round (EAI_AGAIN under musl). Only this absolute form
+            # resolves to the ClusterIP under both, so it survives a future base-image change.
             - name: API_GATEWAY_URL
-              value: "http://api-gateway-svc.default.svc.cluster.local:8080"
+              value: "http://api-gateway-svc.default.svc.cluster.local.:8080"
             # Kubernetes metadata (Downward API)
             - name: K8S_POD_NAME
               valueFrom:
