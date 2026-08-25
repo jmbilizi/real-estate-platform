@@ -101,8 +101,17 @@ export async function seedOnStart(
   }
 
   if (empty) {
-    await runSeed(pool, { datasetHash });
-    return 'seeded';
+    // Emptiness is probed on `listings`, but a seed writes seven tables, and `insertCommunity()` is a
+    // bare INSERT with a fresh uuid against a `communities.name` that carries no unique constraint.
+    // So "listings is empty" does NOT imply "there is nothing to replace": a database that has been
+    // seeded before can hold surviving sample communities — from a re-seed whose properties were
+    // spared by the NOT EXISTS guards, or simply from someone emptying the listings table by hand to
+    // reset — and seeding without the sweep would silently double those rows. A recorded hash is the
+    // reliable signal that this database has been seeded before; only a genuinely first seed skips
+    // the delete.
+    const seededBefore = appliedHash !== null;
+    await runSeed(pool, { replaceExistingSampleData: seededBefore, datasetHash });
+    return seededBefore ? 'reseeded' : 'seeded';
   }
 
   if (appliedHash === datasetHash) {

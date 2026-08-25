@@ -52,6 +52,13 @@ export interface SeedConnectable {
  * Accepts anything exposing `.connect()` returning a `query`/`release` pair (a real `pg.Pool`, or a
  * lightweight fake) so it can be exercised in unit tests without a live database.
  */
+/**
+ * Arbitrary but fixed key identifying "the property_db sample seed" to `pg_advisory_xact_lock`.
+ * Advisory locks share one namespace per database, so this value must not collide with another
+ * subsystem's; nothing else in this service takes an advisory lock today.
+ */
+const SEED_ADVISORY_LOCK_KEY = 811_000_111;
+
 export interface RunSeedOptions {
   /**
    * Remove every existing `is_sample` row before inserting, inside the same transaction. Required
@@ -74,6 +81,14 @@ export async function runSeed(
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    // Serialises concurrent seeds against one database. Placing the trigger in an initContainer
+    // removes the race between an app's REPLICAS, but not the one across a ROLLOUT: a rolling update
+    // starts the new pod's migrate initContainer while the old pod is still up, and a retried deploy
+    // can overlap likewise. Two seeds both observing a hash mismatch would both delete-then-insert.
+    // A transaction-scoped advisory lock is released automatically on COMMIT or ROLLBACK, so it
+    // cannot outlive a crashed seeder the way a session lock could.
+    await client.query('SELECT pg_advisory_xact_lock($1)', [SEED_ADVISORY_LOCK_KEY]);
 
     if (replaceExistingSampleData) {
       await deleteSampleData(client);

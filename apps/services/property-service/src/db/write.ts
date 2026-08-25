@@ -441,6 +441,10 @@ export async function insertMedia(client: Queryable, rows: MediaRow[]): Promise<
  * that matters most about them — every single one is scoped on `is_sample = true` — rather than
  * trusting a reviewer to re-read the list.
  *
+ * Every statement narrows to sample data, but note that the FIRST one qualifies on its parent
+ * listing's flag rather than its own — see the comment on it; `is_sample = true` still appears in
+ * every statement, which is what the accompanying test asserts.
+ *
  * ORDER IS LOAD-BEARING, and it is dictated by the foreign keys rather than chosen:
  *   - `listing_events` is `ON DELETE RESTRICT` on both `listings` and `properties` (history is
  *     append-only, deliberately), so it must go first or the listings delete fails.
@@ -454,7 +458,17 @@ export async function insertMedia(client: Queryable, rows: MediaRow[]): Promise<
  * exactly the PRD §6.3 case where real inventory attaches to a property the seed created.
  */
 export const SAMPLE_DATA_DELETE_STATEMENTS: readonly string[] = [
-  'DELETE FROM listing_events WHERE is_sample = true',
+  // Scoped by PARENTAGE, not by the event's own flag, and that difference is load-bearing.
+  // `applyTerminalCorrection()` appends its correction event with `is_sample: false` unconditionally
+  // (see its call to `appendEvent`), so a correction applied to a sample listing leaves an event this
+  // sweep would skip — and the very next statement then hits `listing_events`' ON DELETE RESTRICT on
+  // `listings` and rolls the whole transaction back. That would fail the migrate initContainer on
+  // every boot, forever, until someone deleted the row by hand. Deleting the history of the listings
+  // being deleted makes the sweep complete by construction instead of by coincidence.
+  `DELETE FROM listing_events e
+    USING listings l
+    WHERE e.listing_id = l.id
+      AND l.is_sample = true`,
   'DELETE FROM listing_media WHERE is_sample = true',
   'DELETE FROM listing_open_houses WHERE is_sample = true',
   'DELETE FROM listings WHERE is_sample = true',

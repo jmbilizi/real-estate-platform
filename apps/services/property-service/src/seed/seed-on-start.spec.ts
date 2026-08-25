@@ -168,6 +168,17 @@ describe('deleteSampleData statements', () => {
     expect(index('properties')).toBeLessThan(index('communities'));
   });
 
+  // applyTerminalCorrection() appends its event with is_sample:false unconditionally, so an
+  // own-flag scope here would leave that row behind and the listings delete would then hit
+  // listing_events' ON DELETE RESTRICT — wedging every future boot. Parentage scoping is what makes
+  // the sweep complete regardless of how a child row got flagged.
+  it('removes listing history by its parent listing, not by the event row own flag', () => {
+    const events = SAMPLE_DATA_DELETE_STATEMENTS.find((s) => /DELETE FROM listing_events/.test(s));
+    expect(events).toMatch(/USING listings l/);
+    expect(events).toMatch(/e\.listing_id = l\.id/);
+    expect(events).toMatch(/l\.is_sample = true/);
+  });
+
   it('spares a durable row that a surviving listing still references', () => {
     const properties = SAMPLE_DATA_DELETE_STATEMENTS.find((s) => /DELETE FROM properties/.test(s));
     // PRD §6.3: a real listing may legitimately attach to a property the seed created. That property
@@ -175,6 +186,23 @@ describe('deleteSampleData statements', () => {
     // under real inventory.
     expect(properties).toMatch(
       /NOT EXISTS \(SELECT 1 FROM listings l WHERE l\.property_id = p\.id\)/,
+    );
+    // The property is additionally pinned by anything else that outlived the sweep.
+    expect(properties).toMatch(/NOT EXISTS \(SELECT 1 FROM units u WHERE u\.property_id = p\.id\)/);
+    expect(properties).toMatch(
+      /NOT EXISTS \(SELECT 1 FROM listing_events e WHERE e\.property_id = p\.id\)/,
+    );
+  });
+
+  it('spares a unit or community that anything surviving still references', () => {
+    const units = SAMPLE_DATA_DELETE_STATEMENTS.find((s) => /DELETE FROM units/.test(s));
+    const communities = SAMPLE_DATA_DELETE_STATEMENTS.find((s) =>
+      /DELETE FROM communities/.test(s),
+    );
+
+    expect(units).toMatch(/NOT EXISTS \(SELECT 1 FROM listings l WHERE l\.unit_id = u\.id\)/);
+    expect(communities).toMatch(
+      /NOT EXISTS \(SELECT 1 FROM properties p WHERE p\.community_id = c\.id\)/,
     );
   });
 
@@ -259,6 +287,15 @@ describe('seedOnStart', () => {
     expect(firstDelete).toBeGreaterThan(begin);
     expect(firstInsert).toBeGreaterThan(firstDelete);
     expect(queries[queries.length - 1]).toBe('COMMIT');
+  });
+
+  // An empty `listings` does not mean an empty database. `insertCommunity()` is a bare INSERT
+  // against a name with no unique constraint, so seeding a previously-seeded database without the
+  // sweep silently doubles its community rows.
+  it('sweeps first when listings is empty but the database was seeded before', async () => {
+    const { pool, queries } = createFakePool({ appliedHash: 'a-hash-from-an-older-dataset' });
+    await expect(seedOnStart(pool, enabled)).resolves.toBe('reseeded');
+    expect(deletes(queries)).toHaveLength(SAMPLE_DATA_DELETE_STATEMENTS.length);
   });
 
   it('re-seeds a populated database that has no recorded hash at all', async () => {
