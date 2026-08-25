@@ -69,8 +69,8 @@ pnpm exec nx e2e property-service          # Boots the service, then hits it ove
 pnpm exec nx lint property-service         # Also: type-check, build
 pnpm exec nx run property-service:migrate       # Apply migrations (needs DATABASE_URL)
 pnpm exec nx run property-service:migrate-down  # Roll back the last migration
-pnpm exec nx run property-service:seed          # Load the sample dataset
-pnpm run skaffold:services                 # Deploy into the local cluster
+pnpm exec nx run property-service:seed          # Load the sample dataset into $DATABASE_URL
+pnpm run skaffold:services                 # Deploy into the local cluster (seeds itself — see below)
 ```
 
 ## Data model — durable home vs. listing episode
@@ -134,7 +134,9 @@ Postgres is **18** (`infra/docker/postgres/Dockerfile` — PostGIS + pgvector), 
 native and every primary key uses it rather than random `uuid_generate_v4()`.
 
 - **Local**: copy `.env.example` to `.env` and set `DATABASE_URL`. Migrations run via the `migrate`
-  target, which uses `--envPath .env`.
+  target, which uses `--envPath .env`. This is the workstation path for `migrate`/`migrate-down` and
+  for the e2e compliance fixtures — it is **not** how you get sample data into a cluster (see
+  below).
 - **In-cluster**: `DATABASE_URL` is assembled in the Deployment from `postgres-svc` plus the
   `PROPERTY_SERVICE_DB_USER_PASSWORD` key of `postgres-secret`. Migrations run in a **`migrate`
   initContainer** using the same image, invoking `node-pg-migrate` directly — deliberately with no
@@ -142,6 +144,53 @@ native and every primary key uses it rather than random `uuid_generate_v4()`.
 - Migrations are plain CommonJS in `migrations/` and are **not** part of the webpack bundle, so the
   Dockerfile copies that directory into the runtime image explicitly. If you move it, the
   initContainer silently has nothing to apply.
+
+### Sample data: seeded in-cluster, not from a workstation (#111)
+
+**`pnpm run skaffold:services` brings up a populated `property_db` on its own.** There is no `.env`,
+no `kubectl port-forward` and no credential to lift out of `postgres.secret.yaml` — the `migrate`
+initContainer already holds the host, the user and the secret, so it seeds itself immediately after
+migrations by spawning `seed-on-start.js` (bundled next to `main.js` by `webpack.config.js` →
+`additionalEntryPoints`). Nothing runs in `src/main.ts`: a seed there would add a database
+round-trip before `listen()` and would race across replicas.
+
+Three conditions, all required, implemented in `src/seed/seed-on-start.ts`:
+
+1. `PROPERTY_SERVICE_SEED_ON_START` is exactly `'1'`, set **only** in `infra/k8s/podman/local` and
+   `infra/k8s/hetzner/dev`. `hetzner/test` and `hetzner/prod` never set it.
+2. `NODE_ENV` is not `production` — independent of the flag, mirroring `tests/support/fixtures.ts`.
+   Those two overlays therefore also set `NODE_ENV=development` **on the initContainer**, because
+   the runtime image bakes `NODE_ENV=production` and the api container's override does not reach an
+   initContainer.
+3. There is something to do: either `listings` is empty (first run), or the dataset's content hash
+   differs from the one recorded in `seed_state`. Neither is ever the sole trigger — a fresh
+   production `property_db` is empty by definition, and emptiness alone would self-populate it with
+   fabricated inventory.
+
+**A changed dataset is re-applied destructively**, and this is the part to understand before editing
+`mock-listings.ts`. `deleteSampleData()` in `src/db/write.ts` removes every `is_sample = true` row
+and then the dataset is inserted fresh, all in one transaction. Upsert cannot do the job: a listing
+**removed** from the dataset has to actually disappear, and no upsert expresses that.
+
+It is also worse than "upsert wouldn't remove things". An insert-only second pass **silently
+duplicates the entire dataset**: `seed.ts` mints a fresh `randomUUID()` per row, the `listings`
+INSERT has no `ON CONFLICT` target, and the table's only unique index (`idx_listings_source_key`) is
+partial on `source_listing_key IS NOT NULL`, which seeded rows leave NULL. If you find a local
+`property_db` holding an exact multiple of 13 listings, this is why.
+
+The deletes are ordered by the foreign keys, not by preference — `listing_events` is
+`ON DELETE RESTRICT` on both `listings` and `properties`, so history goes first — and the durable
+tables are guarded by `NOT EXISTS` so a property, unit or community that any **non-sample** listing
+still references survives (PRD §6.3). `seed.spec.ts` asserts the single-writer rule for `DELETE` as
+well as `INSERT`/`UPDATE`.
+
+The hash is over the dataset **content**, never the image tag: a rebuild that changed no data must
+not destructively churn the database. So an unchanged dataset is a true no-op — no transaction opens
+at all. `seed_state` is deliberately not `is_sample`-labelled, so it survives the sweep it governs.
+
+The `seed` Nx target still exists for loading the dataset into an arbitrary database you have
+pointed `DATABASE_URL` at — it is no longer the way to get local data, and it does **not** perform
+the delete-then-insert re-apply.
 
 ### Migration rules (each of these fails silently or confusingly if ignored)
 
@@ -189,7 +238,9 @@ native and every primary key uses it rather than random `uuid_generate_v4()`.
 - `src/db/pool.ts` — lazily-created `pg` pool, configured only from `DATABASE_URL`. It throws if the
   variable is unset rather than silently connecting somewhere unexpected.
 - `src/seed/` — `mock-listings.ts` (dataset), `transform.ts` (pure mapping, unit-tested with no DB),
-  `seed.ts` (transactional load over a narrow queryable seam).
+  `seed.ts` (transactional load over a narrow queryable seam), `seed-on-start.ts` (the in-cluster
+  gate) and `seed-on-start.main.ts` (its program entry — a separate file because
+  `require.main === module` is silently always false inside a webpack bundle).
 - **Tests live in this project**, matching `account-service/Tests/` and
   `multi-model-inference/tests/` — there is deliberately no `property-service-e2e` sibling project.
   Unit specs sit beside their subject as `src/**/*.spec.ts`; the e2e suite is

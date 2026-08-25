@@ -112,7 +112,7 @@ pnpm exec nx build property-service
 
 pnpm exec nx run property-service:migrate       # Apply migrations (needs DATABASE_URL)
 pnpm exec nx run property-service:migrate-down  # Roll back the last migration
-pnpm exec nx run property-service:seed          # Load the sample dataset
+pnpm exec nx run property-service:seed          # Load the sample dataset into $DATABASE_URL
 
 pnpm exec nx e2e property-service        # Boots the service, then hits it over HTTP
 ```
@@ -155,10 +155,20 @@ See the project `AGENTS.md` for the migration rules and the columns that must ne
 
 ## Seed data and compliance
 
-`pnpm exec nx run property-service:seed` loads 13 sample listings across 12 properties — two of them
-share an address, so the property → many-listings case the schema exists for is actually exercised —
-adapted from the web app's mock dataset. This data is **sample data, not real inventory**, and is
-authored so that it can never be mistaken for real (PRD §6.2/§6.3):
+**A cluster seeds itself.** `pnpm run skaffold:services` brings up a populated `property_db` with no
+`.env`, no port-forward and no credential step: the `migrate` initContainer loads the dataset right
+after migrations, gated on `PROPERTY_SERVICE_SEED_ON_START=1` (set only in the `podman/local` and
+`hetzner/dev` overlays), a non-production `NODE_ENV`, and either an empty `listings` table or a
+dataset that has changed since the hash recorded in `seed_state`. Editing `mock-listings.ts` and
+redeploying therefore updates the data; a redeploy that changed no data does nothing at all. A
+changed dataset is re-applied by deleting every `is_sample` row and inserting fresh. See the project
+`AGENTS.md`. The `seed` target listed above remains for loading the dataset into an arbitrary
+database you have already pointed `DATABASE_URL` at.
+
+The seed loads 13 sample listings across 12 properties — two of them share an address, so the
+property → many-listings case the schema exists for is actually exercised — adapted from the web
+app's mock dataset. This data is **sample data, not real inventory**, and is authored so that it can
+never be mistaken for real (PRD §6.2/§6.3):
 
 - `source` is `internal` on every row — never `brightMLS`. This data did not come from the MLS.
 - Every `title` ends in `(Sample)`, and every row sets `is_sample = true`, so the labelling reaches

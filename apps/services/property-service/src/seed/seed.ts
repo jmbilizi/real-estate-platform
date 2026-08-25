@@ -1,6 +1,8 @@
 import { randomUUID } from 'crypto';
 import { closePool, getPool } from '../db/pool';
+import { recordAppliedHash } from '../db/seed-state';
 import {
+  deleteSampleData,
   getOrCreateProperty,
   getOrCreateUnit,
   insertCommunity,
@@ -25,11 +27,11 @@ import {
  * `pg.PoolClient` so unit tests can pass a lightweight fake instead of a real
  * connection. A real `pg.Pool`/`PoolClient` satisfies this structurally.
  */
-interface SeedQueryable extends Queryable {
+export interface SeedQueryable extends Queryable {
   release: () => void;
 }
 
-interface SeedConnectable {
+export interface SeedConnectable {
   connect: () => Promise<SeedQueryable>;
 }
 
@@ -50,10 +52,47 @@ interface SeedConnectable {
  * Accepts anything exposing `.connect()` returning a `query`/`release` pair (a real `pg.Pool`, or a
  * lightweight fake) so it can be exercised in unit tests without a live database.
  */
-export async function runSeed(pool: SeedConnectable): Promise<void> {
+/**
+ * Arbitrary but fixed key identifying "the property_db sample seed" to `pg_advisory_xact_lock`.
+ * Advisory locks share one namespace per database, so this value must not collide with another
+ * subsystem's; nothing else in this service takes an advisory lock today.
+ */
+const SEED_ADVISORY_LOCK_KEY = 811_000_111;
+
+export interface RunSeedOptions {
+  /**
+   * Remove every existing `is_sample` row before inserting, inside the same transaction. Required
+   * when re-applying a changed dataset: upsert alone cannot express a listing that was DELETED from
+   * `mock-listings.ts`, and the seed mints a fresh uuid per row, so an insert-only second pass
+   * silently duplicates the whole dataset instead of updating it.
+   */
+  replaceExistingSampleData?: boolean;
+  /**
+   * The dataset hash to record in `seed_state` on success. Written inside this transaction, so a
+   * rolled-back seed never leaves behind a claim that it applied.
+   */
+  datasetHash?: string;
+}
+
+export async function runSeed(
+  pool: SeedConnectable,
+  { replaceExistingSampleData = false, datasetHash }: RunSeedOptions = {},
+): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    // Serialises concurrent seeds against one database. Placing the trigger in an initContainer
+    // removes the race between an app's REPLICAS, but not the one across a ROLLOUT: a rolling update
+    // starts the new pod's migrate initContainer while the old pod is still up, and a retried deploy
+    // can overlap likewise. Two seeds both observing a hash mismatch would both delete-then-insert.
+    // A transaction-scoped advisory lock is released automatically on COMMIT or ROLLBACK, so it
+    // cannot outlive a crashed seeder the way a session lock could.
+    await client.query('SELECT pg_advisory_xact_lock($1)', [SEED_ADVISORY_LOCK_KEY]);
+
+    if (replaceExistingSampleData) {
+      await deleteSampleData(client);
+    }
 
     const groups = groupListingsByCommunity(mockListings);
     // Address key -> property id, so the second listing on an address reuses the first's property even
@@ -99,9 +138,14 @@ export async function runSeed(pool: SeedConnectable): Promise<void> {
       }
     }
 
+    if (datasetHash) {
+      await recordAppliedHash(client, datasetHash);
+    }
+
     await client.query('COMMIT');
     console.info(
-      `Seeded ${groups.size} communit${groups.size === 1 ? 'y' : 'ies'}, ` +
+      `${replaceExistingSampleData ? 'Re-seeded' : 'Seeded'} ` +
+        `${groups.size} communit${groups.size === 1 ? 'y' : 'ies'}, ` +
         `${propertyIdsByAddressKey.size} propert${propertyIdsByAddressKey.size === 1 ? 'y' : 'ies'} ` +
         `and ${mockListings.length} listing(s) (source=internal, is_sample=true).`,
     );

@@ -435,3 +435,71 @@ export async function insertMedia(client: Queryable, rows: MediaRow[]): Promise<
     );
   }
 }
+
+/**
+ * The ordered `DELETE`s that a sample re-seed performs. Exported so a test can assert the invariant
+ * that matters most about them — every single one is scoped on `is_sample = true` — rather than
+ * trusting a reviewer to re-read the list.
+ *
+ * Every statement narrows to sample data, but note that the FIRST one qualifies on its parent
+ * listing's flag rather than its own — see the comment on it; `is_sample = true` still appears in
+ * every statement, which is what the accompanying test asserts.
+ *
+ * ORDER IS LOAD-BEARING, and it is dictated by the foreign keys rather than chosen:
+ *   - `listing_events` is `ON DELETE RESTRICT` on both `listings` and `properties` (history is
+ *     append-only, deliberately), so it must go first or the listings delete fails.
+ *   - `listing_media` and `listing_open_houses` would cascade, but are deleted explicitly anyway:
+ *     relying on a cascade means the `is_sample` scope is implied rather than stated, and a cascade
+ *     from a wrongly-scoped parent delete would take non-sample children with it silently.
+ *   - `listings` is `ON DELETE RESTRICT` on `properties`/`units`, so the durable rows come last.
+ *
+ * The three durable tables additionally refuse to delete a row anything still references, so a
+ * property shared with a real (non-sample) listing survives even though it is itself `is_sample` —
+ * exactly the PRD §6.3 case where real inventory attaches to a property the seed created.
+ */
+export const SAMPLE_DATA_DELETE_STATEMENTS: readonly string[] = [
+  // Scoped by PARENTAGE, not by the event's own flag, and that difference is load-bearing.
+  // `applyTerminalCorrection()` appends its correction event with `is_sample: false` unconditionally
+  // (see its call to `appendEvent`), so a correction applied to a sample listing leaves an event this
+  // sweep would skip — and the very next statement then hits `listing_events`' ON DELETE RESTRICT on
+  // `listings` and rolls the whole transaction back. That would fail the migrate initContainer on
+  // every boot, forever, until someone deleted the row by hand. Deleting the history of the listings
+  // being deleted makes the sweep complete by construction instead of by coincidence.
+  `DELETE FROM listing_events e
+    USING listings l
+    WHERE e.listing_id = l.id
+      AND l.is_sample = true`,
+  'DELETE FROM listing_media WHERE is_sample = true',
+  'DELETE FROM listing_open_houses WHERE is_sample = true',
+  'DELETE FROM listings WHERE is_sample = true',
+  `DELETE FROM units u
+    WHERE u.is_sample = true
+      AND NOT EXISTS (SELECT 1 FROM listings l WHERE l.unit_id = u.id)`,
+  `DELETE FROM properties p
+    WHERE p.is_sample = true
+      AND NOT EXISTS (SELECT 1 FROM listings l WHERE l.property_id = p.id)
+      AND NOT EXISTS (SELECT 1 FROM units u WHERE u.property_id = p.id)
+      AND NOT EXISTS (SELECT 1 FROM listing_events e WHERE e.property_id = p.id)`,
+  `DELETE FROM communities c
+    WHERE c.is_sample = true
+      AND NOT EXISTS (SELECT 1 FROM properties p WHERE p.community_id = c.id)`,
+];
+
+/**
+ * Removes every sample row so the current dataset can be inserted fresh (#111).
+ *
+ * Delete-then-insert rather than upsert, for a reason upsert cannot address: a listing REMOVED from
+ * `mock-listings.ts` has to actually disappear, and no upsert expresses that. It also sidesteps the
+ * terminal-snapshot freeze instead of fighting it — `applyTerminalCorrection()` is the audited path
+ * for changing one closed listing, not a bulk re-seed mechanism.
+ *
+ * This lives in `write.ts` because it writes `listings`, and this module is the only one permitted
+ * to (`seed.spec.ts` asserts it, for DELETE as well as INSERT/UPDATE). It takes a `Queryable`, never
+ * a pool: the caller must already be inside the seeding transaction, so a failed insert rolls the
+ * deletes back with it and the database is never left empty.
+ */
+export async function deleteSampleData(client: Queryable): Promise<void> {
+  for (const statement of SAMPLE_DATA_DELETE_STATEMENTS) {
+    await client.query(statement);
+  }
+}

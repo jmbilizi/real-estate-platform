@@ -17,6 +17,29 @@ spec:
         - name: migrate
           image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:dev
           imagePullPolicy: Always
+          # Sample inventory is loaded here, right after migrations, so the dev cluster comes up with
+          # a populated property_db and no workstation credential step (#111). Only this overlay and
+          # podman/local set the flag; hetzner/test and hetzner/prod never do.
+          #
+          # NODE_ENV is repeated here because the runtime image bakes NODE_ENV=production
+          # (see the property-service Dockerfile) and the api container's override does not reach an
+          # initContainer — without it the seed's production refusal fires and nothing is loaded.
+          env:
+            - name: NODE_ENV
+              value: "development"
+            - name: PROPERTY_SERVICE_SEED_ON_START
+              value: "1"
+          # Raised only where seeding runs. The base 128Mi limit was sized for ONE short-lived
+          # migration process; seeding spawns a second Node process while migrate.js is still
+          # resident, so two Node runtimes share this cgroup. Exceeding it is a SIGKILL, which
+          # surfaces as a failed initContainer on every boot. test/prod never seed and stay at 128Mi.
+          resources:
+            requests:
+              memory: "96Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "300m"
       containers:
         - name: api
           image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:dev
