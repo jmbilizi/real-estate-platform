@@ -15,7 +15,7 @@ import {
 } from '@/lib/listing-format';
 import ListingAttribution from '@/components/listing/ListingAttribution';
 import ListingImage from '@/components/listing/ListingImage';
-import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges';
+// import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges';
 
 export default function ListingCard({ listing }: { listing: ListingCardRow }) {
   const { toggleSave, isSaved } = useApp();
