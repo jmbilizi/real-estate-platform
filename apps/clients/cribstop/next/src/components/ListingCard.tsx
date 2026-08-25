@@ -257,10 +257,10 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
          * what gets truncated or crowded out to make heights match — that is why they sit outside
          * the image's single badge slot in the first place. If the row is visible, these are visible.
          */}
-        <div className="mb-1 flex h-5 flex-wrap items-center gap-1 overflow-hidden">
+        {/* <div className="mb-1 flex h-5 flex-wrap items-center gap-1 overflow-hidden">
           {listing.isSample && <SampleBadge />}
           {listing.sponsored && <SponsoredBadge />}
-        </div>
+        </div> */}
 
         {/* `caption` (14px/500). Was 14/600, a pairing the scale does not define. */}
         <h3 className="truncate text-sm font-medium text-ink">
