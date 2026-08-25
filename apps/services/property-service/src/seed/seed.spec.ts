@@ -224,6 +224,8 @@ describe('listings write path', () => {
     const serviceRoot = join(__dirname, '..', '..');
     const shouldNotWriteListings = [
       'src/seed/seed.ts',
+      'src/seed/seed-on-start.ts',
+      'src/seed/seed-on-start.main.ts',
       'src/seed/transform.ts',
       'src/app.ts',
       'src/main.ts',

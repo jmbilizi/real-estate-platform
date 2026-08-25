@@ -25,11 +25,11 @@ import {
  * `pg.PoolClient` so unit tests can pass a lightweight fake instead of a real
  * connection. A real `pg.Pool`/`PoolClient` satisfies this structurally.
  */
-interface SeedQueryable extends Queryable {
+export interface SeedQueryable extends Queryable {
   release: () => void;
 }
 
-interface SeedConnectable {
+export interface SeedConnectable {
   connect: () => Promise<SeedQueryable>;
 }
 
