@@ -226,16 +226,21 @@ describe('listings write path', () => {
       'src/seed/seed.ts',
       'src/seed/seed-on-start.ts',
       'src/seed/seed-on-start.main.ts',
+      'src/seed/dataset-hash.ts',
       'src/seed/transform.ts',
       'src/app.ts',
       'src/main.ts',
       'src/db/pool.ts',
+      'src/db/seed-state.ts',
     ];
 
     for (const relativePath of shouldNotWriteListings) {
       const contents = readFileSync(join(serviceRoot, relativePath), 'utf8');
       expect(contents).not.toMatch(/INSERT\s+INTO\s+listings\b/i);
       expect(contents).not.toMatch(/UPDATE\s+listings\b/i);
+      // DELETE is checked too as of #111, which gave the module a `deleteSampleData()` bulk removal
+      // path. A stray DELETE elsewhere is strictly more dangerous than a stray INSERT.
+      expect(contents).not.toMatch(/DELETE\s+FROM\s+listings\b/i);
     }
   });
 });

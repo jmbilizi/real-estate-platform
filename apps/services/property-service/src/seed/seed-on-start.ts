@@ -16,22 +16,33 @@
  *  2. NOT PRODUCTION. `NODE_ENV=production` refuses independent of the flag. Note the ordering: an
  *     unset flag is a quiet skip, while the flag set *under* production throws, because that
  *     combination is a misconfiguration and must not be absorbed silently.
- *  3. EMPTY TABLE. Emptiness is a second condition, never the trigger — a fresh production
- *     `property_db` is empty by definition, and emptiness alone would self-populate it with
- *     fabricated listings.
+ *  3. SOMETHING TO DO. Either `listings` is empty (first run), or the dataset has changed since the
+ *     hash recorded in `seed_state` (`src/db/seed-state.ts`). Neither is ever the sole trigger — a
+ *     fresh production `property_db` is empty by definition, and emptiness alone would self-populate
+ *     it with fabricated listings.
  *
- * Re-running is a no-op by both conditions: a populated table short-circuits before any write, and
- * `runSeed()` itself is idempotent (`getOrCreateProperty()` / `upsertListing()` key on
- * `address_key`), so a partially-populated table cannot duplicate rows either.
+ * WHY A CHANGED DATASET IS A DESTRUCTIVE RE-APPLY, not an upsert. A listing REMOVED from
+ * `mock-listings.ts` has to actually disappear, and no upsert expresses that. Worse, an insert-only
+ * second pass does not merely fail to remove things: `seed.ts` mints a fresh `randomUUID()` per row
+ * and the `listings` INSERT has no `ON CONFLICT` target (the table's only unique index is partial on
+ * `source_listing_key IS NOT NULL`, which seeded rows leave NULL), so it silently duplicates the
+ * entire dataset. So a re-apply deletes every `is_sample` row first, in the same transaction — see
+ * `deleteSampleData()` in `src/db/write.ts`, where every statement is scoped on `is_sample = true`
+ * and the durable rows are spared if any real listing still references them.
  *
- * There is no second write path here: `runSeed()` is reused as-is, and `src/db/write.ts` remains the
- * only module that writes `listings` (asserted by `seed.spec.ts`).
+ * That destructiveness is why the gate above is a safety interlock rather than a convenience. An
+ * unchanged dataset is a true no-op: nothing is deleted, nothing is written, no transaction opens.
+ *
+ * There is no second write path here: `runSeed()` is reused, and `src/db/write.ts` remains the only
+ * module that writes `listings` (asserted by `seed.spec.ts`, for DELETE as well as INSERT/UPDATE).
  */
 
+import { readAppliedHash } from '../db/seed-state';
 import { Queryable } from '../db/write';
+import { computeDatasetHash } from './dataset-hash';
 import { runSeed, SeedConnectable } from './seed';
 
-export type SeedOnStartOutcome = 'skipped-disabled' | 'skipped-populated' | 'seeded';
+export type SeedOnStartOutcome = 'skipped-disabled' | 'skipped-current' | 'seeded' | 'reseeded';
 
 /**
  * Whether the caller has opted in to seeding. Throws — rather than returning false — when the opt-in
@@ -63,8 +74,11 @@ export async function isListingsTableEmpty(client: Queryable): Promise<boolean> 
 }
 
 /**
- * Runs the sample-data seed when all three conditions hold, and reports which one stopped it
- * otherwise. Accepts anything exposing `.connect()` so it is exercisable against a fake pool.
+ * Runs the sample-data seed when the conditions hold, and reports what it decided otherwise.
+ * Accepts anything exposing `.connect()` so it is exercisable against a fake pool.
+ *
+ * The probe runs on its own short-lived connection and writes nothing. Only once it has established
+ * that there IS work to do does `runSeed()` open the transaction that deletes and inserts.
  */
 export async function seedOnStart(
   pool: SeedConnectable,
@@ -74,18 +88,27 @@ export async function seedOnStart(
     return 'skipped-disabled';
   }
 
+  const datasetHash = computeDatasetHash();
+
   const client = await pool.connect();
   let empty: boolean;
+  let appliedHash: string | null;
   try {
     empty = await isListingsTableEmpty(client);
+    appliedHash = await readAppliedHash(client);
   } finally {
     client.release();
   }
 
-  if (!empty) {
-    return 'skipped-populated';
+  if (empty) {
+    await runSeed(pool, { datasetHash });
+    return 'seeded';
   }
 
-  await runSeed(pool);
-  return 'seeded';
+  if (appliedHash === datasetHash) {
+    return 'skipped-current';
+  }
+
+  await runSeed(pool, { replaceExistingSampleData: true, datasetHash });
+  return 'reseeded';
 }

@@ -23,10 +23,13 @@ async function main(): Promise<void> {
     const outcome = await seedOnStart(pool);
     switch (outcome) {
       case 'seeded':
+      case 'reseeded':
         // runSeed() already logged what it wrote.
         break;
-      case 'skipped-populated':
-        console.info('Seed skipped: listings already holds rows, so there is nothing to load.');
+      case 'skipped-current':
+        console.info(
+          'Seed skipped: the sample data in this database already matches the dataset this image ships.',
+        );
         break;
       case 'skipped-disabled':
         console.info('Seed skipped: PROPERTY_SERVICE_SEED_ON_START is not set to 1.');

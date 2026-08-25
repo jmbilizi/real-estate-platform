@@ -162,13 +162,35 @@ Three conditions, all required, implemented in `src/seed/seed-on-start.ts`:
    Those two overlays therefore also set `NODE_ENV=development` **on the initContainer**, because
    the runtime image bakes `NODE_ENV=production` and the api container's override does not reach an
    initContainer.
-3. `listings` is empty. Emptiness is never the sole trigger — a fresh production `property_db` is
-   empty by definition, and emptiness alone would self-populate it with fabricated inventory.
+3. There is something to do: either `listings` is empty (first run), or the dataset's content hash
+   differs from the one recorded in `seed_state`. Neither is ever the sole trigger — a fresh
+   production `property_db` is empty by definition, and emptiness alone would self-populate it with
+   fabricated inventory.
 
-Re-running is a no-op: a populated table short-circuits before any write, and `runSeed()` is
-idempotent on `address_key` regardless. The `seed` Nx target still exists for loading the dataset
-into an arbitrary database you have pointed `DATABASE_URL` at — it is no longer the way to get local
-data.
+**A changed dataset is re-applied destructively**, and this is the part to understand before editing
+`mock-listings.ts`. `deleteSampleData()` in `src/db/write.ts` removes every `is_sample = true` row
+and then the dataset is inserted fresh, all in one transaction. Upsert cannot do the job: a listing
+**removed** from the dataset has to actually disappear, and no upsert expresses that.
+
+It is also worse than "upsert wouldn't remove things". An insert-only second pass **silently
+duplicates the entire dataset**: `seed.ts` mints a fresh `randomUUID()` per row, the `listings`
+INSERT has no `ON CONFLICT` target, and the table's only unique index (`idx_listings_source_key`) is
+partial on `source_listing_key IS NOT NULL`, which seeded rows leave NULL. If you find a local
+`property_db` holding an exact multiple of 13 listings, this is why.
+
+The deletes are ordered by the foreign keys, not by preference — `listing_events` is
+`ON DELETE RESTRICT` on both `listings` and `properties`, so history goes first — and the durable
+tables are guarded by `NOT EXISTS` so a property, unit or community that any **non-sample** listing
+still references survives (PRD §6.3). `seed.spec.ts` asserts the single-writer rule for `DELETE` as
+well as `INSERT`/`UPDATE`.
+
+The hash is over the dataset **content**, never the image tag: a rebuild that changed no data must
+not destructively churn the database. So an unchanged dataset is a true no-op — no transaction opens
+at all. `seed_state` is deliberately not `is_sample`-labelled, so it survives the sweep it governs.
+
+The `seed` Nx target still exists for loading the dataset into an arbitrary database you have
+pointed `DATABASE_URL` at — it is no longer the way to get local data, and it does **not** perform
+the delete-then-insert re-apply.
 
 ### Migration rules (each of these fails silently or confusingly if ignored)
 

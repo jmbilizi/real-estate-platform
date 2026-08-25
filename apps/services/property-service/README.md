@@ -158,7 +158,10 @@ See the project `AGENTS.md` for the migration rules and the columns that must ne
 **A cluster seeds itself.** `pnpm run skaffold:services` brings up a populated `property_db` with no
 `.env`, no port-forward and no credential step: the `migrate` initContainer loads the dataset right
 after migrations, gated on `PROPERTY_SERVICE_SEED_ON_START=1` (set only in the `podman/local` and
-`hetzner/dev` overlays), a non-production `NODE_ENV`, and an empty `listings` table. See the project
+`hetzner/dev` overlays), a non-production `NODE_ENV`, and either an empty `listings` table or a
+dataset that has changed since the hash recorded in `seed_state`. Editing `mock-listings.ts` and
+redeploying therefore updates the data; a redeploy that changed no data does nothing at all. A
+changed dataset is re-applied by deleting every `is_sample` row and inserting fresh. See the project
 `AGENTS.md`. The `seed` target listed above remains for loading the dataset into an arbitrary
 database you have already pointed `DATABASE_URL` at.
 
