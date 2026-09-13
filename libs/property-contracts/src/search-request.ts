@@ -6,6 +6,49 @@ import { AMENITIES, amenitySchema, LISTING_TYPES, PROPERTY_TYPES } from './commo
 export const PAGE_SIZE_DEFAULT = 20;
 export const PAGE_SIZE_MAX = 100;
 
+/**
+ * The deepest offset — `(page - 1) * pageSize` — a caller may reach on `GET /listings`.
+ *
+ * This is the SECOND, independent paging bound, and it answers a different question from
+ * `PAGE_SIZE_MAX`. The page-size ceiling bounds the cost of ONE request; this bounds how much of
+ * the dataset is reachable by making MANY of them. Without it the whole consumer-visible set can be
+ * walked `pageSize` rows at a time, which for a licensed IDX feed is a display-rule exposure (PRD
+ * §6.2) rather than merely an infrastructure cost — and, because every page runs an exact
+ * `COUNT(*)` over the filtered set, a scripted walk is simultaneously the cheapest thing to script
+ * and the most expensive thing we serve.
+ *
+ * The bound is on DEPTH, never on whether filters were supplied: the unfiltered browse surface (the
+ * footer's "Search All", the default search) is a deliberate shopping path, and "tell us where
+ * before we show you anything" is friction a housing product should not add.
+ *
+ * A search UI does not need more: at the default page size this reaches page 51, and no consumer
+ * refines a housing search by paging to result 1,001 — they narrow the filters. The limit is on the
+ * offset itself, as the acceptance criterion states it, so the deepest row reachable is
+ * `MAX_RESULT_OFFSET + pageSize`.
+ *
+ * `total` is deliberately NOT clamped to this window. It stays the exact count of the full filtered
+ * set, because it is what the headline result count and every "narrow your search" affordance are
+ * built on — clamping it would be a fabricated fact (PRD §6.3).
+ */
+export const MAX_RESULT_OFFSET = 1000;
+
+/** The offset a `(page, pageSize)` pair asks the database for. One definition, so the bound the
+ *  route enforces and the offset the repository issues cannot drift apart. */
+export function resultOffsetFor(page: number, pageSize: number): number {
+  return (page - 1) * pageSize;
+}
+
+/** The deepest page number still inside the window at a given page size (51 at the default 20).
+ *  Exported so a client can bound its own pager rather than rendering a page button that 400s. */
+export function maxReachablePage(pageSize: number): number {
+  return Math.floor(MAX_RESULT_OFFSET / pageSize) + 1;
+}
+
+/** Whether a parsed request asks for a page past the reachable window. */
+export function exceedsResultWindow(request: Pick<SearchRequest, 'page' | 'pageSize'>): boolean {
+  return resultOffsetFor(request.page, request.pageSize) > MAX_RESULT_OFFSET;
+}
+
 const queryInt = z.string().regex(/^\d+$/, 'must be a whole number').transform(Number);
 
 /** `baths` alone tolerates a half step: `baths_display` in
@@ -28,7 +71,13 @@ const queryPage = z
   .regex(/^[1-9]\d*$/, 'must be a positive whole number')
   .transform(Number)
   .pipe(z.number().int().min(1))
-  .describe('Whole number, 1 or greater. Default 1.');
+  .describe(
+    'Whole number, 1 or greater. Default 1. Paging depth is bounded: (page - 1) * pageSize must ' +
+      `not exceed ${MAX_RESULT_OFFSET}, and a request past that returns 400. The bound is not ` +
+      'expressed as a maximum on this parameter because the deepest valid page depends on ' +
+      `pageSize (${maxReachablePage(PAGE_SIZE_DEFAULT)} at the default page size of ` +
+      `${PAGE_SIZE_DEFAULT}).`,
+  );
 
 /** Mirrors `PAGE_SIZE_MAX` (100) exactly in the regex — if that constant ever changes, this
  *  pattern must change with it, or the published bound silently drifts from the enforced one. */

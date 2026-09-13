@@ -3,6 +3,7 @@ import {
   type ListingsEnvelope,
   type ListingsMeta,
   NOT_FOUND_BODY,
+  resultOffsetFor,
   type SearchRequest,
 } from '@cribstop/property-contracts';
 import { LISTING_CARD_SELECT, LISTING_DETAIL_SELECT } from './columns';
@@ -98,7 +99,9 @@ export async function searchListings(
     // Their placeholder numbers continue the filter params' sequence, hence the arithmetic.
     const limitPlaceholder = `$${params.length + 1}`;
     const offsetPlaceholder = `$${params.length + 2}`;
-    const offset = (request.page - 1) * request.pageSize;
+    // The same function the route's window check bounds (#65), so the offset enforced and the
+    // offset issued are one definition rather than two copies of the same arithmetic.
+    const offset = resultOffsetFor(request.page, request.pageSize);
 
     const pageResult = await client.query<ListingCardDbRow>(
       `SELECT ${LISTING_CARD_SELECT}, pm.primary_media_url, pm.primary_media_alt_text
