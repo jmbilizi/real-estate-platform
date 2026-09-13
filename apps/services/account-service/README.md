@@ -148,9 +148,15 @@ When an account is soft-deleted (`DELETE /account/profile`), the service:
 1. Sets `DeletedAt` and `DeletedByUserId` on the user row.
 2. Calls `UpdateSecurityStampAsync` to rotate the stored security stamp.
 
-Because `ValidationInterval = TimeSpan.Zero`, the next request from that user's cookie or bearer
-token triggers a stamp mismatch → the session is rejected with `401` immediately. There is no expiry
-window.
+Because `ValidationInterval = TimeSpan.Zero`, the next request carrying that user's **cookie** is
+rejected with `401` immediately — there is no expiry window — and their **refresh tokens** are dead,
+since `/account/refresh` revalidates the stamp before issuing anything.
+
+An `Identity.Bearer` **access** token already in circulation is the exception: `BearerTokenHandler`
+unprotects the ticket and checks its own `ExpiresUtc`, and never re-reads the security stamp. So a
+bearer token issued before the revocation keeps working until it expires on its own. This applies to
+every stamp rotation in the service — soft-delete, admin suspension, and password reset alike.
+Tracked in issue #142.
 
 ---
 
@@ -166,9 +172,64 @@ window.
 | `POST` | `/account/refresh`               | Refresh a bearer token           |
 | `POST` | `/account/logout`                | Logout (revokes cookie/token)    |
 | `GET`  | `/account/confirmEmail`          | Confirm email address            |
-| `POST` | `/account/forgotPassword`        | Trigger password reset email     |
-| `POST` | `/account/resetPassword`         | Complete password reset          |
 | `POST` | `/account/manage/2fa`            | Manage two-factor authentication |
+
+Identity's own `/account/forgotPassword` and `/account/resetPassword` are **suppressed** and answer
+`404` — see Password Recovery below.
+
+### Password Recovery
+
+| Method | Path                       | Auth required | Description                                 |
+| ------ | -------------------------- | ------------- | ------------------------------------------- |
+| `POST` | `/account/password/forgot` | Anonymous     | Request a reset token for an email address  |
+| `POST` | `/account/password/reset`  | Anonymous     | Redeem a reset token and set a new password |
+
+```jsonc
+// POST /account/password/forgot  -> 200 (always), or 429 with Retry-After
+{ "email": "someone@example.com" }
+
+// POST /account/password/reset   -> 200, 400 (ValidationProblem), or 429 with Retry-After
+{ "email": "someone@example.com", "resetCode": "<code>", "newPassword": "..." }
+```
+
+The request endpoint answers **identically** — status, body, and elapsed time down to a configured
+floor — whether or not the address has an account. It is not a membership oracle, and that parity is
+an explicit test rather than an implementation note.
+
+Tokens come from ASP.NET Identity's `GeneratePasswordResetTokenAsync` on a dedicated provider
+(`PasswordResetTokenProvider`) with its own lifetime and its own data-protection purpose, so the
+reset lifetime is independent of email-confirmation and two-factor tokens. Redeeming a token rotates
+the account's security stamp, which is part of the token's own payload — that is what makes it
+single-use. Used, expired, tampered and unknown tokens all produce one indistinguishable `400`; a
+password that fails the policy is reported as itself, but only after the token has proven valid. A
+successful reset also clears any lockout, so the password spraying that prompted a reset does not
+outlast the recovery from it.
+
+Rotating the stamp drops the account's **cookie sessions** on their next request and invalidates its
+**refresh tokens** immediately (`/account/refresh` revalidates the stamp before issuing anything).
+One residue survives: an `Identity.Bearer` **access** token already issued is self-contained and is
+checked only against its own expiry, so it keeps working until it expires on its own. That gap is
+service-wide — `DELETE /account/profile` claims the same immediate revocation and has the same hole
+— and is tracked separately rather than papered over here.
+
+Both endpoints are rate limited in-process, per email address and per client address, on top of the
+gateway's per-route Ocelot limits
+(`apps/api-gateway/Configuration/Routes/account-service-routes.json`). The client address comes from
+the forwarded `X-Real-IP` header, the same header Ocelot's own limits key on — never the transport
+peer, which for every external caller is the gateway pod and would collapse the per-caller limit
+into one global bucket. That header is caller-asserted and therefore evadable — the same weakness
+the gateway's own limits have; issue #143 tracks making it trustworthy. The per-email limit does not
+depend on the caller's claim about who they are.
+
+**These endpoints issue a token; they do not deliver it.** Until a delivery channel is configured,
+`UndeliveredPasswordResetNotifier` logs a `Warning` — event id `1360`,
+`PasswordResetTokenUndelivered` — for every issued token, and the token itself is never logged.
+Supplying a real channel means registering an `IPasswordResetNotifier`; nothing about these
+contracts changes.
+
+Identity's built-in `/account/forgotPassword` and `/account/resetPassword` are removed
+(`Routes/IdentityApiSuppression.cs`): they only issue a token when `IsEmailConfirmedAsync` is true,
+and nothing in this platform confirms an address, so they returned `200` having done nothing.
 
 ### Profile
 
@@ -313,6 +374,15 @@ enrichment pipeline.
   "Apps": {
     "AllowedApps": ["cribstop", "admin-portal"]
   },
+  "PasswordReset": {
+    "TokenLifetime": "01:00:00",
+    "RequestsPerEmail": 5,
+    "RequestsPerAddress": 15,
+    "RedemptionsPerAddress": 30,
+    "RequestWindow": "00:15:00",
+    "MaxTrackedKeys": 50000,
+    "MinimumResponseDuration": "00:00:00.250"
+  },
   "ConnectionStrings": {
     "DefaultConnection": "Host=...;Database=account_db;..."
   }
@@ -321,6 +391,11 @@ enrichment pipeline.
 
 `AllowedApps` controls which `AppId` values are accepted in `X-App-Id` headers and API key creation.
 Unknown values are rejected with `400` (API keys) or silently ignored (login headers).
+
+`PasswordReset` is the whole reset policy, configuration rather than constants so an environment can
+tighten it without a code change. `TokenLifetime` is bound into the password-reset token provider,
+so it is the lifetime actually enforced at redemption. `MinimumResponseDuration` is the floor both
+endpoints are padded to, which is what keeps the work actually done off the clock.
 
 ---
 

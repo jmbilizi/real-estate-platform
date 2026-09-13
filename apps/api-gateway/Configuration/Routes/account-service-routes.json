@@ -41,9 +41,9 @@
       }
     },
     {
-      "UpstreamPathTemplate": "/account/forgotPassword",
+      "UpstreamPathTemplate": "/account/password/forgot",
       "UpstreamHttpMethod": ["POST"],
-      "DownstreamPathTemplate": "/account/forgotPassword",
+      "DownstreamPathTemplate": "/account/password/forgot",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
         {
@@ -60,9 +60,9 @@
       }
     },
     {
-      "UpstreamPathTemplate": "/account/resetPassword",
+      "UpstreamPathTemplate": "/account/password/reset",
       "UpstreamHttpMethod": ["POST"],
-      "DownstreamPathTemplate": "/account/resetPassword",
+      "DownstreamPathTemplate": "/account/password/reset",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
         {
