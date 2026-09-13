@@ -56,6 +56,17 @@ export class ListingsApiError extends Error {
 
 const USER_FACING_MESSAGE: Record<ErrorBody['error']['code'], string> = {
   invalid_request: 'We could not run that search. Try adjusting your filters.',
+  /**
+   * Paging past the API's result window (#65). Distinct copy from `invalid_request` because it is
+   * a distinct situation for the person reading it: nothing they typed is wrong, and retrying the
+   * same request will never work — the way forward is a narrower search, which is what this says.
+   *
+   * The pager clamps itself to the reachable window, so a shopper clicking through results should
+   * never see this; it is reachable by editing `?page=` in the URL, and a blank or generic failure
+   * there would look like the site was broken.
+   */
+  result_window_exceeded:
+    'That is further than search results go. Try narrowing your search to see more homes.',
   not_found: 'This listing is no longer available.',
   internal_error: 'We could not load listings just now. Please try again.',
 };

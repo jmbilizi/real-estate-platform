@@ -13,6 +13,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
               "code": {
                 "enum": [
                   "invalid_request",
+                  "result_window_exceeded",
                   "not_found",
                   "internal_error",
                 ],
@@ -785,7 +786,11 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
   "paths": {
     "/listings": {
       "get": {
-        "description": "Sorted with a deterministic total order, so paging is stable. \`listingType=all\` covers currently marketed listings and excludes sold; ask for \`sold\` explicitly.",
+        "description": "Sorted with a deterministic total order, so paging is stable. \`listingType=all\` covers currently marketed listings and excludes sold; ask for \`sold\` explicitly.
+
+This is a SEARCH surface, not a bulk-export surface. Paging depth is bounded: \`(page - 1) * pageSize\` must not exceed 1000, so at the default page size of 20 the deepest reachable page is 51. A request past that window is rejected with 400 and the error code \`result_window_exceeded\` — it is never silently clamped to the last valid page, and never answered with an empty 200. There is no parameter that lifts the bound. To reach listings outside the window, narrow the search with filters; retrieving the whole set is not a supported operation.
+
+The bound is on depth alone — no filter is required, and an unfiltered search is a supported browse path. It is also independent of the past-the-end rule: a page beyond the last result but INSIDE the window is a normal 200 with an empty \`results\` array. \`total\` is always the exact count of the full filtered set, even when that count exceeds the window — it is never clamped to it.",
         "operationId": "searchListings",
         "parameters": [
           {
@@ -988,7 +993,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "name": "page",
             "required": false,
             "schema": {
-              "description": "Whole number, 1 or greater. Default 1.",
+              "description": "Whole number, 1 or greater. Default 1. Paging depth is bounded: (page - 1) * pageSize must not exceed 1000, and a request past that returns 400. The bound is not expressed as a maximum on this parameter because the deepest valid page depends on pageSize (51 at the default page size of 20).",
               "pattern": "^[1-9]\\d*$",
               "type": "string",
             },
@@ -1023,7 +1028,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 },
               },
             },
-            "description": "Unknown or invalid query parameter.",
+            "description": "Unknown or invalid query parameter (\`invalid_request\`), or a page past the reachable result window (\`result_window_exceeded\`). The two carry different error codes because they call for different responses: the first means a parameter needs fixing, the second that the search needs narrowing — retrying the same request will never succeed.",
           },
           "500": {
             "content": {

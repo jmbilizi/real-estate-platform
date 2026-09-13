@@ -1,5 +1,7 @@
-import { render, waitFor } from '@testing-library/react';
-import { searchListings } from '@/lib/api/listings';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { maxReachablePage, PAGE_SIZE_DEFAULT } from '@cribstop/property-contracts';
+import { ListingsApiError, searchListings } from '@/lib/api/listings';
+import { aListingCardRow } from '@/test/fixtures';
 import SearchExperience from './SearchExperience';
 
 /**
@@ -18,7 +20,19 @@ import SearchExperience from './SearchExperience';
 jest.mock('@/lib/api/listings', () => ({
   searchListings: jest.fn(),
   getListingsMeta: jest.fn(),
-  ListingsApiError: class extends Error {},
+  // Carries `code` and `status` like the real one. A bare `class extends Error {}` was enough while
+  // nothing branched on the code, but `useListingSearch` now reports it so the UI can tell a
+  // deterministic failure (a page past the result window, #65) from a retryable one — a mock
+  // without it would make every error look retryable and the branch untestable.
+  ListingsApiError: class extends Error {
+    constructor(
+      message: string,
+      readonly code: string,
+      readonly status: number,
+    ) {
+      super(message);
+    }
+  },
 }));
 
 // Neither the map nor the search bar is what these tests are about, and both pull in leaflet, the
@@ -127,5 +141,113 @@ describe('SearchExperience follows the URL it is given', () => {
     // Re-seeding builds a new filters object every time; the search must key on its *value*, or
     // every parent re-render costs a round trip.
     await waitFor(() => expect(mockedSearchListings).toHaveBeenCalledTimes(1));
+  });
+});
+
+/**
+ * The API bounds paging depth (#65): a request whose offset exceeds `MAX_RESULT_OFFSET` is a 400.
+ * `pageCount` is deliberately NOT clamped to that window server-side — it is derived from the exact
+ * `total` — so the pager has to do the clamping, or the shipped UI renders a "last page" button
+ * that fails when clicked. That is invisible against the seeded dataset and guaranteed once a real
+ * IDX feed is behind the endpoint.
+ */
+describe('SearchExperience never offers a page the API will refuse', () => {
+  const LAST_REACHABLE = maxReachablePage(PAGE_SIZE_DEFAULT);
+
+  // The pager renders only alongside results, so every envelope here carries a row. One is enough
+  // — these tests are about which page buttons exist, not about the grid.
+  const withResults = (total: number, pageCount: number) => ({
+    ...envelope(),
+    results: [aListingCardRow()],
+    total,
+    pageCount,
+  });
+
+  /** A result set far larger than the window: 200,000 rows is 10,000 pages at the default size. */
+  const hugeEnvelope = withResults(200_000, 10_000);
+
+  const pageButtonLabels = () =>
+    screen
+      .getAllByRole('button')
+      .map((button) => button.textContent?.trim())
+      .filter((label) => label !== undefined && /^\d+$/.test(label));
+
+  it('caps the highest offered page at the deepest reachable one, not at pageCount', async () => {
+    mockedSearchListings.mockResolvedValue(hugeEnvelope);
+
+    render(<SearchExperience initialQuery="q=Alexandria" />);
+
+    await waitFor(() => expect(pageButtonLabels()).toContain(String(LAST_REACHABLE)));
+    expect(pageButtonLabels()).not.toContain('10000');
+    for (const label of pageButtonLabels()) {
+      expect(Number(label)).toBeLessThanOrEqual(LAST_REACHABLE);
+    }
+  });
+
+  it('disables Next on the deepest reachable page rather than stepping past the window', async () => {
+    mockedSearchListings.mockResolvedValue(hugeEnvelope);
+
+    render(<SearchExperience initialQuery={`q=Alexandria&page=${LAST_REACHABLE}`} />);
+
+    await waitFor(() => expect(lastRequestedPage()).toBe(LAST_REACHABLE));
+    expect(screen.getByLabelText('Next page')).toBeDisabled();
+  });
+
+  it('clamps against the page size the API applied, not an assumed one', async () => {
+    // The limit is on the offset, so the deepest reachable page moves with page size. A response
+    // that says `pageSize: 100` means page 11 is the last reachable one, whatever the request's
+    // default happens to be.
+    mockedSearchListings.mockResolvedValue({ ...withResults(200_000, 2_000), pageSize: 100 });
+
+    render(<SearchExperience initialQuery="q=Alexandria" />);
+
+    await waitFor(() => expect(pageButtonLabels()).toContain(String(maxReachablePage(100))));
+    for (const label of pageButtonLabels()) {
+      expect(Number(label)).toBeLessThanOrEqual(maxReachablePage(100));
+    }
+  });
+
+  it('offers a way back to page 1 — not a retry that cannot succeed — when the URL asks past the window', async () => {
+    // Reachable by hand-editing `?page=`, an old bookmark, or a link minted before the bound
+    // existed. The pager lives in the results branch, so without this the user has no in-page
+    // route back at all.
+    mockedSearchListings.mockRejectedValue(
+      new ListingsApiError(
+        'That is further than search results go.',
+        'result_window_exceeded',
+        400,
+      ),
+    );
+
+    render(<SearchExperience initialQuery="q=Alexandria&page=200" />);
+
+    const action = await screen.findByRole('button', { name: 'Back to the first page' });
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+
+    mockedSearchListings.mockResolvedValue(withResults(60, 3));
+    fireEvent.click(action);
+
+    await waitFor(() => expect(lastRequestedPage()).toBe(1));
+  });
+
+  it('still offers a retry for an ordinary failure', async () => {
+    mockedSearchListings.mockRejectedValue(
+      new ListingsApiError('We could not load listings just now.', 'internal_error', 500),
+    );
+
+    render(<SearchExperience initialQuery="q=Alexandria" />);
+
+    expect(await screen.findByRole('button', { name: 'Try again' })).toBeInTheDocument();
+  });
+
+  it('still offers every page when the result set fits inside the window', async () => {
+    // The clamp must not cost a shopper any page they could actually reach — it is a ceiling, not
+    // a shortening of ordinary result sets.
+    mockedSearchListings.mockResolvedValue(withResults(60, 3));
+
+    render(<SearchExperience initialQuery="q=Alexandria" />);
+
+    await waitFor(() => expect(pageButtonLabels()).toContain('3'));
+    expect(pageButtonLabels()).toEqual(['1', '2', '3']);
   });
 });

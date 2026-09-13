@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PAGE_SIZE_DEFAULT } from '@cribstop/property-contracts';
+import type { ErrorBody } from '@cribstop/property-contracts';
 import type { ListingCardRow } from '@/lib/types';
 import type { SearchFilters } from '@/lib/types';
 import { ListingsApiError, searchListings } from '@/lib/api/listings';
@@ -18,11 +19,29 @@ export interface ListingSearchResult {
    */
   page: number;
   pageCount: number;
+  /**
+   * The page size the API actually applied, echoed back in the envelope.
+   *
+   * Reported rather than kept private because paging depth is bounded by an OFFSET (#65), so the
+   * deepest reachable page depends on this value. A caller that clamps its pager against a page
+   * size it merely assumes is one edit away from offering pages the API refuses; reading back what
+   * was applied removes the assumption. Falls back to the requested default until the first
+   * response settles.
+   */
+  pageSize: number;
   /** Echoed back by the API so the UI can reconcile what it asked for with what was applied. */
   appliedFilters: Record<string, unknown>;
   status: 'loading' | 'ready' | 'error';
   /** A user-facing message from the API error, not one invented here. */
   error: string | null;
+  /**
+   * The contract error code behind `error`, or null when the failure carried none.
+   *
+   * Exposed so a caller can distinguish a failure worth retrying from one that is deterministic —
+   * `result_window_exceeded` will answer identically forever, so offering "Try again" for it is
+   * offering a button that cannot work.
+   */
+  errorCode: ErrorBody['error']['code'] | null;
   retry: () => void;
 }
 
@@ -68,9 +87,11 @@ export function useListingSearch(
     total: 0,
     echo: null,
     pageCount: 1,
+    pageSize: PAGE_SIZE_DEFAULT,
     appliedFilters: {},
     status: 'loading',
     error: null,
+    errorCode: null,
   });
 
   const { toast } = useToast();
@@ -93,7 +114,7 @@ export function useListingSearch(
     const controller = new AbortController();
     let active = true;
 
-    setState((prev) => ({ ...prev, status: 'loading', error: null }));
+    setState((prev) => ({ ...prev, status: 'loading', error: null, errorCode: null }));
 
     searchListings({ ...filtersRef.current, page, pageSize: PAGE_SIZE_DEFAULT }, controller.signal)
       .then((envelope) => {
@@ -103,9 +124,11 @@ export function useListingSearch(
           total: envelope.total,
           echo: { requested: page, applied: envelope.page },
           pageCount: envelope.pageCount,
+          pageSize: envelope.pageSize,
           appliedFilters: envelope.appliedFilters,
           status: 'ready',
           error: null,
+          errorCode: null,
         });
       })
       .catch((err: unknown) => {
@@ -116,8 +139,9 @@ export function useListingSearch(
           err instanceof ListingsApiError
             ? err.message
             : 'We could not load listings just now. Please try again.';
+        const errorCode = err instanceof ListingsApiError ? err.code : null;
 
-        setState((prev) => ({ ...prev, status: 'error', error: message }));
+        setState((prev) => ({ ...prev, status: 'error', error: message, errorCode }));
         toastRef.current(message, 'error');
       });
 

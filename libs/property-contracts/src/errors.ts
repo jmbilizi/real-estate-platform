@@ -1,8 +1,9 @@
 import { z } from 'zod';
+import { MAX_RESULT_OFFSET } from './search-request';
 
 export const errorBodySchema = z.object({
   error: z.object({
-    code: z.enum(['invalid_request', 'not_found', 'internal_error']),
+    code: z.enum(['invalid_request', 'result_window_exceeded', 'not_found', 'internal_error']),
     message: z.string(),
   }),
 });
@@ -33,6 +34,33 @@ export const NOT_FOUND_BODY = Object.freeze({
  */
 export const INTERNAL_ERROR_BODY = Object.freeze({
   error: Object.freeze({ code: 'internal_error', message: 'Internal server error.' } as const),
+} as const);
+
+/**
+ * The single 400 body for a request past the reachable result window, frozen for the same reason as
+ * the two above.
+ *
+ * It carries its OWN code rather than reusing `invalid_request`, because the two are different
+ * facts and an integrator has to be able to tell them apart: `invalid_request` means "fix your
+ * parameter" (a typo, a `pageSize` over the maximum), whereas this means "your parameters are
+ * well-formed and this endpoint will not take you that deep — narrow the search instead". A client
+ * that retried on `invalid_request` would loop forever here; one that branches on this code can
+ * stop paging and say so.
+ *
+ * The message names the limit, in the same terms the OpenAPI description uses, so the constraint is
+ * legible from the response alone. It carries no caller-supplied content — an error string is a
+ * reflection surface — and, deliberately, does not name the last valid page: computing it is
+ * trivial from the stated rule, and quoting it would read as an invitation to walk to exactly
+ * there.
+ */
+export const RESULT_WINDOW_EXCEEDED_BODY = Object.freeze({
+  error: Object.freeze({
+    code: 'result_window_exceeded',
+    message:
+      `Result window exceeded: (page - 1) * pageSize must not exceed ${MAX_RESULT_OFFSET}. ` +
+      'This is a search surface, not a bulk-export surface — narrow the search with filters ' +
+      'rather than paging deeper.',
+  } as const),
 } as const);
 
 export type ErrorBody = z.infer<typeof errorBodySchema>;
