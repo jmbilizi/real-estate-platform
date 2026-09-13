@@ -149,6 +149,21 @@ export function highlightMatch(text: string, query: string): React.ReactNode {
  */
 const MAX_NEARBY_PLACES = 8;
 
+/**
+ * Coordinate precision, in decimal places, for the nearby-places request URL.
+ *
+ * This is what makes the proxy's `Cache-Control` worth anything. The browser's HTTP cache keys on
+ * the URL *this* function builds, so passing the map centre through at full float precision
+ * (`38.89553417351007`) minted a URL never seen before on every pixel of pan and the cache could
+ * not hit once. Three decimals is ~110m, which against a radius measured in kilometres cannot
+ * change which towns come back.
+ *
+ * `/api/overpass` rounds to the same grid on its side — it cannot trust a client not to. The two
+ * are therefore duplicated on purpose, and a drift between them is a *cache-hit* regression rather
+ * than a correctness one: the server's rounding still decides the answer either way.
+ */
+const NEARBY_COORD_PRECISION = 3;
+
 // Fetch nearby cities/towns/villages via the internal Overpass proxy (`/api/overpass`).
 // Overpass doesn't reliably emit CORS headers, so this can't hit the upstream API directly
 // from the browser — see src/app/api/overpass/route.ts.
@@ -160,8 +175,8 @@ export async function fetchNearbyLocationsByType(
   signal?: AbortSignal,
 ): Promise<any[]> {
   const params = new URLSearchParams({
-    lat: String(lat),
-    lon: String(lon),
+    lat: lat.toFixed(NEARBY_COORD_PRECISION),
+    lon: lon.toFixed(NEARBY_COORD_PRECISION),
     placeType,
     radiusMeters: String(radiusMeters),
   });

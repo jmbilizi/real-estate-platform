@@ -14,7 +14,8 @@ import { BRAND } from '@/lib/brand';
  * user waiting on a map. Shorter than the Property API's 30s deliberately — this request is not on
  * the path to any content, and a slow one must not hold a serverless invocation open.
  *
- * `/api/overpass` still has no timeout at all; that is its own fix, not this one's.
+ * `/api/overpass` now bounds itself the same way, off its own declared query budget — see the
+ * timeout constants there.
  */
 const NOMINATIM_TIMEOUT_MS = 10_000;
 
