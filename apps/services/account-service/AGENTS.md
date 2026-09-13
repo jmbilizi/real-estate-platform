@@ -22,4 +22,15 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   JWT**), and SHA-256-hashed API keys.
 - Six-tier staff RBAC is hierarchical; **domain roles are additive facets** — never model them as
   exclusive personas (PRD §11.2).
+- **Password recovery is this service's own, not `MapIdentityApi`'s.**
+  `POST /account/password/forgot` and `POST /account/password/reset` (`Routes/PasswordReset.cs`);
+  Identity's `/account/forgotPassword` and `/account/resetPassword` are suppressed to `404`
+  (`Routes/IdentityApiSuppression.cs`) because they only issue a token when `IsEmailConfirmedAsync`
+  is true and nothing here confirms an address — they answered 200 having done nothing. The request
+  endpoint's response is identical for registered and unregistered addresses **including its
+  timing**; anything added to that handler has to preserve that, and the parity tests in
+  `Tests/Integration/PasswordResetEndpointTests.cs` are there to catch it if not.
+- **Reset mail is not sent here.** The endpoints issue a token and hand it to
+  `IPasswordResetNotifier`; the stand-in logs a warning (event id 1360) per issued token and never
+  logs the token. Delivery is one DI registration — the API does not change to add it.
 - CPM: versionless `<PackageReference>`; run `pnpm run nx:reset` after project structure changes.

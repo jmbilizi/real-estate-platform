@@ -12,6 +12,8 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.BearerToken;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Npgsql;
 
 namespace AccountService;
@@ -43,7 +45,11 @@ internal static class Program
 
         builder.Services.AddOpenApi();
         builder.Services.AddHttpContextAccessor();
+        builder.Services.AddMemoryCache();
+        builder.Services.TryAddSingleton(TimeProvider.System);
         builder.Services.Configure<AppSettings>(builder.Configuration.GetSection(AppSettings.SectionName));
+        builder.Services.Configure<PasswordResetOptions>(
+            builder.Configuration.GetSection(PasswordResetOptions.SectionName));
         builder.Services.AddDbContext<AccountDbContext>(options => options.UseNpgsql(connectionString));
         builder.Services.AddScoped<IClaimsTransformation, UserAppClaimsTransformation>();
 
@@ -63,11 +69,32 @@ internal static class Program
         });
 
         builder.Services
-            .AddIdentityApiEndpoints<ApplicationUser>()
+            .AddIdentityApiEndpoints<ApplicationUser>(options =>
+                options.Tokens.PasswordResetTokenProvider = PasswordResetTokenProvider.ProviderName)
             .AddRoles<IdentityRole>()
             .AddUserManager<AppUserManager>()
             .AddSignInManager<AppSignInManager>()
-            .AddEntityFrameworkStores<AccountDbContext>();
+            .AddEntityFrameworkStores<AccountDbContext>()
+            .AddTokenProvider<PasswordResetTokenProvider>(PasswordResetTokenProvider.ProviderName);
+
+        // Password reset runs on its own token provider so its lifetime — and its data-protection
+        // purpose — are independent of every other Identity token. Bound from options rather than
+        // read from configuration here, so a test (or a later environment override) that replaces
+        // PasswordResetOptions is the value the provider actually enforces.
+        builder.Services
+            .AddOptions<PasswordResetTokenProviderOptions>()
+            .Configure<IOptions<PasswordResetOptions>>((tokenOptions, passwordReset) =>
+            {
+                tokenOptions.Name = PasswordResetTokenProvider.ProviderName;
+                tokenOptions.TokenLifespan = passwordReset.Value.TokenLifetime;
+            });
+
+        builder.Services.AddScoped<PasswordResetRateLimiter>();
+
+        // No delivery channel exists yet, so the notifier that records that fact stands in. Adding
+        // a real one is a single registration — the endpoints, their contracts and their
+        // enumeration guarantees do not change.
+        builder.Services.TryAddScoped<IPasswordResetNotifier, UndeliveredPasswordResetNotifier>();
 
         // Revoke existing sessions immediately when the security stamp changes
         // (e.g., on account soft-delete or admin suspension).
@@ -116,8 +143,15 @@ internal static class Program
         // Readiness probe — same response; kept separate so K8s can distinguish liveness from readiness
         app.MapGet("/account/health/ready", () => Results.Ok(new { status = "ready" }));
 
-        // Identity: built-in ASP.NET Identity endpoints (register, login, refresh, etc.)
-        app.MapGroup("/account").MapIdentityApi<ApplicationUser>();
+        // Identity: built-in ASP.NET Identity endpoints (register, login, refresh, etc.).
+        // Its password-reset pair is suppressed — see Routes/IdentityApiSuppression.cs — and
+        // replaced by MapPasswordResetRoutes below.
+        var identityGroup = app.MapGroup("/account");
+        identityGroup.MapIdentityApi<ApplicationUser>();
+        identityGroup.SuppressIdentityPasswordResetEndpoints();
+
+        // Password recovery: POST /account/password/forgot, POST /account/password/reset
+        app.MapPasswordResetRoutes();
 
         // Profile: GET/PUT/DELETE /account/profile, GET /account/{userId}/history
         app.MapProfileRoutes();

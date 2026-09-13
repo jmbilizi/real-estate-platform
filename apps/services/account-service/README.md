@@ -166,9 +166,51 @@ window.
 | `POST` | `/account/refresh`               | Refresh a bearer token           |
 | `POST` | `/account/logout`                | Logout (revokes cookie/token)    |
 | `GET`  | `/account/confirmEmail`          | Confirm email address            |
-| `POST` | `/account/forgotPassword`        | Trigger password reset email     |
-| `POST` | `/account/resetPassword`         | Complete password reset          |
 | `POST` | `/account/manage/2fa`            | Manage two-factor authentication |
+
+Identity's own `/account/forgotPassword` and `/account/resetPassword` are **suppressed** and answer
+`404` — see Password Recovery below.
+
+### Password Recovery
+
+| Method | Path                       | Auth required | Description                                 |
+| ------ | -------------------------- | ------------- | ------------------------------------------- |
+| `POST` | `/account/password/forgot` | Anonymous     | Request a reset token for an email address  |
+| `POST` | `/account/password/reset`  | Anonymous     | Redeem a reset token and set a new password |
+
+```jsonc
+// POST /account/password/forgot  -> 200 (always), or 429 with Retry-After
+{ "email": "someone@example.com" }
+
+// POST /account/password/reset   -> 200, 400 (ValidationProblem), or 429 with Retry-After
+{ "email": "someone@example.com", "resetCode": "<code>", "newPassword": "..." }
+```
+
+The request endpoint answers **identically** — status, body, and elapsed time down to a configured
+floor — whether or not the address has an account. It is not a membership oracle, and that parity is
+an explicit test rather than an implementation note.
+
+Tokens come from ASP.NET Identity's `GeneratePasswordResetTokenAsync` on a dedicated provider
+(`PasswordResetTokenProvider`) with its own lifetime and its own data-protection purpose, so the
+reset lifetime is independent of email-confirmation and two-factor tokens. Redeeming a token rotates
+the account's security stamp, which is part of the token's own payload — that is what makes it
+single-use, and what revokes every other session for the account (see Session Revocation above).
+Used, expired, tampered and unknown tokens all produce one indistinguishable `400`; a password that
+fails the policy is reported as itself, but only after the token has proven valid.
+
+Both endpoints are rate limited in-process, per email address and per client address, on top of the
+gateway's per-route Ocelot limits
+(`apps/api-gateway/Configuration/Routes/account-service-routes.json`).
+
+**These endpoints issue a token; they do not deliver it.** Until a delivery channel is configured,
+`UndeliveredPasswordResetNotifier` logs a `Warning` — event id `1360`,
+`PasswordResetTokenUndelivered` — for every issued token, and the token itself is never logged.
+Supplying a real channel means registering an `IPasswordResetNotifier`; nothing about these
+contracts changes.
+
+Identity's built-in `/account/forgotPassword` and `/account/resetPassword` are removed
+(`Routes/IdentityApiSuppression.cs`): they only issue a token when `IsEmailConfirmedAsync` is true,
+and nothing in this platform confirms an address, so they returned `200` having done nothing.
 
 ### Profile
 
@@ -313,6 +355,14 @@ enrichment pipeline.
   "Apps": {
     "AllowedApps": ["cribstop", "admin-portal"]
   },
+  "PasswordReset": {
+    "TokenLifetime": "01:00:00",
+    "RequestsPerEmail": 3,
+    "RequestsPerAddress": 15,
+    "RedemptionsPerAddress": 30,
+    "RequestWindow": "00:15:00",
+    "MinimumResponseDuration": "00:00:00.250"
+  },
   "ConnectionStrings": {
     "DefaultConnection": "Host=...;Database=account_db;..."
   }
@@ -321,6 +371,11 @@ enrichment pipeline.
 
 `AllowedApps` controls which `AppId` values are accepted in `X-App-Id` headers and API key creation.
 Unknown values are rejected with `400` (API keys) or silently ignored (login headers).
+
+`PasswordReset` is the whole reset policy, configuration rather than constants so an environment can
+tighten it without a code change. `TokenLifetime` is bound into the password-reset token provider,
+so it is the lifetime actually enforced at redemption. `MinimumResponseDuration` is the floor both
+endpoints are padded to, which is what keeps the work actually done off the clock.
 
 ---
 
