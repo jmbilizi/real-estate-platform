@@ -1,5 +1,10 @@
 import { NextRequest } from 'next/server';
-import { buildNearbyPlacesQuery, overpassRemark, QUERY_TIMEOUT_SECONDS } from '../_lib/overpass';
+import {
+  buildNearbyPlacesQuery,
+  classifyUpstreamFailure,
+  overpassRemark,
+  QUERY_TIMEOUT_SECONDS,
+} from '../_lib/overpass';
 
 // Proxies OpenStreetMap Overpass API requests for nearby place lookups.
 // Overpass does not reliably emit CORS headers so it cannot be called directly from the browser.
@@ -94,7 +99,11 @@ export async function GET(req: NextRequest) {
       headers: { 'Cache-Control': `public, max-age=${CACHE_SECONDS}` },
     });
   } catch (e) {
-    return softFailure(e);
+    /*
+     * `req.signal.aborted` is read here, at the point of failure, rather than passed down from
+     * anywhere earlier: it is only meaningful once the request has actually ended.
+     */
+    return abandonedOrFailed(e, req.signal.aborted);
   }
 }
 
@@ -110,4 +119,38 @@ export async function GET(req: NextRequest) {
 function softFailure(cause: unknown): Response {
   console.error('[Overpass] Upstream request failed', cause);
   return Response.json({ error: 'Upstream unavailable' }, { status: 502 });
+}
+
+/**
+ * The thrown-request path — the only one where "no answer" might not mean "something went wrong".
+ *
+ * `AbortSignal.any` folds a withdrawn client request and an expired budget into one rejection, and
+ * reporting them alike is what makes the log useless. `CompactSearchBar` aborts the in-flight
+ * nearby lookup at the top of every re-trigger, so before this split ordinary typing and panning
+ * emitted an upstream-error line per abandoned request.
+ *
+ * That is the exact mirror of the 200-with-remark bug fixed earlier in this PR: there, a real
+ * failure logged nothing; here, a non-failure logged loudly. Both leave the same operator equally
+ * unable to tell whether anything is actually wrong — which #84 depends on being able to do.
+ */
+function abandonedOrFailed(cause: unknown, clientAborted: boolean): Response {
+  switch (classifyUpstreamFailure(cause, clientAborted)) {
+    case 'client-abort':
+      /*
+       * Silent, and not a 502. Nothing failed, and there is nobody to tell: the caller's own fetch
+       * rejected with its own `AbortError` before it could read any of this. 499 ("client closed
+       * request") is nginx's convention rather than an RFC status, chosen because it is what shows
+       * up in access logs as *not our problem* — the body is omitted for the same reason.
+       */
+      return new Response(null, { status: 499 });
+
+    case 'timeout':
+      // Distinct from a transport failure on purpose: this one says our own budget was the limit,
+      // which is the line that matters when tuning `QUEUE_ALLOWANCE_MS` or reading #84's counters.
+      console.error(`[Overpass] No response within ${REQUEST_TIMEOUT_MS}ms (queue + query budget)`);
+      return Response.json({ error: 'Upstream unavailable' }, { status: 502 });
+
+    default:
+      return softFailure(cause);
+  }
 }

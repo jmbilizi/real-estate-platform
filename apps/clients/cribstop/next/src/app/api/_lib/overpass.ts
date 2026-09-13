@@ -71,6 +71,42 @@ export type BuiltQuery = { ok: true; query: string } | { ok: false; error: strin
  * Lives here rather than in the route for the same reason the query builder does: it is a fact
  * about what Overpass says, which is testable without a network.
  */
+/**
+ * Why a request to Overpass ended without an answer. Three cases, and only two are failures.
+ *
+ * `AbortSignal.any([req.signal, AbortSignal.timeout(...)])` folds two very different events into
+ * one rejection, and the handler must not report them alike:
+ *
+ * - `client-abort` — the browser withdrew the question. `CompactSearchBar` aborts the in-flight
+ *   nearby lookup at the top of *every* re-trigger, so this fires on ordinary typing and panning.
+ *   Nothing went wrong and nobody is listening for the answer.
+ * - `timeout` — our own budget expired. A real operational event: Overpass did not answer within
+ *   queue + query time, and we gave up on it.
+ * - `error` — anything else: DNS, connection reset, malformed body.
+ *
+ * Keeping these separable is not tidiness. #84 requires that "we are being abused" and "we are
+ * rate-limiting ourselves" stay distinguishable in operations, and #84 builds on this file — a line
+ * that fires on every keystroke would destroy that signal before the limiter is even written.
+ *
+ * `clientAborted` is passed in rather than sniffed off the error because it is the only reliable
+ * discriminator: `AbortSignal.any` propagates the reason, so a withdrawn request surfaces as
+ * `AbortError` and an expired budget as `TimeoutError`, but an `AbortError` alone does not say
+ * *whose* abort it was. `req.signal.aborted` does.
+ */
+export type UpstreamFailure = 'client-abort' | 'timeout' | 'error';
+
+export function classifyUpstreamFailure(cause: unknown, clientAborted: boolean): UpstreamFailure {
+  // Checked first, and deliberately wins a race with the timeout: if the client has gone, the
+  // answer is worthless whatever else also happened, and there is no one to report it to.
+  if (clientAborted) return 'client-abort';
+
+  // Read defensively rather than with `instanceof`. This is a `DOMException`, whose relationship to
+  // `Error` varies by runtime, and a rejection is not guaranteed to be an object at all.
+  return (cause as { name?: unknown } | null | undefined)?.name === 'TimeoutError'
+    ? 'timeout'
+    : 'error';
+}
+
 export function overpassRemark(body: unknown): string | null {
   if (typeof body !== 'object' || body === null) return null;
 

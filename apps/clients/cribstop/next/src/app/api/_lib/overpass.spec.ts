@@ -1,11 +1,13 @@
 import {
   buildNearbyPlacesQuery,
+  classifyUpstreamFailure,
   COORD_PRECISION,
   DEFAULT_RADIUS_METERS,
   MAX_RADIUS_METERS,
   MIN_RADIUS_METERS,
   overpassRemark,
 } from './overpass';
+import { NEARBY_COORD_PRECISION } from '@/lib/search-utils';
 
 const build = (qs: string) => buildNearbyPlacesQuery(new URLSearchParams(qs));
 
@@ -120,6 +122,18 @@ describe('buildNearbyPlacesQuery', () => {
       // the URL, and a drift between the two costs cache hits.
       expect(COORD_PRECISION).toBe(3);
     });
+
+    /**
+     * The claim the comments on both constants make, actually asserted.
+     *
+     * The two are duplicated deliberately — importing this module into `search-utils.tsx` would
+     * pull the upstream query builder into the browser bundle to save one number — and both sides
+     * say the drift would "only" cost cache hits. Nothing tested that, so the drift they wave off
+     * would have passed CI in silence. This is the cheap half of the trade the duplication makes.
+     */
+    it('agrees with the grid the client rounds to before building the URL', () => {
+      expect(NEARBY_COORD_PRECISION).toBe(COORD_PRECISION);
+    });
   });
 
   /**
@@ -203,5 +217,62 @@ describe('overpassRemark', () => {
     ['a non-string remark', { remark: { message: 'nope' } }],
   ])('does not treat %s as a failure', (_label, body) => {
     expect(overpassRemark(body)).toBeNull();
+  });
+});
+
+/**
+ * Telling a withdrawn request apart from a real failure.
+ *
+ * `AbortSignal.any([req.signal, AbortSignal.timeout(...)])` folds both into one rejection, and
+ * `CompactSearchBar` aborts the in-flight nearby lookup at the top of *every* re-trigger — so
+ * without this split, ordinary typing and panning emitted an upstream-error log line per abandoned
+ * request. #84 builds on this file and requires that "we are being abused" stay distinguishable
+ * from "we are rate-limiting ourselves"; a line that fires on every keystroke destroys that.
+ */
+describe('classifyUpstreamFailure', () => {
+  /** What `fetch` rejects with when an `AbortSignal` fires — name-carrying, like a DOMException. */
+  const abortError = Object.assign(new Error('This operation was aborted'), { name: 'AbortError' });
+  const timeoutError = Object.assign(new Error('The operation timed out'), {
+    name: 'TimeoutError',
+  });
+
+  it('reports a client-aborted request as withdrawn, not as a failure', () => {
+    expect(classifyUpstreamFailure(abortError, true)).toBe('client-abort');
+  });
+
+  it('reports our own expired budget as a timeout', () => {
+    expect(classifyUpstreamFailure(timeoutError, false)).toBe('timeout');
+  });
+
+  it('keeps the two separately legible — the whole point of the split', () => {
+    expect(classifyUpstreamFailure(timeoutError, false)).not.toBe(
+      classifyUpstreamFailure(abortError, true),
+    );
+  });
+
+  it('reports a transport failure as an error', () => {
+    expect(classifyUpstreamFailure(new TypeError('fetch failed'), false)).toBe('error');
+  });
+
+  /**
+   * The client leaving wins a race with the budget expiring. Both may be true at once, and when the
+   * caller has gone the answer is worthless whatever else also happened — there is nobody to tell.
+   */
+  it('treats the client having gone as decisive even if the budget also expired', () => {
+    expect(classifyUpstreamFailure(timeoutError, true)).toBe('client-abort');
+  });
+
+  /**
+   * A rejection is not guaranteed to be an object, and `DOMException`'s relationship to `Error`
+   * varies by runtime — so the name is read defensively rather than with `instanceof`.
+   */
+  it.each([
+    ['null', null],
+    ['undefined', undefined],
+    ['a string', 'boom'],
+    ['a number', 0],
+    ['an object with no name', {}],
+  ])('falls back to a plain error for a rejection that is %s', (_label, cause) => {
+    expect(classifyUpstreamFailure(cause, false)).toBe('error');
   });
 });
