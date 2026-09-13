@@ -123,6 +123,21 @@ services:
     kubectl_labels:
       app: account-service
 
+  bright-mls-ingest:
+    type: application
+    description: "Scheduled Bright MLS ingestion CronJob (property-service image, #91)"
+    resources:
+      # Base resources (provider/environment-agnostic)
+      - infra/k8s/base/cronjobs/bright-mls-ingest.cronjob.yaml
+      - infra/k8s/base/secrets/bright-mls.secret.yaml
+      # Environment patches (provider/environment-specific)
+      - infra/k8s/podman/local/patches/cronjobs/bright-mls-ingest.cronjob.yaml
+      - infra/k8s/hetzner/dev/patches/cronjobs/bright-mls-ingest.cronjob.yaml
+      - infra/k8s/hetzner/test/patches/cronjobs/bright-mls-ingest.cronjob.yaml
+      - infra/k8s/hetzner/prod/patches/cronjobs/bright-mls-ingest.cronjob.yaml
+    kubectl_labels:
+      app: bright-mls-ingest
+
   cribstop-web:
     type: application
     description: "Cribstop Next.js web client"

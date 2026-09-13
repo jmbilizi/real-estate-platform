@@ -1,0 +1,37 @@
+# yaml-language-server: disable
+# Bright MLS Ingestion CronJob Patch for Podman Local Environment
+#
+# Local receives NO Bright credentials, ever (#117): it stays on the seeded `source='internal'`
+# sample rows. The job is left UNSUSPENDED anyway, and that is the point — an hourly run that
+# completes with a `not_configured` outcome is the cheapest continuous proof that the vehicle #92 and
+# #93 drop into actually starts, schedules, and finishes. Nothing leaves the cluster: the committed
+# `StrongBase64Password` placeholder is treated as absent and is never transmitted.
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bright-mls-ingest
+spec:
+  schedule: "0 * * * *"
+  suspend: false
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: ingest
+              image: property-service
+              imagePullPolicy: IfNotPresent
+              resources:
+                requests:
+                  memory: "64Mi"
+                  cpu: "25m"
+                limits:
+                  memory: "192Mi"
+                  cpu: "200m"
+              # NODE_ENV is repeated here for the same reason the property-service migrate
+              # initContainer repeats it: the runtime image bakes NODE_ENV=production, and there is
+              # no other container's override to inherit.
+              env:
+                - name: NODE_ENV
+                  value: "development"

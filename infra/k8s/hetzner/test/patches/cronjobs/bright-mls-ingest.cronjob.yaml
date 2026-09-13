@@ -1,0 +1,29 @@
+# yaml-language-server: disable
+# Bright MLS Ingestion CronJob Patch for Hetzner Test Environment
+#
+# TEST RECEIVES NO BRIGHT CREDENTIALS OF ANY KIND (stakeholder ruling 2026-09-12, recorded on #117).
+# It stays on seeded `source='internal'` sample rows, like local. So this job is SUSPENDED here —
+# explicitly, rather than by inheriting the base default, because "test is deliberately excluded" is
+# a decision somebody should be able to read off this file instead of deducing from an absence.
+#
+# The endpoint pair stays empty from base and the secret keeps its committed placeholder, so even an
+# accidental unsuspend completes with a `not_configured` outcome and transmits nothing. Two
+# independent barriers, neither relying on the other.
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bright-mls-ingest
+spec:
+  suspend: true
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: ingest
+              image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:test
+              imagePullPolicy: Always
+              env:
+                - name: NODE_ENV
+                  value: "production"

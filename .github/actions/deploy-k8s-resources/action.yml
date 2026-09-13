@@ -65,7 +65,7 @@ runs:
         kubectl version --client
         kubectl cluster-info
 
-    - name: Substitute secrets (Postgres, Redis, Jaeger)
+    - name: Substitute secrets (Postgres, Redis, Jaeger, Bright MLS)
       shell: bash
       run: |
         # In-memory substitution pattern; overwrite templates in workspace
@@ -87,6 +87,39 @@ runs:
         yq eval '.stringData.auth = env(JAEGER_BASIC_AUTH)' infra/k8s/base/secrets/jaeger.secret.yaml \
         > /tmp/jaeger.secret.processed.yaml
         mv /tmp/jaeger.secret.processed.yaml infra/k8s/base/secrets/jaeger.secret.yaml
+
+        # Bright MLS (#91). Guarded, unlike the blocks above, because these two are the only secrets
+        # here that are legitimately ABSENT in some environments: `test` never receives Bright
+        # credentials at all (#117), and no environment has them until #117 is done. An unguarded
+        # `env(VAR)` on an unset variable writes a null into stringData, which kubectl rejects — so
+        # an expected absence would break the whole deploy rather than the one job.
+        #
+        # Leaving the committed `StrongBase64Password` placeholder in place is the correct outcome
+        # for that case: the job treats it as "not configured", completes cleanly and transmits
+        # nothing. These MUST be GitHub *environment* secrets, never repository secrets — that is the
+        # mechanism keeping the staging set (dev) and the production set (prod) from becoming
+        # interchangeable, and the field names are identical across environments by design.
+        if [ -n "$BRIGHT_MLS_CLIENT_ID" ] && [ -n "$BRIGHT_MLS_CLIENT_SECRET" ]; then
+          echo "🔐 Bright MLS credentials present for this environment — substituting."
+          yq eval '.stringData.BRIGHT_MLS_CLIENT_ID = env(BRIGHT_MLS_CLIENT_ID)' infra/k8s/base/secrets/bright-mls.secret.yaml | \
+          yq eval '.stringData.BRIGHT_MLS_CLIENT_SECRET = env(BRIGHT_MLS_CLIENT_SECRET)' - \
+          > /tmp/bright-mls.secret.processed.yaml
+          mv /tmp/bright-mls.secret.processed.yaml infra/k8s/base/secrets/bright-mls.secret.yaml
+        elif [ -n "$BRIGHT_MLS_CLIENT_ID" ] || [ -n "$BRIGHT_MLS_CLIENT_SECRET" ]; then
+          # Half a pair is a provisioning mistake, not an expected absence — but it is NOT grounds to
+          # abort the environment. This step runs before any deploy-control gating, so failing here
+          # would take postgres, redis, jaeger, the gateway and the web client down over a credential
+          # for a job that may not even be enabled in this environment. That disproportionate blast
+          # radius is exactly #45, which `tools/infra/deploy-scope.js` exists to have ended.
+          #
+          # So: substitute NEITHER, keeping both placeholders. No half-credential reaches the cluster,
+          # the ingestion job reports "credentials not configured" naming both variables, and the
+          # warning below says why — all visible, none of it fatal to anything else.
+          echo "::warning::Only one of BRIGHT_MLS_CLIENT_ID / BRIGHT_MLS_CLIENT_SECRET is set for this environment. Neither was applied; the ingestion job will report 'credentials not configured'. Both are provisioned together as environment secrets — see #117."
+        else
+          echo "ℹ️  No Bright MLS credentials for this environment — keeping the committed placeholder."
+          echo "   The ingestion job will complete with a 'credentials not configured' outcome (#91)."
+        fi
 
     - name: Substitute domain placeholders in ingress manifests
       shell: bash

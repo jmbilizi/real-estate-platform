@@ -1,0 +1,42 @@
+# yaml-language-server: disable
+# Bright MLS Ingestion CronJob Patch for Hetzner Dev Environment
+#
+# DEV AUTHENTICATES AGAINST BRIGHT'S TEST/STAGING FEED — never real licensed production inventory
+# (stakeholder ruling 2026-09-12, recorded on #117). The credential in this environment's
+# bright-mls-secret is the STAGING set; the production set lives only in the prod environment's
+# secrets and the two are never promoted across environments.
+#
+# The endpoint pair below is the inspectable half of that ruling. It is intentionally left EMPTY:
+# Bright's developer portal is login-gated (verified 2026-09-13) and the staging URLs arrive with
+# the credentials in the week of 2026-09-15. #117 item 1 is where a human records them, and this is
+# the slot they go in. Do not guess a hostname here — an environment pointed at the wrong feed is
+# the single most expensive mistake this file can make, which is why the value is a per-environment
+# blank rather than a default inherited from anywhere.
+#
+# Until then an empty endpoint is treated as "not configured": each run completes cleanly, logs the
+# missing variables, and transmits nothing. #117's definition of done is observing this job leave
+# that state here first, before prod is attempted at all.
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bright-mls-ingest
+spec:
+  schedule: "0 3 * * *"
+  suspend: false
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: ingest
+              image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:dev
+              imagePullPolicy: Always
+              env:
+                - name: NODE_ENV
+                  value: "development"
+                # Bright TEST/STAGING feed. Filled in by #117 item 1.
+                - name: BRIGHT_MLS_TOKEN_ENDPOINT
+                  value: ""
+                - name: BRIGHT_MLS_SERVICE_ROOT
+                  value: ""

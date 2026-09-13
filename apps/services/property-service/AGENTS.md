@@ -192,6 +192,47 @@ The `seed` Nx target still exists for loading the dataset into an arbitrary data
 pointed `DATABASE_URL` at — it is no longer the way to get local data, and it does **not** perform
 the delete-then-insert re-apply.
 
+### Bright MLS ingestion (`src/jobs/bright-ingest/`) — the vehicle, not the cargo (#91)
+
+The scheduled ingestion job is **this image with a different command**, exactly as the section above
+prescribes: a separate process because the workload is throughput-bound and must not compete with
+request-serving CPU, but the same Nx project because `property_db` is this service's database and
+`src/db/write.ts` must stay the only writer. `bright-ingest.main.ts` is a second webpack entry point
+(`webpack.config.js` → `additionalEntryPoints`, the same mechanism `seed-on-start` uses), run by the
+`bright-mls-ingest` CronJob in `infra/k8s/base/cronjobs/`.
+
+**It ingests nothing.** Incremental RESO replication into staging is #92; mapping into the consumer
+schema is #93. A run resolves configuration and then either reports `not_configured` or
+authenticates and probes `$metadata`. `no-consumer-writes.spec.ts` asserts that structurally — the
+directory issues no write SQL against any consumer table, never mentions `listing_search_v`, and
+imports neither `db/pool` nor `db/write`. When #92 lands, the allowance to make is **its own staging
+table**, never a relaxation of the consumer-table rule.
+
+Four things here are load-bearing and easy to undo by accident:
+
+- **"Not configured" is a success, exit 0.** `local` and `test` receive no Bright credentials ever
+  (#117) and hold the committed `StrongBase64Password` placeholder, which `config.ts` treats as
+  absent and never transmits. Making that a failure would give a CronJob a nightly backoff loop over
+  an entirely expected condition and bury real faults in the noise. A value that is present but
+  **unusable** is the opposite case and does fail the run.
+- **Two credential sets, never one** (stakeholder ruling 2026-09-12, #117): dev authenticates
+  against Bright's test/staging feed, prod against the licensed production feed. The field names are
+  identical across environments and only the values differ, which is what makes GitHub _environment_
+  secrets — not repository secrets — the enforcement mechanism. The endpoint is per-environment
+  **configuration** on the CronJob so the feed is inspectable without decoding a Secret.
+- **Only endpoint HOSTS are ever logged**, never full URLs and never credential material. The
+  containment is structural: no log record type in `run-log.ts` has a field a credential could be
+  assigned to. The exception that had to be argued about is `message`, the one free-text field — so
+  `bright-client.ts` keeps only RFC 6749's closed set of `error` CODES from a failure body and drops
+  `error_description` entirely, because a gateway answering `"Client 'abc123' not found"` would
+  otherwise log the client id through it. The redaction assertions live in `run.spec.ts`
+  ("runBrightIngest — redaction"). If one fails, take the field off the record type — do not add a
+  scrubbing pass, which is only ever a list of things somebody remembered.
+- **Every Bright-specific fact the pipeline assumes is unverified.** The developer portal is
+  login-gated, so request shapes are inferred from public RESO documentation.
+  `docs/bright-mls-day-one-checklist.md` is the list to work the hour the credentials arrive; an
+  item that comes back different is a product-owner ping, not a quiet local fix.
+
 ### Migration rules (each of these fails silently or confusingly if ignored)
 
 - **These files are immutable once merged.** `pgmigrations` keys applied migrations by **filename**,

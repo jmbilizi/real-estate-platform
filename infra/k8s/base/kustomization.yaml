@@ -25,6 +25,7 @@ resources:
   - secrets/postgres.secret.yaml
   - secrets/redis.secret.yaml
   - secrets/jaeger.secret.yaml
+  - secrets/bright-mls.secret.yaml
 
   # ConfigMaps (all second)
   - configmaps/postgres.configmap.yaml
@@ -64,3 +65,4 @@ resources:
   ## Jobs (one-time tasks like database schema migration, initialize cache, initial data load, one-time data import)
 
   ## CronJobs (scheduled tasks like backups, cleanup, reports )
+  - cronjobs/bright-mls-ingest.cronjob.yaml

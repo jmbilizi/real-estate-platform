@@ -30,6 +30,9 @@ patches:
   - path: patches/ingresses/api-gateway.ingress.yaml
   - path: patches/ingresses/cribstop-web.ingress.yaml
 
+  ## CronJobs (scheduled tasks)
+  - path: patches/cronjobs/bright-mls-ingest.cronjob.yaml
+
 # Common labels for all resources
 labels:
   - pairs:
