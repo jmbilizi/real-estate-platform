@@ -45,7 +45,6 @@ internal static class Program
 
         builder.Services.AddOpenApi();
         builder.Services.AddHttpContextAccessor();
-        builder.Services.AddMemoryCache();
         builder.Services.TryAddSingleton(TimeProvider.System);
         builder.Services.Configure<AppSettings>(builder.Configuration.GetSection(AppSettings.SectionName));
         builder.Services.Configure<PasswordResetOptions>(
@@ -89,7 +88,9 @@ internal static class Program
                 tokenOptions.TokenLifespan = passwordReset.Value.TokenLifetime;
             });
 
-        builder.Services.AddScoped<PasswordResetRateLimiter>();
+        // Singleton: the counters are the point, and it owns the bounded cache they live in
+        // (deliberately not the application cache — see PasswordResetRateLimiter).
+        builder.Services.AddSingleton<PasswordResetRateLimiter>();
 
         // No delivery channel exists yet, so the notifier that records that fact stands in. Adding
         // a real one is a single registration — the endpoints, their contracts and their

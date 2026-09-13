@@ -40,10 +40,19 @@ namespace AccountService.Routes;
 /// Used, expired, tampered and unknown tokens all fail the same way. The response never says which.
 /// </item>
 /// <item>
-/// A successful redemption invalidates every existing session for the account, because the rotated
-/// stamp is revalidated against the database on every authenticated request
-/// (<c>SecurityStampValidatorOptions.ValidationInterval = Zero</c>). A reset performed because the
-/// account was compromised actually removes the attacker.
+/// A successful redemption rotates the account's security stamp, which invalidates its cookie
+/// sessions on their very next request
+/// (<c>SecurityStampValidatorOptions.ValidationInterval = Zero</c>) and its refresh tokens
+/// immediately, since <c>/account/refresh</c> revalidates the stamp before issuing anything. One
+/// residue survives: <c>Identity.Bearer</c> <em>access</em> tokens are self-contained and are
+/// checked only against their own expiry, so a token already in an attacker's hands keeps working
+/// until it expires on its own. That gap is service-wide — it is equally true of the revocation
+/// <c>DELETE /account/profile</c> performs — and is tracked in issue #142 rather than papered over
+/// here.
+/// </item>
+/// <item>
+/// A successful redemption also clears any lockout, so an account locked by the password spraying
+/// that prompted the reset is usable again the moment the reset completes.
 /// </item>
 /// </list>
 /// </remarks>
@@ -104,7 +113,7 @@ internal static class PasswordReset
                     .ConfigureAwait(false);
             }
 
-            await PadAsync(startedAt, options.Value.MinimumResponseDuration, cancellationToken).ConfigureAwait(false);
+            await PadAsync(startedAt, options.Value.MinimumResponseDuration).ConfigureAwait(false);
             return Results.Ok();
         })
         .AllowAnonymous();
@@ -134,7 +143,7 @@ internal static class PasswordReset
             if (user is null || user.DeletedAt is not null || !TryDecode(request.ResetCode, out var token))
             {
                 // Unknown address, deleted account, malformed code — one answer, no distinction.
-                await PadAsync(startedAt, minimumDuration, cancellationToken).ConfigureAwait(false);
+                await PadAsync(startedAt, minimumDuration).ConfigureAwait(false);
                 return InvalidToken();
             }
 
@@ -142,12 +151,18 @@ internal static class PasswordReset
                 .ResetPasswordAsync(user, token, request.NewPassword ?? string.Empty)
                 .ConfigureAwait(false);
 
-            await PadAsync(startedAt, minimumDuration, cancellationToken).ConfigureAwait(false);
+            if (result.Succeeded)
+            {
+                await ClearLockoutAsync(userManager, user).ConfigureAwait(false);
+            }
+
+            await PadAsync(startedAt, minimumDuration).ConfigureAwait(false);
 
             if (result.Succeeded)
             {
                 // ResetPasswordAsync rotates the security stamp as part of writing the new hash,
-                // which is what kills the account's other sessions and burns this token.
+                // which is what burns this token and drops the account's cookie sessions and
+                // refresh tokens.
                 return Results.Ok();
             }
 
@@ -170,8 +185,60 @@ internal static class PasswordReset
         return app;
     }
 
-    private static string? ClientAddress(HttpContext context) =>
-        context.Connection.RemoteIpAddress?.ToString();
+    /// <summary>
+    /// Releases any lockout on an account that has just completed a reset.
+    /// </summary>
+    /// <remarks>
+    /// <c>ResetPasswordAsync</c> writes the new hash but leaves <c>LockoutEnd</c> and
+    /// <c>AccessFailedCount</c> alone, and <c>/account/login</c> signs in with
+    /// <c>lockoutOnFailure: true</c>. Without this, the very password spraying that locks an account
+    /// also outlasts the recovery from it: the owner resets successfully and is then refused, with
+    /// no explanation, for the remainder of the lockout — which the attacker can simply re-trigger.
+    /// </remarks>
+    /// <param name="userManager">The user manager.</param>
+    /// <param name="user">The account that was just reset.</param>
+    /// <returns>A task that completes when the lockout has been cleared.</returns>
+    private static async Task ClearLockoutAsync(UserManager<ApplicationUser> userManager, ApplicationUser user)
+    {
+        await userManager.ResetAccessFailedCountAsync(user).ConfigureAwait(false);
+
+        if (await userManager.GetLockoutEnabledAsync(user).ConfigureAwait(false))
+        {
+            await userManager.SetLockoutEndDateAsync(user, null).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// The address the per-caller limits are counted against.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>RemoteIpAddress</c> is the wrong answer here and dangerously so: every external request
+    /// arrives through Ocelot, so the peer address is the gateway pod's for all of them, and the
+    /// per-caller limit would become one global bucket that a handful of unrelated users could
+    /// exhaust — turning a limit meant to stop abuse into a denial of recovery for everyone.
+    /// </para>
+    /// <para>
+    /// <c>X-Real-IP</c> is what the gateway forwards and what Ocelot's own per-route limits key on
+    /// (<c>Ocelot.Settings.json</c> → <c>ClientIdHeader</c>), so this agrees with the edge rather
+    /// than inventing a second notion of caller. It is caller-asserted and therefore evadable by
+    /// anyone willing to vary the header — the same weakness the gateway's limits already have. The
+    /// per-email limit is the one that does not depend on the caller's own claim about who they
+    /// are, which is why both exist. Making the forwarded value trustworthy is issue #143.
+    /// </para>
+    /// </remarks>
+    /// <param name="context">The request context.</param>
+    /// <returns>The caller's address, or null when none can be determined.</returns>
+    private static string? ClientAddress(HttpContext context)
+    {
+        var realIp = context.Request.Headers["X-Real-IP"].ToString();
+        if (!string.IsNullOrWhiteSpace(realIp))
+        {
+            return realIp.Trim();
+        }
+
+        return context.Connection.RemoteIpAddress?.ToString();
+    }
 
     private static IResult InvalidToken() =>
         Results.ValidationProblem(new Dictionary<string, string[]>
@@ -215,7 +282,7 @@ internal static class PasswordReset
     /// Holds the response until the configured floor has elapsed, so the work actually done is not
     /// readable from the clock.
     /// </summary>
-    private static async Task PadAsync(long startedAt, TimeSpan floor, CancellationToken cancellationToken)
+    private static async Task PadAsync(long startedAt, TimeSpan floor)
     {
         if (floor <= TimeSpan.Zero)
         {
@@ -225,7 +292,10 @@ internal static class PasswordReset
         var remaining = floor - Stopwatch.GetElapsedTime(startedAt);
         if (remaining > TimeSpan.Zero)
         {
-            await Task.Delay(remaining, cancellationToken).ConfigureAwait(false);
+            // Deliberately not observing RequestAborted. The token has already been issued by the
+            // time this runs, so honouring a disconnect here would only replace a uniform 200 with
+            // a TaskCanceledException thrown out of the handler.
+            await Task.Delay(remaining, CancellationToken.None).ConfigureAwait(false);
         }
     }
 }

@@ -148,9 +148,15 @@ When an account is soft-deleted (`DELETE /account/profile`), the service:
 1. Sets `DeletedAt` and `DeletedByUserId` on the user row.
 2. Calls `UpdateSecurityStampAsync` to rotate the stored security stamp.
 
-Because `ValidationInterval = TimeSpan.Zero`, the next request from that user's cookie or bearer
-token triggers a stamp mismatch → the session is rejected with `401` immediately. There is no expiry
-window.
+Because `ValidationInterval = TimeSpan.Zero`, the next request carrying that user's **cookie** is
+rejected with `401` immediately — there is no expiry window — and their **refresh tokens** are dead,
+since `/account/refresh` revalidates the stamp before issuing anything.
+
+An `Identity.Bearer` **access** token already in circulation is the exception: `BearerTokenHandler`
+unprotects the ticket and checks its own `ExpiresUtc`, and never re-reads the security stamp. So a
+bearer token issued before the revocation keeps working until it expires on its own. This applies to
+every stamp rotation in the service — soft-delete, admin suspension, and password reset alike.
+Tracked in issue #142.
 
 ---
 
@@ -194,13 +200,26 @@ Tokens come from ASP.NET Identity's `GeneratePasswordResetTokenAsync` on a dedic
 (`PasswordResetTokenProvider`) with its own lifetime and its own data-protection purpose, so the
 reset lifetime is independent of email-confirmation and two-factor tokens. Redeeming a token rotates
 the account's security stamp, which is part of the token's own payload — that is what makes it
-single-use, and what revokes every other session for the account (see Session Revocation above).
-Used, expired, tampered and unknown tokens all produce one indistinguishable `400`; a password that
-fails the policy is reported as itself, but only after the token has proven valid.
+single-use. Used, expired, tampered and unknown tokens all produce one indistinguishable `400`; a
+password that fails the policy is reported as itself, but only after the token has proven valid. A
+successful reset also clears any lockout, so the password spraying that prompted a reset does not
+outlast the recovery from it.
+
+Rotating the stamp drops the account's **cookie sessions** on their next request and invalidates its
+**refresh tokens** immediately (`/account/refresh` revalidates the stamp before issuing anything).
+One residue survives: an `Identity.Bearer` **access** token already issued is self-contained and is
+checked only against its own expiry, so it keeps working until it expires on its own. That gap is
+service-wide — `DELETE /account/profile` claims the same immediate revocation and has the same hole
+— and is tracked separately rather than papered over here.
 
 Both endpoints are rate limited in-process, per email address and per client address, on top of the
 gateway's per-route Ocelot limits
-(`apps/api-gateway/Configuration/Routes/account-service-routes.json`).
+(`apps/api-gateway/Configuration/Routes/account-service-routes.json`). The client address comes from
+the forwarded `X-Real-IP` header, the same header Ocelot's own limits key on — never the transport
+peer, which for every external caller is the gateway pod and would collapse the per-caller limit
+into one global bucket. That header is caller-asserted and therefore evadable — the same weakness
+the gateway's own limits have; issue #143 tracks making it trustworthy. The per-email limit does not
+depend on the caller's claim about who they are.
 
 **These endpoints issue a token; they do not deliver it.** Until a delivery channel is configured,
 `UndeliveredPasswordResetNotifier` logs a `Warning` — event id `1360`,
@@ -357,10 +376,11 @@ enrichment pipeline.
   },
   "PasswordReset": {
     "TokenLifetime": "01:00:00",
-    "RequestsPerEmail": 3,
+    "RequestsPerEmail": 5,
     "RequestsPerAddress": 15,
     "RedemptionsPerAddress": 30,
     "RequestWindow": "00:15:00",
+    "MaxTrackedKeys": 50000,
     "MinimumResponseDuration": "00:00:00.250"
   },
   "ConnectionStrings": {

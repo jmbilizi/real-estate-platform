@@ -5,6 +5,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using AccountService.Configuration;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -174,6 +175,81 @@ namespace AccountService.Tests.Integration
         }
 
         [Fact]
+        public async Task ResetPassword_InvalidatesExistingRefreshTokens()
+        {
+            using var factory = new PasswordResetFactory(NoDelay);
+            using var client = factory.CreateClient();
+
+            var email = $"refresh-{Guid.NewGuid()}@example.com";
+            await RegisterAsync(client, email);
+
+            using var login = await client.PostAsJsonAsync("/account/login", new { email, password = Password });
+            login.EnsureSuccessStatusCode();
+            var refreshToken = (await login.Content.ReadFromJsonAsync<JsonElement>())
+                .GetProperty("refreshToken").GetString();
+
+            var resetCode = await RequestResetCodeAsync(factory, client, email);
+            (await PostResetAsync(client, email, resetCode, NewPassword)).StatusCode
+                .Should().Be(HttpStatusCode.OK);
+
+            // Refresh revalidates the security stamp, so the refresh material an attacker captured
+            // before the reset can no longer be exchanged for a new access token.
+            using var refresh = await client.PostAsJsonAsync("/account/refresh", new { refreshToken });
+            refresh.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        }
+
+        [Fact]
+        public async Task ResetPassword_ClearsALockoutCausedByFailedLogins()
+        {
+            using var factory = new PasswordResetFactory(NoDelay);
+            using var client = factory.CreateClient();
+
+            var email = $"lockout-{Guid.NewGuid()}@example.com";
+            await RegisterAsync(client, email);
+
+            // Spray the account until Identity locks it (default: 5 failures).
+            for (var attempt = 0; attempt < 6; attempt++)
+            {
+                using var failed = await client.PostAsJsonAsync(
+                    "/account/login",
+                    new { email, password = "Wrong1234!@#" });
+                failed.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+            }
+
+            var resetCode = await RequestResetCodeAsync(factory, client, email);
+            (await PostResetAsync(client, email, resetCode, NewPassword)).StatusCode
+                .Should().Be(HttpStatusCode.OK);
+
+            // Recovering from the spraying must not leave the owner locked out by it.
+            using var login = await client.PostAsJsonAsync("/account/login", new { email, password = NewPassword });
+            login.StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        [Fact]
+        public async Task ForgotPassword_CountsTheCallerFromXRealIp_NotTheGatewaysOwnAddress()
+        {
+            using var factory = new PasswordResetFactory(options =>
+            {
+                NoDelay(options);
+                options.RequestsPerEmail = 100;
+                options.RequestsPerAddress = 1;
+            });
+            using var client = factory.CreateClient();
+
+            // Every request here shares one transport peer — which in production is the gateway pod,
+            // for every consumer at once. Only the forwarded address can tell them apart.
+            (await PostForgotAsync(client, $"ip-a-{Guid.NewGuid()}@example.com", "203.0.113.1"))
+                .Response.StatusCode.Should().Be(HttpStatusCode.OK);
+            (await PostForgotAsync(client, $"ip-b-{Guid.NewGuid()}@example.com", "203.0.113.1"))
+                .Response.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+
+            // A different caller is unaffected — one exhausted budget must not deny recovery to
+            // everyone else behind the same gateway.
+            (await PostForgotAsync(client, $"ip-c-{Guid.NewGuid()}@example.com", "203.0.113.2"))
+                .Response.StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        [Fact]
         public async Task ResetPassword_EnforcesTheSamePasswordPolicyAsRegistration()
         {
             using var factory = new PasswordResetFactory(NoDelay);
@@ -299,6 +375,25 @@ namespace AccountService.Tests.Integration
             register.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
+        [Fact]
+        public async Task OpenApiDocument_AdvertisesTheRealEndpoints_AndNotTheSuppressedOnes()
+        {
+            using var factory = new PasswordResetFactory(NoDelay);
+            using var client = factory.CreateClient();
+
+            using var response = await client.GetAsync("/openapi/v1.json");
+            response.EnsureSuccessStatusCode();
+            var document = await response.Content.ReadAsStringAsync();
+
+            // This document is aggregated into the gateway's public Swagger UI, so an endpoint that
+            // answers 404 must not be advertised there either. Reachability and advertisement are
+            // separate problems; both have to be closed.
+            document.Should().Contain(ForgotPath);
+            document.Should().Contain(ResetPath);
+            document.Should().NotContain("/account/forgotPassword");
+            document.Should().NotContain("/account/resetPassword");
+        }
+
         private static void NoDelay(PasswordResetOptions options) =>
             options.MinimumResponseDuration = TimeSpan.Zero;
 
@@ -312,10 +407,21 @@ namespace AccountService.Tests.Integration
 
         private static async Task<(HttpResponseMessage Response, string Body, TimeSpan Elapsed)> PostForgotAsync(
             HttpClient client,
-            string email)
+            string email,
+            string? realIp = null)
         {
+            using var request = new HttpRequestMessage(HttpMethod.Post, ForgotPath)
+            {
+                Content = JsonContent.Create(new { email }),
+            };
+
+            if (realIp is not null)
+            {
+                request.Headers.Add("X-Real-IP", realIp);
+            }
+
             var startedAt = Stopwatch.GetTimestamp();
-            var response = await client.PostAsJsonAsync(ForgotPath, new { email });
+            var response = await client.SendAsync(request);
             var elapsed = Stopwatch.GetElapsedTime(startedAt);
             return (response, await response.Content.ReadAsStringAsync(), elapsed);
         }

@@ -26,20 +26,47 @@ namespace AccountService.Helpers;
 /// to avoid.
 /// </para>
 /// <para>
-/// Counters live in this process's memory, so with more than one replica the effective limit is the
-/// configured limit multiplied by the replica count. That is a weaker bound, not an absent one, and
-/// it is the same trade-off the gateway's in-memory Ocelot limiter already makes. Moving the
-/// counters to the cluster's Redis is the scale-out path when replica counts rise.
+/// The counters live in a cache this limiter owns, capped by
+/// <see cref="PasswordResetOptions.MaxTrackedKeys"/>. They must not share the application cache: the
+/// email half of the key is attacker-chosen and an entry is created before the request is refused,
+/// so an unbounded cache would grow by one entry per flooded request and evict unrelated data. Under
+/// the cap the worst case is that counters are evicted early, which loosens the limit rather than
+/// exhausting memory.
+/// </para>
+/// <para>
+/// Counters are per process, so with more than one replica the effective limit is the configured
+/// limit multiplied by the replica count. That is a weaker bound, not an absent one, and it is the
+/// same trade-off the gateway's in-memory Ocelot limiter already makes. Moving the counters to the
+/// cluster's Redis is the scale-out path when replica counts rise.
 /// </para>
 /// </remarks>
-/// <param name="cache">The backing memory cache.</param>
 /// <param name="options">The password-reset options.</param>
 /// <param name="timeProvider">The time source, injected so tests need not sleep.</param>
 internal sealed class PasswordResetRateLimiter(
-    IMemoryCache cache,
     IOptions<PasswordResetOptions> options,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider) : IDisposable
 {
+    /// <summary>
+    /// Guards read-modify-write of a counter.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="CacheExtensions.GetOrCreate{TItem}(IMemoryCache, object, Func{ICacheEntry, TItem})"/>
+    /// is get-then-create with nothing in between, so two requests arriving together on a cold or
+    /// just-expired key both miss, both create, and the second commit discards the first — along
+    /// with its count. One lock over the whole operation is the simple correct answer here: the
+    /// critical section is a dictionary lookup and an integer increment, and the endpoints it guards
+    /// are deliberately slow.
+    /// </remarks>
+    private readonly Lock gate = new();
+
+    private readonly MemoryCache cache = new(new MemoryCacheOptions
+    {
+        SizeLimit = Math.Max(1, options.Value.MaxTrackedKeys),
+    });
+
+    /// <inheritdoc/>
+    public void Dispose() => this.cache.Dispose();
+
     /// <summary>
     /// Counts one reset <em>request</em> against both the email and the client-address limits.
     /// </summary>
@@ -51,7 +78,7 @@ internal sealed class PasswordResetRateLimiter(
     {
         var settings = options.Value;
 
-        // Both counters are always incremented, even if the first one refuses: a caller that has
+        // Both counters are always consumed, even if the first one refuses: a caller that has
         // exhausted one limit should not get free attempts against the other.
         var emailAllowed = this.TryConsume(
             $"pwreset:request:email:{email.ToUpperInvariant()}",
@@ -90,14 +117,15 @@ internal sealed class PasswordResetRateLimiter(
     {
         var now = timeProvider.GetUtcNow();
 
-        var counter = cache.GetOrCreate(key, entry =>
+        lock (this.gate)
         {
-            entry.AbsoluteExpirationRelativeToNow = window;
-            return new Window(now + window);
-        })!;
+            var counter = this.cache.GetOrCreate(key, entry =>
+            {
+                entry.AbsoluteExpirationRelativeToNow = window;
+                entry.Size = 1;
+                return new Window(now + window);
+            })!;
 
-        lock (counter)
-        {
             counter.Count++;
             retryAfter = counter.ExpiresAt > now ? counter.ExpiresAt - now : TimeSpan.Zero;
             return counter.Count <= limit;

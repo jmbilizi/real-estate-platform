@@ -5,7 +5,6 @@
 using AccountService.Configuration;
 using AccountService.Helpers;
 using FluentAssertions;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Xunit;
 
@@ -16,17 +15,17 @@ namespace AccountService.Tests.Helpers
     /// </summary>
     public class PasswordResetRateLimiterTests : IDisposable
     {
-        private readonly List<MemoryCache> caches = new();
+        private readonly List<PasswordResetRateLimiter> limiters = new();
 
         /// <inheritdoc/>
         public void Dispose()
         {
-            foreach (var cache in this.caches)
+            foreach (var limiter in this.limiters)
             {
-                cache.Dispose();
+                limiter.Dispose();
             }
 
-            this.caches.Clear();
+            this.limiters.Clear();
             GC.SuppressFinalize(this);
         }
 
@@ -130,10 +129,9 @@ namespace AccountService.Tests.Helpers
             var options = new PasswordResetOptions();
             configure(options);
 
-            var cache = new MemoryCache(new MemoryCacheOptions());
-            this.caches.Add(cache);
-
-            return new PasswordResetRateLimiter(cache, Options.Create(options), TimeProvider.System);
+            var limiter = new PasswordResetRateLimiter(Options.Create(options), TimeProvider.System);
+            this.limiters.Add(limiter);
+            return limiter;
         }
     }
 }
