@@ -13,6 +13,7 @@ import {
 import { isParcelOnlySelection, PARCEL_INTERLOCK_HINT, SearchPanel } from '@/lib/store/types';
 import { Z_LAYERS } from '@/lib/z-layers';
 import { BED_OPTIONS, DateRangePanel } from './DateRangePanel';
+import { SkeletonBlock, SkeletonText } from './Skeleton';
 import { PROPERTY_TYPES } from '@cribstop/property-contracts';
 import type { ListingType } from '@/lib/types';
 
@@ -518,6 +519,28 @@ export default function CompactSearchBar({
       window.scrollTo({ top: 0 });
     }
   }
+
+  /**
+   * Whether the client has taken over from the server-rendered HTML.
+   *
+   * The "Where" value is the one field this bar cannot render truthfully on the server. It reads
+   * `searchLocation` from the store, and on `/search?q=...` that is seeded from the URL by an
+   * effect in `SearchExperience` — which does not run server-side. So the server ships "Add
+   * locations" for a visitor who plainly did search for somewhere, and it corrects itself only once
+   * the bundle has downloaded, parsed and run.
+   *
+   * The route's own query string is not a way out of this, unlike the nav tabs: `ScrollSentinel`
+   * mounts this bar from a **layout**, and Next does not give layouts `searchParams`. Seeding the
+   * store during SSR is worse still — `store.ts` builds one module-scoped store, shared by every
+   * request the server process handles, so per-request seeding would leak one visitor's search into
+   * another's page. A placeholder is what is left, and it is the honest answer: we do not yet know.
+   *
+   * `useLayoutEffect` so the swap lands before the first client paint rather than a frame after it.
+   */
+  const [hydrated, setHydrated] = useState(false);
+  useLayoutEffect(() => {
+    setHydrated(true);
+  }, []);
 
   // Local aliases ? keep all existing JSX/logic unchanged
   const location = searchLocation;
@@ -2337,12 +2360,16 @@ export default function CompactSearchBar({
           className="flex-1 flex flex-col justify-center px-4 py-2 text-left min-w-0 hover:bg-surface-alt/60 transition-colors"
         >
           <span className="text-[10px] font-medium text-ink-muted leading-none mb-1 select-none">
-            Where
+            <SkeletonText loading={!hydrated} width="w-10">
+              Where
+            </SkeletonText>
           </span>
           <span
             className={`text-[13px] leading-snug truncate ${location ? 'text-ink font-bold' : 'text-ink-muted'}`}
           >
-            {location || 'Anywhere'}
+            <SkeletonText loading={!hydrated} width="w-20">
+              {location || 'Anywhere'}
+            </SkeletonText>
           </span>
         </button>
         <div className="my-auto h-5 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)]" />
@@ -2354,12 +2381,16 @@ export default function CompactSearchBar({
           className="flex flex-col justify-center px-4 py-2 text-left whitespace-nowrap hover:bg-surface-alt/60 transition-colors"
         >
           <span className="text-[10px] font-medium text-ink-muted leading-none mb-1 select-none">
-            When
+            <SkeletonText loading={!hydrated} width="w-9">
+              When
+            </SkeletonText>
           </span>
           <span
             className={`text-[13px] leading-snug ${dateRange.start ? 'text-ink font-bold' : 'text-ink-muted'}`}
           >
-            {dateRange.start ? formatDateRangeLabel(dateRange) : 'Anytime'}
+            <SkeletonText loading={!hydrated} width="w-16">
+              {dateRange.start ? formatDateRangeLabel(dateRange) : 'Anytime'}
+            </SkeletonText>
           </span>
         </button>
         <div className="my-auto h-5 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)]" />
@@ -2371,29 +2402,34 @@ export default function CompactSearchBar({
           className="flex flex-col justify-center px-4 py-2 text-left whitespace-nowrap flex-shrink-0 hover:bg-surface-alt/60 transition-colors"
         >
           <span className="text-[10px] font-medium text-ink-muted leading-none mb-1 select-none">
-            What
+            <SkeletonText loading={!hydrated} width="w-9">
+              What
+            </SkeletonText>
           </span>
           <span className="text-[13px] text-ink font-bold leading-snug flex items-center">
-            {listingType === 'for-rent' ? 'For Rent' : 'For Sale'}
-            {(() => {
-              const n =
-                (selectedPropertyTypes.length > 0 ? 1 : 0) +
-                (bedsIdx > 0 ? 1 : 0) +
-                (baths ? 1 : 0) +
-                (searchMaxPrice > 0 ? 1 : 0) +
-                (description ? 1 : 0);
-              return n > 0 ? (
-                <span className="ml-1.5 inline-flex items-center justify-center h-[18px] px-1.5 rounded-full bg-black/[0.07] text-ink/60 text-[10px] font-semibold leading-none whitespace-nowrap">
-                  +{n}
-                </span>
-              ) : null;
-            })()}
+            <SkeletonText loading={!hydrated} width="w-14">
+              {listingType === 'for-rent' ? 'For Rent' : 'For Sale'}
+              {(() => {
+                const n =
+                  (selectedPropertyTypes.length > 0 ? 1 : 0) +
+                  (bedsIdx > 0 ? 1 : 0) +
+                  (baths ? 1 : 0) +
+                  (searchMaxPrice > 0 ? 1 : 0) +
+                  (description ? 1 : 0);
+                return n > 0 ? (
+                  <span className="ml-1.5 inline-flex items-center justify-center h-[18px] px-1.5 rounded-full bg-black/[0.07] text-ink/60 text-[10px] font-semibold leading-none whitespace-nowrap">
+                    +{n}
+                  </span>
+                ) : null;
+              })()}
+            </SkeletonText>
           </span>
         </button>
         {/* Search icon button — grows back (or expands) the same as a field
             click, then either submits directly (valid location) or lands on
             the 'where' panel already open (handleSearch's existing fallback). */}
         <div className="flex items-center pr-1.5 pl-1">
+          {!hydrated && <SkeletonBlock className="h-9 w-9 rounded-full" />}
           <button
             type="button"
             aria-label="Search"
@@ -2401,7 +2437,9 @@ export default function CompactSearchBar({
               openFromPill('where');
               handleSearch({ preventDefault: () => {} } as any);
             }}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-brand text-white"
+            className={`h-9 w-9 items-center justify-center rounded-full bg-brand text-white ${
+              hydrated ? 'flex content-resolved' : 'hidden'
+            }`}
           >
             <svg
               className="h-[15px] w-[15px]"
@@ -2674,37 +2712,41 @@ export default function CompactSearchBar({
                   }`}
                 >
                   <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
-                    Where
+                    <SkeletonText loading={!hydrated} width="w-10">
+                      Where
+                    </SkeletonText>
                   </span>
                   <span
                     className={`text-[11px] sm:text-[13px] leading-snug truncate pr-5 ${location ? 'text-ink font-bold' : 'text-ink-subtle'}`}
                   >
-                    {isGeolocating ? (
-                      <span className="flex items-center gap-1.5 text-ink-muted">
-                        <svg
-                          className="h-3.5 w-3.5 animate-spin flex-shrink-0"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                        >
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                          />
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                          />
-                        </svg>
-                        Detecting location…
-                      </span>
-                    ) : (
-                      location || 'Add locations'
-                    )}
+                    <SkeletonText loading={!hydrated} width="w-28">
+                      {isGeolocating ? (
+                        <span className="flex items-center gap-1.5 text-ink-muted">
+                          <svg
+                            className="h-3.5 w-3.5 animate-spin flex-shrink-0"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                          >
+                            <circle
+                              className="opacity-25"
+                              cx="12"
+                              cy="12"
+                              r="10"
+                              stroke="currentColor"
+                              strokeWidth="2.5"
+                            />
+                            <path
+                              className="opacity-75"
+                              fill="currentColor"
+                              d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                            />
+                          </svg>
+                          Detecting location…
+                        </span>
+                      ) : (
+                        location || 'Add locations'
+                      )}
+                    </SkeletonText>
                   </span>
                 </button>
                 {location && activePanel === 'where' && (
@@ -2749,18 +2791,16 @@ export default function CompactSearchBar({
                 }`}
               >
                 <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
-                  When
+                  <SkeletonText loading={!hydrated} width="w-9">
+                    When
+                  </SkeletonText>
                 </span>
                 <span
                   className={`text-[11px] sm:text-[13px] leading-snug truncate ${dateRange.start ? 'text-ink font-bold' : 'text-ink-subtle'}`}
                 >
-                  {dateRange.start ? (
-                    formatDateRangeLabel(dateRange)
-                  ) : (
-                    <>
-                      <span className="">Add dates</span>
-                    </>
-                  )}
+                  <SkeletonText loading={!hydrated} width="w-20">
+                    {dateRange.start ? formatDateRangeLabel(dateRange) : <span>Add dates</span>}
+                  </SkeletonText>
                 </span>
               </button>
 
@@ -2778,23 +2818,29 @@ export default function CompactSearchBar({
                 }`}
               >
                 <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
-                  What
+                  <SkeletonText loading={!hydrated} width="w-9">
+                    What
+                  </SkeletonText>
                 </span>
                 <span className="text-[11px] sm:text-[13px] text-ink font-bold leading-snug truncate flex items-center">
-                  {listingType === 'for-rent' ? 'For Rent' : 'For Sale'}
-                  {(() => {
-                    const n =
-                      (selectedPropertyTypes.length > 0 ? 1 : 0) +
-                      (bedsIdx > 0 ? 1 : 0) +
-                      (baths ? 1 : 0) +
-                      (searchMaxPrice > 0 ? 1 : 0) +
-                      (description ? 1 : 0);
-                    return n > 0 ? (
-                      <span className="ml-1.5 inline-flex items-center justify-center h-[18px] px-1.5 rounded-full bg-black/[0.07] text-ink/60 text-[10px] font-semibold leading-none">
-                        +{n} {n === 1 ? 'filter' : 'filters'}
-                      </span>
-                    ) : null;
-                  })()}
+                  <SkeletonText loading={!hydrated} width="w-16">
+                    <>
+                      {listingType === 'for-rent' ? 'For Rent' : 'For Sale'}
+                      {(() => {
+                        const n =
+                          (selectedPropertyTypes.length > 0 ? 1 : 0) +
+                          (bedsIdx > 0 ? 1 : 0) +
+                          (baths ? 1 : 0) +
+                          (searchMaxPrice > 0 ? 1 : 0) +
+                          (description ? 1 : 0);
+                        return n > 0 ? (
+                          <span className="ml-1.5 inline-flex items-center justify-center h-[18px] px-1.5 rounded-full bg-black/[0.07] text-ink/60 text-[10px] font-semibold leading-none">
+                            +{n} {n === 1 ? 'filter' : 'filters'}
+                          </span>
+                        ) : null;
+                      })()}
+                    </>
+                  </SkeletonText>
                 </span>
               </button>
 
@@ -2803,6 +2849,9 @@ export default function CompactSearchBar({
                 ref={searchBtnRef}
                 className="relative z-[1] flex items-center pr-1.5 pl-1 flex-shrink-0"
               >
+                {/* Kept in the same box as the button it stands in for — `searchBtnRef` above is
+                    measured during the large↔pill morph, so this slot must not change width. */}
+                {!hydrated && <SkeletonBlock className="h-12 w-12 rounded-full" />}
                 <button
                   type="button"
                   disabled={isSearching}
@@ -2810,7 +2859,9 @@ export default function CompactSearchBar({
                     setActivePanel(null);
                     handleSearch({ preventDefault: () => {} } as any);
                   }}
-                  className="flex items-center justify-center rounded-full bg-brand text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-80 h-12 w-12 flex-shrink-0"
+                  className={`items-center justify-center rounded-full bg-brand text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-80 h-12 w-12 flex-shrink-0 ${
+                    hydrated ? 'flex content-resolved' : 'hidden'
+                  }`}
                   aria-label="Search"
                 >
                   {isSearching ? (
@@ -2885,3 +2936,20 @@ export default function CompactSearchBar({
     </motion.div>
   );
 }
+
+/**
+ * A field value we do not yet know, drawn as a bar rather than left blank or guessed at.
+ *
+ * Sized from the **line box it is written inside** rather than from a pixel height: `inline-block`
+ * plus `&nbsp;` makes the span exactly one line of whatever type scale its parent field uses, and
+ * the visible bar is inset within that line. The bar therefore measures the same at every one of
+ * this component's breakpoints (`text-[11px]` / `sm:text-[13px]`) without listing any of them, and
+ * — the part that matters here — it cannot change the bar's geometry. The morph between the large
+ * and pill layouts is driven by measured widths and heights, so a placeholder that changed either
+ * would show up as the search bar visibly jumping mid-animation. It sits inside a `flex-1`
+ * truncating container and occupies one line: nothing to measure differently.
+ *
+ * `bg-surface-soft skeleton-fill` is the same pairing every listing placeholder uses (`FILL` in
+ * `listing/ListingStates.tsx`), driven by `--skeleton-tint` on `:root`, so the header sweeps in the
+ * same colour and on the same clock as the cards below it.
+ */

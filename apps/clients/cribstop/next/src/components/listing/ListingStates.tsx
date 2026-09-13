@@ -22,8 +22,15 @@ import type { ListingCardRow } from '@/lib/types';
  * `h-20`/`h-64`/`h-32` white panels, which read as *empty panels the listing genuinely has nothing
  * to put in* rather than as content on its way. They are now panel shells with this fill inside
  * them, which is what the rest of the file was already doing.
+ *
+ * It carries the **animation** as well as the colour (`skeleton-fill`, defined in `globals.css`,
+ * tinted by `--skeleton-tint` on `:root`). That pairing is the point: every placeholder in this
+ * file — card skeleton and detail skeleton, bars, chips, avatars, buttons — animates identically
+ * because they all read from this one constant, so the two surfaces cannot drift into different
+ * loading vocabularies the way they did when the card shimmered and the detail panels pulsed.
+ * Reach for a bare `bg-surface-soft` and you have made a static block on an animated page.
  */
-const FILL = 'bg-surface-soft';
+const FILL = 'bg-surface-soft skeleton-fill';
 
 /**
  * A placeholder line whose height comes from the type class it is written inside, not from a
@@ -63,15 +70,18 @@ export const CARD_WIDTH_CLASS =
 /**
  * A card placeholder built on `ListingCard`'s own reserved slots.
  *
- * The card reserves a box for each variable row — the label row, the stats line, the attribution
- * block — precisely so that every tile in a grid is the same height. This mirrors those slots with
- * the same elements and type classes rather than approximating them with five loose bars, which
- * measured 26px short per card; across a row of them the similar-homes panel grew on load.
+ * Every block in it animates, because every block is painted with `FILL`. It was briefly the other
+ * way round — the sweep on the image box alone — which left the four `Bar` placeholders and the
+ * attribution block static: a half-alive card reads as a broken render rather than as one loading.
  */
 export function ListingCardSkeleton() {
   return (
-    <div className="animate-pulse" aria-hidden="true">
-      <div className={`aspect-square rounded-md ${FILL}`} />
+    // `data-skeleton-card` is the stable handle for "this is a card placeholder" — the same idiom
+    // as the `data-skeleton-section` markers in `ListingDetailSkeleton` below. Tests counted these
+    // by their animation class instead, which broke the moment the animation changed; a marker that
+    // says what the element IS survives changes to how it looks.
+    <div aria-hidden="true" data-skeleton-card>
+      <div className={`aspect-square overflow-hidden rounded-md ${FILL}`} />
       <div className="pt-2">
         {/* The required-label slot, reserved and empty — the same box a row with no labels gets. */}
         <div className="mb-1 h-5" />
@@ -169,11 +179,18 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
   const panel = 'rounded-2xl border border-surface-border bg-white';
 
   /*
-   * One pulse, on the containers. Everything inside them is a placeholder now, so there is no real
-   * content for the animation to breathe in and out — which is why it had to move onto the
-   * individual blocks while the header and gallery carried real data.
+   * No container-level animation here, and deliberately not.
+   *
+   * This used to be `animate-pulse` on the header, the scrolling body and the mobile CTA bar,
+   * from back when those containers held real listing data that had to breathe as a whole.
+   * Everything inside them is a placeholder now, and every placeholder is painted with `FILL`,
+   * which carries its own sweep — so the animation belongs to the blocks, and a pulse on top of
+   * it would be a second, unrelated motion fighting the first.
+   *
+   * It also made this page load in two vocabularies: the panels pulsed grey while the
+   * similar-homes carousel below them swept violet, on the same screen at the same moment.
+   * One source for the fill means one source for the motion.
    */
-  const pulse = 'animate-pulse';
 
   return (
     <div className="flex h-full min-h-0 flex-col" role="status" aria-label="Loading listing">
@@ -188,9 +205,7 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
        * itself flickering. Tying the boxes to the type scale keeps them equal at every breakpoint,
        * including the ones this header changes size at (`sm`/`md`/`lg`/`xl`).
        */}
-      <div
-        className={`flex flex-shrink-0 items-center gap-3 border-b border-surface-border bg-white px-6 pb-3 pt-4 sm:px-8 ${pulse}`}
-      >
+      <div className="flex flex-shrink-0 items-center gap-3 border-b border-surface-border bg-white px-6 pb-3 pt-4 sm:px-8">
         <div className={`h-11 w-11 flex-shrink-0 rounded-full ${FILL}`} />
         <div className="min-w-0 flex-1">
           {/* The placeholders stay *inside* the real `h1` and `p`, so their boxes come from the
@@ -214,9 +229,7 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
           measured 999px inside a 750px panel and was simply clipped. */}
       {/* Same scroll classes as the loaded body. With `overflow-hidden` the skeleton had no
           scrollbar while the loaded page did, so the content column was 10px wider during load. */}
-      <div
-        className={`scrollbar-overlay min-h-0 flex-1 bg-surface-alt px-6 py-4 pb-8 sm:px-8 ${pulse}`}
-      >
+      <div className="scrollbar-overlay min-h-0 flex-1 bg-surface-alt px-6 py-4 pb-8 sm:px-8">
         {/*
          * The gallery, in the same bordered panel the loaded page wraps `PropertyGallery` in, so
          * the block measures 482px at `md` and up in both states. Getting this shape wrong is the
@@ -461,9 +474,7 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
 
       {/* The loaded page has a sticky CTA bar below `lg`. Without a placeholder of the same height
           the mobile layout shifts on load the same way the header did on desktop. */}
-      <div
-        className={`flex flex-shrink-0 items-center justify-between gap-3 border-t border-surface-border bg-white px-4 py-3 lg:hidden ${pulse}`}
-      >
+      <div className="flex flex-shrink-0 items-center justify-between gap-3 border-t border-surface-border bg-white px-4 py-3 lg:hidden">
         <div className={`h-7 w-28 rounded-xs ${FILL}`} />
         <div className="flex shrink-0 gap-2">
           <div className={`h-9 w-24 rounded-full ${FILL}`} />

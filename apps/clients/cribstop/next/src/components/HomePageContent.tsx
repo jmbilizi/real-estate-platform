@@ -23,7 +23,7 @@ const LUXURY_RENT_MIN_PRICE = 5_000;
 type CarouselState = {
   listings: ListingCardRow[];
   loading: boolean;
-  /** true once the fetch has settled with an error — the row renders nothing, not an error UI. */
+  /** true once the fetch has settled with an error — shows retry UI instead of blank. */
   failed: boolean;
 };
 
@@ -34,11 +34,14 @@ type CarouselState = {
  * blocks or blanks the others — they render in parallel because each is an independent effect
  * fired on mount / whenever `query` changes, not a chain of awaits.
  */
-function useCarouselListings(query: ListingSearchQuery): CarouselState {
+function useCarouselListings(query: ListingSearchQuery) {
   const [state, setState] = useState<CarouselState>({ listings: [], loading: true, failed: false });
+  const [retryKey, setRetryKey] = useState(0);
   // Query objects are re-created on every render, so key the effect on their serialized form
   // rather than the object identity — otherwise it would re-fetch every render.
   const queryKey = JSON.stringify(query);
+
+  const refetch = () => setRetryKey((k) => k + 1);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -52,9 +55,9 @@ function useCarouselListings(query: ListingSearchQuery): CarouselState {
       });
 
     return () => controller.abort();
-  }, [queryKey]);
+  }, [queryKey, retryKey]);
 
-  return state;
+  return { ...state, refetch };
 }
 
 const NEIGHBORHOODS = [
@@ -149,13 +152,11 @@ export default function HomePageContent() {
     pageSize: CAROUSEL_PAGE_SIZE,
   });
 
-  // A carousel with nothing to show — still loading, failed, or genuinely empty — renders
-  // nothing rather than a bare heading over an empty strip. One failed carousel never blanks the
-  // rest of the page because each row's visibility is decided from its own state only.
-  const showFeatured = featured.loading || featured.listings.length > 0;
-  const showPrimary = primary.loading || primary.listings.length > 0;
-  const showLuxury = luxury.loading || luxury.listings.length > 0;
-  const showRecent = recent.loading || recent.listings.length > 0;
+  // A carousel with nothing to show — failed state shows retry, loading shows shimmer skeleton.
+  const showFeatured = featured.loading || featured.listings.length > 0 || featured.failed;
+  const showPrimary = primary.loading || primary.listings.length > 0 || primary.failed;
+  const showLuxury = luxury.loading || luxury.listings.length > 0 || luxury.failed;
+  const showRecent = recent.loading || recent.listings.length > 0 || recent.failed;
 
   return (
     <>
@@ -172,6 +173,8 @@ export default function HomePageContent() {
           href={listingType === 'sale' ? '/search?type=sale' : '/search?type=rent'}
           listings={featured.listings}
           loading={featured.loading}
+          failed={featured.failed}
+          onRetry={featured.refetch}
           max={7}
         />
       )}
@@ -187,6 +190,8 @@ export default function HomePageContent() {
           href={listingType === 'sale' ? '/search?type=sale' : '/search?type=rent'}
           listings={primary.listings}
           loading={primary.loading}
+          failed={primary.failed}
+          onRetry={primary.refetch}
           max={7}
         />
       )}
@@ -219,6 +224,8 @@ export default function HomePageContent() {
           }
           listings={luxury.listings}
           loading={luxury.loading}
+          failed={luxury.failed}
+          onRetry={luxury.refetch}
           max={7}
         />
       )}
@@ -236,6 +243,8 @@ export default function HomePageContent() {
           href={listingType === 'sale' ? '/search?type=sale' : '/search?type=rent'}
           listings={recent.listings}
           loading={recent.loading}
+          failed={recent.failed}
+          onRetry={recent.refetch}
           max={7}
         />
       )}

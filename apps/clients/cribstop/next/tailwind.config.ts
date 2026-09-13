@@ -44,9 +44,37 @@ const config: Config = {
           900: '#881337',
         },
         // Sub-brand accents — Premium / Select contexts only (DESIGN.md `accent-deep`/`accent-rich`)
+        //
+        // The brand gradient is written as `from-brand to-accent-deep` at its use sites rather than
+        // given its own `accent.gradient.start`/`.end` tokens: those duplicated `brand.DEFAULT` and
+        // `accent.deep` under second names, which is one more pair to drift.
         accent: {
           deep: '#460479',
           rich: '#92174d',
+        },
+        // The violet ramp `accent.deep` sits at the dark end of — for tints and hovers in Premium /
+        // Select contexts, and for the purple half of the brand gradient.
+        //
+        // Named `brand-purple`, NOT `purple`, and the distinction is not cosmetic: a top-level
+        // `purple` key under `theme.extend.colors` does not *add* a purple alongside Tailwind's, it
+        // REPLACES the built-in `purple-50…950` wholesale. The next person to write
+        // `text-purple-500` expecting Tailwind's purple would silently get this ramp, and
+        // `purple-900` would be #460479 rather than #581c87. Brand shades live under brand-named
+        // keys; never take a Tailwind palette name for one.
+        'brand-purple': {
+          50: '#f5f3ff',
+          100: '#ede9fe',
+          200: '#ddd6fe',
+          300: '#c4b5fd',
+          400: '#a78bfa',
+          500: '#8b5cf6',
+          600: '#7c3aed',
+          700: '#6d28d9',
+          800: '#5b21b6',
+          // The 900 rung is `accent.deep` itself — the ramp is built to land on the token the
+          // design system already names, not to run past it into a second dark violet.
+          900: '#460479',
+          950: '#2e1065',
         },
         // Neutral ink / typography (DESIGN.md `colors.ink`/`body`/`muted`/`muted-soft`)
         ink: {

@@ -474,6 +474,13 @@ export default function ListingsMapInner({
 
   const [scrollActive, setScrollActive] = useState(false);
 
+  /* Marker and cluster styling is entirely inline on the `divIcon` HTML above (see
+     `buildPriceIcon` / `clusterIconFactory`) — the `.cribstop-price-marker` and
+     `.cribstop-cluster` wrapper classes are deliberately transparent in globals.css so only
+     the inner span paints. Do not add a stylesheet for those wrappers: rules that fight the
+     `!important` transparency there land silently for the parts that don't conflict, which is
+     how an unintended halo and hover-scale reached every cluster marker. */
+
   // The frame — radius, border, shadow, fill — belongs to the wrapper in `ListingsMap`, so that the
   // loading placeholder wears it too. This fills that frame and positions the overlays below.
   return (
@@ -491,6 +498,7 @@ export default function ListingsMapInner({
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
           subdomains="abcd"
           maxZoom={20}
+          className="cribstop-map-tiles"
         />
         <InvalidateOnMount />
         <CustomMapControls />
