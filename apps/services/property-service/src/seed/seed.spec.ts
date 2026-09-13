@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { mockListings } from './mock-listings';
@@ -242,5 +242,68 @@ describe('listings write path', () => {
       // path. A stray DELETE elsewhere is strictly more dangerous than a stray INSERT.
       expect(contents).not.toMatch(/DELETE\s+FROM\s+listings\b/i);
     }
+  });
+});
+
+/** Every `.ts` file under a directory, recursively. */
+function collectSourceFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      return collectSourceFiles(path);
+    }
+    return entry.isFile() && path.endsWith('.ts') ? [path] : [];
+  });
+}
+
+describe('MLS attribute model write path', () => {
+  /**
+   * The same containment, mirrored onto the attribute store (#127).
+   *
+   * The reason differs from the listings one and is worth keeping distinct: the attribute model's
+   * invariants ARE enforceable in the database (composite foreign keys do it), so this is not the only
+   * thing standing between a caller and a bad row. What one writer buys is the fail-closed BEHAVIOUR —
+   * an unregistered value detected and reported as a rejection instead of raising a constraint
+   * violation that aborts the whole ingest transaction. A second writer would get the rejection right
+   * on Monday and abort a batch on Tuesday.
+   *
+   * Note the symmetry: `write.ts` is checked here too. The two modules own different tables and
+   * neither may reach into the other's.
+   */
+  const ATTRIBUTE_TABLES = [
+    'mls_fields',
+    'mls_lookup_values',
+    'listing_attributes',
+    'property_attributes',
+  ];
+
+  it('is confined to src/db/mls-attributes.ts', () => {
+    // Every source file under src/ EXCEPT the writer itself, discovered rather than enumerated.
+    //
+    // A hardcoded allowlist would not cover the two modules most likely to become the second writer —
+    // the `$metadata` sync (#91) and the ingestion writer (#93), which are the whole reason this model
+    // exists and do not exist yet. They would simply not be in the list, and the rule would stop being
+    // enforced with nothing failing to say so.
+    const sourceRoot = join(__dirname, '..');
+    const sourceFiles = collectSourceFiles(sourceRoot).filter(
+      (path) => !path.endsWith(join('db', 'mls-attributes.ts')) && !path.endsWith('.spec.ts'),
+    );
+    expect(sourceFiles.length).toBeGreaterThan(5);
+
+    for (const absolutePath of sourceFiles) {
+      const contents = readFileSync(absolutePath, 'utf8');
+      for (const table of ATTRIBUTE_TABLES) {
+        expect(contents).not.toMatch(new RegExp(`INSERT\\s+INTO\\s+${table}\\b`, 'i'));
+        expect(contents).not.toMatch(new RegExp(`UPDATE\\s+${table}\\b`, 'i'));
+        expect(contents).not.toMatch(new RegExp(`DELETE\\s+FROM\\s+${table}\\b`, 'i'));
+      }
+    }
+  });
+
+  it('does not write listings, which belongs to src/db/write.ts', () => {
+    const contents = readFileSync(join(__dirname, '..', 'db', 'mls-attributes.ts'), 'utf8');
+    expect(contents).not.toMatch(/INSERT\s+INTO\s+listings\b/i);
+    expect(contents).not.toMatch(/UPDATE\s+listings\b/i);
+    expect(contents).not.toMatch(/DELETE\s+FROM\s+listings\b/i);
   });
 });
