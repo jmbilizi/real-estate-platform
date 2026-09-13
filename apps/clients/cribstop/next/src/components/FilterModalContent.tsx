@@ -1,515 +1,356 @@
-import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
-import { isParcelOnlySelection, PARCEL_INTERLOCK_HINT } from '@/lib/store/types';
+import React from 'react';
+import { AMENITIES, LISTING_TYPES, PROPERTY_TYPES } from '@cribstop/property-contracts';
+import type { Amenity, PropertyType, SearchFilters } from '@/lib/types';
+import { isLandOnly } from '@/lib/listing-filters';
+import { PARCEL_INTERLOCK_HINT } from '@/lib/store/types';
 
-/** Ties the disabled dwelling steppers to their single visible explanation. */
+/** Ties the disabled dwelling controls to their single visible explanation. */
 const PARCEL_HINT_ID = 'filter-modal-parcel-interlock-hint';
 
-export interface FilterModalContentHandle {
-  clear: () => void;
-  submit: () => void;
+/**
+ * The filter modal's body: one control per parameter the listings contract defines, and nothing
+ * else.
+ *
+ * **Controlled, with no state of its own.** It used to keep a full Zillow-shaped filter set in
+ * local `useState` and hand it to an `onShow` callback the parent wired to `onClose` — a
+ * `() => void` — so every value it collected was dropped on the floor. The modal closed, the URL
+ * did not change, and the results were never narrowed. Owning no state is what makes that class of
+ * bug unrepresentable here: the only filter set is the parent's draft, and the only way to change
+ * it is `onChange`.
+ *
+ * The vocabulary is the contract's, imported from `@cribstop/property-contracts` rather than
+ * re-typed. Every control that had no contract parameter behind it is gone — see the note on
+ * `FilterModal` for the list. A control that pretends to filter is worse than an absent one,
+ * because the user believes the results in front of them are narrowed.
+ */
+export interface FilterModalContentProps {
+  /** The draft filter set being edited. Not the applied one — the parent commits on Show. */
+  value: SearchFilters;
+  onChange: (next: SearchFilters) => void;
 }
 
-const propertyTypes = [
-  { label: 'House', icon: '🏠' },
-  { label: 'Townhome', icon: '🏢' },
-  { label: 'Condo', icon: '🏢' },
-  { label: 'Co-op', icon: '🏢' },
-  { label: 'Lot/Land', icon: '🌳' },
-  { label: 'Mobile Homes', icon: '🏡' },
-  { label: 'Multi-Family', icon: '🏡' },
-  { label: 'Other', icon: '🏢' },
-];
-const features = [
-  { label: 'Open House', icon: '🚪' },
-  { label: 'Pet Friendly', icon: '🐾' },
-  { label: 'Waterfront', icon: '🌊' },
-  { label: 'Garage', icon: '🚗' },
-  { label: 'Pool', icon: '🏊' },
-  { label: 'Fireplace', icon: '🔥' },
-  { label: 'Garden', icon: '🌳' },
-];
+/** Icons are decorative; the label is the accessible name. */
+const PROPERTY_TYPE_ICONS: Record<PropertyType, string> = {
+  'Single Family': '🏠',
+  Condo: '🏢',
+  Townhome: '🏘️',
+  'Multi-Family': '🏡',
+  Loft: '🏬',
+  Land: '🌳',
+  'New Construction': '🏗️',
+};
 
-const listingStatuses = ['Coming Soon', 'Active', 'Under Contract', 'Pending'];
-const listingTypes = [
-  'Resale',
-  'New Construction',
-  'Pre-Foreclosure',
-  'Foreclosure',
-  'Short Sale',
-  'Auction',
-];
+const LISTING_TYPE_LABELS: Record<(typeof LISTING_TYPES)[number] | 'all', string> = {
+  all: 'All',
+  sale: 'Buy',
+  rent: 'Rent',
+  sold: 'Sold',
+};
 
-const FilterModalContent = forwardRef<
-  FilterModalContentHandle,
-  {
-    onClear: (values?: any) => void;
-    onShow: (values: any) => void;
-  }
->(function FilterModalContent(
-  {
-    onClear,
-    onShow,
-  }: {
-    onClear: (values?: any) => void;
-    onShow: (values: any) => void;
-  },
-  ref,
-) {
-  const [selectedPropertyTypes, setSelectedPropertyTypes] = useState<string[]>([]);
-  const [excludeActiveAdult, setExcludeActiveAdult] = useState(false);
-  const [selectedListingStatus, setSelectedListingStatus] = useState<string[]>([]);
-  const [selectedListingTypes, setSelectedListingTypes] = useState<string[]>([]);
-  const [minPrice, setMinPrice] = useState('');
-  const [maxPrice, setMaxPrice] = useState('');
-  const [luxury, setLuxury] = useState(false);
-  const [beds, setBeds] = useState('');
-  const [baths, setBaths] = useState('');
-  const [yearBuiltMin, setYearBuiltMin] = useState('');
-  const [yearBuiltMax, setYearBuiltMax] = useState('');
-  const [storiesMin, setStoriesMin] = useState('');
-  const [storiesMax, setStoriesMax] = useState('');
-  const [parking, setParking] = useState('Any');
-  const [selectedFeatures, setSelectedFeatures] = useState<string[]>([]);
+/** `0` is the "Any" rung; the API is asked for `beds`/`baths` only above it. */
+const COUNT_RUNGS = [0, 1, 2, 3, 4, 5, 6, 7, 8] as const;
 
-  const toggleArrayValue = (arr: string[], value: string) =>
-    arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value];
+export default function FilterModalContent({ value, onChange }: FilterModalContentProps) {
+  const set = (patch: SearchFilters) => onChange({ ...value, ...patch });
 
-  // --- Lot/Land interlock (#24) --------------------------------------------
-  //
-  // A parcel has no beds or baths, so the API's dwelling predicates exclude every parcel: asking
-  // for Lot/Land AND 2+ beds returns nothing, with no explanation on screen. Both controls are
-  // cleared and disabled while land is the only home type selected. The interlock lives in the UI,
-  // never in the request builder — the API is meant to receive exactly what the user asked for.
-  const parcelOnly = isParcelOnlySelection(selectedPropertyTypes);
+  /*
+   * The Lot/Land interlock (#24), unchanged in meaning.
+   *
+   * A parcel has no bedrooms, bathrooms or living area, so the API's dwelling predicates exclude
+   * every parcel: asking for Land AND 2+ beds is a guaranteed empty page with nothing on screen to
+   * explain it. The dwelling controls are cleared *and* disabled while land is the only home type
+   * selected, with a visible hint tied to them by `aria-describedby`.
+   *
+   * The clearing happens in the parent's draft reducer (`applyLandInterlock`), so it converges in
+   * one pass with no effect and no render loop, and it clears the *values* rather than dropping
+   * them from the request — the API is meant to receive exactly what the UI shows.
+   */
+  const parcelOnly = isLandOnly(value);
   const parcelHintId = parcelOnly ? PARCEL_HINT_ID : undefined;
 
-  useEffect(() => {
-    if (!parcelOnly) return;
-    if (beds !== '') setBeds('');
-    if (baths !== '') setBaths('');
-  }, [parcelOnly, beds, baths]);
-
-  const handleShow = () => {
-    onShow({
-      selectedPropertyTypes,
-      excludeActiveAdult,
-      selectedListingStatus,
-      selectedListingTypes,
-      minPrice: luxury ? '1000000' : minPrice,
-      maxPrice,
-      // Belt and braces: land-only can never carry a dwelling count out of here even if some
-      // future entry path sets one without going through the interlock above.
-      beds: parcelOnly ? '' : beds,
-      baths: parcelOnly ? '' : baths,
-      yearBuiltMin,
-      yearBuiltMax,
-      storiesMin,
-      storiesMax,
-      parking,
-      selectedFeatures,
-      luxury,
-    });
+  const toggleAmenity = (amenity: Amenity) => {
+    const current = value.amenities ?? [];
+    const next = current.includes(amenity)
+      ? current.filter((entry) => entry !== amenity)
+      : [...current, amenity];
+    set({ amenities: next.length > 0 ? next : undefined });
   };
 
-  const handleClear = () => {
-    setSelectedPropertyTypes([]);
-    setExcludeActiveAdult(false);
-    setSelectedListingStatus([]);
-    setSelectedListingTypes([]);
-    setMinPrice('');
-    setMaxPrice('');
-    setBeds('');
-    setBaths('');
-    setYearBuiltMin('');
-    setYearBuiltMax('');
-    setStoriesMin('');
-    setStoriesMax('');
-    setParking('Any');
-    setSelectedFeatures([]);
-    setLuxury(false);
-    onClear();
-  };
-
-  useImperativeHandle(ref, () => ({
-    clear: handleClear,
-    submit: handleShow,
-  }));
-
-  return (
-    <div className="grid grid-cols-1 gap-y-5">
-      {/* ── Col 1: Home Type ─────────────────────────────────────────── */}
-      <div>
-        <div className="mb-2 font-semibold uppercase text-xs tracking-wider text-ink">
-          Home Type
-        </div>
-        <div className="grid grid-cols-4 gap-2 mb-3">
-          {propertyTypes.map((cat) => {
-            const active = selectedPropertyTypes.includes(cat.label);
-            return (
-              <button
-                key={cat.label}
-                type="button"
-                className={`flex flex-col items-center rounded-xl border py-3 text-[11px] font-normal transition ${
-                  active
-                    ? 'bg-blue-900 text-white border-blue-900'
-                    : 'bg-white text-ink border-surface-border hover:bg-surface-alt'
-                }`}
-                onClick={() =>
-                  setSelectedPropertyTypes(toggleArrayValue(selectedPropertyTypes, cat.label))
-                }
-              >
-                <span className="text-xl mb-0.5">{cat.icon}</span>
-                {cat.label}
-              </button>
-            );
-          })}
-        </div>
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            id="exclude-active-adult"
-            className="form-checkbox h-4 w-4 rounded border-gray-300"
-            checked={excludeActiveAdult}
-            onChange={() => setExcludeActiveAdult((v) => !v)}
-          />
-          <label
-            htmlFor="exclude-active-adult"
-            className="text-sm font-normal text-ink cursor-pointer select-none flex items-center gap-1"
-          >
-            Exclude active adult
-            <span
-              className="relative inline-flex flex-col items-center justify-center ml-1 group"
-              tabIndex={0}
-              role="img"
-            >
-              <span
-                className="absolute bottom-full left-1/2 z-10 mb-2 w-60 -translate-x-1/2 rounded-lg bg-white border border-surface-border px-3 py-2 text-xs text-ink opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity pointer-events-none shadow-md text-center"
-                role="tooltip"
-              >
-                Excludes <b>55+</b> or <b>active adult</b> communities from results.
-                <span className="absolute bottom-0 left-1/2 translate-x-[-50%] translate-y-1/2 w-2 h-2 bg-white border-l border-b border-surface-border rotate-45"></span>
-              </span>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4 text-gray-400 cursor-pointer"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                aria-hidden="true"
-              >
-                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="white" />
-                <text
-                  x="12"
-                  y="16"
-                  textAnchor="middle"
-                  fontSize="12"
-                  fill="currentColor"
-                  fontFamily="Arial"
-                  dy="-2"
-                >
-                  i
-                </text>
-              </svg>
-            </span>
-          </label>
-        </div>
-      </div>
-
-      {/* ── Col 2: Listing Status + Listing Type ─────────────────────── */}
-      <div className="flex flex-col gap-4">
-        <div>
-          <div className="mb-2 font-semibold uppercase text-xs tracking-wider text-ink">
-            Listing Status
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {listingStatuses.map((status) => {
-              const active = selectedListingStatus.includes(status);
-              return (
-                <button
-                  key={status}
-                  type="button"
-                  className={`rounded-xl border px-3 py-2 text-sm font-normal transition focus:outline-none ${
-                    active
-                      ? 'bg-blue-900 text-white border-blue-900'
-                      : 'bg-white text-ink border-surface-border hover:bg-surface-alt'
-                  }`}
-                  onClick={() =>
-                    setSelectedListingStatus(toggleArrayValue(selectedListingStatus, status))
-                  }
-                >
-                  {status}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <div>
-          <div className="mb-2 font-semibold uppercase text-xs tracking-wider text-ink">
-            Listing Type
-          </div>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-            {listingTypes.map((type) => (
-              <label
-                key={type}
-                className="flex items-center gap-2 text-sm font-normal text-ink cursor-pointer select-none"
-              >
-                <input
-                  type="checkbox"
-                  className="form-checkbox h-4 w-4 rounded border-gray-300"
-                  checked={selectedListingTypes.includes(type)}
-                  onChange={() =>
-                    setSelectedListingTypes(toggleArrayValue(selectedListingTypes, type))
-                  }
-                />
-                {type}
-              </label>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Col 3: Price + Beds + Baths ──────────────────────────────── */}
-      <div className="flex flex-col gap-4">
-        <div>
-          <div className="mb-2 font-semibold uppercase text-xs tracking-wider text-ink">
-            Price Range
-          </div>
-          <div className="flex gap-2 mb-2">
-            <input
-              type="number"
-              placeholder="Min"
-              className="w-1/2 rounded-xl border border-surface-border px-3 py-2 text-sm font-normal"
-              value={minPrice}
-              onChange={(e) => setMinPrice(e.target.value)}
-            />
-            <input
-              type="number"
-              placeholder="Max"
-              className="w-1/2 rounded-xl border border-surface-border px-3 py-2 text-sm font-normal"
-              value={maxPrice}
-              onChange={(e) => setMaxPrice(e.target.value)}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="luxury-toggle"
-              className="form-checkbox h-4 w-4 rounded border-gray-300"
-              checked={luxury}
-              onChange={() => setLuxury((v) => !v)}
-            />
-            <label
-              htmlFor="luxury-toggle"
-              className="text-sm font-normal text-ink cursor-pointer select-none flex items-center gap-1"
-            >
-              Luxury (min $1M) <span title="Show only luxury homes (min $1M)">💎</span>
-            </label>
-          </div>
-        </div>
-        {(() => {
-          const bedsOpts = ['Any', '1+', '2+', '3+', '4+', '5+', '6+', '7+', '8+'];
-          const bathsOpts = ['Any', '1+', '2+', '3+', '4+', '5+', '6+', '7+', '8+'];
-          const bedIdx = beds === '' ? 0 : bedsOpts.indexOf(beds);
-          const bathIdx = baths === '' ? 0 : bathsOpts.indexOf(baths);
-          const stepperBtn = (disabled: boolean, onClick: () => void, label: string) => (
-            <button
-              type="button"
-              disabled={disabled}
-              aria-disabled={disabled}
-              aria-describedby={parcelHintId}
-              onClick={onClick}
-              className={`h-8 w-8 rounded-full border inline-flex items-center justify-center leading-none select-none transition-colors ${
-                disabled
-                  ? 'border-[rgba(0,0,0,0.12)] text-[rgba(0,0,0,0.2)] cursor-default'
-                  : 'border-[rgba(0,0,0,0.4)] text-ink hover:border-ink cursor-pointer'
-              }`}
-              style={{ fontSize: '18px', paddingBottom: label === '–' ? '1px' : '0' }}
-            >
-              {label}
-            </button>
-          );
-          const labelTone = parcelOnly ? 'text-ink-subtle' : 'text-ink';
-          return (
-            <div className="flex flex-col gap-3">
-              {parcelOnly && (
-                <p id={PARCEL_HINT_ID} className="text-xs text-ink-muted">
-                  {PARCEL_INTERLOCK_HINT}
-                </p>
-              )}
-              <div className="flex items-center justify-between py-1">
-                <span className={`text-sm font-medium ${labelTone}`}>Bedrooms</span>
-                <div className="flex items-center gap-5">
-                  {stepperBtn(
-                    parcelOnly || bedIdx === 0,
-                    () => setBeds(bedIdx === 1 ? '' : bedsOpts[bedIdx - 1]),
-                    '–',
-                  )}
-                  <span className={`w-8 text-center text-[15px] font-normal ${labelTone}`}>
-                    {parcelOnly || bedIdx === 0 ? 'Any' : bedsOpts[bedIdx]}
-                  </span>
-                  {stepperBtn(
-                    parcelOnly || bedIdx === bedsOpts.length - 1,
-                    () => setBeds(bedsOpts[bedIdx + 1]),
-                    '+',
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center justify-between py-1">
-                <span className={`text-sm font-medium ${labelTone}`}>Bathrooms</span>
-                <div className="flex items-center gap-5">
-                  {stepperBtn(
-                    parcelOnly || bathIdx === 0,
-                    () => setBaths(bathIdx === 1 ? '' : bathsOpts[bathIdx - 1]),
-                    '–',
-                  )}
-                  <span className={`w-8 text-center text-[15px] font-normal ${labelTone}`}>
-                    {parcelOnly || bathIdx === 0 ? 'Any' : bathsOpts[bathIdx]}
-                  </span>
-                  {stepperBtn(
-                    parcelOnly || bathIdx === bathsOpts.length - 1,
-                    () => setBaths(bathsOpts[bathIdx + 1]),
-                    '+',
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })()}
-      </div>
-
-      {/* ── Row 2 Col 1: Year Built + Stories ────────────────────────── */}
-      <div className="flex flex-col gap-4">
-        <div>
-          <div className="mb-2 font-semibold uppercase text-xs tracking-wider text-ink">
-            Year Built
-          </div>
-          <div className="flex gap-2">
-            <select
-              className="w-1/2 rounded-xl border border-surface-border px-3 py-2 text-sm font-normal"
-              value={yearBuiltMin}
-              onChange={(e) => setYearBuiltMin(e.target.value)}
-            >
-              <option value="">Any</option>
-              {Array.from({ length: 55 }, (_, i) => new Date().getFullYear() - i).map((y) => (
-                <option key={y} value={String(y)}>
-                  {y}
-                </option>
-              ))}
-            </select>
-            <span className="self-center text-ink-muted">–</span>
-            <select
-              className="w-1/2 rounded-xl border border-surface-border px-3 py-2 text-sm font-normal"
-              value={yearBuiltMax}
-              onChange={(e) => setYearBuiltMax(e.target.value)}
-            >
-              <option value="">Any</option>
-              {Array.from({ length: 55 }, (_, i) => new Date().getFullYear() - i).map((y) => (
-                <option key={y} value={String(y)}>
-                  {y}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div>
-          <div className="mb-2 font-semibold uppercase text-xs tracking-wider text-ink">
-            Stories
-          </div>
-          <div className="flex gap-2">
-            <select
-              className="w-1/2 rounded-xl border border-surface-border px-3 py-2 text-sm font-normal"
-              value={storiesMin}
-              onChange={(e) => setStoriesMin(e.target.value)}
-            >
-              <option value="">Any</option>
-              {['1', '2', '3', '4', '5+'].map((v) => (
-                <option key={v} value={v}>
-                  {v}
-                </option>
-              ))}
-            </select>
-            <span className="self-center text-ink-muted">–</span>
-            <select
-              className="w-1/2 rounded-xl border border-surface-border px-3 py-2 text-sm font-normal"
-              value={storiesMax}
-              onChange={(e) => setStoriesMax(e.target.value)}
-            >
-              <option value="">Any</option>
-              {['1', '2', '3', '4', '5+'].map((v) => (
-                <option key={v} value={v}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Row 2 Col 2: Parking ─────────────────────────────────────── */}
-      <div>
-        {(() => {
-          const parkingOpts = ['Any', '1+', '2+', '3+', '4+', '5+', '6+', '7+', '8+'];
-          const parkingIdx = parkingOpts.indexOf(parking);
-          const stepperBtn = (disabled: boolean, onClick: () => void, label: string) => (
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={onClick}
-              className={`h-8 w-8 rounded-full border inline-flex items-center justify-center leading-none select-none transition-colors ${
-                disabled
-                  ? 'border-[rgba(0,0,0,0.12)] text-[rgba(0,0,0,0.2)] cursor-default'
-                  : 'border-[rgba(0,0,0,0.4)] text-ink hover:border-ink cursor-pointer'
-              }`}
-              style={{ fontSize: '18px', paddingBottom: label === '–' ? '1px' : '0' }}
-            >
-              {label}
-            </button>
-          );
-          return (
-            <div className="flex items-center justify-between py-1">
-              <span className="text-sm font-medium text-ink">Parking</span>
-              <div className="flex items-center gap-5">
-                {stepperBtn(parkingIdx === 0, () => setParking(parkingOpts[parkingIdx - 1]), '–')}
-                <span className="w-8 text-center text-[15px] font-normal text-ink">
-                  {parkingOpts[parkingIdx]}
-                </span>
-                {stepperBtn(
-                  parkingIdx === parkingOpts.length - 1,
-                  () => setParking(parkingOpts[parkingIdx + 1]),
-                  '+',
-                )}
-              </div>
-            </div>
-          );
-        })()}
-      </div>
-
-      {/* ── Row 2 Col 3: Features ─────────────────────────────────────── */}
-      <div>
-        <div className="mb-2 font-semibold uppercase text-xs tracking-wider text-ink">Features</div>
-        <div className="grid grid-cols-4 gap-2">
-          {features.map((feat) => {
-            const active = selectedFeatures.includes(feat.label);
-            return (
-              <button
-                key={feat.label}
-                type="button"
-                className={`flex flex-col items-center rounded-xl border py-3 text-[11px] font-normal transition ${
-                  active
-                    ? 'bg-blue-900 text-white border-blue-900'
-                    : 'bg-white text-ink border-surface-border hover:bg-surface-alt'
-                }`}
-                onClick={() => setSelectedFeatures(toggleArrayValue(selectedFeatures, feat.label))}
-              >
-                <span className="text-xl mb-0.5">{feat.icon}</span>
-                {feat.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+  const priceInput = (
+    key: 'minPrice' | 'maxPrice',
+    label: string,
+    placeholder: string,
+    inputId: string,
+  ) => (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-ink-muted" htmlFor={inputId}>
+        {label}
+      </label>
+      <input
+        id={inputId}
+        type="number"
+        min={0}
+        step={1}
+        inputMode="numeric"
+        placeholder={placeholder}
+        className="w-full rounded-xl border border-surface-border px-3 py-2 text-sm font-normal"
+        value={value[key] ?? ''}
+        onChange={(event) => set({ [key]: wholeNumberOrUndefined(event.target.value) })}
+      />
     </div>
   );
-});
 
-export default FilterModalContent;
+  const stepper = (key: 'beds' | 'baths', label: string, disabled: boolean) => {
+    const current = value[key] ?? 0;
+    const index = COUNT_RUNGS.indexOf(Math.trunc(current) as (typeof COUNT_RUNGS)[number]);
+    // A URL can carry a half step (`baths=2.5`) or a value past the top rung; neither has a rung,
+    // and snapping silently would change a filter the user never touched. Step from where we are.
+    const atIndex = index === -1 ? null : index;
+    const step = (delta: number) => {
+      const from = atIndex ?? Math.trunc(current);
+      const next = Math.min(8, Math.max(0, from + delta));
+      set({ [key]: next === 0 ? undefined : next });
+    };
+
+    return (
+      <div className="flex items-center justify-between py-1">
+        <span className={`text-sm font-medium ${disabled ? 'text-ink-subtle' : 'text-ink'}`}>
+          {label}
+        </span>
+        <div className="flex items-center gap-5">
+          {stepperButton({
+            label: '–',
+            accessibleName: `Fewer ${label.toLowerCase()}`,
+            disabled: disabled || current <= 0,
+            describedBy: parcelHintId,
+            onClick: () => step(-1),
+          })}
+          <span
+            aria-live="polite"
+            className={`w-10 text-center text-[15px] font-normal ${
+              disabled ? 'text-ink-subtle' : 'text-ink'
+            }`}
+          >
+            {disabled || current <= 0 ? 'Any' : `${current}+`}
+          </span>
+          {stepperButton({
+            label: '+',
+            accessibleName: `More ${label.toLowerCase()}`,
+            disabled: disabled || current >= 8,
+            describedBy: parcelHintId,
+            onClick: () => step(1),
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="grid grid-cols-1 gap-y-6">
+      {/* ── Listing type ─────────────────────────────────────────────── */}
+      <fieldset>
+        <legend className="mb-2 font-semibold uppercase text-xs tracking-wider text-ink">
+          Listing Type
+        </legend>
+        <div className="inline-flex w-full rounded-full bg-surface-alt p-1">
+          {(['all', ...LISTING_TYPES] as const).map((option) => {
+            const active = (value.listingType ?? 'all') === option;
+            return (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={active}
+                onClick={() => set({ listingType: option === 'all' ? undefined : option })}
+                className={`flex-1 rounded-full px-3 py-1.5 text-sm font-semibold transition ${
+                  active ? 'bg-white text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
+                }`}
+              >
+                {LISTING_TYPE_LABELS[option]}
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
+
+      {/* ── Home type ────────────────────────────────────────────────────
+          Single-select, because the contract's `propertyType` is one enum value. The old grid was
+          multi-select and produced `propertyType=Condo,Townhome`, which the API rejects. */}
+      <fieldset>
+        <legend className="mb-2 font-semibold uppercase text-xs tracking-wider text-ink">
+          Home Type
+        </legend>
+        <div className="grid grid-cols-4 gap-2">
+          {PROPERTY_TYPES.map((type) => {
+            const active = value.propertyType === type;
+            return (
+              <button
+                key={type}
+                type="button"
+                aria-pressed={active}
+                onClick={() => set({ propertyType: active ? undefined : type })}
+                className={`flex flex-col items-center rounded-xl border px-1 py-3 text-[11px] font-normal transition ${
+                  active
+                    ? 'bg-ink text-white border-ink'
+                    : 'bg-white text-ink border-surface-border hover:bg-surface-alt'
+                }`}
+              >
+                <span className="text-xl mb-0.5" aria-hidden="true">
+                  {PROPERTY_TYPE_ICONS[type]}
+                </span>
+                {type}
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
+
+      {/* ── Price ────────────────────────────────────────────────────── */}
+      <fieldset>
+        <legend className="mb-2 font-semibold uppercase text-xs tracking-wider text-ink">
+          Price Range
+        </legend>
+        <div className="grid grid-cols-2 gap-3">
+          {priceInput('minPrice', 'Min price', 'No min', 'filter-min-price')}
+          {priceInput('maxPrice', 'Max price', 'No max', 'filter-max-price')}
+        </div>
+      </fieldset>
+
+      {/* ── Beds / Baths / Min sqft — the dwelling group the interlock governs ── */}
+      <fieldset>
+        <legend className="mb-2 font-semibold uppercase text-xs tracking-wider text-ink">
+          Size
+        </legend>
+        {parcelOnly && (
+          <p id={PARCEL_HINT_ID} className="mb-3 text-xs text-ink-muted">
+            {PARCEL_INTERLOCK_HINT}
+          </p>
+        )}
+        <div className="flex flex-col gap-3">
+          {stepper('beds', 'Bedrooms', parcelOnly)}
+          {stepper('baths', 'Bathrooms', parcelOnly)}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-ink-muted" htmlFor="filter-sqft">
+              Min square feet
+            </label>
+            <input
+              id="filter-sqft"
+              type="number"
+              min={0}
+              step={1}
+              inputMode="numeric"
+              placeholder={parcelOnly ? 'Not applicable to land' : 'No min'}
+              disabled={parcelOnly}
+              aria-describedby={parcelHintId}
+              className="w-full rounded-xl border border-surface-border px-3 py-2 text-sm font-normal disabled:bg-surface-alt disabled:text-ink-subtle disabled:cursor-not-allowed"
+              value={parcelOnly ? '' : (value.minSqft ?? '')}
+              onChange={(event) => set({ minSqft: wholeNumberOrUndefined(event.target.value) })}
+            />
+          </div>
+        </div>
+      </fieldset>
+
+      {/* ── Showing-only toggles ─────────────────────────────────────────
+          `openHouse` and `newConstruction` are the only two booleans with a predicate of their own.
+          `waterfront` and `petFriendly` are not here because server-side they *are* the amenities
+          of the same name (see `parseFiltersFromSearchParams`), so they appear once, as chips. */}
+      <fieldset>
+        <legend className="mb-2 font-semibold uppercase text-xs tracking-wider text-ink">
+          Show Only
+        </legend>
+        <div className="flex flex-wrap gap-2">
+          {(
+            [
+              { key: 'openHouse', label: 'Has an open house' },
+              { key: 'newConstruction', label: 'Newly built' },
+            ] as const
+          ).map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={!!value[key]}
+              onClick={() => set({ [key]: value[key] ? undefined : true })}
+              className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                value[key]
+                  ? 'border-ink bg-ink text-white'
+                  : 'border-surface-border text-ink-muted hover:border-ink-subtle'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </fieldset>
+
+      {/* ── Amenities — the contract's closed 15-value set ───────────── */}
+      <fieldset>
+        <legend className="mb-2 font-semibold uppercase text-xs tracking-wider text-ink">
+          Amenities
+        </legend>
+        <div className="flex flex-wrap gap-2">
+          {AMENITIES.map((amenity) => {
+            const active = value.amenities?.includes(amenity) ?? false;
+            return (
+              <button
+                key={amenity}
+                type="button"
+                aria-pressed={active}
+                onClick={() => toggleAmenity(amenity)}
+                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                  active
+                    ? 'border-ink bg-ink text-white'
+                    : 'border-surface-border text-ink-muted hover:border-ink-subtle'
+                }`}
+              >
+                {amenity}
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
+    </div>
+  );
+}
+
+function stepperButton({
+  label,
+  accessibleName,
+  disabled,
+  describedBy,
+  onClick,
+}: {
+  label: string;
+  accessibleName: string;
+  disabled: boolean;
+  describedBy?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      aria-disabled={disabled}
+      aria-label={accessibleName}
+      aria-describedby={describedBy}
+      onClick={onClick}
+      className={`h-8 w-8 rounded-full border inline-flex items-center justify-center leading-none select-none transition-colors ${
+        disabled
+          ? 'border-[rgba(0,0,0,0.12)] text-[rgba(0,0,0,0.2)] cursor-default'
+          : 'border-[rgba(0,0,0,0.4)] text-ink hover:border-ink cursor-pointer'
+      }`}
+      style={{ fontSize: '18px', paddingBottom: label === '–' ? '1px' : '0' }}
+    >
+      <span aria-hidden="true">{label}</span>
+    </button>
+  );
+}
+
+/**
+ * A number input can hold `''`, `-4`, `1.5` or `1e9`. The contract's numeric query parameters are
+ * `^\d+$`, so anything else is a 400 we would have manufactured ourselves — parse to the filter's
+ * absence instead, which degrades to a wider search the user can act on.
+ */
+function wholeNumberOrUndefined(raw: string): number | undefined {
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) return undefined;
+  return Number(trimmed);
+}

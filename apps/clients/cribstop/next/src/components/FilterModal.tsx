@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type { SearchFilters } from '@/lib/types';
 import FilterModalContent from '@/components/FilterModalContent';
+import { applyLandInterlock, filtersToSearchParams } from '@/lib/listing-filters';
 
 interface Props {
   isOpen: boolean;
@@ -12,23 +13,63 @@ interface Props {
   resultCount: number;
 }
 
+/**
+ * The parameters the search bar owns, not the filter modal.
+ *
+ * "Clear all" clears *filters*; it does not throw away the place the user searched for or the
+ * order they asked results in. Clearing `q` would empty the search bar and swap a local search for
+ * a nationwide one, which is not what the button says it does.
+ */
+const PRESERVED_ON_CLEAR = ['query', 'zip', 'street', 'neighborhood', 'sort'] as const;
+
+/**
+ * How many filters the badge on the Filters button reports.
+ *
+ * Counts exactly what the live surface can set — no more. It used to count `waterfront` and
+ * `petFriendly` as separate filters, which were folded onto their amenity equivalents, and to
+ * treat `beds: 0` as active. A badge that says "3" when the modal shows one thing selected is a
+ * second, quieter version of the same bug this ticket closes.
+ *
+ * Amenities count individually because each is an independent narrowing the user chose.
+ */
 export function countActiveFilters(filters: SearchFilters): number {
   let n = 0;
   if (filters.listingType && filters.listingType !== 'all') n++;
-  if (filters.minPrice !== undefined || filters.maxPrice !== undefined) n++;
-  if (filters.beds && filters.beds > 0) n++;
-  if (filters.baths && filters.baths > 0) n++;
   if (filters.propertyType && filters.propertyType !== 'all') n++;
+  if (filters.minPrice !== undefined || filters.maxPrice !== undefined) n++;
+  if (filters.beds !== undefined && filters.beds > 0) n++;
+  if (filters.baths !== undefined && filters.baths > 0) n++;
+  if (filters.minSqft !== undefined && filters.minSqft > 0) n++;
   if (filters.openHouse) n++;
   if (filters.newConstruction) n++;
-  if (filters.waterfront) n++;
-  if (filters.petFriendly) n++;
-  if (filters.amenities && filters.amenities.length > 0) n += filters.amenities.length;
-  if (filters.minSqft !== undefined) n++;
+  n += filters.amenities?.length ?? 0;
   return n;
 }
 
+/** True when two filter sets would produce the same request — compared by their URL form. */
+function sameFilters(a: SearchFilters, b: SearchFilters): boolean {
+  const key = (filters: SearchFilters) => {
+    const params = filtersToSearchParams(filters);
+    params.sort();
+    return params.toString();
+  };
+  return key(a) === key(b);
+}
+
 export default function FilterModal({ isOpen, onClose, filters, onChange, resultCount }: Props) {
+  /*
+   * The draft the user is editing, seeded from what is currently applied.
+   *
+   * Reopening the modal therefore shows what is actually narrowing the results, which it never did
+   * before: the body kept its own state, was never handed the applied filters, and so showed
+   * defaults every time — telling the user nothing was filtered while the badge next to the button
+   * said otherwise.
+   *
+   * A `useState` initialiser is enough because this component unmounts while closed (see the early
+   * return below), so it re-seeds on every open with no effect and no stale-draft window.
+   */
+  const [draft, setDraft] = useState<SearchFilters>(filters);
+
   // Lock body scroll while open
   useEffect(() => {
     if (isOpen) {
@@ -53,15 +94,24 @@ export default function FilterModal({ isOpen, onClose, filters, onChange, result
 
   if (!isOpen) return null;
 
-  const hasFilters = countActiveFilters(filters) > 0;
+  const hasFilters = countActiveFilters(draft) > 0;
+  /** The result count on the button describes the applied search, so it is only true of a draft
+   *  that has not diverged from it. */
+  const countIsCurrent = sameFilters(draft, filters);
 
-  const clearAll = () =>
-    onChange({
-      query: filters.query,
-      zip: filters.zip,
-      street: filters.street,
-      sort: filters.sort,
-    });
+  const clearedDraft = (): SearchFilters => {
+    const kept: SearchFilters = {};
+    for (const key of PRESERVED_ON_CLEAR) {
+      const value = draft[key];
+      if (value !== undefined) Object.assign(kept, { [key]: value });
+    }
+    return kept;
+  };
+
+  const apply = (next: SearchFilters) => {
+    onChange(next);
+    onClose();
+  };
 
   return (
     <div
@@ -99,13 +149,19 @@ export default function FilterModal({ isOpen, onClose, filters, onChange, result
 
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto p-6">
-          <FilterModalContent onClear={clearAll} onShow={onClose} />
+          <FilterModalContent
+            value={draft}
+            // The Lot/Land interlock is applied on every draft edit rather than in an effect, so it
+            // converges in a single pass: picking Land clears beds/baths/min-sqft in the same
+            // update that sets the home type.
+            onChange={(next) => setDraft(applyLandInterlock(next))}
+          />
         </div>
 
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-surface-border shrink-0 bg-white">
           <button
-            onClick={clearAll}
+            onClick={() => setDraft(clearedDraft())}
             disabled={!hasFilters}
             className={`text-sm font-semibold underline-offset-2 transition ${
               hasFilters ? 'text-ink underline hover:text-ink/60' : 'text-ink-muted cursor-default'
@@ -114,10 +170,12 @@ export default function FilterModal({ isOpen, onClose, filters, onChange, result
             Clear all
           </button>
           <button
-            onClick={onClose}
+            onClick={() => apply(draft)}
             className="rounded-xl bg-ink px-6 py-3 text-sm font-bold text-white hover:bg-ink/85 active:scale-[0.98] transition"
           >
-            Show {resultCount.toLocaleString()} home{resultCount !== 1 ? 's' : ''}
+            {countIsCurrent
+              ? `Show ${resultCount.toLocaleString()} home${resultCount !== 1 ? 's' : ''}`
+              : 'Show homes'}
           </button>
         </div>
       </div>

@@ -132,8 +132,6 @@ export function parseFiltersFromSearchParams(params: URLSearchParams): SearchFil
 
   filters.openHouse = bool('openHouse');
   filters.newConstruction = bool('newConstruction');
-  filters.waterfront = bool('waterfront');
-  filters.petFriendly = bool('petFriendly');
 
   // `amenities` is the one genuinely repeatable parameter, against a closed 15-value set.
   const amenities = params
@@ -143,6 +141,31 @@ export function parseFiltersFromSearchParams(params: URLSearchParams): SearchFil
     .filter((value): value is (typeof AMENITIES)[number] =>
       (AMENITIES as readonly string[]).includes(value),
     );
+
+  /**
+   * `waterfront` and `petFriendly` are folded onto their amenity equivalents rather than kept as
+   * separate filter state.
+   *
+   * They are not separate capabilities. In `property-service`'s `search-query.ts`,
+   * `waterfront=true` compiles to `'Waterfront' = ANY(v.amenities)` and `petFriendly=true` to
+   * `'Pet Friendly' = ANY(v.amenities)` — exactly what asking for those two amenities does. Two
+   * parameters for one predicate means two controls for one thing in any honest UI, and a filter
+   * surface that shows "Waterfront" twice, in two sections, where checking either changes the same
+   * result set.
+   *
+   * Folding at the parse layer keeps the UI, the URL and the request one statement: every link
+   * still minted with `?waterfront=true` (in-app links, bookmarks, anything predating this) keeps
+   * working and now shows as applied in the modal, and the URL self-heals to the canonical
+   * `?amenities=Waterfront` the next time filters are applied. Nothing is dropped from the request
+   * — the same predicate is still asked for, under the parameter that has a control.
+   */
+  for (const [key, amenity] of [
+    ['waterfront', 'Waterfront'],
+    ['petFriendly', 'Pet Friendly'],
+  ] as const) {
+    if (bool(key) && !amenities.includes(amenity)) amenities.push(amenity);
+  }
+
   if (amenities.length > 0) {
     filters.amenities = Array.from(new Set(amenities));
   }
@@ -156,6 +179,94 @@ export function parseFiltersFromSearchParams(params: URLSearchParams): SearchFil
   }
 
   return applyLandInterlock(filters);
+}
+
+/**
+ * Every query-string key `parseFiltersFromSearchParams` reads, including the two spellings it
+ * accepts as aliases.
+ *
+ * Listed here so the serialiser can clear the whole filter vocabulary out of a URL before writing
+ * the current one back. Without it a removed filter would persist: dropping `beds` from the modal
+ * leaves `?beds=2` in the URL, the next parse puts it straight back, and the filter the user just
+ * removed reappears on reload.
+ */
+const FILTER_PARAM_KEYS = [
+  'q',
+  'zip',
+  'street',
+  'neighborhood',
+  'type',
+  'listingType',
+  'propertyType',
+  'minPrice',
+  'maxPrice',
+  'beds',
+  'baths',
+  'minSqft',
+  'openHouse',
+  'newConstruction',
+  'waterfront',
+  'petFriendly',
+  'amenities',
+  'sort',
+] as const;
+
+/**
+ * Writes a filter set back into a query string — the exact inverse of
+ * `parseFiltersFromSearchParams`, so that `parse(serialise(f))` is `f`.
+ *
+ * The URL is the source of truth for a search: it is what the search page parses on load, what a
+ * refresh restores, and what a user pastes to a partner or a spouse. Holding applied filters only
+ * in React state made a filtered search unlinkable and unsurvivable — reloading the page showed a
+ * different result set than the one on screen a moment earlier.
+ *
+ * `base` carries everything that is *not* a filter (`lat`/`lon` for the map, any campaign
+ * parameter) through untouched; the filter vocabulary is cleared out of it first so a removed
+ * filter is genuinely removed rather than resurrected by the next parse. `page` is always dropped:
+ * a filter change means a different result set, and page 40 of the old one is not a position in
+ * the new one — it is frequently past the end of it, which the API answers with a 400
+ * (`result_window_exceeded`) rather than with homes.
+ */
+export function filtersToSearchParams(
+  filters: SearchFilters,
+  base: URLSearchParams = new URLSearchParams(),
+): URLSearchParams {
+  const params = new URLSearchParams(base);
+  for (const key of FILTER_PARAM_KEYS) params.delete(key);
+  params.delete('page');
+
+  const set = (key: string, value: string | number | undefined) => {
+    if (value === undefined || value === '') return;
+    params.set(key, String(value));
+  };
+
+  // `q` and `type` are the spellings the search bar builds and existing links carry; the parser's
+  // `listingType` alias is deliberately never written, so a URL only ever holds one of the two.
+  set('q', filters.query);
+  set('zip', filters.zip);
+  set('street', filters.street);
+  set('neighborhood', filters.neighborhood);
+  if (filters.listingType && filters.listingType !== 'all') set('type', filters.listingType);
+  if (filters.propertyType && filters.propertyType !== 'all')
+    set('propertyType', filters.propertyType);
+  set('minPrice', filters.minPrice);
+  set('maxPrice', filters.maxPrice);
+  set('beds', filters.beds);
+  set('baths', filters.baths);
+  set('minSqft', filters.minSqft);
+
+  // Only `true` is written. `?openHouse=false` parses back to `undefined` anyway, so writing it
+  // would put a parameter in the URL that means nothing and reads as an active filter.
+  if (filters.openHouse) params.set('openHouse', 'true');
+  if (filters.newConstruction) params.set('newConstruction', 'true');
+
+  // Repeated rather than comma-joined: both forms parse, and the repeated form is the one that
+  // survives a value ever containing a comma.
+  for (const amenity of filters.amenities ?? []) params.append('amenities', amenity);
+
+  if (filters.sort && filters.sort !== 'recommended') set('sort', filters.sort);
+
+  return params;
 }
 
 /** The 1-based page from the URL, floored at 1 so a hand-edited `?page=0` cannot 400. */
