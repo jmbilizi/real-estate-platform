@@ -1,6 +1,11 @@
 import { ATTRIBUTION_KEYS } from './common';
 import { toOpenApiDocument } from './openapi';
-import { PAGE_SIZE_MAX } from './search-request';
+import {
+  MAX_RESULT_OFFSET,
+  maxReachablePage,
+  PAGE_SIZE_DEFAULT,
+  PAGE_SIZE_MAX,
+} from './search-request';
 
 describe('toOpenApiDocument', () => {
   // `any` lets these assertions inspect the raw JSON Schema shape (the published contract)
