@@ -14,6 +14,7 @@ import {
   parseFiltersFromSearchParams,
   parsePageFromSearchParams,
 } from '@/lib/listing-filters';
+import { maxReachablePage } from '@cribstop/property-contracts';
 import { useListingSearch } from '@/lib/useListingSearch';
 import { ListingErrorState, ListingGridSkeleton } from '@/components/listing/ListingStates';
 
@@ -338,7 +339,7 @@ export default function SearchExperience({
     setPage(parsePageFromSearchParams(params));
   }, [initialQuery, deferred, setLocation, setSearchSuggestion]);
 
-  const { results, total, pageCount, status, error, retry } = useListingSearch(
+  const { results, total, pageCount, pageSize, status, error, errorCode, retry } = useListingSearch(
     filters,
     page,
     !deferred,
@@ -346,6 +347,35 @@ export default function SearchExperience({
 
   const isLoading = status === 'loading';
   const isError = status === 'error';
+
+  /**
+   * How many pages the pager may offer, as opposed to how many pages of results exist (#65).
+   *
+   * The API bounds paging depth: `(page - 1) * pageSize` may not exceed `MAX_RESULT_OFFSET`, and a
+   * request past that is a 400. `pageCount` is derived from the exact `total` and is deliberately
+   * NOT clamped to the window — it is the honest size of the result set, and the headline count
+   * above still renders from `total`. But a page button the API will refuse is a button that
+   * breaks when clicked, so the pager is bounded here and only here.
+   *
+   * The bound is computed from the page size the API actually APPLIED (echoed in the envelope),
+   * never from an assumed one: because the limit is on the offset, the deepest reachable page
+   * changes with page size, so a clamp keyed on a separately-declared constant silently stops
+   * matching the moment the request's page size is tuned.
+   *
+   * This also stops `Array.from({ length: pageCount })` below from allocating one element per page
+   * of the full dataset — fine at a few hundred seeded rows, a five-figure array per render once a
+   * real IDX feed is behind the endpoint.
+   */
+  const reachablePageCount = Math.min(pageCount, maxReachablePage(pageSize));
+
+  /**
+   * A search that failed because it asked to page past the window is not a failed load (#65). The
+   * request is well-formed and the service is healthy; it will answer the same way forever, so the
+   * generic error state's "Try again" is a button that cannot work — and the pager, which lives in
+   * the results branch, is not rendered to offer a way back. Reachable by hand-editing `?page=`, by
+   * an old bookmark, or by a link minted before this bound existed.
+   */
+  const isPastWindow = errorCode === 'result_window_exceeded';
 
   /** Keeps the URL the shareable source of truth for the current result set. */
   const pushPage = (next: number) => {
@@ -499,7 +529,9 @@ export default function SearchExperience({
                */
               <ListingErrorState
                 message={error ?? 'We could not load listings just now. Please try again.'}
-                onRetry={retry}
+                heading={isPastWindow ? 'That is past the last page of results' : undefined}
+                actionLabel={isPastWindow ? 'Back to the first page' : undefined}
+                onRetry={isPastWindow ? () => pushPage(1) : retry}
               />
             ) : results.length === 0 ? (
               <EmptyState onClear={() => window.location.reload()} />
@@ -516,7 +548,7 @@ export default function SearchExperience({
                     </div>
                   ))}
                 </div>
-                {pageCount > 1 && (
+                {reachablePageCount > 1 && (
                   <div className="flex justify-center mt-10">
                     <nav className="inline-flex items-center gap-1 rounded-full bg-white/90 px-4 py-2 shadow-lg border border-surface-border">
                       <button
@@ -527,8 +559,8 @@ export default function SearchExperience({
                       >
                         &lt;
                       </button>
-                      {Array.from({ length: pageCount }, (_, i) => i + 1).map((p) =>
-                        p === 1 || p === pageCount || Math.abs(p - page) <= 2 ? (
+                      {Array.from({ length: reachablePageCount }, (_, i) => i + 1).map((p) =>
+                        p === 1 || p === reachablePageCount || Math.abs(p - page) <= 2 ? (
                           <button
                             key={p}
                             className={`px-3 py-1.5 rounded-full font-semibold transition ${
@@ -541,7 +573,7 @@ export default function SearchExperience({
                           >
                             {p}
                           </button>
-                        ) : (p === page - 3 || p === page + 3) && pageCount > 7 ? (
+                        ) : (p === page - 3 || p === page + 3) && reachablePageCount > 7 ? (
                           <span key={p} className="px-2 text-ink-muted">
                             …
                           </span>
@@ -549,8 +581,8 @@ export default function SearchExperience({
                       )}
                       <button
                         className="px-3 py-1.5 rounded-full font-semibold text-ink-muted hover:text-ink disabled:opacity-40"
-                        onClick={() => pushPage(Math.min(pageCount, page + 1))}
-                        disabled={page === pageCount}
+                        onClick={() => pushPage(Math.min(reachablePageCount, page + 1))}
+                        disabled={page === reachablePageCount}
                         aria-label="Next page"
                       >
                         &gt;
