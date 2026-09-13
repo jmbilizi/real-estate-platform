@@ -6,7 +6,6 @@ import FilterModalContent from '@/components/FilterModalContent';
 import { applyLandInterlock, filtersToSearchParams } from '@/lib/listing-filters';
 
 interface Props {
-  isOpen: boolean;
   onClose: () => void;
   filters: SearchFilters;
   onChange: (f: SearchFilters) => void;
@@ -26,9 +25,14 @@ const PRESERVED_ON_CLEAR = ['query', 'zip', 'street', 'neighborhood', 'sort'] as
  * How many filters the badge on the Filters button reports.
  *
  * Counts exactly what the live surface can set — no more. It used to count `waterfront` and
- * `petFriendly` as separate filters, which were folded onto their amenity equivalents, and to
- * treat `beds: 0` as active. A badge that says "3" when the modal shows one thing selected is a
- * second, quieter version of the same bug this ticket closes.
+ * `petFriendly` as separate filters, which are now folded onto their amenity equivalents. A badge
+ * that says "3" when the modal shows one thing selected is a second, quieter version of the same
+ * bug this ticket closes.
+ *
+ * A present key is an active filter, with no value test: `0` never reaches a filter set, because
+ * both the parser and the modal's inputs read it as the filter's absence. Testing `> 0` here
+ * instead would be the one place a zero could hide — narrowing the results while the badge reads
+ * nought and "Clear all" sits disabled.
  *
  * Amenities count individually because each is an independent narrowing the user chose.
  */
@@ -37,62 +41,72 @@ export function countActiveFilters(filters: SearchFilters): number {
   if (filters.listingType && filters.listingType !== 'all') n++;
   if (filters.propertyType && filters.propertyType !== 'all') n++;
   if (filters.minPrice !== undefined || filters.maxPrice !== undefined) n++;
-  if (filters.beds !== undefined && filters.beds > 0) n++;
-  if (filters.baths !== undefined && filters.baths > 0) n++;
-  if (filters.minSqft !== undefined && filters.minSqft > 0) n++;
+  if (filters.beds !== undefined) n++;
+  if (filters.baths !== undefined) n++;
+  if (filters.minSqft !== undefined) n++;
   if (filters.openHouse) n++;
   if (filters.newConstruction) n++;
   n += filters.amenities?.length ?? 0;
   return n;
 }
 
-/** True when two filter sets would produce the same request — compared by their URL form. */
+/**
+ * True when two filter sets would produce the same request — compared by their URL form.
+ *
+ * Amenities are sorted first because their order carries no meaning to the API (`amenities @>`
+ * is containment) but does survive `URLSearchParams.sort()`, which orders by key alone. Without
+ * it, unticking and re-ticking a chip reorders the array and the Show button silently drops its
+ * result count for a draft that is not actually different.
+ */
 function sameFilters(a: SearchFilters, b: SearchFilters): boolean {
   const key = (filters: SearchFilters) => {
-    const params = filtersToSearchParams(filters);
+    const params = filtersToSearchParams({
+      ...filters,
+      amenities: filters.amenities ? [...filters.amenities].sort() : undefined,
+    });
     params.sort();
     return params.toString();
   };
   return key(a) === key(b);
 }
 
-export default function FilterModal({ isOpen, onClose, filters, onChange, resultCount }: Props) {
+/**
+ * The filters dialog.
+ *
+ * **Rendered only while open** — the caller mounts it, rather than passing an `isOpen` flag it
+ * would honour with an early `return null`. That is not a style preference: the draft below is
+ * seeded by a `useState` initialiser, and an early return does not unmount a fiber, so with a flag
+ * the draft was seeded once at page mount and never re-synced. Abandoning the dialog (Escape, the
+ * X, the backdrop) left the abandoned edits in it, and searching a new city left the *previous*
+ * city's filters in it — pressing Show then snapped the results back to a search the user had
+ * moved on from. Mounting on open makes "the draft is what is applied" true by construction.
+ */
+export default function FilterModal({ onClose, filters, onChange, resultCount }: Props) {
   /*
    * The draft the user is editing, seeded from what is currently applied.
    *
-   * Reopening the modal therefore shows what is actually narrowing the results, which it never did
-   * before: the body kept its own state, was never handed the applied filters, and so showed
-   * defaults every time — telling the user nothing was filtered while the badge next to the button
-   * said otherwise.
-   *
-   * A `useState` initialiser is enough because this component unmounts while closed (see the early
-   * return below), so it re-seeds on every open with no effect and no stale-draft window.
+   * Reopening therefore shows what is actually narrowing the results, which it never did before:
+   * the body kept its own state, was never handed the applied filters, and so showed defaults every
+   * time — telling the user nothing was filtered while the badge next to the button said otherwise.
    */
   const [draft, setDraft] = useState<SearchFilters>(filters);
 
-  // Lock body scroll while open
+  // Lock body scroll for as long as the dialog is mounted.
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
+    document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = '';
     };
-  }, [isOpen]);
+  }, []);
 
   // Close on Escape
   useEffect(() => {
-    if (!isOpen) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
+  }, [onClose]);
 
   const hasFilters = countActiveFilters(draft) > 0;
   /** The result count on the button describes the applied search, so it is only true of a draft

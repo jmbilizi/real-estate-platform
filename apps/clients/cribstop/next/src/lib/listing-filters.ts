@@ -66,16 +66,23 @@ export function parseFiltersFromSearchParams(params: URLSearchParams): SearchFil
    * `minPrice`/`maxPrice`/`beds`/`minSqft` are `^\d+$` server-side and `baths` is `^\d+(\.5)?$`, so
    * `?minPrice=1.5`, `?minPrice=-500` and `?baths=1.7` are all 400s. Forwarding them would
    * manufacture exactly the error this function exists to avoid — see the note on `oneOf` below.
+   *
+   * **Zero is treated as absent, not as a filter.** `minPrice=0`, `beds=0` and `minSqft=0` are all
+   * valid contract values that mean nothing as a narrowing — except `minSqft=0`, which is worse
+   * than nothing: `v.sqft >= 0` excludes every row whose `sqft` is NULL, which is every parcel. A
+   * zero would also count as no active filter in the badge and leave "Clear all" disabled, so it
+   * would be narrowing the results with no control anywhere on the page able to remove it. The
+   * stepper's own "Any" rung is 0, so this is also what keeps the two ends agreeing.
    */
   const int = (key: string) => {
     const raw = str(key);
     if (raw === undefined || !/^\d+$/.test(raw)) return undefined;
-    return Number(raw);
+    return Number(raw) || undefined;
   };
   const halfStep = (key: string) => {
     const raw = str(key);
     if (raw === undefined || !/^\d+(\.5)?$/.test(raw)) return undefined;
-    return Number(raw);
+    return Number(raw) || undefined;
   };
   const bool = (key: string) => (params.get(key) === 'true' ? true : undefined);
 
@@ -235,8 +242,10 @@ export function filtersToSearchParams(
   for (const key of FILTER_PARAM_KEYS) params.delete(key);
   params.delete('page');
 
+  // `0` is dropped along with `undefined` and `''`: it is not a narrowing, the parser reads it back
+  // as absent, and writing it would put a filter in the URL that no control on the page can clear.
   const set = (key: string, value: string | number | undefined) => {
-    if (value === undefined || value === '') return;
+    if (value === undefined || value === '' || value === 0) return;
     params.set(key, String(value));
   };
 

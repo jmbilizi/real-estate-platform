@@ -233,6 +233,68 @@ describe('the filter modal actually filters', () => {
     expect(lastRequest()?.beds).toBeUndefined();
   });
 
+  it('re-seeds from what is applied on every open, not once at page mount', async () => {
+    // `if (!isOpen) return null` does not unmount a fiber, so a draft seeded by a `useState`
+    // initialiser behind such a flag is seeded once and never re-synced. Abandoned edits then
+    // survive in the dialog and get applied on the next Show — a filter the user cancelled.
+    render(<SearchExperience initialQuery="q=Alexandria" />);
+    await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
+
+    openFilters();
+    fireEvent.click(screen.getByRole('button', { name: 'Pool' }));
+    fireEvent.click(screen.getByLabelText('Close filters'));
+
+    openFilters();
+
+    expect(screen.getByRole('button', { name: 'Pool' })).toHaveAttribute('aria-pressed', 'false');
+    showHomes();
+    expect(currentParams().has('amenities')).toBe(false);
+  });
+
+  it('steps down from a half-step bath count without skipping a whole bathroom', async () => {
+    // `?baths=2.5` is a legitimate contract value — `baths_display` is `full + 0.5 * half`. A
+    // stepper keyed on an index into a rung list truncated it to 2 and then stepped to 1.
+    render(<SearchExperience initialQuery="q=Alexandria&baths=2.5" />);
+    await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
+
+    openFilters();
+    expect(screen.getByText('2.5+')).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Fewer bathrooms'));
+
+    expect(screen.getByText('2+')).toBeInTheDocument();
+  });
+
+  it('never leaves a zero-valued filter narrowing the results invisibly', async () => {
+    // `minSqft=0` is not a no-op: `v.sqft >= 0` excludes every parcel, whose `sqft` is NULL. Read
+    // as absent it can neither narrow the results nor hide from the badge and the Clear control.
+    render(<SearchExperience initialQuery="q=Alexandria&minSqft=0&beds=0" />);
+
+    await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
+    expect(lastRequest()?.minSqft).toBeUndefined();
+    expect(lastRequest()?.beds).toBeUndefined();
+
+    openFilters();
+    fireEvent.click(screen.getByRole('button', { name: 'Pool' }));
+    showHomes();
+
+    expect(currentParams().has('minSqft')).toBe(false);
+  });
+
+  it('keeps the result count on the button when a draft is re-ticked back to what is applied', async () => {
+    mockedSearchListings.mockResolvedValue({ ...envelope(), total: 12 });
+    render(<SearchExperience initialQuery="q=Alexandria&amenities=Pool&amenities=Garage" />);
+    await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
+
+    openFilters();
+    expect(screen.getByRole('button', { name: 'Show 12 homes' })).toBeInTheDocument();
+
+    // Identical request, different array order — the count must not disappear over that.
+    fireEvent.click(screen.getByRole('button', { name: 'Pool' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Pool' }));
+
+    expect(screen.getByRole('button', { name: 'Show 12 homes' })).toBeInTheDocument();
+  });
+
   describe('the Lot/Land interlock', () => {
     it('clears and disables the dwelling controls when land is the only home type', async () => {
       render(<SearchExperience initialQuery="q=Alexandria&beds=3&minSqft=2000" />);

@@ -47,8 +47,9 @@ const LISTING_TYPE_LABELS: Record<(typeof LISTING_TYPES)[number] | 'all', string
   sold: 'Sold',
 };
 
-/** `0` is the "Any" rung; the API is asked for `beds`/`baths` only above it. */
-const COUNT_RUNGS = [0, 1, 2, 3, 4, 5, 6, 7, 8] as const;
+/** The stepper's rungs: `0` reads as "Any" and is sent as no filter at all. */
+const COUNT_MIN = 0;
+const COUNT_MAX = 8;
 
 export default function FilterModalContent({ value, onChange }: FilterModalContentProps) {
   const set = (patch: SearchFilters) => onChange({ ...value, ...patch });
@@ -101,15 +102,20 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
   );
 
   const stepper = (key: 'beds' | 'baths', label: string, disabled: boolean) => {
-    const current = value[key] ?? 0;
-    const index = COUNT_RUNGS.indexOf(Math.trunc(current) as (typeof COUNT_RUNGS)[number]);
-    // A URL can carry a half step (`baths=2.5`) or a value past the top rung; neither has a rung,
-    // and snapping silently would change a filter the user never touched. Step from where we are.
-    const atIndex = index === -1 ? null : index;
+    const current = value[key] ?? COUNT_MIN;
+    /*
+     * Stepping is defined on the value, not on an index into a rung list, because a URL can carry
+     * a value that is not a rung: `?baths=2.5` is a legitimate contract value (the service's
+     * `baths_display` is `full + 0.5 * half`), and `?beds=12` is reachable by hand.
+     *
+     * Going up floors first and going down ceils first, so the next rung is always the adjacent
+     * one in the direction pressed. Truncating in both directions — which an earlier version did —
+     * turned "–" from 2.5 into 1, silently skipping a whole bedroom.
+     */
     const step = (delta: number) => {
-      const from = atIndex ?? Math.trunc(current);
-      const next = Math.min(8, Math.max(0, from + delta));
-      set({ [key]: next === 0 ? undefined : next });
+      const from = delta > 0 ? Math.floor(current) : Math.ceil(current);
+      const next = Math.min(COUNT_MAX, Math.max(COUNT_MIN, from + delta));
+      set({ [key]: next === COUNT_MIN ? undefined : next });
     };
 
     return (
@@ -121,7 +127,7 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
           {stepperButton({
             label: '–',
             accessibleName: `Fewer ${label.toLowerCase()}`,
-            disabled: disabled || current <= 0,
+            disabled: disabled || current <= COUNT_MIN,
             describedBy: parcelHintId,
             onClick: () => step(-1),
           })}
@@ -131,12 +137,12 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
               disabled ? 'text-ink-subtle' : 'text-ink'
             }`}
           >
-            {disabled || current <= 0 ? 'Any' : `${current}+`}
+            {disabled || current <= COUNT_MIN ? 'Any' : `${current}+`}
           </span>
           {stepperButton({
             label: '+',
             accessibleName: `More ${label.toLowerCase()}`,
-            disabled: disabled || current >= 8,
+            disabled: disabled || current >= COUNT_MAX,
             describedBy: parcelHintId,
             onClick: () => step(1),
           })}
@@ -352,5 +358,8 @@ function stepperButton({
 function wholeNumberOrUndefined(raw: string): number | undefined {
   const trimmed = raw.trim();
   if (!/^\d+$/.test(trimmed)) return undefined;
-  return Number(trimmed);
+  // `0` is the filter's absence, not a filter — matching the parser and the stepper's "Any" rung.
+  // A `minSqft` of 0 is in fact a narrowing (`sqft >= 0` excludes every parcel, whose `sqft` is
+  // NULL) that would show as no active filter and leave nothing on the page able to clear it.
+  return Number(trimmed) || undefined;
 }

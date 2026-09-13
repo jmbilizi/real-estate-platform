@@ -402,14 +402,16 @@ export default function SearchExperience({
 
   return (
     <div className="flex flex-col">
-      {/* Filter modal */}
-      <FilterModal
-        isOpen={filterOpen}
-        onClose={() => setFilterOpen(false)}
-        filters={filters}
-        onChange={applyFilters}
-        resultCount={total}
-      />
+      {/* Filter modal — mounted only while open, so its draft is seeded from the applied filters
+           on every open rather than once, at page mount. See the note on `FilterModal`. */}
+      {filterOpen && (
+        <FilterModal
+          onClose={() => setFilterOpen(false)}
+          filters={filters}
+          onChange={applyFilters}
+          resultCount={total}
+        />
+      )}
 
       {/* Body: Airbnb-style split layout.
            Desktop  — map fills right half edge-to-edge, full viewport height.
