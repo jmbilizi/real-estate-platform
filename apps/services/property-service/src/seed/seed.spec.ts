@@ -244,3 +244,56 @@ describe('listings write path', () => {
     }
   });
 });
+
+describe('MLS attribute model write path', () => {
+  /**
+   * The same containment, mirrored onto the attribute store (#127).
+   *
+   * The reason differs from the listings one and is worth keeping distinct: the attribute model's
+   * invariants ARE enforceable in the database (composite foreign keys do it), so this is not the only
+   * thing standing between a caller and a bad row. What one writer buys is the fail-closed BEHAVIOUR —
+   * an unregistered value detected and reported as a rejection instead of raising a constraint
+   * violation that aborts the whole ingest transaction. A second writer would get the rejection right
+   * on Monday and abort a batch on Tuesday.
+   *
+   * Note the symmetry: `write.ts` is checked here too. The two modules own different tables and
+   * neither may reach into the other's.
+   */
+  const ATTRIBUTE_TABLES = [
+    'mls_fields',
+    'mls_lookup_values',
+    'listing_attributes',
+    'property_attributes',
+  ];
+
+  it('is confined to src/db/mls-attributes.ts', () => {
+    const serviceRoot = join(__dirname, '..', '..');
+    const shouldNotWriteAttributes = [
+      'src/db/write.ts',
+      'src/seed/seed.ts',
+      'src/seed/seed-on-start.ts',
+      'src/seed/transform.ts',
+      'src/app.ts',
+      'src/main.ts',
+      'src/db/pool.ts',
+      'src/db/seed-state.ts',
+      'src/listings/repository.ts',
+    ];
+
+    for (const relativePath of shouldNotWriteAttributes) {
+      const contents = readFileSync(join(serviceRoot, relativePath), 'utf8');
+      for (const table of ATTRIBUTE_TABLES) {
+        expect(contents).not.toMatch(new RegExp(`INSERT\\s+INTO\\s+${table}\\b`, 'i'));
+        expect(contents).not.toMatch(new RegExp(`UPDATE\\s+${table}\\b`, 'i'));
+        expect(contents).not.toMatch(new RegExp(`DELETE\\s+FROM\\s+${table}\\b`, 'i'));
+      }
+    }
+  });
+
+  it('does not write listings, which belongs to src/db/write.ts', () => {
+    const contents = readFileSync(join(__dirname, '..', 'db', 'mls-attributes.ts'), 'utf8');
+    expect(contents).not.toMatch(/INSERT\s+INTO\s+listings\b/i);
+    expect(contents).not.toMatch(/UPDATE\s+listings\b/i);
+    expect(contents).not.toMatch(/DELETE\s+FROM\s+listings\b/i);
+  });
+});
