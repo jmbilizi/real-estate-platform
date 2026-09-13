@@ -100,28 +100,32 @@ describe('ListingCard', () => {
   });
 
   describe('required disclosure labels', () => {
-    // it('labels a sample row', () => {
-    //   render(<ListingCard listing={aListingCardRow({ isSample: true })} />);
-    //   expect(screen.getByText(/sample data/i)).toBeInTheDocument();
-    // });
-    // it('does not label a non-sample row', () => {
-    //   render(<ListingCard listing={aListingCardRow({ isSample: false })} />);
-    //   expect(screen.queryByText(/sample data/i)).not.toBeInTheDocument();
-    // });
-    // it('labels a sponsored row, so paid placement is never shown as organic ranking', () => {
-    //   render(<ListingCard listing={aListingCardRow({ sponsored: true })} />);
-    //   expect(screen.getByText('Sponsored')).toBeInTheDocument();
-    // });
-    // it('shows both required labels at once, and neither displaces a marketing badge slot', () => {
-    //   render(
-    //     <ListingCard
-    //       listing={aListingCardRow({ isSample: true, sponsored: true, priceReduced: true })}
-    //     />,
-    //   );
-    //   expect(screen.getByText(/sample data/i)).toBeInTheDocument();
-    //   expect(screen.getByText('Sponsored')).toBeInTheDocument();
-    //   expect(screen.getByText('Price reduced')).toBeInTheDocument();
-    // });
+    it('labels a sample row', () => {
+      render(<ListingCard listing={aListingCardRow({ isSample: true })} />);
+      expect(screen.getByText(/sample data/i)).toBeInTheDocument();
+    });
+
+    it('does not label a non-sample row', () => {
+      render(<ListingCard listing={aListingCardRow({ isSample: false })} />);
+      expect(screen.queryByText(/sample data/i)).not.toBeInTheDocument();
+    });
+
+    it('labels a sponsored row, so paid placement is never shown as organic ranking', () => {
+      render(<ListingCard listing={aListingCardRow({ sponsored: true })} />);
+      expect(screen.getByText('Sponsored')).toBeInTheDocument();
+    });
+
+    it('shows both required labels at once, and neither displaces a marketing badge slot', () => {
+      render(
+        <ListingCard
+          listing={aListingCardRow({ isSample: true, sponsored: true, priceReduced: true })}
+        />,
+      );
+
+      expect(screen.getByText(/sample data/i)).toBeInTheDocument();
+      expect(screen.getByText('Sponsored')).toBeInTheDocument();
+      expect(screen.getByText('Price reduced')).toBeInTheDocument();
+    });
   });
 
   describe('NAR 7.58 attribution — applies to search results, not only detail pages', () => {
@@ -370,8 +374,8 @@ describe('ListingCard', () => {
       );
 
       expect(screen.getByText('Open:')).toBeInTheDocument();
-      // expect(screen.getByText(/sample data/i)).toBeInTheDocument();
-      // expect(screen.getByText('Sponsored')).toBeInTheDocument();
+      expect(screen.getByText(/sample data/i)).toBeInTheDocument();
+      expect(screen.getByText('Sponsored')).toBeInTheDocument();
     });
   });
 
@@ -380,11 +384,32 @@ describe('ListingCard', () => {
    * row, a withheld-price row and an open-house row all occupy the same number of rows.
    */
   describe('grid uniformity', () => {
+    /**
+     * Scoped to the info block, not a bare `.h-5`.
+     *
+     * This assertion used to be `container.querySelector('.h-5')`, which the save control's
+     * `h-5 w-5` svg satisfies on its own — so it matched whether or not the label row existed. It
+     * is not a hypothetical: this test passed, green and unchanged, through all three commits that
+     * commented the disclosure row out of the component (`ed84ac7`, `c56dd33`, `7aa5ace`), which is
+     * a large part of why the labels stayed gone. A guard that cannot fail is worse than no guard,
+     * because it is read as coverage.
+     */
     it('reserves the disclosure-label slot even when a row has no labels', () => {
       const { container } = render(
         <ListingCard listing={aListingCardRow({ isSample: false, sponsored: false })} />,
       );
-      expect(container.querySelector('.h-5')).toBeTruthy();
+      expect(container.querySelector('.pt-2 > .h-5')).toBeTruthy();
+    });
+
+    /**
+     * The guard above, guarded.
+     *
+     * Asserts the selector is actually discriminating — that it goes red when the row is absent —
+     * so the next person to widen it back to a bare `.h-5` has to defeat this too.
+     */
+    it('the reserved-slot assertion fails when the label row is not rendered', () => {
+      const { container } = render(<div className="pt-2" />);
+      expect(container.querySelector('.pt-2 > .h-5')).toBeNull();
     });
 
     it('reserves the stats row even when there are no stats to show', () => {
