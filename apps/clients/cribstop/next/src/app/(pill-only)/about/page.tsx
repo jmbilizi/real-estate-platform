@@ -11,7 +11,7 @@ export default function AboutPage() {
       <p className="mt-4 text-lg leading-relaxed text-ink-muted">
         {BRAND.siteDomain} is your modern real estate marketplace, designed to make buying, selling,
         and renting homes as seamless as booking a trip. We combine beautiful design with powerful
-        search to help you find your perfect home in the DMV area and beyond.
+        search to help you find your perfect home in the DMV area.
       </p>
 
       <div className="mt-12 grid gap-8 sm:grid-cols-2">
@@ -26,9 +26,9 @@ export default function AboutPage() {
         <div className="rounded-2xl border border-surface-border bg-white p-6 shadow-card">
           <h2 className="font-display text-xl font-bold">Our Mission</h2>
           <p className="mt-3 text-sm leading-relaxed text-ink-muted">
-            We believe finding a home should be inspiring, not overwhelming. Every feature on
-            {BRAND.siteDomain} is designed to give you confidence—from verified listings and
-            transparent broker attribution to neighborhood insights and real-time search alerts.
+            We believe finding a home should be inspiring, not overwhelming. Every feature on{' '}
+            {BRAND.siteDomain} is designed to give you confidence—from transparent broker
+            attribution to neighborhood insights.
           </p>
         </div>
       </div>
@@ -42,20 +42,33 @@ export default function AboutPage() {
             discriminate on the basis of race, color, religion, sex, handicap, familial status, or
             national origin.
           </p>
-          <p>
-            Listing information displayed on {BRAND.siteDomain} is provided by Bright MLS and is
-            deemed reliable but not guaranteed. The information is for personal, non-commercial use
-            only and may not be used for any purpose other than identifying prospective properties
-            consumers may be interested in purchasing or renting.
-          </p>
+          {/*
+           * This card deliberately makes NO claim about where listing data comes from, and states
+           * no dataset-freshness value. Both used to live here as static prose and both were
+           * false: every row is `source='internal'` (#21 asserts it) with no Bright content
+           * licence yet (#33), and a hardcoded "Data last updated" date is wrong on every day but
+           * one (PRD §6.3 — a fabricated fact on a compliance disclosure).
+           *
+           * Neither is re-derived here, because neither belongs here:
+           *
+           * - **Provenance.** The site-level attribution IDX display rules actually require is the
+           *   `sources`-gated block in `components/Footer.tsx`, which renders only when
+           *   `GET /property/listings/meta` reports `brightMLS`. `Footer` is mounted in the root
+           *   `app/layout.tsx`, so it is already on this route — removing the sentence that was
+           *   here removed an unapproved *editorial* claim, not a required disclosure. Approved
+           *   replacement wording is #33's to deliver with broker sign-off; do not reintroduce it
+           *   by hand here. `about/page.spec.tsx` fails if anyone does.
+           * - **Freshness.** The same footer states it once per route from that endpoint, omitting
+           *   the line entirely when `dataUpdatedAt` is null rather than substituting today. One
+           *   fact, one source; a second copy here could only ever disagree with it.
+           *
+           * What remains below is source-neutral and true of our own inventory exactly as it would
+           * be of Bright's.
+           */}
           <p>
             Some properties which appear for sale or rent on this website may no longer be available
             because they are under contract, have closed, or are no longer being offered for sale or
             rent.
-          </p>
-          <p>
-            All listing data is provided courtesy of the listing broker. Data last updated: April
-            21, 2026 at 12:00 PM ET.
           </p>
           <p className="font-medium text-ink">
             Brokered by {BRAND.brokerageShort}. Equal Housing Opportunity.
