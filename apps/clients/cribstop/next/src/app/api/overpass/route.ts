@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { buildNearbyPlacesQuery, QUERY_TIMEOUT_SECONDS } from '../_lib/overpass';
+import { buildNearbyPlacesQuery, overpassRemark, QUERY_TIMEOUT_SECONDS } from '../_lib/overpass';
 
 // Proxies OpenStreetMap Overpass API requests for nearby place lookups.
 // Overpass does not reliably emit CORS headers so it cannot be called directly from the browser.
@@ -8,17 +8,33 @@ import { buildNearbyPlacesQuery, QUERY_TIMEOUT_SECONDS } from '../_lib/overpass'
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
 
 /**
- * The timeout that actually bounds this handler.
+ * How long Overpass may sit on the request *before* it starts running it.
  *
- * Deliberately longer than the query's own `[timeout:...]`: if Overpass is merely slow we want
- * *its* budget to expire and return a real error we can log, not ours to cut off a query that was
- * about to answer. The margin covers connection setup and transfer either side of that budget.
+ * `[timeout:N]` in the query is an **execution** budget, and execution does not begin when the
+ * request arrives — overpass-api.de allows only a couple of concurrent slots per client IP and
+ * holds the connection open in a queue until one frees up. So the wall clock a client must budget
+ * for is queue + execution, not execution plus a little transfer.
+ *
+ * Getting this wrong inverts the whole point of the margin: at `[timeout:10] + 2s` our own signal
+ * fired first on any loaded upstream, aborting queries that were about to run and turning every
+ * lookup into a 502 — exactly the "ours cutting off a query that was about to answer" outcome the
+ * margin exists to prevent.
+ *
+ * Eight seconds is a judgement call, not a measurement, and it cannot be made correct: the queue is
+ * someone else's and is unbounded in principle. It is chosen to make *our* timeout the unusual case
+ * and Overpass's own `remark` the usual one, because that is the failure we can read and log.
+ * Affordable because this lookup is enrichment — it degrades suggestions and never blocks a page.
+ */
+const QUEUE_ALLOWANCE_MS = 8_000;
+
+/**
+ * The timeout that actually bounds this handler.
  *
  * There was no client timeout here at all, only the server-side one inside the query — which does
  * nothing for a connection reset before Overpass ever sees it. `_lib/nominatim-fetch.ts` has had
  * one since it was written and its comment recorded this route's lack of one as outstanding debt.
  */
-const REQUEST_TIMEOUT_MS = (QUERY_TIMEOUT_SECONDS + 2) * 1000;
+const REQUEST_TIMEOUT_MS = QUERY_TIMEOUT_SECONDS * 1000 + QUEUE_ALLOWANCE_MS;
 
 /**
  * How long a nearby-places answer may be reused.
@@ -48,14 +64,33 @@ export async function GET(req: NextRequest) {
         'User-Agent': 'real-estate-platform/1.0',
       },
       body: `data=${encodeURIComponent(built.query)}`,
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      /*
+       * Composed, not just a timeout: the caller aborts its own request on every re-trigger (the
+       * search bar does this on each keystroke), and without `req.signal` in here an abandoned
+       * lookup still occupies one of the ~2 Overpass slots our IP gets, for the full budget above.
+       * Rapid panning would then park abandoned queries in the exact scarce resource this whole
+       * change is about not squandering.
+       */
+      signal: AbortSignal.any([req.signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
     });
 
     if (!upstream.ok) {
       return softFailure(`upstream ${upstream.status}`);
     }
 
-    return Response.json(await upstream.json(), {
+    const body = await upstream.json();
+
+    /*
+     * A 200 is not a success here — see `overpassRemark`. Checked before the response is built,
+     * because the thing that makes this failure expensive is the `Cache-Control` below it.
+     */
+    const remark = overpassRemark(body);
+
+    if (remark) {
+      return softFailure(`upstream returned 200 with remark: ${remark}`);
+    }
+
+    return Response.json(body, {
       headers: { 'Cache-Control': `public, max-age=${CACHE_SECONDS}` },
     });
   } catch (e) {

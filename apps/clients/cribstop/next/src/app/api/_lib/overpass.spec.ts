@@ -4,12 +4,22 @@ import {
   DEFAULT_RADIUS_METERS,
   MAX_RADIUS_METERS,
   MIN_RADIUS_METERS,
+  overpassRemark,
 } from './overpass';
 
 const build = (qs: string) => buildNearbyPlacesQuery(new URLSearchParams(qs));
 
-/** The query text a successful build produced, for asserting on what we send upstream. */
-const queryOf = (r: ReturnType<typeof buildNearbyPlacesQuery>) => (r.ok ? r.query : '');
+/**
+ * The query text a successful build produced, for asserting on what we send upstream.
+ *
+ * Throws rather than returning `''` on a rejected build. Two queries compared for equality would
+ * otherwise both be `''` and match trivially, so a builder that started rejecting valid input would
+ * make that test pass instead of fail — the one silent failure mode in this file.
+ */
+const queryOf = (r: ReturnType<typeof buildNearbyPlacesQuery>) => {
+  if (!r.ok) throw new Error(`expected a built query, got rejection: ${r.error}`);
+  return r.query;
+};
 
 /** The coordinates from a real request, at the full float precision the map centre arrives with. */
 const VALID = 'lat=38.89553417351007&lon=-77.07075970701736&placeType=city';
@@ -149,5 +159,49 @@ describe('buildNearbyPlacesQuery', () => {
         expect(queryOf(build(`${VALID}&${qs}`))).not.toContain('NaN');
       }
     });
+  });
+});
+
+/**
+ * Overpass answers an expired query budget, rate limiting and truncated results with HTTP **200**
+ * and a `remark` in the body. Missing that is not a missed error but a cached one: the handler
+ * would stamp a day of `Cache-Control` on it and the browser would not ask again until tomorrow.
+ */
+describe('overpassRemark', () => {
+  it('reads the remark out of a failed 200 body', () => {
+    const body = {
+      elements: [],
+      remark: 'runtime error: Query timed out in "query" at line 3 after 10 seconds.',
+    };
+
+    expect(overpassRemark(body)).toBe(body.remark);
+  });
+
+  it('reports nothing for a genuine empty result, which is not an error', () => {
+    // "There are no towns within the radius" and "the query failed" are the same `elements: []`.
+    // The remark is the only thing separating them.
+    expect(overpassRemark({ elements: [] })).toBeNull();
+  });
+
+  it('reports nothing for a successful result', () => {
+    expect(overpassRemark({ elements: [{ id: 1, tags: { name: 'Arlington' } }] })).toBeNull();
+  });
+
+  it.each([
+    ['null', null],
+    ['undefined', undefined],
+    ['an array', []],
+    ['a string', 'remark'],
+    ['a number', 0],
+  ])('tolerates a body that is %s', (_label, body) => {
+    expect(overpassRemark(body)).toBeNull();
+  });
+
+  it.each([
+    ['a blank remark', { remark: '   ' }],
+    ['an empty remark', { remark: '' }],
+    ['a non-string remark', { remark: { message: 'nope' } }],
+  ])('does not treat %s as a failure', (_label, body) => {
+    expect(overpassRemark(body)).toBeNull();
   });
 });

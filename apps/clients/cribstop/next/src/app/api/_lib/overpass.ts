@@ -51,6 +51,34 @@ export const MAX_RADIUS_METERS = 50_000;
 
 export type BuiltQuery = { ok: true; query: string } | { ok: false; error: string };
 
+/**
+ * The failure that arrives as a success.
+ *
+ * Overpass reports an expired `[timeout:...]` budget, rate limiting, and truncated results in the
+ * response **body**, with an HTTP **200** and a `remark` field:
+ *
+ * ```json
+ * { "elements": [], "remark": "runtime error: Query timed out in \"query\" at line 3 after 10 seconds." }
+ * ```
+ *
+ * So `response.ok` is not a health check here, and treating it as one is worse than merely missing
+ * the error: the handler stamps a day of `Cache-Control` on it, the caller reads `elements` as an
+ * empty list and reports "no nearby locations", and the browser will not ask again for that grid
+ * square until tomorrow. A transient upstream hiccup becomes a day of wrong answers, and nothing is
+ * logged. That is the single worst outcome this endpoint has, and the only signal distinguishing it
+ * from a genuine "there are no towns near here" is this field.
+ *
+ * Lives here rather than in the route for the same reason the query builder does: it is a fact
+ * about what Overpass says, which is testable without a network.
+ */
+export function overpassRemark(body: unknown): string | null {
+  if (typeof body !== 'object' || body === null) return null;
+
+  const remark = (body as { remark?: unknown }).remark;
+
+  return typeof remark === 'string' && remark.trim() !== '' ? remark : null;
+}
+
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 /**
