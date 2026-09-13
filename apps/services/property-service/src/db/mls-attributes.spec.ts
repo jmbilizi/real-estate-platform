@@ -43,9 +43,17 @@ function createFakeClient(data: FakeRows): { client: Queryable; queries: Recorde
         return Promise.resolve({ rows: row ? [row] : [] });
       }
       if (text.includes('FROM mls_lookup_values')) {
-        const value = String(values?.[1]);
-        const row = data.lookupValues?.[value];
-        return Promise.resolve({ rows: row ? [row] : [] });
+        // The writer resolves a whole field's vocabulary in one `= ANY($2)` query, so the fake
+        // answers in the same shape: only the requested values that are actually registered.
+        const requested = (values?.[1] ?? []) as string[];
+        const rows: Record<string, unknown>[] = [];
+        for (const value of requested) {
+          const row = data.lookupValues?.[value];
+          if (row) {
+            rows.push({ ...row, value });
+          }
+        }
+        return Promise.resolve({ rows });
       }
       if (text.includes('DELETE FROM')) {
         return Promise.resolve({ rows: data.deleted ?? [] });
@@ -130,6 +138,53 @@ describe('putListingAttributes — fail closed without aborting the batch', () =
     expect(result.stored).toBe(0);
     expect(queries.some((q) => q.text.includes('DELETE FROM listing_attributes'))).toBe(false);
     expect(inserts(queries, 'listing_attributes')).toHaveLength(0);
+  });
+
+  it('reports EVERY unregistered value of a field in one pass, not just the first', async () => {
+    // One rejection per run would mean one ingest run per missing token to close a vocabulary gap.
+    const { client } = createFakeClient({
+      fields: { ArchitecturalStyle: lookupField },
+      lookupValues: { Colonial: { id: 'value-1', retired_at: null } },
+    });
+
+    const result = await putListingAttributes(client, 'listing-1', [
+      {
+        ...BRIGHT_KEY,
+        fieldName: 'ArchitecturalStyle',
+        value: ['Colonial', 'Brutalist', 'Deconstructivist'],
+      },
+    ]);
+
+    expect(result.rejected.map((rejection) => rejection.value)).toEqual([
+      'Brutalist',
+      'Deconstructivist',
+    ]);
+    expect(result.stored).toBe(0);
+  });
+
+  it('resolves a whole enumerated field in ONE round trip, not one per value', async () => {
+    // The ingest workload is throughput-bound; a query per value is ~200 extra round trips on a
+    // vocabulary-heavy listing.
+    const { client, queries } = createFakeClient({
+      fields: { ArchitecturalStyle: lookupField },
+      lookupValues: {
+        Colonial: { id: 'value-1', retired_at: null },
+        Craftsman: { id: 'value-2', retired_at: null },
+        Victorian: { id: 'value-3', retired_at: null },
+      },
+    });
+
+    await putListingAttributes(client, 'listing-1', [
+      {
+        ...BRIGHT_KEY,
+        fieldName: 'ArchitecturalStyle',
+        value: ['Colonial', 'Craftsman', 'Victorian'],
+      },
+    ]);
+
+    const lookups = queries.filter((q) => q.text.includes('FROM mls_lookup_values'));
+    expect(lookups).toHaveLength(1);
+    expect(lookups[0]?.values?.[1]).toEqual(['Colonial', 'Craftsman', 'Victorian']);
   });
 
   it('rejects a retired value rather than storing against a withdrawn vocabulary entry', async () => {
@@ -236,6 +291,77 @@ describe('putListingAttributes — typed storage', () => {
     const result = await putListingAttributes(client, 'listing-1', [{ ...BRIGHT_KEY, value: 'Y' }]);
 
     expect(result.rejected[0]?.reason).toBe('type_mismatch');
+  });
+
+  /**
+   * Each of these passed a shape check and then raised AT THE COLUMN, aborting the caller's whole
+   * ingest transaction — the one failure this module's entire design is meant to rule out. They are
+   * grouped because the class matters more than the individual values: anything Postgres would throw
+   * on has to be caught here, where it is still an ordinary rejection.
+   */
+  describe('values the column would throw on are rejected here, not by Postgres', () => {
+    it.each([
+      ['2026-02-30', 'a day that does not exist in that month'],
+      ['2026-13-01', 'a month that does not exist'],
+      ['0000-00-00', 'the all-zero placeholder some feeds emit'],
+    ])('rejects the date %p — %s', async (value) => {
+      const { client, queries } = createFakeClient({
+        fields: { LotSizeAcres: { ...numericField, data_type: 'date' } },
+      });
+
+      const result = await putListingAttributes(client, 'listing-1', [{ ...BRIGHT_KEY, value }]);
+
+      expect(result.rejected[0]?.reason).toBe('type_mismatch');
+      expect(inserts(queries, 'listing_attributes')).toHaveLength(0);
+    });
+
+    it('accepts a real date', async () => {
+      const { client, queries } = createFakeClient({
+        fields: { LotSizeAcres: { ...numericField, data_type: 'date' } },
+      });
+
+      await putListingAttributes(client, 'listing-1', [{ ...BRIGHT_KEY, value: '2026-02-28' }]);
+
+      expect(inserts(queries, 'listing_attributes')[0]?.values?.[6]).toBe('2026-02-28');
+    });
+
+    it.each([
+      [1e20, 'beyond numeric(20,6) — an Edm.Int64-shaped value overflows the column'],
+      [-1e20, 'the same overflow, negative'],
+    ])('rejects %p as out of range — %s', async (value) => {
+      const { client } = createFakeClient({ fields: { LotSizeAcres: numericField } });
+
+      const result = await putListingAttributes(client, 'listing-1', [{ ...BRIGHT_KEY, value }]);
+
+      expect(result.rejected[0]?.reason).toBe('type_mismatch');
+    });
+
+    it.each([
+      ['0x10', 'a hex literal, which Number() would silently read as 16'],
+      ['Infinity', 'a word Number() accepts'],
+      ['', 'the empty string, which Number() reads as 0'],
+      ['  ', 'whitespace, likewise'],
+    ])('rejects the numeric string %p — %s', async (value) => {
+      const { client } = createFakeClient({ fields: { LotSizeAcres: numericField } });
+
+      const result = await putListingAttributes(client, 'listing-1', [{ ...BRIGHT_KEY, value }]);
+
+      expect(result.rejected[0]?.reason).toBe('type_mismatch');
+    });
+  });
+
+  it('rejects an array on a SCALAR field instead of silently keeping the last member', async () => {
+    // Flattening would upsert each member onto the same row (the unique index is NULLS NOT DISTINCT),
+    // so `3` would win while `stored: 3` was reported — a wrong value that looks like a right one.
+    const { client, queries } = createFakeClient({ fields: { LotSizeAcres: numericField } });
+
+    const result = await putListingAttributes(client, 'listing-1', [
+      { ...BRIGHT_KEY, value: [1, 2, 3] },
+    ]);
+
+    expect(result.rejected[0]?.reason).toBe('type_mismatch');
+    expect(result.stored).toBe(0);
+    expect(inserts(queries, 'listing_attributes')).toHaveLength(0);
   });
 
   it('writes one row per value of a multi-valued lookup field', async () => {

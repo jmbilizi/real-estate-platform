@@ -108,8 +108,8 @@ status, city/state/zip, geo — `idx_listings_live_price` is why), **and everyth
 governed typed attribute store.** Four tables:
 
 - **`mls_fields`** — one row per field we accept. Identity is
-  `(originating_system, reso_resource, field_name)`, so onboarding a second MLS is rows, not DDL, and
-  the same RESO standard field from two systems is deliberately two rows (entitlement and
+  `(originating_system, reso_resource, field_name)`, so onboarding a second MLS is rows, not DDL,
+  and the same RESO standard field from two systems is deliberately two rows (entitlement and
   classification differ per market).
 - **`mls_lookup_values`** — one row per permitted value of an enumerated field. This generalises the
   `listing_statuses` precedent to every field. **Adding a value Bright invented last week is an
@@ -135,7 +135,7 @@ to be the second half of those keys; they are not data.
 **`src/db/mls-attributes.ts` is the only module that writes these four tables**, mirroring (not
 merged into) `write.ts`'s rule — `seed.spec.ts` asserts both directions. The reason differs and is
 worth keeping straight: `write.ts` exists because the dwelling snapshot is drift-capable and
-*cannot* be constrained; this module exists for the fail-closed **behaviour** the constraints cannot
+_cannot_ be constrained; this module exists for the fail-closed **behaviour** the constraints cannot
 express — an unregistered value is detected first and returned as a structured rejection, so one
 unknown vocabulary token does not abort the ingest of a whole batch. Rejections are diagnostics for
 an ingestion run to record (#93 owns retention); this module persists none of them, and truncates
@@ -147,11 +147,11 @@ lookup token.
 nobody has classified is therefore invisible rather than public — the inverse of the
 column-by-column suppression rule that fails open on every field nobody thought about (#53).
 `registerMlsField()` deliberately offers no way to set `is_consumer_displayable`, and its
-`ON CONFLICT` never re-asserts `is_address_bearing`, `data_type` or `scope`, so a `$metadata` re-pull
-cannot silently revert a human's review. **Nothing is exposed to a consumer yet**: no
-`listing_search_v` change, no contract change, no API field. Whatever eventually exposes an attribute
-filters on `is_consumer_displayable` **and** routes through `suppression.ts` — neither substitutes
-for the other.
+`ON CONFLICT` never re-asserts `is_address_bearing`, `data_type` or `scope`, so a `$metadata`
+re-pull cannot silently revert a human's review. **Nothing is exposed to a consumer yet**: no
+`listing_search_v` change, no contract change, no API field. Whatever eventually exposes an
+attribute filters on `is_consumer_displayable` **and** routes through `suppression.ts` — neither
+substitutes for the other.
 
 `listings.amenities` and `properties.property_type` keep their CHECKs and are untouched; whether to
 converge them onto this store later is deliberately left open in both directions.

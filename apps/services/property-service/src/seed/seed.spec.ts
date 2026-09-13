@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { mockListings } from './mock-listings';
@@ -245,6 +245,17 @@ describe('listings write path', () => {
   });
 });
 
+/** Every `.ts` file under a directory, recursively. */
+function collectSourceFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      return collectSourceFiles(path);
+    }
+    return entry.isFile() && path.endsWith('.ts') ? [path] : [];
+  });
+}
+
 describe('MLS attribute model write path', () => {
   /**
    * The same containment, mirrored onto the attribute store (#127).
@@ -267,21 +278,20 @@ describe('MLS attribute model write path', () => {
   ];
 
   it('is confined to src/db/mls-attributes.ts', () => {
-    const serviceRoot = join(__dirname, '..', '..');
-    const shouldNotWriteAttributes = [
-      'src/db/write.ts',
-      'src/seed/seed.ts',
-      'src/seed/seed-on-start.ts',
-      'src/seed/transform.ts',
-      'src/app.ts',
-      'src/main.ts',
-      'src/db/pool.ts',
-      'src/db/seed-state.ts',
-      'src/listings/repository.ts',
-    ];
+    // Every source file under src/ EXCEPT the writer itself, discovered rather than enumerated.
+    //
+    // A hardcoded allowlist would not cover the two modules most likely to become the second writer —
+    // the `$metadata` sync (#91) and the ingestion writer (#93), which are the whole reason this model
+    // exists and do not exist yet. They would simply not be in the list, and the rule would stop being
+    // enforced with nothing failing to say so.
+    const sourceRoot = join(__dirname, '..');
+    const sourceFiles = collectSourceFiles(sourceRoot).filter(
+      (path) => !path.endsWith(join('db', 'mls-attributes.ts')) && !path.endsWith('.spec.ts'),
+    );
+    expect(sourceFiles.length).toBeGreaterThan(5);
 
-    for (const relativePath of shouldNotWriteAttributes) {
-      const contents = readFileSync(join(serviceRoot, relativePath), 'utf8');
+    for (const absolutePath of sourceFiles) {
+      const contents = readFileSync(absolutePath, 'utf8');
       for (const table of ATTRIBUTE_TABLES) {
         expect(contents).not.toMatch(new RegExp(`INSERT\\s+INTO\\s+${table}\\b`, 'i'));
         expect(contents).not.toMatch(new RegExp(`UPDATE\\s+${table}\\b`, 'i'));

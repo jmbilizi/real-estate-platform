@@ -249,10 +249,32 @@ const EMPTY_TYPED_VALUE: TypedValue = {
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
+ * A decimal literal, and nothing else.
+ *
+ * `Number()` alone is too permissive for a value that is about to be bound to a `numeric` column: it
+ * reads `'0x10'` as 16, `'Infinity'` as Infinity, and `''` as 0. A feed sending any of those has a
+ * mapping problem, and guessing at it here is how a wrong number ends up looking like a real one.
+ */
+const DECIMAL_LITERAL = /^[+-]?(\d+(\.\d+)?|\.\d+)([eE][+-]?\d+)?$/;
+
+/**
+ * The column is `numeric(20,6)`, which leaves 20 − 6 = 14 digits before the point.
+ *
+ * Exceeding it raises `numeric field overflow` AT THE COLUMN — which would abort the caller's whole
+ * ingest transaction, the precise failure this module exists to prevent. So the bound is enforced
+ * here, where it can still be reported as an ordinary rejection. An `Edm.Int64`-shaped feed value
+ * (a large numeric key) is the realistic way to hit it.
+ */
+const MAX_NUMERIC_MAGNITUDE = 1e14;
+
+/**
  * Coerces one raw feed value against the field's registered type, or returns undefined to reject it.
  *
- * Numeric strings are accepted because RESO serialises `Edm.Decimal` as a string over JSON; anything
- * that is not a clean finite number is still rejected rather than silently becoming NaN or 0. Booleans
+ * EVERY ARM MUST REJECT ANYTHING THE COLUMN WOULD THROW ON. A value that passes here and then raises
+ * at the column takes down the surrounding transaction, so "the database will catch it" is not an
+ * acceptable division of labour on this path — it is the batch-abort this module promises not to do.
+ *
+ * Numeric strings are accepted because RESO serialises `Edm.Decimal` as a string over JSON. Booleans
  * are NOT coerced from `'Y'`/`'1'` — a feed that spells them that way needs a reviewed mapping, not a
  * guess made at write time.
  */
@@ -263,23 +285,35 @@ function coerceScalar(dataType: MlsDataType, raw: unknown): TypedValue | undefin
       const numeric =
         typeof raw === 'number'
           ? raw
-          : typeof raw === 'string' && raw.trim() !== ''
-            ? Number(raw)
+          : typeof raw === 'string' && DECIMAL_LITERAL.test(raw.trim())
+            ? Number(raw.trim())
             : NaN;
-      if (!Number.isFinite(numeric)) {
+      if (!Number.isFinite(numeric) || Math.abs(numeric) >= MAX_NUMERIC_MAGNITUDE) {
         return undefined;
       }
       if (dataType === 'integer' && !Number.isInteger(numeric)) {
         return undefined;
       }
+      // Scale is deliberately NOT rejected: the column rounds anything past 6 decimal places, and
+      // dropping a lot size because the feed sent 0.3333333333 would lose a real value over a
+      // difference that cannot matter. Magnitude is different — that one is an error, not a rounding.
       return { ...EMPTY_TYPED_VALUE, value_numeric: numeric };
     }
     case 'boolean':
       return typeof raw === 'boolean' ? { ...EMPTY_TYPED_VALUE, value_boolean: raw } : undefined;
-    case 'date':
-      return typeof raw === 'string' && ISO_DATE.test(raw)
-        ? { ...EMPTY_TYPED_VALUE, value_date: raw }
-        : undefined;
+    case 'date': {
+      if (typeof raw !== 'string' || !ISO_DATE.test(raw)) {
+        return undefined;
+      }
+      // The regex checks SHAPE, not calendar validity: `2026-02-30` and `2026-13-01` both match it and
+      // then raise `date/time field value out of range` at the column. Round-tripping through Date is
+      // what separates the two — JS rolls an impossible day over into the next month, so a date that
+      // does not come back identical was never a real date.
+      const parsed = new Date(`${raw}T00:00:00Z`);
+      return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== raw
+        ? undefined
+        : { ...EMPTY_TYPED_VALUE, value_date: raw };
+    }
     case 'timestamp': {
       if (!(typeof raw === 'string' || raw instanceof Date)) {
         return undefined;
@@ -295,26 +329,31 @@ function coerceScalar(dataType: MlsDataType, raw: unknown): TypedValue | undefin
   }
 }
 
-async function resolveLookupValue(
+/**
+ * Resolves EVERY value of one enumerated field in a single round trip.
+ *
+ * One query per value would be ~200 extra round trips on a listing whose payload is mostly
+ * vocabularies, on the workload this project's guide singles out as throughput-bound. The registry is
+ * small and static within a run, so the whole set is fetched at once and matched in memory.
+ */
+async function resolveLookupValues(
   client: Queryable,
   fieldId: string,
-  raw: unknown,
-): Promise<{ id: string } | MlsRejectionReason> {
-  if (typeof raw !== 'string') {
-    return 'type_mismatch';
+  values: string[],
+): Promise<Map<string, { id: string; retired: boolean }>> {
+  if (values.length === 0) {
+    return new Map();
   }
   const { rows } = await client.query(
-    'SELECT id, retired_at FROM mls_lookup_values WHERE field_id = $1 AND value = $2',
-    [fieldId, raw],
+    'SELECT id, value, retired_at FROM mls_lookup_values WHERE field_id = $1 AND value = ANY($2::text[])',
+    [fieldId, [...new Set(values)]],
   );
-  const match = rows[0];
-  if (!match) {
-    return 'unregistered_value';
-  }
-  if (match.retired_at) {
-    return 'retired_value';
-  }
-  return { id: match.id as string };
+  return new Map(
+    rows.map((row) => [
+      String(row.value),
+      { id: String(row.id), retired: row.retired_at !== null && row.retired_at !== undefined },
+    ]),
+  );
 }
 
 interface AttributeTarget {
@@ -432,12 +471,22 @@ async function putAttributes(
 
     // Flatten: an array is a multi-valued lookup, a scalar is one value, null/undefined clears.
     const raw: { value: unknown; timestamp: string | null }[] = [];
+    let fieldRejected = false;
     for (const attribute of group) {
       const timestamp = attribute.sourceModificationTimestamp ?? null;
       if (attribute.value === null || attribute.value === undefined) {
         continue;
       }
       if (Array.isArray(attribute.value)) {
+        // Only an ENUMERATED field is multi-valued. An array on a scalar field is a mapping mistake,
+        // and it has to be rejected rather than flattened: each member would upsert onto the same row
+        // (the unique index is NULLS NOT DISTINCT, deliberately), so the last one would silently win
+        // while every member was reported as stored — a wrong value that looks like a right one.
+        if (field.data_type !== 'lookup') {
+          reject('type_mismatch', attribute.value);
+          fieldRejected = true;
+          break;
+        }
         for (const member of attribute.value) {
           raw.push({ value: member, timestamp });
         }
@@ -446,15 +495,36 @@ async function putAttributes(
       }
     }
 
+    // Resolved in one round trip for the whole field, rather than one per value.
+    const lookupMatches =
+      field.data_type === 'lookup' && !fieldRejected
+        ? await resolveLookupValues(
+            client,
+            field.id,
+            raw
+              .map((entry) => entry.value)
+              .filter((value): value is string => typeof value === 'string'),
+          )
+        : new Map<string, { id: string; retired: boolean }>();
+
     const resolved: ResolvedValue[] = [];
-    let fieldRejected = false;
-    for (const entry of raw) {
+    for (const entry of fieldRejected ? [] : raw) {
       if (field.data_type === 'lookup') {
-        const match = await resolveLookupValue(client, field.id, entry.value);
-        if (typeof match === 'string') {
-          reject(match, entry.value);
+        if (typeof entry.value !== 'string') {
+          reject('type_mismatch', entry.value);
           fieldRejected = true;
-          break;
+          continue;
+        }
+        const match = lookupMatches.get(entry.value);
+        if (!match) {
+          reject('unregistered_value', entry.value);
+          fieldRejected = true;
+          continue;
+        }
+        if (match.retired) {
+          reject('retired_value', entry.value);
+          fieldRejected = true;
+          continue;
         }
         resolved.push({
           typed: { ...EMPTY_TYPED_VALUE, value_lookup_id: match.id },
@@ -467,8 +537,11 @@ async function putAttributes(
       const typed = coerceScalar(field.data_type, entry.value);
       if (!typed) {
         reject('type_mismatch', entry.value);
+        // Deliberately NOT a `break`: every bad value of this field is reported in one pass, so
+        // closing a vocabulary gap takes one ingest run rather than one run per missing token. The
+        // field is still applied all-or-nothing — `fieldRejected` is what enforces that.
         fieldRejected = true;
-        break;
+        continue;
       }
       resolved.push({
         typed,

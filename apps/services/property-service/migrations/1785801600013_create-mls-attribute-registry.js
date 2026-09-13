@@ -61,8 +61,9 @@ exports.shorthands = undefined;
  *
  * ── HOW GOVERNANCE IS ENFORCED ────────────────────────────────────────────────────────────────────
  *
- * By composite foreign keys, not by the writer's discipline. `src/db/write.ts` is still the only
- * module that writes these tables, but the invariants below hold even against a manual `psql` session:
+ * By composite foreign keys, not by the writer's discipline. `src/db/mls-attributes.ts` is the only
+ * module that writes these four tables — NOT `src/db/write.ts`, which owns `listings` and is asserted
+ * to stay out of these — but the invariants below hold even against a manual `psql` session:
  *
  *   1. An unregistered FIELD cannot be stored     — `field_id` references `mls_fields`.
  *   2. An unregistered VALUE cannot be stored     — `value_lookup_id` references `mls_lookup_values`,
