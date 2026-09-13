@@ -308,16 +308,20 @@ database, which is why nearly all of the logic lives in them:
   carrying flags for callers to remember. No parameter, header or flag bypasses it, and none of its
   predicates is restated in a handler's `WHERE` clause.
 - **What the view structurally cannot reach is withheld in `suppression.ts`, and nowhere else.**
-  Both endpoints join `listing_media` and `listing_open_houses` ALONGSIDE the view rather than
-  through it, so `openHouses[].remarks` (#59), `media[].altText` and `primaryMedia.altText` (#105)
-  are unreachable from any view predicate. `applyAddressSuppression()` covers the detail response
-  and `applyCardAddressSuppression()` the card — two exported functions over ONE private rule, both
-  keyed on `address === null` (the OUTCOME the view decided, never `address_display_allowed`, which
-  this service never reads) and both applied at the same edge of `repository.ts`. Alt text is
-  **nulled, not substituted**, the opposite call from `title`: the contract declares it nullable and
-  the client falls back to `alt=""`, so the honest answer is available — whereas any derived
-  alternative would describe an image this service has never seen. A new media-bearing response
-  shape reuses these, never a third mechanism.
+  Both endpoints join `listing_media` ALONGSIDE the view rather than through it, and the DETAIL
+  endpoint does the same with `listing_open_houses`, so `media[].altText`, `primaryMedia.altText`
+  (#105) and the detail's `openHouses[].remarks` (#59) are unreachable from any view predicate. The
+  CARD's single `openHouse.remarks` is **not** in that set — it comes out of `listing_search_v`,
+  which masks it on the `address_display_allowed` `CASE`, and `applyCardAddressSuppression()` never
+  touches it. Do not read that view `CASE` as dead weight during the next view migration: deleting
+  it reopens #59 on the search endpoint, where nothing at the response boundary would catch it.
+  `applyAddressSuppression()` covers the detail response and `applyCardAddressSuppression()` the
+  card — two exported functions over ONE private rule, both keyed on `address === null` (the OUTCOME
+  the view decided, never `address_display_allowed`, which this service never reads) and both
+  applied at the same edge of `repository.ts`. Alt text is **nulled, not substituted**, the opposite
+  call from `title`: the contract declares it nullable and the client falls back to `alt=""`, so the
+  honest answer is available — whereas any derived alternative would describe an image this service
+  has never seen. A new media-bearing response shape reuses these, never a third mechanism.
 - **Enumerate columns, never `SELECT *`.** The view no longer projects the unmasked `street_line`
   beside the masked `address` (**#48**, closed by migration `1785801600010`), so this is now defence
   in depth rather than the sole barrier: `SELECT *` would still read the view's compliance predicate
@@ -399,8 +403,13 @@ by `main.ts` and the harness alike) to run the suite while `skaffold` holds that
 
 `ListingRow` requires `internet_display_allowed`, `address_display_allowed`,
 `description_moderation` and `featured_reason`, `OpenHouseRow` requires `remarks` and
-`is_cancelled`, and `MediaRow` requires `alt_text` (#105). They are **required, not
-optional-with-default**: all of these columns have permissive database defaults, so an optional
-field would let a future MLS mapper that forgets to carry `InternetEntireListingDisplayYN` publish a
-listing the seller withheld, silently and with no error at any layer. Required makes that omission a
-compile error. Do not relax them.
+`is_cancelled`. They are **required, not optional-with-default**: all of these columns have
+permissive database defaults, so an optional field would let a future MLS mapper that forgets to
+carry `InternetEntireListingDisplayYN` publish a listing the seller withheld, silently and with no
+error at any layer. Required makes that omission a compile error. Do not relax them.
+
+`MediaRow.alt_text` (#105) is required for a related but distinct reason, worth stating separately
+because the argument above does not transfer: the column has no default and omitting it publishes
+nothing, so the failure is not fail-open. It is required so that a mapper must **declare** whether
+it carries a feed's photo caption — and so the address suppression over it has a real value to
+withhold. While no writer could set it, every assertion about it was vacuously true.
