@@ -198,6 +198,18 @@ export interface MediaRow {
   id: string;
   listing_id: string;
   source_url: string;
+  /**
+   * The image's accessible name — feed-authored free text (#105). **Required, not
+   * optional-with-default**, for the same reason as `description_moderation`,
+   * `internet_display_allowed` and `OpenHouseRow.remarks`: the column is nullable with no
+   * constraint, so an optional field here lets a mapper carry an MLS photo caption without ever
+   * declaring that it does. MLS captions routinely embed the street line ("Front elevation, 123
+   * Maple St"), which is precisely the value an address-suppressed listing must not publish — and
+   * `applyAddressSuppression()` / `applyCardAddressSuppression()` only get to withhold what a
+   * writer can actually put there. Required makes the omission a compile error, and makes the
+   * suppression testable against a real value instead of a column that is NULL by accident.
+   */
+  alt_text: string | null;
   sort_order: number;
   is_primary: boolean;
   is_sample: boolean;

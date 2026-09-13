@@ -14,7 +14,7 @@ import {
   toListingDetail,
   toListingsMeta,
 } from './map-row';
-import { applyAddressSuppression } from './suppression';
+import { applyAddressSuppression, applyCardAddressSuppression } from './suppression';
 
 /**
  * The only module in this service that executes read SQL.
@@ -112,7 +112,11 @@ export async function searchListings(
     await client.query('COMMIT');
 
     return {
-      results: pageResult.rows.map(toListingCardRow),
+      // The card's named suppression boundary, applied at the same edge and in the same shape as the
+      // detail path's below. `primaryMedia` is joined in from `listing_media` ALONGSIDE the view
+      // rather than through it, so the view cannot reach its alt text (#105) — and nothing else on
+      // the card escapes the view, which is why this path had no boundary before.
+      results: pageResult.rows.map((row) => applyCardAddressSuppression(toListingCardRow(row))),
       total,
       page: request.page,
       pageSize: request.pageSize,

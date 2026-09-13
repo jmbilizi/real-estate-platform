@@ -314,6 +314,11 @@ export function mapToMediaRows(ids: string[], listingId: string, listing: MockLi
     id: ids[index] as string,
     listing_id: listingId,
     source_url: url,
+    // NULL, deliberately: the mock dataset carries image URLs and no captions, and synthesising one
+    // from the listing's own fields would describe an image this service has never seen — a
+    // fabricated fact (PRD §6.3). The consumer falls back to `alt=""`, which is the honest
+    // rendering of "no description available".
+    alt_text: null,
     sort_order: index,
     is_primary: index === 0,
     is_sample: SEED_IS_SAMPLE,

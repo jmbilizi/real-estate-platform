@@ -426,12 +426,30 @@ export async function insertOpenHouse(client: Queryable, row: OpenHouseRow): Pro
   );
 }
 
+/**
+ * `alt_text` was previously absent from both `MediaRow` and this INSERT (#105), which made the
+ * column permanently NULL and the address suppression over it permanently untestable — a test that
+ * cannot fail. It is feed-authored free text: MLS photo captions routinely carry the street line
+ * ("Front elevation, 123 Maple St"), so on an address-suppressed listing it is the same class of
+ * leak #59 closed for `title`/`description`/`open_house_remarks`, withheld at the response boundary
+ * (`src/listings/suppression.ts`) because both endpoints read `listing_media` through LATERAL joins
+ * that bypass `listing_search_v` entirely.
+ */
 export async function insertMedia(client: Queryable, rows: MediaRow[]): Promise<void> {
   for (const row of rows) {
     await client.query(
-      `INSERT INTO listing_media (id, listing_id, source_url, sort_order, is_primary, is_sample)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [row.id, row.listing_id, row.source_url, row.sort_order, row.is_primary, row.is_sample],
+      `INSERT INTO listing_media
+         (id, listing_id, source_url, alt_text, sort_order, is_primary, is_sample)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        row.id,
+        row.listing_id,
+        row.source_url,
+        row.alt_text,
+        row.sort_order,
+        row.is_primary,
+        row.is_sample,
+      ],
     );
   }
 }

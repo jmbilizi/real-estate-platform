@@ -379,6 +379,9 @@ describe('mapToMediaRows', () => {
         id: 'm1',
         listing_id: 'l1',
         source_url: 'https://example.com/a.jpg',
+        // NULL rather than a synthesised caption (#105): the mock dataset has no captions, and
+        // describing an image this service has never seen would be a fabricated fact (PRD §6.3).
+        alt_text: null,
         sort_order: 0,
         is_primary: true,
         is_sample: true,
@@ -387,6 +390,7 @@ describe('mapToMediaRows', () => {
         id: 'm2',
         listing_id: 'l1',
         source_url: 'https://example.com/b.jpg',
+        alt_text: null,
         sort_order: 1,
         is_primary: false,
         is_sample: true,

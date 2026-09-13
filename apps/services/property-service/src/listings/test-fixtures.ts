@@ -1,5 +1,5 @@
 import { listingCardSchema, listingDetailSchema } from '@cribstop/property-contracts';
-import type { ListingCardRow, ListingDetail } from '@cribstop/property-contracts';
+import type { ListingCardRow, ListingDetail, Media } from '@cribstop/property-contracts';
 
 /**
  * Contract-valid fixtures for this directory's pure unit tests. Every fixture is produced by
@@ -12,7 +12,9 @@ import type { ListingCardRow, ListingDetail } from '@cribstop/property-contracts
 const BASE_CARD_INPUT = {
   id: '018f2f2a-6d1b-7c3d-8b2e-000000000001',
   title: 'Sample Listing (Sample)',
-  address: '900 King St',
+  // Widened from the `as const` literal so a test can express the masked case — `address === null`
+  // is the signal the whole suppression boundary keys off (`suppression.ts`).
+  address: '900 King St' as string | null,
   city: 'Alexandria',
   state: 'VA',
   zip: '22314',
@@ -29,7 +31,7 @@ const BASE_CARD_INPUT = {
   sqft: 1800,
   lotSqft: 4000,
   yearBuilt: 1990,
-  primaryMedia: null,
+  primaryMedia: null as Media | null,
   openHouse: null,
   amenities: [],
   featured: false,
@@ -167,6 +169,12 @@ export interface DetailFixtureOverrides {
    * (#59) and why a test needs to be able to put text in them.
    */
   readonly openHouses?: readonly { startsAt: string; endsAt: string; remarks: string | null }[];
+  /**
+   * `listing.media`. Built by the detail query's OWN `json_agg` over `listing_media`, not by
+   * `listing_search_v` — the same structural reason the open-house remarks need suppressing at the
+   * response boundary, and why a test needs to be able to put a street line in an alt text (#105).
+   */
+  readonly media?: readonly Media[];
 }
 
 export function detailFixture(overrides: DetailFixtureOverrides = {}): ListingDetail {
@@ -188,7 +196,7 @@ export function detailFixture(overrides: DetailFixtureOverrides = {}): ListingDe
       ...BASE_DETAIL_LISTING_INPUT,
       address,
       description: null,
-      media: [],
+      media: overrides.media ?? [],
       openHouses: overrides.openHouses ?? [],
     },
   });

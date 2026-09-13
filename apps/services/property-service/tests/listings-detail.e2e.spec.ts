@@ -45,11 +45,13 @@ describe('suppressed address on detail (address_display_allowed = false)', () =>
   });
 
   describe('free-text fields (#59)', () => {
-    it('stores the street line in all three free-text fields — otherwise everything below is vacuous', () => {
+    it('stores the street line in all four free-text fields — otherwise everything below is vacuous', () => {
       for (const stored of [
         fixtures.suppressedAddressStoredTitle,
         fixtures.suppressedAddressStoredDescription,
         fixtures.suppressedAddressStoredOpenHouseRemarks,
+        // #105's fourth field, on listing_media — the one path no view predicate can reach.
+        fixtures.suppressedAddressStoredMediaAltText,
       ]) {
         expect(stored).toContain(fixtures.suppressedAddressStreetLine);
       }
@@ -91,15 +93,32 @@ describe('suppressed address on detail (address_display_allowed = false)', () =>
       }
     });
 
+    it('nulls the alt text on every media[] entry while still publishing the photos (#105)', async () => {
+      // This array does NOT come from listing_search_v either: findListingById() builds it with its
+      // own json_agg over listing_media, the same structural bypass the open-house remarks have. An
+      // MLS photo caption ("Front elevation, 123 Maple St") is feed-authored free text and the
+      // client renders it as the image's accessible name, so leaving it alone republishes the
+      // street line the view masked. Nulled rather than substituted: the contract declares
+      // `altText` nullable and the client falls back to alt="", so a neutral derived string would
+      // be this service describing an image it has never seen.
+      const response = await axios.get(`/listings/${fixtures.suppressedAddressListingId}`);
+      const detail = listingDetailSchema.parse(response.data);
+
+      expect(detail.listing.media.length).toBeGreaterThan(0);
+      for (const item of detail.listing.media) {
+        expect(item.altText).toBeNull();
+        // The opt-out masks the address, it does not withdraw the listing's photos from the market.
+        expect(typeof item.url).toBe('string');
+      }
+    });
+
     it('carries no part of the withheld address anywhere in the serialised payload', async () => {
       // Whole-payload, not field-by-field: a field added to the detail graph later that carried the
       // street line would fail here rather than needing someone to remember to assert it.
       //
-      // #105 is the known live example. `media[].altText` reaches this payload from a LATERAL over
-      // `listing_media` that bypasses the view, and nothing suppresses it — but `insertMedia()`
-      // never binds `alt_text`, so the column is NULL everywhere and this fixture has no media at
-      // all. Giving the fixture a media row with a street line in its alt text is expected to turn
-      // THIS assertion red until #105 lands; that is the intended sequencing.
+      // #105 was the live example, and this fixture now carries it: `media[].altText` reaches this
+      // payload from a LATERAL over `listing_media` that bypasses the view, and the fixture's alt
+      // text embeds the real street line. `applyAddressSuppression()` is what keeps this green.
       const response = await axios.get(`/listings/${fixtures.suppressedAddressListingId}`);
 
       const serialised = JSON.stringify(response.data);
