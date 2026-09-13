@@ -55,6 +55,7 @@ import {
   getOrCreateProperty,
   getOrCreateUnit,
   insertCommunity,
+  insertMedia,
   insertOpenHouse,
   Queryable,
   upsertListing,
@@ -92,6 +93,14 @@ export interface ComplianceFixtureIds {
   suppressedAddressStoredTitle: string;
   suppressedAddressStoredDescription: string;
   suppressedAddressStoredOpenHouseRemarks: string;
+  /**
+   * #105. The media alt text AS STORED, containing the real street line. A FOURTH feed-authored
+   * free-text field, and the only one on a path `listing_search_v` cannot reach at all — both
+   * endpoints read `listing_media` through their own LATERAL joins. A spec asserts it really does
+   * contain the street line (anti-vacuity) and then that neither `primaryMedia.altText` (card) nor
+   * any `media[].altText` (detail) reaches the wire.
+   */
+  suppressedAddressStoredMediaAltText: string;
   suppressedListingId: string;
   unapprovedDescriptionListingId: string;
   /** So a spec can assert `query=` never matches it. */
@@ -238,6 +247,16 @@ const SUPPRESSED_ADDRESS_DESCRIPTION =
 const SUPPRESSED_ADDRESS_OPEN_HOUSE_REMARKS =
   'E2E Fixture (Sample) remarks: park on the corner and use the rear entrance of ' +
   `${FIXTURE_STREETS.suppressedAddress}.`;
+/**
+ * #105's fourth free-text value, written the way an MLS photo caption actually is — a subject
+ * followed by the street line ("Front elevation, 123 Maple St"). It is stored on `listing_media`,
+ * which BOTH consumer endpoints read through their own LATERAL joins rather than through
+ * `listing_search_v`, so no view predicate can reach it: `applyCardAddressSuppression()` and
+ * `applyAddressSuppression()` are what withhold it.
+ */
+const SUPPRESSED_ADDRESS_MEDIA_ALT_TEXT =
+  'E2E Fixture (Sample) photo: front elevation of ' +
+  `${FIXTURE_STREETS.suppressedAddress}, unit ${SUPPRESSED_ADDRESS_UNIT_NUMBER}`;
 
 function buildFixtureProperty(input: {
   id: string;
@@ -466,6 +485,20 @@ export async function loadComplianceFixtures(pool: FixturesPool): Promise<Compli
       is_cancelled: false,
       is_sample: true,
     });
+    // #105: the fourth free-text field, and the only one no view predicate can reach. `is_primary`
+    // so the CARD path's `PRIMARY_MEDIA_JOIN` actually selects this row — a non-primary row would
+    // leave the search-side assertion passing vacuously against a NULL `primaryMedia`.
+    await insertMedia(client, [
+      {
+        id: randomUUID(),
+        listing_id: suppressedAddressListingId,
+        source_url: 'https://cdn.example/e2e-fixture-suppressed-address-1.jpg',
+        alt_text: SUPPRESSED_ADDRESS_MEDIA_ALT_TEXT,
+        sort_order: 0,
+        is_primary: true,
+        is_sample: true,
+      },
+    ]);
 
     // --- Suppressed listing: internet_display_allowed=false → absent everywhere, 404 on detail -----
     const suppressedListingPropertyId = randomUUID();
@@ -897,6 +930,7 @@ export async function loadComplianceFixtures(pool: FixturesPool): Promise<Compli
       suppressedAddressStoredTitle: SUPPRESSED_ADDRESS_STORED_TITLE,
       suppressedAddressStoredDescription: SUPPRESSED_ADDRESS_DESCRIPTION,
       suppressedAddressStoredOpenHouseRemarks: SUPPRESSED_ADDRESS_OPEN_HOUSE_REMARKS,
+      suppressedAddressStoredMediaAltText: SUPPRESSED_ADDRESS_MEDIA_ALT_TEXT,
       suppressedListingId,
       unapprovedDescriptionListingId,
       unapprovedDescriptionText,

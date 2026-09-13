@@ -198,6 +198,18 @@ export interface MediaRow {
   id: string;
   listing_id: string;
   source_url: string;
+  /**
+   * The image's accessible name — feed-authored free text (#105). **Required, not
+   * optional-with-default**, though for a different reason than the flags on `ListingRow`: this
+   * column has no permissive default, so omitting it is fail-SAFE rather than fail-open. It is
+   * required so a mapper must DECLARE whether it carries the feed's photo caption, and so the
+   * address suppression over it has a real value to withhold. MLS captions routinely embed the
+   * street line ("Front elevation, 123 Maple St"), which is precisely what an address-suppressed
+   * listing must not publish — and `applyAddressSuppression()` /
+   * `applyCardAddressSuppression()` only get to withhold what a writer can actually put there.
+   * While no writer could set it, every assertion about it was vacuously true.
+   */
+  alt_text: string | null;
   sort_order: number;
   is_primary: boolean;
   is_sample: boolean;

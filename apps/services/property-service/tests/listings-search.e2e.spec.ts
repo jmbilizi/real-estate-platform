@@ -57,13 +57,15 @@ describe('suppressed address (address_display_allowed = false)', () => {
   });
 
   describe('free-text fields (#59)', () => {
-    it('stores the street line in the title, description AND open-house remarks — otherwise everything below is vacuous', () => {
+    it('stores the street line in the title, description, open-house remarks AND media alt text — otherwise everything below is vacuous', () => {
       // The scenario only exists if the fixture actually looks like feed-authored copy. A real MLS
       // title reads "142 Oak St — Colonial"; remarks read "entrance at the rear of 142".
       for (const stored of [
         fixtures.suppressedAddressStoredTitle,
         fixtures.suppressedAddressStoredDescription,
         fixtures.suppressedAddressStoredOpenHouseRemarks,
+        // #105's fourth field. Stored on listing_media, which no view predicate can reach.
+        fixtures.suppressedAddressStoredMediaAltText,
       ]) {
         expect(stored).toContain(fixtures.suppressedAddressStreetLine);
       }
@@ -99,14 +101,30 @@ describe('suppressed address (address_display_allowed = false)', () => {
       expect(row?.openHouse?.remarks).toBeNull();
     });
 
+    it('withholds primaryMedia.altText while still publishing the photo — the card path had no suppression boundary at all before #105, because every other card field comes from the view and this one does not', async () => {
+      // `primaryMedia` is joined in from listing_media ALONGSIDE listing_search_v, never through it,
+      // so no view predicate can reach the alt text. MLS captions routinely carry the street line
+      // and the client renders it as the image's accessible name, publishing the withheld address
+      // to screen readers and to page source.
+      const results = await fetchAllResults();
+      const row = results.find((result) => result.id === fixtures.suppressedAddressListingId);
+
+      expect(row?.primaryMedia).not.toBeNull();
+      // Anti-vacuity: if the fixture's media row stopped being selected, `primaryMedia` would be
+      // null and a bare altText assertion would pass against nothing.
+      expect(typeof row?.primaryMedia?.url).toBe('string');
+      expect(row?.primaryMedia?.altText).toBeNull();
+    });
+
     it('carries no part of the withheld address anywhere in its serialised card', async () => {
       // Whole-row, not field-by-field, for the same reason listing-search-view.e2e.spec.ts scans
       // the view's whole row: a card field added later that carried the street line would fail here
       // rather than needing someone to remember to assert it.
       //
-      // #105 is the known live example — `primaryMedia.altText` reaches this card from a LATERAL
-      // over `listing_media` that bypasses the view, suppressed by nothing. It cannot leak today
-      // because `insertMedia()` never binds `alt_text`, so the column is NULL everywhere.
+      // #105 was the live example, and this fixture now carries it: `primaryMedia.altText` reaches
+      // this card from a LATERAL over `listing_media` that bypasses the view entirely, and the
+      // fixture's alt text embeds the real street line. `applyCardAddressSuppression()` is what
+      // keeps this assertion green.
       const results = await fetchAllResults();
       const row = results.find((result) => result.id === fixtures.suppressedAddressListingId);
 

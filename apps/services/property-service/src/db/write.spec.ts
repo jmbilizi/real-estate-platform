@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { applyTerminalCorrection, Queryable } from './write';
+import { applyTerminalCorrection, insertMedia, Queryable } from './write';
 
 /**
  * Guards on the terminal-correction escape hatch.
@@ -140,6 +140,53 @@ describe('upsertListing column coverage for the suppression flags', () => {
 
     // A literal such as now() inside the VALUES list consumes no placeholder and silently shifts
     // every later column onto the wrong value — the exact trap this project's AGENTS.md warns about.
+    expect(placeholderCount).toBe(columnCount);
+  });
+});
+
+describe('insertMedia carries alt_text (#105)', () => {
+  it('binds the caller-supplied alt_text, so a feed-authored photo caption cannot be silently lost', async () => {
+    // The column is nullable with no constraint, so before #105 every row was NULL by accident
+    // rather than by decision — which made the address suppression over it untestable, i.e. a test
+    // that could not fail. MLS captions read exactly like the value below.
+    const { client, queries } = createFakeClient([]);
+
+    await insertMedia(client, [
+      {
+        id: 'media-1',
+        listing_id: 'listing-1',
+        source_url: 'https://cdn.example/photo-1.jpg',
+        alt_text: 'Front elevation of 142 Oak St',
+        sort_order: 0,
+        is_primary: true,
+        is_sample: true,
+      },
+    ]);
+
+    const [recorded] = queries;
+    expect(recorded?.text).toContain('alt_text');
+    expect(recorded?.values).toEqual([
+      'media-1',
+      'listing-1',
+      'https://cdn.example/photo-1.jpg',
+      'Front elevation of 142 Oak St',
+      0,
+      true,
+      true,
+    ]);
+  });
+
+  it('binds one parameter per column, so no value is shifted out of step with its column', () => {
+    const source = readFileSync(join(__dirname, 'write.ts'), 'utf8');
+    const start = source.indexOf('INSERT INTO listing_media');
+    expect(start).toBeGreaterThan(-1);
+    const statement = source.slice(start, source.indexOf('`,', start));
+
+    const columnList = statement.slice(statement.indexOf('(') + 1, statement.indexOf('VALUES'));
+    const columnCount = columnList.split(',').filter((entry) => entry.trim().length > 0).length;
+    const placeholderCount = new Set(statement.slice(statement.indexOf('VALUES')).match(/\$\d+/g))
+      .size;
+
     expect(placeholderCount).toBe(columnCount);
   });
 });
