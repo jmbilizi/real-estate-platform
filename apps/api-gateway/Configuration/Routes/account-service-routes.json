@@ -41,9 +41,9 @@
       }
     },
     {
-      "UpstreamPathTemplate": "/account/password/forgot",
+      "UpstreamPathTemplate": "/account/forgotPassword",
       "UpstreamHttpMethod": ["POST"],
-      "DownstreamPathTemplate": "/account/password/forgot",
+      "DownstreamPathTemplate": "/account/forgotPassword",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
         {
@@ -60,9 +60,9 @@
       }
     },
     {
-      "UpstreamPathTemplate": "/account/password/reset",
+      "UpstreamPathTemplate": "/account/resetPassword",
       "UpstreamHttpMethod": ["POST"],
-      "DownstreamPathTemplate": "/account/password/reset",
+      "DownstreamPathTemplate": "/account/resetPassword",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
         {
@@ -95,6 +95,25 @@
         "Period": "1m",
         "PeriodTimespan": 60,
         "Limit": 5
+      }
+    },
+    {
+      "UpstreamPathTemplate": "/account/resendConfirmationEmail",
+      "UpstreamHttpMethod": ["POST"],
+      "DownstreamPathTemplate": "/account/resendConfirmationEmail",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "account-service-svc",
+          "Port": 8080
+        }
+      ],
+      "Priority": 1,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 3
       }
     },
     {

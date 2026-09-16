@@ -1,4 +1,4 @@
-// <copyright file="PasswordResetRateLimiterTests.cs" company="PlaceholderCompany">
+// <copyright file="AccountRecoveryRateLimiterTests.cs" company="PlaceholderCompany">
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
@@ -11,11 +11,11 @@ using Xunit;
 namespace AccountService.Tests.Helpers
 {
     /// <summary>
-    /// Unit tests for <see cref="PasswordResetRateLimiter"/>.
+    /// Unit tests for <see cref="AccountRecoveryRateLimiter"/>.
     /// </summary>
-    public class PasswordResetRateLimiterTests : IDisposable
+    public class AccountRecoveryRateLimiterTests : IDisposable
     {
-        private readonly List<PasswordResetRateLimiter> limiters = new();
+        private readonly List<AccountRecoveryRateLimiter> limiters = new();
 
         /// <inheritdoc/>
         public void Dispose()
@@ -112,6 +112,44 @@ namespace AccountService.Tests.Helpers
         }
 
         [Fact]
+        public void TryResend_IsCountedSeparatelyFromResetRequests()
+        {
+            var limiter = this.Create(options =>
+            {
+                options.RequestsPerEmail = 1;
+                options.ResendsPerEmail = 1;
+            });
+
+            limiter.TryRequest("a@example.com", "10.0.0.1", out _).Should().BeTrue();
+            limiter.TryRequest("a@example.com", "10.0.0.1", out _).Should().BeFalse();
+
+            // Asking for a reset link and asking for a confirmation link are different asks about
+            // the same address. Spending one budget must not spend the other, or a person who
+            // mistyped their way through a reset could no longer confirm their address at all.
+            limiter.TryResend("a@example.com", "10.0.0.1", out _).Should().BeTrue();
+            limiter.TryResend("a@example.com", "10.0.0.1", out var retryAfter).Should().BeFalse();
+            retryAfter.Should().BePositive();
+        }
+
+        [Fact]
+        public void TryRegistration_IsCountedPerAddress_AndSeparatelyFromEverythingElse()
+        {
+            var limiter = this.Create(options =>
+            {
+                options.RegistrationsPerAddress = 2;
+                options.RequestsPerAddress = 1;
+            });
+
+            limiter.TryRegistration("10.0.0.1", out _).Should().BeTrue();
+            limiter.TryRegistration("10.0.0.1", out _).Should().BeTrue();
+            limiter.TryRegistration("10.0.0.1", out _).Should().BeFalse();
+
+            // A different caller is unaffected — the whole risk of limiting registration per
+            // address is denying a stranger behind the same NAT, so the buckets must not bleed.
+            limiter.TryRegistration("10.0.0.2", out _).Should().BeTrue();
+        }
+
+        [Fact]
         public void TryRequest_GroupsCallersWithNoAddress_RatherThanExemptingThem()
         {
             var limiter = this.Create(options =>
@@ -124,12 +162,12 @@ namespace AccountService.Tests.Helpers
             limiter.TryRequest("b@example.com", null, out _).Should().BeFalse();
         }
 
-        private PasswordResetRateLimiter Create(Action<PasswordResetOptions> configure)
+        private AccountRecoveryRateLimiter Create(Action<AccountRecoveryOptions> configure)
         {
-            var options = new PasswordResetOptions();
+            var options = new AccountRecoveryOptions();
             configure(options);
 
-            var limiter = new PasswordResetRateLimiter(Options.Create(options), TimeProvider.System);
+            var limiter = new AccountRecoveryRateLimiter(Options.Create(options), TimeProvider.System);
             this.limiters.Add(limiter);
             return limiter;
         }
