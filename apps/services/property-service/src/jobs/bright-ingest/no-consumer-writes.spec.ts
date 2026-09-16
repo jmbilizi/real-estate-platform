@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 /**
  * #91 ships the ingestion vehicle and nothing that drives it: replication into a staging area is #92
@@ -30,9 +30,16 @@ const JOB_DIR = __dirname;
  */
 const SCANNER_FILENAME = 'no-consumer-writes.spec.ts';
 
+/**
+ * Recursive on purpose. #92's natural layout is a subdirectory (`replication/` holding the cursor
+ * and the staging writer), and a flat `readdirSync` would leave every file in it silently unscanned
+ * while the suite still passed green — the precise failure this guard is supposed to make
+ * impossible.
+ */
 function jobSourceFiles(): string[] {
-  return readdirSync(JOB_DIR)
-    .filter((name) => name.endsWith('.ts') && name !== SCANNER_FILENAME)
+  return readdirSync(JOB_DIR, { recursive: true })
+    .map((entry) => String(entry))
+    .filter((name) => name.endsWith('.ts') && basename(name) !== SCANNER_FILENAME)
     .sort();
 }
 

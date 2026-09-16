@@ -75,11 +75,23 @@ function parseArgs(argv) {
   const args = argv.filter((arg) => arg !== '--');
   const options = { namespace: 'default', timeout: 180, keep: false, cronjob: null, name: null };
 
+  // A value-taking flag reads the NEXT argument, so a trailing `--namespace` would otherwise hand
+  // `undefined` to spawnSync and surface as an ERR_INVALID_ARG_TYPE stack trace instead of the
+  // usage error this function exists to produce.
+  const valueFor = (flag, i) => {
+    const value = args[i + 1];
+    if (value === undefined || value.startsWith('-')) {
+      console.error(`ERROR: ${flag} requires a value.`);
+      process.exit(1);
+    }
+    return value;
+  };
+
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === '--namespace' || arg === '-n') options.namespace = args[++i];
-    else if (arg === '--timeout') options.timeout = Number(args[++i]);
-    else if (arg === '--name') options.name = args[++i];
+    if (arg === '--namespace' || arg === '-n') options.namespace = valueFor(arg, i++);
+    else if (arg === '--timeout') options.timeout = Number(valueFor(arg, i++));
+    else if (arg === '--name') options.name = valueFor(arg, i++);
     else if (arg === '--keep') options.keep = true;
     else if (!arg.startsWith('-') && options.cronjob === null) options.cronjob = arg;
     else {

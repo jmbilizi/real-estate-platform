@@ -61,9 +61,14 @@ a connectivity probe and nothing more — it parses nothing and keeps nothing, b
 #92 and mapping is #93. So the fastest way to start this list is to watch one run:
 
 ```bash
-kubectl create job bright-mls-ingest-manual --from=cronjob/bright-mls-ingest
-kubectl logs -l app=bright-mls-ingest --tail=-1
+pnpm run infra:local:cronjob:trigger -- bright-mls-ingest
 ```
+
+That wrapper creates the Job, waits for it, prints its logs and exits with the job's real outcome.
+It is local-cluster-only on purpose: triggering an ingestion run against dev or prod is a
+deploy-time decision owned by `infra/deploy-control.yaml`, not a developer convenience. To watch a
+run in dev, read the logs of the run the schedule produced
+(`kubectl logs -l app=bright-mls-ingest --tail=-1`) rather than forcing one.
 
 Each run emits two JSON lines, `run_started` and `run_finished`, correlated by `runId`. Saving the
 `$metadata` document itself into the repo is still a human action — see section 0.
@@ -93,8 +98,7 @@ Discovered fields land in the governed MLS field + lookup registry introduced by
 unregistered lookup value is rejected on upsert so the previous good row keeps publishing;
 `is_consumer_displayable` defaults false and `is_address_bearing` defaults true, so an unclassified
 field is invisible rather than public). This checklist does not implement that registry — it only
-records where the fields discovered here are meant to go. **#127 is not yet merged to `dev` at the
-time of writing.**
+records where the fields discovered here are meant to go.
 
 ## 1. Entitlement and the field set — an extensibility question, not a count
 

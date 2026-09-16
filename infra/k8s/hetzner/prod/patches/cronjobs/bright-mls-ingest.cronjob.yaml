@@ -33,7 +33,13 @@ spec:
           containers:
             - name: ingest
               image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:latest
-              imagePullPolicy: IfNotPresent
+              # `Always`, not `IfNotPresent`, because nothing re-pulls for a CronJob. The deploy
+              # action's staleness mechanism is `kubectl rollout restart` driven by
+              # `restart-deployments.txt`, which `tools/infra/deploy-scope.js` populates from
+              # `kind == "Deployment"` only. With a mutable `:latest` tag and `IfNotPresent`, the
+              # nightly run would keep executing whatever layer the node happened to cache at
+              # first pull — indefinitely, and with no signal anywhere that it had gone stale.
+              imagePullPolicy: Always
               resources:
                 requests:
                   memory: "128Mi"
