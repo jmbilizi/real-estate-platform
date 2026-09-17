@@ -135,11 +135,33 @@ internal sealed class AppUserManager(
 
     private async Task ClearLockoutAsync(ApplicationUser user)
     {
-        await ResetAccessFailedCountAsync(user).ConfigureAwait(false);
+        // Both results are checked rather than discarded. Neither call is expected to fail here,
+        // but a validator-driven UpdateUserAsync failure would leave the account still locked after
+        // a reset the consumer was told succeeded — and their next move is to try logging in and be
+        // refused with no explanation. Silent is the one thing that must not happen.
+        var reset = await ResetAccessFailedCountAsync(user).ConfigureAwait(false);
+        WarnIfFailed(reset, user, nameof(ResetAccessFailedCountAsync));
 
         if (await GetLockoutEnabledAsync(user).ConfigureAwait(false))
         {
-            await SetLockoutEndDateAsync(user, null).ConfigureAwait(false);
+            var cleared = await SetLockoutEndDateAsync(user, null).ConfigureAwait(false);
+            WarnIfFailed(cleared, user, nameof(SetLockoutEndDateAsync));
         }
+    }
+
+    private void WarnIfFailed(IdentityResult result, ApplicationUser user, string operation)
+    {
+        if (result.Succeeded)
+        {
+            return;
+        }
+
+#pragma warning disable CA1848 // Use the LoggerMessage delegates — matches the convention at the service's other log sites.
+        Logger.LogWarning(
+            "{Operation} failed for {UserId} after a successful password reset; the account may still be locked out. Errors: {Errors}",
+            operation,
+            user.Id,
+            string.Join("; ", result.Errors.Select(error => error.Code)));
+#pragma warning restore CA1848
     }
 }

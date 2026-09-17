@@ -162,6 +162,46 @@ namespace AccountService.Tests.Helpers
             limiter.TryRequest("b@example.com", null, out _).Should().BeFalse();
         }
 
+        [Fact]
+        public void TryRequest_StillEnforcesTheLimit_WhenTheCounterCacheIsAtCapacity()
+        {
+            // The counter cache is capped, and the cap is reachable on purpose: half of every key
+            // is an attacker-chosen email address. What must NOT happen is that reaching the cap
+            // turns the limiter off.
+            //
+            // This is the regression test for a real fail-open. MemoryCache with a SizeLimit does
+            // not evict-then-add when it is full — it refuses to store the entry and schedules a
+            // background compaction. GetOrCreate still returns the factory's value, so a cold key
+            // came back with Count == 1 on every single request, forever, and the limit simply did
+            // not apply. An attacker who can vary X-Real-IP can fill the cache deliberately, so
+            // this was reachable, not theoretical.
+            var limiter = this.Create(options =>
+            {
+                options.MaxTrackedKeys = 2;
+                options.RequestsPerEmail = 1;
+                options.RequestsPerAddress = 1000;
+            });
+
+            // One call consumes two keys (email + address), which fills the cache.
+            limiter.TryRequest("resident@example.com", "10.0.0.1", out _).Should().BeTrue();
+
+            // A resident key is still counted correctly.
+            limiter.TryRequest("resident@example.com", "10.0.0.1", out _).Should().BeFalse();
+
+            // A cold key, with the cache full, must not be unlimited. Under the bug every one of
+            // these returned true.
+            var refusals = 0;
+            for (var attempt = 0; attempt < 10; attempt++)
+            {
+                if (!limiter.TryRequest("cold@example.com", "10.0.0.2", out _))
+                {
+                    refusals++;
+                }
+            }
+
+            refusals.Should().BeGreaterThan(0, "a limit that stops applying under load is not a limit");
+        }
+
         private AccountRecoveryRateLimiter Create(Action<AccountRecoveryOptions> configure)
         {
             var options = new AccountRecoveryOptions();

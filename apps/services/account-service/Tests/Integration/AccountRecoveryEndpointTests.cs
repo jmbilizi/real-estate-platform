@@ -328,9 +328,14 @@ namespace AccountService.Tests.Integration
             factory.ResetCodes.Should().HaveCount(issuedBefore);
 
             // And the code taken before the deletion is refused with the same opaque failure as any
-            // other unusable token. Both come from AppUserManager.IsEmailConfirmedAsync reporting a
-            // deleted account as unconfirmed, which is the one predicate Identity consults on both
-            // paths.
+            // other unusable token.
+            //
+            // Note what this second assertion does and does not prove. It is NOT evidence for the
+            // AppUserManager.IsEmailConfirmedAsync override: DELETE /account/profile calls
+            // UpdateSecurityStampAsync (Routes/Profile.cs), the stamp is embedded in the token and
+            // compared on validate, so this code would be refused with or without the override.
+            // Only the /forgotPassword assertion above actually exercises it. This is kept because
+            // the end-to-end behaviour is worth pinning, not because it tests the override.
             using var reset = await PostResetAsync(client, email, resetCode, NewPassword);
             reset.StatusCode.Should().Be(HttpStatusCode.BadRequest);
             (await reset.Content.ReadAsStringAsync()).Should().Be(await InvalidTokenBodyAsync(client, email));
@@ -601,6 +606,51 @@ namespace AccountService.Tests.Integration
         }
 
         [Fact]
+        public async Task ThrottleFilter_LeavesNonRecoveryEndpointsAlone()
+        {
+            // The filter is attached to the WHOLE Identity group, so it also runs for /login,
+            // /refresh, /confirmEmail and /manage/*. It is supposed to pass those straight through.
+            //
+            // Without this test nothing would notice if, say, /login started consuming the
+            // registration budget — every other test either raises the limits out of the way or
+            // lowers only the single limit it is exercising. Here the registration budget is 1 and
+            // is spent immediately, so any bleed from the login path shows up as a 429.
+            using var factory = new AccountRecoveryFactory(options =>
+            {
+                NoDelay(options);
+                options.RegistrationsPerAddress = 1;
+                options.RequestsPerAddress = 1;
+                options.RedemptionsPerAddress = 1;
+            });
+            using var client = factory.CreateClient();
+
+            var email = $"passthrough-{Guid.NewGuid()}@example.com";
+            await RegisterAndConfirmAsync(factory, client, email);
+
+            // Spend every recovery budget there is.
+            using (var forgot = await client.PostAsJsonAsync(ForgotPath, new { email }))
+            {
+                forgot.StatusCode.Should().Be(HttpStatusCode.OK);
+            }
+
+            // Logging in repeatedly is unaffected by all of that.
+            for (var attempt = 0; attempt < 4; attempt++)
+            {
+                using var login = await client.PostAsJsonAsync("/account/login", new { email, password = Password });
+                login.StatusCode.Should().Be(HttpStatusCode.OK, "login is not part of the recovery surface");
+            }
+
+            // And so is confirming — which has no request DTO at all, the case that would throw if
+            // the filter indexed arguments instead of searching them.
+            await ConfirmAsync(factory, client, email);
+
+            // Meanwhile the budgets really were spent, so the limits are genuinely in force and
+            // this test is not passing because the filter is inert everywhere.
+            using var refused = await client.PostAsJsonAsync(ForgotPath, new { email });
+            refused.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        }
+
+        [Fact]
         public async Task IdentityRecoveryEndpoints_ArePresent_AndAdvertisedInTheOpenApiDocument()
         {
             using var factory = new AccountRecoveryFactory(NoDelay);
@@ -751,10 +801,13 @@ namespace AccountService.Tests.Integration
         /// nothing.
         /// </para>
         /// <para>
-        /// The second assertion is the one that actually states the security property: the two
-        /// outcomes must not be distinguishable from each other. An unpadded handler answers the
-        /// found-nothing case in single-digit milliseconds and the found-an-account case in
-        /// noticeably more, so both assertions fail loudly if the filter stops padding.
+        /// <b>The two floor assertions are what catch a regression</b>, and the delta assertion is
+        /// not — an earlier version of this comment claimed the opposite and was wrong. With
+        /// padding removed the unpadded times are roughly 30ms and 3ms, a delta of ~27ms, which
+        /// would sail under any delta bound loose enough not to be flaky. The delta assertion
+        /// states the property in the form it is meant to hold (the two outcomes are close to each
+        /// other) and guards against one branch being padded while the other is not; only the floor
+        /// assertions notice if the padding disappears entirely.
         /// </para>
         /// </remarks>
         private static void AssertHeldToTheFloor(TimeSpan knownElapsed, TimeSpan unknownElapsed)
@@ -765,7 +818,9 @@ namespace AccountService.Tests.Integration
             knownElapsed.Should().BeGreaterThanOrEqualTo(floor - tolerance);
             unknownElapsed.Should().BeGreaterThanOrEqualTo(floor - tolerance);
 
-            (knownElapsed - unknownElapsed).Duration().Should().BeLessThan(floor);
+            // Loose enough to survive scheduling jitter on a loaded CI box, tight enough that one
+            // padded branch and one unpadded branch (a ~220ms gap) fails.
+            (knownElapsed - unknownElapsed).Duration().Should().BeLessThan(TimeSpan.FromMilliseconds(150));
         }
 
         /// <summary>Extracts the path and query from an absolute confirmation URL.</summary>

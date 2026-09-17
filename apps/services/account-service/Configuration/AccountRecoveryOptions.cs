@@ -136,10 +136,19 @@ internal sealed class AccountRecoveryOptions
     /// Gets or sets the cap on how many rate-limit counters are held at once.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Half of each counter key is an attacker-chosen email address, so without a cap a flood of
     /// requests naming fresh addresses would grow the counter cache by one entry per request for a
-    /// whole window. Exceeding the cap evicts counters, which loosens the limit; it does not
-    /// exhaust memory.
+    /// whole window.
+    /// </para>
+    /// <para>
+    /// At the cap the limiter <b>fails closed</b>: a request whose counter cannot be stored is
+    /// refused, not waved through. So the cost of setting this too low is that a burst of unique
+    /// addresses starts refusing legitimate recovery requests — visible and recoverable — rather
+    /// than silently disabling the limit, which is what the previous implementation did. Size it
+    /// well above the number of distinct addresses plus client addresses you expect inside one
+    /// <see cref="RequestWindow"/>.
+    /// </para>
     /// </remarks>
     public int MaxTrackedKeys { get; set; } = 50_000;
 
