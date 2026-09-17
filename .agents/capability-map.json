@@ -1,0 +1,65 @@
+{
+  "$comment": "Capability names used in .agents/ bodies, mapped to each provider's tool. agents:sync renders this into .agents/README.md and appends the Claude Code column to every generated .claude/agents/*.md copy.",
+  "capabilities": [
+    {
+      "capability": "Read-only exploration subagent",
+      "claude-code": "`Explore` agent (Agent tool, `subagent_type: Explore`)",
+      "other": "`@workspace` search"
+    },
+    {
+      "capability": "Planning / architecture subagent",
+      "claude-code": "`Plan` agent, `superpowers:writing-plans` skill",
+      "other": "plan by hand"
+    },
+    {
+      "capability": "Parallel implementation subagents",
+      "claude-code": "Agent tool (`model`), Workflow `agent()` (`model`, `effort`)",
+      "other": "sequential, by hand"
+    },
+    {
+      "capability": "Isolated worktree per lane",
+      "claude-code": "Agent tool `isolation: \"worktree\"`",
+      "other": "`git worktree add`"
+    },
+    {
+      "capability": "TDD discipline",
+      "claude-code": "`superpowers:test-driven-development` skill",
+      "other": "apply the discipline by hand"
+    },
+    {
+      "capability": "Brainstorm before design",
+      "claude-code": "`superpowers:brainstorming` skill",
+      "other": "apply by hand"
+    },
+    {
+      "capability": "Written plan",
+      "claude-code": "`superpowers:writing-plans` skill",
+      "other": "write the plan by hand"
+    },
+    {
+      "capability": "Finish a branch / open PR",
+      "claude-code": "`superpowers:finishing-a-development-branch` skill",
+      "other": "`gh pr create`"
+    },
+    {
+      "capability": "UI design guidance",
+      "claude-code": "`frontend-design:frontend-design` skill",
+      "other": "n/a"
+    },
+    {
+      "capability": ".NET / Azure SDK reference",
+      "claude-code": "`microsoft-docs:microsoft-code-reference` skill",
+      "other": "Microsoft Learn"
+    },
+    {
+      "capability": "Current JS library docs",
+      "claude-code": "Context7 MCP (`resolve-library-id`, `query-docs`)",
+      "other": "official docs"
+    },
+    {
+      "capability": "Compliance / contract review",
+      "claude-code": "`cribstop-compliance-reviewer`, `contract-sync-reviewer` agents",
+      "other": "same, discovered from `.agents/agents/`"
+    }
+  ]
+}
