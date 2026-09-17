@@ -85,6 +85,22 @@ environments:
         require_approval: false # No approval needed
         rollback_on_failure: false # Disabled in dev for manual investigation
 
+      bright-mls-ingest:
+        # The scheduled Bright MLS ingestion CronJob (#91). It runs the property-service image with
+        # a different entry point but carries its own identity label and therefore its own key here,
+        # because dev reads Bright's TEST/STAGING feed while prod reads the licensed production feed
+        # (#117) — whether the job ships to an environment has to be decidable separately from
+        # whether the Property API does.
+        #
+        # Shipping it to dev now, before credentials exist, is the point of #91: the run completes
+        # with a "credentials not configured" outcome and transmits nothing, so the moment #117
+        # provisions this environment's secret there is a running vehicle to observe leaving that
+        # state. Whether it actually fires is the CronJob's own `suspend` field, per environment.
+        enabled: true
+        auto_deploy: true # Auto-deploy in dev
+        require_approval: false # No approval needed
+        rollback_on_failure: false # Disabled in dev for manual investigation
+
       cribstop-web:
         enabled: true
         auto_deploy: true # Auto-deploy in dev
@@ -157,6 +173,14 @@ environments:
         require_approval: false # Optional approval
         rollback_on_failure: false # Disabled for manual validation
 
+      bright-mls-ingest:
+        # test receives NO Bright credentials of any kind and stays on seeded sample rows (#117), so
+        # this stays shut — and the CronJob is independently `suspend: true` in the test overlay.
+        enabled: false # Not deployed to test; test is never pointed at a Bright feed
+        auto_deploy: false # Manual deployment in test
+        require_approval: false # Optional approval
+        rollback_on_failure: false # Disabled for manual validation
+
       cribstop-web:
         enabled: false # Not yet deployed to test
         auto_deploy: false # Manual deployment in test
@@ -224,6 +248,16 @@ environments:
         rollback_on_failure: false # Manual review recommended for production
 
       property-service:
+        enabled: false # Not yet deployed to production
+        auto_deploy: false # Manual deployment only
+        require_approval: true # Always require approval
+        rollback_on_failure: false # Manual review recommended for production
+
+      bright-mls-ingest:
+        # Deliberately shut. #117's rollout order is dev first and prod as a SEPARATE confirmation,
+        # never an assumption carried over from a green dev run — the credential here authenticates
+        # against real licensed inventory, and #102/#117 item 6 (production display-URL
+        # registration) is not settled. The prod overlay additionally sets `suspend: true`.
         enabled: false # Not yet deployed to production
         auto_deploy: false # Manual deployment only
         require_approval: true # Always require approval

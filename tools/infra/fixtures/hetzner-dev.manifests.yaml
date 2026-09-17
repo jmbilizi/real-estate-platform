@@ -122,6 +122,13 @@ metadata:
 apiVersion: v1
 kind: Secret
 metadata:
+  name: bright-mls-secret
+  labels:
+    app: bright-mls-ingest
+---
+apiVersion: v1
+kind: Secret
+metadata:
   name: jaeger-secret
   labels:
     app: jaeger
@@ -355,6 +362,21 @@ spec:
         - image: alpine:3.19
       containers:
         - image: valkey/valkey:9.0-alpine
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bright-mls-ingest
+  namespace: default
+  labels:
+    app: bright-mls-ingest
+spec:
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:dev
 ---
 apiVersion: batch/v1
 kind: Job

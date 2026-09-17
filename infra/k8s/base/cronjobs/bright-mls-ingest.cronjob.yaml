@@ -1,0 +1,116 @@
+# Bright MLS ingestion job (#91) — the scheduled vehicle, ahead of the credentials.
+#
+# Runs the `bright-ingest` entry point of the property-service image (bundled by
+# apps/services/property-service/webpack.config.js → additionalEntryPoints, the same mechanism
+# `seed-on-start` uses). It is the property-service image with a different command rather than a
+# separate project on purpose: `property_db` is property-service's database, its append-only
+# migration chain is where #92's staging tables have to land, and `src/db/write.ts` must stay the
+# only module that writes `listings` (see apps/services/property-service/AGENTS.md — "the split that
+# does matter is by workload, not language").
+#
+# It nevertheless carries its OWN identity label, `app: bright-mls-ingest`, and therefore its own
+# `infra/deploy-control.yaml` key in every environment. That is deliberate: the two-credential ruling
+# (#117) means dev reads Bright's test/staging feed, prod reads the licensed production feed, and
+# test reads neither — so whether this ships to an environment has to be decidable without also
+# deciding whether the Property API ships there.
+#
+# TODAY IT INGESTS NOTHING. Incremental RESO replication is #92; mapping into
+# properties/units/listings is #93. A run resolves its configuration, reports "credentials not
+# configured" or authenticates and probes `$metadata`, and exits. No consumer table is written —
+# asserted by src/jobs/bright-ingest/no-consumer-writes.spec.ts, not by this comment.
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bright-mls-ingest
+  namespace: default
+  labels:
+    app: bright-mls-ingest
+spec:
+  # Schedule and suspend are BOTH overridden per environment, which is what makes the job's cadence
+  # and its on/off switch changeable without an image rebuild (infra/k8s/{podman/local,hetzner/*}).
+  #
+  # The base defaults are fail-safe, not sensible: suspended, so a newly added environment that
+  # forgets to patch this cannot silently start issuing authenticated requests against a licensed
+  # feed on somebody else's schedule.
+  schedule: "0 3 * * *"
+  suspend: true
+  timeZone: Etc/UTC
+  # A replication cursor is single-threaded by nature (#92), so a run that overruns its window must
+  # not be joined by the next one. Forbid, never Replace: killing a run mid-cursor is worse than
+  # skipping one.
+  concurrencyPolicy: Forbid
+  # A controller outage must not stampede every missed run at once when it comes back.
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    metadata:
+      labels:
+        app: bright-mls-ingest
+    spec:
+      # Bounded so a failure surfaces as a failed Job rather than a crash loop. A missing credential
+      # is NOT a failure — the job exits 0 with a `not_configured` outcome — so these retries only
+      # ever apply to a real fault.
+      backoffLimit: 2
+      # A hung socket must not hold the Forbid lock until the next scheduled run.
+      activeDeadlineSeconds: 900
+      # Deliberately NO ttlSecondsAfterFinished: the history limits above already bound retention,
+      # and a TTL shorter than three scheduling intervals would delete Jobs before those limits ever
+      # applied — two mechanisms racing to keep the same three runs, with the wrong one winning.
+      template:
+        metadata:
+          labels:
+            app: bright-mls-ingest
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: ingest
+              # Image format: ghcr.io/<owner>/<repo>/property-service:<tag>
+              # CI/CD workflow substitutes GITHUB_REPOSITORY_OWNER, GITHUB_REPOSITORY_NAME
+              # Local development uses Skaffold override (see podman/local/patches)
+              image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:latest
+              imagePullPolicy: IfNotPresent
+              command: ["node", "bright-ingest.js"]
+              resources:
+                requests:
+                  memory: "96Mi"
+                  cpu: "50m"
+                limits:
+                  memory: "256Mi"
+                  cpu: "300m"
+              env:
+                # ── Which feed this environment talks to ──────────────────────────────────────
+                # Configuration, NOT a constant in code, so `kubectl get cronjob bright-mls-ingest
+                # -o yaml` answers "which Bright feed is this environment reading?" without decoding
+                # a Secret. Empty here and overridden per environment; an empty value is treated as
+                # "not configured" and nothing is sent anywhere.
+                #
+                # The real URLs are not in this repo yet: Bright's developer portal is login-gated
+                # (verified 2026-09-13) and the values arrive with the credentials. #117 item 1
+                # records which endpoint each credential set authenticates against — dev against the
+                # TEST/STAGING feed, prod against the LICENSED PRODUCTION feed. Do not guess them.
+                - name: BRIGHT_MLS_TOKEN_ENDPOINT
+                  value: ""
+                - name: BRIGHT_MLS_SERVICE_ROOT
+                  value: ""
+                # ── The credential itself ────────────────────────────────────────────────────
+                # Same field names in every environment, different values, sourced from GitHub
+                # ENVIRONMENT secrets (#117 item 2) — repository secrets are precisely how a staging
+                # value and a production value become interchangeable. The committed template holds
+                # `StrongBase64Password` placeholders, which the job treats as "not configured" and
+                # never transmits, so `local` and `test` run to a clean completion rather than a 401.
+                #
+                # The reference is deliberately NOT `optional: true`: if bright-mls-secret is missing
+                # from a cluster the pod must fail to start with an obvious reason, rather than run
+                # and quietly report "no credentials" for a wiring mistake.
+                - name: BRIGHT_MLS_CLIENT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: bright-mls-secret
+                      key: BRIGHT_MLS_CLIENT_ID
+                - name: BRIGHT_MLS_CLIENT_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: bright-mls-secret
+                      key: BRIGHT_MLS_CLIENT_SECRET

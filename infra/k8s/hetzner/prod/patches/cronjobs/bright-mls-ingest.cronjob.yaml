@@ -1,0 +1,57 @@
+# yaml-language-server: disable
+# Bright MLS Ingestion CronJob Patch for Hetzner Prod Environment
+#
+# PROD AUTHENTICATES AGAINST THE LICENSED PRODUCTION FEED (stakeholder ruling 2026-09-12, recorded
+# on #117). This credential authenticates Real Broker, LLC's MLS participation against real licensed
+# inventory: a leak, a value committed to Git, or licensed data reaching an unregistered display host
+# are participation risks rather than ordinary incidents (PRD §6.2). Its blast radius is not the
+# staging set's, even though the handling discipline is identical.
+#
+# The endpoint pair is intentionally left EMPTY, exactly as in dev — the production URLs arrive with
+# the credentials and #117 item 1 is where a human records them. Never copy a value from the dev
+# patch into this file: identical field names with different values per environment is the whole
+# mechanism, and a copied endpoint would point production at test data while every credential check
+# still passed.
+#
+# SUSPENDED until deliberately promoted. #117's rollout order is dev first and prod as a separate
+# confirmation, never an assumption carried over from a green dev run; `infra/deploy-control.yaml`
+# additionally keeps this service `enabled: false` for prod until then. #102 chooses the production
+# hostnames and #117 item 6 confirms display-URL registration — neither is settled, and rendering
+# licensed inventory from an unregistered host is the failure this suspension prevents.
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bright-mls-ingest
+spec:
+  schedule: "0 3 * * *"
+  suspend: true
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: ingest
+              image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:latest
+              # `Always`, not `IfNotPresent`, because nothing re-pulls for a CronJob. The deploy
+              # action's staleness mechanism is `kubectl rollout restart` driven by
+              # `restart-deployments.txt`, which `tools/infra/deploy-scope.js` populates from
+              # `kind == "Deployment"` only. With a mutable `:latest` tag and `IfNotPresent`, the
+              # nightly run would keep executing whatever layer the node happened to cache at
+              # first pull — indefinitely, and with no signal anywhere that it had gone stale.
+              imagePullPolicy: Always
+              resources:
+                requests:
+                  memory: "128Mi"
+                  cpu: "100m"
+                limits:
+                  memory: "512Mi"
+                  cpu: "500m"
+              env:
+                - name: NODE_ENV
+                  value: "production"
+                # Bright LICENSED PRODUCTION feed. Filled in by #117 item 1. Never copied from dev.
+                - name: BRIGHT_MLS_TOKEN_ENDPOINT
+                  value: ""
+                - name: BRIGHT_MLS_SERVICE_ROOT
+                  value: ""

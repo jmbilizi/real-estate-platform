@@ -23,6 +23,15 @@ module.exports = {
           entryName: 'seed-on-start',
           entryPath: './src/seed/seed-on-start.main.ts',
         },
+        // The Bright MLS ingestion job (#91) runs as its own scheduled process — the workload is
+        // throughput-bound and must not compete with request-serving CPU (see AGENTS.md, "the split
+        // that does matter is by workload, not language"). It reuses this image with a different
+        // command, which is why it needs its own entry: nothing in main.ts imports it, so without
+        // this it would not reach the runtime image and the CronJob would have nothing to run.
+        {
+          entryName: 'bright-ingest',
+          entryPath: './src/jobs/bright-ingest/bright-ingest.main.ts',
+        },
       ],
       tsConfig: './tsconfig.app.json',
       assets: ['./src/assets'],

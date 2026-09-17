@@ -99,63 +99,6 @@ audited path for correcting one.
 property blindly — use `getOrCreateProperty()`, or one physical building becomes two rows and two
 accounts can each hold an approved `owner` claim on it.
 
-### The MLS attribute model — the long tail of the feed (#127)
-
-A licensed MLS feed carries a couple hundred fields. The shape decision, made in migration
-`1785801600013` and not reversible cheaply once #93 writes real data: **the columns the product
-filters and sorts on stay first-class columns on `listings`** (price, beds, baths, living area,
-status, city/state/zip, geo — `idx_listings_live_price` is why), **and everything else goes into a
-governed typed attribute store.** Four tables:
-
-- **`mls_fields`** — one row per field we accept. Identity is
-  `(originating_system, reso_resource, field_name)`, so onboarding a second MLS is rows, not DDL,
-  and the same RESO standard field from two systems is deliberately two rows (entitlement and
-  classification differ per market).
-- **`mls_lookup_values`** — one row per permitted value of an enumerated field. This generalises the
-  `listing_statuses` precedent to every field. **Adding a value Bright invented last week is an
-  INSERT** — no migration, no redeploy.
-- **`listing_attributes` / `property_attributes`** — the typed stores. Offer-scoped vs durable, the
-  same split `listings` vs `properties` already makes.
-
-**There is no text value column, and there must never be one.** A value is either a reference to a
-registered lookup value or a typed scalar (`value_numeric` / `value_boolean` / `value_date` /
-`value_timestamp`). That is what keeps this from being the `attributes jsonb` bag forbidden below —
-free text here is unrepresentable rather than merely discouraged, so a steering phrase has no column
-to land in. A consequence that looks like an omission but is not: an identifier-shaped field (parcel
-number, subdivision name) is also unstorable this way, and gets a reviewed column if the product
-needs it. `src/db/mls-attribute-model.spec.ts` asserts all of this against the DDL the migrations
-actually emit, across every migration, so a later append cannot quietly add one.
-
-**Governance is enforced by composite foreign keys, not by the writer's discipline** — an
-unregistered field or value, a field written to the wrong table, or a value in the wrong typed
-column are all constraint violations even from a manual `psql` session. `value_kind` and
-`field_scope` on the attribute rows are denormalised copies of `mls_fields` columns that exist only
-to be the second half of those keys; they are not data.
-
-**`src/db/mls-attributes.ts` is the only module that writes these four tables**, mirroring (not
-merged into) `write.ts`'s rule — `seed.spec.ts` asserts both directions. The reason differs and is
-worth keeping straight: `write.ts` exists because the dwelling snapshot is drift-capable and
-_cannot_ be constrained; this module exists for the fail-closed **behaviour** the constraints cannot
-express — an unregistered value is detected first and returned as a structured rejection, so one
-unknown vocabulary token does not abort the ingest of a whole batch. Rejections are diagnostics for
-an ingestion run to record (#93 owns retention); this module persists none of them, and truncates
-the offending value to 120 characters, because a value long enough to be prose is by that fact not a
-lookup token.
-
-**Both disclosure flags default to the safe side**: `is_address_bearing` defaults **true** and
-`is_consumer_displayable` defaults **false**, with a CHECK forbidding the combination. A field
-nobody has classified is therefore invisible rather than public — the inverse of the
-column-by-column suppression rule that fails open on every field nobody thought about (#53).
-`registerMlsField()` deliberately offers no way to set `is_consumer_displayable`, and its
-`ON CONFLICT` never re-asserts `is_address_bearing`, `data_type` or `scope`, so a `$metadata`
-re-pull cannot silently revert a human's review. **Nothing is exposed to a consumer yet**: no
-`listing_search_v` change, no contract change, no API field. Whatever eventually exposes an
-attribute filters on `is_consumer_displayable` **and** routes through `suppression.ts` — neither
-substitutes for the other.
-
-`listings.amenities` and `properties.property_type` keep their CHECKs and are untouched; whether to
-converge them onto this store later is deliberately left open in both directions.
-
 **Fair Housing: never add these columns** to properties/units/listings — no `attributes jsonb` bag
 (a RESO mapping exposes `HighSchoolDistrict`, `ElementarySchool` and similar, so an open bag
 persists steering-adjacent fields with no migration to review), no `keywords`/`tags`/`features`
@@ -248,6 +191,47 @@ at all. `seed_state` is deliberately not `is_sample`-labelled, so it survives th
 The `seed` Nx target still exists for loading the dataset into an arbitrary database you have
 pointed `DATABASE_URL` at — it is no longer the way to get local data, and it does **not** perform
 the delete-then-insert re-apply.
+
+### Bright MLS ingestion (`src/jobs/bright-ingest/`) — the vehicle, not the cargo (#91)
+
+The scheduled ingestion job is **this image with a different command**, exactly as the section above
+prescribes: a separate process because the workload is throughput-bound and must not compete with
+request-serving CPU, but the same Nx project because `property_db` is this service's database and
+`src/db/write.ts` must stay the only writer. `bright-ingest.main.ts` is a second webpack entry point
+(`webpack.config.js` → `additionalEntryPoints`, the same mechanism `seed-on-start` uses), run by the
+`bright-mls-ingest` CronJob in `infra/k8s/base/cronjobs/`.
+
+**It ingests nothing.** Incremental RESO replication into staging is #92; mapping into the consumer
+schema is #93. A run resolves configuration and then either reports `not_configured` or
+authenticates and probes `$metadata`. `no-consumer-writes.spec.ts` asserts that structurally — the
+directory issues no write SQL against any consumer table, never mentions `listing_search_v`, and
+imports neither `db/pool` nor `db/write`. When #92 lands, the allowance to make is **its own staging
+table**, never a relaxation of the consumer-table rule.
+
+Four things here are load-bearing and easy to undo by accident:
+
+- **"Not configured" is a success, exit 0.** `local` and `test` receive no Bright credentials ever
+  (#117) and hold the committed `StrongBase64Password` placeholder, which `config.ts` treats as
+  absent and never transmits. Making that a failure would give a CronJob a nightly backoff loop over
+  an entirely expected condition and bury real faults in the noise. A value that is present but
+  **unusable** is the opposite case and does fail the run.
+- **Two credential sets, never one** (stakeholder ruling 2026-09-12, #117): dev authenticates
+  against Bright's test/staging feed, prod against the licensed production feed. The field names are
+  identical across environments and only the values differ, which is what makes GitHub _environment_
+  secrets — not repository secrets — the enforcement mechanism. The endpoint is per-environment
+  **configuration** on the CronJob so the feed is inspectable without decoding a Secret.
+- **Only endpoint HOSTS are ever logged**, never full URLs and never credential material. The
+  containment is structural: no log record type in `run-log.ts` has a field a credential could be
+  assigned to. The exception that had to be argued about is `message`, the one free-text field — so
+  `bright-client.ts` keeps only RFC 6749's closed set of `error` CODES from a failure body and drops
+  `error_description` entirely, because a gateway answering `"Client 'abc123' not found"` would
+  otherwise log the client id through it. The redaction assertions live in `run.spec.ts`
+  ("runBrightIngest — redaction"). If one fails, take the field off the record type — do not add a
+  scrubbing pass, which is only ever a list of things somebody remembered.
+- **Every Bright-specific fact the pipeline assumes is unverified.** The developer portal is
+  login-gated, so request shapes are inferred from public RESO documentation.
+  `docs/bright-mls-day-one-checklist.md` is the list to work the hour the credentials arrive; an
+  item that comes back different is a product-owner ping, not a quiet local fix.
 
 ### Migration rules (each of these fails silently or confusingly if ignored)
 
