@@ -116,6 +116,58 @@ without an extra DB call.
 
 ---
 
+## Registration and Email Confirmation
+
+Registration, confirmation and resend are ASP.NET Core Identity's own endpoints:
+
+```
+POST /account/register                 { "email": "...", "password": "..." }   → 200 (empty)
+GET  /account/confirmEmail?userId=&code= → 200 "Thank you for confirming your email."
+POST /account/resendConfirmationEmail  { "email": "..." }                      → 200 (empty)
+```
+
+`/register` sends a confirmation link through `IEmailSender<ApplicationUser>`. The link points at
+the web app: `AccountRecovery:WebBaseUrl` + `/confirm-email` + `userId` + `code`. The link is valid
+for `AccountRecovery:ConfirmationTokenLifetime` (24h) on a dedicated token provider.
+
+**Enforcement is off** (`AccountRecovery:RequireConfirmedEmail = false` in every environment). An
+unconfirmed account can sign in. The service logs a warning (event 1364) at startup while this is
+so. #149 turns it on after #133 and #138 make delivery real.
+
+**No delivery transport exists yet.** `UndeliveredIdentityEmailSender` logs one warning per message
+(events 1360, 1361) and never logs the link or code. #138 replaces it.
+
+**Sender identity** (configuration, section `Email`): from
+`Cribstop (Real Broker, LLC) <no-reply@cribstop.com>`, reply-to `contact@cribstop.com`.
+
+**No account enumeration.** The caller learns nothing about whether an address has an account:
+
+| Request                                             | Response                     |
+| --------------------------------------------------- | ---------------------------- |
+| `/register`, address already in use                 | `200` empty, same as success |
+| `/register`, weak password or malformed address     | `400` validation problem     |
+| `/login`, unconfirmed (switch on) or locked out     | `401` `detail: "Failed"`     |
+| `/confirmEmail`, expired, used, tampered or unknown | `401` "Request a new link."  |
+| `/resendConfirmationEmail`, any address             | `200` empty                  |
+
+`/register` and `/resendConfirmationEmail` answer no faster than
+`AccountRecovery:MinimumResponseDuration` (250ms).
+
+**Rate limits** (`429` + `Retry-After`, counted before any account lookup):
+
+| Limit                                       | Setting                                   | Default |
+| ------------------------------------------- | ----------------------------------------- | ------- |
+| Resend interval per address                 | `AccountRecovery:ResendMinimumInterval`   | 60s     |
+| Resends per address per hour                | `AccountRecovery:ResendsPerEmailPerHour`  | 3       |
+| Resends per address per 24h                 | `AccountRecovery:ResendsPerEmailPerDay`   | 10      |
+| Resends per client address per window       | `AccountRecovery:ResendsPerAddress`       | 10      |
+| Registrations per client address per window | `AccountRecovery:RegistrationsPerAddress` | 30      |
+| Window for the client-address counters      | `AccountRecovery:RequestWindow`           | 15m     |
+
+Client identity is `X-Real-IP`, which the gateway sets. Counters are per process.
+
+---
+
 ## Multi-App Tracking
 
 The platform runs multiple front-end apps (`cribstop`, `admin-portal`, etc.). The allowed set is
