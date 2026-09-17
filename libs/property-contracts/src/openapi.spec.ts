@@ -1,6 +1,11 @@
 import { ATTRIBUTION_KEYS } from './common';
 import { toOpenApiDocument } from './openapi';
-import { PAGE_SIZE_MAX } from './search-request';
+import {
+  MAX_RESULT_OFFSET,
+  maxReachablePage,
+  PAGE_SIZE_DEFAULT,
+  PAGE_SIZE_MAX,
+} from './search-request';
 
 describe('toOpenApiDocument', () => {
   // `any` lets these assertions inspect the raw JSON Schema shape (the published contract)
@@ -95,6 +100,62 @@ describe('toOpenApiDocument', () => {
     // Sanity check that this assertion is actually exercising something.
     expect(nullableFields.length).toBeGreaterThan(0);
     expect(card.required).toEqual(expect.arrayContaining(nullableFields));
+  });
+
+  // The whole point of the AC's "says it in words" requirement is that an integrator reads the
+  // constraint in the document instead of discovering it at 400, so these assert the published
+  // TEXT rather than a schema keyword — there is no OpenAPI vocabulary for "the offset across two
+  // parameters is bounded", which is exactly why it has to be prose.
+  describe('the result window is documented, not just enforced (#65)', () => {
+    const searchDescription: string = doc.paths['/listings'].get.description;
+
+    it('says this is a search surface and not a bulk-export surface', () => {
+      expect(searchDescription).toMatch(/search surface/i);
+      expect(searchDescription).toMatch(/not a bulk-export surface/i);
+    });
+
+    it('states the window in the terms the service enforces it, and the resulting deepest page', () => {
+      expect(searchDescription).toContain('(page - 1) * pageSize');
+      expect(searchDescription).toContain(String(MAX_RESULT_OFFSET));
+      expect(searchDescription).toContain(String(maxReachablePage(PAGE_SIZE_DEFAULT)));
+    });
+
+    it('says a request past the window is a 400 — not a clamp and not an empty 200', () => {
+      expect(searchDescription).toMatch(/400/);
+      expect(searchDescription).toMatch(/result_window_exceeded/);
+      expect(searchDescription).toMatch(/never silently clamped/i);
+    });
+
+    it('says total is never clamped to the window, and that a past-the-end page inside it is a 200', () => {
+      expect(searchDescription).toMatch(/`total` is always the exact count/);
+      expect(searchDescription).toMatch(/INSIDE the window is a normal 200/);
+    });
+
+    it('documents the new code on the 400 response alongside invalid_request', () => {
+      const response400: string = doc.paths['/listings'].get.responses['400'].description;
+      expect(response400).toContain('result_window_exceeded');
+      expect(response400).toContain('invalid_request');
+    });
+
+    it('publishes result_window_exceeded in the ErrorBody code enum, so a generated client has a branch for it', () => {
+      expect(doc.components.schemas.ErrorBody.properties.error.properties.code.enum).toContain(
+        'result_window_exceeded',
+      );
+    });
+
+    it('carries the bound on the page parameter itself, where a codegen tool surfaces it', () => {
+      const pageParam = doc.paths['/listings'].get.parameters.find(
+        (p: { name: string }) => p.name === 'page',
+      );
+      expect(pageParam.schema.description).toContain(String(MAX_RESULT_OFFSET));
+    });
+
+    it('adds no parameter that could lift the bound', () => {
+      const names = doc.paths['/listings'].get.parameters.map((p: { name: string }) => p.name);
+      for (const forbidden of ['offset', 'limit', 'cursor', 'all', 'export', 'maxResults']) {
+        expect(names).not.toContain(forbidden);
+      }
+    });
   });
 
   it('matches the committed golden document', () => {
