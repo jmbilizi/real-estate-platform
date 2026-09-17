@@ -48,3 +48,21 @@ coincidences (e.g., "family room" is a room type, not familial-status steering).
 
 End with a verdict: PASS or FAIL, plus a one-line summary per category. Do not pad the report with
 what you checked; findings and verdict only.
+
+## Capability map (Claude Code)
+
+Generated from `.agents/capability-map.json`. Where the text above names a capability, use:
+
+- **Read-only exploration subagent**: `Explore` agent (Agent tool, `subagent_type: Explore`)
+- **Planning / architecture subagent**: `Plan` agent, `superpowers:writing-plans` skill
+- **Parallel implementation subagents**: Agent tool (`model`), Workflow `agent()` (`model`,
+  `effort`)
+- **Isolated worktree per lane**: Agent tool `isolation: "worktree"`
+- **TDD discipline**: `superpowers:test-driven-development` skill
+- **Brainstorm before design**: `superpowers:brainstorming` skill
+- **Written plan**: `superpowers:writing-plans` skill
+- **Finish a branch / open PR**: `superpowers:finishing-a-development-branch` skill
+- **UI design guidance**: `frontend-design:frontend-design` skill
+- **.NET / Azure SDK reference**: `microsoft-docs:microsoft-code-reference` skill
+- **Current JS library docs**: Context7 MCP (`resolve-library-id`, `query-docs`)
+- **Compliance / contract review**: `cribstop-compliance-reviewer`, `contract-sync-reviewer` agents

@@ -10,7 +10,9 @@ description:
 # Pick Next Ticket
 
 Full board/command reference: `AGENTS.md` → "Product Backlog (GitHub Issues & Projects)". Never call
-`gh`/`git` directly for this — always the `pnpm run gh:ticket:*` wrappers.
+`gh`/`git` directly for this — always the `pnpm run gh:ticket:*` wrappers. Write the claim comment
+and the Implementation Plan in ASD-STE100 Simplified Technical English (`AGENTS.md` → "Writing
+Standard"): one testable step per item, no narrative.
 
 ## Steps
 
@@ -40,14 +42,15 @@ Full board/command reference: `AGENTS.md` → "Product Backlog (GitHub Issues & 
    ```
 
 5. **Hand off into normal planning** — pull the full ticket body for context
-   (`pnpm run gh:ticket:view -- --issue <number>`), then invoke `superpowers:brainstorming` (or
-   `superpowers:writing-plans` if the ticket's acceptance criteria are already concrete enough to
-   skip straight to a plan). Before coding starts, the plan goes into the ticket itself as an
-   ordered checklist — each item independently testable, roughly one commit — via
-   `pnpm run gh:ticket:update-status -- --issue <number> --plan-file <path>` (writes only the
-   marker-delimited `## Implementation Plan` section; keep its checkboxes current as items land so
-   any later session can resume mid-ticket). Work happens on one branch `<number>-short-slug` cut
-   from `dev`. This skill's job is selection and handoff, not planning or implementation.
+   (`pnpm run gh:ticket:view -- --issue <number>`), then brainstorm the design (or go straight to a
+   written plan if the ticket's acceptance criteria are already concrete enough). Provider tool
+   names for these steps: `.agents/README.md` → "Capability map". Before coding starts, the plan
+   goes into the ticket itself as an ordered checklist — each item independently testable, roughly
+   one commit — via `pnpm run gh:ticket:update-status -- --issue <number> --plan-file <path>`
+   (writes only the marker-delimited `## Implementation Plan` section; keep its checkboxes current
+   as items land so any later session can resume mid-ticket). Work happens on one branch
+   `<number>-short-slug` cut from `dev`. This skill's job is selection and handoff, not planning or
+   implementation.
 
 6. When the resulting branch is ready to merge, use the `close-ticket` skill to move Status to In
    Review / Done — don't leave the board saying "In Progress" after the work has shipped.
