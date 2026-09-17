@@ -12,12 +12,23 @@ pointer stub. Canonical skills, subagents, and hooks live in `.agents/` — see
 
 ## Project Guides (nested AGENTS.md, auto-loaded per directory)
 
-- `apps/clients/cribstop/AGENTS.md` — Next.js consumer web app
-- `apps/api-gateway/AGENTS.md` — Ocelot (.NET) API gateway
-- `apps/services/account-service/AGENTS.md` — .NET identity/auth service
-- `apps/services/property-service/AGENTS.md` — Node property/listings domain service
-- `apps/services/multi-model-inference/AGENTS.md` — Python inference service
-- `libs/property-contracts/AGENTS.md` — shared listings wire-contract library
+Every Nx project under `apps/` or `libs/` owns an `AGENTS.md` in its directory or a parent.
+`pnpm run agents:sync` generates the list below from the files on disk and the `CLAUDE.md` import
+stub beside each guide. Both `agents:sync` and `agents:check` (pre-commit) fail on a project with no
+guide. Do not edit the list by hand. Build-only projects elsewhere (such as `infra/docker/`) need no
+guide.
+
+<!-- project-guides:start -->
+
+- `apps/api-gateway/AGENTS.md` — API Gateway (api-gateway)
+- `apps/clients/cribstop/AGENTS.md` — Cribstop Web App (cribstop-next)
+- `apps/services/account-service/AGENTS.md` — Account Service (account-service)
+- `apps/services/multi-model-inference/AGENTS.md` — Multi-Model Inference Service
+  (multi-model-inference)
+- `apps/services/property-service/AGENTS.md` — Property Service (property-service)
+- `libs/property-contracts/AGENTS.md` — property-contracts (`@cribstop/property-contracts`)
+
+<!-- project-guides:end -->
 
 ## Key Docs (read before deep work)
 
@@ -52,6 +63,43 @@ pointer stub. Canonical skills, subagents, and hooks live in `.agents/` — see
    when the task that needed them is done — before reporting or committing — and confirm none
    survive (`ps -W | grep -E 'skaffold|kubectl|node'`). **On Windows `pkill` silently does nothing**
    — use `taskkill //F //IM kubectl.exe` (or `skaffold.exe`, `node.exe`).
+9. **Write in ASD-STE100 Simplified Technical English, and write only what the reader needs.** This
+   applies to everything an agent writes: ticket bodies, ticket comments, code comments, PR
+   descriptions, commit messages, and replies to the user. See
+   [Writing Standard](#writing-standard).
+
+## Writing Standard (ASD-STE100)
+
+Every agent writes in Simplified Technical English. The rules that matter most here:
+
+- **One idea per sentence.** Procedural sentences: 20 words maximum. Descriptive sentences: 25 words
+  maximum. No semicolons, no em-dash asides, no nested parentheses.
+- **Active voice, present tense.** "The gateway rejects the request", not "the request is rejected".
+  Write instructions as commands: "Run the deploy", not "the deploy should be run".
+- **One word, one meaning.** Use the repo's canonical names (`AGENTS.md`, PRD.md, project
+  `AGENTS.md`) and use the same word for the same thing every time. Do not invent synonyms.
+- **No filler.** Delete hedges ("basically", "it is worth noting"), intensifiers ("very", "truly"),
+  and courtesy phrases. Delete any sentence that does not change what the reader does.
+- **Approved words only.** Prefer the simple word: "use" not "utilize", "start" not "initiate",
+  "before" not "prior to", "if" not "in the event that".
+
+Concision is the second half of the standard. Include only details that change an implementation, a
+decision, or a verification. Concretely:
+
+- **Ticket bodies**: Problem, Acceptance Criteria, Technical Notes. Facts, constraints, and file
+  paths. No history of how the ticket was discovered, no restatement of repo conventions that
+  `AGENTS.md` already records, no motivational prose.
+- **Ticket comments**: the decision or the finding, then the evidence. One comment per event, not a
+  running narrative.
+- **Code comments**: explain _why_ only when the code cannot show it (a non-obvious constraint, a
+  workaround with its trigger, a compliance rule). Never restate what the next line does. Never
+  write a paragraph where one sentence works. Point to the ticket or doc for the long version.
+- **PR descriptions and commit messages**: what changed and why, per Acceptance Criterion. No
+  process narrative.
+- **Replies to the user**: lead with the answer or the outcome. Stop when the content stops.
+
+When refactoring existing text, apply the same standard: cut rather than rewrite, and keep only what
+a reader needs to understand or act.
 
 ## Commands (repo level)
 
@@ -89,13 +137,15 @@ pnpm run infra:validate:dev            # Kustomize validation per env
   - `.agents/hooks/*.js` — provider-neutral hook scripts. Claude Code registers them in
     `.claude/settings.json`; other providers adopt them as their hook systems stabilize. Git hooks
     (husky) remain the universal enforcement backstop.
-- **Generated pointers are committed.** After editing anything under `.agents/`, run
-  `pnpm run agents:sync` to regenerate the `.claude/` pointers; `pnpm run agents:check` (wired into
-  pre-commit) fails on drift. Never hand-edit generated files in `.claude/skills/` or
-  `.claude/agents/`.
-- **Project-specific skills**: nest them in the project (`apps/<...>/.agents/skills/`) and add the
-  location per provider as needed. **Project-specific hooks and subagents** (root-only discovery):
-  name them with the project prefix, e.g. `cribstop-compliance-reviewer`.
+- **Generated files are committed and derived from disk, never hand-listed.** After editing anything
+  under `.agents/`, or adding a project or a project `AGENTS.md`, run `pnpm run agents:sync`. It
+  regenerates the `.claude/` pointers, the root "Project Guides" list, missing `CLAUDE.md` stubs,
+  and `chat.agentSkillsLocations` in `.vscode/settings.json`. `pnpm run agents:check` (pre-commit)
+  fails on drift and on an `apps/`/`libs/` project with no `AGENTS.md`. Never hand-edit those
+  outputs.
+- **Project-specific skills**: nest them in the project (`apps/<...>/.agents/skills/`); the sync
+  registers the location. **Project-specific hooks and subagents** (root-only discovery): name them
+  with the project prefix, e.g. `cribstop-compliance-reviewer`.
 
 ## Repo-Wide Gotchas
 
@@ -151,10 +201,10 @@ pnpm run infra:validate:dev            # Kustomize validation per env
   exit 0 (CI runs it in six places). Reconcile a failure with an install, never by hand-editing.
 - **No Alpine base images for anything doing in-cluster DNS.** musl fails Kubernetes service
   resolution with `EAI_AGAIN`; use a Debian `-slim` base. No Dockerfile in the repo is on Alpine any
-  more (`cribstop-next` was the last one — #74). **A `-slim` base ships no CA bundle at all**, where
-  the Alpine Node image shipped 145 certs, so any swap must `apt-get install ca-certificates` or it
-  silently strips TLS trust; install it in the shared `base` stage so the runtime image keeps it
-  too, not just the stage that runs `pnpm install`.
+  more (#74). **A `-slim` base ships no CA bundle at all**, where the Alpine Node image shipped 145
+  certs, so any swap must `apt-get install ca-certificates` or it silently strips TLS trust; install
+  it in the shared `base` stage so the runtime image keeps it too, not just the stage that runs
+  `pnpm install`.
 - **Any Dockerfile that runs Nx must set `ENV NX_DAEMON=false`.** Nx turns its daemon off in CI and
   in Docker, but does not detect podman/buildah or BuildKit (`isDocker()` checks only `/.dockerenv`
   and cgroup `"docker"`; podman writes `/run/.containerenv`, and no build engine propagates `CI`).
@@ -162,7 +212,8 @@ pnpm run infra:validate:dev            # Kustomize validation per env
   while the build is mutating files, trips over a transient generated tsconfig, and persists the
   graph with an `errors[]` entry; every later `readCachedProjectGraph()` then reports **"No cached
   ProjectGraph is available"** for a file that is present and fine. Cost a red `dev` build at 50%
-  reproducibility (#69). `property-service` is currently the only such Dockerfile.
+  reproducibility (#69). Find the affected Dockerfiles with a grep for `nx ` in
+  `apps/**/Dockerfile`.
 - Jest `<rootDir>` inside `testMatch` / `testPathIgnorePatterns` silently matches nothing on Windows
   (native backslashes read as escapes). Write the patterns without it.
 
@@ -852,15 +903,16 @@ substitution. Infrastructure code in `infra/`:
 - **Redis/Valkey 9.0**: ACL-based authentication, 5 users (admin, pubsub, cache, ratelimit, monitor)
 - **Jaeger + OpenTelemetry**: Distributed tracing for microservices observability (optional sidecar)
 
-**Planned Architecture** (applications not yet deployed):
+**Application tier** (the deployed set is whatever `skaffold.yaml` and `infra/deploy-control.yaml`
+register; the planned set is PRD §2.1):
 
-- **API Gateway** (Ocelot .NET 9.0): Centralized entry point for microservices
-  - Responsibilities: Request routing, authentication (JWT), rate limiting, circuit breaking
+- **API Gateway** (Ocelot .NET): Centralized entry point for microservices
+  - Responsibilities: Request routing, authentication, rate limiting, circuit breaking
   - Routes external requests to internal microservices
   - Provides unified API surface with versioning support
-- **Microservices** (Node.js/Python/.NET): Domain-specific services
-  - account-service, messaging-service, property-service, social-service (future)
-- **Web App** (Next.js): Frontend application (future)
+- **Microservices** (Node.js/Python/.NET): Domain-specific services, one project guide each (see
+  Project Guides)
+- **Web App** (Next.js): Frontend application
 
 **External Access** (via Ingress):
 
@@ -1459,22 +1511,22 @@ project — Projects v2 permissions for a user-owned board are granted per-user,
   product owner, not parked at a P3 that never ships). `Size` (XS/S/M/L/XL, optional estimate).
   Field _option_ matching in the wrapper scripts is case-insensitive ("In progress" on the board ==
   "In Progress" in docs/commands), so board-UI casing edits can't break automation.
-- **Labels** carry scope tagging (`scope:cribstop-web`, `scope:api-gateway`,
-  `scope:account-service`, `scope:multi-model-inference`, `scope:shared` for cross-cutting work) and
-  type (`type:bug`/`type:feature`/`type:chore`). Scope values use each component's **canonical
-  platform name** — today that equals the Nx project name for everything except the web app, whose
-  Nx project is currently `cribstop-next` (a framework-detail name expected to eventually be renamed
-  to match `cribstop-web`; the build→deploy name mapping already lives in
-  `tools/docker/image-name-map.json`). These labels are unrelated to the Nx _tag_ dimensions despite
-  the shared prefixes: an Nx `scope:` tag is a business-domain classifier and an Nx `type:` tag a
-  project-kind classifier — different vocabulary, different system. Prefix convention: prefixed
-  labels (`type:`, `scope:`) are dimensions picked from the taxonomy; unprefixed labels (`blocked`,
-  `human-action`) are orthogonal overlays that combine with any Status or dimension. Labels are
-  multi-valued (a ticket touching web + gateway gets both scope labels), which Projects v2 fields
-  cannot do — there's no multi-select field type. `blocked` marks anything stuck regardless of its
-  current Status (Status's linear progression has no room for a branch state). `human-action` marks
-  tickets only a human can complete (provision a secret/API key per environment, PAT scopes, DNS,
-  paid accounts, legal/broker sign-off) — authored as a runbook (what / where / how / by when) with
+- **Labels** carry scope (`scope:<canonical platform name>`, one per component touched, plus
+  `scope:shared` for cross-cutting work) and type (`type:bug`/`type:feature`/`type:chore`). There is
+  no hand-maintained list of scope labels. The canonical name is the Nx project name, with one
+  exception: the web app is `scope:cribstop-web` although its Nx project is `cribstop-next`. Image
+  names in `tools/docker/image-name-map.json` are not scope names. The label must exist on the repo
+  before a ticket can carry it. The product owner creates it while grooming the ticket that
+  introduces the component. These labels are unrelated to the Nx _tag_ dimensions despite the shared
+  prefixes: an Nx `scope:` tag is a business-domain classifier and an Nx `type:` tag a project-kind
+  classifier — different vocabulary, different system. Prefix convention: prefixed labels (`type:`,
+  `scope:`) are dimensions picked from the taxonomy; unprefixed labels (`blocked`, `human-action`)
+  are orthogonal overlays that combine with any Status or dimension. Labels are multi-valued (a
+  ticket touching web + gateway gets both scope labels), which Projects v2 fields cannot do —
+  there's no multi-select field type. `blocked` marks anything stuck regardless of its current
+  Status (Status's linear progression has no room for a branch state). `human-action` marks tickets
+  only a human can complete (provision a secret/API key per environment, PAT scopes, DNS, paid
+  accounts, legal/broker sign-off) — authored as a runbook (what / where / how / by when) with
   `Blocks #<n>` referencing the work waiting on it; the engineer agent files these whenever it hits
   such a dependency, adds `blocked` to the dependent ticket, and moves on to unblocked work. All
   taxonomy labels are provisioned on the repo (labels must pre-exist — `gh:ticket:create` passes

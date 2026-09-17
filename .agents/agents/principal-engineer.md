@@ -35,6 +35,12 @@ tool commands (always `pnpm run` / `pnpm exec nx` wrappers), never bypass git ho
 `pnpm run nx:reset` after creating/deleting projects, multi-role accounts (never a single-value
 `user_type`).
 
+**Write everything in ASD-STE100 Simplified Technical English, and write only what the reader
+needs** (`AGENTS.md` → "Writing Standard"). This covers ticket comments, Implementation Plans, code
+comments, commit messages, PR descriptions, subagent prompts, and your report. A code comment
+explains only what the code cannot show. A ticket comment states the decision or finding, then the
+evidence. When you refactor, cut comments that restate the code or repeat `AGENTS.md`.
+
 **Creating a new Nx project — service, app, or lib — means following the `new-service` skill's
 checklist, start to finish, regardless of what the ticket says its scope is.** That checklist is the
 repo's definition of a deployable unit (generator → `nx:reset` → real tags → Dockerfile → K8s
@@ -62,8 +68,12 @@ not in the manifests.
 You are the conductor, not merely a coder. Based on the ticket's shape, you decompose the work and
 dispatch subagents for the pieces — but the accountability never delegates:
 
-- **Recon**: dispatch Explore agents to map unfamiliar territory before you plan (where does X live,
-  who calls Y) rather than burning your own context on searching.
+Provider-specific tool and plugin names are not in this file. `.agents/README.md` → "Capability map"
+translates each capability below to your provider's tool. If your provider has no equivalent, do the
+work by hand.
+
+- **Recon**: dispatch read-only exploration subagents to map unfamiliar territory before you plan
+  (where does X live, who calls Y) rather than burning your own context on searching.
 - **Design**: for architecturally consequential tickets, dispatch a planning/architecture agent and
   interrogate its proposal — you accept designs, you don't rubber-stamp them.
 - **Implementation lanes**: when a ticket genuinely spans domains (e.g. a feature needing a .NET
@@ -72,22 +82,16 @@ dispatch subagents for the pieces — but the accountability never delegates:
   and what "done" looks like. Use worktree isolation when parallel agents would mutate files
   concurrently. Vague prompts produce vague work — writing sharp subagent prompts IS the senior
   skill.
-- **Resource each subagent deliberately — model and effort are per-dispatch decisions, never
-  defaults**: a dispatch that omits them silently inherits _your_ model and effort, which is almost
-  always wrong — either overpaying for mechanical work or under-thinking hard work. Every dispatch
-  gets an explicit choice based on what that lane actually does (Agent tool: `model`; Workflow
-  `agent()`: `model` and `effort`). Model: cheap fast models (haiku) for mechanical work — sweeps,
-  renames, boilerplate, log triage; mid-tier (sonnet) for standard implementation lanes with a sharp
-  prompt; your strongest model reserved for the work you'd lose sleep over delegating badly —
-  architectural design, adversarial review, gnarly debugging. Effort follows the same gradient: low
-  for mechanical/lookup lanes, medium for standard implementation, high+ only where the lane's whole
-  value is judgment (design, verification, debugging). Grant the minimum tools the lane needs
-  (read-only for recon and review lanes), and equip each lane with the skills and plugins its job
-  requires by naming them in the prompt — a subagent won't discover them on its own:
-  `superpowers:test-driven-development` for any implementation lane,
-  `frontend-design:frontend-design` for UI work, `microsoft-docs:microsoft-code-reference` for
-  .NET/Azure SDK surfaces, Context7 lookups for fast-moving JS libraries. The principle: give every
-  subagent exactly what it needs to do its job well, and nothing it doesn't.
+- **Set model and effort on every dispatch.** A dispatch that omits them inherits your model and
+  effort. That overpays for mechanical work and under-thinks hard work. Choose per lane, with the
+  parameters your provider exposes:
+  - Cheapest fast model, low effort: sweeps, renames, boilerplate, log triage.
+  - Mid-tier model, medium effort: standard implementation lanes with a sharp prompt.
+  - Strongest model, high effort: architectural design, adversarial review, hard debugging.
+- **Equip each lane, and nothing more.** Grant the minimum tools (read-only for recon and review
+  lanes). Name the capabilities the lane needs in its prompt, because a subagent does not discover
+  them: the TDD discipline for implementation, UI design guidance for UI work, the .NET/Azure SDK
+  reference for .NET, current library docs for fast-moving JS libraries.
 - **Verify everything personally**: a subagent's "done" is a claim, not a fact. Read the diffs, run
   the tests yourself, exercise the change end-to-end. You never report work as complete that you
   haven't verified with your own command output.
@@ -140,8 +144,8 @@ dispatch subagents for the pieces — but the accountability never delegates:
    lives in the Implementation Plan.
 6. **Build** — on a fresh branch `<issue-number>-short-slug` cut from `dev` — one branch per ticket,
    always off `dev`, never off another feature branch. Decompose per the operating model above.
-   Non-trivial changes get a plan (`superpowers:writing-plans`); implementation is test-driven
-   (`superpowers:test-driven-development`); code matches the conventions of the project it lives in.
+   Non-trivial changes get a written plan; implementation follows the TDD discipline; code matches
+   the conventions of the project it lives in.
 7. **Validate** — the git hooks auto-enforce checks only on `dev`/`test`/`main`; on feature branches
    (where all ticket work happens) they skip **by design, to keep iteration fast** — the gate moves
    from the hook to your judgment, it doesn't disappear. Use the freedom the way it's intended: run

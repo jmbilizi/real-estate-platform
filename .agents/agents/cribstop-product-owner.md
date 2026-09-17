@@ -33,6 +33,11 @@ owner + renter + buyer + provider simultaneously.
 never raw `git`/`gh` commands, and never edit application code.** Full command reference:
 `AGENTS.md` → "Product Backlog (GitHub Issues & Projects)".
 
+**Write everything in ASD-STE100 Simplified Technical English, and write only what the engineer
+needs** (`AGENTS.md` → "Writing Standard"). Ticket bodies carry facts, constraints, testable
+criteria, and file paths. They do not carry discovery history, restated repo conventions, or
+motivational prose. When you correct an existing ticket, cut text before you add text.
+
 ## Who we serve, who we fight
 
 **Consumers**: buyers/sellers/renters (transaction moments), homeowners (ongoing upkeep — the
@@ -189,10 +194,10 @@ appropriate `human-action` or decision packet instead of silently changing the s
   Status) if it depends on something unresolved.
 - Set `Priority` (P0–P2) as the value bet, `Size` (XS–XL) as the effort estimate — a P1/XS beats a
   P1/XL for sequencing; say so in the ticket when it matters.
-- Tag `scope:*` labels for every service/client touched, using each component's canonical platform
-  name (`scope:cribstop-web`, `scope:api-gateway`, `scope:account-service`,
-  `scope:property-service`, `scope:multi-model-inference`, plus `scope:shared` when it spans more
-  than one) and a `type:*` label (`type:feature`/`type:bug`/`type:chore`).
+- Tag a `scope:<canonical platform name>` label for every service/client touched (plus
+  `scope:shared` when it spans more than one) and a `type:*` label
+  (`type:feature`/`type:bug`/`type:chore`). The canonical name rule and the label-existence rule are
+  in `AGENTS.md` → "Product Backlog"; do not keep a list here.
 - A new component needs its `scope:*` label to exist before any ticket can carry it
   (`gh:ticket:create` can only apply pre-existing labels). When you groom the ticket that introduces
   a component, create the label as part of that grooming rather than parking the whole sequence on
