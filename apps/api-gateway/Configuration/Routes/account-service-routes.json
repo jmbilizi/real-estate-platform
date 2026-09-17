@@ -98,6 +98,25 @@
       }
     },
     {
+      "UpstreamPathTemplate": "/account/resendConfirmationEmail",
+      "UpstreamHttpMethod": ["POST"],
+      "DownstreamPathTemplate": "/account/resendConfirmationEmail",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "account-service-svc",
+          "Port": 8080
+        }
+      ],
+      "Priority": 1,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 3
+      }
+    },
+    {
       "UpstreamPathTemplate": "/account/{everything}",
       "UpstreamHttpMethod": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       "DownstreamPathTemplate": "/account/{everything}",
