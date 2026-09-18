@@ -313,11 +313,17 @@ Rules that hold:
 - With no `.env`, nothing is generated and the render is byte-identical to a clean checkout.
 - A key whose name is not already SCREAMING_SNAKE is qualified with its Secret name, so the jaeger
   `auth` key is `JAEGER_AUTH`. A bare `auth` in `process.env` would collide too easily.
+- The generated patches hold plaintext until a later run supplies no key. To clear them now, run
+  `pnpm run infra:secrets:clean`.
+- An explicit `--profile` selects the render path yourself, so it turns injection off. The script
+  warns and names the keys it did not inject.
 
-`pnpm run infra:validate` runs the drift gate in `secret-drift.js`: the manifests, the `yq` lines in
-`.github/actions/deploy-k8s-resources/action.yml`, the workflow `env:` block, and `.env.example`
-must agree. `check-staged-secrets.js` runs in pre-commit and refuses a staged manifest whose
-`stringData` value changed.
+Two gates keep this honest. `pnpm run infra:validate` runs the drift gate in `secret-drift.js`: the
+manifests, the `yq` lines in `.github/actions/deploy-k8s-resources/action.yml`, the workflow `env:`
+block, and `.env.example` must agree. `check-staged-secrets.js` runs in pre-commit, ahead of the
+feature-branch gate, and refuses a staged manifest whose committed value changed. It reads `data` as
+well as `stringData`, and it fails closed on a manifest it cannot parse. To change a committed
+default on purpose, run the commit with `ALLOW_SECRET_VALUE_CHANGE=1`.
 
 ## Files
 

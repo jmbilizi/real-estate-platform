@@ -430,8 +430,7 @@ const podmanDockerHost = resolvePodmanDockerHost();
  * present in `process.env`. A shell export or a CI variable therefore still wins over the file,
  * which is what makes a one-off override possible without editing `.env`.
  *
- * Returns the kustomize path fragment the render must start from: the generated secret overlay
- * when at least one key is supplied, and the committed local overlay otherwise.
+ * Returns the overlay result, or null for a command that renders no manifests.
  */
 function ensureLocalSecrets() {
   const command = args[0];
@@ -457,28 +456,49 @@ function ensureLocalSecrets() {
     }
   }
 
-  const result = ensureLocalSecretOverlay();
-  console.log(describeOverrides(result));
-  return result.dir;
+  return ensureLocalSecretOverlay();
 }
 
-const localSecretsDir = ensureLocalSecrets();
+const localSecretsResult = ensureLocalSecrets();
+const localSecretsDir = localSecretsResult ? localSecretsResult.dir : null;
 
 // When running --module services, generate the services-only overlay and activate the profile.
 const isServicesOnly =
   (args.includes('--module') && args.includes('services')) ||
   args.some((a) => a === '--module=services');
 
+// An explicit -p/--profile is the caller's choice of render path, so neither generated profile is
+// activated over it.
+const callerChoseProfile = hasArg(args, '-p') || hasArg(args, '--profile');
+let injectionActive = false;
+
 if (isServicesOnly) {
   // The services-only overlay chains through the secret overlay when one exists, so only one
   // profile is ever activated. Two profiles would both set manifests.kustomize.paths, and the last
   // one would silently discard the other's render path.
   const overlayDir = ensureServicesOnlyOverlay(localSecretsDir ? '../secrets' : '../../local');
-  if (overlayDir && !hasArg(args, '-p') && !hasArg(args, '--profile')) {
+  if (overlayDir && !callerChoseProfile) {
     args.push('-p', 'services-only');
+    injectionActive = Boolean(localSecretsDir);
   }
-} else if (localSecretsDir && !hasArg(args, '-p') && !hasArg(args, '--profile')) {
+} else if (localSecretsDir && !callerChoseProfile) {
   args.push('-p', 'local-secrets');
+  injectionActive = true;
+}
+
+// Reported after the profile decision, never before it: the overlay existing is not the same as
+// the render using it. Written to stderr so it cannot become an extra YAML document in the output
+// of `skaffold render`.
+if (localSecretsResult) {
+  if (localSecretsResult.overriddenKeys.length > 0 && !injectionActive) {
+    console.error(
+      `WARNING: ${localSecretsResult.overriddenKeys.length} secret override(s) are NOT injected, ` +
+        'because an explicit --profile selects the render path: ' +
+        `${localSecretsResult.overriddenKeys.join(', ')}`,
+    );
+  } else {
+    console.error(describeOverrides(localSecretsResult));
+  }
 }
 
 const env = {

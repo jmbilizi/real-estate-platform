@@ -95,7 +95,9 @@ function ensureLocalSecretOverlay(options = {}) {
   fs.mkdirSync(dir, { recursive: true });
 
   const patchPaths = [];
-  for (const [secretName, group] of [...bySecret.entries()].sort()) {
+  for (const [secretName, group] of [...bySecret.entries()].sort(([a], [b]) =>
+    a.localeCompare(b),
+  )) {
     const fileName = `${secretName}.secret.yaml`;
     fs.writeFileSync(path.join(dir, fileName), renderPatch(secretName, group, env));
     patchPaths.push(fileName);
@@ -128,6 +130,17 @@ function describeOverrides(result) {
     return `No local secret overrides found in .env — using the committed values for all ${result.totalKeys} keys.`;
   }
   return `Overriding ${result.overriddenKeys.length} of ${result.totalKeys} keys: ${result.overriddenKeys.join(', ')}`;
+}
+
+// `clean` removes the generated plaintext patches without waiting for the next run.
+if (require.main === module) {
+  if (process.argv[2] === 'clean') {
+    clearOverlay();
+    console.log('✓ removed infra/k8s/podman/.generated/secrets');
+  } else {
+    console.error('Usage: node tools/infra/local-secret-overlay.js clean');
+    process.exit(1);
+  }
 }
 
 module.exports = {

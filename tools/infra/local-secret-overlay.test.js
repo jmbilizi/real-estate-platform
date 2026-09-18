@@ -21,6 +21,23 @@ function tempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
+test('process.loadEnvFile lets the real environment win, which AC 3 depends on', () => {
+  // Guards the Node behaviour the override rule is built on, so a runtime upgrade that reversed it
+  // would fail here rather than silently inject the wrong value into a cluster Secret.
+  const dir = tempDir('load-env-');
+  const file = path.join(dir, 'probe');
+  const name = 'CRIBSTOP_LOAD_ENV_PROBE';
+  fs.writeFileSync(file, `${name}=from-file\n`);
+  process.env[name] = 'from-shell';
+  try {
+    process.loadEnvFile(file);
+    assert.equal(process.env[name], 'from-shell');
+  } finally {
+    delete process.env[name];
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('an unset or empty variable is not an override', () => {
   const records = deriveSecretKeys(fixtureOptions);
   const overrides = selectOverrides(records, { ALPHA_TWO_PASSWORD: '', BETA_PASSWORD: 'supplied' });

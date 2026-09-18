@@ -571,14 +571,14 @@ function checkInfrastructure() {
   return true;
 }
 
-// Refuse a staged secret manifest whose stringData value was changed. Always runs: the script
-// no-ops in milliseconds when no secret manifest is staged, and this is the one check whose miss
-// leaks a credential into Git rather than breaking a build.
+// Refuse a staged secret manifest whose committed value was changed. Called ahead of the branch
+// gate in main() — see the comment there.
 function checkStagedSecrets() {
-  logStep('Validating Staged Secret Manifests');
-  const result = run('node tools/infra/check-staged-secrets.js');
+  // Quiet on success, so the feature-branch fast path stays quiet.
+  const result = run('node tools/infra/check-staged-secrets.js', { silent: true });
   if (!result.success) {
-    logError('A staged secret manifest carries a changed value — see above');
+    logStep('Validating Staged Secret Manifests');
+    log(result.output || '', 'red');
     return false;
   }
   return true;
@@ -599,6 +599,18 @@ function checkAgentsSync() {
 function main() {
   log('\n⚡ Pre-Commit Quick Checks', 'bright');
   log('='.repeat(80), 'cyan');
+
+  // Runs ahead of the branch gate below, and is the only check that does.
+  //
+  // Every other check here protects a build, so a feature branch can defer it to a manual run or
+  // to CI. This one protects Git itself: a credential committed to a feature branch is in the
+  // history permanently, and the branch a developer experiments with a real credential on is
+  // exactly a feature branch. Nothing downstream repeats it either — the drift gate compares key
+  // names, never values. Reading the index costs about 10 ms, so the fast path survives.
+  if (!checkStagedSecrets()) {
+    logError('\n❌ Commit refused to protect a committed secret manifest.\n');
+    process.exit(1);
+  }
 
   // Git-hook invocations (--hook) enforce checks only on protected branches.
   // Manual runs (`pnpm run pre-commit`) always execute in full.
@@ -719,10 +731,6 @@ function main() {
   // Check infrastructure files (Kustomize) if changed
   const infraResult = checkInfrastructure();
   allPassed = allPassed && infraResult;
-
-  // Guard the committed secret manifests (fast, always runs)
-  const stagedSecretsResult = checkStagedSecrets();
-  allPassed = allPassed && stagedSecretsResult;
 
   // Check generated agentic config is in sync with .agents/ (fast, always runs)
   const agentsResult = checkAgentsSync();

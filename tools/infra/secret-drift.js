@@ -3,9 +3,8 @@
 /**
  * CI key-drift gate for the secret manifests.
  *
- * The deploy action keeps its current hand-written form. It fronts every dev, test and prod
- * deploy, so a restructure carries risk this work does not need to take. This gate instead asserts
- * that the action cannot disagree silently with the manifests or with `.env.example`.
+ * The deploy action keeps its hand-written form. This gate asserts that it cannot disagree
+ * silently with the manifests or with `.env.example`. Design: #160.
  *
  * Three relations are checked:
  *
@@ -22,9 +21,6 @@
  * R1 is keyed on the manifest key and R2 on the variable name, because the two are not always
  * equal — the jaeger manifest key is `auth` and CI feeds it from `JAEGER_BASIC_AUTH`. A gate that
  * compared one flat set of names would report that correct wiring as drift.
- *
- * Collapsing the action's 12 `yq` lines into a loop is separate work. This gate proves equivalence
- * before that is attempted.
  */
 
 const fs = require('fs');

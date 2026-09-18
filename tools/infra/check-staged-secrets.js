@@ -53,29 +53,59 @@ function readBlob(revision, file) {
   }
 }
 
-/** Flatten a manifest's documents to a `secretName.key -> value` map. */
+/** Decode a `data:` value. Returns null when it is not valid base64. */
+function decodeBase64(value) {
+  const text = String(value);
+  try {
+    const decoded = Buffer.from(text, 'base64');
+    return decoded.toString('base64').replace(/=+$/, '') === text.replace(/=+$/, '')
+      ? decoded.toString('utf-8')
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Flatten a manifest's documents to a `field -> value` map.
+ *
+ * Both `stringData` and `data` are read. Only `stringData` is injectable, but this guard is the
+ * leak gate: a real credential hand-pasted as base64 under `data` must not pass because the
+ * derivation happens to ignore that block. A `data` value is compared decoded, so the sentinel
+ * rule applies to it unchanged.
+ *
+ * @returns {{ entries: Map<string, string>, parsed: boolean }}
+ */
 function stringDataEntries(text) {
   const entries = new Map();
   if (typeof text !== 'string') {
-    return entries;
+    // No such path at that revision. That is a new file, not a parse failure.
+    return { entries, parsed: true };
   }
   let documents;
   try {
     documents = yaml.loadAll(text);
   } catch {
-    // A manifest that does not parse fails `pnpm run infra:validate` with a better message.
-    return entries;
+    return { entries, parsed: false };
   }
   for (const doc of documents) {
-    if (!doc || typeof doc !== 'object' || !doc.stringData || typeof doc.stringData !== 'object') {
+    if (!doc || typeof doc !== 'object') {
       continue;
     }
     const secretName = doc.metadata?.name || '';
-    for (const [key, value] of Object.entries(doc.stringData)) {
-      entries.set(`${secretName}.${key}`, String(value));
+    if (doc.stringData && typeof doc.stringData === 'object') {
+      for (const [key, value] of Object.entries(doc.stringData)) {
+        entries.set(`${secretName}.${key}`, String(value));
+      }
+    }
+    if (doc.data && typeof doc.data === 'object') {
+      for (const [key, value] of Object.entries(doc.data)) {
+        // An undecodable value is kept verbatim, so a change to it still registers as a change.
+        entries.set(`${secretName}.data.${key}`, decodeBase64(value) ?? String(value));
+      }
     }
   }
-  return entries;
+  return { entries, parsed: true };
 }
 
 /**
@@ -84,8 +114,24 @@ function stringDataEntries(text) {
  * @returns {Array<{ file: string, field: string, reason: string }>}
  */
 function findChangedValues(file, stagedText, headText) {
-  const staged = stringDataEntries(stagedText);
-  const head = stringDataEntries(headText);
+  const stagedResult = stringDataEntries(stagedText);
+  const headResult = stringDataEntries(headText);
+
+  // Fail closed. An unreadable manifest is the one case where "found nothing" and "could not
+  // look" are indistinguishable, and this guard must never mistake the second for the first.
+  if (!stagedResult.parsed || !headResult.parsed) {
+    const which = stagedResult.parsed ? 'committed' : 'staged';
+    return [
+      {
+        file,
+        field: '(whole file)',
+        reason: `the ${which} manifest does not parse, so no value in it can be verified`,
+      },
+    ];
+  }
+
+  const staged = stagedResult.entries;
+  const head = headResult.entries;
   const findings = [];
 
   for (const [field, value] of staged) {

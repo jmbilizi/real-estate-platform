@@ -22,14 +22,58 @@ function staged(replacements) {
 }
 
 test('flattens stringData across documents and keys it by secret name', () => {
-  const entries = stringDataEntries(HEAD);
+  const { entries, parsed } = stringDataEntries(HEAD);
+  assert.equal(parsed, true);
   assert.equal(entries.get('alpha-secret.ALPHA_ONE_PASSWORD'), PLACEHOLDER);
   assert.equal(entries.get('alpha-secret.auth'), 'admin:$2y$10$committeddefault');
 });
 
-test('a manifest that does not parse yields no entries', () => {
-  assert.equal(stringDataEntries('stringData: [').size, 0);
-  assert.equal(stringDataEntries(null).size, 0);
+test('a data block is read too, decoded, so the sentinel rule applies to it', () => {
+  const withData = [
+    'apiVersion: v1',
+    'kind: Secret',
+    'metadata:',
+    '  name: gamma-secret',
+    'data:',
+    `  ALREADY_BASE64: ${Buffer.from(PLACEHOLDER).toString('base64')}`,
+    '',
+  ].join('\n');
+  const { entries } = stringDataEntries(withData);
+  assert.equal(entries.get('gamma-secret.data.ALREADY_BASE64'), PLACEHOLDER);
+  assert.deepEqual(findChangedValues('gamma.secret.yaml', withData, null), []);
+});
+
+test('a real credential hidden in a data block is refused', () => {
+  const withData = [
+    'apiVersion: v1',
+    'kind: Secret',
+    'metadata:',
+    '  name: gamma-secret',
+    'data:',
+    `  ALREADY_BASE64: ${Buffer.from('real-production-password').toString('base64')}`,
+    '',
+  ].join('\n');
+  const findings = findChangedValues('gamma.secret.yaml', withData, null);
+  assert.deepEqual(
+    findings.map((finding) => finding.field),
+    ['gamma-secret.data.ALREADY_BASE64'],
+  );
+});
+
+test('a manifest that does not parse fails closed', () => {
+  const { entries, parsed } = stringDataEntries('stringData: [');
+  assert.equal(parsed, false);
+  assert.equal(entries.size, 0);
+
+  const findings = findChangedValues('alpha.secret.yaml', 'stringData: [', HEAD);
+  assert.equal(findings.length, 1);
+  assert.match(findings[0].reason, /does not parse/);
+});
+
+test('an absent path at a revision is not a parse failure', () => {
+  const { entries, parsed } = stringDataEntries(null);
+  assert.equal(parsed, true);
+  assert.equal(entries.size, 0);
 });
 
 test('an unchanged manifest passes, including a committed non-placeholder default', () => {

@@ -7,9 +7,10 @@
  * learns key names by reading it. It carries key names and comments only, so it never carries a
  * realistic sample value.
  *
- * Usage:
- *   pnpm run infra:secrets:example               # write .env.example
- *   pnpm run infra:secrets:example -- --check    # exit 1 when the file is out of date
+ * Drift is reported by `pnpm run infra:validate`, which compares this render against the committed
+ * file. This script only writes.
+ *
+ * Usage: pnpm run infra:secrets:example
  */
 
 const fs = require('fs');
@@ -69,29 +70,10 @@ function renderEnvExample(records) {
   return lines.join('\n');
 }
 
-function normalize(text) {
-  return text.replace(/\r\n/g, '\n');
-}
-
 function main() {
-  const check = process.argv.includes('--check');
-  const expected = renderEnvExample(deriveSecretKeys());
-
-  if (check) {
-    const actual = fs.existsSync(ENV_EXAMPLE_PATH)
-      ? normalize(fs.readFileSync(ENV_EXAMPLE_PATH, 'utf-8'))
-      : null;
-    if (actual === normalize(expected)) {
-      console.log('✓ .env.example matches the secret manifests');
-      process.exit(0);
-    }
-    console.error('✗ .env.example is out of date');
-    console.error('  Regenerate it: pnpm run infra:secrets:example');
-    process.exit(1);
-  }
-
-  fs.writeFileSync(ENV_EXAMPLE_PATH, expected);
-  console.log(`✓ wrote .env.example (${deriveSecretKeys().length} keys)`);
+  const records = deriveSecretKeys();
+  fs.writeFileSync(ENV_EXAMPLE_PATH, renderEnvExample(records));
+  console.log(`✓ wrote .env.example (${records.length} keys)`);
 }
 
 if (require.main === module) {
