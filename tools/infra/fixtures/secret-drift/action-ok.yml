@@ -1,0 +1,25 @@
+# Fixture: a deploy action aligned with fixtures/secret-keys.
+# `auth` is fed from a differently named variable on purpose. That mirrors the real jaeger wiring
+# and proves the gate keys the manifest relation on the key and the workflow relation on the
+# variable name.
+name: fixture-deploy
+runs:
+  using: composite
+  steps:
+    - name: Substitute secrets
+      shell: bash
+      run: |
+        yq eval '.stringData.ALPHA_ONE_PASSWORD = env(ALPHA_ONE_PASSWORD)' alpha.secret.yaml | \
+        yq eval '.stringData.ALPHA_TWO_PASSWORD = env(ALPHA_TWO_PASSWORD)' - \
+        > /tmp/alpha.processed.yaml
+
+        yq eval '.stringData.BETA_PASSWORD = env(BETA_PASSWORD)' beta.secret.yaml \
+        > /tmp/beta.processed.yaml
+
+        yq eval '.stringData.auth = env(BETA_BASIC_AUTH)' beta.secret.yaml \
+        > /tmp/beta-auth.processed.yaml
+
+    - name: Substitute domain placeholders
+      shell: bash
+      run: |
+        sed -i "s|FIXTURE_DOMAIN_PLACEHOLDER|$FIXTURE_DOMAIN|g" ingress.yaml

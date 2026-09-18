@@ -1,0 +1,17 @@
+# Fixture: a deploy action that disagrees with fixtures/secret-keys in three ways.
+#   - ALPHA_TWO_PASSWORD and auth are declared in a manifest but never substituted.
+#   - STALE_KEY is substituted but no manifest declares it.
+#   - NEVER_PASSED is read but the workflow fixture never passes it.
+name: fixture-deploy-drift
+runs:
+  using: composite
+  steps:
+    - name: Substitute secrets
+      shell: bash
+      run: |
+        yq eval '.stringData.ALPHA_ONE_PASSWORD = env(ALPHA_ONE_PASSWORD)' alpha.secret.yaml | \
+        yq eval '.stringData.STALE_KEY = env(NEVER_PASSED)' - \
+        > /tmp/alpha.processed.yaml
+
+        yq eval '.stringData.BETA_PASSWORD = env(BETA_PASSWORD)' beta.secret.yaml \
+        > /tmp/beta.processed.yaml

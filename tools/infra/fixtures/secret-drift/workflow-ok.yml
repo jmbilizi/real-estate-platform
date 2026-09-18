@@ -1,0 +1,16 @@
+# Fixture: the workflow that feeds fixtures/secret-drift/action-ok.yml.
+# FIXTURE_DOMAIN is an out-of-scope extra. The gate must ignore it, because the workflow env block
+# legitimately carries the ingress-domain family too.
+name: fixture-workflow
+on: workflow_dispatch
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ./.github/actions/deploy-k8s-resources
+        env:
+          ALPHA_ONE_PASSWORD: ${{ secrets.ALPHA_ONE_PASSWORD }}
+          ALPHA_TWO_PASSWORD: ${{ secrets.ALPHA_TWO_PASSWORD }}
+          BETA_PASSWORD: ${{ secrets.BETA_PASSWORD }}
+          BETA_BASIC_AUTH: ${{ secrets.BETA_BASIC_AUTH }}
+          FIXTURE_DOMAIN: ${{ secrets.FIXTURE_DOMAIN }}
