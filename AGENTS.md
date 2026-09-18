@@ -196,6 +196,18 @@ pnpm run infra:validate:dev            # Kustomize validation per env
   Declare the dependency in the Dockerfile rather than special-casing the script. The script only
   ever removes projects and fails open, so a parse it cannot handle costs a rebuild, not a stale
   image.
+- **The injectable secret keys are derived, never listed.** `tools/infra/secret-keys.js` reads every
+  `stringData` key in `infra/k8s/base/secrets/*.secret.yaml`. `.env.example` is a rendered view of
+  that derivation, so adding a key means editing the manifest and running
+  `pnpm run infra:secrets:example` — never editing `.env.example`. A local deploy injects whatever
+  `.env` supplies; an omitted or empty key keeps the committed placeholder, because Kustomize
+  strategic-merges `stringData` key by key. Real values are written only under
+  `infra/k8s/podman/.generated/`, which is git-ignored. Two gates keep this honest:
+  `pnpm run infra:validate` fails when the manifests, the deploy action's `yq` lines, the workflow
+  `env:` block, or `.env.example` disagree; pre-commit refuses a staged secret manifest whose
+  `stringData` value changed. Note the two name spaces are not one: the manifest KEY drives the
+  action relation (`auth`), the VARIABLE name drives the workflow relation (`JAEGER_BASIC_AUTH` in
+  CI, `JAEGER_AUTH` locally). A gate comparing one flat set would call correct wiring drift.
 - **`pnpm-lock.yaml` is Prettier-ignored** — pnpm owns its formatting, so never reformat it. After
   any dependency change the gate is correctness, not style: `pnpm install --frozen-lockfile` must
   exit 0 (CI runs it in six places). Reconcile a failure with an install, never by hand-editing.
