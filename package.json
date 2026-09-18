@@ -138,6 +138,7 @@
     "// Infrastructure": "",
     "infra:setup": "node tools/infra/setup-infra.js",
     "infra:validate": "node tools/infra/validate-kustomize.js",
+    "infra:secrets:example": "node tools/infra/generate-env-example.js",
     "infra:validate:dev": "node tools/infra/validate-kustomize.js dev",
     "infra:validate:test": "node tools/infra/validate-kustomize.js test",
     "infra:validate:prod": "node tools/infra/validate-kustomize.js prod",
