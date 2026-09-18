@@ -82,7 +82,7 @@ namespace AccountService.Tests.Integration
         {
             // A negative lifetime makes every issued link already expired, with no sleeping.
             using var factory = new AccountRecoveryFactory(options =>
-                options.ConfirmationTokenLifetime = TimeSpan.FromSeconds(-1));
+                options.ConfirmationTokenLifetime = TimeSpan.FromMilliseconds(1));
             using var client = factory.CreateClient();
             var email = NewEmail("expired");
             await RegisterAsync(client, email);
@@ -326,6 +326,26 @@ namespace AccountService.Tests.Integration
         }
 
         [Fact]
+        public async Task Login_IsHeldToTheTimingFloor_SoTheCollapsedBodyIsNotUndoneByAStopwatch()
+        {
+            // An unknown address costs no password hash and a real account pays PBKDF2. Without
+            // the floor the identical bodies are readable as a timing difference.
+            using var factory = new AccountRecoveryFactory(options =>
+                options.MinimumResponseDuration = TimeSpan.FromMilliseconds(400));
+            using var client = factory.CreateClient();
+            var email = NewEmail("login-floor");
+            await RegisterAsync(client, email);
+
+            var unknown = await PostTimedAsync(client, LoginPath, new { email = NewEmail("nobody"), password = Password });
+            var wrongPassword = await PostTimedAsync(client, LoginPath, new { email, password = "Wrong1234!@#" });
+
+            unknown.Status.Should().Be(HttpStatusCode.Unauthorized);
+            wrongPassword.Status.Should().Be(HttpStatusCode.Unauthorized);
+            unknown.Elapsed.Should().BeGreaterThan(TimeSpan.FromMilliseconds(350));
+            wrongPassword.Elapsed.Should().BeGreaterThan(TimeSpan.FromMilliseconds(350));
+        }
+
+        [Fact]
         public async Task Login_AnswersALockedOutAccount_LikeAWrongPassword()
         {
             using var factory = new AccountRecoveryFactory();
@@ -405,7 +425,7 @@ namespace AccountService.Tests.Integration
         }
 
         [Fact]
-        public async Task Filters_LeaveLoginAndConfirmAlone()
+        public async Task Filters_ApplyNoRateLimitToLoginOrConfirm()
         {
             using var factory = new AccountRecoveryFactory(options =>
             {

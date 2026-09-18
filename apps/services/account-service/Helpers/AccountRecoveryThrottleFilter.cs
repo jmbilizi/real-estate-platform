@@ -58,8 +58,15 @@ internal sealed class AccountRecoveryThrottleFilter(
                 allowed = rateLimiter.TryRegistration(clientAddress, out retryAfter);
                 break;
 
+            case LoginRequest:
+                // No limit of ours: Identity owns lockout. The floor is the point. Without it an
+                // unknown address answers in about a millisecond and a real account pays PBKDF2,
+                // which restores by stopwatch the oracle IdentityResponseShapingFilter removes
+                // from the body.
+                return await PaddedAsync(context, next, startedAt).ConfigureAwait(false);
+
             default:
-                // Login, refresh, confirmEmail and manage/* pass through. Login has Identity's lockout.
+                // Refresh, confirmEmail and manage/* pass through.
                 return await next(context).ConfigureAwait(false);
         }
 
@@ -68,9 +75,7 @@ internal sealed class AccountRecoveryThrottleFilter(
             return TooManyRequests(context.HttpContext, retryAfter);
         }
 
-        var result = await next(context).ConfigureAwait(false);
-        await PadAsync(startedAt, options.Value.MinimumResponseDuration).ConfigureAwait(false);
-        return result;
+        return await PaddedAsync(context, next, startedAt).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -99,7 +104,7 @@ internal sealed class AccountRecoveryThrottleFilter(
     {
         for (var i = 0; i < context.Arguments.Count; i++)
         {
-            if (context.Arguments[i] is ResendConfirmationEmailRequest or RegisterRequest)
+            if (context.Arguments[i] is ResendConfirmationEmailRequest or RegisterRequest or LoginRequest)
             {
                 return context.Arguments[i];
             }
@@ -132,5 +137,15 @@ internal sealed class AccountRecoveryThrottleFilter(
             // replace a uniform 200 with an exception out of the filter.
             await Task.Delay(remaining, CancellationToken.None).ConfigureAwait(false);
         }
+    }
+
+    private async ValueTask<object?> PaddedAsync(
+        EndpointFilterInvocationContext context,
+        EndpointFilterDelegate next,
+        long startedAt)
+    {
+        var result = await next(context).ConfigureAwait(false);
+        await PadAsync(startedAt, options.Value.MinimumResponseDuration).ConfigureAwait(false);
+        return result;
     }
 }

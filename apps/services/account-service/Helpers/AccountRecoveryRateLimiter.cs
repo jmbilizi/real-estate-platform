@@ -25,8 +25,8 @@ namespace AccountService.Helpers;
 /// <para>
 /// The counters live in a cache this class owns, capped by
 /// <see cref="AccountRecoveryOptions.MaxTrackedKeys"/>. Half of each key is attacker-chosen, so the
-/// cache must not be the shared application cache. At the cap the limiter fails closed: see
-/// <see cref="TryConsume"/>.
+/// cache must not be the shared application cache. At the cap the limiter compacts and retries
+/// before it refuses: see <see cref="TryConsume"/>.
 /// </para>
 /// <para>
 /// Counters are per process. With N replicas the effective limit is N times the configured limit.
@@ -41,13 +41,21 @@ internal sealed class AccountRecoveryRateLimiter(
     IOptions<AccountRecoveryOptions> options,
     TimeProvider timeProvider) : IDisposable
 {
+    /// <summary>The share of the counter cache dropped when it is full.</summary>
+    private const double CompactionShare = 0.1;
+
+    /// <summary>The smallest counter cache, so <see cref="CompactionShare"/> evicts at least one.</summary>
+    private const int MinimumTrackedKeys = 16;
+
     // GetOrCreate is get-then-create with nothing in between. One lock over lookup and increment
     // keeps two cold-key requests from discarding each other's count.
     private readonly Lock gate = new();
 
     private readonly MemoryCache cache = new(new MemoryCacheOptions
     {
-        SizeLimit = Math.Max(1, options.Value.MaxTrackedKeys),
+        // Compaction drops a share of the current size, so it can never evict from a cache of one
+        // or two. The floor keeps a share of at least one entry.
+        SizeLimit = Math.Max(MinimumTrackedKeys, options.Value.MaxTrackedKeys),
     });
 
     /// <inheritdoc/>
@@ -84,12 +92,17 @@ internal sealed class AccountRecoveryRateLimiter(
             new Counter($"register:addr:{clientAddress ?? "unknown"}", options.Value.RegistrationsPerAddress, options.Value.RequestWindow));
 
     /// <summary>
-    /// Consumes one unit from every counter. Every counter is consumed even after one refuses, so a
-    /// caller that exhausted one limit gets no free attempts against the others.
+    /// Consumes one unit from each counter in turn and stops at the first refusal.
     /// </summary>
+    /// <remarks>
+    /// The refusing counter is still consumed, so a caller cannot retry past a limit for free. The
+    /// counters after it are not. A refused request is never served, so it must not spend the long
+    /// windows: the 60-second interval comes first, which caps how fast anyone can burn an address's
+    /// 24-hour budget. Charging every counter let 10 requests in one second lock an address out for
+    /// a day.
+    /// </remarks>
     private bool TryConsumeAll(out TimeSpan retryAfter, params Counter[] counters)
     {
-        var allowed = true;
         retryAfter = TimeSpan.Zero;
 
         foreach (var counter in counters)
@@ -99,14 +112,14 @@ internal sealed class AccountRecoveryRateLimiter(
                 continue;
             }
 
-            if (!this.TryConsume(counter.Key, counter.Limit, counter.Window, out var counterRetry))
+            if (!this.TryConsume(counter.Key, counter.Limit, counter.Window, out retryAfter))
             {
-                allowed = false;
-                retryAfter = counterRetry > retryAfter ? counterRetry : retryAfter;
+                return false;
             }
         }
 
-        return allowed;
+        retryAfter = TimeSpan.Zero;
+        return true;
     }
 
     /// <summary>
@@ -116,7 +129,13 @@ internal sealed class AccountRecoveryRateLimiter(
     /// A full <see cref="MemoryCache"/> with a size limit does not evict to make room. It drops the
     /// new entry, and <c>GetOrCreate</c> still returns the factory value. Without the residency
     /// check every cold key would read <c>Count == 1</c> forever and the limit would silently stop
-    /// applying. Refusing at capacity is visible and recoverable. Silently not limiting is neither.
+    /// applying.
+    /// <para>
+    /// Both halves of a key are caller-chosen, so the cap is reachable on demand. Refusing every
+    /// cold key at the cap would turn that into a service-wide outage that lasts as long as the
+    /// 24-hour counters. So a full cache is compacted once and the insert is retried. Only a key
+    /// that still does not fit is refused.
+    /// </para>
     /// </remarks>
     private bool TryConsume(string key, int limit, TimeSpan window, out TimeSpan retryAfter)
     {
@@ -124,25 +143,38 @@ internal sealed class AccountRecoveryRateLimiter(
 
         lock (this.gate)
         {
-            var counter = this.cache.GetOrCreate(key, entry =>
+            var counter = this.GetOrCreate(key, window, now);
+
+            if (!this.IsTracked(key, counter))
             {
-                entry.AbsoluteExpirationRelativeToNow = window;
-                entry.Size = 1;
-                return new Window(now + window);
-            })!;
+                // Oldest first. The evicted counters lose their history, which is the same
+                // exposure as a process restart and is bounded by the compaction share.
+                this.cache.Compact(CompactionShare);
+                counter = this.GetOrCreate(key, window, now);
+
+                if (!this.IsTracked(key, counter))
+                {
+                    retryAfter = window;
+                    return false;
+                }
+            }
 
             counter.Count++;
             retryAfter = counter.ExpiresAt > now ? counter.ExpiresAt - now : TimeSpan.Zero;
-
-            if (!this.cache.TryGetValue(key, out Window? tracked) || !ReferenceEquals(tracked, counter))
-            {
-                retryAfter = window;
-                return false;
-            }
-
             return counter.Count <= limit;
         }
     }
+
+    private Window GetOrCreate(string key, TimeSpan window, DateTimeOffset now) =>
+        this.cache.GetOrCreate(key, entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = window;
+            entry.Size = 1;
+            return new Window(now + window);
+        })!;
+
+    private bool IsTracked(string key, Window counter) =>
+        this.cache.TryGetValue(key, out Window? tracked) && ReferenceEquals(tracked, counter);
 
     private readonly record struct Counter(string Key, int Limit, TimeSpan Window);
 

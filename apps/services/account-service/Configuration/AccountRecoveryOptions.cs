@@ -102,6 +102,30 @@ internal sealed class AccountRecoveryOptions
             return $"{SectionName}:{nameof(this.ConfirmationPath)} must start with '/'.";
         }
 
+        if (this.ConfirmationTokenLifetime <= TimeSpan.Zero)
+        {
+            return $"{SectionName}:{nameof(this.ConfirmationTokenLifetime)} must be positive.";
+        }
+
+        // A mistyped override binds to 0 and reads as "refuse everything". Refuse to start instead.
+        return FirstNonPositive(
+            (nameof(this.ResendsPerEmailPerHour), this.ResendsPerEmailPerHour),
+            (nameof(this.ResendsPerEmailPerDay), this.ResendsPerEmailPerDay),
+            (nameof(this.ResendsPerAddress), this.ResendsPerAddress),
+            (nameof(this.RegistrationsPerAddress), this.RegistrationsPerAddress),
+            (nameof(this.MaxTrackedKeys), this.MaxTrackedKeys));
+    }
+
+    private static string? FirstNonPositive(params (string Name, int Value)[] limits)
+    {
+        foreach (var (name, value) in limits)
+        {
+            if (value <= 0)
+            {
+                return $"{SectionName}:{name} must be positive.";
+            }
+        }
+
         return null;
     }
 }

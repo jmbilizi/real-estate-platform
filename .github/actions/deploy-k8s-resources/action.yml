@@ -218,7 +218,10 @@ runs:
             sed -i "s/CRIBSTOP_DOMAIN_PLACEHOLDER/${CRIBSTOP_DOMAIN}/g" "$ACCOUNT_PATCH"
             echo "   ✅ account-service WebBaseUrl substituted"
           else
-            echo "   ❌ CRIBSTOP_DOMAIN is not set: account-service confirmation links will carry the placeholder host"
+            # The placeholder is a valid absolute https URI, so the pod starts and stays healthy
+            # while it mails links to a host that does not resolve. Fail the deploy instead.
+            echo "   ❌ CRIBSTOP_DOMAIN is not set: account-service would mail confirmation links to the placeholder host"
+            exit 1
           fi
         fi
 

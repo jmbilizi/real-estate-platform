@@ -60,7 +60,7 @@ namespace AccountService.Tests.Helpers
         }
 
         [Fact]
-        public void TryResend_ReportsTheLongestRefusingWindow()
+        public void TryResend_ReportsTheWindowOfTheFirstRefusingCounter()
         {
             var limiter = this.Create(options =>
             {
@@ -71,8 +71,9 @@ namespace AccountService.Tests.Helpers
             limiter.TryResend("victim@example.com", null, out _).Should().BeTrue();
             limiter.TryResend("victim@example.com", null, out var retryAfter).Should().BeFalse();
 
-            // Both the interval and the hourly window refuse. Waiting 60s would not help.
-            retryAfter.Should().BeGreaterThan(TimeSpan.FromMinutes(55));
+            // The interval refuses first and the hourly counter is not consulted.
+            retryAfter.Should().BeGreaterThan(TimeSpan.FromSeconds(55));
+            retryAfter.Should().BeLessThan(TimeSpan.FromMinutes(2));
         }
 
         [Fact]
@@ -101,20 +102,42 @@ namespace AccountService.Tests.Helpers
         }
 
         [Fact]
-        public void TryResend_ConsumesEveryBudget_EvenAfterOneRefuses()
+        public void TryResend_StopsAtTheFirstRefusal_SoABurstCannotDrainTheDailyBudget()
         {
             var limiter = this.Create(options =>
             {
                 options.ResendMinimumInterval = TimeSpan.FromMinutes(1);
-                options.ResendsPerAddress = 2;
+                options.ResendsPerEmailPerDay = 3;
+            });
+
+            limiter.TryResend("victim@example.com", "10.0.0.1", out _).Should().BeTrue();
+
+            // Nine more within the interval. Each is refused by the interval counter, so none of
+            // them reaches the daily counter. Charging them all locked the mailbox out for 24h.
+            TimeSpan retryAfter = default;
+            for (var i = 0; i < 9; i++)
+            {
+                limiter.TryResend("victim@example.com", "10.0.0.1", out retryAfter).Should().BeFalse();
+            }
+
+            // Still the interval window. A drained daily counter would report about 24 hours.
+            retryAfter.Should().BeLessThan(TimeSpan.FromMinutes(2));
+        }
+
+        [Fact]
+        public void TryResend_StillChargesTheCounterThatRefused()
+        {
+            var limiter = this.Create(options =>
+            {
+                options.ResendMinimumInterval = TimeSpan.Zero;
+                options.ResendsPerEmailPerHour = 1;
             });
 
             limiter.TryResend("a@example.com", "10.0.0.1", out _).Should().BeTrue();
-
-            // Refused by the interval. The address budget is still spent.
             limiter.TryResend("a@example.com", "10.0.0.1", out _).Should().BeFalse();
 
-            limiter.TryResend("b@example.com", "10.0.0.1", out _).Should().BeFalse();
+            // Retrying past an exhausted limit is not free: the refused attempt was counted too.
+            limiter.TryResend("a@example.com", "10.0.0.1", out _).Should().BeFalse();
         }
 
         [Fact]
@@ -143,19 +166,36 @@ namespace AccountService.Tests.Helpers
         }
 
         [Fact]
-        public void TryRegistration_StillRefuses_WhenTheCounterCacheIsAtCapacity()
+        public void TryRegistration_CompactsRatherThanRefusing_WhenTheCounterCacheIsFull()
         {
-            // One tracked key. The second key cannot be stored, so it cannot be counted, so it is
-            // refused. The fail-open this replaces let every cold key through forever.
+            // Twenty tracked keys and sixty callers. Refusing everyone past the cap would be a
+            // service-wide outage any caller could trigger on demand, so the cache makes room.
             var limiter = this.Create(options =>
             {
-                options.MaxTrackedKeys = 1;
+                options.MaxTrackedKeys = 20;
                 options.RegistrationsPerAddress = 100;
             });
 
-            limiter.TryRegistration("10.0.0.1", out _).Should().BeTrue();
-            limiter.TryRegistration("10.0.0.2", out var retryAfter).Should().BeFalse();
-            retryAfter.Should().BePositive();
+            for (var i = 0; i < 60; i++)
+            {
+                limiter.TryRegistration($"10.0.0.{i}", out _).Should().BeTrue();
+            }
+        }
+
+        [Fact]
+        public void Options_RefuseANonPositiveLimit_RatherThanRefusingEveryRequest()
+        {
+            new AccountRecoveryOptions { WebBaseUrl = new Uri("https://x.example"), ConfirmationPath = "/c", MaxTrackedKeys = 0 }
+                .Validate().Should().Contain("MaxTrackedKeys");
+
+            new AccountRecoveryOptions { WebBaseUrl = new Uri("https://x.example"), ConfirmationPath = "/c", ResendsPerEmailPerHour = 0 }
+                .Validate().Should().Contain("ResendsPerEmailPerHour");
+
+            new AccountRecoveryOptions { WebBaseUrl = new Uri("https://x.example"), ConfirmationPath = "/c", ConfirmationTokenLifetime = TimeSpan.Zero }
+                .Validate().Should().Contain("ConfirmationTokenLifetime");
+
+            new AccountRecoveryOptions { WebBaseUrl = new Uri("https://x.example"), ConfirmationPath = "/c" }
+                .Validate().Should().BeNull();
         }
 
         private AccountRecoveryRateLimiter Create(Action<AccountRecoveryOptions> configure)
