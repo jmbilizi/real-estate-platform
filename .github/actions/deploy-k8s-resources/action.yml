@@ -211,6 +211,20 @@ runs:
           echo "   ⚠️  Cribstop web ingress not found or CRIBSTOP_DOMAIN not set — skipping"
         fi
 
+        # account-service builds its email-confirmation links from AccountRecovery__WebBaseUrl (#147).
+        ACCOUNT_PATCH="${{ inputs.kustomizePath }}/patches/deployments/account-service.deployment.yaml"
+        if [ -f "$ACCOUNT_PATCH" ] && grep -q "CRIBSTOP_DOMAIN_PLACEHOLDER" "$ACCOUNT_PATCH"; then
+          if [ -n "$CRIBSTOP_DOMAIN" ]; then
+            sed -i "s/CRIBSTOP_DOMAIN_PLACEHOLDER/${CRIBSTOP_DOMAIN}/g" "$ACCOUNT_PATCH"
+            echo "   ✅ account-service WebBaseUrl substituted"
+          else
+            # The placeholder is a valid absolute https URI, so the pod starts and stays healthy
+            # while it mails links to a host that does not resolve. Fail the deploy instead.
+            echo "   ❌ CRIBSTOP_DOMAIN is not set: account-service would mail confirmation links to the placeholder host"
+            exit 1
+          fi
+        fi
+
     - name: Build manifests
       shell: bash
       run: |

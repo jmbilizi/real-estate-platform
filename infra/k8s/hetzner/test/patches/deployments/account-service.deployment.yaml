@@ -31,3 +31,9 @@ spec:
           env:
             - name: ASPNETCORE_ENVIRONMENT
               value: "Staging"
+            # Email confirmation is not enforced yet (#147). #149 turns it on.
+            - name: AccountRecovery__RequireConfirmedEmail
+              value: "false"
+            # Public origin of the web app. The deploy action substitutes the placeholder.
+            - name: AccountRecovery__WebBaseUrl
+              value: "https://CRIBSTOP_DOMAIN_PLACEHOLDER"
