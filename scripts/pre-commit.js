@@ -571,6 +571,19 @@ function checkInfrastructure() {
   return true;
 }
 
+// Refuse a staged secret manifest whose stringData value was changed. Always runs: the script
+// no-ops in milliseconds when no secret manifest is staged, and this is the one check whose miss
+// leaks a credential into Git rather than breaking a build.
+function checkStagedSecrets() {
+  logStep('Validating Staged Secret Manifests');
+  const result = run('node tools/infra/check-staged-secrets.js');
+  if (!result.success) {
+    logError('A staged secret manifest carries a changed value — see above');
+    return false;
+  }
+  return true;
+}
+
 // Verify generated provider pointers (.claude/) match canonical .agents/ sources
 function checkAgentsSync() {
   logStep('Validating Agentic Config Sync');
@@ -706,6 +719,10 @@ function main() {
   // Check infrastructure files (Kustomize) if changed
   const infraResult = checkInfrastructure();
   allPassed = allPassed && infraResult;
+
+  // Guard the committed secret manifests (fast, always runs)
+  const stagedSecretsResult = checkStagedSecrets();
+  allPassed = allPassed && stagedSecretsResult;
 
   // Check generated agentic config is in sync with .agents/ (fast, always runs)
   const agentsResult = checkAgentsSync();
