@@ -27,6 +27,14 @@ internal sealed class TransactionalEmailOptions
     /// <summary>Gets or sets the reply-to address.</summary>
     public string ReplyToAddress { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Gets or sets the brokerage disclosure line every message body carries (PRD §6).
+    /// </summary>
+    /// <remarks>
+    /// Configuration, not a constant: a jurisdiction change must not need a code change.
+    /// </remarks>
+    public string BrokerageDisclosure { get; set; } = string.Empty;
+
     /// <summary>Validates that both addresses are set and differ.</summary>
     /// <returns>An error message, or <see langword="null"/> when the options are valid.</returns>
     public string? Validate()
@@ -44,6 +52,11 @@ internal sealed class TransactionalEmailOptions
         if (string.Equals(this.ReplyToAddress, this.FromAddress, StringComparison.OrdinalIgnoreCase))
         {
             return $"{SectionName}:{nameof(this.ReplyToAddress)} must not be the no-reply address.";
+        }
+
+        if (string.IsNullOrWhiteSpace(this.BrokerageDisclosure))
+        {
+            return $"{SectionName}:{nameof(this.BrokerageDisclosure)} is required.";
         }
 
         return null;

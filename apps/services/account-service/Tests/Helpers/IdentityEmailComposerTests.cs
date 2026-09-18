@@ -74,7 +74,18 @@ namespace AccountService.Tests.Helpers
             message.To.Should().Be("person@example.com");
             message.TextBody.Should().Contain("https://cribstop.example/confirm-email?userId=user-1&code=Q29kZQ");
             message.TextBody.Should().NotContain("account-service-svc");
-            message.TextBody.Should().Contain("Real Broker, LLC");
+            message.TextBody.Should().EndWith("Cribstop is brokered by Real Broker, LLC.");
+        }
+
+        [Fact]
+        public void EveryMessage_EndsWithTheConfiguredBrokerageDisclosure()
+        {
+            var composer = CreateComposer();
+
+            composer.PasswordResetCode("person@example.com", "code").TextBody
+                .Should().EndWith("Cribstop is brokered by Real Broker, LLC.");
+            composer.PasswordResetLink("person@example.com", "https://cribstop.example/reset").TextBody
+                .Should().EndWith("Cribstop is brokered by Real Broker, LLC.");
         }
 
         [Fact]
@@ -110,12 +121,16 @@ namespace AccountService.Tests.Helpers
                 FromName = "Cribstop (Real Broker, LLC)",
                 FromAddress = "no-reply@cribstop.com",
                 ReplyToAddress = "NO-REPLY@cribstop.com",
+                BrokerageDisclosure = "Cribstop is brokered by Real Broker, LLC.",
             };
 
             options.Validate().Should().Contain("ReplyToAddress");
 
             options.ReplyToAddress = "contact@cribstop.com";
             options.Validate().Should().BeNull();
+
+            options.BrokerageDisclosure = string.Empty;
+            options.Validate().Should().Contain("BrokerageDisclosure");
         }
 
         private static ConfirmationLinkBuilder CreateBuilder() =>
@@ -132,6 +147,7 @@ namespace AccountService.Tests.Helpers
                     FromName = "Cribstop (Real Broker, LLC)",
                     FromAddress = "no-reply@cribstop.com",
                     ReplyToAddress = "contact@cribstop.com",
+                    BrokerageDisclosure = "Cribstop is brokered by Real Broker, LLC.",
                 }),
                 CreateBuilder());
     }

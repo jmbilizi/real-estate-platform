@@ -55,6 +55,7 @@ namespace AccountService.Tests.Helpers
                     FromName = "Cribstop (Real Broker, LLC)",
                     FromAddress = "no-reply@cribstop.com",
                     ReplyToAddress = "contact@cribstop.com",
+                    BrokerageDisclosure = "Cribstop is brokered by Real Broker, LLC.",
                 }),
                 new ConfirmationLinkBuilder(Options.Create(new AccountRecoveryOptions
                 {

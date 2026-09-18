@@ -41,7 +41,8 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   `Helpers/IdentityEmailComposer.cs`.
 - **Sender identity** (stakeholder ruling 2026-09-16, section `Email`): from
   `Cribstop (Real Broker, LLC) <no-reply@cribstop.com>`, reply-to `contact@cribstop.com`. Startup
-  validation refuses a reply-to equal to the from address.
+  validation refuses a reply-to equal to the from address. `Email:BrokerageDisclosure` ends every
+  body (PRD §6). It is configuration, so a jurisdiction change needs no code change.
 - **Confirmation link**: `AccountRecovery:WebBaseUrl` + `AccountRecovery:ConfirmationPath`
   (`/confirm-email`, fixed) + Identity's `userId` and `code`. `Helpers/ConfirmationLinkBuilder.cs`
   rebuilds Identity's in-cluster link onto the web origin. `WebBaseUrl` has no default in code. Each

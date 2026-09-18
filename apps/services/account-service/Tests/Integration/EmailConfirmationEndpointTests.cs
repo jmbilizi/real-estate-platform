@@ -398,6 +398,7 @@ namespace AccountService.Tests.Integration
             sender.FromName.Should().Be("Cribstop (Real Broker, LLC)");
             sender.FromAddress.Should().Be("no-reply@cribstop.com");
             sender.ReplyToAddress.Should().Be("contact@cribstop.com");
+            sender.BrokerageDisclosure.Should().Be("Cribstop is brokered by Real Broker, LLC.");
             recovery.ConfirmationPath.Should().Be("/confirm-email");
             recovery.ConfirmationTokenLifetime.Should().Be(TimeSpan.FromHours(24));
             recovery.RequireConfirmedEmail.Should().BeFalse();

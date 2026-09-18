@@ -138,7 +138,8 @@ so. #149 turns it on after #133 and #138 make delivery real.
 (events 1360, 1361) and never logs the link or code. #138 replaces it.
 
 **Sender identity** (configuration, section `Email`): from
-`Cribstop (Real Broker, LLC) <no-reply@cribstop.com>`, reply-to `contact@cribstop.com`.
+`Cribstop (Real Broker, LLC) <no-reply@cribstop.com>`, reply-to `contact@cribstop.com`. Every body
+ends with `Email:BrokerageDisclosure` (PRD §6).
 
 **No account enumeration.** The caller learns nothing about whether an address has an account:
 

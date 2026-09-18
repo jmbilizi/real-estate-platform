@@ -13,8 +13,8 @@ namespace AccountService.Helpers;
 /// </summary>
 /// <remarks>
 /// Every sender, including the Postmark transport #138 adds, composes through this class. It is
-/// the one place the sender identity and the confirmation link are applied. The brokerage line in
-/// each body is PRD §6 brand prominence.
+/// the one place the sender identity and the confirmation link are applied. Every body ends with
+/// the configured brokerage disclosure (PRD §6 brand prominence).
 /// </remarks>
 /// <param name="email">The sender identity.</param>
 /// <param name="links">The confirmation link builder.</param>
@@ -22,7 +22,6 @@ internal sealed class IdentityEmailComposer(
     IOptions<TransactionalEmailOptions> email,
     ConfirmationLinkBuilder links)
 {
-    private const string Brokerage = "Cribstop is brokered by Real Broker, LLC.";
     private const string ConfirmSubject = "Confirm your email address for Cribstop";
     private const string ResetSubject = "Reset your Cribstop password";
     private const string IgnoreIfNotYou = "If you did not create a Cribstop account, ignore this message.";
@@ -35,7 +34,7 @@ internal sealed class IdentityEmailComposer(
     internal OutboundEmail ConfirmationLink(string to, string identityLink)
     {
         var link = links.Rebuild(identityLink);
-        var body = $"Open this link to confirm your email address:\n\n{link}\n\n{IgnoreIfNotYou}\n\n{Brokerage}";
+        var body = $"Open this link to confirm your email address:\n\n{link}\n\n{IgnoreIfNotYou}";
         return this.Compose(to, ConfirmSubject, body);
     }
 
@@ -45,7 +44,7 @@ internal sealed class IdentityEmailComposer(
     /// <returns>The message.</returns>
     internal OutboundEmail PasswordResetCode(string to, string resetCode)
     {
-        var body = $"Your password reset code is:\n\n{WebUtility.HtmlDecode(resetCode)}\n\n{IgnoreIfNotReset}\n\n{Brokerage}";
+        var body = $"Your password reset code is:\n\n{WebUtility.HtmlDecode(resetCode)}\n\n{IgnoreIfNotReset}";
         return this.Compose(to, ResetSubject, body);
     }
 
@@ -55,13 +54,19 @@ internal sealed class IdentityEmailComposer(
     /// <returns>The message.</returns>
     internal OutboundEmail PasswordResetLink(string to, string resetLink)
     {
-        var body = $"Open this link to reset your password:\n\n{WebUtility.HtmlDecode(resetLink)}\n\n{IgnoreIfNotReset}\n\n{Brokerage}";
+        var body = $"Open this link to reset your password:\n\n{WebUtility.HtmlDecode(resetLink)}\n\n{IgnoreIfNotReset}";
         return this.Compose(to, ResetSubject, body);
     }
 
     private OutboundEmail Compose(string to, string subject, string body)
     {
         var sender = email.Value;
-        return new OutboundEmail(sender.FromName, sender.FromAddress, sender.ReplyToAddress, to, subject, body);
+        return new OutboundEmail(
+            sender.FromName,
+            sender.FromAddress,
+            sender.ReplyToAddress,
+            to,
+            subject,
+            $"{body}\n\n{sender.BrokerageDisclosure}");
     }
 }
