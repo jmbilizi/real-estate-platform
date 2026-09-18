@@ -19,6 +19,7 @@ const path = require('path');
 const fs = require('fs');
 const yaml = require('js-yaml');
 const { resolveDeployScope, describeProblems } = require('./deploy-scope');
+const { checkSecretDrift } = require('./secret-drift');
 
 const colors = {
   reset: '\x1b[0m',
@@ -229,6 +230,33 @@ function validateHetznerLocation(env) {
   }
 }
 
+/**
+ * Cross-check the secret keys declared by the manifests against the deploy action, the workflow
+ * env block that feeds it, and `.env.example`. Environment-independent: the manifests and the
+ * action are single files shared by every environment, so this runs once per invocation.
+ */
+function validateSecretKeys() {
+  log('\nValidating secret keys...', 'cyan');
+  const problems = checkSecretDrift();
+
+  if (problems.length === 0) {
+    logSuccess('secret keys agree across the manifests, the deploy action and .env.example');
+    return true;
+  }
+
+  logError('secret key drift detected');
+  for (const problem of problems) {
+    log(`  ${problem.headline}:`, 'red');
+    for (const item of problem.items) {
+      log(`    - ${item}`, 'red');
+    }
+    for (const line of problem.detail) {
+      log(`    ${line}`, 'yellow');
+    }
+  }
+  return false;
+}
+
 function main() {
   const args = process.argv.slice(2);
   const targetEnv = args[0]; // dev, test, prod, or undefined (all)
@@ -240,13 +268,17 @@ function main() {
     process.exit(1);
   }
 
+  // Run before provider discovery, so a workspace with no rendered environment still gates the
+  // secret keys. The manifests and the deploy action exist independently of any overlay.
+  const secretKeysPassed = validateSecretKeys();
+
   // Discover all providers
   const providers = discoverProviders();
 
   if (providers.length === 0) {
     logWarning('No cloud providers found in infra/k8s/');
     logWarning('Expected structure: infra/k8s/{provider}/{env}/kustomization.yaml');
-    process.exit(0);
+    process.exit(secretKeysPassed ? 0 : 1);
   }
 
   log(`\nDiscovered providers: ${providers.join(', ')}\n`, 'blue');
@@ -299,7 +331,7 @@ function main() {
   if (Object.keys(results).length === 0) {
     logWarning('No environments found to validate');
     logWarning(`Providers checked: ${providers.join(', ')}`);
-    process.exit(0);
+    process.exit(secretKeysPassed ? 0 : 1);
   }
 
   // Summary
@@ -307,7 +339,12 @@ function main() {
   log('  Validation Summary', 'bright');
   log('='.repeat(80), 'cyan');
 
-  let allPassed = true;
+  let allPassed = secretKeysPassed;
+  if (secretKeysPassed) {
+    logSuccess('secret keys: PASSED');
+  } else {
+    logError('secret keys: FAILED');
+  }
   for (const [key, passed] of Object.entries(results)) {
     if (passed) {
       logSuccess(`${key}: PASSED`);

@@ -284,7 +284,53 @@ node tools/infra/run-skaffold.js run --skip-build
 - macOS: `brew install kustomize`
 - Linux: Download from [GitHub releases](https://github.com/kubernetes-sigs/kustomize/releases)
 
+## Local Secret Injection
+
+Committed secret manifests hold placeholders. To give the local cluster a real credential, copy
+`.env.example` to `.env` and set only the keys you need:
+
+```bash
+pnpm run infra:secrets:example   # regenerate .env.example after a manifest change
+pnpm run skaffold:services:deploy          # injects whatever .env supplies
+```
+
+How it works:
+
+1. `secret-keys.js` derives one record per `stringData` key in `infra/k8s/base/secrets/`. That
+   derivation is the only key list in the repo.
+2. `run-skaffold.js` loads `.env` with `process.loadEnvFile()`. A variable already set in your shell
+   wins over the file.
+3. `local-secret-overlay.js` writes one Kustomize strategic-merge patch per affected Secret to
+   `infra/k8s/podman/.generated/secrets/`, carrying only the keys you supplied.
+4. Kustomize merges `stringData` key by key, so a key you omit keeps the committed value. Nothing
+   can blank a key.
+
+Rules that hold:
+
+- Real values are written only under `infra/k8s/podman/.generated/`, which is git-ignored. The
+  working tree is never modified, so `git status` stays clean after a deploy.
+- The tooling logs key names and a count, never a value.
+- With no `.env`, nothing is generated and the render is byte-identical to a clean checkout.
+- A key whose name is not already SCREAMING_SNAKE is qualified with its Secret name, so the jaeger
+  `auth` key is `JAEGER_AUTH`. A bare `auth` in `process.env` would collide too easily.
+- The generated patches hold plaintext until a later run supplies no key. To clear them now, run
+  `pnpm run infra:secrets:clean`.
+- An explicit `--profile` selects the render path yourself, so it turns injection off. The script
+  warns and names the keys it did not inject.
+
+Two gates keep this honest. `pnpm run infra:validate` runs the drift gate in `secret-drift.js`: the
+manifests, the `yq` lines in `.github/actions/deploy-k8s-resources/action.yml`, the workflow `env:`
+block, and `.env.example` must agree. `check-staged-secrets.js` runs in pre-commit, ahead of the
+feature-branch gate, and refuses a staged manifest whose committed value changed. It reads `data` as
+well as `stringData`, and it fails closed on a manifest it cannot parse. To change a committed
+default on purpose, run the commit with `ALLOW_SECRET_VALUE_CHANGE=1`.
+
 ## Files
 
 - `setup-infra.js` - Auto-installer (cross-platform)
 - `validate-kustomize.js` - Validation script (used by git hooks)
+- `secret-keys.js` - Derives the injectable secret keys from the manifests (source of truth)
+- `generate-env-example.js` - Renders `.env.example` from that derivation (`--check` for drift)
+- `local-secret-overlay.js` - Writes the local secret patches under `podman/.generated/secrets/`
+- `secret-drift.js` - Key-drift gate across the manifests, the deploy action and `.env.example`
+- `check-staged-secrets.js` - Pre-commit guard against a changed committed secret value

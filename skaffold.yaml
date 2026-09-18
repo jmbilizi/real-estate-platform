@@ -160,6 +160,19 @@ profiles:
         buildArgs:
           - --enable-alpha-plugins
 
+  # Activated by tools/infra/run-skaffold.js only when `.env` supplies at least one secret key.
+  # The generated overlay chains to infra/k8s/podman/local and strategic-merges the supplied keys
+  # into the cluster Secrets. Never activate it by hand: the overlay does not exist otherwise.
+  # With --module services the services-only overlay chains through this one instead, so the two
+  # profiles are never combined.
+  - name: local-secrets
+    manifests:
+      kustomize:
+        paths:
+          - infra/k8s/podman/.generated/secrets
+        buildArgs:
+          - --enable-alpha-plugins
+
 ---
 # ═══════════════════════════════════════════════════════════════════════════════
 # Module: clients — frontend apps (add new client apps here)
