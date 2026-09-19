@@ -95,15 +95,15 @@ each service's own contract to converge, not a consequence of the gateway's own 
 not in `@cribstop/property-contracts` — a gateway-enforced response is not one service's claim to
 make, and fires on account and inference routes too. It defines two codes:
 
-| Code                   | Status       | Source                                                 |
-| ---------------------- | ------------ | ------------------------------------------------------- |
-| `upstream_unavailable` | 502 or 503   | `Middleware/UpstreamUnavailableMiddleware.cs`            |
-| `rate_limited`         | 429          | Ocelot's own rate limiter (`RateLimitOptions`)           |
+| Code                   | Status     | Source                                         |
+| ---------------------- | ---------- | ---------------------------------------------- |
+| `upstream_unavailable` | 502 or 503 | `Middleware/UpstreamUnavailableMiddleware.cs`  |
+| `rate_limited`         | 429        | Ocelot's own rate limiter (`RateLimitOptions`) |
 
 A 429's body used to be `RateLimitOptions.QuotaExceededMessage` as a bare, unparsable sentence — a
-client's `Response.json()` threw on it, so the rate-limit fact never reached the browser even
-though the 429 status itself did. `Configuration/Ocelot.Settings.json` now sets that message to the
-JSON envelope `Middleware/RateLimitContract.cs` documents, so it parses like every other gateway
+client's `Response.json()` threw on it, so the rate-limit fact never reached the browser even though
+the 429 status itself did. `Configuration/Ocelot.Settings.json` now sets that message to the JSON
+envelope `Middleware/RateLimitContract.cs` documents, so it parses like every other gateway
 response. `Tests/Configuration/RateLimitOptionsTests.cs` keeps the two in sync.
 
 QoS does not apply to `/swagger/docs/...`. `MMLib.SwaggerForOcelot` fetches each downstream document
