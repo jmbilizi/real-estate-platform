@@ -19,9 +19,10 @@ import { formatListingLocation, formatStreetAddress } from '@/lib/listing-format
  *    `title` or `description` (an open server-side gap, #59), and a real feed routinely puts the
  *    street line in both. Putting either in a share title or an `og:description` would hand back
  *    the address the seller withheld — to a preview card that gets cached and re-posted.
- * 3. **Never claim provenance a row does not have.** A `isSample` row is labelled as sample data,
- *    and no share text asserts MLS provenance. The brokerage is named, which is an obligation
- *    rather than decoration.
+ * 3. **Never claim provenance a row does not have.** A `isSample` row is labelled as sample data, a
+ *    `sponsored` row is labelled as a paid placement, and no share text asserts MLS provenance.
+ *    Per-listing attribution is the row's own `listedBy` — the listing office is a third party on
+ *    a `brightMLS` row, so "brokered by Real Broker, LLC" describes the site and never the home.
  */
 
 /** The fields a share reads. A subset of `ListingDetailView`, so a card row can share too. */
@@ -33,10 +34,29 @@ export interface ShareableListing {
   zip: string;
   neighborhood: string | null;
   isSample: boolean;
+  sponsored: boolean;
+  /** NAR 7.58 attribution, derived server-side. Rendered as-is on every surface that shows a row. */
+  listedBy: string;
 }
 
 /** The label a sample row carries on every surface it appears on, this one included (PRD §6.3). */
 export const SAMPLE_SHARE_LABEL = 'Sample data — an illustration, not real listing inventory.';
+
+/** The paid-placement disclosure, owed wherever a sponsored row renders (FTC / PRD §6). */
+export const SPONSORED_SHARE_LABEL = 'Sponsored listing.';
+
+/**
+ * The required labels for a row, in the order a truncating preview should keep them.
+ *
+ * Every unfurl surface cuts the tail of a description, so a disclosure placed last is the first
+ * thing lost. These lead.
+ */
+export function shareDisclosures(listing: ShareableListing): string[] {
+  return [
+    ...(listing.isSample ? [SAMPLE_SHARE_LABEL] : []),
+    ...(listing.sponsored ? [SPONSORED_SHARE_LABEL] : []),
+  ];
+}
 
 /**
  * The canonical path for a listing.
@@ -78,12 +98,25 @@ export function buildListingShare(listing: ShareableListing, url: string): Listi
   const heading = shareHeading(listing);
 
   return {
-    title: listing.isSample ? `Sample listing — ${heading}` : heading,
+    title: shareTitle(listing),
     text: [
-      `${heading} on ${BRAND.siteDomain}.`,
-      `Brokered by ${BRAND.brokerage}.`,
-      ...(listing.isSample ? [SAMPLE_SHARE_LABEL] : []),
+      ...shareDisclosures(listing),
+      `${heading}.`,
+      `Listed by ${listing.listedBy}.`,
+      `From ${BRAND.brokerage} on ${BRAND.siteDomain}.`,
     ].join(' '),
     url,
   };
+}
+
+/**
+ * The share-sheet and preview-card title.
+ *
+ * The sample label belongs here and not only in the body text: a share sheet and a compact unfurl
+ * both show the title alone, so a label that lives only in the description is a label a recipient
+ * may never see.
+ */
+export function shareTitle(listing: ShareableListing): string {
+  const heading = shareHeading(listing);
+  return listing.isSample ? `Sample listing — ${heading}` : heading;
 }

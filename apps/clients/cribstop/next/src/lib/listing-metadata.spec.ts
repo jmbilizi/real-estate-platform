@@ -2,6 +2,7 @@ import type { ListingDetail } from '@cribstop/property-contracts';
 import { toListingDetailView } from '@/lib/api/listings';
 import { PRICE_WITHHELD_COPY } from '@/lib/listing-format';
 import { listingMetadata, unresolvedListingMetadata } from '@/lib/listing-metadata';
+import { SAMPLE_SHARE_LABEL, SPONSORED_SHARE_LABEL } from '@/lib/listing-share';
 import { aListingDetail } from '@/test/fixtures';
 
 const ORIGIN = 'https://example.com';
@@ -33,12 +34,38 @@ describe('listingMetadata — canonical URL', () => {
   });
 });
 
-describe('listingMetadata — brand prominence', () => {
+describe('listingMetadata — attribution', () => {
   it('names the brokerage in the title and as the Open Graph site name', () => {
     const meta = metaFor({});
 
     expect(meta.title).toContain('Real Broker, LLC');
     expect(meta.openGraph?.siteName).toBe('Real Broker, LLC');
+  });
+
+  it('attributes the listing to its own listing office, not to our brokerage', () => {
+    const meta = metaFor({ listedBy: 'Jane Q. Agent – Bright Partner Realty' });
+
+    expect(meta.description).toContain('Listed by Jane Q. Agent – Bright Partner Realty.');
+    expect(meta.description).not.toMatch(/Brokered by Real Broker/);
+  });
+});
+
+describe('listingMetadata — the preview must not contradict the page', () => {
+  it('shows a closed sale at its close price, with its status', () => {
+    const meta = metaFor({
+      status: 'Sold',
+      price: 750000,
+      closePrice: 712000,
+      closeDate: '2026-03-04',
+    });
+
+    expect(meta.description).toContain('Sold');
+    expect(meta.description).toContain('$712,000');
+    expect(meta.description).not.toContain('$750,000');
+  });
+
+  it('adds no status word for an active listing', () => {
+    expect(metaFor({ status: 'Active' }).description).not.toContain('Active');
   });
 });
 
@@ -78,21 +105,37 @@ describe('listingMetadata — suppression is never undone by a preview', () => {
   });
 });
 
-describe('listingMetadata — provenance', () => {
-  it('labels a sample row as sample data', () => {
-    expect(publishedText(metaFor({ isSample: true }))).toContain('Sample data');
+describe('listingMetadata — required labels survive truncation', () => {
+  it('labels a sample row in the title, which a compact unfurl shows alone', () => {
+    const meta = metaFor({ isSample: true });
+
+    expect(meta.openGraph?.title).toContain('Sample listing');
+    expect(meta.description?.startsWith(SAMPLE_SHARE_LABEL)).toBe(true);
+  });
+
+  it('discloses a paid placement ahead of the listing facts', () => {
+    const description = metaFor({ sponsored: true }).description ?? '';
+
+    expect(description).toContain(SPONSORED_SHARE_LABEL);
+    expect(description.indexOf(SPONSORED_SHARE_LABEL)).toBeLessThan(
+      description.indexOf('Listed by'),
+    );
   });
 
   it('claims no MLS provenance', () => {
-    expect(publishedText(metaFor({ isSample: true }))).not.toMatch(/MLS|Bright/i);
+    expect(publishedText(metaFor({ isSample: true }))).not.toMatch(/\bMLS\b/i);
   });
 });
 
 describe('unresolvedListingMetadata', () => {
-  it('does not publish a dead link, and names no listing', () => {
-    const meta = unresolvedListingMetadata();
+  it('asks a crawler to drop a listing that is genuinely gone', () => {
+    expect(unresolvedListingMetadata({ noindex: true }).robots).toEqual({ index: false });
+  });
 
-    expect(meta.robots).toEqual({ index: false });
+  it('does not de-index a live URL after a transient failure', () => {
+    const meta = unresolvedListingMetadata({ noindex: false });
+
+    expect(meta.robots).toBeUndefined();
     expect(meta.title).toContain('Real Broker, LLC');
   });
 });

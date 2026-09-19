@@ -4,20 +4,35 @@ import StandaloneListingView from '@/components/listing/StandaloneListingView';
 import { loadListingState } from '@/lib/api/listings-server';
 import { listingMetadata, unresolvedListingMetadata } from '@/lib/listing-metadata';
 
+/** A bare `host[:port]` — a name or an IPv4 literal. A forwarded value of any other shape is not
+ *  a host we will publish, whoever sent it. */
+const HOST_PATTERN = /^[a-z0-9.-]+(:\d{1,5})?$/i;
+
+const LOOPBACK_PATTERN = /^(localhost|127\.\d+\.\d+\.\d+|\[?::1\]?)(:\d+)?$/i;
+
 /**
- * The absolute origin this document was requested on.
+ * The absolute origin to publish in `og:url` and the canonical link.
  *
- * An unfurl needs absolute URLs, and the app has no configured public hostname — it is reached
- * through an ingress whose host differs per environment. The forwarded headers are what the
- * crawler itself used to reach us, so they are the one value that is right in every environment
- * with nothing to keep in sync.
+ * `SITE_ORIGIN` is the answer wherever the public hostname is known. It is deliberately first:
+ * a forwarded header is client-controlled, and a crafted `X-Forwarded-Host` on a real listing
+ * would otherwise publish a canonical URL on someone else's host — to a crawler that follows it.
+ *
+ * With no configured origin the request headers are the only value that is right in every
+ * environment, so they are the fallback, validated rather than trusted: the first entry of a
+ * proxy chain, and only if it is shaped like a host.
  */
 async function requestOrigin(): Promise<string> {
+  const configured = process.env.SITE_ORIGIN;
+  if (configured) return configured.replace(/\/$/, '');
+
   const headerList = await headers();
-  const host = headerList.get('x-forwarded-host') ?? headerList.get('host') ?? 'localhost:3000';
-  const proto =
-    headerList.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https');
-  return `${proto}://${host}`;
+  const forwarded = (headerList.get('x-forwarded-host') ?? headerList.get('host') ?? '')
+    .split(',')[0]
+    .trim();
+  const host = HOST_PATTERN.test(forwarded) ? forwarded : 'localhost:3000';
+  const proto = headerList.get('x-forwarded-proto')?.split(',')[0].trim();
+
+  return `${proto ?? (LOOPBACK_PATTERN.test(host) ? 'http' : 'https')}://${host}`;
 }
 
 /** The listing's link preview. The rules it obeys live in `lib/listing-metadata`. */
@@ -29,9 +44,14 @@ export async function generateMetadata({
   const { id } = await params;
   const state = await loadListingState(id);
 
-  if (state.status !== 'ready') return unresolvedListingMetadata();
+  if (state.status === 'ready') return listingMetadata(state.listing, await requestOrigin());
 
-  return listingMetadata(state.listing, await requestOrigin());
+  /*
+   * Only a listing that is genuinely gone asks to be de-indexed. A gateway hiccup is transient,
+   * and answering it with `noindex` on an HTTP 200 would drop live listings out of search for as
+   * long as it takes a crawler to come back.
+   */
+  return unresolvedListingMetadata({ noindex: state.status === 'not-found' });
 }
 
 /**

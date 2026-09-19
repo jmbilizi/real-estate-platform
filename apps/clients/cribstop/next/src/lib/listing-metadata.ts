@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 import type { ListingDetailView } from '@/lib/api/listings';
 import { BRAND } from '@/lib/brand';
-import { formatDwellingStats, formatListingPrice } from '@/lib/listing-format';
-import { listingPath, SAMPLE_SHARE_LABEL, shareHeading } from '@/lib/listing-share';
+import { formatClosePrice, formatDwellingStats, formatListingPrice } from '@/lib/listing-format';
+import { listingShareUrl, shareDisclosures, shareTitle } from '@/lib/listing-share';
 
 /**
  * Link-preview metadata for a shared listing.
@@ -14,19 +14,27 @@ import { listingPath, SAMPLE_SHARE_LABEL, shareHeading } from '@/lib/listing-sha
  * not reach them (#59), and a preview card outlives the page it was cut from.
  */
 export function listingMetadata(listing: ListingDetailView, origin: string): Metadata {
-  const heading = shareHeading(listing);
-  const title = `${heading} · ${BRAND.brokerage}`;
+  const title = `${shareTitle(listing)} · ${BRAND.brokerage}`;
+
+  /*
+   * A closed sale shows what it closed at, and anything that is not Active says so. The preview
+   * card outlives the moment it was cut, so a Sold home previewed at its ask as though it were on
+   * the market contradicts the page it links to for as long as the card is cached.
+   */
+  const closed = formatClosePrice(listing.closePrice, listing.closeDate);
 
   const facts = [
-    formatListingPrice(listing.price, listing.listingType).text,
+    ...(listing.status === 'Active' ? [] : [listing.status]),
+    closed ?? formatListingPrice(listing.price, listing.listingType).text,
     formatDwellingStats(listing.beds, listing.baths, listing.sqft),
     listing.propertyType,
   ].filter(Boolean);
 
   const description = [
+    ...shareDisclosures(listing),
     `${facts.join(' · ')}.`,
-    `Brokered by ${BRAND.brokerage}.`,
-    ...(listing.isSample ? [SAMPLE_SHARE_LABEL] : []),
+    `Listed by ${listing.listedBy}.`,
+    `From ${BRAND.brokerage} on ${BRAND.siteDomain}.`,
   ].join(' ');
 
   /*
@@ -35,7 +43,8 @@ export function listingMetadata(listing: ListingDetailView, origin: string): Met
    * rule left here is to add nothing the service did not send.
    */
   const preview = listing.media[0];
-  const url = `${origin.replace(/\/$/, '')}${listingPath(listing.id)}`;
+  // The same URL the Share button copies. The two must not be able to disagree.
+  const url = listingShareUrl(listing.id, origin);
 
   return {
     title,
@@ -59,9 +68,15 @@ export function listingMetadata(listing: ListingDetailView, origin: string): Met
 }
 
 /**
- * What a listing that did not resolve unfurls into: the site default, and `noindex` so a dead or
- * withdrawn link never publishes an error message as a preview card.
+ * What a listing that did not resolve unfurls into: the site default, naming no home.
+ *
+ * `noindex` is for a listing that is genuinely gone. A transient gateway failure must not carry it
+ * — the URL is still live, and de-indexing it would cost real traffic for a fault that lasted
+ * seconds.
  */
-export function unresolvedListingMetadata(): Metadata {
-  return { title: `${BRAND.brokerage} — ${BRAND.titleSuffix}`, robots: { index: false } };
+export function unresolvedListingMetadata({ noindex }: { noindex: boolean }): Metadata {
+  return {
+    title: `${BRAND.brokerage} — ${BRAND.titleSuffix}`,
+    ...(noindex ? { robots: { index: false } } : {}),
+  };
 }
