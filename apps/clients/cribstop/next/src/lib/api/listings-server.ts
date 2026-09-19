@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import type { ErrorBody, ListingDetail } from '@cribstop/property-contracts';
 import { fetchGateway } from '@/app/api/_lib/gateway';
 import { type ListingDetailState, toListingDetailView } from './listings';
@@ -26,8 +27,14 @@ const UNAVAILABLE = 'We could not load this listing just now. Please try again.'
  * Every outcome is a state the page can present: the listing, a withdrawn listing, or an error with
  * a retry. A rejected promise here would take out the whole route instead, which is the one thing
  * this page must not do — it exists precisely so that a direct link to a listing renders something.
+ *
+ * `cache` makes the route's two readers — `generateMetadata` and the page component — one gateway
+ * call. Both need the same listing, and a shared link must not cost twice what a bookmark costs.
+ * The scope is a single render pass, so nothing is held between requests.
  */
-export async function loadListingState(id: string): Promise<ListingDetailState> {
+export const loadListingState = cache(async function loadListingState(
+  id: string,
+): Promise<ListingDetailState> {
   const upstream = await fetchGateway(`${PROPERTY_LISTING}/${encodeURIComponent(id)}`, {
     method: 'GET',
     headers: { Accept: 'application/json' },
@@ -52,4 +59,4 @@ export async function loadListingState(id: string): Promise<ListingDetailState> 
   if (body === null) return { status: 'error', message: UNAVAILABLE };
 
   return { status: 'ready', listing: toListingDetailView(body as ListingDetail) };
-}
+});

@@ -20,9 +20,12 @@ import {
   formatOpenHouse,
   formatStreetAddress,
 } from '@/lib/listing-format';
+import { copyToClipboard } from '@/lib/clipboard';
+import { buildListingShare, listingShareUrl } from '@/lib/listing-share';
 import { searchListings } from '@/lib/api/listings';
 import type { ListingDetailView } from '@/lib/api/listings';
 import { useApp } from '@/lib/context';
+import { useToast } from '@/lib/useToast';
 import type { ListingCardRow } from '@/lib/types';
 
 interface Props {
@@ -58,7 +61,43 @@ type SimilarState =
 
 export default function ListingDetailContent({ listing, onClose }: Props) {
   const { toggleSave, isSaved } = useApp();
+  const { toast } = useToast();
   const saved = isSaved(listing.id);
+
+  /**
+   * Share the listing.
+   *
+   * The Web Share API is the useful path on a phone, which is where a listing actually gets sent to
+   * a partner or a parent. Everywhere else the link goes to the clipboard, with a toast, because a
+   * silent copy reads the same as the inert button this replaces.
+   *
+   * The text comes from `lib/listing-share`, which holds the suppression and provenance rules, and
+   * the clipboard carries the URL alone — the preview a recipient sees is then the route's own
+   * Open Graph tags, which are built from the same module.
+   */
+  async function handleShare() {
+    const url = listingShareUrl(listing.id, window.location.origin);
+
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share(buildListingShare(listing, url));
+        return;
+      } catch (err) {
+        /*
+         * A dismissed share sheet is a choice, not a failure — copying behind the user's back
+         * would undo it. Any other rejection falls through to the clipboard.
+         *
+         * The name alone decides it. An `instanceof DOMException` guard also holds in a browser,
+         * but a WebView can reject with a plain `Error` named `AbortError`, and there the guard
+         * would read a deliberate cancel as a failure and copy anyway.
+         */
+        if ((err as { name?: string } | null)?.name === 'AbortError') return;
+      }
+    }
+
+    if (await copyToClipboard(url)) toast('Link copied');
+    else toast('We could not copy the link.', 'error');
+  }
 
   const [similar, setSimilar] = useState<SimilarState>({ status: 'loading', results: [] });
 
@@ -177,7 +216,11 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          <button className="btn-secondary px-2.5 sm:gap-1.5 sm:px-5" aria-label="Share">
+          <button
+            onClick={handleShare}
+            className="btn-secondary px-2.5 sm:gap-1.5 sm:px-5"
+            aria-label="Share"
+          >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"

@@ -1,6 +1,6 @@
 import type { ListingSource } from '@cribstop/property-contracts';
-import { BRAND } from '@/lib/brand';
 import { formatDate } from '@/lib/format';
+import { formatListingProvenance } from '@/lib/listing-format';
 
 /**
  * Per-listing data provenance, driven off **that row's** `source`.
@@ -17,6 +17,13 @@ import { formatDate } from '@/lib/format';
  * - `brightMLS` → the Bright provenance line.
  * - `internal`  → our own attribution, which is the accurate statement for a row we hold.
  * - `other`     → neither Bright's nor ours.
+ *
+ * The sentences themselves are `formatListingProvenance`, because the share text and the link
+ * preview publish the same claim and must not be able to word it differently. `internal` names the
+ * site rather than the brokerage: PRD §6.2 counts owner-claimed and FSBO rows as internal, so
+ * naming Real Broker, LLC as the source would assert that we supplied a listing its owner
+ * supplied. Brokerage identification is a separate obligation, carried unconditionally by the
+ * attribution block and the footer.
  */
 export default function ListingProvenance({
   source,
@@ -27,23 +34,12 @@ export default function ListingProvenance({
   lastUpdated: string;
   className?: string;
 }) {
-  if (source === 'other') return null;
-
-  const updated = `Data last updated: ${formatDate(lastUpdated)}.`;
+  const sentence = formatListingProvenance(source);
+  if (sentence === null) return null;
 
   return (
     <p className={`text-xs leading-relaxed text-ink-muted ${className}`}>
-      {source === 'brightMLS'
-        ? `Information provided by Bright MLS. Deemed reliable but not guaranteed. ${updated}`
-        : /*
-           * `internal` covers listings we hold directly, which per PRD §6.2 includes owner-claimed
-           * and FSBO rows. Naming the brokerage as the source would assert that Real Broker, LLC
-           * supplied a listing its owner supplied — true for some internal rows, not all, and the
-           * whole point of driving provenance off the row is not to overclaim. The site is the
-           * accurate answer for every `internal` row. Brokerage identification is a separate
-           * obligation and is carried unconditionally by the attribution block and the footer.
-           */
-          `Listing information provided by ${BRAND.siteDomain}. Deemed reliable but not guaranteed. ${updated}`}
+      {`${sentence} Data last updated: ${formatDate(lastUpdated)}.`}
     </p>
   );
 }

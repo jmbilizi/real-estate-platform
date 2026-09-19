@@ -1,5 +1,40 @@
+import type { Metadata } from 'next';
 import StandaloneListingView from '@/components/listing/StandaloneListingView';
 import { loadListingState } from '@/lib/api/listings-server';
+import { listingMetadata, unresolvedListingMetadata } from '@/lib/listing-metadata';
+
+/**
+ * The origin to publish in the canonical link and `og:url`, or null when we have none to vouch
+ * for.
+ *
+ * Only `SITE_ORIGIN` counts. The request's `Host` / `X-Forwarded-Host` is client-controlled and
+ * the ingress rule for this app is a catch-all, so a crafted header would otherwise publish a real
+ * listing's canonical URL on an attacker's domain — to the one audience that acts on it, a
+ * crawler. `SITE_ORIGIN` is not wired per environment yet, so today both tags are simply omitted.
+ */
+function publishableOrigin(): string | null {
+  const configured = process.env.SITE_ORIGIN?.trim();
+  return configured ? configured.replace(/\/$/, '') : null;
+}
+
+/** The listing's link preview. The rules it obeys live in `lib/listing-metadata`. */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const state = await loadListingState(id);
+
+  if (state.status === 'ready') return listingMetadata(state.listing, publishableOrigin());
+
+  /*
+   * Only a listing that is genuinely gone asks to be de-indexed. A gateway hiccup is transient,
+   * and answering it with `noindex` on an HTTP 200 would drop live listings out of search for as
+   * long as it takes a crawler to come back.
+   */
+  return unresolvedListingMetadata({ noindex: state.status === 'not-found' });
+}
 
 /**
  * A **hard** navigation to a listing — a shared link, a bookmark, a reload.
