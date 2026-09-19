@@ -56,13 +56,28 @@ guide.
    `new-service` skill checklist — Dockerfile, `infra/k8s/` manifests, skaffold artifact, env/secret
    wiring — verified with `pnpm run skaffold:services:deploy`, not just a green `nx build`. A ticket
    that scopes infra out is a defective ticket; flag it and build it correctly.
-8. **Always shut down anything you started in the background.** Dev servers, `skaffold` watches,
-   `kubectl port-forward`, test runners in watch mode — they outlive the command that launched them.
-   Left running they squat on ports (3000/3002/5432/8080) so the next run fails or, worse, silently
-   answers from a stale process and a later check "passes" against nothing. Stop background shells
-   when the task that needed them is done — before reporting or committing — and confirm none
-   survive (`ps -W | grep -E 'skaffold|kubectl|node'`). **On Windows `pkill` silently does nothing**
-   — use `taskkill //F //IM kubectl.exe` (or `skaffold.exe`, `node.exe`).
+8. **Always shut down anything you started in the background, by PID, never by image name.** Dev
+   servers, `skaffold` watches, `kubectl port-forward`, and test runners in watch mode outlive the
+   command that launched them. Left running, they squat on ports (3000/3002/5432/8080). The next run
+   then fails, or worse, silently answers from a stale process and a later check "passes" against
+   nothing. Stop background shells before reporting or committing. Confirm none survive with
+   `ps -W | grep -E 'skaffold|kubectl|node'`.
+
+   Several engineer lanes run at once in this repo. An image-wide kill takes down every other lane's
+   process of that name, not just yours. This has already happened three times: it killed another
+   lane's dev server, then another lane's `dotnet` processes, then this session's own MCP server
+   processes. **Never run `taskkill //F //IM <name>` or `pkill <name>` for cleanup.** Both match by
+   image name and kill every matching process on the machine. `pkill` also silently does nothing on
+   Windows, so it never was a safe fallback there. This is worst for `node.exe`. It is the most
+   shared image in the repo, running every Node dev server, `pnpm` invocation, and MCP server.
+   Killing it by image name is never acceptable, not just discouraged.
+
+   Use `pnpm run dev:stop -- --pid <pid>` or `pnpm run dev:stop -- --port <port>` instead
+   (`tools/dev/stop-process.js`). It resolves one PID, from the value you pass or from whatever
+   listens on the port, and kills only that process tree. It works the same way on Windows, macOS,
+   and Linux. It calls `taskkill` directly from Node, so it needs none of the doubled-slash `//PID`
+   workaround that Git Bash's MSYS path conversion otherwise forces.
+
 9. **Write in ASD-STE100 Simplified Technical English, and write only what the reader needs.** This
    applies to everything an agent writes: ticket bodies, ticket comments, code comments, PR
    descriptions, commit messages, and replies to the user. See
