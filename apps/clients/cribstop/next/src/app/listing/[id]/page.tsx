@@ -1,5 +1,38 @@
+import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import StandaloneListingView from '@/components/listing/StandaloneListingView';
 import { loadListingState } from '@/lib/api/listings-server';
+import { listingMetadata, unresolvedListingMetadata } from '@/lib/listing-metadata';
+
+/**
+ * The absolute origin this document was requested on.
+ *
+ * An unfurl needs absolute URLs, and the app has no configured public hostname — it is reached
+ * through an ingress whose host differs per environment. The forwarded headers are what the
+ * crawler itself used to reach us, so they are the one value that is right in every environment
+ * with nothing to keep in sync.
+ */
+async function requestOrigin(): Promise<string> {
+  const headerList = await headers();
+  const host = headerList.get('x-forwarded-host') ?? headerList.get('host') ?? 'localhost:3000';
+  const proto =
+    headerList.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https');
+  return `${proto}://${host}`;
+}
+
+/** The listing's link preview. The rules it obeys live in `lib/listing-metadata`. */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const state = await loadListingState(id);
+
+  if (state.status !== 'ready') return unresolvedListingMetadata();
+
+  return listingMetadata(state.listing, await requestOrigin());
+}
 
 /**
  * A **hard** navigation to a listing — a shared link, a bookmark, a reload.

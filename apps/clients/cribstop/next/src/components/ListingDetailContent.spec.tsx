@@ -1,4 +1,5 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { aListingDetail } from '@/test/fixtures';
 import { searchListings, toListingDetailView } from '@/lib/api/listings';
 import ListingDetailContent from './ListingDetailContent';
@@ -6,6 +7,9 @@ import ListingDetailContent from './ListingDetailContent';
 jest.mock('@/lib/context', () => ({
   useApp: () => ({ toggleSave: jest.fn(), isSaved: () => false }),
 }));
+
+const mockToast = jest.fn();
+jest.mock('@/lib/useToast', () => ({ useToast: () => ({ toast: mockToast }) }));
 
 jest.mock('@/lib/api/listings', () => {
   const actual = jest.requireActual('@/lib/api/listings');
@@ -32,6 +36,7 @@ jest.mock('@/components/SingleListingMap', () => ({
 const mockedSearchListings = searchListings as jest.Mock;
 
 beforeEach(() => {
+  mockToast.mockReset();
   mockedSearchListings.mockReset();
   mockedSearchListings.mockResolvedValue({
     results: [],
@@ -229,5 +234,119 @@ describe('ListingDetailContent — NAR 7.58 attribution', () => {
     const attribution = screen.getByText(/Listing courtesy of/i);
     expect(attribution.className).toContain('text-sm');
     expect(attribution.className).not.toMatch(/text-\[1[0-3]px\]|text-xs/);
+  });
+});
+
+describe('ListingDetailContent — Share (#135)', () => {
+  const LISTING_ID = '11111111-1111-4111-8111-111111111111';
+  const CANONICAL = `http://localhost/listing/${LISTING_ID}`;
+
+  /** Replaces one `navigator` member for the duration of a test and restores it after. */
+  function stubNavigator(key: string, value: unknown) {
+    const original = Object.getOwnPropertyDescriptor(navigator, key);
+    Object.defineProperty(navigator, key, { value, configurable: true, writable: true });
+    return () => {
+      if (original) Object.defineProperty(navigator, key, original);
+      else delete (navigator as unknown as Record<string, unknown>)[key];
+    };
+  }
+
+  const restores: Array<() => void> = [];
+  afterEach(() => {
+    while (restores.length > 0) restores.pop()?.();
+  });
+
+  async function clickShare(view: ReturnType<typeof toListingDetailView>) {
+    await renderAndSettle(<ListingDetailContent listing={view} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Share' }));
+  }
+
+  it('hands the canonical listing URL to the Web Share API when the platform has one', async () => {
+    const share = jest.fn().mockResolvedValue(undefined);
+    restores.push(stubNavigator('share', share));
+
+    await clickShare(toListingDetailView(aListingDetail({ listing: { id: LISTING_ID } })));
+
+    expect(share).toHaveBeenCalledTimes(1);
+    expect(share.mock.calls[0][0]).toMatchObject({ url: CANONICAL });
+    expect(mockToast).not.toHaveBeenCalled();
+  });
+
+  it('copies the canonical URL and confirms it when the platform has no Web Share API', async () => {
+    const writeText = jest.fn().mockResolvedValue(undefined);
+    restores.push(stubNavigator('share', undefined));
+    restores.push(stubNavigator('clipboard', { writeText }));
+
+    await clickShare(toListingDetailView(aListingDetail({ listing: { id: LISTING_ID } })));
+
+    expect(writeText).toHaveBeenCalledWith(CANONICAL);
+    expect(mockToast).toHaveBeenCalledWith('Link copied');
+  });
+
+  it('falls back to the clipboard when the share sheet fails for a reason other than dismissal', async () => {
+    const writeText = jest.fn().mockResolvedValue(undefined);
+    restores.push(stubNavigator('share', jest.fn().mockRejectedValue(new Error('not allowed'))));
+    restores.push(stubNavigator('clipboard', { writeText }));
+
+    await clickShare(toListingDetailView(aListingDetail({ listing: { id: LISTING_ID } })));
+
+    expect(writeText).toHaveBeenCalledWith(CANONICAL);
+  });
+
+  it('does nothing further when the user dismisses the share sheet', async () => {
+    const writeText = jest.fn();
+    const abort = new DOMException('dismissed', 'AbortError');
+    restores.push(stubNavigator('share', jest.fn().mockRejectedValue(abort)));
+    restores.push(stubNavigator('clipboard', { writeText }));
+
+    await clickShare(toListingDetailView(aListingDetail({ listing: { id: LISTING_ID } })));
+
+    expect(writeText).not.toHaveBeenCalled();
+    expect(mockToast).not.toHaveBeenCalled();
+  });
+
+  it('reports a failed copy rather than leaving the click silent', async () => {
+    restores.push(stubNavigator('share', undefined));
+    restores.push(
+      stubNavigator('clipboard', { writeText: jest.fn().mockRejectedValue(new Error('denied')) }),
+    );
+
+    await clickShare(toListingDetailView(aListingDetail({ listing: { id: LISTING_ID } })));
+
+    expect(mockToast).toHaveBeenCalledWith(expect.stringContaining('could not copy'), 'error');
+  });
+
+  it('shares no masked address and no MLS claim for a suppressed sample row', async () => {
+    const share = jest.fn().mockResolvedValue(undefined);
+    restores.push(stubNavigator('share', share));
+
+    await clickShare(
+      toListingDetailView(
+        aListingDetail({
+          listing: {
+            id: LISTING_ID,
+            address: null,
+            latitude: null,
+            longitude: null,
+            isSample: true,
+            title: '742 Evergreen Terrace — Waterfront Penthouse',
+          },
+        }),
+      ),
+    );
+
+    const payload = share.mock.calls[0][0] as { title: string; text: string };
+    const shared = `${payload.title} ${payload.text}`;
+
+    expect(shared).not.toContain('742 Evergreen Terrace');
+    expect(shared).not.toMatch(/MLS|Bright/i);
+    expect(shared).toContain('Sample');
+    expect(shared).toContain('Real Broker, LLC');
+  });
+
+  it('keeps the button’s accessible name', async () => {
+    await renderAndSettle(<ListingDetailContent listing={toListingDetailView(aListingDetail())} />);
+
+    expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument();
   });
 });
