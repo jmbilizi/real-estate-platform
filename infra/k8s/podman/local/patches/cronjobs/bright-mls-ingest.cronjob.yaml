@@ -29,13 +29,16 @@ spec:
             - name: ingest
               image: property-service
               imagePullPolicy: IfNotPresent
+              # A page is up to 1000 BrightProperty records of 931 fields each, held as a body
+              # string, parsed objects and a JSON copy per insert chunk at the same time. 192Mi
+              # OOMKills the container mid-page, which looks like a vanished pod, not a job error.
               resources:
                 requests:
-                  memory: "64Mi"
+                  memory: "192Mi"
                   cpu: "25m"
                 limits:
-                  memory: "192Mi"
-                  cpu: "200m"
+                  memory: "768Mi"
+                  cpu: "400m"
               # NODE_ENV is repeated here for the same reason the property-service migrate
               # initContainer repeats it: the runtime image bakes NODE_ENV=production, and there is
               # no other container's override to inherit.

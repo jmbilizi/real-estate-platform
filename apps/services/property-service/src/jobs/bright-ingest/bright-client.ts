@@ -37,6 +37,7 @@
 import { createHash } from 'node:crypto';
 
 import type { BrightCredentials, BrightEndpoint } from './config';
+import { backoffDelayMs, isRetryableStatus, type RateLimiter } from './rate-limiter';
 
 /** Default per-request ceiling. A scheduled job must not hang until the CronJob deadline kills it. */
 export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
@@ -318,4 +319,193 @@ export async function probeMetadata(
       };
     },
   );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+ * Replication (#92). Everything above this line is #91's connectivity probe and is unchanged.
+ * ════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/** One OData page. `nextLink` is `@odata.nextLink`, absent on the last page. */
+export interface BrightPage {
+  readonly records: readonly Record<string, unknown>[];
+  readonly nextLink: string | null;
+}
+
+export interface BrightPageOptions extends BrightClientOptions {
+  /** Shared across the whole run. One limiter, or two callers each stay under and together exceed. */
+  readonly limiter?: RateLimiter;
+  readonly maxRetries?: number;
+  readonly sleep?: (ms: number) => Promise<void>;
+  /** Injected so a test asserts the backoff schedule without waiting for it. */
+  readonly random?: () => number;
+  /** Called once per retried attempt, so the run report can count retries. */
+  readonly onRetry?: (attempt: number, status: number) => void;
+}
+
+/** Supplies a valid access token, refreshing it when it is close to expiring. */
+export type TokenProvider = () => Promise<BrightToken>;
+
+/**
+ * Bright's tokens report `expires_in=3600`. A backfill run can outlive that.
+ *
+ * Refreshing 120 seconds early is not a guess about clock skew — it is the window in which a token
+ * that validated when the request was built expires while the request is in flight. That failure
+ * arrives as a 401 in the middle of a page loop, which is indistinguishable from a revoked
+ * credential and would otherwise be retried against a ceiling nobody wants to spend on it.
+ */
+const TOKEN_REFRESH_MARGIN_MS = 120_000;
+
+export function createTokenProvider(
+  endpoint: BrightEndpoint,
+  credentials: BrightCredentials,
+  options: BrightClientOptions & { readonly now?: () => number } = {},
+): TokenProvider {
+  const now = options.now ?? (() => Date.now());
+  let cached: { token: BrightToken; expiresAt: number } | null = null;
+  let pending: Promise<BrightToken> | null = null;
+
+  return async () => {
+    if (cached !== null && now() < cached.expiresAt) {
+      return cached.token;
+    }
+    // Collapse concurrent refreshes. Two page fetches noticing the same expiry must not each spend a
+    // token request from the shared budget.
+    pending ??= (async () => {
+      const token = await acquireToken(endpoint, credentials, options);
+      const lifetimeMs = (token.expiresInSeconds ?? 3600) * 1000;
+      cached = { token, expiresAt: now() + Math.max(0, lifetimeMs - TOKEN_REFRESH_MARGIN_MS) };
+      return token;
+    })().finally(() => {
+      pending = null;
+    });
+    return pending;
+  };
+}
+
+/**
+ * Fetches one page.
+ *
+ * `url` is either built by `odata-query.ts` or is an `@odata.nextLink` Bright returned. The second
+ * case is why `allowedHost` exists: a nextLink is a server-supplied URL, and this request carries a
+ * bearer token. A feed that answered with a nextLink pointing somewhere else would otherwise hand
+ * our credential to that somewhere else, and the run would look entirely normal while doing it. The
+ * host is pinned to the configured service root and a mismatch fails the run.
+ *
+ * Retries only a 429 or a 5xx, with jittered backoff. Every attempt passes through the same limiter,
+ * so a retry storm cannot exceed the ceiling either.
+ */
+export async function fetchPage(
+  url: string,
+  tokenProvider: TokenProvider,
+  allowedHost: string,
+  options: BrightPageOptions = {},
+): Promise<BrightPage> {
+  const fetchImpl = resolveFetch(options);
+  const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  const maxRetries = options.maxRetries ?? 5;
+  const sleep = options.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    throw new Error(
+      `Bright returned a page link that is not an absolute URL, against ${allowedHost}.`,
+    );
+  }
+  if (parsedUrl.host !== allowedHost) {
+    throw new Error(
+      `Refusing to send the Bright access token to ${parsedUrl.host}: the configured service root ` +
+        `is ${allowedHost}. An @odata.nextLink is server-supplied, so a host change is either a ` +
+        'feed misconfiguration or an attempt to collect our bearer token.',
+    );
+  }
+  if (parsedUrl.protocol !== 'https:') {
+    throw new Error(`Refusing to send the Bright access token over ${parsedUrl.protocol}//.`);
+  }
+
+  let lastStatus = 0;
+  let lastStatusText = '';
+
+  for (let attempt = 1; attempt <= maxRetries + 1; attempt += 1) {
+    const token = await tokenProvider();
+    const run = async () => {
+      const response = await fetchImpl(url, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token.accessToken}`,
+          Accept: 'application/json',
+        },
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      return { response, body: await response.text() };
+    };
+
+    const { response, body } = await withTransportContext(
+      'Bright MLS page request',
+      allowedHost,
+      () => (options.limiter === undefined ? run() : options.limiter.schedule(run)),
+    );
+
+    if (response.ok) {
+      return parsePage(body, allowedHost);
+    }
+
+    lastStatus = response.status;
+    lastStatusText = response.statusText;
+
+    if (!isRetryableStatus(response.status) || attempt === maxRetries + 1) {
+      throw new BrightRequestError({
+        what: 'Bright MLS page request',
+        host: allowedHost,
+        status: response.status,
+        statusText: response.statusText,
+        oauthError: readOAuthError(body),
+      });
+    }
+
+    options.onRetry?.(attempt, response.status);
+    await sleep(backoffDelayMs(attempt, options.random));
+  }
+
+  // Unreachable: the loop either returns or throws. Kept so the signature needs no non-null cast.
+  throw new BrightRequestError({
+    what: 'Bright MLS page request',
+    host: allowedHost,
+    status: lastStatus,
+    statusText: lastStatusText,
+  });
+}
+
+/**
+ * Reads an OData collection response.
+ *
+ * Only `value` and `@odata.nextLink` are read. Nothing else on the envelope is kept, and no record
+ * field is inspected here — the payload goes to staging verbatim and #93 interprets it.
+ */
+function parsePage(body: string, host: string): BrightPage {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    throw new Error(
+      `Bright MLS page response from ${host} is not JSON. The request asked for ` +
+        'application/json and the 2026-09-18 probes returned it.',
+    );
+  }
+
+  const envelope = (parsed ?? {}) as Record<string, unknown>;
+  const value = envelope.value;
+  if (!Array.isArray(value)) {
+    throw new Error(
+      `Bright MLS page response from ${host} has no "value" array. An OData collection response ` +
+        'always carries one, so this is a change at Bright or a non-collection endpoint.',
+    );
+  }
+
+  const nextLink = envelope['@odata.nextLink'];
+  return {
+    records: value as Record<string, unknown>[],
+    nextLink: typeof nextLink === 'string' && nextLink.length > 0 ? nextLink : null,
+  };
 }
