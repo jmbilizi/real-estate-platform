@@ -218,6 +218,45 @@ describe('a listing that HAS an upcoming open house', () => {
   });
 });
 
+describe('field-level seller suppression on detail (#53)', () => {
+  it('withholds the current price and leaves everything else alone', async () => {
+    const response = await axios.get(`/listings/${fixtures.suppressedPriceListingId}`);
+    const detail = listingDetailSchema.parse(response.data);
+
+    expect(detail.listing.price).toBeNull();
+    expect(detail.listing.address).not.toBeNull();
+  });
+
+  it('withholds price_reduced along with the original price it was derived from', async () => {
+    // Only closePrice/closeDate are exposed on the wire from the "price history" family today;
+    // priceReduced is asserted here because it IS on the wire and is the field this fixture's
+    // suppression must visibly change.
+    const response = await axios.get(`/listings/${fixtures.suppressedPriceHistoryListingId}`);
+    const detail = listingDetailSchema.parse(response.data);
+
+    expect(detail.listing.priceReduced).toBe(false);
+  });
+
+  describe('media suppression: exactly one retained photo, selected by an explicit marker', () => {
+    it('emits ONLY the marked photo, never the sort_order/is_primary photo, even though one exists', async () => {
+      const response = await axios.get(`/listings/${fixtures.suppressedMediaWithMarkerListingId}`);
+      const detail = listingDetailSchema.parse(response.data);
+
+      expect(detail.listing.media).toHaveLength(1);
+      expect(detail.listing.media[0]?.url).toBe(
+        'https://cdn.example/e2e-fixture-suppressed-media-retained.jpg',
+      );
+    });
+
+    it('emits NO photo at all when no row is marked — the fail-closed case for a listing whose media replication pass has not run yet', async () => {
+      const response = await axios.get(`/listings/${fixtures.suppressedMediaNoMarkerListingId}`);
+      const detail = listingDetailSchema.parse(response.data);
+
+      expect(detail.listing.media).toEqual([]);
+    });
+  });
+});
+
 describe('attribution (NAR 7.58 / PRD §6.2) on the detail listing', () => {
   it('carries the full attribution block on listing, not just on search cards', async () => {
     const response = await axios.get(`/listings/${fixtures.sampleListingId}`);

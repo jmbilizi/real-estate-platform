@@ -115,7 +115,14 @@ const amenityList = z
  * client unable to accept it.
  */
 export const SORT_VALUES = ['recommended', 'newest', 'price-asc', 'price-desc'] as const;
-export const sortSchema = z.enum(SORT_VALUES);
+export const sortSchema = z
+  .enum(SORT_VALUES)
+  .describe(
+    '`price-asc` and `price-desc` place a listing with a seller-suppressed price (#53) LAST, ' +
+      'regardless of direction — `NULLS LAST` on both, not the SQL default of `NULLS FIRST` on ' +
+      'DESC. A suppressed-price row is never lost from the result, only ordered after every row ' +
+      'that has a price.',
+  );
 export type ListingSort = z.infer<typeof sortSchema>;
 
 /**
@@ -133,8 +140,21 @@ export const searchRequestSchema = z.strictObject({
   // single-enum shape codegen and Swagger UI expect (#47 review, I3).
   listingType: z.enum([...LISTING_TYPES, 'all'] as const).default('all'),
   propertyType: z.enum([...PROPERTY_TYPES, 'all'] as const).default('all'),
-  minPrice: queryInt.optional(),
-  maxPrice: queryInt.optional(),
+  // A seller may suppress `price` (#53); a suppressed row's price is null. `NULL >= x` and
+  // `NULL <= x` are never true, so these two filters exclude a suppressed-price row from every
+  // range they express — never a false match, and never a special case in search-query.ts.
+  minPrice: queryInt
+    .optional()
+    .describe(
+      'Whole number. A listing with a seller-suppressed price never matches this filter, ' +
+        'because it has no price to compare.',
+    ),
+  maxPrice: queryInt
+    .optional()
+    .describe(
+      'Whole number. A listing with a seller-suppressed price never matches this filter, ' +
+        'because it has no price to compare.',
+    ),
   beds: queryInt.optional(),
   baths: queryBathCount.optional(),
   minSqft: queryInt.optional(),

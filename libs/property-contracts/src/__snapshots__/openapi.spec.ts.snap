@@ -778,7 +778,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
     },
   },
   "info": {
-    "description": "\`property-service\`'s HTTP API. The service owns the Communities → Properties → Units → Listings hierarchy; \`listings\` is the resource this version of the document exposes, and a later resource extends THIS document rather than publishing a second one — the aggregation key is part of the docs URL, so splitting would break every bookmark. Every response carries the full broker/office attribution block (NAR 7.58, PRD §6.2), there is no field-selection parameter, and unknown query parameters are rejected with 400 — so no caller can omit it. Results are read through a compliance-enforcing view that applies two distinct seller opt-outs. A listing withheld from internet display is absent entirely: omitted from search results and from \`total\`, and indistinguishable from an unknown id on detail (the same 404, byte for byte). A listing whose street address is withheld is still returned, with \`address\`, \`latitude\` and \`longitude\` null together and \`unit.unitNumber\` withheld on detail, so the address cannot be reconstructed; such rows remain in \`total\` and simply have no map coordinates — never substitute a city or ZIP centroid for them. Free-text \`query\` matches title, address, city, neighborhood and zip — never the description, which is third-party MLS remarks carrying a moderation state; making it searchable would allow keyword-based steering on protected-class language (PRD §6.3).",
+    "description": "\`property-service\`'s HTTP API. The service owns the Communities → Properties → Units → Listings hierarchy; \`listings\` is the resource this version of the document exposes, and a later resource extends THIS document rather than publishing a second one — the aggregation key is part of the docs URL, so splitting would break every bookmark. Every response carries the full broker/office attribution block (NAR 7.58, PRD §6.2), there is no field-selection parameter, and unknown query parameters are rejected with 400 — so no caller can omit it. Results are read through a compliance-enforcing view that applies two distinct seller opt-outs. A listing withheld from internet display is absent entirely: omitted from search results and from \`total\`, and indistinguishable from an unknown id on detail (the same 404, byte for byte). A listing whose street address is withheld is still returned, with \`address\`, \`latitude\` and \`longitude\` null together and \`unit.unitNumber\` withheld on detail, so the address cannot be reconstructed; such rows remain in \`total\` and simply have no map coordinates — never substitute a city or ZIP centroid for them. Free-text \`query\` matches title, address, city, neighborhood and zip — never the description, which is third-party MLS remarks carrying a moderation state; making it searchable would allow keyword-based steering on protected-class language (PRD §6.3). A seller may also suppress price, photos, days on market or price history individually (#53) while the listing stays syndicated; a field withheld this way is null (or, for photos, reduced to at most one image), and the listing remains in results and in \`total\`. See the \`minPrice\`/\`maxPrice\`/\`sort\` parameter descriptions for how a seller-suppressed price interacts with range filters and ordering.",
     "title": "Property Service",
     "version": "1.0.0",
   },
@@ -856,6 +856,7 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
             "name": "minPrice",
             "required": false,
             "schema": {
+              "description": "Whole number. A listing with a seller-suppressed price never matches this filter, because it has no price to compare.",
               "pattern": "^\\d+$",
               "type": "string",
             },
@@ -865,6 +866,7 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
             "name": "maxPrice",
             "required": false,
             "schema": {
+              "description": "Whole number. A listing with a seller-suppressed price never matches this filter, because it has no price to compare.",
               "pattern": "^\\d+$",
               "type": "string",
             },
@@ -979,6 +981,7 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
             "required": false,
             "schema": {
               "default": "recommended",
+              "description": "\`price-asc\` and \`price-desc\` place a listing with a seller-suppressed price (#53) LAST, regardless of direction — \`NULLS LAST\` on both, not the SQL default of \`NULLS FIRST\` on DESC. A suppressed-price row is never lost from the result, only ordered after every row that has a price.",
               "enum": [
                 "recommended",
                 "newest",

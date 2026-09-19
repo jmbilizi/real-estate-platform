@@ -140,7 +140,12 @@ export function toOpenApiDocument() {
         'Free-text `query` matches title, address, ' +
         'city, neighborhood and zip — never the description, which is third-party MLS remarks ' +
         'carrying a moderation state; making it searchable would allow keyword-based steering on ' +
-        'protected-class language (PRD §6.3).',
+        'protected-class language (PRD §6.3). A seller may also suppress price, photos, days on ' +
+        'market or price history individually (#53) while the listing stays syndicated; a field ' +
+        'withheld this way is null (or, for photos, reduced to at most one image), and the ' +
+        'listing remains in results and in `total`. See the `minPrice`/`maxPrice`/`sort` ' +
+        'parameter descriptions for how a seller-suppressed price interacts with range filters ' +
+        'and ordering.',
     },
     paths: {
       '/listings': {

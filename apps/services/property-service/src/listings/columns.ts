@@ -21,6 +21,14 @@ export const FORBIDDEN_COLUMNS = [
   'internet_display_allowed',
   'description_moderation',
   'source_status',
+  // #53. Bright's field-level suppression predicate inputs. `media_display_allowed` is projected
+  // by the view for repository.ts's ad hoc media-join SQL (not enumerated here), but must never
+  // reach a mapper or the wire either — a handler reading any of these five is a handler that can
+  // re-implement a rule the view or repository.ts already enforces.
+  'price_display_allowed',
+  'price_history_display_allowed',
+  'media_display_allowed',
+  'days_on_market_display_allowed',
 ] as const;
 
 const CARD_COLUMNS = [

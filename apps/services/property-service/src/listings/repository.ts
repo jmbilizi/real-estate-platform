@@ -47,14 +47,22 @@ export interface ReadPool extends ReadClient {
 }
 
 /**
- * The soonest-first primary image. `is_primary` wins; failing that the lowest `sort_order`, with `id`
- * as a final tiebreaker so the chosen image is stable across requests rather than plan-dependent.
+ * The soonest-first primary image when media is not suppressed: `is_primary` wins; failing that
+ * the lowest `sort_order`, with `id` as a final tiebreaker so the chosen image is stable across
+ * requests rather than plan-dependent.
+ *
+ * #53. `v.media_display_allowed` gates the WHERE clause, not the ORDER BY: when false, only the
+ * row `retained_when_suppressed` marks can match at all, so `sort_order`/`is_primary` are never
+ * consulted to choose among candidates — there is at most one (enforced by
+ * `idx_listing_media_one_retained`), and none at all when no row is marked. That "none at all" is
+ * the fail-closed case a media pass that has not run yet must land in, never an arbitrary photo.
  */
 const PRIMARY_MEDIA_JOIN = `
     LEFT JOIN LATERAL (
       SELECT m.source_url AS primary_media_url, m.alt_text AS primary_media_alt_text
       FROM listing_media m
       WHERE m.listing_id = v.id AND m.source_url IS NOT NULL
+        AND (v.media_display_allowed OR m.retained_when_suppressed)
       ORDER BY m.is_primary DESC, m.sort_order, m.id
       LIMIT 1
     ) pm ON true`;
@@ -160,12 +168,17 @@ export async function findListingById(pool: ReadClient, id: string): Promise<Lis
      JOIN properties p ON p.id = v.property_id
      LEFT JOIN units u ON u.id = v.unit_id
      LEFT JOIN LATERAL (
+       -- #53. Same rule as PRIMARY_MEDIA_JOIN, applied to the full gallery: when media is
+       -- suppressed only the marked row can match, so the detail response degrades to at most one
+       -- photo (or none) exactly like the card's primaryMedia, rather than two different answers
+       -- for the same listing.
        SELECT json_agg(
                 json_build_object('url', m.source_url, 'alt_text', m.alt_text)
                 ORDER BY m.is_primary DESC, m.sort_order, m.id
               ) AS media
        FROM listing_media m
        WHERE m.listing_id = v.id AND m.source_url IS NOT NULL
+         AND (v.media_display_allowed OR m.retained_when_suppressed)
      ) media ON true
      LEFT JOIN LATERAL (
        -- Upcoming occurrences only, on the same \`ends_at > now()\` rule the view applies to the card's

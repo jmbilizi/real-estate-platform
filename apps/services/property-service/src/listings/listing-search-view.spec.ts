@@ -33,6 +33,24 @@ interface ViewMigration {
   up: (pgm: CapturingMigrationBuilder) => void;
 }
 
+/**
+ * The newest view migration's `up()` may also call other `pgm` methods (`addColumn`,
+ * `addConstraint`, `createIndex`, ...) to make schema changes alongside replacing the view — a
+ * real `MigrationBuilder` supports all of them, but this spec only cares about the `sql()` calls
+ * that build `CREATE VIEW`. A `Proxy` answering every other method with a no-op means a future
+ * migration is free to call any real `pgm` method without this guard needing to grow a matching
+ * stub for each one.
+ */
+function fakePgm(statements: string[]): CapturingMigrationBuilder {
+  return new Proxy(
+    { sql: (statement: string) => statements.push(statement) },
+    {
+      get: (target, property) =>
+        property in target ? Reflect.get(target, property) : () => undefined,
+    },
+  ) as CapturingMigrationBuilder;
+}
+
 const MIGRATIONS_DIR = join(__dirname, '..', '..', 'migrations');
 
 /** The `CREATE VIEW listing_search_v` statement emitted by the newest migration that creates it. */
@@ -56,7 +74,7 @@ function newestCreateViewSql(): string {
 
   const statements: string[] = [];
   const migration = requireMigration(join(MIGRATIONS_DIR, newest)) as ViewMigration;
-  migration.up({ sql: (statement) => statements.push(statement) });
+  migration.up(fakePgm(statements));
 
   const createView = statements.find((statement) =>
     /CREATE VIEW\s+listing_search_v/i.test(statement),
@@ -264,6 +282,66 @@ describe('the opt-out covers the free-text fields too (#59)', () => {
 
       expect(projection).toBeDefined();
       expect(projection?.expression).not.toContain('address_display_allowed');
+    }
+  });
+});
+
+describe('field-level seller suppression (#53)', () => {
+  it('gates price on price_display_allowed', () => {
+    const price = projections.find((candidate) => candidate.outputName === 'price');
+
+    expect(price?.expression).toMatch(/CASE\s+WHEN[\s\S]*price_display_allowed/i);
+  });
+
+  it('gates days_on_market on days_on_market_display_allowed', () => {
+    const daysOnMarket = projections.find((candidate) => candidate.outputName === 'days_on_market');
+
+    expect(daysOnMarket).toBeDefined();
+    expect(daysOnMarket?.expression).toMatch(/CASE\s+WHEN[\s\S]*days_on_market_display_allowed/i);
+  });
+
+  it('gates original_list_price and price_reduced on the SAME price_history_display_allowed predicate', () => {
+    // The two travel together: an unmasked price_reduced next to a masked original price still
+    // discloses that a price change happened, which is what this opt-out means to withhold.
+    const originalListPrice = projections.find(
+      (candidate) => candidate.outputName === 'original_list_price',
+    );
+    const priceReduced = projections.find((candidate) => candidate.outputName === 'price_reduced');
+
+    expect(originalListPrice?.expression).toMatch(
+      /CASE\s+WHEN[\s\S]*price_history_display_allowed/i,
+    );
+    expect(priceReduced?.expression).toMatch(/CASE\s+WHEN[\s\S]*price_history_display_allowed/i);
+  });
+
+  it('forces price_reduced to false, never to null, when price history is suppressed', () => {
+    // Nulling it would still be a truthful "unknown" answer for most booleans, but the client's
+    // contract declares priceReduced non-nullable — an ELSE-less CASE here would 500 the response
+    // exactly like an ELSE-less title CASE would (see the #59 guard above).
+    const priceReduced = projections.find((candidate) => candidate.outputName === 'price_reduced');
+
+    expect(priceReduced?.expression).toMatch(/ELSE\s+false/i);
+  });
+
+  it('projects media_display_allowed as a plain passthrough, never itself masked', () => {
+    // It is an INPUT to repository.ts's media-selection SQL, not a value the view withholds.
+    const mediaDisplayAllowed = projections.find(
+      (candidate) => candidate.outputName === 'media_display_allowed',
+    );
+
+    expect(mediaDisplayAllowed).toBeDefined();
+    expect(mediaDisplayAllowed?.expression).not.toMatch(/CASE/i);
+  });
+
+  it('does not let any of the new flags leak into a masked expression by name alone', () => {
+    // Anti-regression for the columns.ts FORBIDDEN_COLUMNS list: none of these four flag names may
+    // appear as an OUTPUT NAME (a caller-visible column), only as a predicate INPUT inside a CASE.
+    for (const flag of [
+      'price_display_allowed',
+      'price_history_display_allowed',
+      'days_on_market_display_allowed',
+    ]) {
+      expect(outputNames).not.toContain(flag);
     }
   });
 });

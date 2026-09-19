@@ -151,6 +151,66 @@ describe('suppressed address (address_display_allowed = false)', () => {
   });
 });
 
+describe('field-level seller suppression on search cards (#53)', () => {
+  it('masks price alone: null on the card, absent from BOTH range filters, and never lost from the result set', async () => {
+    const results = await fetchAllResults();
+    const row = results.find((result) => result.id === fixtures.suppressedPriceListingId);
+
+    expect(row).toBeDefined();
+    expect(row?.price).toBeNull();
+
+    const belowMax = await fetchAllResults({ maxPrice: fixtures.suppressedPriceStoredListPrice });
+    expect(belowMax.some((result) => result.id === fixtures.suppressedPriceListingId)).toBe(false);
+
+    const aboveMin = await fetchAllResults({
+      minPrice: fixtures.suppressedPriceStoredListPrice - 1,
+    });
+    expect(aboveMin.some((result) => result.id === fixtures.suppressedPriceListingId)).toBe(false);
+  });
+
+  it('sorts a suppressed-price listing LAST under both price-asc and price-desc, never lost', async () => {
+    const ascending = await fetchAllResults({ sort: 'price-asc' });
+    const descending = await fetchAllResults({ sort: 'price-desc' });
+
+    for (const results of [ascending, descending]) {
+      const index = results.findIndex((result) => result.id === fixtures.suppressedPriceListingId);
+      expect(index).toBeGreaterThanOrEqual(0);
+      const pricedAfterIt = results.slice(index + 1).filter((result) => result.price !== null);
+      expect(pricedAfterIt).toEqual([]);
+    }
+  });
+
+  it('withholds price_reduced when price history is suppressed', async () => {
+    const results = await fetchAllResults();
+    const row = results.find((result) => result.id === fixtures.suppressedPriceHistoryListingId);
+
+    expect(row).toBeDefined();
+    expect(row?.priceReduced).toBe(false);
+  });
+
+  describe('media suppression: exactly one retained photo, never sort_order/is_primary', () => {
+    it('publishes ONLY the marked photo as primaryMedia', async () => {
+      const results = await fetchAllResults();
+      const row = results.find(
+        (result) => result.id === fixtures.suppressedMediaWithMarkerListingId,
+      );
+
+      expect(row).toBeDefined();
+      expect(row?.primaryMedia?.url).toBe(
+        'https://cdn.example/e2e-fixture-suppressed-media-retained.jpg',
+      );
+    });
+
+    it('publishes NO photo when no row is marked, never falling back to is_primary', async () => {
+      const results = await fetchAllResults();
+      const row = results.find((result) => result.id === fixtures.suppressedMediaNoMarkerListingId);
+
+      expect(row).toBeDefined();
+      expect(row?.primaryMedia).toBeNull();
+    });
+  });
+});
+
 describe('suppressed listing (internet_display_allowed = false)', () => {
   it('is absent from results under every filter tried — the seller withheld the WHOLE listing, not just the address', async () => {
     const unfiltered = await fetchAllResults();
