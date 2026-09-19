@@ -147,6 +147,38 @@ pnpm run infra:validate:dev            # Kustomize validation per env
   registers the location. **Project-specific hooks and subagents** (root-only discovery): name them
   with the project prefix, e.g. `cribstop-compliance-reviewer`.
 
+### Model Selection Per Dispatch
+
+Every agent dispatch names a model. Pick the cheapest tier that can do the task. Inheriting the
+orchestrator's model is the default failure mode: silence spends the most expensive option. State
+the model explicitly on every dispatch, never leave it to inherit.
+
+The top tier is for orchestration and genuine architecture or ambiguous diagnosis. Use it least, not
+by default.
+
+Three tiers, named by the work, not the vendor:
+
+- **Cheapest** — mechanical, well-specified work: ticket-text edits, doc wording, renames, inventory
+  and list sweeps, formatting, label and board writes.
+- **Mid — the default for real work** — most implementation and review lanes: a scoped feature, a
+  bug fix, a test suite, a review of a bounded diff.
+- **Top — rare and justified** — cross-cutting architecture, an ambiguous diagnosis nobody has
+  cracked, orchestration itself.
+
+**Escalate on evidence, not anticipation.** Start a lane cheap. Re-dispatch at a higher tier only
+when the cheap lane stalls. A cheap lane that fails costs less than every lane running at the top
+tier.
+
+Parallel fan-out multiplies model cost. Right-sizing matters more, not less, when lanes run wide.
+
+Provider mapping (Claude only — keep vendor names out of the rest of this guide):
+
+| Tier     | Claude model |
+| -------- | ------------ |
+| Cheapest | Haiku        |
+| Mid      | Sonnet       |
+| Top      | Opus         |
+
 ## Repo-Wide Gotchas
 
 - Test a changed project directly by name (`pnpm exec nx test <project>`); `nx affected` needs a
