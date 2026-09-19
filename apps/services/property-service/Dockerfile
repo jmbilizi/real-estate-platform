@@ -2,29 +2,32 @@
 
 # Debian (glibc), NOT alpine — musl fails cluster-DNS lookups (`EAI_AGAIN postgres-svc`); see the
 # root AGENTS.md gotcha. An alpine build crash-looped this service's migrate initContainer 7 times.
+#
+# node:20-slim ships no CA bundle at all (unlike python:*-slim or the mcr.microsoft.com/dotnet
+# images), so ca-certificates is installed here, in the shared base, not only in a build stage.
+# runner is FROM base directly (#195) — installing it only in deps left the runtime image with no
+# trust store, breaking all outbound TLS in every environment, not only local.
 FROM node:20-slim AS base
+
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
 
 # ── Stage 1: Install workspace dependencies ───────────────────────────────────
 FROM base AS deps
 ARG COPY_CERTS=false
 
-# node:20-slim ships no CA bundle at all, so ca-certificates is installed first (apt over HTTP,
-# no TLS needed to bootstrap) before the enterprise root is registered. COPY_CERTS is local-dev only.
+# ca-certificates is already installed (base). This only adds the enterprise root, local-dev only.
 RUN --mount=type=bind,source=.workspace-certs,target=/tmp/certs,readonly \
     if [ "$COPY_CERTS" = "true" ] && [ -f /tmp/certs/workspace-enterprise-roots.pem ]; then \
       echo "Installing enterprise CA certificates for local development..." && \
-      apt-get update && apt-get install -y --no-install-recommends ca-certificates && \
       cp /tmp/certs/workspace-enterprise-roots.pem /usr/local/share/ca-certificates/workspace-roots.crt && \
       update-ca-certificates && \
-      rm -rf /var/lib/apt/lists/* && \
       echo "Enterprise CA certificates installed successfully"; \
     else \
-      echo "Skipping enterprise CA setup (CI/CD mode or certs not available)" && \
-      apt-get update && apt-get install -y --no-install-recommends ca-certificates && \
-      rm -rf /var/lib/apt/lists/*; \
+      echo "Skipping enterprise CA setup (CI/CD mode or certs not available)"; \
     fi
-
-ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
 
 WORKDIR /app
 

@@ -262,10 +262,11 @@ Provider mapping (Claude only — keep vendor names out of the rest of this guid
   exit 0 (CI runs it in six places). Reconcile a failure with an install, never by hand-editing.
 - **No Alpine base images for anything doing in-cluster DNS.** musl fails Kubernetes service
   resolution with `EAI_AGAIN`; use a Debian `-slim` base. No Dockerfile in the repo is on Alpine any
-  more (#74). **A `-slim` base ships no CA bundle at all**, where the Alpine Node image shipped 145
-  certs, so any swap must `apt-get install ca-certificates` or it silently strips TLS trust; install
-  it in the shared `base` stage so the runtime image keeps it too, not just the stage that runs
-  `pnpm install`.
+  more (#74). **`node:*-slim` ships no CA bundle at all** (`python:*-slim` and the
+  `mcr.microsoft.com/dotnet` images do, by default), where the Alpine Node image shipped 145 certs,
+  so any swap to `node:*-slim` must `apt-get install ca-certificates` or it silently strips TLS
+  trust; install it in the shared `base` stage so the runtime image keeps it too, not just the stage
+  that runs `pnpm install` (#195).
 - **Any Dockerfile that runs Nx must set `ENV NX_DAEMON=false`.** Nx turns its daemon off in CI and
   in Docker, but does not detect podman/buildah or BuildKit (`isDocker()` checks only `/.dockerenv`
   and cgroup `"docker"`; podman writes `/run/.containerenv`, and no build engine propagates `CI`).
