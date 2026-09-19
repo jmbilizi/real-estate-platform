@@ -82,6 +82,18 @@ jobs:
           ACCOUNT_SERVICE_DB_USER_PASSWORD: ${{ secrets.ACCOUNT_SERVICE_DB_USER_PASSWORD }}
           MESSAGING_SERVICE_DB_USER_PASSWORD: ${{ secrets.MESSAGING_SERVICE_DB_USER_PASSWORD }}
           PROPERTY_SERVICE_DB_USER_PASSWORD: ${{ secrets.PROPERTY_SERVICE_DB_USER_PASSWORD }}
+          # Bright MLS ingestion (#91). Environment-scoped by `environment: ${{ matrix.environment }}`
+          # above, which is what keeps dev's TEST/STAGING credential and prod's LICENSED PRODUCTION
+          # credential from being the same value (#117). Unset until #117 provisions them, and
+          # permanently unset for `test`; the action keeps the committed placeholder in that case.
+          BRIGHT_MLS_CLIENT_ID: ${{ secrets.BRIGHT_MLS_CLIENT_ID }}
+          BRIGHT_MLS_CLIENT_SECRET: ${{ secrets.BRIGHT_MLS_CLIENT_SECRET }}
+          # Postmark transactional email (#175). One variable name for every environment.
+          # `environment: ${{ matrix.environment }}` above scopes the lookup to that environment's
+          # secrets, which is the control that keeps prod's live sender out of a dev or test run:
+          # dev and test hold a Postmark sandbox token, prod holds the only live one (#133). No
+          # repository secret of this name exists, so GitHub has no fallback to resolve.
+          POSTMARK_SERVER_TOKEN: ${{ secrets.POSTMARK_SERVER_TOKEN }}
           REDIS_ADMIN_PASSWORD: ${{ secrets.REDIS_ADMIN_PASSWORD }}
           REDIS_PUBSUB_PASSWORD: ${{ secrets.REDIS_PUBSUB_PASSWORD }}
           REDIS_CACHE_PASSWORD: ${{ secrets.REDIS_CACHE_PASSWORD }}

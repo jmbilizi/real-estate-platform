@@ -481,18 +481,30 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
  * different problems and read differently to the user, so the caller passes the message it got
  * from `ListingsApiError` rather than a generic string being invented here.
  */
+/**
+ * `heading` and `actionLabel` are overridable because not every failure this renders is a load that
+ * might succeed on a second attempt. A request past the API's result window (#65) fails
+ * deterministically — "Try again" there is a button that is guaranteed not to work, and offering it
+ * is worse than offering nothing, because the way out is a different request rather than the same
+ * one. The defaults are the retryable case, so every existing call site is unchanged.
+ */
 export function ListingErrorState({
   message,
   onRetry,
+  heading = 'We couldn’t load this',
+  actionLabel = 'Try again',
   className = '',
 }: {
   message: string;
+  /** The action the button runs. Named for the common case; `actionLabel` says what it really is. */
   onRetry?: () => void;
+  heading?: string;
+  actionLabel?: string;
   className?: string;
 }) {
   return (
     <div className={`rounded-md bg-surface-alt px-4 py-8 text-center ${className}`} role="alert">
-      <p className="text-sm font-semibold text-ink">We couldn’t load this</p>
+      <p className="text-sm font-semibold text-ink">{heading}</p>
       <p className="mx-auto mt-1 max-w-md text-sm text-ink-muted">{message}</p>
       {onRetry && (
         <button
@@ -500,7 +512,7 @@ export function ListingErrorState({
           onClick={onRetry}
           className="mt-4 rounded-sm bg-ink px-4 py-2 text-sm font-semibold text-white transition hover:bg-ink-body focus:outline-none focus-visible:ring-2 focus-visible:ring-ink"
         >
-          Try again
+          {actionLabel}
         </button>
       )}
     </div>

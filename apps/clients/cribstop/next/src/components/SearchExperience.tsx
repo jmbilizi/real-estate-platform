@@ -11,9 +11,11 @@ import SortDropdown from '@/components/SortDropdown';
 import FilterModal, { countActiveFilters } from '@/components/FilterModal';
 import {
   applyLandInterlock,
+  filtersToSearchParams,
   parseFiltersFromSearchParams,
   parsePageFromSearchParams,
 } from '@/lib/listing-filters';
+import { maxReachablePage } from '@cribstop/property-contracts';
 import { useListingSearch } from '@/lib/useListingSearch';
 import { ListingErrorState, ListingGridSkeleton } from '@/components/listing/ListingStates';
 
@@ -338,7 +340,7 @@ export default function SearchExperience({
     setPage(parsePageFromSearchParams(params));
   }, [initialQuery, deferred, setLocation, setSearchSuggestion]);
 
-  const { results, total, pageCount, status, error, retry } = useListingSearch(
+  const { results, total, pageCount, pageSize, status, error, errorCode, retry } = useListingSearch(
     filters,
     page,
     !deferred,
@@ -346,6 +348,35 @@ export default function SearchExperience({
 
   const isLoading = status === 'loading';
   const isError = status === 'error';
+
+  /**
+   * How many pages the pager may offer, as opposed to how many pages of results exist (#65).
+   *
+   * The API bounds paging depth: `(page - 1) * pageSize` may not exceed `MAX_RESULT_OFFSET`, and a
+   * request past that is a 400. `pageCount` is derived from the exact `total` and is deliberately
+   * NOT clamped to the window — it is the honest size of the result set, and the headline count
+   * above still renders from `total`. But a page button the API will refuse is a button that
+   * breaks when clicked, so the pager is bounded here and only here.
+   *
+   * The bound is computed from the page size the API actually APPLIED (echoed in the envelope),
+   * never from an assumed one: because the limit is on the offset, the deepest reachable page
+   * changes with page size, so a clamp keyed on a separately-declared constant silently stops
+   * matching the moment the request's page size is tuned.
+   *
+   * This also stops `Array.from({ length: pageCount })` below from allocating one element per page
+   * of the full dataset — fine at a few hundred seeded rows, a five-figure array per render once a
+   * real IDX feed is behind the endpoint.
+   */
+  const reachablePageCount = Math.min(pageCount, maxReachablePage(pageSize));
+
+  /**
+   * A search that failed because it asked to page past the window is not a failed load (#65). The
+   * request is well-formed and the service is healthy; it will answer the same way forever, so the
+   * generic error state's "Try again" is a button that cannot work — and the pager, which lives in
+   * the results branch, is not rendered to offer a way back. Reachable by hand-editing `?page=`, by
+   * an old bookmark, or by a link minted before this bound existed.
+   */
+  const isPastWindow = errorCode === 'result_window_exceeded';
 
   /** Keeps the URL the shareable source of truth for the current result set. */
   const pushPage = (next: number) => {
@@ -358,22 +389,59 @@ export default function SearchExperience({
     window.history.pushState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
   };
 
+  /**
+   * Commits a filter set: state, URL and paging together.
+   *
+   * **The URL is written, not just the state.** Filters used to live only in this component, so a
+   * narrowed search could not be refreshed, bookmarked or sent to anyone — reloading the page
+   * silently returned a different, wider result set than the one on screen. `?q=` was shareable and
+   * nothing else was.
+   *
+   * **Paging resets to page 1.** A filter change is a different result set, and the user's position
+   * in the old one is not a position in the new one: applying a filter from page 40 of a broad
+   * search lands past the end of a narrow one. That reads as an empty page at best, and once the
+   * API's result window is in play (#65, `result_window_exceeded`) as an outright error on a
+   * request the user never made.
+   *
+   * The interlock runs here rather than at the call sites so every entry path — the modal, the
+   * empty state's clear, anything added later — goes through it once.
+   */
+  const applyFilters = (next: SearchFilters) => {
+    const committed = applyLandInterlock(next);
+    setFilters(committed);
+    setPage(1);
+    if (!ownsUrl) return; // not our URL to write — see `ownsUrl`
+    const params = filtersToSearchParams(committed, new URLSearchParams(window.location.search));
+    const qs = params.toString();
+    window.history.pushState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
+  };
+
+  /**
+   * What "Clear all filters" clears: the filters, and only the filters.
+   *
+   * The place searched for and the requested order are the search bar's and the sort control's,
+   * not the filter panel's — dropping `q` would turn "show me more homes in Bethesda" into a
+   * nationwide search, which is not what the button offers. This used to call
+   * `window.location.reload()`, which reloaded the same filtered URL and therefore cleared
+   * nothing at all.
+   */
+  const clearFilters = () => {
+    const { query, zip, street, neighborhood, sort } = filters;
+    applyFilters({ query, zip, street, neighborhood, sort });
+  };
+
   return (
     <div className="flex flex-col">
-      {/* Filter modal */}
-      <FilterModal
-        isOpen={filterOpen}
-        onClose={() => setFilterOpen(false)}
-        filters={filters}
-        onChange={(f) => {
-          // A parcel has no bedrooms, bathrooms or living area, and dwelling predicates exclude
-          // parcels server-side — so a stale `beds` alongside the Lot/Land chip would return an
-          // unexplained zero. The values are cleared here, not dropped from the request.
-          setFilters(applyLandInterlock(f));
-          pushPage(1);
-        }}
-        resultCount={total}
-      />
+      {/* Filter modal — mounted only while open, so its draft is seeded from the applied filters
+           on every open rather than once, at page mount. See the note on `FilterModal`. */}
+      {filterOpen && (
+        <FilterModal
+          onClose={() => setFilterOpen(false)}
+          filters={filters}
+          onChange={applyFilters}
+          resultCount={total}
+        />
+      )}
 
       {/* Body: Airbnb-style split layout.
            Desktop  — map fills right half edge-to-edge, full viewport height.
@@ -499,10 +567,19 @@ export default function SearchExperience({
                */
               <ListingErrorState
                 message={error ?? 'We could not load listings just now. Please try again.'}
-                onRetry={retry}
+                heading={isPastWindow ? 'That is past the last page of results' : undefined}
+                actionLabel={isPastWindow ? 'Back to the first page' : undefined}
+                onRetry={isPastWindow ? () => pushPage(1) : retry}
               />
             ) : results.length === 0 ? (
-              <EmptyState onClear={() => window.location.reload()} />
+              /*
+               * Three outcomes, three visibly different surfaces — skeleton cards while loading,
+               * a red-flagged alert when the API failed, and this. A search that legitimately
+               * matches nothing must not read as a broken site, and it must not be mistaken for
+               * either of the other two: it says which filters are narrowing, and offers the one
+               * action that widens them.
+               */
+              <EmptyState activeFilterCount={countActiveFilters(filters)} onClear={clearFilters} />
             ) : (
               <>
                 <div className="grid gap-8 gap-y-12 grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3">
@@ -516,7 +593,7 @@ export default function SearchExperience({
                     </div>
                   ))}
                 </div>
-                {pageCount > 1 && (
+                {reachablePageCount > 1 && (
                   <div className="flex justify-center mt-10">
                     <nav className="inline-flex items-center gap-1 rounded-full bg-white/90 px-4 py-2 shadow-lg border border-surface-border">
                       <button
@@ -527,8 +604,8 @@ export default function SearchExperience({
                       >
                         &lt;
                       </button>
-                      {Array.from({ length: pageCount }, (_, i) => i + 1).map((p) =>
-                        p === 1 || p === pageCount || Math.abs(p - page) <= 2 ? (
+                      {Array.from({ length: reachablePageCount }, (_, i) => i + 1).map((p) =>
+                        p === 1 || p === reachablePageCount || Math.abs(p - page) <= 2 ? (
                           <button
                             key={p}
                             className={`px-3 py-1.5 rounded-full font-semibold transition ${
@@ -541,7 +618,7 @@ export default function SearchExperience({
                           >
                             {p}
                           </button>
-                        ) : (p === page - 3 || p === page + 3) && pageCount > 7 ? (
+                        ) : (p === page - 3 || p === page + 3) && reachablePageCount > 7 ? (
                           <span key={p} className="px-2 text-ink-muted">
                             …
                           </span>
@@ -549,8 +626,8 @@ export default function SearchExperience({
                       )}
                       <button
                         className="px-3 py-1.5 rounded-full font-semibold text-ink-muted hover:text-ink disabled:opacity-40"
-                        onClick={() => pushPage(Math.min(pageCount, page + 1))}
-                        disabled={page === pageCount}
+                        onClick={() => pushPage(Math.min(reachablePageCount, page + 1))}
+                        disabled={page === reachablePageCount}
                         aria-label="Next page"
                       >
                         &gt;
@@ -567,9 +644,20 @@ export default function SearchExperience({
   );
 }
 
-function EmptyState({ onClear }: { onClear: () => void }) {
+function EmptyState({
+  activeFilterCount,
+  onClear,
+}: {
+  activeFilterCount: number;
+  onClear: () => void;
+}) {
+  const filtered = activeFilterCount > 0;
   return (
-    <div className="rounded-3xl border border-dashed border-surface-border bg-surface-alt/60 py-20 text-center">
+    <div
+      role="status"
+      data-testid="search-empty-state"
+      className="rounded-3xl border border-dashed border-surface-border bg-surface-alt/60 py-20 text-center"
+    >
       <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-sm">
         <svg
           className="h-7 w-7 text-ink-muted"
@@ -585,13 +673,19 @@ function EmptyState({ onClear }: { onClear: () => void }) {
           />
         </svg>
       </div>
-      <p className="mt-5 font-display text-xl font-bold">No homes match your filters</p>
-      <p className="mt-1 text-sm text-ink-muted">
-        Try widening your price range or removing a filter.
+      <p className="mt-5 font-display text-xl font-bold">
+        {filtered ? 'No homes match your filters' : 'No homes to show here'}
       </p>
-      <button onClick={onClear} className="btn-primary mt-5 text-sm">
-        Clear all filters
-      </button>
+      <p className="mt-1 text-sm text-ink-muted">
+        {filtered
+          ? `Your search ran, and ${activeFilterCount === 1 ? 'the filter you applied matches' : `the ${activeFilterCount} filters you applied match`} no listings. Try widening your price range or removing a filter.`
+          : 'Your search ran and found no listings in this area. Try searching a nearby city or ZIP code.'}
+      </p>
+      {filtered && (
+        <button onClick={onClear} className="btn-primary mt-5 text-sm">
+          Clear all filters
+        </button>
+      )}
     </div>
   );
 }

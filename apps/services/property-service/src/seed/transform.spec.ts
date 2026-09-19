@@ -384,6 +384,8 @@ describe('mapToMediaRows', () => {
         alt_text: null,
         sort_order: 0,
         is_primary: true,
+        // #53. Sample listings are never field-suppressed, so there is never a marker to set.
+        retained_when_suppressed: false,
         is_sample: true,
       },
       {
@@ -393,6 +395,7 @@ describe('mapToMediaRows', () => {
         alt_text: null,
         sort_order: 1,
         is_primary: false,
+        retained_when_suppressed: false,
         is_sample: true,
       },
     ]);

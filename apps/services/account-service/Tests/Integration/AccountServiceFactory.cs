@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace AccountService.Tests.Integration
 {
@@ -20,13 +21,23 @@ namespace AccountService.Tests.Integration
     /// </summary>
     public class AccountServiceFactory : WebApplicationFactory<TestEntryPoint>
     {
+        /// <summary>The web origin every test host is configured with.</summary>
+        internal const string WebOrigin = "https://web.test.example";
+
+        /// <summary>The confirmation path every test host is configured with.</summary>
+        internal const string ConfirmationPath = "/confirm-email";
+
         private readonly string dbName = $"AccountServiceTest-{Guid.NewGuid()}";
+
+        /// <summary>Gets every log entry the host wrote.</summary>
+        internal CapturingLoggerProvider Logs { get; } = new();
 
         /// <inheritdoc/>
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             ArgumentNullException.ThrowIfNull(builder);
             builder.UseEnvironment("Testing");
+            builder.ConfigureLogging(logging => logging.AddProvider(this.Logs));
 
             builder.ConfigureServices(services =>
             {
@@ -42,22 +53,22 @@ namespace AccountService.Tests.Integration
                 services.AddDbContext<AccountDbContext>(options =>
                     options.UseInMemoryDatabase(this.dbName));
 
-                // Lift the account-recovery counters out of the way for every test that is not
-                // about them. Requests from TestServer arrive with no remote address at all, so
-                // every caller in a shared host collapses into one "unknown" bucket — and most of
-                // these tests reach their subject by registering and logging in first, which means
-                // they would otherwise fail on a rate limit belonging to a feature they do not
-                // touch. AccountRecoveryFactory configures whatever limits its own tests need on top
-                // of this; the response-timing floor is deliberately left alone, because the parity
-                // tests assert it.
+                // TestServer requests carry no remote address, so every caller in a shared host
+                // shares one "unknown" bucket. Lift the limits and the timing floor out of the way.
+                // AccountRecoveryFactory sets back whatever its own tests need.
                 services.Configure<AccountRecoveryOptions>(options =>
                 {
+                    options.WebBaseUrl = new Uri(WebOrigin);
+                    options.ConfirmationPath = ConfirmationPath;
+                    options.ResendMinimumInterval = TimeSpan.Zero;
+                    options.ResendsPerEmailPerHour = int.MaxValue;
+                    options.ResendsPerEmailPerDay = int.MaxValue;
+                    options.ResendsPerAddress = int.MaxValue;
                     options.RequestsPerEmail = int.MaxValue;
                     options.RequestsPerAddress = int.MaxValue;
-                    options.ResendsPerEmail = int.MaxValue;
-                    options.ResendsPerAddress = int.MaxValue;
                     options.RedemptionsPerAddress = int.MaxValue;
                     options.RegistrationsPerAddress = int.MaxValue;
+                    options.MinimumResponseDuration = TimeSpan.Zero;
                 });
             });
         }

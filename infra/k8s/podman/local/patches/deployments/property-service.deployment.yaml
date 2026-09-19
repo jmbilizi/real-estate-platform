@@ -39,6 +39,13 @@ spec:
             limits:
               memory: "256Mi"
               cpu: "300m"
+      # Mounts the enterprise CA ConfigMap (#180) so the container's own filesystem carries the
+      # trust the Kind node's OS trust store cannot pass through. Empty on a workstation with no
+      # corporate TLS-intercepting proxy — see workspace-ca-bundle.configmap.yaml.
+      volumes:
+        - name: workspace-ca-bundle
+          configMap:
+            name: workspace-ca-bundle
       containers:
         - name: api
           image: property-service
@@ -50,6 +57,12 @@ spec:
             limits:
               memory: "256Mi"
               cpu: "200m"
+          volumeMounts:
+            - name: workspace-ca-bundle
+              mountPath: /etc/workspace-ca
+              readOnly: true
           env:
             - name: NODE_ENV
               value: "development"
+            - name: NODE_EXTRA_CA_CERTS
+              value: "/etc/workspace-ca/workspace-enterprise-roots.pem"

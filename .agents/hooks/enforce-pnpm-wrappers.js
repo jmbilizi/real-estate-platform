@@ -4,7 +4,7 @@
  * commands; always use pnpm run / pnpm exec nx wrappers.
  * See AGENTS.md "Always Use Project Scripts".
  *
- * Exit 0 = allow, exit 2 = block (stderr is shown to Claude).
+ * Exit 0 = allow, exit 2 = block (stderr is shown to the agent).
  *
  * Known limitation (accepted): commands wrapped in quotes (e.g.
  * `bash -c "dotnet build"`) bypass matching — quoted text is stripped to

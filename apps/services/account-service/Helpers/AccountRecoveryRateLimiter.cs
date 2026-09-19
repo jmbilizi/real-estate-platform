@@ -9,37 +9,27 @@ using Microsoft.Extensions.Options;
 namespace AccountService.Helpers;
 
 /// <summary>
-/// Fixed-window request counters for the unauthenticated account-recovery endpoints, keyed
-/// independently by email address and by client address.
+/// Fixed-window request counters for the unauthenticated Identity endpoints — registration, email
+/// confirmation resend, and password reset — keyed by email address and by client address.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The endpoints these guard are ASP.NET Core Identity's own, and Identity ships them with
-/// <em>no</em> rate limiting: there is no <c>RequireRateLimiting</c>, no throttling metadata and no
-/// counter anywhere in <c>MapIdentityApi</c>'s group. The only brute-force control in the whole
-/// group is Identity's lockout, and that applies to <c>/login</c> alone. So registration, password
-/// reset requests, reset redemptions and confirmation resends are all unmetered out of the box —
-/// which for the three that send mail means an unmetered mail cannon, and for redemption means
-/// unmetered token guessing.
+/// Identity ships these endpoints with no rate limit. The gateway caps them per client address at
+/// the edge, but it cannot count per email address (the address is in the body) and it is not the
+/// only route to the service inside the cluster.
 /// </para>
 /// <para>
-/// The gateway already caps these routes per client address, which is the right place for the
-/// coarse edge limit. This is the limit the service owes on its own account: the gateway is not the
-/// only way to reach <c>account-service-svc</c> from inside the cluster, and the gateway cannot
-/// limit per email address because the address is in the request body.
+/// Callers consult the limiter before any account lookup, so a refusal depends only on request
+/// counts and never on whether the address has an account.
 /// </para>
 /// <para>
-/// Counting happens before any account lookup, so the decision depends only on how many requests
-/// have been made — never on whether the address names an account. A limiter consulted after the
-/// lookup would reintroduce, in its own timing and response, exactly the oracle these endpoints
-/// must not be.
+/// The counters live in a cache this class owns, capped by
+/// <see cref="AccountRecoveryOptions.MaxTrackedKeys"/>. Half of each key is attacker-chosen, so the
+/// cache must not be the shared application cache. At the cap the limiter compacts and retries
+/// before it refuses: see <see cref="TryConsume"/>.
 /// </para>
 /// <para>
-/// The counters live in a cache this limiter owns, capped by
-/// <see cref="AccountRecoveryOptions.MaxTrackedKeys"/>. They must not share the application cache:
-/// the email half of the key is attacker-chosen and an entry is created before the request is
-/// refused, so an unbounded cache would grow by one entry per flooded request and evict unrelated
-/// data. At the cap this limiter <b>fails closed</b> — a request whose counter cannot be stored is
+/// At the cap this limiter <b>fails closed</b> — a request whose counter cannot be stored is
 /// refused rather than waved through. See <see cref="TryConsume"/> for why that check exists and
 /// what it costs; it is not optional, and removing it turns the limiter off under exactly the load
 /// it exists to survive.
@@ -63,22 +53,21 @@ internal sealed class AccountRecoveryRateLimiter(
     IOptions<AccountRecoveryOptions> options,
     TimeProvider timeProvider) : IDisposable
 {
-    /// <summary>
-    /// Guards read-modify-write of a counter.
-    /// </summary>
-    /// <remarks>
-    /// <see cref="CacheExtensions.GetOrCreate{TItem}(IMemoryCache, object, Func{ICacheEntry, TItem})"/>
-    /// is get-then-create with nothing in between, so two requests arriving together on a cold or
-    /// just-expired key both miss, both create, and the second commit discards the first — along
-    /// with its count. One lock over the whole operation is the simple correct answer here: the
-    /// critical section is a dictionary lookup and an integer increment, and the endpoints it guards
-    /// are deliberately slow.
-    /// </remarks>
+    /// <summary>The share of the counter cache dropped when it is full.</summary>
+    private const double CompactionShare = 0.1;
+
+    /// <summary>The smallest counter cache, so <see cref="CompactionShare"/> evicts at least one.</summary>
+    private const int MinimumTrackedKeys = 16;
+
+    // GetOrCreate is get-then-create with nothing in between. One lock over lookup and increment
+    // keeps two cold-key requests from discarding each other's count.
     private readonly Lock gate = new();
 
     private readonly MemoryCache cache = new(new MemoryCacheOptions
     {
-        SizeLimit = Math.Max(1, options.Value.MaxTrackedKeys),
+        // Compaction drops a share of the current size, so it can never evict from a cache of one
+        // or two. The floor keeps a share of at least one entry.
+        SizeLimit = Math.Max(MinimumTrackedKeys, options.Value.MaxTrackedKeys),
     });
 
     /// <inheritdoc/>
@@ -88,98 +77,119 @@ internal sealed class AccountRecoveryRateLimiter(
     /// Counts one password-reset <em>request</em> against both the email and the client-address
     /// limits.
     /// </summary>
+    /// <remarks>
+    /// Both counters are charged independently, even when one already refuses: a caller who has
+    /// exhausted the email budget must not get free, unmetered attempts against the address budget.
+    /// </remarks>
     /// <param name="email">The submitted email address; compared case-insensitively.</param>
-    /// <param name="clientAddress">The client address, or null when it cannot be determined.</param>
-    /// <param name="retryAfter">When the call is refused, how long until the window rolls over.</param>
+    /// <param name="clientAddress">The client address, or null when unknown.</param>
+    /// <param name="retryAfter">When refused, how long until the refusing counter rolls over.</param>
     /// <returns><see langword="true"/> when the request may proceed.</returns>
     internal bool TryRequest(string email, string? clientAddress, out TimeSpan retryAfter)
     {
         var settings = options.Value;
+        var key = email.ToUpperInvariant();
 
         return this.TryConsumePair(
-            "pwreset:request",
-            email,
-            clientAddress,
+            $"pwreset:request:email:{key}",
+            $"pwreset:request:addr:{clientAddress ?? "unknown"}",
             settings.RequestsPerEmail,
             settings.RequestsPerAddress,
+            settings.RequestWindow,
             out retryAfter);
     }
 
     /// <summary>
-    /// Counts one confirmation-email <em>resend</em> against both the email and the client-address
-    /// limits.
+    /// Counts one reset <em>redemption</em> against the client-address limit, bounding token
+    /// guessing.
+    /// </summary>
+    /// <param name="clientAddress">The client address, or null when unknown.</param>
+    /// <param name="retryAfter">When refused, how long until the window rolls over.</param>
+    /// <returns><see langword="true"/> when the redemption may proceed.</returns>
+    internal bool TryRedemption(string? clientAddress, out TimeSpan retryAfter) =>
+        this.TryConsumeAll(
+            out retryAfter,
+            new Counter($"pwreset:redeem:addr:{clientAddress ?? "unknown"}", options.Value.RedemptionsPerAddress, options.Value.RequestWindow));
+
+    /// <summary>
+    /// Counts one confirmation resend against the interval, hourly and daily limits for the address
+    /// and against the client-address limit.
     /// </summary>
     /// <param name="email">The submitted email address; compared case-insensitively.</param>
-    /// <param name="clientAddress">The client address, or null when it cannot be determined.</param>
-    /// <param name="retryAfter">When the call is refused, how long until the window rolls over.</param>
+    /// <param name="clientAddress">The client address, or null when unknown.</param>
+    /// <param name="retryAfter">When refused, how long until every refusing window rolls over.</param>
     /// <returns><see langword="true"/> when the resend may proceed.</returns>
     internal bool TryResend(string email, string? clientAddress, out TimeSpan retryAfter)
     {
         var settings = options.Value;
+        var key = email.ToUpperInvariant();
 
-        return this.TryConsumePair(
-            "confirm:resend",
-            email,
-            clientAddress,
-            settings.ResendsPerEmail,
-            settings.ResendsPerAddress,
-            out retryAfter);
+        return this.TryConsumeAll(
+            out retryAfter,
+            new Counter($"confirm:resend:interval:{key}", 1, settings.ResendMinimumInterval),
+            new Counter($"confirm:resend:hour:{key}", settings.ResendsPerEmailPerHour, TimeSpan.FromHours(1)),
+            new Counter($"confirm:resend:day:{key}", settings.ResendsPerEmailPerDay, TimeSpan.FromHours(24)),
+            new Counter($"confirm:resend:addr:{clientAddress ?? "unknown"}", settings.ResendsPerAddress, settings.RequestWindow));
+    }
+
+    /// <summary>Counts one registration attempt against the client-address limit.</summary>
+    /// <param name="clientAddress">The client address, or null when unknown.</param>
+    /// <param name="retryAfter">When refused, how long until the window rolls over.</param>
+    /// <returns><see langword="true"/> when the registration may proceed.</returns>
+    internal bool TryRegistration(string? clientAddress, out TimeSpan retryAfter) =>
+        this.TryConsumeAll(
+            out retryAfter,
+            new Counter($"register:addr:{clientAddress ?? "unknown"}", options.Value.RegistrationsPerAddress, options.Value.RequestWindow));
+
+    /// <summary>
+    /// Consumes one unit from each counter in turn and stops at the first refusal.
+    /// </summary>
+    /// <remarks>
+    /// The refusing counter is still consumed, so a caller cannot retry past a limit for free. The
+    /// counters after it are not. A refused request is never served, so it must not spend the long
+    /// windows: the shortest window comes first, which caps how fast anyone can burn an address's
+    /// longer-window budget. Charging every counter let 10 requests in one second lock an address out
+    /// for a day.
+    /// </remarks>
+    private bool TryConsumeAll(out TimeSpan retryAfter, params Counter[] counters)
+    {
+        retryAfter = TimeSpan.Zero;
+
+        foreach (var counter in counters)
+        {
+            if (counter.Window <= TimeSpan.Zero)
+            {
+                continue;
+            }
+
+            if (!this.TryConsume(counter.Key, counter.Limit, counter.Window, out retryAfter))
+            {
+                return false;
+            }
+        }
+
+        retryAfter = TimeSpan.Zero;
+        return true;
     }
 
     /// <summary>
-    /// Counts one reset <em>redemption</em> against the client-address limit, bounding token guessing.
-    /// </summary>
-    /// <param name="clientAddress">The client address, or null when it cannot be determined.</param>
-    /// <param name="retryAfter">When the call is refused, how long until the window rolls over.</param>
-    /// <returns><see langword="true"/> when the redemption may proceed.</returns>
-    internal bool TryRedemption(string? clientAddress, out TimeSpan retryAfter) =>
-        this.TryConsume(
-            $"pwreset:redeem:addr:{clientAddress ?? "unknown"}",
-            options.Value.RedemptionsPerAddress,
-            options.Value.RequestWindow,
-            out retryAfter);
-
-    /// <summary>
-    /// Counts one <em>registration</em> attempt against the client-address limit.
-    /// </summary>
-    /// <param name="clientAddress">The client address, or null when it cannot be determined.</param>
-    /// <param name="retryAfter">When the call is refused, how long until the window rolls over.</param>
-    /// <returns><see langword="true"/> when the registration may proceed.</returns>
-    internal bool TryRegistration(string? clientAddress, out TimeSpan retryAfter) =>
-        this.TryConsume(
-            $"register:addr:{clientAddress ?? "unknown"}",
-            options.Value.RegistrationsPerAddress,
-            options.Value.RequestWindow,
-            out retryAfter);
-
-    /// <summary>
-    /// Consumes one unit from an email-keyed counter and one from an address-keyed counter.
+    /// Consumes one unit from an email-keyed counter and one from an address-keyed counter,
+    /// independently.
     /// </summary>
     /// <remarks>
-    /// Both counters are always consumed, even if the first one refuses: a caller that has
-    /// exhausted one limit should not get free attempts against the other.
+    /// Both counters are always consumed, even when the first one refuses: a caller who has
+    /// exhausted one limit must not get free attempts against the other.
     /// </remarks>
     private bool TryConsumePair(
-        string prefix,
-        string email,
-        string? clientAddress,
+        string emailKey,
+        string addressKey,
         int emailLimit,
         int addressLimit,
+        TimeSpan window,
         out TimeSpan retryAfter)
     {
-        var window = options.Value.RequestWindow;
-
-        var emailAllowed = this.TryConsume(
-            $"{prefix}:email:{email.ToUpperInvariant()}",
-            emailLimit,
-            window,
-            out var emailRetry);
-
-        var addressAllowed = this.TryConsume(
-            $"{prefix}:addr:{clientAddress ?? "unknown"}",
-            addressLimit,
-            window,
-            out var addressRetry);
+        var emailAllowed = this.TryConsume(emailKey, emailLimit, window, out var emailRetry);
+        var addressAllowed = this.TryConsume(addressKey, addressLimit, window, out var addressRetry);
 
         retryAfter = emailAllowed ? addressRetry : emailRetry;
         return emailAllowed && addressAllowed;
@@ -221,12 +231,21 @@ internal sealed class AccountRecoveryRateLimiter(
 
         lock (this.gate)
         {
-            var counter = this.cache.GetOrCreate(key, entry =>
+            var counter = this.GetOrCreate(key, window, now);
+
+            if (!this.IsTracked(key, counter))
             {
-                entry.AbsoluteExpirationRelativeToNow = window;
-                entry.Size = 1;
-                return new Window(now + window);
-            })!;
+                // Oldest first. The evicted counters lose their history, which is the same
+                // exposure as a process restart and is bounded by the compaction share.
+                this.cache.Compact(CompactionShare);
+                counter = this.GetOrCreate(key, window, now);
+
+                if (!this.IsTracked(key, counter))
+                {
+                    retryAfter = window;
+                    return false;
+                }
+            }
 
             counter.Count++;
             retryAfter = counter.ExpiresAt > now ? counter.ExpiresAt - now : TimeSpan.Zero;
@@ -243,6 +262,19 @@ internal sealed class AccountRecoveryRateLimiter(
             return counter.Count <= limit;
         }
     }
+
+    private Window GetOrCreate(string key, TimeSpan window, DateTimeOffset now) =>
+        this.cache.GetOrCreate(key, entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = window;
+            entry.Size = 1;
+            return new Window(now + window);
+        })!;
+
+    private bool IsTracked(string key, Window counter) =>
+        this.cache.TryGetValue(key, out Window? tracked) && ReferenceEquals(tracked, counter);
+
+    private readonly record struct Counter(string Key, int Limit, TimeSpan Window);
 
     private sealed class Window(DateTimeOffset expiresAt)
     {

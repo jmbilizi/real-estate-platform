@@ -344,6 +344,24 @@ namespace AccountService.Migrations
                     b.ToTable("UserApps", (string)null);
                 });
 
+            modelBuilder.Entity("AccountService.Models.WaitlistInterest", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("InterestKind")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("RegisteredAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("NOW()");
+
+                    b.HasKey("UserId", "InterestKind");
+
+                    b.ToTable("WaitlistInterests", (string)null);
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
                 {
                     b.Property<string>("Id")
@@ -543,6 +561,17 @@ namespace AccountService.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("AccountService.Models.WaitlistInterest", b =>
+                {
+                    b.HasOne("AccountService.Models.ApplicationUser", "User")
+                        .WithMany("WaitlistInterests")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole", null)
@@ -599,6 +628,8 @@ namespace AccountService.Migrations
                     b.Navigation("ApiKeys");
 
                     b.Navigation("UserApps");
+
+                    b.Navigation("WaitlistInterests");
                 });
 #pragma warning restore 612, 618
         }

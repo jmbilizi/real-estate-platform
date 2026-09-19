@@ -12,12 +12,24 @@ pointer stub. Canonical skills, subagents, and hooks live in `.agents/` — see
 
 ## Project Guides (nested AGENTS.md, auto-loaded per directory)
 
-- `apps/clients/cribstop/AGENTS.md` — Next.js consumer web app
-- `apps/api-gateway/AGENTS.md` — Ocelot (.NET) API gateway
-- `apps/services/account-service/AGENTS.md` — .NET identity/auth service
-- `apps/services/property-service/AGENTS.md` — Node property/listings domain service
-- `apps/services/multi-model-inference/AGENTS.md` — Python inference service
-- `libs/property-contracts/AGENTS.md` — shared listings wire-contract library
+Every Nx project under `apps/` or `libs/` owns an `AGENTS.md` in its directory or a parent.
+`pnpm run agents:sync` generates the list below from the files on disk and the `CLAUDE.md` import
+stub beside each guide. Both `agents:sync` and `agents:check` (pre-commit) fail on a project with no
+guide. Do not edit the list by hand. Build-only projects elsewhere (such as `infra/docker/`) need no
+guide.
+
+<!-- project-guides:start -->
+
+- `apps/api-gateway/AGENTS.md` — API Gateway (api-gateway)
+- `apps/clients/cribstop/AGENTS.md` — Cribstop Web App (cribstop-next)
+- `apps/services/account-service/AGENTS.md` — Account Service (account-service)
+- `apps/services/multi-model-inference/AGENTS.md` — Multi-Model Inference Service
+  (multi-model-inference)
+- `apps/services/property-service/AGENTS.md` — Property Service (property-service)
+- `libs/gateway-contracts/AGENTS.md` — gateway-contracts (`@cribstop/gateway-contracts`)
+- `libs/property-contracts/AGENTS.md` — property-contracts (`@cribstop/property-contracts`)
+
+<!-- project-guides:end -->
 
 ## Key Docs (read before deep work)
 
@@ -45,13 +57,65 @@ pointer stub. Canonical skills, subagents, and hooks live in `.agents/` — see
    `new-service` skill checklist — Dockerfile, `infra/k8s/` manifests, skaffold artifact, env/secret
    wiring — verified with `pnpm run skaffold:services:deploy`, not just a green `nx build`. A ticket
    that scopes infra out is a defective ticket; flag it and build it correctly.
-8. **Always shut down anything you started in the background.** Dev servers, `skaffold` watches,
-   `kubectl port-forward`, test runners in watch mode — they outlive the command that launched them.
-   Left running they squat on ports (3000/3002/5432/8080) so the next run fails or, worse, silently
-   answers from a stale process and a later check "passes" against nothing. Stop background shells
-   when the task that needed them is done — before reporting or committing — and confirm none
-   survive (`ps -W | grep -E 'skaffold|kubectl|node'`). **On Windows `pkill` silently does nothing**
-   — use `taskkill //F //IM kubectl.exe` (or `skaffold.exe`, `node.exe`).
+8. **Always shut down anything you started in the background, by PID, never by image name.** Dev
+   servers, `skaffold` watches, `kubectl port-forward`, and test runners in watch mode outlive the
+   command that launched them. Left running, they squat on ports (3000/3002/5432/8080). The next run
+   then fails, or worse, silently answers from a stale process and a later check "passes" against
+   nothing. Stop background shells before reporting or committing. Confirm none survive with
+   `ps -W | grep -E 'skaffold|kubectl|node'`.
+
+   Several engineer lanes run at once in this repo. An image-wide kill takes down every other lane's
+   process of that name, not just yours. This has already happened three times: it killed another
+   lane's dev server, then another lane's `dotnet` processes, then this session's own MCP server
+   processes. **Never run `taskkill //F //IM <name>` or `pkill <name>` for cleanup.** Both match by
+   image name and kill every matching process on the machine. `pkill` also silently does nothing on
+   Windows, so it never was a safe fallback there. This is worst for `node.exe`. It is the most
+   shared image in the repo, running every Node dev server, `pnpm` invocation, and MCP server.
+   Killing it by image name is never acceptable, not just discouraged.
+
+   Use `pnpm run dev:stop -- --pid <pid>` or `pnpm run dev:stop -- --port <port>` instead
+   (`tools/dev/stop-process.js`). It resolves one PID, from the value you pass or from whatever
+   listens on the port, and kills only that process tree. It works the same way on Windows, macOS,
+   and Linux. It calls `taskkill` directly from Node, so it needs none of the doubled-slash `//PID`
+   workaround that Git Bash's MSYS path conversion otherwise forces.
+
+9. **Write in ASD-STE100 Simplified Technical English, and write only what the reader needs.** This
+   applies to everything an agent writes: ticket bodies, ticket comments, code comments, PR
+   descriptions, commit messages, and replies to the user. See
+   [Writing Standard](#writing-standard).
+
+## Writing Standard (ASD-STE100)
+
+Every agent writes in Simplified Technical English. The rules that matter most here:
+
+- **One idea per sentence.** Procedural sentences: 20 words maximum. Descriptive sentences: 25 words
+  maximum. No semicolons, no em-dash asides, no nested parentheses.
+- **Active voice, present tense.** "The gateway rejects the request", not "the request is rejected".
+  Write instructions as commands: "Run the deploy", not "the deploy should be run".
+- **One word, one meaning.** Use the repo's canonical names (`AGENTS.md`, PRD.md, project
+  `AGENTS.md`) and use the same word for the same thing every time. Do not invent synonyms.
+- **No filler.** Delete hedges ("basically", "it is worth noting"), intensifiers ("very", "truly"),
+  and courtesy phrases. Delete any sentence that does not change what the reader does.
+- **Approved words only.** Prefer the simple word: "use" not "utilize", "start" not "initiate",
+  "before" not "prior to", "if" not "in the event that".
+
+Concision is the second half of the standard. Include only details that change an implementation, a
+decision, or a verification. Concretely:
+
+- **Ticket bodies**: Problem, Acceptance Criteria, Technical Notes. Facts, constraints, and file
+  paths. No history of how the ticket was discovered, no restatement of repo conventions that
+  `AGENTS.md` already records, no motivational prose.
+- **Ticket comments**: the decision or the finding, then the evidence. One comment per event, not a
+  running narrative.
+- **Code comments**: explain _why_ only when the code cannot show it (a non-obvious constraint, a
+  workaround with its trigger, a compliance rule). Never restate what the next line does. Never
+  write a paragraph where one sentence works. Point to the ticket or doc for the long version.
+- **PR descriptions and commit messages**: what changed and why, per Acceptance Criterion. No
+  process narrative.
+- **Replies to the user**: lead with the answer or the outcome. Stop when the content stops.
+
+When refactoring existing text, apply the same standard: cut rather than rewrite, and keep only what
+a reader needs to understand or act.
 
 ## Commands (repo level)
 
@@ -89,13 +153,47 @@ pnpm run infra:validate:dev            # Kustomize validation per env
   - `.agents/hooks/*.js` — provider-neutral hook scripts. Claude Code registers them in
     `.claude/settings.json`; other providers adopt them as their hook systems stabilize. Git hooks
     (husky) remain the universal enforcement backstop.
-- **Generated pointers are committed.** After editing anything under `.agents/`, run
-  `pnpm run agents:sync` to regenerate the `.claude/` pointers; `pnpm run agents:check` (wired into
-  pre-commit) fails on drift. Never hand-edit generated files in `.claude/skills/` or
-  `.claude/agents/`.
-- **Project-specific skills**: nest them in the project (`apps/<...>/.agents/skills/`) and add the
-  location per provider as needed. **Project-specific hooks and subagents** (root-only discovery):
-  name them with the project prefix, e.g. `cribstop-compliance-reviewer`.
+- **Generated files are committed and derived from disk, never hand-listed.** After editing anything
+  under `.agents/`, or adding a project or a project `AGENTS.md`, run `pnpm run agents:sync`. It
+  regenerates the `.claude/` pointers, the root "Project Guides" list, missing `CLAUDE.md` stubs,
+  and `chat.agentSkillsLocations` in `.vscode/settings.json`. `pnpm run agents:check` (pre-commit)
+  fails on drift and on an `apps/`/`libs/` project with no `AGENTS.md`. Never hand-edit those
+  outputs.
+- **Project-specific skills**: nest them in the project (`apps/<...>/.agents/skills/`); the sync
+  registers the location. **Project-specific hooks and subagents** (root-only discovery): name them
+  with the project prefix, e.g. `cribstop-compliance-reviewer`.
+
+### Model Selection Per Dispatch
+
+Every agent dispatch names a model. Pick the cheapest tier that can do the task. Inheriting the
+orchestrator's model is the default failure mode: silence spends the most expensive option. State
+the model explicitly on every dispatch, never leave it to inherit.
+
+The top tier is for orchestration and genuine architecture or ambiguous diagnosis. Use it least, not
+by default.
+
+Three tiers, named by the work, not the vendor:
+
+- **Cheapest** — mechanical, well-specified work: ticket-text edits, doc wording, renames, inventory
+  and list sweeps, formatting, label and board writes.
+- **Mid — the default for real work** — most implementation and review lanes: a scoped feature, a
+  bug fix, a test suite, a review of a bounded diff.
+- **Top — rare and justified** — cross-cutting architecture, an ambiguous diagnosis nobody has
+  cracked, orchestration itself.
+
+**Escalate on evidence, not anticipation.** Start a lane cheap. Re-dispatch at a higher tier only
+when the cheap lane stalls. A cheap lane that fails costs less than every lane running at the top
+tier.
+
+Parallel fan-out multiplies model cost. Right-sizing matters more, not less, when lanes run wide.
+
+Provider mapping (Claude only — keep vendor names out of the rest of this guide):
+
+| Tier     | Claude model |
+| -------- | ------------ |
+| Cheapest | Haiku        |
+| Mid      | Sonnet       |
+| Top      | Opus         |
 
 ## Repo-Wide Gotchas
 
@@ -146,15 +244,30 @@ pnpm run infra:validate:dev            # Kustomize validation per env
   Declare the dependency in the Dockerfile rather than special-casing the script. The script only
   ever removes projects and fails open, so a parse it cannot handle costs a rebuild, not a stale
   image.
+- **The injectable secret keys are derived, never listed.** `tools/infra/secret-keys.js` reads every
+  `stringData` key in `infra/k8s/base/secrets/*.secret.yaml`. `.env.example` is a rendered view of
+  that derivation, so adding a key means editing the manifest and running
+  `pnpm run infra:secrets:example` — never editing `.env.example`. A local deploy injects whatever
+  `.env` supplies. An omitted or empty key keeps the committed placeholder, because Kustomize
+  strategic-merges `stringData` key by key. Real values are written only under
+  `infra/k8s/podman/.generated/`, which is git-ignored. Two gates keep this honest.
+  `pnpm run infra:validate` fails when the manifests, the deploy action's `yq` lines, the workflow
+  `env:` block, or `.env.example` disagree. Pre-commit refuses a staged secret manifest whose
+  committed value changed — ahead of the feature-branch gate, because that is the branch a
+  credential gets experimented with on. To change a committed default on purpose, run the commit
+  with `ALLOW_SECRET_VALUE_CHANGE=1`. Note the two name spaces are not one: the manifest KEY drives
+  the action relation (`auth`), the VARIABLE name drives the workflow relation (`JAEGER_BASIC_AUTH`
+  in CI, `JAEGER_AUTH` locally). A gate comparing one flat set would call correct wiring drift.
 - **`pnpm-lock.yaml` is Prettier-ignored** — pnpm owns its formatting, so never reformat it. After
   any dependency change the gate is correctness, not style: `pnpm install --frozen-lockfile` must
   exit 0 (CI runs it in six places). Reconcile a failure with an install, never by hand-editing.
 - **No Alpine base images for anything doing in-cluster DNS.** musl fails Kubernetes service
-  resolution with `EAI_AGAIN`; use a Debian `-slim` base. No Dockerfile in the repo is on Alpine any
-  more (`cribstop-next` was the last one — #74). **A `-slim` base ships no CA bundle at all**, where
-  the Alpine Node image shipped 145 certs, so any swap must `apt-get install ca-certificates` or it
-  silently strips TLS trust; install it in the shared `base` stage so the runtime image keeps it
-  too, not just the stage that runs `pnpm install`.
+  resolution with `EAI_AGAIN`. Use a Debian `-slim` base. No Dockerfile in the repo is on Alpine any
+  more (#74). **`node:*-slim` ships no CA bundle at all** (`python:*-slim` and the
+  `mcr.microsoft.com/dotnet` images do, by default), where the Alpine Node image shipped 145 certs.
+  A swap to `node:*-slim` must `apt-get install ca-certificates`, or it silently strips TLS trust.
+  Install it in the shared `base` stage so the runtime image keeps it too, not just the stage that
+  runs `pnpm install` (#195).
 - **Any Dockerfile that runs Nx must set `ENV NX_DAEMON=false`.** Nx turns its daemon off in CI and
   in Docker, but does not detect podman/buildah or BuildKit (`isDocker()` checks only `/.dockerenv`
   and cgroup `"docker"`; podman writes `/run/.containerenv`, and no build engine propagates `CI`).
@@ -162,7 +275,8 @@ pnpm run infra:validate:dev            # Kustomize validation per env
   while the build is mutating files, trips over a transient generated tsconfig, and persists the
   graph with an `errors[]` entry; every later `readCachedProjectGraph()` then reports **"No cached
   ProjectGraph is available"** for a file that is present and fine. Cost a red `dev` build at 50%
-  reproducibility (#69). `property-service` is currently the only such Dockerfile.
+  reproducibility (#69). Find the affected Dockerfiles with a grep for `nx ` in
+  `apps/**/Dockerfile`.
 - Jest `<rootDir>` inside `testMatch` / `testPathIgnorePatterns` silently matches nothing on Windows
   (native backslashes read as escapes). Write the patterns without it.
 
@@ -343,7 +457,8 @@ regardless of branch (the gate only applies to the `--hook` flag the husky scrip
 **Pre-Push (Complete - ~30s-2min with projects, <1s empty workspace)**
 
 - Format + Lint + Type + Test + Build
-- Mimics CI behavior exactly
+- Runs the same gates CI runs, over the working tree. CI reads the pushed commits, so a dirty tree
+  makes the result advisory — the summary says so instead of predicting CI.
 - Feature branches: affected projects | Base branches: all projects
 - **Kustomize validation**: Full build test for all environments (dev, test, prod)
 - Uses `--skip-reset` flag (no workspace file modifications)
@@ -352,6 +467,24 @@ regardless of branch (the gate only applies to the `--hook` flag the husky scrip
 **Why `--skip-reset` in hooks**: Git operations must not modify workspace files (prevents unstaged
 changes after commit). Manual commands (`pnpm run pre-commit`, `pnpm run pre-push`) DO run reset for
 clean state validation.
+
+**The format gate runs before anything writes, and the write names what it rewrote** (#151). A
+manual run used to call a repo-wide `nx format:write` after `nx:reset` and before
+`nx:workspace-format-check`. The write repaired the working tree, the check then passed, and
+pre-push printed "CI will pass" — over a commit whose content still failed the same gate in CI. The
+repair reached the tree only. Now `nx:workspace-format-check` runs first, ahead of `nx:reset` and
+the write, so it reads the tree CI reads. Do not "fix" this by scoping the write instead:
+`nx format:write --files=…` still rewrites `nx.json` and the root `tsconfig.json` unconditionally,
+because `addRootConfigFiles` returns early only for `--all`. `pnpm run pre-push` also refuses to
+claim anything about CI while a tracked file differs from HEAD, because CI reads the pushed commits,
+not the tree. Untracked files are excluded from that judgement: they are absent from the push, so
+they can only make the local check stricter than CI. `pre-commit` gets the same order. The cost is
+one extra cycle: a formatting failure stops the commit, and the same run then repairs the file, so
+the developer stages the repair and commits again. The gain is that a mis-formatted file the
+developer did NOT stage — the #91 shape — now fails instead of passing. The logic lives in
+`tools/validation/format-gate.js`, the regression guard in `tools/validation/format-gate.test.js`
+(run with `pnpm run tools:test`). That guard reads both scripts and fails if a write is ordered
+ahead of the gate, so reverting either script turns the suite red.
 
 **Performance Optimization**: Both hooks check if any projects exist before running expensive
 operations. On empty workspaces (no projects in `apps/` or `libs/`), they exit in <1 second instead
@@ -852,15 +985,16 @@ substitution. Infrastructure code in `infra/`:
 - **Redis/Valkey 9.0**: ACL-based authentication, 5 users (admin, pubsub, cache, ratelimit, monitor)
 - **Jaeger + OpenTelemetry**: Distributed tracing for microservices observability (optional sidecar)
 
-**Planned Architecture** (applications not yet deployed):
+**Application tier** (the deployed set is whatever `skaffold.yaml` and `infra/deploy-control.yaml`
+register; the planned set is PRD §2.1):
 
-- **API Gateway** (Ocelot .NET 9.0): Centralized entry point for microservices
-  - Responsibilities: Request routing, authentication (JWT), rate limiting, circuit breaking
+- **API Gateway** (Ocelot .NET): Centralized entry point for microservices
+  - Responsibilities: Request routing, authentication, rate limiting, circuit breaking
   - Routes external requests to internal microservices
   - Provides unified API surface with versioning support
-- **Microservices** (Node.js/Python/.NET): Domain-specific services
-  - account-service, messaging-service, property-service, social-service (future)
-- **Web App** (Next.js): Frontend application (future)
+- **Microservices** (Node.js/Python/.NET): Domain-specific services, one project guide each (see
+  Project Guides)
+- **Web App** (Next.js): Frontend application
 
 **External Access** (via Ingress):
 
@@ -1459,22 +1593,22 @@ project — Projects v2 permissions for a user-owned board are granted per-user,
   product owner, not parked at a P3 that never ships). `Size` (XS/S/M/L/XL, optional estimate).
   Field _option_ matching in the wrapper scripts is case-insensitive ("In progress" on the board ==
   "In Progress" in docs/commands), so board-UI casing edits can't break automation.
-- **Labels** carry scope tagging (`scope:cribstop-web`, `scope:api-gateway`,
-  `scope:account-service`, `scope:multi-model-inference`, `scope:shared` for cross-cutting work) and
-  type (`type:bug`/`type:feature`/`type:chore`). Scope values use each component's **canonical
-  platform name** — today that equals the Nx project name for everything except the web app, whose
-  Nx project is currently `cribstop-next` (a framework-detail name expected to eventually be renamed
-  to match `cribstop-web`; the build→deploy name mapping already lives in
-  `tools/docker/image-name-map.json`). These labels are unrelated to the Nx _tag_ dimensions despite
-  the shared prefixes: an Nx `scope:` tag is a business-domain classifier and an Nx `type:` tag a
-  project-kind classifier — different vocabulary, different system. Prefix convention: prefixed
-  labels (`type:`, `scope:`) are dimensions picked from the taxonomy; unprefixed labels (`blocked`,
-  `human-action`) are orthogonal overlays that combine with any Status or dimension. Labels are
-  multi-valued (a ticket touching web + gateway gets both scope labels), which Projects v2 fields
-  cannot do — there's no multi-select field type. `blocked` marks anything stuck regardless of its
-  current Status (Status's linear progression has no room for a branch state). `human-action` marks
-  tickets only a human can complete (provision a secret/API key per environment, PAT scopes, DNS,
-  paid accounts, legal/broker sign-off) — authored as a runbook (what / where / how / by when) with
+- **Labels** carry scope (`scope:<canonical platform name>`, one per component touched, plus
+  `scope:shared` for cross-cutting work) and type (`type:bug`/`type:feature`/`type:chore`). There is
+  no hand-maintained list of scope labels. The canonical name is the Nx project name, with one
+  exception: the web app is `scope:cribstop-web` although its Nx project is `cribstop-next`. Image
+  names in `tools/docker/image-name-map.json` are not scope names. The label must exist on the repo
+  before a ticket can carry it. The product owner creates it while grooming the ticket that
+  introduces the component. These labels are unrelated to the Nx _tag_ dimensions despite the shared
+  prefixes: an Nx `scope:` tag is a business-domain classifier and an Nx `type:` tag a project-kind
+  classifier — different vocabulary, different system. Prefix convention: prefixed labels (`type:`,
+  `scope:`) are dimensions picked from the taxonomy; unprefixed labels (`blocked`, `human-action`)
+  are orthogonal overlays that combine with any Status or dimension. Labels are multi-valued (a
+  ticket touching web + gateway gets both scope labels), which Projects v2 fields cannot do —
+  there's no multi-select field type. `blocked` marks anything stuck regardless of its current
+  Status (Status's linear progression has no room for a branch state). `human-action` marks tickets
+  only a human can complete (provision a secret/API key per environment, PAT scopes, DNS, paid
+  accounts, legal/broker sign-off) — authored as a runbook (what / where / how / by when) with
   `Blocks #<n>` referencing the work waiting on it; the engineer agent files these whenever it hits
   such a dependency, adds `blocked` to the dependent ticket, and moves on to unblocked work. All
   taxonomy labels are provisioned on the repo (labels must pre-exist — `gh:ticket:create` passes
@@ -1517,11 +1651,29 @@ pnpm run gh:project:sync-schema
 pnpm run gh:ticket:create -- --title "..." --priority P1 --size M --status Ready \
   --scope cribstop-web --label type:feature
 
-# Find work (this is what pick-next-ticket queries):
+# Find work (this is what pick-next-ticket queries). Closed tickets are left out by default:
 pnpm run gh:ticket:list -- --status Ready --priority P0
+pnpm run gh:ticket:list -- --state all --status Done   # --state open (default) | closed | all
 
 # Product owner: reprioritize/groom (Status/Priority/Size — full field access):
 pnpm run gh:ticket:update-fields -- --issue 42 --priority P0
+
+# Product owner: retitle. The title is the only thing gh:ticket:list, the session brief and
+# pick-next-ticket render, so a stale title misdirects work even when the body is correct:
+pnpm run gh:ticket:update-fields -- --issue 42 --title "New title"
+
+# Product owner: decline a ticket. The reason posts as a comment, then the issue closes as
+# "not planned". --reopen takes a reason the same way. Neither flag exists on update-status:
+pnpm run gh:ticket:update-fields -- --issue 42 --decline --reason "Superseded by #61"
+pnpm run gh:ticket:update-fields -- --issue 42 --reopen --reason "Stakeholder reversed the call"
+
+# Either lane: comment on an issue or a PR. Never touches the body, so the plan block is safe:
+pnpm run gh:comment -- --issue 42 --body-file ./note.md
+pnpm run gh:comment -- --pr 139 --body "Rebased on dev."
+
+# Product owner: repo labels. A ticket can only carry a label that already exists:
+pnpm run gh:label -- list --search scope:
+pnpm run gh:label -- create --name scope:property-contracts --color 1D76DB --description "..."
 
 # Product owner: correct a ticket's spec after creation. Replaces the whole body with the file's
 # contents apart from the engineer's Implementation Plan block, carried over byte-for-byte; refuses
@@ -1565,6 +1717,25 @@ with `✗ … Nothing was written.` instead of guessed at, because a guess appen
 silently drops the plan, and the run after that splices across the wrong span and eats a whole
 section. Fix the markers on the issue by hand and re-run. Unit tests for both directions live in
 `tools/github/lib/issue-body.test.js` — run them with `pnpm run tools:test`.
+
+The same split governs the new flags. `--title`, `--decline` and `--reopen` are product-owner
+capabilities, so they live only on `update-ticket-fields.js`. Disposal is a product decision: the
+board runs three priority levels on the principle that low-value work is declined, not parked. A
+decline needs `--reason`, which posts as a comment before the close, so a closed ticket always
+records why. The close reason is always `not planned` — completed work closes through the PR's
+`Closes #<n>`, so read the close reason to tell a declined ticket from a delivered one.
+
+**A declined ticket keeps its board Status**, which is why `gh:ticket:list` leaves closed issues out
+unless you pass `--state closed` or `--state all`. Without that filter a ticket declined at
+`Status: Ready, Priority: P0` stays at the top of the engineer's queue and gets built. Do not rely
+on the board's built-in "item closed → Done" workflow for this: nothing in the repo asserts that it
+is switched on, and it does not run in reverse on `--reopen`.
+
+`gh:comment` and `gh:label` are separate scripts, not flags. A comment never touches the issue body,
+so both lanes can use it and the Implementation Plan block stays out of reach. `gh:label -- create`
+refuses a name that already exists and writes nothing; `--update` changes an existing label on
+purpose. Create the `scope:<component>` label before the ticket that first carries it, because
+`gh issue create` rejects an unknown label.
 
 Unknown labels are validated by `gh` at write time rather than pre-checked locally, so a rejected
 label can leave earlier edits in the same invocation already applied — e.g.

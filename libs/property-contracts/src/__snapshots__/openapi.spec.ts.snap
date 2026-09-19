@@ -13,6 +13,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
               "code": {
                 "enum": [
                   "invalid_request",
+                  "result_window_exceeded",
                   "not_found",
                   "internal_error",
                 ],
@@ -99,6 +100,12 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "minimum": 0,
             "nullable": true,
             "type": "number",
+          },
+          "daysOnMarket": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer",
           },
           "featured": {
             "type": "boolean",
@@ -283,6 +290,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
           "latitude",
           "longitude",
           "price",
+          "daysOnMarket",
           "status",
           "listingType",
           "source",
@@ -382,6 +390,12 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "minimum": 0,
                 "nullable": true,
                 "type": "number",
+              },
+              "daysOnMarket": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "nullable": true,
+                "type": "integer",
               },
               "description": {
                 "nullable": true,
@@ -574,6 +588,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
               "latitude",
               "longitude",
               "price",
+              "daysOnMarket",
               "status",
               "listingType",
               "source",
@@ -777,7 +792,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
     },
   },
   "info": {
-    "description": "\`property-service\`'s HTTP API. The service owns the Communities → Properties → Units → Listings hierarchy; \`listings\` is the resource this version of the document exposes, and a later resource extends THIS document rather than publishing a second one — the aggregation key is part of the docs URL, so splitting would break every bookmark. Every response carries the full broker/office attribution block (NAR 7.58, PRD §6.2), there is no field-selection parameter, and unknown query parameters are rejected with 400 — so no caller can omit it. Results are read through a compliance-enforcing view that applies two distinct seller opt-outs. A listing withheld from internet display is absent entirely: omitted from search results and from \`total\`, and indistinguishable from an unknown id on detail (the same 404, byte for byte). A listing whose street address is withheld is still returned, with \`address\`, \`latitude\` and \`longitude\` null together and \`unit.unitNumber\` withheld on detail, so the address cannot be reconstructed; such rows remain in \`total\` and simply have no map coordinates — never substitute a city or ZIP centroid for them. Free-text \`query\` matches title, address, city, neighborhood and zip — never the description, which is third-party MLS remarks carrying a moderation state; making it searchable would allow keyword-based steering on protected-class language (PRD §6.3).",
+    "description": "\`property-service\`'s HTTP API. The service owns the Communities → Properties → Units → Listings hierarchy; \`listings\` is the resource this version of the document exposes, and a later resource extends THIS document rather than publishing a second one — the aggregation key is part of the docs URL, so splitting would break every bookmark. Every response carries the full broker/office attribution block (NAR 7.58, PRD §6.2), there is no field-selection parameter, and unknown query parameters are rejected with 400 — so no caller can omit it. Results are read through a compliance-enforcing view that applies two distinct seller opt-outs. A listing withheld from internet display is absent entirely: omitted from search results and from \`total\`, and indistinguishable from an unknown id on detail (the same 404, byte for byte). A listing whose street address is withheld is still returned, with \`address\`, \`latitude\` and \`longitude\` null together and \`unit.unitNumber\` withheld on detail, so the address cannot be reconstructed; such rows remain in \`total\` and simply have no map coordinates — never substitute a city or ZIP centroid for them. Free-text \`query\` matches title, address, city, neighborhood and zip — never the description, which is third-party MLS remarks carrying a moderation state; making it searchable would allow keyword-based steering on protected-class language (PRD §6.3). A seller may also suppress price, photos, days on market or price history individually (#53) while the listing stays syndicated; a field withheld this way is null (or, for photos, reduced to at most one image), and the listing remains in results and in \`total\`. See the \`minPrice\`/\`maxPrice\`/\`sort\` parameter descriptions for how a seller-suppressed price interacts with range filters and ordering.",
     "title": "Property Service",
     "version": "1.0.0",
   },
@@ -785,7 +800,11 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
   "paths": {
     "/listings": {
       "get": {
-        "description": "Sorted with a deterministic total order, so paging is stable. \`listingType=all\` covers currently marketed listings and excludes sold; ask for \`sold\` explicitly.",
+        "description": "Sorted with a deterministic total order, so paging is stable. \`listingType=all\` covers currently marketed listings and excludes sold; ask for \`sold\` explicitly.
+
+This is a SEARCH surface, not a bulk-export surface. Paging depth is bounded: \`(page - 1) * pageSize\` must not exceed 1000, so at the default page size of 20 the deepest reachable page is 51. A request past that window is rejected with 400 and the error code \`result_window_exceeded\` — it is never silently clamped to the last valid page, and never answered with an empty 200. There is no parameter that lifts the bound. To reach listings outside the window, narrow the search with filters; retrieving the whole set is not a supported operation.
+
+The bound is on depth alone — no filter is required, and an unfiltered search is a supported browse path. It is also independent of the past-the-end rule: a page beyond the last result but INSIDE the window is a normal 200 with an empty \`results\` array. \`total\` is always the exact count of the full filtered set, even when that count exceeds the window — it is never clamped to it.",
         "operationId": "searchListings",
         "parameters": [
           {
@@ -851,6 +870,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "name": "minPrice",
             "required": false,
             "schema": {
+              "description": "Whole number. A listing with a seller-suppressed price never matches this filter, because it has no price to compare.",
               "pattern": "^\\d+$",
               "type": "string",
             },
@@ -860,6 +880,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "name": "maxPrice",
             "required": false,
             "schema": {
+              "description": "Whole number. A listing with a seller-suppressed price never matches this filter, because it has no price to compare.",
               "pattern": "^\\d+$",
               "type": "string",
             },
@@ -974,6 +995,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "required": false,
             "schema": {
               "default": "recommended",
+              "description": "\`price-asc\` and \`price-desc\` place a listing with a seller-suppressed price (#53) LAST, regardless of direction — \`NULLS LAST\` on both, not the SQL default of \`NULLS FIRST\` on DESC. A suppressed-price row is never lost from the result, only ordered after every row that has a price.",
               "enum": [
                 "recommended",
                 "newest",
@@ -988,7 +1010,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "name": "page",
             "required": false,
             "schema": {
-              "description": "Whole number, 1 or greater. Default 1.",
+              "description": "Whole number, 1 or greater. Default 1. Paging depth is bounded: (page - 1) * pageSize must not exceed 1000, and a request past that returns 400. The bound is not expressed as a maximum on this parameter because the deepest valid page depends on pageSize (51 at the default page size of 20).",
               "pattern": "^[1-9]\\d*$",
               "type": "string",
             },
@@ -1023,7 +1045,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 },
               },
             },
-            "description": "Unknown or invalid query parameter.",
+            "description": "Unknown or invalid query parameter (\`invalid_request\`), or a page past the reachable result window (\`result_window_exceeded\`). The two carry different error codes because they call for different responses: the first means a parameter needs fixing, the second that the search needs narrowing — retrying the same request will never succeed.",
           },
           "500": {
             "content": {

@@ -1,5 +1,8 @@
-import { render, waitFor } from '@testing-library/react';
-import { searchListings } from '@/lib/api/listings';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { maxReachablePage, PAGE_SIZE_DEFAULT } from '@cribstop/property-contracts';
+import { ListingsApiError, searchListings } from '@/lib/api/listings';
+import { PARCEL_INTERLOCK_HINT } from '@/lib/store/types';
+import { aListingCardRow } from '@/test/fixtures';
 import SearchExperience from './SearchExperience';
 
 /**
@@ -18,7 +21,19 @@ import SearchExperience from './SearchExperience';
 jest.mock('@/lib/api/listings', () => ({
   searchListings: jest.fn(),
   getListingsMeta: jest.fn(),
-  ListingsApiError: class extends Error {},
+  // Carries `code` and `status` like the real one. A bare `class extends Error {}` was enough while
+  // nothing branched on the code, but `useListingSearch` now reports it so the UI can tell a
+  // deterministic failure (a page past the result window, #65) from a retryable one — a mock
+  // without it would make every error look retryable and the branch untestable.
+  ListingsApiError: class extends Error {
+    constructor(
+      message: string,
+      readonly code: string,
+      readonly status: number,
+    ) {
+      super(message);
+    }
+  },
 }));
 
 // Neither the map nor the search bar is what these tests are about, and both pull in leaflet, the
@@ -127,5 +142,351 @@ describe('SearchExperience follows the URL it is given', () => {
     // Re-seeding builds a new filters object every time; the search must key on its *value*, or
     // every parent re-render costs a round trip.
     await waitFor(() => expect(mockedSearchListings).toHaveBeenCalledTimes(1));
+  });
+});
+
+/**
+ * The API bounds paging depth (#65): a request whose offset exceeds `MAX_RESULT_OFFSET` is a 400.
+ * `pageCount` is deliberately NOT clamped to that window server-side — it is derived from the exact
+ * `total` — so the pager has to do the clamping, or the shipped UI renders a "last page" button
+ * that fails when clicked. That is invisible against the seeded dataset and guaranteed once a real
+ * IDX feed is behind the endpoint.
+ */
+describe('SearchExperience never offers a page the API will refuse', () => {
+  const LAST_REACHABLE = maxReachablePage(PAGE_SIZE_DEFAULT);
+
+  // The pager renders only alongside results, so every envelope here carries a row. One is enough
+  // — these tests are about which page buttons exist, not about the grid.
+  const withResults = (total: number, pageCount: number) => ({
+    ...envelope(),
+    results: [aListingCardRow()],
+    total,
+    pageCount,
+  });
+
+  /** A result set far larger than the window: 200,000 rows is 10,000 pages at the default size. */
+  const hugeEnvelope = withResults(200_000, 10_000);
+
+  const pageButtonLabels = () =>
+    screen
+      .getAllByRole('button')
+      .map((button) => button.textContent?.trim())
+      .filter((label) => label !== undefined && /^\d+$/.test(label));
+
+  it('caps the highest offered page at the deepest reachable one, not at pageCount', async () => {
+    mockedSearchListings.mockResolvedValue(hugeEnvelope);
+
+    render(<SearchExperience initialQuery="q=Alexandria" />);
+
+    await waitFor(() => expect(pageButtonLabels()).toContain(String(LAST_REACHABLE)));
+    expect(pageButtonLabels()).not.toContain('10000');
+    for (const label of pageButtonLabels()) {
+      expect(Number(label)).toBeLessThanOrEqual(LAST_REACHABLE);
+    }
+  });
+
+  it('disables Next on the deepest reachable page rather than stepping past the window', async () => {
+    mockedSearchListings.mockResolvedValue(hugeEnvelope);
+
+    render(<SearchExperience initialQuery={`q=Alexandria&page=${LAST_REACHABLE}`} />);
+
+    await waitFor(() => expect(lastRequestedPage()).toBe(LAST_REACHABLE));
+    expect(screen.getByLabelText('Next page')).toBeDisabled();
+  });
+
+  it('clamps against the page size the API applied, not an assumed one', async () => {
+    // The limit is on the offset, so the deepest reachable page moves with page size. A response
+    // that says `pageSize: 100` means page 11 is the last reachable one, whatever the request's
+    // default happens to be.
+    mockedSearchListings.mockResolvedValue({ ...withResults(200_000, 2_000), pageSize: 100 });
+
+    render(<SearchExperience initialQuery="q=Alexandria" />);
+
+    await waitFor(() => expect(pageButtonLabels()).toContain(String(maxReachablePage(100))));
+    for (const label of pageButtonLabels()) {
+      expect(Number(label)).toBeLessThanOrEqual(maxReachablePage(100));
+    }
+  });
+
+  it('offers a way back to page 1 — not a retry that cannot succeed — when the URL asks past the window', async () => {
+    // Reachable by hand-editing `?page=`, an old bookmark, or a link minted before the bound
+    // existed. The pager lives in the results branch, so without this the user has no in-page
+    // route back at all.
+    mockedSearchListings.mockRejectedValue(
+      new ListingsApiError(
+        'That is further than search results go.',
+        'result_window_exceeded',
+        400,
+      ),
+    );
+
+    render(<SearchExperience initialQuery="q=Alexandria&page=200" />);
+
+    const action = await screen.findByRole('button', { name: 'Back to the first page' });
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+
+    mockedSearchListings.mockResolvedValue(withResults(60, 3));
+    fireEvent.click(action);
+
+    await waitFor(() => expect(lastRequestedPage()).toBe(1));
+  });
+
+  it('still offers a retry for an ordinary failure', async () => {
+    mockedSearchListings.mockRejectedValue(
+      new ListingsApiError('We could not load listings just now.', 'internal_error', 500),
+    );
+
+    render(<SearchExperience initialQuery="q=Alexandria" />);
+
+    expect(await screen.findByRole('button', { name: 'Try again' })).toBeInTheDocument();
+  });
+
+  it('still offers every page when the result set fits inside the window', async () => {
+    // The clamp must not cost a shopper any page they could actually reach — it is a ceiling, not
+    // a shortening of ordinary result sets.
+    mockedSearchListings.mockResolvedValue(withResults(60, 3));
+
+    render(<SearchExperience initialQuery="q=Alexandria" />);
+
+    await waitFor(() => expect(pageButtonLabels()).toContain('3'));
+    expect(pageButtonLabels()).toEqual(['1', '2', '3']);
+  });
+});
+
+/**
+ * What this suite exists to stop (#77).
+ *
+ * The filter modal collected a full Zillow-shaped filter set and threw every value away: its
+ * `onShow` callback was wired to the parent's `onClose`, a `() => void`. The modal closed, the URL
+ * did not change, no new request went out, and the user was left believing the results in front of
+ * them had been narrowed. A control that pretends to filter is worse than no control.
+ *
+ * These tests assert on the two things that are true of a filter that really filters — **the URL
+ * changed** and **the request changed** — rather than on what the modal drew, because the drawing
+ * was never the broken part.
+ */
+describe('the filter modal actually filters', () => {
+  const openFilters = () => fireEvent.click(screen.getByLabelText('Open filters'));
+  const showHomes = () =>
+    fireEvent.click(screen.getByRole('button', { name: /^Show (homes|[\d,]+ home)/ }));
+
+  /** The filters carried by the most recent `searchListings` call. */
+  const lastRequest = () =>
+    mockedSearchListings.mock.calls.at(-1)?.[0] as Record<string, unknown> | undefined;
+
+  const currentParams = () => new URLSearchParams(window.location.search);
+
+  it('puts an applied filter in the URL and in the request', async () => {
+    render(<SearchExperience initialQuery="q=Alexandria" />);
+    await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
+
+    openFilters();
+    fireEvent.click(screen.getByLabelText('More bedrooms'));
+    fireEvent.click(screen.getByRole('button', { name: 'Pool' }));
+    showHomes();
+
+    // The URL is the shareable, refreshable source of truth — state alone is not a filtered search
+    // anyone can link to or come back to.
+    expect(currentParams().get('beds')).toBe('1');
+    expect(currentParams().getAll('amenities')).toEqual(['Pool']);
+    expect(currentParams().get('q')).toBe('Alexandria');
+
+    await waitFor(() => expect(lastRequest()).toMatchObject({ beds: 1, amenities: ['Pool'] }));
+  });
+
+  it('survives a reload of the URL it wrote', async () => {
+    render(<SearchExperience initialQuery="q=Alexandria" />);
+    await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
+
+    openFilters();
+    fireEvent.click(screen.getByLabelText('More bedrooms'));
+    showHomes();
+
+    const shared = window.location.search;
+    mockedSearchListings.mockClear();
+
+    // Exactly what a refresh, a bookmark or a pasted link does: the page is built from the URL.
+    render(<SearchExperience initialQuery={shared.replace(/^\?/, '')} />);
+
+    await waitFor(() => expect(lastRequest()).toMatchObject({ beds: 1 }));
+  });
+
+  it('returns to page 1, because a filtered result set has no page 3 of the old one', async () => {
+    render(<SearchExperience initialQuery="q=Alexandria&page=3" />);
+    await waitFor(() => expect(lastRequestedPage()).toBe(3));
+
+    openFilters();
+    fireEvent.click(screen.getByLabelText('More bedrooms'));
+    showHomes();
+
+    // Left on page 3, a narrowed search lands past the end of its own results — an empty page at
+    // best, and a `result_window_exceeded` 400 once paging depth is bounded (#65).
+    await waitFor(() => expect(lastRequestedPage()).toBe(1));
+    expect(currentParams().has('page')).toBe(false);
+  });
+
+  it('shows what is applied when it is reopened', async () => {
+    // The modal used to keep its own state and was never handed the applied filters, so reopening
+    // it showed defaults while the badge beside the button said three filters were active.
+    render(
+      <SearchExperience initialQuery="q=Alexandria&beds=3&propertyType=Condo&minPrice=500000" />,
+    );
+    await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
+
+    openFilters();
+
+    expect(screen.getByText('3+')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Condo/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('Min price')).toHaveValue(500000);
+  });
+
+  it('clears a filter it no longer wants instead of leaving it in the URL', async () => {
+    render(<SearchExperience initialQuery="q=Alexandria&beds=3" />);
+    await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
+
+    openFilters();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all' }));
+    showHomes();
+
+    expect(currentParams().has('beds')).toBe(false);
+    // Clearing filters does not throw away the place the user searched for.
+    expect(currentParams().get('q')).toBe('Alexandria');
+    await waitFor(() => expect(lastRequest()).toMatchObject({ query: 'Alexandria' }));
+    expect(lastRequest()?.beds).toBeUndefined();
+  });
+
+  it('re-seeds from what is applied on every open, not once at page mount', async () => {
+    // `if (!isOpen) return null` does not unmount a fiber, so a draft seeded by a `useState`
+    // initialiser behind such a flag is seeded once and never re-synced. Abandoned edits then
+    // survive in the dialog and get applied on the next Show — a filter the user cancelled.
+    render(<SearchExperience initialQuery="q=Alexandria" />);
+    await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
+
+    openFilters();
+    fireEvent.click(screen.getByRole('button', { name: 'Pool' }));
+    fireEvent.click(screen.getByLabelText('Close filters'));
+
+    openFilters();
+
+    expect(screen.getByRole('button', { name: 'Pool' })).toHaveAttribute('aria-pressed', 'false');
+    showHomes();
+    expect(currentParams().has('amenities')).toBe(false);
+  });
+
+  it('steps down from a half-step bath count without skipping a whole bathroom', async () => {
+    // `?baths=2.5` is a legitimate contract value — `baths_display` is `full + 0.5 * half`. A
+    // stepper keyed on an index into a rung list truncated it to 2 and then stepped to 1.
+    render(<SearchExperience initialQuery="q=Alexandria&baths=2.5" />);
+    await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
+
+    openFilters();
+    expect(screen.getByText('2.5+')).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Fewer bathrooms'));
+
+    expect(screen.getByText('2+')).toBeInTheDocument();
+  });
+
+  it('never leaves a zero-valued filter narrowing the results invisibly', async () => {
+    // `minSqft=0` is not a no-op: `v.sqft >= 0` excludes every parcel, whose `sqft` is NULL. Read
+    // as absent it can neither narrow the results nor hide from the badge and the Clear control.
+    render(<SearchExperience initialQuery="q=Alexandria&minSqft=0&beds=0" />);
+
+    await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
+    expect(lastRequest()?.minSqft).toBeUndefined();
+    expect(lastRequest()?.beds).toBeUndefined();
+
+    openFilters();
+    fireEvent.click(screen.getByRole('button', { name: 'Pool' }));
+    showHomes();
+
+    expect(currentParams().has('minSqft')).toBe(false);
+  });
+
+  it('keeps the result count on the button when a draft is re-ticked back to what is applied', async () => {
+    mockedSearchListings.mockResolvedValue({ ...envelope(), total: 12 });
+    render(<SearchExperience initialQuery="q=Alexandria&amenities=Pool&amenities=Garage" />);
+    await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
+
+    openFilters();
+    expect(screen.getByRole('button', { name: 'Show 12 homes' })).toBeInTheDocument();
+
+    // Identical request, different array order — the count must not disappear over that.
+    fireEvent.click(screen.getByRole('button', { name: 'Pool' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Pool' }));
+
+    expect(screen.getByRole('button', { name: 'Show 12 homes' })).toBeInTheDocument();
+  });
+
+  describe('the Lot/Land interlock', () => {
+    it('clears and disables the dwelling controls when land is the only home type', async () => {
+      render(<SearchExperience initialQuery="q=Alexandria&beds=3&minSqft=2000" />);
+      await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
+
+      openFilters();
+      fireEvent.click(screen.getByRole('button', { name: /Land/ }));
+
+      // Cleared *and* disabled, with the one visible explanation — a parcel has no bedrooms, so
+      // `propertyType=Land&beds=3` is a guaranteed empty page with nothing on screen to explain it.
+      expect(screen.getByLabelText('More bedrooms')).toBeDisabled();
+      expect(screen.getByLabelText('Fewer bedrooms')).toBeDisabled();
+      expect(screen.getByLabelText('Min square feet')).toBeDisabled();
+      expect(screen.getByText(PARCEL_INTERLOCK_HINT)).toBeInTheDocument();
+
+      showHomes();
+
+      expect(currentParams().get('propertyType')).toBe('Land');
+      expect(currentParams().has('beds')).toBe(false);
+      expect(currentParams().has('minSqft')).toBe(false);
+    });
+
+    it('leaves the dwelling controls alone for a home type that has bedrooms', async () => {
+      render(<SearchExperience initialQuery="q=Alexandria&beds=3" />);
+      await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
+
+      openFilters();
+      fireEvent.click(screen.getByRole('button', { name: /Condo/ }));
+
+      expect(screen.getByLabelText('More bedrooms')).toBeEnabled();
+      expect(screen.queryByText(PARCEL_INTERLOCK_HINT)).not.toBeInTheDocument();
+
+      showHomes();
+
+      expect(currentParams().get('beds')).toBe('3');
+    });
+  });
+});
+
+/**
+ * A search that matched nothing, a search still running, and a search that failed are three
+ * different things, and a user who cannot tell them apart reads all three as a broken site.
+ */
+describe('an empty result set is not a failure and not a load', () => {
+  it('says so plainly, and offers the action that widens the search', async () => {
+    mockedSearchListings.mockResolvedValue({ ...envelope(), results: [], total: 0 });
+
+    render(<SearchExperience initialQuery="q=Alexandria&beds=5" />);
+
+    const empty = await screen.findByTestId('search-empty-state');
+    expect(empty).toHaveTextContent('No homes match your filters');
+    // Distinct from the error surface, which is the only thing rendering role="alert" here.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all filters' }));
+
+    // It used to call `window.location.reload()`, which reloaded the same filtered URL and
+    // therefore cleared nothing at all.
+    await waitFor(() =>
+      expect(new URLSearchParams(window.location.search).has('beds')).toBe(false),
+    );
+  });
+
+  it('does not offer to clear filters when there are none to clear', async () => {
+    mockedSearchListings.mockResolvedValue({ ...envelope(), results: [], total: 0 });
+
+    render(<SearchExperience initialQuery="q=Alexandria" />);
+
+    const empty = await screen.findByTestId('search-empty-state');
+    expect(empty).toHaveTextContent('No homes to show here');
+    expect(screen.queryByRole('button', { name: 'Clear all filters' })).not.toBeInTheDocument();
   });
 });

@@ -1,8 +1,10 @@
 import { type NextFunction, type Request, type Response, Router } from 'express';
 import {
   type ErrorBody,
+  exceedsResultWindow,
   idSchema,
   NOT_FOUND_BODY,
+  RESULT_WINDOW_EXCEEDED_BODY,
   type SearchRequest,
   searchRequestSchema,
 } from '@cribstop/property-contracts';
@@ -132,6 +134,31 @@ export function createListingsRouter(pool: ReadPool): Router {
       const parsed = parseSearchRequest(req.query);
       if (!parsed.ok) {
         res.status(400).json(parsed.body);
+        return;
+      }
+      /**
+       * The result-window bound (#65), enforced HERE — after a successful parse, before any SQL
+       * runs. Two consequences of that placement are the whole point:
+       *
+       *  - It is upstream of `buildSearchQuery` and `searchListings`, so it applies identically to
+       *    every sort and every filter combination by construction rather than by remembering to
+       *    repeat it. There is no query shape that can reach the database past the window.
+       *  - The expensive exact `COUNT(*)` never runs for a rejected request, so the cheapest thing
+       *    to script stops being the most expensive thing we serve.
+       *
+       * It is a route-level check rather than a `.superRefine` on `searchRequestSchema` because it
+       * carries its OWN status body and code: a schema rejection is reported as `invalid_request`
+       * by `parseSearchRequest` above, and collapsing "this parameter is malformed" into "this
+       * endpoint will not page that deep" is exactly the distinction the separate code exists to
+       * preserve.
+       *
+       * This is NOT the past-the-end rule and must never be conflated with it. A page beyond the
+       * last result but inside the window is a 200 with an empty `results` and the correct `total`
+       * — only crossing the window boundary is a 400. Clamping to the last valid page instead
+       * would teach an integrator that paging works when it does not.
+       */
+      if (exceedsResultWindow(parsed.value)) {
+        res.status(400).json(RESULT_WINDOW_EXCEEDED_BODY);
         return;
       }
       const envelope = await searchListings(pool, parsed.value);

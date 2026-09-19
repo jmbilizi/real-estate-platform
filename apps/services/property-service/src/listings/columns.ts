@@ -21,6 +21,18 @@ export const FORBIDDEN_COLUMNS = [
   'internet_display_allowed',
   'description_moderation',
   'source_status',
+  // #53. Bright's field-level suppression predicate inputs that mask a VALUE in the view. A
+  // handler reading one of these is a handler that can re-implement a rule the view already
+  // enforces. `media_display_allowed` is a DELIBERATE exception, listed separately below: it masks
+  // no view column, so barring it from a projection would forbid nothing real.
+  'price_display_allowed',
+  'price_history_display_allowed',
+  'days_on_market_display_allowed',
+  // `media_display_allowed` gates repository.ts's ad hoc media-join SQL, not a CARD/DETAIL
+  // projection — it never reaches `LISTING_CARD_COLUMNS`, so listing it in the array above would
+  // assert something this file cannot fail on. Named here so a reader auditing the five #53 flags
+  // finds all of them from this one file.
+  'media_display_allowed',
 ] as const;
 
 const CARD_COLUMNS = [
@@ -36,6 +48,8 @@ const CARD_COLUMNS = [
   'latitude',
   'longitude',
   'price',
+  // #53. Nullable when the seller suppressed days-on-market display.
+  'days_on_market',
   'status',
   'listing_type',
   'source',
@@ -80,3 +94,31 @@ export const LISTING_CARD_SELECT = qualify(CARD_COLUMNS);
  * Housing steering risk, so it does not belong on the widest and most-cached surface.
  */
 export const LISTING_DETAIL_SELECT = `${LISTING_CARD_SELECT}, v.description`;
+
+/**
+ * The governed MLS attribute path (#127/#128). `listing_attributes`/`property_attributes` are
+ * unreachable from `listing_search_v`, so every read joins `mls_fields` for `address_classification`
+ * — whether a value can re-identify a suppressed address is a property of the FIELD, never of one
+ * instance of it. Enumerated for the same reason as the columns above: no `SELECT *` on a table that
+ * will eventually carry a few hundred distinct fields.
+ */
+const ATTRIBUTE_VALUE_COLUMNS = [
+  'a.id',
+  'a.field_id',
+  'a.value_kind',
+  'a.value_numeric',
+  'a.value_boolean',
+  'a.value_date',
+  'a.value_timestamp',
+  'a.value_lookup_id',
+] as const;
+
+const ATTRIBUTE_FIELD_COLUMNS = [
+  'f.originating_system',
+  'f.reso_resource',
+  'f.field_name',
+  'f.address_classification',
+  'f.is_consumer_displayable',
+] as const;
+
+export const ATTRIBUTE_SELECT = [...ATTRIBUTE_VALUE_COLUMNS, ...ATTRIBUTE_FIELD_COLUMNS].join(', ');

@@ -1,3 +1,5 @@
+import { GATEWAY_ERROR_CODES, type GatewayErrorCode } from '@cribstop/gateway-contracts';
+import { errorBodySchema } from '@cribstop/property-contracts';
 import type {
   ErrorBody,
   ListingDetail,
@@ -27,11 +29,34 @@ import type {
  */
 export type ListingSearchQuery = Partial<SearchRequest>;
 
+/**
+ * Every code this client can branch on: the Property API's own contract, plus the gateway's own
+ * codes (#177). The gateway answers ahead of the service on a rate limit, a timeout or an open
+ * circuit breaker, so a caller sees these on the listings surface too, not just the service's own
+ * codes.
+ */
+export type ListingsErrorCode = ErrorBody['error']['code'] | GatewayErrorCode;
+
+/**
+ * Validated against the schemas themselves, not a hand-copied list of code strings — a set copied
+ * from `errorBodySchema`'s enum would silently stop matching a code the contract added later, and
+ * the drift is invisible because this set is a runtime value, not derived from `ErrorBody`'s type.
+ */
+function isKnownListingsCode(code: unknown): code is ListingsErrorCode {
+  if (typeof code !== 'string') return false;
+  if ((GATEWAY_ERROR_CODES as readonly string[]).includes(code)) return true;
+  return errorBodySchema.safeParse({ error: { code, message: '' } }).success;
+}
+
+function toKnownCode(code: unknown): ListingsErrorCode {
+  return isKnownListingsCode(code) ? code : 'internal_error';
+}
+
 /** Thrown for any non-2xx response, carrying the contract's error code so callers can branch. */
 export class ListingsApiError extends Error {
   constructor(
     message: string,
-    readonly code: ErrorBody['error']['code'],
+    readonly code: ListingsErrorCode,
     readonly status: number,
   ) {
     super(message);
@@ -54,10 +79,26 @@ export class ListingsApiError extends Error {
   }
 }
 
-const USER_FACING_MESSAGE: Record<ErrorBody['error']['code'], string> = {
+const USER_FACING_MESSAGE: Record<ListingsErrorCode, string> = {
   invalid_request: 'We could not run that search. Try adjusting your filters.',
+  /**
+   * Paging past the API's result window (#65). Distinct copy from `invalid_request` because it is
+   * a distinct situation for the person reading it: nothing they typed is wrong, and retrying the
+   * same request will never work — the way forward is a narrower search, which is what this says.
+   *
+   * The pager clamps itself to the reachable window, so a shopper clicking through results should
+   * never see this; it is reachable by editing `?page=` in the URL, and a blank or generic failure
+   * there would look like the site was broken.
+   */
+  result_window_exceeded:
+    'That is further than search results go. Try narrowing your search to see more homes.',
   not_found: 'This listing is no longer available.',
   internal_error: 'We could not load listings just now. Please try again.',
+  /** The gateway's own 502/503, before the request ever reached the Property API (#177). */
+  upstream_unavailable:
+    'The listings service is temporarily unavailable. Please try again shortly.',
+  /** The gateway's own 429 (#177) — a person can act on this; retrying immediately will not help. */
+  rate_limited: "You're making requests too quickly. Please wait a moment and try again.",
 };
 
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
@@ -65,8 +106,8 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   const body = await res.json().catch(() => null);
 
   if (!res.ok) {
-    const code: ErrorBody['error']['code'] =
-      body && typeof body === 'object' && body.error?.code ? body.error.code : 'internal_error';
+    const code =
+      body && typeof body === 'object' ? toKnownCode(body.error?.code) : 'internal_error';
     throw new ListingsApiError(
       USER_FACING_MESSAGE[code] ?? USER_FACING_MESSAGE.internal_error,
       code,
@@ -149,6 +190,7 @@ export interface ListingDetailView {
   latitude: number | null;
   longitude: number | null;
   price: number | null;
+  daysOnMarket: number | null;
   status: ListingDetail['listing']['status'];
   listingType: ListingDetail['listing']['listingType'];
   source: ListingDetail['listing']['source'];
@@ -228,6 +270,7 @@ export function toListingDetailView(detail: ListingDetail): ListingDetailView {
     latitude: listing.latitude,
     longitude: listing.longitude,
     price: listing.price,
+    daysOnMarket: listing.daysOnMarket,
     status: listing.status,
     listingType: listing.listingType,
     source: listing.source,

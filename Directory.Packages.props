@@ -54,6 +54,8 @@
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.1.1" />
     <PackageVersion Include="MMLib.SwaggerForOcelot" Version="10.0.0" />
     <PackageVersion Include="Ocelot" Version="24.1.0" />
+    <!-- Keep in lockstep with Ocelot: the QoS provider ships per core version. -->
+    <PackageVersion Include="Ocelot.Provider.Polly" Version="24.1.0" />
     <PackageVersion Include="FluentValidation.AspNetCore" Version="11.3.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.8" />
     

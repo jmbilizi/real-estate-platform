@@ -96,6 +96,8 @@ export async function upsertListing(client: Queryable, row: ListingRow): Promise
         description, description_source, description_moderation, amenities,
         featured, featured_reason, price_reduced, new_construction,
         internet_display_allowed, address_display_allowed,
+        price_display_allowed, price_history_display_allowed, media_display_allowed,
+        days_on_market_display_allowed, days_on_market,
         broker_name, broker_phone, broker_email, office_name,
         office_broker_lead_phone, office_broker_lead_email, listing_agent_name,
         is_sample, last_updated)
@@ -106,9 +108,11 @@ export async function upsertListing(client: Queryable, row: ListingRow): Promise
              $24, $25, $26, $27,
              $28, $29, $30, $31,
              $32, $33,
-             $34, $35, $36, $37,
-             $38, $39, $40,
-             $41, $42)`,
+             $34, $35, $36,
+             $37, $38,
+             $39, $40, $41, $42,
+             $43, $44, $45,
+             $46, $47)`,
     [
       row.id,
       row.property_id,
@@ -147,6 +151,13 @@ export async function upsertListing(client: Queryable, row: ListingRow): Promise
       // that omission is a compile error rather than a runtime disclosure.
       row.internet_display_allowed,
       row.address_display_allowed,
+      // #53. Bright's field-level suppression flags — the same "required, bound explicitly, never
+      // defaulted here" reasoning as the two flags above.
+      row.price_display_allowed,
+      row.price_history_display_allowed,
+      row.media_display_allowed,
+      row.days_on_market_display_allowed,
+      row.days_on_market,
       row.broker_name,
       row.broker_phone,
       row.broker_email,
@@ -395,7 +406,7 @@ export async function getOrCreateUnit(client: Queryable, row: UnitRow): Promise<
  * what this module assumes. Failing loudly beats returning `undefined` as an id and writing a listing
  * that references nothing.
  */
-function requireId(rows: Record<string, unknown>[], table: string): string {
+export function requireId(rows: Record<string, unknown>[], table: string): string {
   const id = rows[0]?.id;
   if (typeof id !== 'string') {
     throw new Error(`Upsert on ${table} returned no id.`);
@@ -439,8 +450,9 @@ export async function insertMedia(client: Queryable, rows: MediaRow[]): Promise<
   for (const row of rows) {
     await client.query(
       `INSERT INTO listing_media
-         (id, listing_id, source_url, alt_text, sort_order, is_primary, is_sample)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+         (id, listing_id, source_url, alt_text, sort_order, is_primary,
+          retained_when_suppressed, is_sample)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         row.id,
         row.listing_id,
@@ -448,6 +460,9 @@ export async function insertMedia(client: Queryable, rows: MediaRow[]): Promise<
         row.alt_text,
         row.sort_order,
         row.is_primary,
+        // #53. The explicit retained-photo marker. Bound explicitly, never defaulted here, for the
+        // same reason alt_text is: MediaRow requires it so a mapper must declare it.
+        row.retained_when_suppressed,
         row.is_sample,
       ],
     );

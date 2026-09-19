@@ -45,6 +45,13 @@
 *.xml text eol=lf
 *.sql text eol=lf
 
+# Bright MLS captures are verbatim HTTP response bodies whose sha256 is recorded in
+# docs/bright-mls/README.md and compared against the hash the ingestion job computes over the wire
+# bytes. Any line-ending normalisation makes the two disagree and reports a drift that did not
+# happen, so these two files are byte-exact and not text.
+apps/services/property-service/docs/bright-mls/bright-metadata.xml -text
+apps/services/property-service/docs/bright-mls/service-document.json -text
+
 # Documentation
 *.txt text eol=lf
 README text eol=lf

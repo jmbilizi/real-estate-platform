@@ -147,18 +147,18 @@ conventions before inventing values: test uses the `:test` tag with 2 replicas, 
 with 3 (not a `:prod` tag).
 
 **Keep insertion position consistent everywhere.** A new service goes in the same relative slot in
-every registry — for `property-service` that meant after `account-service` and before `cribstop-web`
-in all five `kustomization.yaml` files, all three `deploy-control.yaml` environments, and the
-skaffold services module. Verify the _rendered_ result, not just the source:
+every registry: every `infra/k8s/**/kustomization.yaml`, every environment block in
+`infra/deploy-control.yaml`, and the skaffold services module. Pick the slot next to the existing
+service you copied. Verify the _rendered_ result, not just the source:
 `kustomize build infra/k8s/<overlay> --enable-alpha-plugins`. Strategic-merge patches reorder list
 entries by the patch's order, so ordering you wrote in base can silently change per overlay.
 
 ### 5b. If the service owns a database
 
 The Postgres StatefulSet already provisions per-service databases and users
-(`infra/k8s/base/configmaps/postgres.configmap.yaml` — `account_db`, `messaging_db`, `property_db`,
-each with its own owner and extensions). "The database already exists" is where the work _starts_,
-not where it ends. Wire all three of these or the pod cannot talk to it:
+(`infra/k8s/base/configmaps/postgres.configmap.yaml` — one `<service>_db` per service, each with its
+own owner and extensions). "The database already exists" is where the work _starts_, not where it
+ends. Wire all three of these or the pod cannot talk to it:
 
 - **Connection env on the container**, host `postgres-svc` port `5432`, with the password pulled
   from `secretKeyRef` → `postgres-secret` / `<SERVICE>_SERVICE_DB_USER_PASSWORD`. Never inline a
@@ -218,11 +218,12 @@ if they must differ (as for `multi-model-inference` → `inference-service`).
 Add the Ocelot route in `apps/api-gateway/Configuration/` (upstream path → new service ClusterIP +
 port). Auth is forwarded (cookie / opaque bearer / API key) — do not add JWT anything.
 
-## 8. Project AGENTS.md + root index
+## 8. Project AGENTS.md
 
-Create `apps/services/<name>/AGENTS.md` (copy the shape of an existing service guide: description,
-Nx project name, commands, notes) plus a sibling `CLAUDE.md` stub containing `@AGENTS.md` (copy an
-existing one), and add one line to the root `AGENTS.md` "Project Guides" list.
+Create `apps/services/<name>/AGENTS.md` with an H1 `# <Title> (<nx-project-name>)`, then the
+description, commands, and notes (copy the shape of an existing service guide). Run
+`pnpm run agents:sync`: it creates the sibling `CLAUDE.md` stub and adds the guide to the root
+`AGENTS.md` list. `agents:check` fails until the guide exists.
 
 ## 9. Verify everything
 

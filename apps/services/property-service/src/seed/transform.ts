@@ -235,6 +235,13 @@ export function mapToListingRow(
     // MLS mapper cannot forget to carry the feed's real value.
     internet_display_allowed: true,
     address_display_allowed: true,
+    // #53. Sample inventory is fully displayable — there is no real seller to have opted out of a
+    // field, and the mock dataset does not model "days on market" at all.
+    price_display_allowed: true,
+    price_history_display_allowed: true,
+    media_display_allowed: true,
+    days_on_market_display_allowed: true,
+    days_on_market: null,
     broker_name: listing.brokerName,
     broker_phone: listing.brokerPhone,
     broker_email: listing.brokerEmail,
@@ -321,6 +328,9 @@ export function mapToMediaRows(ids: string[], listingId: string, listing: MockLi
     alt_text: null,
     sort_order: index,
     is_primary: index === 0,
+    // #53. Sample listings are never field-suppressed, so there is never a retained-photo marker
+    // to set.
+    retained_when_suppressed: false,
     is_sample: SEED_IS_SAMPLE,
   }));
 }

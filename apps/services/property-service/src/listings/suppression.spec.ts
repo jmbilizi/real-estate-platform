@@ -179,3 +179,8 @@ describe('applyCardAddressSuppression (#105)', () => {
     expect(card.primaryMedia?.altText).toBe(LEAKY_ALT_TEXT);
   });
 });
+
+// The MLS attribute path's address-suppression rule (#128) is enforced in SQL, inside
+// `getListingAttributes()`/`getPropertyAttributes()` in `repository.ts` — see those doc comments
+// and `repository.spec.ts` for the query-shape tests. There is no app-code filter function here to
+// test: the decision never leaves Postgres.

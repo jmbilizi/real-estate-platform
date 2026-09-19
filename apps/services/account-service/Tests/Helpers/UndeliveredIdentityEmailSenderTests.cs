@@ -2,84 +2,82 @@
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
+using AccountService.Configuration;
 using AccountService.Helpers;
 using AccountService.Models;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace AccountService.Tests.Helpers
 {
     /// <summary>
-    /// Tests for the stand-in <c>IEmailSender&lt;ApplicationUser&gt;</c> used while no delivery
-    /// channel is configured.
+    /// Unit tests for <see cref="UndeliveredIdentityEmailSender"/>.
     /// </summary>
-    /// <remarks>
-    /// Two things matter about it, on every one of Identity's three sends: that the missing channel
-    /// is impossible to miss in the logs, and that the credential never reaches them. What it
-    /// replaces is Identity's own <c>DefaultMessageEmailSender</c> → <c>NoOpEmailSender</c> chain,
-    /// which discards the message and says nothing at all.
-    /// </remarks>
     public class UndeliveredIdentityEmailSenderTests
     {
-        private const string Email = "someone@example.com";
-        private const string Secret = "CfDJ8-super-secret-credential";
+        private const string Email = "person@example.com";
+        private const string Code = "Q29kZQ-SECRET";
+        private const string Link = "http://account-service-svc:8080/account/confirmEmail?userId=u1&amp;code=" + Code;
 
         [Fact]
-        public async Task SendPasswordResetCodeAsync_LogsADistinguishableWarning_WithoutTheCode()
+        public async Task SendConfirmationLinkAsync_WarnsWithTheConfirmationEventId_AndNeverLogsTheLink()
         {
-            var entry = await SendAsync((sender, user) =>
-                sender.SendPasswordResetCodeAsync(user, Email, Secret));
+            var entry = await SendAsync((sender, user) => sender.SendConfirmationLinkAsync(user, Email, Link));
 
-            entry.EventId.Name.Should().Be("PasswordResetTokenUndelivered");
-            entry.Message.Should().Contain("Password reset token issued");
+            entry.EventId.Should().Be(UndeliveredIdentityEmailSender.UndeliveredConfirmationEvent);
         }
 
         [Fact]
-        public async Task SendPasswordResetLinkAsync_LogsADistinguishableWarning_WithoutTheLink()
+        public async Task SendPasswordResetCodeAsync_WarnsWithTheResetEventId_AndNeverLogsTheCode()
         {
-            var entry = await SendAsync((sender, user) =>
-                sender.SendPasswordResetLinkAsync(user, Email, Secret));
+            var entry = await SendAsync((sender, user) => sender.SendPasswordResetCodeAsync(user, Email, Code));
 
-            entry.EventId.Name.Should().Be("PasswordResetTokenUndelivered");
+            entry.EventId.Should().Be(UndeliveredIdentityEmailSender.UndeliveredResetEvent);
         }
 
         [Fact]
-        public async Task SendConfirmationLinkAsync_LogsADistinguishableWarning_WithoutTheLink()
+        public async Task SendPasswordResetLinkAsync_WarnsWithTheResetEventId_AndNeverLogsTheLink()
         {
-            var entry = await SendAsync((sender, user) =>
-                sender.SendConfirmationLinkAsync(user, Email, Secret));
+            var entry = await SendAsync((sender, user) => sender.SendPasswordResetLinkAsync(user, Email, Link));
 
-            // A separate event id from the reset one: the two failures need separate alerts, because
-            // one means nobody can recover an account and the other means nobody can create one.
-            entry.EventId.Name.Should().Be("EmailConfirmationLinkUndelivered");
-            entry.Message.Should().Contain("Email confirmation link issued");
+            entry.EventId.Should().Be(UndeliveredIdentityEmailSender.UndeliveredResetEvent);
         }
 
-        /// <summary>
-        /// Runs one send and returns the single log entry it produced, asserting the guarantees that
-        /// hold for every send: a warning, identifiable without matching on prose, naming the
-        /// address and never the credential.
-        /// </summary>
         private static async Task<(LogLevel Level, EventId EventId, string Message)> SendAsync(
             Func<UndeliveredIdentityEmailSender, ApplicationUser, Task> send)
         {
             var logger = new CapturingLogger();
-            var sender = new UndeliveredIdentityEmailSender(logger);
+            var composer = new IdentityEmailComposer(
+                Options.Create(new TransactionalEmailOptions
+                {
+                    FromName = "Cribstop (Real Broker, LLC)",
+                    FromAddress = "no-reply@cribstop.com",
+                    ReplyToAddress = "contact@cribstop.com",
+                    BrokerageDisclosure = "Cribstop is brokered by Real Broker, LLC.",
+                }),
+                new ConfirmationLinkBuilder(Options.Create(new AccountRecoveryOptions
+                {
+                    WebBaseUrl = new Uri("https://cribstop.example"),
+                    ConfirmationPath = "/confirm-email",
+                })));
+            var sender = new UndeliveredIdentityEmailSender(composer, logger);
 
             await send(sender, new ApplicationUser { Email = Email });
 
             var entry = logger.Entries.Should().ContainSingle().Subject;
 
-            // Loud, not silent — and identifiable by event id, so an alert need not match on prose.
             entry.Level.Should().Be(LogLevel.Warning);
-            entry.EventId.Name.Should().NotBeNullOrEmpty();
             entry.Message.Should().Contain(Email);
+            entry.Message.Should().Contain("no-reply@cribstop.com");
+            entry.Message.Should().Contain("contact@cribstop.com");
             entry.Message.Should().Contain("no delivery channel");
 
-            // The link and the code are both bearer credentials for the account. Neither goes to a
-            // shared sink, where the audience is larger than the account holder.
-            entry.Message.Should().NotContain(Secret);
+            // The link and the code are bearer credentials for the account.
+            entry.Message.Should().NotContain(Code);
+            entry.Message.Should().NotContain("confirm-email");
+            entry.Message.Should().NotContain("account-service-svc");
 
             return entry;
         }

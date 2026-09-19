@@ -16,13 +16,18 @@ spec:
     spec:
       containers:
         - name: postgres
+          # 256Mi was enough for an idle instance and the 13-row sample seed, and nothing else.
+          # The Bright replication job (#92) writes 931-field jsonb rows in batches and OOMKilled
+          # this container three times in a row, which presents as "connection terminated
+          # unexpectedly" on the client and looks like a network fault. Raised so a local cluster
+          # can hold real feed data. Hetzner overlays are unchanged.
           resources:
             requests:
-              memory: "128Mi"
+              memory: "256Mi"
               cpu: "50m"
             limits:
-              memory: "256Mi"
-              cpu: "100m"
+              memory: "1Gi"
+              cpu: "500m"
   volumeClaimTemplates:
     - metadata:
         name: postgres-data

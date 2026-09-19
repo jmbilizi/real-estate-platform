@@ -4,7 +4,12 @@ import { listingCardSchema, listingsEnvelopeSchema } from './listing-card';
 import { listingDetailSchema } from './listing-detail';
 import { listingsMetaSchema } from './listings-meta';
 import { errorBodySchema } from './errors';
-import { searchRequestSchema } from './search-request';
+import {
+  MAX_RESULT_OFFSET,
+  maxReachablePage,
+  PAGE_SIZE_DEFAULT,
+  searchRequestSchema,
+} from './search-request';
 
 /**
  * `unrepresentable` is deliberately left at its default (`'throw'`), not `'any'`. `'any'` would
@@ -86,7 +91,8 @@ function componentSchemas() {
  * nobody checks.
  *
  * 429 is deliberately NOT documented here: rate limiting is enforced by the gateway's Ocelot route
- * configuration, not by this service, so it is not this document's claim to make.
+ * configuration, not by this service, so it is not this document's claim to make. The gateway's own
+ * 429/502/503 contract lives in `@cribstop/gateway-contracts` instead (#177).
  */
 const serverErrorResponse = {
   description: 'Unexpected server error. The body carries no detail by design.',
@@ -135,7 +141,12 @@ export function toOpenApiDocument() {
         'Free-text `query` matches title, address, ' +
         'city, neighborhood and zip — never the description, which is third-party MLS remarks ' +
         'carrying a moderation state; making it searchable would allow keyword-based steering on ' +
-        'protected-class language (PRD §6.3).',
+        'protected-class language (PRD §6.3). A seller may also suppress price, photos, days on ' +
+        'market or price history individually (#53) while the listing stays syndicated; a field ' +
+        'withheld this way is null (or, for photos, reduced to at most one image), and the ' +
+        'listing remains in results and in `total`. See the `minPrice`/`maxPrice`/`sort` ' +
+        'parameter descriptions for how a seller-suppressed price interacts with range filters ' +
+        'and ordering.',
     },
     paths: {
       '/listings': {
@@ -144,7 +155,20 @@ export function toOpenApiDocument() {
           summary: 'Search listings',
           description:
             'Sorted with a deterministic total order, so paging is stable. `listingType=all` ' +
-            'covers currently marketed listings and excludes sold; ask for `sold` explicitly.',
+            'covers currently marketed listings and excludes sold; ask for `sold` explicitly.\n\n' +
+            'This is a SEARCH surface, not a bulk-export surface. Paging depth is bounded: ' +
+            `\`(page - 1) * pageSize\` must not exceed ${MAX_RESULT_OFFSET}, so at the default ` +
+            `page size of ${PAGE_SIZE_DEFAULT} the deepest reachable page is ` +
+            `${maxReachablePage(PAGE_SIZE_DEFAULT)}. A request past that window is rejected with ` +
+            '400 and the error code `result_window_exceeded` — it is never silently clamped to ' +
+            'the last valid page, and never answered with an empty 200. There is no parameter ' +
+            'that lifts the bound. To reach listings outside the window, narrow the search with ' +
+            'filters; retrieving the whole set is not a supported operation.\n\n' +
+            'The bound is on depth alone — no filter is required, and an unfiltered search is a ' +
+            'supported browse path. It is also independent of the past-the-end rule: a page ' +
+            'beyond the last result but INSIDE the window is a normal 200 with an empty ' +
+            '`results` array. `total` is always the exact count of the full filtered set, even ' +
+            'when that count exceeds the window — it is never clamped to it.',
           parameters: searchParameters(),
           responses: {
             '200': {
@@ -154,7 +178,12 @@ export function toOpenApiDocument() {
               },
             },
             '400': {
-              description: 'Unknown or invalid query parameter.',
+              description:
+                'Unknown or invalid query parameter (`invalid_request`), or a page past the ' +
+                'reachable result window (`result_window_exceeded`). The two carry different ' +
+                'error codes because they call for different responses: the first means a ' +
+                'parameter needs fixing, the second that the search needs narrowing — retrying ' +
+                'the same request will never succeed.',
               content: {
                 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
               },

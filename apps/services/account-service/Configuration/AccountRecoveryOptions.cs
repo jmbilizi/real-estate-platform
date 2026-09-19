@@ -11,7 +11,7 @@ namespace AccountService.Configuration;
 /// </summary>
 /// <remarks>
 /// <para>
-/// One options type rather than three because it is genuinely one policy. The endpoints it governs
+/// One options type rather than several because it is genuinely one policy. The endpoints it governs
 /// are ASP.NET Core Identity's own (<c>MapIdentityApi</c>), which ship with no rate limiting of any
 /// kind and no timing equalisation, so everything here is a guarantee this service adds on top of
 /// them and shares a single window and a single response floor.
@@ -29,41 +29,48 @@ internal sealed class AccountRecoveryOptions
     public const string SectionName = "AccountRecovery";
 
     /// <summary>
-    /// Gets or sets a value indicating whether a confirmed email address is required to sign in.
-    /// Drives <c>SignInOptions.RequireConfirmedEmail</c>.
+    /// Gets or sets a value indicating whether an unconfirmed account is refused at sign-in.
+    /// Bound to <c>SignInOptions.RequireConfirmedAccount</c>. Every environment sets it explicitly.
+    /// #149 turns it on.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Deliberately <see langword="false"/> until the transactional email provider exists.</b>
-    /// Identity's <c>/register</c> issues a confirmation link through
-    /// <c>IEmailSender&lt;ApplicationUser&gt;</c>, and until issue #133 provisions a provider,
-    /// sending domain and per-environment credentials, nothing can deliver it. Turning this on
-    /// before then would mean no one can create a usable account at all — the web app's signup route
-    /// already posts to <c>/account/register</c> — which is a worse outcome than an unconfirmed
-    /// address. The flip to <see langword="true"/> is owned by #138 and is a configuration change,
-    /// not a code change: both states are covered by tests.
-    /// </para>
-    /// <para>
-    /// Two things this flag does not do, because both get assumed. It is <b>not a revocation</b>:
-    /// <c>/account/refresh</c> checks only the refresh token's own expiry and the security stamp —
-    /// it never calls <c>CanSignInAsync</c> — so an already-issued refresh token keeps minting
-    /// access tokens for an unconfirmed account until its own expiry or a stamp rotation. And
-    /// turning it on <b>creates an enumeration oracle on <c>/account/login</c></b>:
-    /// <c>PreSignInCheck</c> returns <c>SignInResult.NotAllowed</c> before the password is verified
-    /// and Identity's handler puts <c>result.ToString()</c> into the problem <c>detail</c>, so an
-    /// unknown address answers <c>"Failed"</c> and a registered-but-unconfirmed one answers
-    /// <c>"NotAllowed"</c> for any password at all. Both are recorded on issue #136 for a product
-    /// ruling rather than silently absorbed.
-    /// </para>
-    /// </remarks>
-    public bool RequireConfirmedEmailToSignIn { get; set; }
+    public bool RequireConfirmedEmail { get; set; }
 
     /// <summary>
-    /// Gets or sets how long an issued password-reset token stays valid. Bound into the dedicated
+    /// Gets or sets the public origin of the web app, for example <c>https://cribstop.com</c>.
+    /// The confirmation link is built from it. Required. No default in code (PRD §1).
+    /// </summary>
+    public Uri? WebBaseUrl { get; set; }
+
+    /// <summary>
+    /// Gets or sets the web route that receives the confirmation link. The settled value is
+    /// <c>/confirm-email</c> (stakeholder ruling 2026-09-16). Required.
+    /// </summary>
+    public string ConfirmationPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets how long a confirmation link stays valid. Enforced by the dedicated
+    /// <c>EmailConfirmationTokenProvider</c>, so it does not change any other Identity token.
+    /// </summary>
+    public TimeSpan ConfirmationTokenLifetime { get; set; } = TimeSpan.FromHours(24);
+
+    /// <summary>
+    /// Gets or sets how long an issued password-reset token stays valid. Enforced by the dedicated
     /// <c>PasswordResetTokenProvider</c>, so the configured value is the one actually enforced when
-    /// a token is redeemed — not merely advertised.
+    /// a token is redeemed, and it does not change the confirmation token's lifetime.
     /// </summary>
     public TimeSpan TokenLifetime { get; set; } = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// Gets or sets the minimum time between two confirmation sends for one address.
+    /// <see cref="TimeSpan.Zero"/> disables the interval.
+    /// </summary>
+    public TimeSpan ResendMinimumInterval { get; set; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>Gets or sets the confirmation sends allowed for one address per hour.</summary>
+    public int ResendsPerEmailPerHour { get; set; } = 3;
+
+    /// <summary>Gets or sets the confirmation sends allowed for one address per 24 hours.</summary>
+    public int ResendsPerEmailPerDay { get; set; } = 10;
 
     /// <summary>
     /// Gets or sets the number of password-reset requests allowed for one email address per
@@ -80,24 +87,17 @@ internal sealed class AccountRecoveryOptions
     /// </remarks>
     public int RequestsPerEmail { get; set; } = 5;
 
-    /// <summary>Gets or sets the number of password-reset requests allowed from one client address per <see cref="RequestWindow"/>.</summary>
-    public int RequestsPerAddress { get; set; } = 15;
-
     /// <summary>
-    /// Gets or sets the number of confirmation-email resends allowed for one email address per
+    /// Gets or sets the resend requests allowed from one client address per
     /// <see cref="RequestWindow"/>.
     /// </summary>
-    /// <remarks>
-    /// Identity's <c>/resendConfirmationEmail</c> does not gate on <c>IsEmailConfirmedAsync</c> at
-    /// all: it mails a live confirmation link to any address that names an account, already
-    /// confirmed or not. Unmetered, that is a mail cannon pointed at a third party's inbox, and the
-    /// address it targets is chosen entirely by the caller. Counted separately from
-    /// <see cref="RequestsPerEmail"/> so exhausting one does not consume the other.
-    /// </remarks>
-    public int ResendsPerEmail { get; set; } = 3;
-
-    /// <summary>Gets or sets the number of confirmation-email resends allowed from one client address per <see cref="RequestWindow"/>.</summary>
     public int ResendsPerAddress { get; set; } = 10;
+
+    /// <summary>
+    /// Gets or sets the password-reset requests allowed from one client address per
+    /// <see cref="RequestWindow"/>.
+    /// </summary>
+    public int RequestsPerAddress { get; set; } = 15;
 
     /// <summary>
     /// Gets or sets the number of reset redemption attempts allowed from one client address per
@@ -108,32 +108,18 @@ internal sealed class AccountRecoveryOptions
     public int RedemptionsPerAddress { get; set; } = 30;
 
     /// <summary>
-    /// Gets or sets the number of registration attempts allowed from one client address per
-    /// <see cref="RequestWindow"/>.
+    /// Gets or sets the registration attempts allowed from one client address per
+    /// <see cref="RequestWindow"/>. Loose on purpose: one client address is often many people
+    /// behind one NAT.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Identity's <c>/register</c> is unauthenticated, creates rows, sends mail, and — see the note
-    /// on issue #136 — discloses whether an address is already registered. A limit does not fix the
-    /// disclosure, but it bounds how fast the surface can be harvested or the table filled while the
-    /// disclosure is being decided.
-    /// </para>
-    /// <para>
-    /// Deliberately the loosest limit here. Unlike a reset request, a registration is something a
-    /// legitimate person does once — so the requests arriving from one address are far more likely
-    /// to be several unrelated people behind an office NAT or a carrier's CGNAT than one attacker,
-    /// and a tight cap denies a stranger a signup rather than stopping abuse. The gateway's own
-    /// per-route Ocelot limit (5/min) is the coarse edge bound; this one exists to stop a sustained
-    /// harvesting run, which is what the window rather than the count catches.
-    /// </para>
-    /// </remarks>
     public int RegistrationsPerAddress { get; set; } = 30;
 
-    /// <summary>Gets or sets the fixed window over which every limit above is counted.</summary>
+    /// <summary>Gets or sets the window for the per-client-address counters.</summary>
     public TimeSpan RequestWindow { get; set; } = TimeSpan.FromMinutes(15);
 
     /// <summary>
-    /// Gets or sets the cap on how many rate-limit counters are held at once.
+    /// Gets or sets the cap on live rate-limit counters. At the cap the limiter refuses requests
+    /// rather than stop counting. Size it well above the distinct addresses expected in one window.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -145,7 +131,7 @@ internal sealed class AccountRecoveryOptions
     /// At the cap the limiter <b>fails closed</b>: a request whose counter cannot be stored is
     /// refused, not waved through. So the cost of setting this too low is that a burst of unique
     /// addresses starts refusing legitimate recovery requests — visible and recoverable — rather
-    /// than silently disabling the limit, which is what the previous implementation did. Size it
+    /// than silently disabling the limit, which is what an earlier implementation did. Size it
     /// well above the number of distinct addresses plus client addresses you expect inside one
     /// <see cref="RequestWindow"/>.
     /// </para>
@@ -153,15 +139,63 @@ internal sealed class AccountRecoveryOptions
     public int MaxTrackedKeys { get; set; } = 50_000;
 
     /// <summary>
-    /// Gets or sets the floor on how long a recovery request takes to answer.
+    /// Gets or sets the floor on how long a recovery request takes to answer. The found-an-account
+    /// branch does more work than the other; the floor hides that from the clock.
+    /// <see cref="TimeSpan.Zero"/> disables it.
     /// </summary>
-    /// <remarks>
-    /// Identity's <c>/forgotPassword</c> and <c>/resendConfirmationEmail</c> return an identical
-    /// empty <c>200</c> whether or not the address names an account — but the branch that found one
-    /// does a database hit, a token generation and an <c>await</c> on the email sender, while the
-    /// branch that did not does almost nothing. That difference is a membership oracle which
-    /// survives every effort to make the response bodies identical. Padding both outcomes up to a
-    /// common floor removes the signal. Set to <see cref="TimeSpan.Zero"/> to disable.
-    /// </remarks>
     public TimeSpan MinimumResponseDuration { get; set; } = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>Validates the members that have no safe default.</summary>
+    /// <returns>An error message, or <see langword="null"/> when the options are valid.</returns>
+    public string? Validate()
+    {
+        if (this.WebBaseUrl is null || !this.WebBaseUrl.IsAbsoluteUri)
+        {
+            return $"{SectionName}:{nameof(this.WebBaseUrl)} must be an absolute URL.";
+        }
+
+        if (this.WebBaseUrl.Scheme is not ("http" or "https"))
+        {
+            return $"{SectionName}:{nameof(this.WebBaseUrl)} must use http or https.";
+        }
+
+        if (!this.ConfirmationPath.StartsWith('/'))
+        {
+            return $"{SectionName}:{nameof(this.ConfirmationPath)} must start with '/'.";
+        }
+
+        if (this.ConfirmationTokenLifetime <= TimeSpan.Zero)
+        {
+            return $"{SectionName}:{nameof(this.ConfirmationTokenLifetime)} must be positive.";
+        }
+
+        if (this.TokenLifetime <= TimeSpan.Zero)
+        {
+            return $"{SectionName}:{nameof(this.TokenLifetime)} must be positive.";
+        }
+
+        // A mistyped override binds to 0 and reads as "refuse everything". Refuse to start instead.
+        return FirstNonPositive(
+            (nameof(this.ResendsPerEmailPerHour), this.ResendsPerEmailPerHour),
+            (nameof(this.ResendsPerEmailPerDay), this.ResendsPerEmailPerDay),
+            (nameof(this.RequestsPerEmail), this.RequestsPerEmail),
+            (nameof(this.ResendsPerAddress), this.ResendsPerAddress),
+            (nameof(this.RequestsPerAddress), this.RequestsPerAddress),
+            (nameof(this.RedemptionsPerAddress), this.RedemptionsPerAddress),
+            (nameof(this.RegistrationsPerAddress), this.RegistrationsPerAddress),
+            (nameof(this.MaxTrackedKeys), this.MaxTrackedKeys));
+    }
+
+    private static string? FirstNonPositive(params (string Name, int Value)[] limits)
+    {
+        foreach (var (name, value) in limits)
+        {
+            if (value <= 0)
+            {
+                return $"{SectionName}:{name} must be positive.";
+            }
+        }
+
+        return null;
+    }
 }

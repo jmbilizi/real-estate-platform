@@ -1,8 +1,12 @@
-import axios from 'axios';
+import axios, { type AxiosResponse } from 'axios';
 import {
   ATTRIBUTION_KEYS,
+  errorBodySchema,
   type ListingCardRow,
   listingsEnvelopeSchema,
+  MAX_RESULT_OFFSET,
+  maxReachablePage,
+  SORT_VALUES,
 } from '@cribstop/property-contracts';
 import { complianceFixtureIds } from './support/fixture-ids';
 
@@ -36,6 +40,17 @@ async function fetchAllResults(
       return all;
     }
     page += 1;
+    // Paging past the result window (#65) is a 400, which would surface here as an opaque axios
+    // rejection. Every caller of this helper assumes it can reach the whole result set, and that
+    // assumption stops holding the moment the fixture dataset outgrows the window — say so plainly
+    // instead of letting an unrelated-looking HTTP error stand in for it.
+    if (page > maxReachablePage(pageSize)) {
+      throw new Error(
+        `Cannot page through ${envelope.total} results at pageSize=${pageSize}: that exceeds the ` +
+          `${MAX_RESULT_OFFSET}-row result window. These tests assume a dataset small enough to ` +
+          'walk; narrow the filters they pass or shrink the fixture set.',
+      );
+    }
   }
 }
 
@@ -132,6 +147,76 @@ describe('suppressed address (address_display_allowed = false)', () => {
       const serialised = JSON.stringify(row);
       expect(serialised).not.toContain(fixtures.suppressedAddressStreetLine);
       expect(serialised).not.toContain(fixtures.suppressedAddressUnitNumber);
+    });
+  });
+});
+
+describe('field-level seller suppression on search cards (#53)', () => {
+  it('masks price alone: null on the card, absent from BOTH range filters, and never lost from the result set', async () => {
+    const results = await fetchAllResults();
+    const row = results.find((result) => result.id === fixtures.suppressedPriceListingId);
+
+    expect(row).toBeDefined();
+    expect(row?.price).toBeNull();
+
+    const belowMax = await fetchAllResults({ maxPrice: fixtures.suppressedPriceStoredListPrice });
+    expect(belowMax.some((result) => result.id === fixtures.suppressedPriceListingId)).toBe(false);
+
+    const aboveMin = await fetchAllResults({
+      minPrice: fixtures.suppressedPriceStoredListPrice - 1,
+    });
+    expect(aboveMin.some((result) => result.id === fixtures.suppressedPriceListingId)).toBe(false);
+  });
+
+  it('sorts a suppressed-price listing LAST under both price-asc and price-desc, never lost', async () => {
+    const ascending = await fetchAllResults({ sort: 'price-asc' });
+    const descending = await fetchAllResults({ sort: 'price-desc' });
+
+    for (const results of [ascending, descending]) {
+      const index = results.findIndex((result) => result.id === fixtures.suppressedPriceListingId);
+      expect(index).toBeGreaterThanOrEqual(0);
+      const pricedAfterIt = results.slice(index + 1).filter((result) => result.price !== null);
+      expect(pricedAfterIt).toEqual([]);
+    }
+  });
+
+  it('masks days_on_market, distinct from every other family', async () => {
+    const results = await fetchAllResults();
+    const row = results.find((result) => result.id === fixtures.suppressedDaysOnMarketListingId);
+
+    expect(row).toBeDefined();
+    expect(row?.daysOnMarket).toBeNull();
+    // Anti-vacuity: the other families are unsuppressed on this fixture and must still publish.
+    expect(row?.price).not.toBeNull();
+  });
+
+  it('withholds price_reduced when price history is suppressed', async () => {
+    const results = await fetchAllResults();
+    const row = results.find((result) => result.id === fixtures.suppressedPriceHistoryListingId);
+
+    expect(row).toBeDefined();
+    expect(row?.priceReduced).toBe(false);
+  });
+
+  describe('media suppression: exactly one retained photo, never sort_order/is_primary', () => {
+    it('publishes ONLY the marked photo as primaryMedia', async () => {
+      const results = await fetchAllResults();
+      const row = results.find(
+        (result) => result.id === fixtures.suppressedMediaWithMarkerListingId,
+      );
+
+      expect(row).toBeDefined();
+      expect(row?.primaryMedia?.url).toBe(
+        'https://cdn.example/e2e-fixture-suppressed-media-retained.jpg',
+      );
+    });
+
+    it('publishes NO photo when no row is marked, never falling back to is_primary', async () => {
+      const results = await fetchAllResults();
+      const row = results.find((result) => result.id === fixtures.suppressedMediaNoMarkerListingId);
+
+      expect(row).toBeDefined();
+      expect(row?.primaryMedia).toBeNull();
     });
   });
 });
@@ -294,19 +379,115 @@ describe('pagination is a total order', () => {
     },
   );
 
-  it('returns 200 with an empty results array and the SAME total for a page far past the end — never a 404', async () => {
+  // Past-the-end and past-the-window are DIFFERENT rules (#65) and this test is about the first
+  // one. It pages to the deepest page still inside the window rather than to an arbitrary `9999`
+  // (which it used to do): out there the window rule answers first and this assertion would
+  // silently stop exercising anything about past-the-end behaviour.
+  it('returns 200 with an empty results array and the SAME total for a page far past the end but inside the window — never a 404', async () => {
     const first = listingsEnvelopeSchema.parse(
       (await axios.get('/listings', { params: { page: 1, pageSize: 20 } })).data,
     );
     const response = await axios.get('/listings', {
-      params: { page: 9999, pageSize: 20 },
+      params: { page: maxReachablePage(20), pageSize: 20 },
       validateStatus: () => true,
     });
 
     expect(response.status).toBe(200);
     const farPage = listingsEnvelopeSchema.parse(response.data);
+    // The seed-plus-fixture dataset is a few hundred rows, so the last in-window page is past its
+    // end. If this ever stops holding the dataset has grown past the window, and that is worth
+    // knowing loudly rather than having the assertion quietly weaken.
+    expect(first.total).toBeLessThan(MAX_RESULT_OFFSET);
     expect(farPage.results).toEqual([]);
     expect(farPage.total).toBe(first.total);
+  });
+});
+
+/**
+ * The result window (#65), against the real service and the real database.
+ *
+ * `app.spec.ts` already proves the rule in isolation against a fake pool. What these add is that
+ * the bound survives the whole stack — real parsing, real SQL, a real result set — and that it is
+ * the SAME bound for every sort and every filter combination, which is the property an attacker
+ * would probe for a gap in.
+ */
+describe('the result window bounds how deep a caller can page (#65)', () => {
+  const PAGE_SIZE = 20;
+  const LAST_IN_WINDOW = maxReachablePage(PAGE_SIZE);
+
+  // `validateStatus` is the point: every assertion below is about the status code, so a 400 must
+  // come back as a response to inspect rather than as a thrown axios error.
+  const get = (params: Record<string, unknown>): Promise<AxiosResponse> =>
+    axios.get('/listings', { params, validateStatus: () => true });
+
+  it('serves the last in-window page and rejects the first page past it', async () => {
+    const inWindow = await get({ page: LAST_IN_WINDOW, pageSize: PAGE_SIZE });
+    const outOfWindow = await get({ page: LAST_IN_WINDOW + 1, pageSize: PAGE_SIZE });
+
+    expect(inWindow.status).toBe(200);
+    expect(outOfWindow.status).toBe(400);
+  });
+
+  it('rejects with the documented error-body shape and a code that names the limit', async () => {
+    const response = await get({ page: LAST_IN_WINDOW + 1, pageSize: PAGE_SIZE });
+
+    expect(errorBodySchema.parse(response.data).error.code).toBe('result_window_exceeded');
+    expect(response.data.error.message).toContain(String(MAX_RESULT_OFFSET));
+  });
+
+  it('never clamps and never answers an out-of-window page with an empty 200', async () => {
+    const response = await get({ page: 9999, pageSize: PAGE_SIZE });
+
+    expect(response.status).toBe(400);
+    expect(response.data).not.toHaveProperty('results');
+  });
+
+  it('leaves total unaffected by either side of the boundary', async () => {
+    const first = listingsEnvelopeSchema.parse((await get({ page: 1, pageSize: PAGE_SIZE })).data);
+    const lastInWindow = listingsEnvelopeSchema.parse(
+      (await get({ page: LAST_IN_WINDOW, pageSize: PAGE_SIZE })).data,
+    );
+
+    expect(lastInWindow.total).toBe(first.total);
+    // And the rejected request cannot have moved it either — re-read after crossing the boundary.
+    await get({ page: LAST_IN_WINDOW + 1, pageSize: PAGE_SIZE });
+    const after = listingsEnvelopeSchema.parse((await get({ page: 1, pageSize: PAGE_SIZE })).data);
+    expect(after.total).toBe(first.total);
+  });
+
+  it.each(SORT_VALUES)('enforces the identical bound for sort=%s', async (sort) => {
+    expect((await get({ sort, page: LAST_IN_WINDOW, pageSize: PAGE_SIZE })).status).toBe(200);
+
+    const rejected = await get({ sort, page: LAST_IN_WINDOW + 1, pageSize: PAGE_SIZE });
+    expect(rejected.status).toBe(400);
+    expect(rejected.data.error.code).toBe('result_window_exceeded');
+  });
+
+  it.each([
+    ['no filters (the unfiltered browse surface)', {}],
+    ['listingType=sold', { listingType: 'sold' }],
+    ['listingType=rent with a bed filter', { listingType: 'rent', beds: 2 }],
+    ['a free-text query', { query: 'Fixture' }],
+    ['an open-house filter', { openHouse: true }],
+    ['an amenity + property type combination', { amenities: 'Pool', propertyType: 'Condo' }],
+  ])('enforces the identical bound for %s', async (_label, filters) => {
+    expect((await get({ ...filters, page: LAST_IN_WINDOW, pageSize: PAGE_SIZE })).status).toBe(200);
+
+    const rejected = await get({ ...filters, page: LAST_IN_WINDOW + 1, pageSize: PAGE_SIZE });
+    expect(rejected.status).toBe(400);
+    expect(rejected.data.error.code).toBe('result_window_exceeded');
+  });
+
+  it('bounds the offset rather than the page number, so a larger page size buys fewer pages', async () => {
+    expect((await get({ pageSize: 100, page: maxReachablePage(100) })).status).toBe(200);
+    expect((await get({ pageSize: 100, page: maxReachablePage(100) + 1 })).status).toBe(400);
+  });
+
+  it('still serves page 1 of an unfiltered search — the bound is on depth, never on browsing without filters', async () => {
+    const response = await get({});
+
+    expect(response.status).toBe(200);
+    expect(listingsEnvelopeSchema.parse(response.data).results.length).toBeGreaterThan(0);
   });
 });
 

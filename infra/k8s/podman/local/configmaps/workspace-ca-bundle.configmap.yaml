@@ -1,0 +1,10 @@
+# Committed placeholder (#180). `tools/infra/local-ca-overlay.js` overrides `data` with the real
+# enterprise CA bundle when `.workspace-certs/workspace-enterprise-roots.pem` holds one. Kustomize
+# strategic-merges `data` key by key, so this key stays empty — never a committed CA — on a
+# workstation with no corporate TLS-intercepting proxy.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: workspace-ca-bundle
+data:
+  workspace-enterprise-roots.pem: ""

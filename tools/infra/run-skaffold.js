@@ -20,6 +20,8 @@ if (args.length === 0) {
 }
 
 const { withDefaultRepoArg } = require('./registry-settings');
+const { ensureLocalSecretOverlay, describeOverrides } = require('./local-secret-overlay');
+const { ensureLocalCaBundleOverlay, describeCaBundleOverlay } = require('./local-ca-overlay');
 
 // Keep package.json scripts simple, and allow CI to override via env.
 args = withDefaultRepoArg(args, args[0]);
@@ -37,7 +39,7 @@ function hasArg(argsList, name) {
  *
  * Returns the generated overlay directory path, or null if generation isn't needed/possible.
  */
-function ensureServicesOnlyOverlay() {
+function ensureServicesOnlyOverlay(baseOverlay = '../../local') {
   const generatedDir = path.join(
     workspaceRoot,
     'infra',
@@ -115,11 +117,14 @@ function ensureServicesOnlyOverlay() {
     )
     .join('\n');
 
+  // `baseOverlay` is the committed local overlay by default, and the generated secret overlay when
+  // `.env` supplies at least one key. Chaining here is what lets the two generated overlays
+  // compose without either profile having to know about the other.
   const content = `# AUTO-GENERATED — do not edit. Source of truth: skaffold.yaml clients module.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - ../../local
+  - ${baseOverlay}
 patches:
 ${patchesYaml}
 `;
@@ -419,14 +424,125 @@ function resolvePodmanDockerHost() {
 
 const podmanDockerHost = resolvePodmanDockerHost();
 
+/**
+ * Load `.env` and build the local secret-injection overlay.
+ *
+ * `process.loadEnvFile()` needs no dependency, and it does not overwrite a variable already
+ * present in `process.env`. A shell export or a CI variable therefore still wins over the file,
+ * which is what makes a one-off override possible without editing `.env`.
+ *
+ * Returns null for a command that renders no manifests, so the caller below skips both overlays.
+ */
+function commandRendersManifests() {
+  const command = args[0];
+  const commandsThatRenderManifests = new Set([
+    'dev',
+    'debug',
+    'run',
+    'deploy',
+    'delete',
+    'render',
+  ]);
+  return commandsThatRenderManifests.has(command);
+}
+
+function loadDotEnvOnce() {
+  const envFile = path.join(workspaceRoot, '.env');
+  if (!fs.existsSync(envFile)) {
+    return;
+  }
+  try {
+    process.loadEnvFile(envFile);
+  } catch (error) {
+    console.error(`ERROR: Failed to read .env — ${error.message}`);
+    process.exit(1);
+  }
+}
+
+function ensureLocalSecrets(baseOverlay) {
+  if (!commandRendersManifests()) {
+    return null;
+  }
+  loadDotEnvOnce();
+  return ensureLocalSecretOverlay({ baseOverlay });
+}
+
+function ensureLocalCa(baseOverlay) {
+  if (!commandRendersManifests()) {
+    return null;
+  }
+  return ensureLocalCaBundleOverlay({ baseOverlay });
+}
+
+// Three generated overlays can each contribute a layer, and Kustomize resolves only one
+// `manifests.kustomize.paths` per invocation — so they chain rather than stack: the CA-bundle
+// overlay (if present) sits on the committed local overlay, the secrets overlay (if present) sits
+// on whichever of those exists, and the services-only overlay (if requested) sits on top of that.
+// Only the outermost of these that actually exists is ever passed as `-p`.
+const localCaResult = ensureLocalCa('../../local');
+const localCaDir = localCaResult ? localCaResult.dir : null;
+
+const secretsBaseOverlay = localCaDir ? '../ca-bundle' : '../../local';
+const localSecretsResult = ensureLocalSecrets(secretsBaseOverlay);
+const localSecretsDir = localSecretsResult ? localSecretsResult.dir : null;
+
 // When running --module services, generate the services-only overlay and activate the profile.
 const isServicesOnly =
   (args.includes('--module') && args.includes('services')) ||
   args.some((a) => a === '--module=services');
+
+// An explicit -p/--profile is the caller's choice of render path, so no generated profile is
+// activated over it.
+const callerChoseProfile = hasArg(args, '-p') || hasArg(args, '--profile');
+let injectionActive = false;
+let caInjectionActive = false;
+
 if (isServicesOnly) {
-  const overlayDir = ensureServicesOnlyOverlay();
-  if (overlayDir && !hasArg(args, '-p') && !hasArg(args, '--profile')) {
+  // The services-only overlay chains through whichever lower layer exists, so only one profile is
+  // ever activated. Two profiles would both set manifests.kustomize.paths, and the last one would
+  // silently discard the other's render path.
+  const servicesBaseOverlay = localSecretsDir
+    ? '../secrets'
+    : localCaDir
+      ? '../ca-bundle'
+      : '../../local';
+  const overlayDir = ensureServicesOnlyOverlay(servicesBaseOverlay);
+  if (overlayDir && !callerChoseProfile) {
     args.push('-p', 'services-only');
+    injectionActive = Boolean(localSecretsDir);
+    caInjectionActive = Boolean(localCaDir);
+  }
+} else if (localSecretsDir && !callerChoseProfile) {
+  args.push('-p', 'local-secrets');
+  injectionActive = true;
+  caInjectionActive = Boolean(localCaDir);
+} else if (localCaDir && !callerChoseProfile) {
+  args.push('-p', 'local-ca-bundle');
+  caInjectionActive = true;
+}
+
+// Reported after the profile decision, never before it: the overlay existing is not the same as
+// the render using it. Written to stderr so it cannot become an extra YAML document in the output
+// of `skaffold render`.
+if (localSecretsResult) {
+  if (localSecretsResult.overriddenKeys.length > 0 && !injectionActive) {
+    console.error(
+      `WARNING: ${localSecretsResult.overriddenKeys.length} secret override(s) are NOT injected, ` +
+        'because an explicit --profile selects the render path: ' +
+        `${localSecretsResult.overriddenKeys.join(', ')}`,
+    );
+  } else {
+    console.error(describeOverrides(localSecretsResult));
+  }
+}
+if (localCaResult) {
+  if (localCaDir && !caInjectionActive) {
+    console.error(
+      'WARNING: the enterprise CA bundle is NOT injected, because an explicit --profile selects ' +
+        'the render path.',
+    );
+  } else {
+    console.error(describeCaBundleOverlay(localCaResult));
   }
 }
 

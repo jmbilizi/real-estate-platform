@@ -3,9 +3,11 @@ import {
   type ListingsEnvelope,
   type ListingsMeta,
   NOT_FOUND_BODY,
+  resultOffsetFor,
   type SearchRequest,
 } from '@cribstop/property-contracts';
-import { LISTING_CARD_SELECT, LISTING_DETAIL_SELECT } from './columns';
+import type { AddressClassification } from '../db/mls-attributes';
+import { ATTRIBUTE_SELECT, LISTING_CARD_SELECT, LISTING_DETAIL_SELECT } from './columns';
 import { buildSearchQuery } from './search-query';
 import {
   type ListingCardDbRow,
@@ -19,14 +21,19 @@ import { applyAddressSuppression, applyCardAddressSuppression } from './suppress
 /**
  * The only module in this service that executes read SQL.
  *
- * Every statement here reads `listing_search_v` and nothing else drives row visibility. The view
- * ENFORCES the display rules — address and coordinates masked together on seller opt-out, whole
+ * Every statement here reads `listing_search_v`, and it is still the sole source of LISTING
+ * visibility and display masking — address and coordinates masked together on seller opt-out, whole
  * listing excluded when `internet_display_allowed` is false, unapproved descriptions withheld,
  * statuses with no `consumer_status` excluded, solds gated on `close_date`, `is_sample`
- * OR-propagated — so a query that read the base tables instead would reopen every one of those holes
- * at once, silently. There is deliberately no parameter, header or flag that bypasses it, and none of
- * its predicates is restated in a WHERE clause here: a second copy of a compliance rule is a second
- * place for it to drift.
+ * OR-propagated. None of those predicates is restated in a WHERE clause here: a second copy of a
+ * compliance rule is a second place for it to drift.
+ *
+ * `getListingAttributes()`/`getPropertyAttributes()` (#128) add a SECOND governance table to that
+ * picture: they join or reference `listing_search_v` for the listing-visibility rule above, AND gate
+ * on `mls_fields.is_address_bearing`, the field-level closed-vocabulary rule #127/#128 enforce on a
+ * table the view does not project. That is a field's own governance, not a restatement of the
+ * view's — read their doc comments before treating "no WHERE clause restates the view" as covering
+ * them too.
  *
  * Columns are enumerated from `columns.ts`, never `SELECT *`. The view no longer projects the
  * unmasked `street_line` beside the masked `address` (#48, closed), so this is now defence in depth
@@ -46,14 +53,27 @@ export interface ReadPool extends ReadClient {
 }
 
 /**
- * The soonest-first primary image. `is_primary` wins; failing that the lowest `sort_order`, with `id`
- * as a final tiebreaker so the chosen image is stable across requests rather than plan-dependent.
+ * #53. THE media-suppression predicate, defined once so search and detail cannot disagree about
+ * which photos a suppressed listing shows. When `media_display_allowed` is false, only the row
+ * `retained_when_suppressed` marks can match at all — never falling back to `sort_order`/
+ * `is_primary` — and none at all when no row is marked. That "none at all" is the fail-closed case
+ * a media pass that has not run yet must land in, never an arbitrary photo.
+ */
+const MEDIA_VISIBLE = '(v.media_display_allowed OR m.retained_when_suppressed)';
+
+/**
+ * The soonest-first primary image when media is not suppressed: `is_primary` wins; failing that
+ * the lowest `sort_order`, with `id` as a final tiebreaker so the chosen image is stable across
+ * requests rather than plan-dependent. `MEDIA_VISIBLE` gates the WHERE clause, not this ORDER BY:
+ * when media is suppressed there is at most one candidate row (enforced by
+ * `idx_listing_media_one_retained`), so `is_primary`/`sort_order` are never consulted to choose
+ * among candidates in that case.
  */
 const PRIMARY_MEDIA_JOIN = `
     LEFT JOIN LATERAL (
       SELECT m.source_url AS primary_media_url, m.alt_text AS primary_media_alt_text
       FROM listing_media m
-      WHERE m.listing_id = v.id AND m.source_url IS NOT NULL
+      WHERE m.listing_id = v.id AND m.source_url IS NOT NULL AND ${MEDIA_VISIBLE}
       ORDER BY m.is_primary DESC, m.sort_order, m.id
       LIMIT 1
     ) pm ON true`;
@@ -98,7 +118,9 @@ export async function searchListings(
     // Their placeholder numbers continue the filter params' sequence, hence the arithmetic.
     const limitPlaceholder = `$${params.length + 1}`;
     const offsetPlaceholder = `$${params.length + 2}`;
-    const offset = (request.page - 1) * request.pageSize;
+    // The same function the route's window check bounds (#65), so the offset enforced and the
+    // offset issued are one definition rather than two copies of the same arithmetic.
+    const offset = resultOffsetFor(request.page, request.pageSize);
 
     const pageResult = await client.query<ListingCardDbRow>(
       `SELECT ${LISTING_CARD_SELECT}, pm.primary_media_url, pm.primary_media_alt_text
@@ -157,12 +179,16 @@ export async function findListingById(pool: ReadClient, id: string): Promise<Lis
      JOIN properties p ON p.id = v.property_id
      LEFT JOIN units u ON u.id = v.unit_id
      LEFT JOIN LATERAL (
+       -- #53. Same MEDIA_VISIBLE rule as PRIMARY_MEDIA_JOIN, applied to the full gallery: when
+       -- media is suppressed only the marked row can match, so the detail response degrades to at
+       -- most one photo (or none) exactly like the card's primaryMedia, rather than two different
+       -- answers for the same listing.
        SELECT json_agg(
                 json_build_object('url', m.source_url, 'alt_text', m.alt_text)
                 ORDER BY m.is_primary DESC, m.sort_order, m.id
               ) AS media
        FROM listing_media m
-       WHERE m.listing_id = v.id AND m.source_url IS NOT NULL
+       WHERE m.listing_id = v.id AND m.source_url IS NOT NULL AND ${MEDIA_VISIBLE}
      ) media ON true
      LEFT JOIN LATERAL (
        -- Upcoming occurrences only, on the same \`ends_at > now()\` rule the view applies to the card's
@@ -211,6 +237,89 @@ export async function getListingsMeta(pool: ReadClient): Promise<ListingsMeta> {
     throw new Error('Aggregate query over listing_search_v returned no row.');
   }
   return toListingsMeta(row);
+}
+
+/** One `mls_fields`-joined attribute row, as `ATTRIBUTE_SELECT` projects it. */
+export interface AttributeDbRow {
+  id: string;
+  field_id: string;
+  value_kind: string;
+  value_numeric: string | null;
+  value_boolean: boolean | null;
+  value_date: string | null;
+  value_timestamp: string | null;
+  value_lookup_id: string | null;
+  originating_system: string;
+  reso_resource: string;
+  field_name: string;
+  address_classification: AddressClassification | null;
+  is_consumer_displayable: boolean;
+}
+
+/**
+ * Every governed attribute of one listing (#127), address-bearing ones excluded IN SQL when the
+ * listing's address is suppressed (#128).
+ *
+ * The suppression decision belongs to this query, not to the caller: it joins `listing_search_v` on
+ * the listing's OWN id and gates `mls_fields.is_address_bearing` in the WHERE clause. That is what
+ * makes it structural rather than opt-in — no address-bearing row for a suppressed listing ever
+ * leaves Postgres, so there is no "remember to filter" step, no signal to pass wrong, and nothing
+ * for a future debug log or early return to leak. A listing absent from the view (excluded,
+ * soft-deleted) fails the join and returns nothing, exactly like every other read in this file.
+ *
+ * `is_address_bearing` is the governance flag itself; `address_classification` (still projected by
+ * `ATTRIBUTE_SELECT`) is descriptive context for a caller, never re-derived into a second decision.
+ *
+ * Ready for #93 to call: nothing in this service exposes an "attributes" field on the wire yet, so
+ * nothing calls this function outside its own tests.
+ */
+export async function getListingAttributes(
+  pool: ReadClient,
+  listingId: string,
+): Promise<AttributeDbRow[]> {
+  const result = await pool.query<AttributeDbRow>(
+    `SELECT ${ATTRIBUTE_SELECT}
+       FROM listing_attributes a
+       JOIN mls_fields f ON f.id = a.field_id
+       JOIN listing_search_v v ON v.id = a.listing_id
+      WHERE a.listing_id = $1
+        AND (NOT f.is_address_bearing OR v.address IS NOT NULL)`,
+    [listingId],
+  );
+  return result.rows;
+}
+
+/**
+ * Every governed attribute of one property (#127), durable across every listing the property has
+ * ever carried.
+ *
+ * DELIBERATE CHOICE: address-bearing attributes are excluded when ANY visible listing on the
+ * property has its address suppressed — never keyed on one caller-chosen listing. A durable,
+ * offer-independent fact cannot correctly take its visibility from a single offer among possibly
+ * several: a property with one suppressed listing and one published listing withholds its
+ * address-bearing attributes from BOTH, because publishing them through the published listing would
+ * still hand a reader the fact the other listing's seller opted out of. Conservative and
+ * fail-closed, matching the default-deny rule the rest of #128 already applies.
+ *
+ * "Visible" means visible in `listing_search_v` — an excluded or soft-deleted listing contributes
+ * no suppression state, matching the view's own row-visibility rule.
+ */
+export async function getPropertyAttributes(
+  pool: ReadClient,
+  propertyId: string,
+): Promise<AttributeDbRow[]> {
+  const result = await pool.query<AttributeDbRow>(
+    `SELECT ${ATTRIBUTE_SELECT}
+       FROM property_attributes a
+       JOIN mls_fields f ON f.id = a.field_id
+      WHERE a.property_id = $1
+        AND (NOT f.is_address_bearing OR NOT EXISTS (
+              SELECT 1 FROM listing_search_v v
+               WHERE v.property_id = a.property_id AND v.address IS NULL
+            ))`,
+    [propertyId],
+  );
+  return result.rows;
 }
 
 export { NOT_FOUND_BODY };

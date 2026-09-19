@@ -19,6 +19,12 @@
         "Period": "1m",
         "PeriodTimespan": 60,
         "Limit": 120
+      },
+      "QoSOptions": {
+        "Timeout": 3000,
+        "MinimumThroughput": 5,
+        "SamplingDuration": 30000,
+        "BreakDuration": 5000
       }
     },
     {
@@ -38,6 +44,12 @@
         "Period": "1m",
         "PeriodTimespan": 60,
         "Limit": 60
+      },
+      "QoSOptions": {
+        "Timeout": 5000,
+        "MinimumThroughput": 5,
+        "SamplingDuration": 45000,
+        "BreakDuration": 5000
       }
     },
     {
@@ -57,6 +69,12 @@
         "Period": "1m",
         "PeriodTimespan": 60,
         "Limit": 90
+      },
+      "QoSOptions": {
+        "Timeout": 3000,
+        "MinimumThroughput": 5,
+        "SamplingDuration": 30000,
+        "BreakDuration": 5000
       }
     }
   ],

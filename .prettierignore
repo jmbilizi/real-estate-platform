@@ -35,3 +35,10 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# Verbatim Bright MLS HTTP captures. Their sha256 is recorded in the sibling README and compared
+# against the hash the ingestion job computes over the wire bytes, so a reformat reports a drift
+# that did not happen. Prettier rewrote the service document once already (2,406 bytes to 2,919).
+# `.gitattributes` marks the same two files `-text` for the identical reason.
+apps/services/property-service/docs/bright-mls/bright-metadata.xml
+apps/services/property-service/docs/bright-mls/service-document.json

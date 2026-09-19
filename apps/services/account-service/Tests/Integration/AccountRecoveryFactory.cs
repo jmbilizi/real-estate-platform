@@ -2,8 +2,8 @@
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
-using System.Text.Encodings.Web;
 using AccountService.Configuration;
+using AccountService.Helpers;
 using AccountService.Models;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
@@ -12,14 +12,13 @@ using Microsoft.Extensions.DependencyInjection;
 namespace AccountService.Tests.Integration
 {
     /// <summary>
-    /// A factory for account-recovery tests: it captures the confirmation links and reset codes the
-    /// service issues, and lets each test dictate the recovery policy it needs.
+    /// A factory for the Identity-surface tests. It records every message the service hands to the
+    /// delivery seam, composed through the real <see cref="IdentityEmailComposer"/>, and lets each
+    /// test set the recovery policy it needs.
     /// </summary>
     /// <remarks>
-    /// Deliberately <em>not</em> an <c>IClassFixture</c>. The rate limiter counts per client address,
-    /// and every request from <c>TestServer</c> arrives with no remote address at all, so a shared
-    /// host would let one test's requests exhaust another test's budget. One host per test keeps the
-    /// counters — like the in-memory database — private to the test that owns them.
+    /// Not an <c>IClassFixture</c>. The rate limiter counts per client address and TestServer
+    /// requests carry none, so one host per test keeps the counters private to the test.
     /// </remarks>
     /// <param name="configure">Recovery policy overrides for this host, if any.</param>
     internal sealed class AccountRecoveryFactory(Action<AccountRecoveryOptions>? configure = null)
@@ -27,7 +26,7 @@ namespace AccountService.Tests.Integration
     {
         private readonly List<SentMessage> sent = new();
 
-        /// <summary>The kind of message the service handed to the delivery channel.</summary>
+        /// <summary>The kind of message the service handed to the delivery seam.</summary>
         internal enum MessageKind
         {
             /// <summary>An email-confirmation link.</summary>
@@ -40,7 +39,7 @@ namespace AccountService.Tests.Integration
             PasswordResetLink,
         }
 
-        /// <summary>Gets the messages handed to the delivery channel, in order.</summary>
+        /// <summary>Gets the messages handed to the delivery seam, in order.</summary>
         internal IReadOnlyList<SentMessage> Sent
         {
             get
@@ -52,13 +51,17 @@ namespace AccountService.Tests.Integration
             }
         }
 
+        /// <summary>Gets the confirmation links issued so far, in order.</summary>
+        internal IReadOnlyList<SentMessage> ConfirmationLinks =>
+            this.Sent.Where(m => m.Kind == MessageKind.ConfirmationLink).ToList();
+
         /// <summary>Gets the password-reset codes issued so far, in order.</summary>
         internal IReadOnlyList<SentMessage> ResetCodes =>
             this.Sent.Where(m => m.Kind == MessageKind.PasswordResetCode).ToList();
 
-        /// <summary>Gets the confirmation links issued so far, in order.</summary>
-        internal IReadOnlyList<SentMessage> ConfirmationLinks =>
-            this.Sent.Where(m => m.Kind == MessageKind.ConfirmationLink).ToList();
+        /// <summary>Gets the password-reset links issued so far, in order.</summary>
+        internal IReadOnlyList<SentMessage> ResetLinks =>
+            this.Sent.Where(m => m.Kind == MessageKind.PasswordResetLink).ToList();
 
         /// <inheritdoc/>
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -67,11 +70,10 @@ namespace AccountService.Tests.Integration
 
             builder.ConfigureServices(services =>
             {
-                // Stands in for the delivery channel so a test can read what the account holder
-                // would have received. Registered last, so it wins over the service's own sender —
-                // which itself only exists to stop Identity's DefaultMessageEmailSender ->
-                // NoOpEmailSender chain discarding everything silently.
-                services.AddScoped<IEmailSender<ApplicationUser>>(_ => new RecordingEmailSender(this.Record));
+                services.AddScoped<IEmailSender<ApplicationUser>>(sp => new RecordingEmailSender(
+                    sp.GetRequiredService<IdentityEmailComposer>(),
+                    sp.GetRequiredService<ConfirmationLinkBuilder>(),
+                    this.Record));
 
                 if (configure is not null)
                 {
@@ -88,32 +90,48 @@ namespace AccountService.Tests.Integration
             }
         }
 
-        /// <summary>A message the service handed to the delivery channel.</summary>
+        /// <summary>A message the service handed to the delivery seam.</summary>
         /// <param name="Kind">Which of Identity's three sends this was.</param>
         /// <param name="Email">The address it was issued for.</param>
         /// <param name="Credential">
-        /// The link or code, HTML-decoded. Identity passes both through
-        /// <see cref="HtmlEncoder"/> on the way to the sender, which turns the <c>&amp;</c>
-        /// separating a confirmation link's query parameters into <c>&amp;amp;</c>. Decoding here
-        /// means a test can use the value as the consumer's browser would rather than rediscovering
-        /// that each time.
+        /// For a confirmation, the link as the consumer receives it (web origin, configured path).
+        /// For a reset, the HTML-decoded code or link.
         /// </param>
-        internal sealed record SentMessage(MessageKind Kind, string Email, string Credential);
+        /// <param name="Composed">The message the composer produced.</param>
+        internal sealed record SentMessage(MessageKind Kind, string Email, string Credential, OutboundEmail Composed);
 
-        private sealed class RecordingEmailSender(Action<SentMessage> record) : IEmailSender<ApplicationUser>
+        private sealed class RecordingEmailSender(
+            IdentityEmailComposer composer,
+            ConfirmationLinkBuilder links,
+            Action<SentMessage> record) : IEmailSender<ApplicationUser>
         {
-            public Task SendConfirmationLinkAsync(ApplicationUser user, string email, string confirmationLink) =>
-                this.Capture(MessageKind.ConfirmationLink, email, confirmationLink);
-
-            public Task SendPasswordResetLinkAsync(ApplicationUser user, string email, string resetLink) =>
-                this.Capture(MessageKind.PasswordResetLink, email, resetLink);
-
-            public Task SendPasswordResetCodeAsync(ApplicationUser user, string email, string resetCode) =>
-                this.Capture(MessageKind.PasswordResetCode, email, resetCode);
-
-            private Task Capture(MessageKind kind, string email, string credential)
+            public Task SendConfirmationLinkAsync(ApplicationUser user, string email, string confirmationLink)
             {
-                record(new SentMessage(kind, email, System.Net.WebUtility.HtmlDecode(credential)));
+                record(new SentMessage(
+                    MessageKind.ConfirmationLink,
+                    email,
+                    links.Rebuild(confirmationLink).ToString(),
+                    composer.ConfirmationLink(email, confirmationLink)));
+                return Task.CompletedTask;
+            }
+
+            public Task SendPasswordResetLinkAsync(ApplicationUser user, string email, string resetLink)
+            {
+                record(new SentMessage(
+                    MessageKind.PasswordResetLink,
+                    email,
+                    System.Net.WebUtility.HtmlDecode(resetLink),
+                    composer.PasswordResetLink(email, resetLink)));
+                return Task.CompletedTask;
+            }
+
+            public Task SendPasswordResetCodeAsync(ApplicationUser user, string email, string resetCode)
+            {
+                record(new SentMessage(
+                    MessageKind.PasswordResetCode,
+                    email,
+                    System.Net.WebUtility.HtmlDecode(resetCode),
+                    composer.PasswordResetCode(email, resetCode)));
                 return Task.CompletedTask;
             }
         }

@@ -1,15 +1,17 @@
 ---
 name: close-ticket
 description: Moves a ticket's board Status to In Review (PR opened) or Done (PR merged). Use
-  alongside superpowers:finishing-a-development-branch whenever the work being finished started from
-  a ticket picked up via the pick-next-ticket skill — "open a PR for this ticket", "mark ticket
-  done", "the PR for #42 just merged".
+  alongside your provider's finish-a-branch step whenever the work being finished started from a
+  ticket picked up via the pick-next-ticket skill — "open a PR for this ticket", "mark ticket done",
+  "the PR for #42 just merged".
 ---
 
 # Close Ticket
 
 Companion to `pick-next-ticket` — that skill moves a ticket to In Progress; this one moves it the
 rest of the way. Full command reference: `AGENTS.md` → "Product Backlog (GitHub Issues & Projects)".
+Write comments and PR text in ASD-STE100 Simplified Technical English (`AGENTS.md` → "Writing
+Standard"): the outcome, then the evidence, nothing else.
 
 ## Steps
 

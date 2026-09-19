@@ -356,6 +356,52 @@ test('CLI writes scope.txt and a lane plan, and exits 0 with a service opted out
   assert.ok(!restarts.includes('ingress-nginx-controller'));
 });
 
+/**
+ * `bright-mls-ingest` (#91) is the first deploy-control key whose resources are ALL non-workload
+ * kinds — a CronJob and its Secret. Emptiness is measured in resources, not workloads, or a
+ * single-service deploy of it (`workflow_dispatch` with services=bright-mls-ingest, the natural
+ * action once #117 provisions the credential) exits 1 having applied nothing.
+ *
+ * `scope.txt` must stay empty for it all the same: it drives the rollout-wait and rollback steps,
+ * and there is no `kubectl rollout status cronjob/x` to wait on.
+ */
+test('CLI deploys a service whose resources are all non-workload kinds', () => {
+  const documents = [
+    {
+      apiVersion: 'batch/v1',
+      kind: 'CronJob',
+      metadata: {
+        name: 'bright-mls-ingest',
+        namespace: 'default',
+        labels: { app: 'bright-mls-ingest' },
+      },
+      spec: { schedule: '0 3 * * *' },
+    },
+    {
+      apiVersion: 'v1',
+      kind: 'Secret',
+      metadata: { name: 'bright-mls-secret', labels: { app: 'bright-mls-ingest' } },
+    },
+  ];
+
+  const { code, dir } = runCli(documents, 'dev', 'bright-mls-ingest');
+
+  assert.equal(code, 0);
+  assert.equal(fs.readFileSync(path.join(dir, 'scope.txt'), 'utf-8').trim(), '');
+
+  const plan = JSON.parse(fs.readFileSync(path.join(dir, 'scope-plan.json'), 'utf-8'));
+  assert.deepEqual(
+    plan.services.map((service) => service.selector),
+    ['app=bright-mls-ingest'],
+  );
+  assert.deepEqual(plan.services[0].workloads, []);
+});
+
+test('CLI still refuses a run in which no in-scope service owns any resource at all', () => {
+  const { code } = runCli([], 'dev', 'bright-mls-ingest');
+  assert.equal(code, 1);
+});
+
 test('scope-plan.json has exactly the shape the deploy action jq-queries', () => {
   const { code, dir } = runCli(devDocuments(), 'dev', allowedServices('dev').join(','));
   assert.equal(code, 0);

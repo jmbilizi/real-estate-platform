@@ -4,6 +4,8 @@ kind: Kustomization
 # Reference base resources (cloud-agnostic configs)
 resources:
   - ../../base
+  # Placeholder CA bundle (#180) — see tools/infra/local-ca-overlay.js for the real-value path.
+  - configmaps/workspace-ca-bundle.configmap.yaml
 
 # Environment-specific patches (local Podman environment)
 # Patches override base resources with local development configuration:
@@ -29,6 +31,9 @@ patches:
   - path: patches/ingresses/jaeger.ingress.yaml
   - path: patches/ingresses/api-gateway.ingress.yaml
   - path: patches/ingresses/cribstop-web.ingress.yaml
+
+  ## CronJobs (scheduled tasks)
+  - path: patches/cronjobs/bright-mls-ingest.cronjob.yaml
 
 # Common labels for all resources
 labels:

@@ -72,6 +72,14 @@ build:
             - apps/services/account-service/Tests/**
             - apps/services/account-service/TestResults/**
 
+    # Builds ONE image serving two workloads: the `property-service` Deployment and the
+    # `bright-mls-ingest` CronJob (#91), which runs the same image with `node bright-ingest.js`
+    # (webpack.config.js → additionalEntryPoints). The CronJob therefore needs no artifact of its
+    # own — Skaffold rewrites the image reference wherever it appears in the rendered manifests —
+    # but it DOES have its own `infra/deploy-control.yaml` key, because whether it ships to an
+    # environment is a separate decision from whether the Property API does (#117: dev reads
+    # Bright's staging feed, prod the licensed one, test neither). If this artifact is ever split,
+    # the CronJob's image reference has to move with it.
     - image: property-service
       context: .
       custom:
@@ -149,6 +157,32 @@ profiles:
       kustomize:
         paths:
           - infra/k8s/podman/.generated/services-only
+        buildArgs:
+          - --enable-alpha-plugins
+
+  # Activated by tools/infra/run-skaffold.js only when `.env` supplies at least one secret key.
+  # The generated overlay chains to infra/k8s/podman/local (or to local-ca-bundle below, when both
+  # exist) and strategic-merges the supplied keys into the cluster Secrets. Never activate it by
+  # hand: the overlay does not exist otherwise. With --module services the services-only overlay
+  # chains through this one instead, so at most one of these three profiles is ever active.
+  - name: local-secrets
+    manifests:
+      kustomize:
+        paths:
+          - infra/k8s/podman/.generated/secrets
+        buildArgs:
+          - --enable-alpha-plugins
+
+  # Activated by tools/infra/run-skaffold.js only when a corporate enterprise CA is present at
+  # .workspace-certs/workspace-enterprise-roots.pem (#180). The generated overlay chains to
+  # infra/k8s/podman/local and overrides the placeholder workspace-ca-bundle ConfigMap with the real
+  # bundle. A no-op on a workstation with no TLS-intercepting proxy — see
+  # tools/infra/local-ca-overlay.js.
+  - name: local-ca-bundle
+    manifests:
+      kustomize:
+        paths:
+          - infra/k8s/podman/.generated/ca-bundle
         buildArgs:
           - --enable-alpha-plugins
 

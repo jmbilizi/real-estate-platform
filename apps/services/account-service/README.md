@@ -116,6 +116,59 @@ without an extra DB call.
 
 ---
 
+## Registration and Email Confirmation
+
+Registration, confirmation and resend are ASP.NET Core Identity's own endpoints:
+
+```
+POST /account/register                 { "email": "...", "password": "..." }   → 200 (empty)
+GET  /account/confirmEmail?userId=&code= → 200 "Thank you for confirming your email."
+POST /account/resendConfirmationEmail  { "email": "..." }                      → 200 (empty)
+```
+
+`/register` sends a confirmation link through `IEmailSender<ApplicationUser>`. The link points at
+the web app: `AccountRecovery:WebBaseUrl` + `/confirm-email` + `userId` + `code`. The link is valid
+for `AccountRecovery:ConfirmationTokenLifetime` (24h) on a dedicated token provider.
+
+**Enforcement is off** (`AccountRecovery:RequireConfirmedEmail = false` in every environment). An
+unconfirmed account can sign in. The service logs a warning (event 1364) at startup while this is
+so. #149 turns it on after #133 and #138 make delivery real.
+
+**No delivery transport exists yet.** `UndeliveredIdentityEmailSender` logs one warning per message
+(events 1360, 1361) and never logs the link or code. #138 replaces it.
+
+**Sender identity** (configuration, section `Email`): from
+`Cribstop (Real Broker, LLC) <no-reply@cribstop.com>`, reply-to `contact@cribstop.com`. Every body
+ends with `Email:BrokerageDisclosure` (PRD §6).
+
+**No account enumeration.** The caller learns nothing about whether an address has an account:
+
+| Request                                             | Response                     |
+| --------------------------------------------------- | ---------------------------- |
+| `/register`, address already in use                 | `200` empty, same as success |
+| `/register`, weak password or malformed address     | `400` validation problem     |
+| `/login`, unconfirmed (switch on) or locked out     | `401` `detail: "Failed"`     |
+| `/confirmEmail`, expired, used, tampered or unknown | `401` "Request a new link."  |
+| `/resendConfirmationEmail`, any address             | `200` empty                  |
+
+`/register` and `/resendConfirmationEmail` answer no faster than
+`AccountRecovery:MinimumResponseDuration` (250ms).
+
+**Rate limits** (`429` + `Retry-After`, counted before any account lookup):
+
+| Limit                                       | Setting                                   | Default |
+| ------------------------------------------- | ----------------------------------------- | ------- |
+| Resend interval per address                 | `AccountRecovery:ResendMinimumInterval`   | 60s     |
+| Resends per address per hour                | `AccountRecovery:ResendsPerEmailPerHour`  | 3       |
+| Resends per address per 24h                 | `AccountRecovery:ResendsPerEmailPerDay`   | 10      |
+| Resends per client address per window       | `AccountRecovery:ResendsPerAddress`       | 10      |
+| Registrations per client address per window | `AccountRecovery:RegistrationsPerAddress` | 30      |
+| Window for the client-address counters      | `AccountRecovery:RequestWindow`           | 15m     |
+
+Client identity is `X-Real-IP`, which the gateway sets. Counters are per process.
+
+---
+
 ## Multi-App Tracking
 
 The platform runs multiple front-end apps (`cribstop`, `admin-portal`, etc.). The allowed set is
@@ -327,6 +380,33 @@ consumer. That is the intended path, not an oversight.
 | `GET`    | `/account/api-keys`      | Self          | List own API keys (prefix visible, hash never returned) |
 | `DELETE` | `/account/api-keys/{id}` | Self          | Revoke an API key                                       |
 
+### Waitlist (early-access interest)
+
+Services and Connect ship as gated preview. These endpoints record which pillars an account wants
+early access to. They grant no access and commit to no date.
+
+| Method   | Path                           | Auth required | Description                                 |
+| -------- | ------------------------------ | ------------- | ------------------------------------------- |
+| `GET`    | `/account/waitlist`            | Self          | List own early-access interests             |
+| `POST`   | `/account/waitlist`            | Self          | Register one interest (idempotent)          |
+| `DELETE` | `/account/waitlist/{interest}` | Self          | Withdraw one interest (absent is a success) |
+
+Valid `interest` values: `services-consumer`, `services-provider`, `connect`. An account may hold
+any combination of them. The account id always comes from the authenticated principal, so a caller
+reaches only its own rows.
+
+`POST` rejects a value outside the vocabulary with `400`. `DELETE` does not check the vocabulary:
+the lookup is already scoped to the caller, so an unknown value removes nothing and reports the same
+success as an absent one. That keeps a row withdrawable after its kind leaves the vocabulary.
+
+```jsonc
+// POST /account/waitlist — the interest kind is the entire payload
+{ "interest": "connect" }
+
+// GET /account/waitlist
+{ "interests": [{ "interest": "connect", "registeredAt": "2026-09-19T05:12:35Z" }] }
+```
+
 ### Internal Credential Introspection (service-to-service)
 
 | Method | Path                           | Auth shape (forwarded as-is)                          | Description                                                         |
@@ -434,6 +514,26 @@ Key additions on top of the standard Identity columns:
 
 One row per `(UserId, AppId)` pair. Upserted atomically on login. Powers the `app_access` claims
 enrichment pipeline.
+
+### `WaitlistInterest`
+
+One row per `(UserId, InterestKind)` pair. The composite primary key makes registration idempotent
+at the storage layer.
+
+| Field          | Purpose                                                                                          |
+| -------------- | ------------------------------------------------------------------------------------------------ |
+| `UserId`       | FK → `AspNetUsers.Id`, cascade delete                                                            |
+| `InterestKind` | Fixed vocabulary — `services-consumer`, `services-provider`, `connect` (`WaitlistInterestKinds`) |
+| `RegisteredAt` | Cohort date for the waitlist-to-active conversion metric (PRD §16)                               |
+
+The row holds no signal beyond the pillar and the date. No protected-class or eligibility field
+exists on it (PRD §6). Interests are independent, so nothing collapses them to a persona (PRD
+§11.2).
+
+Account soft-delete keeps these rows, because it stamps `DeletedAt` and never hard-deletes the user,
+so the cascade FK does not fire. The endpoints hide the rows from a soft-deleted account. Any later
+query that reads the table directly — an invite or announcement export, for example — must join
+`AspNetUsers` and filter on `DeletedAt IS NULL`, or it contacts accounts that asked to be deleted.
 
 ---
 

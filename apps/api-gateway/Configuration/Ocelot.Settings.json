@@ -3,9 +3,16 @@
     "BaseUrl": "https://localhost",
     "RateLimitOptions": {
       "DisableRateLimitHeaders": false,
-      "QuotaExceededMessage": "Too many requests. Please try again later.",
+      "QuotaExceededMessage": "{\"error\":{\"code\":\"rate_limited\",\"message\":\"Too many requests. Please try again shortly.\"}}",
       "HttpStatusCode": 429,
       "ClientIdHeader": "X-Real-IP"
+    },
+    "QoSOptions": {
+      "Timeout": 10000,
+      "MinimumThroughput": 4,
+      "FailureRatio": 0.5,
+      "SamplingDuration": 60000,
+      "BreakDuration": 10000
     }
   },
   "Routes": [],

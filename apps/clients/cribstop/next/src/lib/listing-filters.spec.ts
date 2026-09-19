@@ -1,9 +1,11 @@
 import {
   applyLandInterlock,
+  filtersToSearchParams,
   isLandOnly,
   parseFiltersFromSearchParams,
   parsePageFromSearchParams,
 } from './listing-filters';
+import type { SearchFilters } from './types';
 
 describe('applyLandInterlock', () => {
   it('clears beds, baths and minimum square footage when Lot/Land is the only property type', () => {
@@ -75,7 +77,34 @@ describe('parseFiltersFromSearchParams', () => {
       street: 'Main',
       sort: 'price-asc',
       openHouse: true,
-      petFriendly: true,
+      // `petFriendly=true` is folded onto its amenity, because server-side it *is* that amenity
+      // (`'Pet Friendly' = ANY(v.amenities)`). One predicate, one parameter, one control.
+      amenities: ['Pet Friendly'],
+    });
+  });
+
+  describe('the two amenity-alias booleans are folded onto the amenities they compile to', () => {
+    it('folds waterfront and petFriendly, so an older link still shows as applied', () => {
+      const filters = parseFiltersFromSearchParams(
+        new URLSearchParams('waterfront=true&petFriendly=true'),
+      );
+
+      expect(filters.amenities).toEqual(['Waterfront', 'Pet Friendly']);
+      expect(filters.waterfront).toBeUndefined();
+      expect(filters.petFriendly).toBeUndefined();
+    });
+
+    it('does not duplicate an amenity already asked for explicitly', () => {
+      expect(
+        parseFiltersFromSearchParams(new URLSearchParams('amenities=Waterfront&waterfront=true'))
+          .amenities,
+      ).toEqual(['Waterfront']);
+    });
+
+    it('folds nothing when the flag is not literally true', () => {
+      expect(
+        parseFiltersFromSearchParams(new URLSearchParams('waterfront=false')).amenities,
+      ).toBeUndefined();
     });
   });
 
@@ -195,6 +224,107 @@ describe('enum parameters are validated against the contract before being forwar
     expect(
       parseFiltersFromSearchParams(new URLSearchParams('amenities=Pool,Garage')).amenities,
     ).toEqual(['Pool', 'Garage']);
+  });
+});
+
+/**
+ * The URL is the source of truth for a search — it is what the page parses on load, what a refresh
+ * restores and what a user sends to someone else. These tests exist because filters used to live
+ * only in component state: a narrowed search could not be linked or reloaded, and the results after
+ * a refresh were quietly wider than the ones on screen a moment before.
+ */
+describe('filtersToSearchParams', () => {
+  const roundTrip = (filters: SearchFilters) =>
+    parseFiltersFromSearchParams(filtersToSearchParams(filters));
+
+  it('round-trips every contract filter the modal can set', () => {
+    const filters: SearchFilters = {
+      query: 'Bethesda, MD',
+      zip: '20814',
+      street: 'Main',
+      neighborhood: 'Downtown',
+      listingType: 'rent',
+      propertyType: 'Condo',
+      minPrice: 1500,
+      maxPrice: 3000,
+      beds: 2,
+      baths: 1.5,
+      minSqft: 900,
+      openHouse: true,
+      newConstruction: true,
+      amenities: ['Pool', 'Garage'],
+      sort: 'price-asc',
+    };
+
+    expect(roundTrip(filters)).toEqual(filters);
+  });
+
+  it('writes the q and type spellings the search bar builds, never the listingType alias', () => {
+    const params = filtersToSearchParams({ query: 'Bethesda', listingType: 'rent' });
+
+    expect(params.get('q')).toBe('Bethesda');
+    expect(params.get('type')).toBe('rent');
+    expect(params.has('listingType')).toBe(false);
+    expect(params.has('query')).toBe(false);
+  });
+
+  it('removes a filter that is no longer set instead of leaving it in the URL', () => {
+    // The bug this closes: dropping `beds` in the modal leaves `?beds=2` behind, the next parse
+    // puts it straight back, and the filter the user just removed returns on reload.
+    const params = filtersToSearchParams(
+      { query: 'Bethesda' },
+      new URLSearchParams('q=Bethesda&beds=2&amenities=Pool&type=rent&listingType=rent'),
+    );
+
+    expect(params.toString()).toBe('q=Bethesda');
+  });
+
+  it('resets paging, because page 40 of a broad search is not a position in a narrow one', () => {
+    const params = filtersToSearchParams(
+      { query: 'Bethesda', beds: 3 },
+      new URLSearchParams('q=Bethesda&page=40'),
+    );
+
+    expect(params.has('page')).toBe(false);
+  });
+
+  it('carries non-filter parameters through untouched', () => {
+    // `lat`/`lon` belong to the map, not to the filter set; losing them on every apply would
+    // re-geocode and recentre the map each time a filter changed.
+    const params = filtersToSearchParams(
+      { query: 'Bethesda', beds: 3 },
+      new URLSearchParams('q=Bethesda&lat=38.98&lon=-77.09'),
+    );
+
+    expect(params.get('lat')).toBe('38.98');
+    expect(params.get('lon')).toBe('-77.09');
+  });
+
+  it('omits the defaults the API applies anyway rather than spelling them out', () => {
+    const params = filtersToSearchParams({
+      query: 'Bethesda',
+      listingType: 'all',
+      propertyType: 'all',
+      sort: 'recommended',
+      openHouse: false,
+    });
+
+    expect(params.toString()).toBe('q=Bethesda');
+  });
+
+  it('repeats amenities rather than comma-joining them', () => {
+    const params = filtersToSearchParams({ amenities: ['Pool', 'Garage'] });
+    expect(params.getAll('amenities')).toEqual(['Pool', 'Garage']);
+  });
+
+  it('rewrites a folded alias boolean to the canonical amenity', () => {
+    // An old `?waterfront=true` link parses to the amenity; applying anything then heals the URL.
+    const healed = filtersToSearchParams(
+      parseFiltersFromSearchParams(new URLSearchParams('q=Bethesda&waterfront=true')),
+    );
+
+    expect(healed.has('waterfront')).toBe(false);
+    expect(healed.getAll('amenities')).toEqual(['Waterfront']);
   });
 });
 

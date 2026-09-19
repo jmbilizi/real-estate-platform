@@ -20,6 +20,13 @@ namespace AccountService;
 
 internal static class Program
 {
+    /// <summary>The event id of the startup warning while the confirmation requirement is off.</summary>
+    internal static readonly EventId ConfirmationNotEnforcedEvent = new(1364, "EmailConfirmationNotEnforced");
+
+    private const string ConfirmationNotEnforcedMessage =
+        "Email confirmation is not enforced (AccountRecovery:RequireConfirmedEmail = false). " +
+        "Accounts can sign in with an unverified address. #149 turns enforcement on.";
+
     public static async Task Main(string[] args)
     {
         // K8s init container mode: run migrations and exit.
@@ -47,8 +54,16 @@ internal static class Program
         builder.Services.AddHttpContextAccessor();
         builder.Services.TryAddSingleton(TimeProvider.System);
         builder.Services.Configure<AppSettings>(builder.Configuration.GetSection(AppSettings.SectionName));
-        builder.Services.Configure<AccountRecoveryOptions>(
-            builder.Configuration.GetSection(AccountRecoveryOptions.SectionName));
+        builder.Services
+            .AddOptions<AccountRecoveryOptions>()
+            .Bind(builder.Configuration.GetSection(AccountRecoveryOptions.SectionName))
+            .Validate(options => options.Validate() is null, "AccountRecovery configuration is invalid. See AccountRecoveryOptions.Validate.")
+            .ValidateOnStart();
+        builder.Services
+            .AddOptions<TransactionalEmailOptions>()
+            .Bind(builder.Configuration.GetSection(TransactionalEmailOptions.SectionName))
+            .Validate(options => options.Validate() is null, "Email configuration is invalid. See TransactionalEmailOptions.Validate.")
+            .ValidateOnStart();
         builder.Services.AddDbContext<AccountDbContext>(options => options.UseNpgsql(connectionString));
         builder.Services.AddScoped<IClaimsTransformation, UserAppClaimsTransformation>();
 
@@ -69,12 +84,26 @@ internal static class Program
 
         builder.Services
             .AddIdentityApiEndpoints<ApplicationUser>(options =>
-                options.Tokens.PasswordResetTokenProvider = PasswordResetTokenProvider.ProviderName)
+            {
+                options.Tokens.EmailConfirmationTokenProvider = EmailConfirmationTokenProvider.ProviderName;
+                options.Tokens.PasswordResetTokenProvider = PasswordResetTokenProvider.ProviderName;
+            })
             .AddRoles<IdentityRole>()
             .AddUserManager<AppUserManager>()
             .AddSignInManager<AppSignInManager>()
             .AddEntityFrameworkStores<AccountDbContext>()
+            .AddTokenProvider<EmailConfirmationTokenProvider>(EmailConfirmationTokenProvider.ProviderName)
             .AddTokenProvider<PasswordResetTokenProvider>(PasswordResetTokenProvider.ProviderName);
+
+        // Own provider, own lifetime: Identity's built-in providers share one
+        // DataProtectionTokenProviderOptions, so a lifetime set there would move every token.
+        builder.Services
+            .AddOptions<EmailConfirmationTokenProviderOptions>()
+            .Configure<IOptions<AccountRecoveryOptions>>((tokenOptions, recovery) =>
+            {
+                tokenOptions.Name = EmailConfirmationTokenProvider.ProviderName;
+                tokenOptions.TokenLifespan = recovery.Value.ConfirmationTokenLifetime;
+            });
 
         // Password reset runs on its own token provider so its lifetime — and its data-protection
         // purpose — are independent of every other Identity token. That independence now matters
@@ -91,31 +120,26 @@ internal static class Program
                 tokenOptions.TokenLifespan = recovery.Value.TokenLifetime;
             });
 
-        // Whether an unconfirmed address can be used as a working account. Registered after
-        // AddIdentityApiEndpoints so this Configure action runs last and wins, and expressed as an
-        // options dependency rather than read from configuration inline so a test that replaces
-        // AccountRecoveryOptions actually changes the behaviour.
+        // The enforcement switch. Registered after AddIdentityApiEndpoints so this Configure runs
+        // last. Bound through options, not read inline, so a test override changes the behaviour.
         //
         // The default is false and that is deliberate, not an omission: Identity's /register issues
         // its confirmation link through IEmailSender<ApplicationUser>, and until #133 provisions a
         // transactional provider nothing can deliver it — so requiring confirmation today would mean
         // no one can create a usable account. See AccountRecoveryOptions for the two things this
-        // flag does not do. Flipping it is #138's job.
+        // flag does not do. Flipping it is #149's job.
         builder.Services
             .AddOptions<IdentityOptions>()
             .Configure<IOptions<AccountRecoveryOptions>>((identity, recovery) =>
-                identity.SignIn.RequireConfirmedEmail = recovery.Value.RequireConfirmedEmailToSignIn);
+                identity.SignIn.RequireConfirmedAccount = recovery.Value.RequireConfirmedEmail);
 
-        // Singleton: the counters are the point, and it owns the bounded cache they live in
-        // (deliberately not the application cache — see AccountRecoveryRateLimiter).
         builder.Services.AddSingleton<AccountRecoveryRateLimiter>();
+        builder.Services.AddSingleton<ConfirmationLinkBuilder>();
+        builder.Services.AddSingleton<IdentityEmailComposer>();
 
-        // No delivery channel exists yet, so the sender that records that fact stands in. This is
-        // not belt-and-braces: without it, Identity's own TryAdd chain
-        // (DefaultMessageEmailSender -> NoOpEmailSender) silently discards every confirmation link
-        // and reset code with a 200 and no log line. A closed-generic registration wins over that
-        // open-generic TryAdd, and EmailSenderResolvesToTheUndeliveredStandIn pins it. Supplying a
-        // real channel (#138) replaces this one line; no contract moves.
+        // The one delivery seam. Without this closed-generic registration Identity's own TryAdd
+        // chain (DefaultMessageEmailSender -> NoOpEmailSender) discards every message silently.
+        // #138 replaces this line with the Postmark transport.
         builder.Services.AddTransient<IEmailSender<ApplicationUser>, UndeliveredIdentityEmailSender>();
 
         // Revoke existing sessions immediately when the security stamp changes
@@ -140,6 +164,8 @@ internal static class Program
         builder.Services.AddScoped<CredentialIntrospector>();
 
         var app = builder.Build();
+
+        WarnIfConfirmationIsNotEnforced(app);
 
         // Seed platform roles after the app starts listening so the readiness probe
         // is not blocked by a slow DB connection on startup.
@@ -167,7 +193,8 @@ internal static class Program
 
         // Identity: built-in ASP.NET Identity endpoints — register, login, refresh, confirmEmail,
         // resendConfirmationEmail, forgotPassword, resetPassword, manage/*. These are the whole
-        // account-recovery surface; this service adds no endpoints of its own to it.
+        // account-recovery surface; this service adds no endpoints of its own to it. Behaviour is
+        // added as filters over the group.
         //
         // Nothing here may remove or rename an Identity endpoint. /confirmEmail in particular is
         // load-bearing well beyond itself: MapIdentityApi captures its endpoint name
@@ -178,10 +205,8 @@ internal static class Program
         // account that exists and will never receive a link. IdentityEndpointsArePresent pins it.
         var identityGroup = app.MapGroup("/account");
         identityGroup.MapIdentityApi<ApplicationUser>();
-
-        // Identity's endpoints ship with no rate limiting and no timing equalisation. Both are
-        // reattached here, as a filter over the group, since the handlers are the framework's.
         identityGroup.AddEndpointFilter<AccountRecoveryThrottleFilter>();
+        identityGroup.AddEndpointFilter<IdentityResponseShapingFilter>();
 
         // Profile: GET/PUT/DELETE /account/profile, GET /account/{userId}/history
         app.MapProfileRoutes();
@@ -192,10 +217,25 @@ internal static class Program
         // API Keys: POST/GET/DELETE /account/api-keys
         app.MapApiKeyRoutes();
 
+        // Waitlist: GET/POST /account/waitlist, DELETE /account/waitlist/{interest}
+        app.MapWaitlistRoutes();
+
         // Internal identity resolution: forwarded cookie/bearer/api-key -> account id
         app.MapCredentialIntrospectionRoutes();
 
         await app.RunAsync().ConfigureAwait(false);
+    }
+
+    private static void WarnIfConfirmationIsNotEnforced(WebApplication app)
+    {
+        if (app.Services.GetRequiredService<IOptions<AccountRecoveryOptions>>().Value.RequireConfirmedEmail)
+        {
+            return;
+        }
+
+#pragma warning disable CA1848 // LoggerMessage delegates: matches the service's other log sites.
+        app.Logger.LogWarning(ConfirmationNotEnforcedEvent, ConfirmationNotEnforcedMessage);
+#pragma warning restore CA1848
     }
 
     private static async Task SeedRolesAsync(IServiceProvider services)

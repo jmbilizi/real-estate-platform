@@ -1,0 +1,43 @@
+# yaml-language-server: disable
+# Bright MLS Ingestion CronJob Patch for Hetzner Test Environment
+#
+# TEST AUTHENTICATES AGAINST BRIGHT'S TEST/STAGING FEED (stakeholder ruling 2026-09-19). The ruling
+# supersedes the part of #117 that gave test no feed at all. The credential in this environment's
+# bright-mls-secret is the STAGING set. The production set exists only in the prod environment's
+# secrets, and the two are never promoted across environments.
+#
+# The endpoint pair is the same verified test-feed pair dev uses. Both values were checked against
+# the live test feed on 2026-09-18 (#163). Do NOT substitute `brightmls.test.okta.com` for the token
+# host. Okta serves the wildcard `*.okta.com`, which cannot match a three-label name, so TLS fails
+# permanently.
+#
+# Load from the default epoch and the default page cap, unlike local. Test is a staging environment
+# and must reproduce the full replication path, not a shortened one.
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bright-mls-ingest
+spec:
+  # 05:00 UTC, not dev's 03:00. Both environments read the same Bright test feed under one shared
+  # rate limit, so an overlapping run would make each look throttled by the other.
+  schedule: "0 5 * * *"
+  suspend: false
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: ingest
+              image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:test
+              imagePullPolicy: Always
+              env:
+                - name: NODE_ENV
+                  value: "production"
+                # Bright TEST/STAGING feed. Verified live 2026-09-18 (#163).
+                - name: BRIGHT_MLS_TOKEN_ENDPOINT
+                  value: "https://okta.tst.brightmls.com/oauth2/default/v1/token"
+                - name: BRIGHT_MLS_SERVICE_ROOT
+                  value: "https://bright-reso.tst.brightmls.com/RESO/OData/bright"
+                - name: BRIGHT_MLS_FEED
+                  value: "test"

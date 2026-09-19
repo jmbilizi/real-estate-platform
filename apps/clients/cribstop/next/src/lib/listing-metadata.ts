@@ -1,0 +1,126 @@
+import type { Metadata } from 'next';
+import type { ListingDetailView } from '@/lib/api/listings';
+import { BRAND } from '@/lib/brand';
+import {
+  formatClosePrice,
+  formatDwellingStats,
+  formatListingPrice,
+  formatListingProvenance,
+  formatLotSize,
+} from '@/lib/listing-format';
+import { listingShareUrl, shareDisclosures, shareTitle, SITE_SENTENCE } from '@/lib/listing-share';
+
+/**
+ * Link-preview metadata for a shared listing.
+ *
+ * An unfurl is a publication, so every rule the listing page obeys applies here. The text is
+ * composed by `lib/listing-share` and `lib/listing-format`, never assembled from raw fields: a
+ * masked address stays masked, a withheld price reads as withheld, and a sample row says it is a
+ * sample. The feed's `title` and `description` are deliberately unused — address suppression does
+ * not reach them (#59), and a preview card outlives the page it was cut from.
+ */
+export function listingMetadata(listing: ListingDetailView, origin: string | null): Metadata {
+  const title = `${shareTitle(listing)} · ${BRAND.brokerage}`;
+
+  /*
+   * A closed sale shows what it closed at, and anything that is not Active says so. The preview
+   * card outlives the moment it was cut, so a Sold home previewed at its ask as though it were on
+   * the market contradicts the page it links to for as long as the card is cached.
+   */
+  const closed = formatClosePrice(listing.closePrice, listing.closeDate);
+  // "Sold for $712,000 on Mar 4, 2026" already says Sold, so the status word would repeat it.
+  const state = closed ?? (listing.status === 'Active' ? null : listing.status);
+  const provenance = formatListingProvenance(listing.source);
+
+  /*
+   * A parcel has no dwelling to describe, so it shows its lot size where a home shows
+   * bed/bath/sqft. The card and the detail page make the same switch; a preview that skipped it
+   * described a parcel with nothing but its price.
+   */
+  const size = listing.isParcel
+    ? formatLotSize(listing.lotSqft)
+    : formatDwellingStats(listing.beds, listing.baths, listing.sqft);
+
+  const facts = [
+    state,
+    closed ? null : formatListingPrice(listing.price, listing.listingType).text,
+    size,
+    listing.propertyType,
+  ].filter(Boolean);
+
+  /*
+   * Required text first, optional text last.
+   *
+   * Every unfurl surface truncates a description — Twitter near 200 characters — so whatever sits
+   * at the tail is what a recipient never reads. The labels, the brokerage, the provenance
+   * sentence and the listing office are all owed; the price and the bed/bath line are not. So the
+   * facts go last, and are the only part a cut can take.
+   */
+  const description = [
+    ...shareDisclosures(listing),
+    SITE_SENTENCE,
+    ...(provenance ? [provenance] : []),
+    `Listed by ${listing.listedBy}.`,
+    `${facts.join(' · ')}.`,
+  ].join(' ');
+
+  /*
+   * The gallery as the service returned it. Suppression is applied upstream — a row whose alt text
+   * would have re-identified a masked address already arrives with `altText: null` — so the only
+   * rule left here is to add nothing the service did not send.
+   */
+  const preview = listing.media[0];
+  /*
+   * The same URL the Share button copies, and null when no trustworthy origin is configured.
+   *
+   * A canonical link and an `og:url` are instructions to a crawler about where this page really
+   * lives, so they may only carry an origin we vouch for. Deriving one from the request's own
+   * `Host` header would let a crafted header publish a real listing's canonical URL on somebody
+   * else's domain. Omitting the tags costs nothing — an unfurler falls back to the URL it fetched,
+   * which is the right one.
+   */
+  const url = origin === null ? null : listingShareUrl(listing.id, origin);
+
+  return {
+    title,
+    description,
+    /*
+     * A sample row is kept out of the search index.
+     *
+     * The `Sample listing` label answers a person who reads the card. A search index does not read
+     * it: it would carry a fabricated home into results as though it were inventory, and keep it
+     * there after the row is gone. Every row is a sample until #33 lands, so this is the normal
+     * case rather than an edge one, and it lifts by itself when real rows arrive.
+     */
+    ...(listing.isSample ? { robots: { index: false } } : {}),
+    ...(url ? { alternates: { canonical: url } } : {}),
+    openGraph: {
+      type: 'website',
+      siteName: BRAND.brokerage,
+      title,
+      description,
+      ...(url ? { url } : {}),
+      images: preview ? [{ url: preview.url, alt: preview.altText ?? undefined }] : undefined,
+    },
+    twitter: {
+      card: preview ? 'summary_large_image' : 'summary',
+      title,
+      description,
+      images: preview ? [preview.url] : undefined,
+    },
+  };
+}
+
+/**
+ * What a listing that did not resolve unfurls into: the site default, naming no home.
+ *
+ * `noindex` is for a listing that is genuinely gone. A transient gateway failure must not carry it
+ * — the URL is still live, and de-indexing it would cost real traffic for a fault that lasted
+ * seconds.
+ */
+export function unresolvedListingMetadata({ noindex }: { noindex: boolean }): Metadata {
+  return {
+    title: `${BRAND.brokerage} — ${BRAND.titleSuffix}`,
+    ...(noindex ? { robots: { index: false } } : {}),
+  };
+}

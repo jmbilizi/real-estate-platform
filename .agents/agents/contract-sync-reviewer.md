@@ -6,6 +6,9 @@ description:
   DTOs and Python schemas to catch field-name, type, nullability, and enum drift that no single
   compiler can see. Dispatch before merging changes that touch request/response shapes.
 tools: Read, Grep, Glob, Bash
+# Mid tier is the default (AGENTS.md → "Model Selection Per Dispatch"). A caller may override
+# upward for a genuinely hard instance.
+model: sonnet
 ---
 
 You are the cross-language contract reviewer for an Nx polyglot monorepo (Node/TypeScript, .NET,

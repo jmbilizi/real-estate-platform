@@ -1,4 +1,5 @@
-import { errorBodySchema, NOT_FOUND_BODY } from './errors';
+import { errorBodySchema, NOT_FOUND_BODY, RESULT_WINDOW_EXCEEDED_BODY } from './errors';
+import { MAX_RESULT_OFFSET } from './search-request';
 
 describe('errorBodySchema', () => {
   it('accepts NOT_FOUND_BODY', () => {
@@ -7,6 +8,10 @@ describe('errorBodySchema', () => {
 
   it('parses NOT_FOUND_BODY without dropping or renaming a key', () => {
     expect(errorBodySchema.parse(NOT_FOUND_BODY)).toEqual(NOT_FOUND_BODY);
+  });
+
+  it('accepts RESULT_WINDOW_EXCEEDED_BODY', () => {
+    expect(errorBodySchema.safeParse(RESULT_WINDOW_EXCEEDED_BODY).success).toBe(true);
   });
 
   it('rejects an unknown error code', () => {
@@ -43,5 +48,31 @@ describe('NOT_FOUND_BODY', () => {
     }).toThrow();
 
     expect(NOT_FOUND_BODY.error.message).toBe('Listing not found.');
+  });
+});
+
+describe('RESULT_WINDOW_EXCEEDED_BODY (#65)', () => {
+  it('carries its own code, distinct from invalid_request — the two call for different client behaviour', () => {
+    expect(RESULT_WINDOW_EXCEEDED_BODY.error.code).toBe('result_window_exceeded');
+    expect(RESULT_WINDOW_EXCEEDED_BODY.error.code).not.toBe('invalid_request');
+  });
+
+  it('names the limit in the message, so the constraint is legible from the response alone', () => {
+    expect(RESULT_WINDOW_EXCEEDED_BODY.error.message).toContain(String(MAX_RESULT_OFFSET));
+    expect(RESULT_WINDOW_EXCEEDED_BODY.error.message).toMatch(/\(page - 1\) \* pageSize/);
+  });
+
+  it('says in words that this is a search surface rather than a bulk-export one', () => {
+    expect(RESULT_WINDOW_EXCEEDED_BODY.error.message).toMatch(/not a bulk-export surface/i);
+  });
+
+  it('is frozen at both levels, like every other shared error body', () => {
+    expect(Object.isFrozen(RESULT_WINDOW_EXCEEDED_BODY)).toBe(true);
+    expect(Object.isFrozen(RESULT_WINDOW_EXCEEDED_BODY.error)).toBe(true);
+
+    expect(() => {
+      // @ts-expect-error — intentionally attempting to mutate a frozen nested object.
+      RESULT_WINDOW_EXCEEDED_BODY.error.message = 'mutated';
+    }).toThrow();
   });
 });

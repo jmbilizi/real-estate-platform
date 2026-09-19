@@ -31,6 +31,8 @@ export const listingCardSchema = z
     longitude: z.number().nullable(),
     // Nullable ahead of Bright's seller-directed field-level suppression (announced 2026-07-09).
     price: z.number().nonnegative().nullable(),
+    // #53. Null when the seller suppressed days-on-market display, independent of price.
+    daysOnMarket: z.number().int().nonnegative().nullable(),
     status: consumerStatusSchema,
     listingType: listingTypeSchema,
     source: listingSourceSchema,

@@ -1,5 +1,12 @@
 import request from 'supertest';
-import { ATTRIBUTION_KEYS, NOT_FOUND_BODY } from '@cribstop/property-contracts';
+import {
+  ATTRIBUTION_KEYS,
+  MAX_RESULT_OFFSET,
+  maxReachablePage,
+  NOT_FOUND_BODY,
+  PAGE_SIZE_DEFAULT,
+  SORT_VALUES,
+} from '@cribstop/property-contracts';
 import { createApp } from './app';
 import type { ReadPool } from './listings/repository';
 import { cardDbRowFixture } from './listings/test-fixtures';
@@ -128,9 +135,14 @@ describe('GET /listings', () => {
     });
   });
 
+  // `page=51` is the deepest page INSIDE the result window at the default page size (#65) and is
+  // far past the end of a 45-row result set — which is the case this test has always been about.
+  // It deliberately does not use a page past the window (it used to say `page=99`): that would now
+  // 400 on the window rule and stop exercising the past-the-end rule at all. The two rules are
+  // independent and this test must keep testing the one it names.
   it('returns an empty page with the correct total past the end, never a 404', async () => {
     const response = await request(createApp({ pool: createSearchPool([], 45) }))
-      .get('/listings?page=99')
+      .get(`/listings?page=${maxReachablePage(PAGE_SIZE_DEFAULT)}`)
       .expect(200);
 
     expect(response.body.results).toEqual([]);
@@ -321,6 +333,126 @@ describe('GET /listings', () => {
       expect(response.status).toBe(400);
       expect(response.body.error.message).not.toContain('<img');
       expect(response.body.error.message).toContain('(unnamed)');
+    });
+  });
+
+  /**
+   * The result window (#65). These run against the fake pool, so they assert the rule itself —
+   * which requests reach the database at all — independently of any dataset.
+   */
+  describe('result window', () => {
+    const lastPage = maxReachablePage(PAGE_SIZE_DEFAULT);
+
+    it('serves the deepest page inside the window as a normal 200', async () => {
+      const response = await request(createApp({ pool: createSearchPool([], 5000) })).get(
+        `/listings?page=${lastPage}`,
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.page).toBe(lastPage);
+    });
+
+    it('rejects the first page past the window with 400 and a code that names the limit', async () => {
+      const response = await request(createApp({ pool: createSearchPool([], 5000) })).get(
+        `/listings?page=${lastPage + 1}`,
+      );
+
+      expect(response.status).toBe(400);
+      expect(response.body.error.code).toBe('result_window_exceeded');
+      expect(response.body.error.message).toContain(String(MAX_RESULT_OFFSET));
+    });
+
+    it('does not report it as invalid_request — the parameters are well-formed, the depth is not available', async () => {
+      const response = await request(createApp({ pool: createSearchPool([], 5000) })).get(
+        `/listings?page=${lastPage + 1}`,
+      );
+
+      expect(response.body.error.code).not.toBe('invalid_request');
+      expect(response.body.error.message).not.toMatch(/unknown/i);
+    });
+
+    it('never clamps to the last valid page and never answers with an empty 200', async () => {
+      // Silently clamping (or returning an empty page) teaches an integrator that paging works
+      // when it does not, which is the exact failure the 400 exists to prevent.
+      const response = await request(createApp({ pool: createSearchPool([], 5000) })).get(
+        '/listings?page=9999',
+      );
+
+      expect(response.status).toBe(400);
+      expect(response.body).not.toHaveProperty('results');
+      expect(response.body).not.toHaveProperty('page');
+    });
+
+    it('runs no SQL at all for a rejected request — the exact COUNT(*) is the expensive half', async () => {
+      const pool = createSearchPool([], 5000);
+
+      await request(createApp({ pool })).get('/listings?page=9999');
+
+      expect(pool.statements).toEqual([]);
+    });
+
+    it('bounds the offset, not the page number, so the bound moves with page size', async () => {
+      // `pageSize=100, page=11` is offset 1000 — in window. `page=12` is offset 1100 — out. The
+      // deepest row a larger page size reaches is one page further in (1,100 vs 1,020), which is
+      // what bounding the OFFSET means; what it cannot do is scale with the dataset.
+      const app = createApp({ pool: createSearchPool([], 5000) });
+
+      expect((await request(app).get('/listings?pageSize=100&page=11')).status).toBe(200);
+      expect((await request(app).get('/listings?pageSize=100&page=12')).status).toBe(400);
+    });
+
+    it('applies identically across every sort', async () => {
+      const app = createApp({ pool: createSearchPool([], 5000) });
+
+      for (const sort of SORT_VALUES) {
+        expect((await request(app).get(`/listings?sort=${sort}&page=${lastPage}`)).status).toBe(
+          200,
+        );
+        const rejected = await request(app).get(`/listings?sort=${sort}&page=${lastPage + 1}`);
+        expect(rejected.status).toBe(400);
+        expect(rejected.body.error.code).toBe('result_window_exceeded');
+      }
+    });
+
+    it('applies identically across filter combinations, including listingType=sold', async () => {
+      const app = createApp({ pool: createSearchPool([], 5000) });
+      const filters = [
+        '',
+        'listingType=sold',
+        'listingType=rent&beds=2',
+        'query=Fixture',
+        'openHouse=true',
+        'amenities=Pool,Garage&propertyType=Condo',
+      ];
+
+      for (const filter of filters) {
+        const suffix = filter ? `${filter}&` : '';
+        expect((await request(app).get(`/listings?${suffix}page=${lastPage}`)).status).toBe(200);
+        expect((await request(app).get(`/listings?${suffix}page=${lastPage + 1}`)).status).toBe(
+          400,
+        );
+      }
+    });
+
+    it('leaves total untouched on the deepest in-window page — it is the full filtered count, never the window', async () => {
+      const response = await request(createApp({ pool: createSearchPool([], 5000) })).get(
+        `/listings?page=${lastPage}`,
+      );
+
+      expect(response.body.total).toBe(5000);
+      expect(response.body.total).toBeGreaterThan(MAX_RESULT_OFFSET);
+      expect(response.body.pageCount).toBe(250);
+    });
+
+    it('adds no parameter that lifts the bound', async () => {
+      // Strict parsing already forecloses this, but the assertion belongs with the window: an
+      // escape hatch added later would be the one change that quietly undoes all of the above.
+      for (const escape of ['offset=2000', 'limit=5000', 'all=true', 'export=1', 'cursor=x']) {
+        const response = await request(createApp({ pool: createSearchPool() })).get(
+          `/listings?${escape}`,
+        );
+        expect(response.status).toBe(400);
+      }
     });
   });
 });
