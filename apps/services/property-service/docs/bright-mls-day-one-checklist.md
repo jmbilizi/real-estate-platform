@@ -34,8 +34,8 @@ It is on this list three times over, and each instance cost real time:
 
 1. `Lookup` is advertised in the service document and returns **400 — "User 'BRIGHTIDXTEST' does not
    have permission to access entity set 'Lookup'"**.
-2. `BrightProperty.Location` is typed `Edm.GeographyPoint` and **no geospatial operator works on
-   it**.
+2. `BrightProperty.Location` is typed `Edm.GeographyPoint` and Bright answers **"GeographyPolygon
+   literals not implemented"**. The type is declared; the operators are not built.
 3. The service document advertises **50** entity sets; `$metadata` declares **25**. Half of what is
    advertised has no type definition at all.
 
@@ -61,6 +61,14 @@ overlays:
 | `prod`      | `https://okta.brightmls.com/oauth2/default/v1/token`     | `https://bright-reso.brightmls.com/RESO/OData/bright`     |
 | `test`      | none                                                     | none                                                      |
 | `local`     | none                                                     | none                                                      |
+
+The `dev` pair is credential-verified. **The `prod` pair is not.** Its service root was
+reachability-checked with no credentials and answers `401 WWW-Authenticate: Bearer`, but its token
+path is inferred by symmetry with test: Bright's production Okta org publishes both an org-level
+discovery document reporting `/oauth2/v1/token` and a `default` authorization server reporting
+`/oauth2/default/v1/token`. We took `default`, because that is what test uses. If the first
+production token call returns 404 or `invalid_client`, drop `/default` before suspecting the
+credential.
 
 **Do not use `brightmls.test.okta.com`.** It resolves, but Okta serves the wildcard `*.okta.com`,
 which matches exactly one label and therefore cannot be valid for a three-label host. A
@@ -221,17 +229,28 @@ records where the fields discovered here are meant to go.
 
 - [x] Does `$metadata` expose a **queryable** `Edm.GeographyPoint` field on the property resource?  
        **Answer: the type is there and the capability is not.** `BrightProperty.Location` is
-      `Edm.GeographyPoint` — the only geography-typed field in the whole document — but
-      `geo.intersects(Location, POLYGON(...))` returns **400**:
+      `Edm.GeographyPoint` — the only geography-typed field in the whole document — and Bright's
+      search engine answers **400, "GeographyPolygon literals not implemented"**. So the fallback
+      applies: bounding-box retrieval plus point-in-polygon in our own PostGIS, which is arguably
+      the primary path anyway since consumer searches hit `property_db`, not Bright.  
+       **Cite that error, not the first one we got.** The 2026-09-18 probe sent a bare
+      `POLYGON((...))` and read back
       `"The property 'POLYGON' ... is not defined in type 'BrightMLS.OData.bright.BrightProperty'"`.
-      So the fallback applies: bounding-box retrieval plus point-in-polygon in our own PostGIS,
-      which is arguably the primary path anyway since consumer searches hit `property_db`, not
-      Bright.
+      That is the OData parser reading `POLYGON` as a property path because the geography literal
+      prefix was missing — a malformed query, not a capability answer. The re-run on 2026-09-19 used
+      the correct OData v4 form, `geo.intersects(Location, geography'SRID=4326;POLYGON((...))')`,
+      and got the "not implemented" answer. The conclusion is the same; the evidence for it is not.
 - [x] Whether `geo.distance` radius filtering is supported.  
-       **Answer: no.** `geo.distance(Location, POINT(...))` returns 400 with the same shape of error
-      for `POINT`.
+       **Answer: no.** `geo.distance(Location, geography'SRID=4326;POINT(-77.03 38.90)') lt 5`
+      returns **400, "GeographyPoint literals not implemented"**.
+- [x] **Server-side bounding-box filtering works, and it is what makes the fallback cheap.**  
+       `BrightProperty.Latitude` and `BrightProperty.Longitude` are `Edm.Double`, so a plain numeric
+      `$filter` narrows a window at the source:
+      `Latitude ge 38.80 and Latitude le 39.00 and Longitude ge -77.12 and Longitude le -76.90`
+      returns 200. #92 must bound by coordinate on the wire rather than pulling unbounded pages and
+      filtering locally.
 - [ ] Any vertex-count or payload-size limit on a polygon filter.  
-       **Moot while no polygon filter parses at all.** Re-open only if Bright later enables
+       **Moot while geography literals are not implemented.** Re-open only if Bright later enables
       geospatial operators.
 - [ ] (A) Whether coordinates are suppressed alongside the address for opted-out listings, or
       delivered regardless. **If delivered regardless, our mapper is the only thing standing between

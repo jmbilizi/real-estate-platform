@@ -7,12 +7,22 @@
 # are participation risks rather than ordinary incidents (PRD §6.2). Its blast radius is not the
 # staging set's, even though the handling discipline is identical.
 #
-# The endpoint pair below is the PRODUCTION pair, verified 2026-09-18 (#163). It was reachability-
-# checked with NO credentials: the service root answers `401 WWW-Authenticate: Bearer`, and the token
-# endpoint is the `token_endpoint` of `okta.brightmls.com`'s OIDC discovery document. Never copy a
-# value between this file and the dev patch in either direction: identical field names with different
-# values per environment is the whole mechanism, and a copied endpoint would point production at test
-# data while every credential check still passed.
+# The endpoint pair below is the PRODUCTION pair, reachability-checked with NO credentials (#163):
+# the service root answers `401 WWW-Authenticate: Bearer`.
+#
+# THE TOKEN PATH IS INFERRED BY SYMMETRY WITH TEST, NOT CREDENTIAL-VERIFIED. Bright's production Okta
+# org publishes two discovery documents and they disagree on the path. The org-level document at
+# `https://okta.brightmls.com/.well-known/openid-configuration` reports `/oauth2/v1/token`; the
+# `default` authorization server at `.../oauth2/default/.well-known/openid-configuration` reports
+# `/oauth2/default/v1/token`, which is the value below. Test authenticates against its own `default`
+# server, so `default` is the consistent choice — but nobody has held a production credential and
+# proven it. If the first production token call returns 404 or `invalid_client`, drop `/default` and
+# re-read those two documents before suspecting the credential. #117 item 5 is where that gets
+# settled.
+#
+# Never copy a value between this file and the dev patch in either direction: identical field names
+# with different values per environment is the whole mechanism, and a copied endpoint would point
+# production at test data while every credential check still passed.
 #
 # Setting the endpoint does NOT start a production run. The CronJob stays suspended below, the prod
 # secret is still the committed placeholder, and `infra/deploy-control.yaml` keeps this service

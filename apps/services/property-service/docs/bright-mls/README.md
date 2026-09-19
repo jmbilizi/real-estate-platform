@@ -1,9 +1,15 @@
-# Bright MLS `$metadata` — the committed reference document
+# Bright MLS — the committed reference captures
 
-`bright-metadata.xml` is the OData v4 CSDL document Bright serves at `{serviceRoot}/$metadata`. It
-is committed so #92, #93, #127, #129 and #130 diff against one fixed version instead of re-fetching,
-and so a schema change arrives as a reviewable diff rather than as a surprise at runtime. Day-one
-checklist section 0 requires it.
+Two verbatim responses from Bright's RESO Web API:
+
+- `bright-metadata.xml` — the OData v4 CSDL document from `{serviceRoot}/$metadata`.
+- `service-document.json` — the service document from `{serviceRoot}/`, which lists the entity sets
+  Bright advertises. It is committed because the gap between what it advertises and what `$metadata`
+  describes is itself a finding, and a finding nobody can re-check is a rumour.
+
+They are committed so #92, #93, #127, #129 and #130 diff against one fixed version instead of
+re-fetching, and so a schema change arrives as a reviewable diff rather than as a surprise at
+runtime. Day-one checklist section 0 requires the first.
 
 ## Provenance
 
@@ -18,19 +24,30 @@ checklist section 0 requires it.
 | `OData-Version` | `4.0`                                                              |
 | Namespace       | `BrightMLS.OData.bright`                                           |
 
+`service-document.json`: fetched in the same session from the same service root, 2,406 bytes, sha256
+`6226aa32569df8c3c9d4ef25cdd32e9ebcb2b271628abfe1fe4491d86e3a654d`, 50 entity sets.
+
 The production feed's document has **not** been fetched. Do not assume the two are identical, and do
 not assume an IDX account sees what a fuller tier sees. Record a production fetch as a separate
 section here rather than overwriting this one.
 
-Re-fetch with one authenticated `GET {serviceRoot}/$metadata`. Replace the file in place, keeping
-the filename, so the change reads as a diff. Update the table above in the same commit.
+The sha256 above is over the **raw response bytes**, because that is what the ingestion job hashes
+and logs. `.gitattributes` therefore marks both captures `-text`, so no line-ending normalisation
+can make the committed file and the wire disagree and report a drift that did not happen. Keep them
+byte-exact: never reformat or pretty-print either file.
+
+Re-fetch with one authenticated `GET {serviceRoot}/$metadata` and one `GET {serviceRoot}/`. Replace
+both files in place, keeping the filenames, so the change reads as a diff. Update the table above in
+the same commit.
 
 ## What this document does and does not settle
 
-**It declares 25 entity sets. The service document advertises 50.** The 25 below are the only ones
-with an entity type in `$metadata`; the other 25 — including `Lookup`, `History`, `PublicRecord`,
-`RelatedLookup` and `ResoRule` — are advertised with no type definition here at all. Reaching one of
-those means discovering its shape from a live response, not from this file.
+**It declares 25 entity sets. The service document advertises 50.** `service-document.json` beside
+it is that service document, captured in the same session, so the comparison is reproducible rather
+than a remembered number — re-fetch both together. The 25 below are the only ones with an entity
+type in `$metadata`; the other 25 — including `Lookup`, `History`, `PublicRecord`, `RelatedLookup`
+and `ResoRule` — are advertised with no type definition here at all. Reaching one of those means
+discovering its shape from a live response, not from this file.
 
 Entity sets declared here, with key and field count:
 
@@ -70,6 +87,11 @@ Three facts worth reading off this file before it costs someone a day:
   `Lookup` resource is the documented alternative and this account cannot read it (400, "User
   'BRIGHTIDXTEST' does not have permission"), so enumerations are currently undiscoverable. #130
   depends on this.
-- **`BrightProperty.Location` is the one `Edm.GeographyPoint` field in the whole document, and it is
-  not queryable.** `geo.intersects` and `geo.distance` both return 400. The type's presence is not a
-  capability. #66 takes the PostGIS fallback.
+- **`BrightProperty.Location` is the one `Edm.GeographyPoint` field in the whole document, and the
+  operators over it are not built.** With the correct OData v4 literal,
+  `geo.intersects(Location, geography'SRID=4326;POLYGON((...))')` returns 400 **"GeographyPolygon
+  literals not implemented"**, and `geo.distance` the same for `GeographyPoint`. A bare
+  `POLYGON((...))` instead returns a misleading "property not defined" parse error — do not cite
+  that one. The type's presence is not a capability, so #66 takes the PostGIS fallback. `Latitude`
+  and `Longitude` are `Edm.Double` and a numeric `$filter` over them works, so the bounding-box half
+  of that fallback still runs on Bright's side.

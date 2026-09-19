@@ -236,10 +236,11 @@ Four things here are load-bearing and easy to undo by accident:
   what the repo previously assumed, and each one is a day if rediscovered: the property entity set
   is **`BrightProperties`**, keyed on `ListingKey` — a plain `Property` set does not exist and 404s;
   `$metadata` declares **no `EnumType`s** and the `Lookup` resource returns 400 for our IDX tier, so
-  enumerations are undiscoverable; and `BrightProperty.Location` is typed `Edm.GeographyPoint` but
-  `geo.intersects` and `geo.distance` both 400, so area search is PostGIS-side (#66). **Visibility
-  is not access** — the service document advertises 50 entity sets and `$metadata` describes 25.
-  Never read a name as a capability.
+  enumerations are undiscoverable; and `BrightProperty.Location` is typed `Edm.GeographyPoint` while
+  Bright answers `"GeographyPolygon literals not implemented"`, so area search is PostGIS-side (#66)
+  over a numeric `Latitude`/`Longitude` bounding box, which does work on the wire. **Visibility is
+  not access** — the service document advertises 50 entity sets and `$metadata` describes 25. Never
+  read a name as a capability.
 
 ### Migration rules (each of these fails silently or confusingly if ignored)
 
