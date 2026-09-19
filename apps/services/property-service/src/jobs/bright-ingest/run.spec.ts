@@ -1,15 +1,19 @@
 import type { FetchLike } from './bright-client';
 import { BRIGHT_ENV_VARS, SECRET_PLACEHOLDER } from './config';
+import { createMemoryStore, createMockResoServer } from './mock-reso-server';
+import { isOrderedWithoutFilter } from './odata-query';
 import { runBrightIngest } from './run';
-import type { BrightRunRecord } from './run-log';
+import type { BrightRunFinishedRecord, BrightRunRecord } from './run-log';
 
 const CLIENT_ID = 'fixture-client-id-3f9a';
 const CLIENT_SECRET = 'fixture-client-secret-91b2c7';
+const TOKEN_ENDPOINT = 'https://bright-staging.example.test/oauth/token';
+const SERVICE_ROOT = 'https://api-staging.example.test/reso/odata/';
 
 function configuredEnv(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   return {
-    [BRIGHT_ENV_VARS.tokenEndpoint]: 'https://bright-staging.example.test/oauth/token',
-    [BRIGHT_ENV_VARS.serviceRoot]: 'https://api-staging.example.test/reso/odata/',
+    [BRIGHT_ENV_VARS.tokenEndpoint]: TOKEN_ENDPOINT,
+    [BRIGHT_ENV_VARS.serviceRoot]: SERVICE_ROOT,
     [BRIGHT_ENV_VARS.clientId]: CLIENT_ID,
     [BRIGHT_ENV_VARS.clientSecret]: CLIENT_SECRET,
     ...overrides,
@@ -69,6 +73,49 @@ function collectRecords(): { sink: (record: BrightRunRecord) => void; records: B
   return { sink: (record) => records.push(record), records };
 }
 
+function listings(count: number, startIso = '2026-09-02T00:00:00.000Z') {
+  const start = Date.parse(startIso);
+  return Array.from({ length: count }, (_, i) => ({
+    ListingKey: 5000 + i,
+    ModificationTimestamp: new Date(start + i * 60_000).toISOString(),
+  }));
+}
+
+/** A whole run against the mock RESO server. CI never holds a Bright credential. */
+function mockRun(
+  options: {
+    env?: NodeJS.ProcessEnv;
+    records?: Record<string, readonly Record<string, unknown>[]>;
+    pageSize?: number;
+    failures?: readonly number[];
+    memory?: ReturnType<typeof createMemoryStore>;
+    now?: () => Date;
+  } = {},
+) {
+  const server = createMockResoServer({
+    tokenEndpoint: TOKEN_ENDPOINT,
+    serviceRoot: SERVICE_ROOT,
+    records: options.records ?? { BrightProperties: listings(6) },
+    pageSize: options.pageSize ?? 4,
+    failures: options.failures,
+  });
+  const memory = options.memory ?? createMemoryStore();
+  const { sink, records } = collectRecords();
+
+  const invoke = () =>
+    runBrightIngest({
+      env: options.env ?? configuredEnv(),
+      sink,
+      fetchImpl: server.fetchImpl,
+      store: memory.store,
+      sleep: () => Promise.resolve(),
+      random: () => 0,
+      now: options.now,
+    });
+
+  return { server, memory, records, invoke };
+}
+
 describe('runBrightIngest — not configured', () => {
   it('completes successfully, names the missing variables, and reaches Bright not at all', async () => {
     const { sink, records } = collectRecords();
@@ -85,10 +132,7 @@ describe('runBrightIngest — not configured', () => {
     expect(records[1]).toMatchObject({ outcome: 'not_configured' });
   });
 
-  /**
-   * `local` and `test` hold the committed placeholder forever. This is the exact shape of a run in
-   * those environments, and it must be a clean completion — not a 401, not a failed Job.
-   */
+  /** An environment still waiting on #117 holds the committed placeholder. That is a clean run. */
   it('treats the committed placeholder as not configured, with the endpoint still reported', async () => {
     const { sink, records } = collectRecords();
     const { fetchImpl, calls } = stubFetch([]);
@@ -109,67 +153,200 @@ describe('runBrightIngest — not configured', () => {
     expect(records[0]).toMatchObject({ tokenEndpointHost: 'bright-staging.example.test' });
   });
 
-  it('reports zero counts, so the siblings have a shape to populate rather than invent', async () => {
+  it('reports zero counts', async () => {
     const { sink } = collectRecords();
     const result = await runBrightIngest({ env: {}, sink, fetchImpl: stubFetch([]).fetchImpl });
 
-    expect(result.counts).toEqual({ recordsFetched: 0, recordsStaged: 0, recordsUpserted: 0 });
+    expect(result.counts.recordsFetched).toBe(0);
+    expect(result.counts.recordsStaged).toBe(0);
+    expect(result.counts.recordsUpserted).toBe(0);
   });
 });
 
-describe('runBrightIngest — configured', () => {
-  it('authenticates, probes $metadata, and reports the hosts it actually used', async () => {
-    const { sink, records } = collectRecords();
-    const { fetchImpl, calls } = stubFetch([
-      { body: JSON.stringify({ access_token: 'token-abc', expires_in: 3600 }) },
-      { headers: { 'OData-Version': '4.0' }, body: '<edmx:Edmx Version="4.0"/>' },
-    ]);
-
-    const result = await runBrightIngest({
-      env: configuredEnv(),
-      sink,
-      fetchImpl,
+describe('runBrightIngest — replication', () => {
+  it('probes $metadata, replicates into staging, and reports the hosts it used', async () => {
+    const { records, memory, invoke } = mockRun({
+      records: { BrightProperties: listings(6) },
       now: fixedClock('2026-09-15T03:00:00.000Z', 1_250),
     });
 
-    expect(result.outcome).toBe('probe_succeeded');
-    expect(result.durationMs).toBe(1_250);
+    const result = await invoke();
+
+    expect(result.outcome).toBe('replicated');
     expect(result.tokenEndpointHost).toBe('bright-staging.example.test');
+    expect(result.counts.recordsFetched).toBe(6);
+    expect(result.counts.recordsStaged).toBe(6);
+    expect(memory.rows.size).toBe(6);
 
-    expect(calls).toHaveLength(2);
-    const [tokenCall, metadataCall] = calls;
-    expect(tokenCall?.method).toBe('POST');
-    expect(tokenCall?.body).toContain('grant_type=client_credentials');
-    // The service root is normalised by URL() and keeps its trailing slash; joining must not
-    // produce `//$metadata`, which many gateways 404 rather than normalise.
-    expect(metadataCall?.url).toBe('https://api-staging.example.test/reso/odata/$metadata');
-    expect(metadataCall?.headers.Authorization).toBe('Bearer token-abc');
-
-    const finished = records[1];
-    expect(finished).toMatchObject({
-      event: 'run_finished',
-      outcome: 'probe_succeeded',
-      metadata: { odataVersion: '4.0', byteLength: 26 },
+    const finished = records[1] as BrightRunFinishedRecord;
+    expect(finished.outcome).toBe('replicated');
+    expect(finished.metadata?.odataVersion).toBe('4.0');
+    expect(finished.feed).toBe('test');
+    expect(finished.resources?.[0]).toMatchObject({
+      resource: 'BrightProperties',
+      recordsStaged: 6,
+      caughtUp: true,
     });
   });
 
-  /** Ingestion is #92/#93. A run that quietly started writing rows would be the real defect here. */
-  it('makes exactly two requests and ingests nothing', async () => {
+  /** Mapping into `properties`/`units`/`listings` is #93. This run writes no consumer row. */
+  it('reports nothing upserted into the consumer schema', async () => {
+    const { invoke } = mockRun();
+    await expect(invoke()).resolves.toMatchObject({ counts: { recordsUpserted: 0 } });
+  });
+
+  it('sends no unbounded ordered request on any page', async () => {
+    const { server, invoke } = mockRun({ records: { BrightProperties: listings(10) } });
+    await invoke();
+
+    expect(server.pageRequests.length).toBeGreaterThan(1);
+    for (const url of server.pageRequests) {
+      expect(isOrderedWithoutFilter(url)).toBe(false);
+    }
+  });
+
+  it('works a second resource from configuration, with its own cursor field', async () => {
+    const { server, memory, invoke } = mockRun({
+      env: configuredEnv({ [BRIGHT_ENV_VARS.resources]: 'BrightProperties,BrightMedia' }),
+      records: {
+        BrightProperties: listings(2),
+        BrightMedia: [{ MediaKey: 9, MediaModificationTimestamp: '2026-09-03T00:00:00.000Z' }],
+      },
+    });
+
+    const result = await invoke();
+
+    expect(result.resources.map((r) => r.resource)).toEqual(['BrightProperties', 'BrightMedia']);
+    expect(memory.cursors.has('BrightMedia')).toBe(true);
+    expect(server.pageRequests.some((url) => url.includes('MediaModificationTimestamp'))).toBe(
+      true,
+    );
+  });
+
+  it('counts Deletion rows as deletions detected', async () => {
+    const { invoke } = mockRun({
+      env: configuredEnv({ [BRIGHT_ENV_VARS.resources]: 'Deletion' }),
+      records: {
+        Deletion: [{ UniversalKey: 4, DeletionTimestamp: '2026-09-03T00:00:00.000Z' }],
+      },
+    });
+
+    await expect(invoke()).resolves.toMatchObject({ counts: { deletionsDetected: 1 } });
+  });
+
+  it('clears every cursor first when a full resync is requested', async () => {
+    const memory = createMemoryStore();
+    await mockRun({ records: { BrightProperties: listings(4) }, memory }).invoke();
+    expect(memory.cursors.get('BrightProperties')?.modifiedAt).not.toBeNull();
+
+    const resync = mockRun({
+      env: configuredEnv({ [BRIGHT_ENV_VARS.fullResync]: '1' }),
+      records: { BrightProperties: listings(4) },
+      memory,
+    });
+    const result = await resync.invoke();
+
+    // Everything is read again, and the upsert makes the second pass idempotent.
+    expect(result.counts.recordsFetched).toBe(4);
+    expect(memory.rows.size).toBe(4);
+  });
+
+  /** A full resync obeys the same ceiling. It is the run most likely to break one. */
+  it('paces a full resync through the same limiter', async () => {
+    const { server, invoke } = mockRun({
+      env: configuredEnv({
+        [BRIGHT_ENV_VARS.requestsPerSecond]: '1',
+        [BRIGHT_ENV_VARS.requestsPerMinute]: '5',
+        [BRIGHT_ENV_VARS.fullResync]: '1',
+      }),
+      records: { BrightProperties: listings(12) },
+      pageSize: 3,
+    });
+
+    await invoke();
+    expect(server.pageRequests.length).toBeGreaterThan(1);
+  });
+
+  it('retries a 429 and reports the retry count', async () => {
+    const { invoke } = mockRun({ records: { BrightProperties: listings(2) }, failures: [429] });
+    await expect(invoke()).resolves.toMatchObject({ counts: { retries: 1, recordsStaged: 2 } });
+  });
+
+  /**
+   * A stalled cursor is the failure nothing else catches: every run succeeds, every count is
+   * plausible, and the data is a month old.
+   */
+  it('reports a stalled cursor loudly', async () => {
+    const { records, invoke } = mockRun({
+      env: configuredEnv({ [BRIGHT_ENV_VARS.cursorMaxAgeHours]: '1' }),
+      records: { BrightProperties: listings(1, '2026-01-01T00:00:00.000Z') },
+      now: () => new Date('2026-09-15T00:00:00.000Z'),
+    });
+
+    const result = await invoke();
+
+    expect(result.stalled).toBe(true);
+    expect(result.message).toContain('STALLED CURSOR');
+    expect((records[1] as BrightRunFinishedRecord).stalled).toBe(true);
+  });
+});
+
+describe('runBrightIngest — feed tier', () => {
+  /**
+   * Stakeholder ruling 2026-09-19: `local`, `dev` and `test` read Bright's test feed; `prod` alone
+   * reads the licensed production feed. The base default is `test`, so an environment that patches
+   * nothing cannot inherit production.
+   */
+  it('refuses a production host when the environment declares the test tier', async () => {
     const { sink } = collectRecords();
-    const { fetchImpl, calls } = stubFetch([
-      { body: JSON.stringify({ access_token: 'token-abc' }) },
-      { body: '<edmx/>' },
-    ]);
+    const result = await runBrightIngest({
+      env: configuredEnv({
+        [BRIGHT_ENV_VARS.serviceRoot]: 'https://bright-reso.brightmls.com/RESO/OData/bright',
+      }),
+      sink,
+      fetchImpl: stubFetch([]).fetchImpl,
+    });
 
-    const result = await runBrightIngest({ env: configuredEnv(), sink, fetchImpl });
+    expect(result.outcome).toBe('failed');
+    expect(result.message).toContain('not a recognised test-feed host');
+  });
 
-    expect(calls).toHaveLength(2);
-    expect(result.counts).toEqual({ recordsFetched: 0, recordsStaged: 0, recordsUpserted: 0 });
+  it('refuses a production token endpoint too, whatever the service root says', async () => {
+    const { sink } = collectRecords();
+    const result = await runBrightIngest({
+      env: configuredEnv({
+        [BRIGHT_ENV_VARS.tokenEndpoint]: 'https://okta.brightmls.com/oauth2/default/v1/token',
+      }),
+      sink,
+      fetchImpl: stubFetch([]).fetchImpl,
+    });
+
+    expect(result.outcome).toBe('failed');
+    expect(result.message).toContain('BRIGHT_MLS_TOKEN_ENDPOINT');
+  });
+
+  it('allows a production host only under the production declaration', async () => {
+    const { invoke } = mockRun({
+      env: configuredEnv({ [BRIGHT_ENV_VARS.feed]: 'production' }),
+    });
+    await expect(invoke()).resolves.toMatchObject({ outcome: 'replicated' });
+  });
+
+  it('rejects a feed value that is neither tier', async () => {
+    const { sink } = collectRecords();
+    const result = await runBrightIngest({
+      env: configuredEnv({ [BRIGHT_ENV_VARS.feed]: 'prod' }),
+      sink,
+      fetchImpl: stubFetch([]).fetchImpl,
+    });
+
+    expect(result.outcome).toBe('failed');
+    expect(result.message).toContain('must be "test" or "production"');
   });
 });
 
 describe('runBrightIngest — failure', () => {
-  it('reports a rejected credential as failed, carrying the OAuth2 error fields', async () => {
+  it('reports a rejected credential as failed, carrying the OAuth2 error code', async () => {
     const { sink, records } = collectRecords();
     const { fetchImpl } = stubFetch([
       {
@@ -241,7 +418,7 @@ describe('runBrightIngest — failure', () => {
   it('fails on an unusable endpoint rather than reporting it as not configured', async () => {
     const { sink, records } = collectRecords();
     const result = await runBrightIngest({
-      env: configuredEnv({ [BRIGHT_ENV_VARS.serviceRoot]: 'http://insecure.example.test' }),
+      env: configuredEnv({ [BRIGHT_ENV_VARS.serviceRoot]: 'http://insecure-test.example.test' }),
       sink,
       fetchImpl: stubFetch([]).fetchImpl,
     });
@@ -251,6 +428,13 @@ describe('runBrightIngest — failure', () => {
     // The terminal record is emitted on every path — a run nobody can account for is the failure
     // mode the structured log exists to prevent.
     expect(records.map((r) => r.event)).toEqual(['run_started', 'run_finished']);
+  });
+
+  it('fails on an unknown configured resource rather than replicating nothing', async () => {
+    const { invoke } = mockRun({
+      env: configuredEnv({ [BRIGHT_ENV_VARS.resources]: 'Property' }),
+    });
+    await expect(invoke()).resolves.toMatchObject({ outcome: 'failed' });
   });
 
   it('never throws, so the CronJob pod always gets a terminal record and a chosen exit code', async () => {
@@ -283,6 +467,23 @@ describe('runBrightIngest — failure', () => {
     expect(result.message).toContain('bright-staging.example.test');
     expect(result.message).toContain('getaddrinfo ENOTFOUND');
   });
+
+  /** A pass that staged rows and then failed has still moved its cursor. Hiding that misleads. */
+  it('keeps the counts of whatever completed before the failure', async () => {
+    const { invoke } = mockRun({
+      env: configuredEnv({
+        [BRIGHT_ENV_VARS.resources]: 'BrightProperties,BrightMedia',
+        [BRIGHT_ENV_VARS.maxRetries]: '0',
+      }),
+      records: { BrightProperties: listings(3) },
+      pageSize: 10,
+    });
+
+    const result = await invoke();
+
+    expect(result.outcome).toBe('failed');
+    expect(result.counts.recordsStaged).toBe(3);
+  });
 });
 
 describe('runBrightIngest — redaction', () => {
@@ -291,27 +492,54 @@ describe('runBrightIngest — redaction', () => {
    * This test is the enforcement. If it fails, do not add a scrubbing pass — a scrubber is a list of
    * things somebody remembered. Take the field off the record type instead.
    */
-  it('emits no credential material on any record, on success or failure', async () => {
-    for (const responses of [
-      [{ body: JSON.stringify({ access_token: 'token-abc' }) }, { body: '<edmx/>' }],
-      [{ ok: false, status: 401, statusText: 'Unauthorized', body: '{"error":"invalid_client"}' }],
-    ]) {
-      const { sink, records } = collectRecords();
-      await runBrightIngest({
-        env: configuredEnv(),
-        sink,
-        fetchImpl: stubFetch(responses).fetchImpl,
-      });
+  it('emits no credential material on any record, on a replicated run', async () => {
+    const { records, invoke } = mockRun({ records: { BrightProperties: listings(4) } });
+    await invoke();
 
-      const serialised = records.map((record) => JSON.stringify(record)).join('\n');
-      expect(serialised).not.toContain(CLIENT_SECRET);
-      expect(serialised).not.toContain(CLIENT_ID);
-      // The access token is Bright's, but it is still bearer material and still not log content.
-      expect(serialised).not.toContain('token-abc');
-      // Hosts are logged; full URLs are not, because a token endpoint's query string is a
-      // plausible place for a credential to end up.
-      expect(serialised).toContain('bright-staging.example.test');
-      expect(serialised).not.toContain('https://bright-staging.example.test/oauth/token');
-    }
+    const serialised = records.map((record) => JSON.stringify(record)).join('\n');
+    expect(serialised).not.toContain(CLIENT_SECRET);
+    expect(serialised).not.toContain(CLIENT_ID);
+    // The access token is Bright's, but it is still bearer material and still not log content.
+    expect(serialised).not.toContain('mock-access-token');
+    // Hosts are logged; full URLs are not, because a token endpoint's query string is a plausible
+    // place for a credential to end up.
+    expect(serialised).toContain('bright-staging.example.test');
+    expect(serialised).not.toContain(TOKEN_ENDPOINT);
+    expect(serialised).not.toContain(SERVICE_ROOT);
+  });
+
+  it('emits no credential material on a failed run either', async () => {
+    const { sink, records } = collectRecords();
+    await runBrightIngest({
+      env: configuredEnv(),
+      sink,
+      fetchImpl: stubFetch([
+        { ok: false, status: 401, statusText: 'Unauthorized', body: '{"error":"invalid_client"}' },
+      ]).fetchImpl,
+    });
+
+    const serialised = records.map((record) => JSON.stringify(record)).join('\n');
+    expect(serialised).not.toContain(CLIENT_SECRET);
+    expect(serialised).not.toContain(CLIENT_ID);
+    expect(serialised).toContain('bright-staging.example.test');
+    expect(serialised).not.toContain(TOKEN_ENDPOINT);
+  });
+
+  /** A staged payload is Bright's data, not ours, but a run record must not carry it either. */
+  it('puts no record payload on a run record', async () => {
+    const { records, invoke } = mockRun({
+      records: {
+        BrightProperties: [
+          {
+            ListingKey: 8001,
+            ModificationTimestamp: '2026-09-02T00:00:00.000Z',
+            UnparsedAddress: '142 Oak St',
+          },
+        ],
+      },
+    });
+    await invoke();
+
+    expect(records.map((r) => JSON.stringify(r)).join('\n')).not.toContain('142 Oak St');
   });
 });

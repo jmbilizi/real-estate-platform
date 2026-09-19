@@ -9,10 +9,11 @@
 # does matter is by workload, not language").
 #
 # It nevertheless carries its OWN identity label, `app: bright-mls-ingest`, and therefore its own
-# `infra/deploy-control.yaml` key in every environment. That is deliberate: the two-credential ruling
-# (#117) means dev reads Bright's test/staging feed, prod reads the licensed production feed, and
-# test reads neither — so whether this ships to an environment has to be decidable without also
-# deciding whether the Property API ships there.
+# `infra/deploy-control.yaml` key in every environment. That is deliberate: the environment ruling
+# of 2026-09-19 means local, dev and test read Bright's TEST/STAGING feed, and prod alone reads the
+# licensed production feed. It supersedes the part of the 2026-09-12 two-credential ruling (#117)
+# that gave local and test no feed at all. So whether this ships to an environment has to be
+# decidable without also deciding whether the Property API ships there.
 #
 # TODAY IT INGESTS NOTHING. Incremental RESO replication is #92; mapping into
 # properties/units/listings is #93. A run resolves its configuration, reports "credentials not
@@ -86,21 +87,29 @@ spec:
                 # a Secret. Empty here and overridden per environment; an empty value is treated as
                 # "not configured" and nothing is sent anywhere.
                 #
-                # The real URLs are verified and live in the dev and prod overlays (#163): dev on the
-                # TEST/STAGING feed, prod on the LICENSED PRODUCTION feed. They stay OUT of this base
-                # on purpose. A default here would be inherited by `test` and `local`, which receive
-                # no Bright credentials at all (#117), and by any environment added later — turning
-                # "which feed is this?" from a per-environment decision into an inherited accident.
+                # The real URLs are verified and live in the local, dev, test and prod overlays
+                # (#163). They stay OUT of this base on purpose. A default here would be inherited by
+                # any environment added later — turning "which feed is this?" from a per-environment
+                # decision into an inherited accident.
                 - name: BRIGHT_MLS_TOKEN_ENDPOINT
                   value: ""
                 - name: BRIGHT_MLS_SERVICE_ROOT
                   value: ""
+                # Which TIER the feed belongs to, declared separately from the URLs. The job refuses
+                # to run if a `test` declaration meets a non-test host, so this value is a check on
+                # the endpoint pair rather than a duplicate of it.
+                #
+                # The base default is the safe tier, and ONLY the prod overlay overrides it. An
+                # environment that forgets to patch this cannot read the production feed.
+                - name: BRIGHT_MLS_FEED
+                  value: "test"
                 # ── The credential itself ────────────────────────────────────────────────────
                 # Same field names in every environment, different values, sourced from GitHub
                 # ENVIRONMENT secrets (#117 item 2) — repository secrets are precisely how a staging
                 # value and a production value become interchangeable. The committed template holds
                 # `StrongBase64Password` placeholders, which the job treats as "not configured" and
-                # never transmits, so `local` and `test` run to a clean completion rather than a 401.
+                # never transmits. An environment whose secret is not provisioned yet therefore runs
+                # to a clean completion rather than a 401.
                 #
                 # The reference is deliberately NOT `optional: true`: if bright-mls-secret is missing
                 # from a cluster the pod must fail to start with an obvious reason, rather than run

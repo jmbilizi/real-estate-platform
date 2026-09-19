@@ -70,3 +70,8 @@ spec:
                   value: "https://okta.brightmls.com/oauth2/default/v1/token"
                 - name: BRIGHT_MLS_SERVICE_ROOT
                   value: "https://bright-reso.brightmls.com/RESO/OData/bright"
+                # The ONLY place in the repo that declares the production tier. The base default is
+                # `test`, and that default is fail-safe: an environment that forgets to patch this
+                # cannot read the production feed.
+                - name: BRIGHT_MLS_FEED
+                  value: "production"

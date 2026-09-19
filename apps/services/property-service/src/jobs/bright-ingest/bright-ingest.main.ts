@@ -11,12 +11,20 @@
  * `runBrightIngest()` never throws, so the only thing left here is the exit code, and it carries a
  * real distinction:
  *
- *   - `not_configured` → **0**. Expected in `local` and `test` forever, and everywhere until #117
- *     provisions credentials. Failing here would make the CronJob retry and back off over a
- *     condition that is not a fault, burying real failures in noise.
+ *   - `not_configured` → **0**. Expected in an environment that waits on #117. Failing here would
+ *     make the CronJob retry and back off over a condition that is not a fault, burying real
+ *     failures in noise.
+ *   - `replicated` → **0**. Staging was written. A capped run is still a success: the cursor moved,
+ *     and the next scheduled run continues from it.
  *   - `failed` → **1**. Something present was unusable, or Bright refused us. The CronJob's
  *     `backoffLimit` bounds the retries so this surfaces as a failed Job, never a crash loop.
+ *
+ * The pool is closed on every path. `runBrightIngest` opens one to write staging, and an open pool
+ * keeps the event loop alive — the pod would sit at "finished" until `activeDeadlineSeconds` killed
+ * it, which reads as a hung run rather than a completed one.
  */
+
+import { closePool } from '../../db/pool';
 
 import { runBrightIngest } from './run';
 
@@ -36,4 +44,5 @@ runBrightIngest()
       }),
     );
     process.exitCode = 1;
-  });
+  })
+  .finally(() => closePool());
