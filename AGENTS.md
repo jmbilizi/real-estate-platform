@@ -1589,6 +1589,23 @@ pnpm run gh:ticket:list -- --status Ready --priority P0
 # Product owner: reprioritize/groom (Status/Priority/Size — full field access):
 pnpm run gh:ticket:update-fields -- --issue 42 --priority P0
 
+# Product owner: retitle. The title is the only thing gh:ticket:list, the session brief and
+# pick-next-ticket render, so a stale title misdirects work even when the body is correct:
+pnpm run gh:ticket:update-fields -- --issue 42 --title "New title"
+
+# Product owner: decline a ticket. The reason posts as a comment, then the issue closes as
+# "not planned". --reopen takes a reason the same way. Neither flag exists on update-status:
+pnpm run gh:ticket:update-fields -- --issue 42 --decline --reason "Superseded by #61"
+pnpm run gh:ticket:update-fields -- --issue 42 --reopen --reason "Stakeholder reversed the call"
+
+# Either lane: comment on an issue or a PR. Never touches the body, so the plan block is safe:
+pnpm run gh:comment -- --issue 42 --body-file ./note.md
+pnpm run gh:comment -- --pr 139 --body "Rebased on dev."
+
+# Product owner: repo labels. A ticket can only carry a label that already exists:
+pnpm run gh:label -- list --search scope:
+pnpm run gh:label -- create --name scope:property-contracts --color 1D76DB --description "..."
+
 # Product owner: correct a ticket's spec after creation. Replaces the whole body with the file's
 # contents apart from the engineer's Implementation Plan block, carried over byte-for-byte; refuses
 # (writing nothing) if the file itself contains a bare plan marker (one quoted in backticks/a fence
@@ -1631,6 +1648,20 @@ with `✗ … Nothing was written.` instead of guessed at, because a guess appen
 silently drops the plan, and the run after that splices across the wrong span and eats a whole
 section. Fix the markers on the issue by hand and re-run. Unit tests for both directions live in
 `tools/github/lib/issue-body.test.js` — run them with `pnpm run tools:test`.
+
+The same split governs the new flags. `--title`, `--decline` and `--reopen` are product-owner
+capabilities, so they live only on `update-ticket-fields.js`. Disposal is a product decision: the
+board runs three priority levels on the principle that low-value work is declined, not parked. A
+decline needs `--reason`, which posts as a comment before the close, so a closed ticket always
+records why. The close reason is always `not planned` — completed work closes through the PR's
+`Closes #<n>`. GitHub's own project workflow then moves the board Status of a closed issue to
+`Done`, so read the close reason, not the Status, to tell a declined ticket from a delivered one.
+
+`gh:comment` and `gh:label` are separate scripts, not flags. A comment never touches the issue body,
+so both lanes can use it and the Implementation Plan block stays out of reach. `gh:label -- create`
+refuses a name that already exists and writes nothing; `--update` changes an existing label on
+purpose. Create the `scope:<component>` label before the ticket that first carries it, because
+`gh issue create` rejects an unknown label.
 
 Unknown labels are validated by `gh` at write time rather than pre-checked locally, so a rejected
 label can leave earlier edits in the same invocation already applied — e.g.
