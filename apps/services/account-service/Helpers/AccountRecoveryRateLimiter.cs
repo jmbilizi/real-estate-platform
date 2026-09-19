@@ -9,8 +9,8 @@ using Microsoft.Extensions.Options;
 namespace AccountService.Helpers;
 
 /// <summary>
-/// Fixed-window request counters for the unauthenticated Identity endpoints, keyed by email address
-/// and by client address.
+/// Fixed-window request counters for the unauthenticated Identity endpoints — registration, email
+/// confirmation resend, and password reset — keyed by email address and by client address.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -29,13 +29,25 @@ namespace AccountService.Helpers;
 /// before it refuses: see <see cref="TryConsume"/>.
 /// </para>
 /// <para>
-/// Counters are per process. With N replicas the effective limit is N times the configured limit.
-/// Moving the counters to Redis is the scale-out path.
+/// At the cap this limiter <b>fails closed</b> — a request whose counter cannot be stored is
+/// refused rather than waved through. See <see cref="TryConsume"/> for why that check exists and
+/// what it costs; it is not optional, and removing it turns the limiter off under exactly the load
+/// it exists to survive.
+/// </para>
+/// <para>
+/// Counters are per process, so with more than one replica the effective limit is the configured
+/// limit multiplied by the replica count. That is a weaker bound, not an absent one, and it is the
+/// same trade-off the gateway's in-memory Ocelot limiter already makes. Moving the counters to the
+/// cluster's Redis is the scale-out path when replica counts rise.
 /// </para>
 /// </remarks>
 /// <param name="options">The account-recovery options.</param>
 /// <param name="timeProvider">
-/// The time source for the <c>Retry-After</c> value only. Counter expiry is the cache clock's job.
+/// The time source for the <c>Retry-After</c> the caller is told to wait. It does <b>not</b> govern
+/// when a counter expires: that is <see cref="MemoryCacheOptions.Clock"/>'s job and the two are not
+/// wired together, so advancing a fake provider moves the reported retry-after without rolling the
+/// window. Worth knowing before writing a window-rollover test against it — there is no coverage of
+/// rollover today for exactly that reason.
 /// </param>
 internal sealed class AccountRecoveryRateLimiter(
     IOptions<AccountRecoveryOptions> options,
@@ -60,6 +72,44 @@ internal sealed class AccountRecoveryRateLimiter(
 
     /// <inheritdoc/>
     public void Dispose() => this.cache.Dispose();
+
+    /// <summary>
+    /// Counts one password-reset <em>request</em> against both the email and the client-address
+    /// limits.
+    /// </summary>
+    /// <remarks>
+    /// Both counters are charged independently, even when one already refuses: a caller who has
+    /// exhausted the email budget must not get free, unmetered attempts against the address budget.
+    /// </remarks>
+    /// <param name="email">The submitted email address; compared case-insensitively.</param>
+    /// <param name="clientAddress">The client address, or null when unknown.</param>
+    /// <param name="retryAfter">When refused, how long until the refusing counter rolls over.</param>
+    /// <returns><see langword="true"/> when the request may proceed.</returns>
+    internal bool TryRequest(string email, string? clientAddress, out TimeSpan retryAfter)
+    {
+        var settings = options.Value;
+        var key = email.ToUpperInvariant();
+
+        return this.TryConsumePair(
+            $"pwreset:request:email:{key}",
+            $"pwreset:request:addr:{clientAddress ?? "unknown"}",
+            settings.RequestsPerEmail,
+            settings.RequestsPerAddress,
+            settings.RequestWindow,
+            out retryAfter);
+    }
+
+    /// <summary>
+    /// Counts one reset <em>redemption</em> against the client-address limit, bounding token
+    /// guessing.
+    /// </summary>
+    /// <param name="clientAddress">The client address, or null when unknown.</param>
+    /// <param name="retryAfter">When refused, how long until the window rolls over.</param>
+    /// <returns><see langword="true"/> when the redemption may proceed.</returns>
+    internal bool TryRedemption(string? clientAddress, out TimeSpan retryAfter) =>
+        this.TryConsumeAll(
+            out retryAfter,
+            new Counter($"pwreset:redeem:addr:{clientAddress ?? "unknown"}", options.Value.RedemptionsPerAddress, options.Value.RequestWindow));
 
     /// <summary>
     /// Counts one confirmation resend against the interval, hourly and daily limits for the address
@@ -97,9 +147,9 @@ internal sealed class AccountRecoveryRateLimiter(
     /// <remarks>
     /// The refusing counter is still consumed, so a caller cannot retry past a limit for free. The
     /// counters after it are not. A refused request is never served, so it must not spend the long
-    /// windows: the 60-second interval comes first, which caps how fast anyone can burn an address's
-    /// 24-hour budget. Charging every counter let 10 requests in one second lock an address out for
-    /// a day.
+    /// windows: the shortest window comes first, which caps how fast anyone can burn an address's
+    /// longer-window budget. Charging every counter let 10 requests in one second lock an address out
+    /// for a day.
     /// </remarks>
     private bool TryConsumeAll(out TimeSpan retryAfter, params Counter[] counters)
     {
@@ -123,18 +173,56 @@ internal sealed class AccountRecoveryRateLimiter(
     }
 
     /// <summary>
-    /// Counts one request against one counter. Refuses when the counter cannot be stored.
+    /// Consumes one unit from an email-keyed counter and one from an address-keyed counter,
+    /// independently.
     /// </summary>
     /// <remarks>
-    /// A full <see cref="MemoryCache"/> with a size limit does not evict to make room. It drops the
-    /// new entry, and <c>GetOrCreate</c> still returns the factory value. Without the residency
-    /// check every cold key would read <c>Count == 1</c> forever and the limit would silently stop
-    /// applying.
+    /// Both counters are always consumed, even when the first one refuses: a caller who has
+    /// exhausted one limit must not get free attempts against the other.
+    /// </remarks>
+    private bool TryConsumePair(
+        string emailKey,
+        string addressKey,
+        int emailLimit,
+        int addressLimit,
+        TimeSpan window,
+        out TimeSpan retryAfter)
+    {
+        var emailAllowed = this.TryConsume(emailKey, emailLimit, window, out var emailRetry);
+        var addressAllowed = this.TryConsume(addressKey, addressLimit, window, out var addressRetry);
+
+        retryAfter = emailAllowed ? addressRetry : emailRetry;
+        return emailAllowed && addressAllowed;
+    }
+
+    /// <summary>
+    /// Counts one request against one counter, and refuses when the counter cannot be tracked.
+    /// </summary>
+    /// <remarks>
     /// <para>
-    /// Both halves of a key are caller-chosen, so the cap is reachable on demand. Refusing every
-    /// cold key at the cap would turn that into a service-wide outage that lasts as long as the
-    /// 24-hour counters. So a full cache is compacted once and the insert is retried. Only a key
-    /// that still does not fit is refused.
+    /// <b>The residency check is the whole point of this method and must not be removed.</b>
+    /// <see cref="MemoryCache"/> with a <see cref="MemoryCacheOptions.SizeLimit"/> does <em>not</em>
+    /// evict-then-add when it is full: it refuses to store the entry, marks it
+    /// <c>EvictionReason.Capacity</c>, and schedules a background compaction that frees only
+    /// <see cref="MemoryCacheOptions.CompactionPercentage"/> (5% by default). But
+    /// <see cref="CacheExtensions.GetOrCreate{TItem}(IMemoryCache, object, Func{ICacheEntry, TItem})"/>
+    /// still returns the factory's value, so without this check a cold key came back with
+    /// <c>Count == 1</c> on <em>every</em> request and the limit silently stopped applying.
+    /// </para>
+    /// <para>
+    /// That fail-open was reachable, not theoretical: half of every key is a caller-chosen email
+    /// address and the other half a caller-asserted <c>X-Real-IP</c> (#143), so an attacker can fill
+    /// the cache deliberately and then enjoy an unmetered endpoint — including against a victim's
+    /// address once its counter has been evicted.
+    /// </para>
+    /// <para>
+    /// <b>The trade this makes.</b> Failing closed at capacity means a full cache refuses recovery
+    /// requests it cannot account for, which is a denial-of-recovery an attacker can also aim for.
+    /// That is the better of the two failures: a limiter that refuses is doing a recognisable,
+    /// alertable thing, where one that silently stops limiting looks healthy while providing no
+    /// protection at all. <see cref="AccountRecoveryOptions.MaxTrackedKeys"/> is sized so ordinary
+    /// traffic never approaches it. Surfacing capacity exhaustion as a metric or a throttled log
+    /// line is a genuine gap and is noted on the ticket rather than bolted on here.
     /// </para>
     /// </remarks>
     private bool TryConsume(string key, int limit, TimeSpan window, out TimeSpan retryAfter)
@@ -161,6 +249,16 @@ internal sealed class AccountRecoveryRateLimiter(
 
             counter.Count++;
             retryAfter = counter.ExpiresAt > now ? counter.ExpiresAt - now : TimeSpan.Zero;
+
+            // Did the counter actually get stored? If not, the cache is at capacity and this
+            // increment is about to be forgotten — so there is no counting happening for this key
+            // and the only safe answer is no.
+            if (!this.cache.TryGetValue(key, out Window? tracked) || !ReferenceEquals(tracked, counter))
+            {
+                retryAfter = window;
+                return false;
+            }
+
             return counter.Count <= limit;
         }
     }

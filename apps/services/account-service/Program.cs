@@ -84,12 +84,16 @@ internal static class Program
 
         builder.Services
             .AddIdentityApiEndpoints<ApplicationUser>(options =>
-                options.Tokens.EmailConfirmationTokenProvider = EmailConfirmationTokenProvider.ProviderName)
+            {
+                options.Tokens.EmailConfirmationTokenProvider = EmailConfirmationTokenProvider.ProviderName;
+                options.Tokens.PasswordResetTokenProvider = PasswordResetTokenProvider.ProviderName;
+            })
             .AddRoles<IdentityRole>()
             .AddUserManager<AppUserManager>()
             .AddSignInManager<AppSignInManager>()
             .AddEntityFrameworkStores<AccountDbContext>()
-            .AddTokenProvider<EmailConfirmationTokenProvider>(EmailConfirmationTokenProvider.ProviderName);
+            .AddTokenProvider<EmailConfirmationTokenProvider>(EmailConfirmationTokenProvider.ProviderName)
+            .AddTokenProvider<PasswordResetTokenProvider>(PasswordResetTokenProvider.ProviderName);
 
         // Own provider, own lifetime: Identity's built-in providers share one
         // DataProtectionTokenProviderOptions, so a lifetime set there would move every token.
@@ -101,8 +105,29 @@ internal static class Program
                 tokenOptions.TokenLifespan = recovery.Value.ConfirmationTokenLifetime;
             });
 
+        // Password reset runs on its own token provider so its lifetime — and its data-protection
+        // purpose — are independent of every other Identity token. That independence now matters
+        // rather than being theoretical: Identity's built-in providers all resolve the single
+        // DataProtectionTokenProviderOptions instance, so a reset lifetime configured through it
+        // would also shorten the *email confirmation* token. Bound from options rather than read
+        // from configuration here, so a test (or a later environment override) that replaces
+        // AccountRecoveryOptions is the value the provider actually enforces.
+        builder.Services
+            .AddOptions<PasswordResetTokenProviderOptions>()
+            .Configure<IOptions<AccountRecoveryOptions>>((tokenOptions, recovery) =>
+            {
+                tokenOptions.Name = PasswordResetTokenProvider.ProviderName;
+                tokenOptions.TokenLifespan = recovery.Value.TokenLifetime;
+            });
+
         // The enforcement switch. Registered after AddIdentityApiEndpoints so this Configure runs
         // last. Bound through options, not read inline, so a test override changes the behaviour.
+        //
+        // The default is false and that is deliberate, not an omission: Identity's /register issues
+        // its confirmation link through IEmailSender<ApplicationUser>, and until #133 provisions a
+        // transactional provider nothing can deliver it — so requiring confirmation today would mean
+        // no one can create a usable account. See AccountRecoveryOptions for the two things this
+        // flag does not do. Flipping it is #149's job.
         builder.Services
             .AddOptions<IdentityOptions>()
             .Configure<IOptions<AccountRecoveryOptions>>((identity, recovery) =>
@@ -166,10 +191,18 @@ internal static class Program
         // Readiness probe — same response; kept separate so K8s can distinguish liveness from readiness
         app.MapGet("/account/health/ready", () => Results.Ok(new { status = "ready" }));
 
-        // Identity's endpoints are the whole register / confirm / resend / reset surface. None is
-        // removed or renamed: /register builds its confirmation link from the endpoint name
-        // MapIdentityApi attaches to /confirmEmail, and throws after the row is committed if it is
-        // gone. Behaviour is added as filters over the group.
+        // Identity: built-in ASP.NET Identity endpoints — register, login, refresh, confirmEmail,
+        // resendConfirmationEmail, forgotPassword, resetPassword, manage/*. These are the whole
+        // account-recovery surface; this service adds no endpoints of its own to it. Behaviour is
+        // added as filters over the group.
+        //
+        // Nothing here may remove or rename an Identity endpoint. /confirmEmail in particular is
+        // load-bearing well beyond itself: MapIdentityApi captures its endpoint name
+        // ("MapIdentityApi-/account/confirmEmail", attached as EndpointNameMetadata) and both
+        // /register and /resendConfirmationEmail build their confirmation link from it with
+        // LinkGenerator.GetUriByName. Take it out of the endpoint data source and /register throws
+        // NotSupportedException *after* CreateAsync has already committed the row — a 500 against an
+        // account that exists and will never receive a link. IdentityEndpointsArePresent pins it.
         var identityGroup = app.MapGroup("/account");
         identityGroup.MapIdentityApi<ApplicationUser>();
         identityGroup.AddEndpointFilter<AccountRecoveryThrottleFilter>();

@@ -64,6 +64,9 @@ namespace AccountService.Tests.Integration
                     options.ResendsPerEmailPerHour = int.MaxValue;
                     options.ResendsPerEmailPerDay = int.MaxValue;
                     options.ResendsPerAddress = int.MaxValue;
+                    options.RequestsPerEmail = int.MaxValue;
+                    options.RequestsPerAddress = int.MaxValue;
+                    options.RedemptionsPerAddress = int.MaxValue;
                     options.RegistrationsPerAddress = int.MaxValue;
                     options.MinimumResponseDuration = TimeSpan.Zero;
                 });

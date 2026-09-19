@@ -55,6 +55,14 @@ namespace AccountService.Tests.Integration
         internal IReadOnlyList<SentMessage> ConfirmationLinks =>
             this.Sent.Where(m => m.Kind == MessageKind.ConfirmationLink).ToList();
 
+        /// <summary>Gets the password-reset codes issued so far, in order.</summary>
+        internal IReadOnlyList<SentMessage> ResetCodes =>
+            this.Sent.Where(m => m.Kind == MessageKind.PasswordResetCode).ToList();
+
+        /// <summary>Gets the password-reset links issued so far, in order.</summary>
+        internal IReadOnlyList<SentMessage> ResetLinks =>
+            this.Sent.Where(m => m.Kind == MessageKind.PasswordResetLink).ToList();
+
         /// <inheritdoc/>
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
