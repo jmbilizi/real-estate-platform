@@ -26,6 +26,7 @@ resources:
   - secrets/redis.secret.yaml
   - secrets/jaeger.secret.yaml
   - secrets/bright-mls.secret.yaml
+  - secrets/postmark.secret.yaml
 
   # ConfigMaps (all second)
   - configmaps/postgres.configmap.yaml
