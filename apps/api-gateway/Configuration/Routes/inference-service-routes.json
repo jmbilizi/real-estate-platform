@@ -12,7 +12,12 @@
           "Host": "inference-svc",
           "Port": 8000
         }
-      ]
+      ],
+      "QoSOptions": {
+        "Timeout": 30000,
+        "MinimumThroughput": 5,
+        "BreakDuration": 15000
+      }
     },
     {
       "UpstreamPathTemplate": "/inference/models",
@@ -24,7 +29,12 @@
           "Host": "inference-svc",
           "Port": 8000
         }
-      ]
+      ],
+      "QoSOptions": {
+        "Timeout": 5000,
+        "MinimumThroughput": 5,
+        "BreakDuration": 10000
+      }
     },
     {
       "UpstreamPathTemplate": "/inference/health",
@@ -36,7 +46,12 @@
           "Host": "inference-svc",
           "Port": 8000
         }
-      ]
+      ],
+      "QoSOptions": {
+        "Timeout": 3000,
+        "MinimumThroughput": 5,
+        "BreakDuration": 10000
+      }
     },
     {
       "UpstreamPathTemplate": "/inference/ready",
@@ -48,7 +63,12 @@
           "Host": "inference-svc",
           "Port": 8000
         }
-      ]
+      ],
+      "QoSOptions": {
+        "Timeout": 3000,
+        "MinimumThroughput": 5,
+        "BreakDuration": 10000
+      }
     }
   ],
   "SwaggerEndPoints": [
