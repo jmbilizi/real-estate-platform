@@ -1,50 +1,64 @@
 /**
- * The Bright MLS ingestion run (#91) — the decision half.
+ * The Bright MLS ingestion run — the decision half.
  *
  * `bright-ingest.main.ts` is the program that invokes this; the split mirrors
  * `seed-on-start.ts` / `seed-on-start.main.ts` and exists for the same reason: a bundled entry point
  * cannot hold logic that anything wants to unit-test, because `require.main === module` is silently
  * always false inside a webpack bundle.
  *
- * ## What a run does today
+ * ## What a run does
  *
  * Resolves configuration, and then either:
  *
- *  - reports `not_configured` and finishes **successfully** — the expected steady state in `local`
- *    and `test`, and everywhere until #117 provisions credentials; or
- *  - authenticates and probes `$metadata`, reporting `probe_succeeded` with zero counts.
+ *  - reports `not_configured` and finishes **successfully** — the expected state for any
+ *    environment that is not wired yet, which now means one where #117 has not provisioned a
+ *    secret, since #176 wired every overlay's endpoint pair; or
+ *  - authenticates, probes `$metadata`, and replicates every configured resource into the staging
+ *    tables, reporting `replicated`.
  *
- * It ingests nothing. Incremental RESO replication into a staging area is #92; mapping into
- * `properties`/`units`/`listings` is #93. Nothing under `src/jobs/bright-ingest/` opens a database
- * connection or issues SQL, and `no-consumer-writes.spec.ts` asserts that structurally rather than
- * trusting this comment — `src/db/write.ts` remains the only module that writes `listings`.
+ * `$metadata` is still probed first, one request per run. It is the drift detector: the `sha256` on
+ * the run record is comparable with the one recorded beside the committed document in
+ * `docs/bright-mls/README.md`, so a schema change at Bright arrives as a changed hash rather than as
+ * a wrong-looking field weeks later.
+ *
+ * ## Staging only. The consumer tables stay off-limits
+ *
+ * Records land in `bright_staging_records` and nowhere else. Mapping into
+ * `properties`/`units`/`listings` is #93, and `src/db/write.ts` remains the only module that writes
+ * `listings`. `no-consumer-writes.spec.ts` asserts that structurally: it allows the staging tables
+ * by name and nothing else.
  *
  * ## Why "not configured" is a success and not a failure
  *
  * A CronJob whose pods exit non-zero retries, backs off, and fills the namespace with Failed jobs
- * and the alerting channel with noise — for the entirely expected condition of "we do not have the
- * keys yet". So the absence of credentials is a clean exit 0 carrying an explicit `not_configured`
- * outcome and a message naming the missing variables. It is loud in the log and quiet in the
- * scheduler, which is the correct way round. A value that is present but unusable is the opposite
- * case and does fail the run.
+ * and the alerting channel with noise — for the expected condition of "we do not have the keys yet".
+ * So the absence of credentials is a clean exit 0 carrying an explicit `not_configured` outcome and
+ * a message naming the missing variables. It is loud in the log and quiet in the scheduler, which is
+ * the correct way round. A value that is present but unusable is the opposite case and does fail the
+ * run — including an endpoint whose host contradicts the declared feed tier.
  */
 
 import { randomUUID } from 'node:crypto';
 
 import {
-  acquireToken,
   type BrightClientOptions,
   type BrightMetadataProbe,
+  createTokenProvider,
   probeMetadata,
 } from './bright-client';
-import { BRIGHT_ENV_VARS, type BrightConfig, resolveBrightConfig } from './config';
+import { type BrightConfig, resolveBrightConfig } from './config';
+import { RateLimiter } from './rate-limiter';
+import { replicateResource, type ReplicateResourceResult, ReplicationFailure } from './replicate';
+import { BRIGHT_RESOURCES, resolveResource } from './resources';
 import {
+  type BrightResourceReport,
   type BrightRunCounts,
   type BrightRunLogSink,
   type BrightRunOutcome,
   consoleRunLogSink,
   ZERO_COUNTS,
 } from './run-log';
+import { type BrightStagingStore, createStagingStore } from './staging-store';
 
 export interface BrightIngestRunResult {
   readonly runId: string;
@@ -54,6 +68,8 @@ export interface BrightIngestRunResult {
   readonly message: string;
   readonly tokenEndpointHost: string | null;
   readonly serviceRootHost: string | null;
+  readonly resources: readonly BrightResourceReport[];
+  readonly stalled: boolean;
 }
 
 export interface RunBrightIngestOptions extends BrightClientOptions {
@@ -62,6 +78,10 @@ export interface RunBrightIngestOptions extends BrightClientOptions {
   /** Injected so a test can assert `durationMs` without sleeping. */
   readonly now?: () => Date;
   readonly runId?: string;
+  /** Injected in tests. Production builds one from the shared pool. */
+  readonly store?: BrightStagingStore;
+  readonly sleep?: (ms: number) => Promise<void>;
+  readonly random?: () => number;
 }
 
 /** ISO-8601 with a `Z` suffix — one wire format per service (see the project guide). */
@@ -73,10 +93,69 @@ function notConfiguredMessage(config: Extract<BrightConfig, { state: 'not-config
   return (
     'Bright MLS credentials are not configured: ' +
     `${config.missing.join(', ')} ${config.missing.length === 1 ? 'is' : 'are'} unset or still ` +
-    'the committed placeholder. Nothing was ingested and nothing was written. This is the ' +
-    'expected state for the local and test environments, which receive no Bright credentials at ' +
-    "all; elsewhere it means #117 has not yet provisioned this environment's secret. See " +
+    'the committed placeholder. Nothing was ingested and nothing was written. Every overlay now ' +
+    'carries an endpoint pair (#176), so this means the secret is missing: either #117 has not ' +
+    "provisioned this environment's, or the overlay lost its endpoint pair. See " +
     'apps/services/property-service/docs/bright-mls-day-one-checklist.md.'
+  );
+}
+
+function toReport(
+  result: ReplicateResourceResult,
+  cursorMaxAgeHours: number,
+): BrightResourceReport {
+  return {
+    resource: result.resource,
+    pagesFetched: result.pagesFetched,
+    recordsFetched: result.recordsFetched,
+    recordsStaged: result.recordsStaged,
+    retries: result.retries,
+    cursorAt: result.cursorAfter.modifiedAt,
+    cursorAgeHours: result.cursorAgeHours,
+    caughtUp: result.caughtUp,
+    cappedByPageLimit: result.cappedByPageLimit,
+    starved: result.starved,
+    stalled: result.cursorAgeHours !== null && result.cursorAgeHours > cursorMaxAgeHours,
+  };
+}
+
+function summarise(
+  reports: readonly BrightResourceReport[],
+  deletionsDetected: number,
+): BrightRunCounts {
+  return {
+    recordsFetched: reports.reduce((total, r) => total + r.recordsFetched, 0),
+    recordsStaged: reports.reduce((total, r) => total + r.recordsStaged, 0),
+    // #93 maps staging into the consumer schema. This run writes no consumer row.
+    recordsUpserted: 0,
+    deletionsDetected,
+    retries: reports.reduce((total, r) => total + r.retries, 0),
+    pagesFetched: reports.reduce((total, r) => total + r.pagesFetched, 0),
+  };
+}
+
+function replicatedMessage(
+  config: Extract<BrightConfig, { state: 'configured' }>,
+  reports: readonly BrightResourceReport[],
+  counts: BrightRunCounts,
+): string {
+  const behind = reports.filter((r) => r.cappedByPageLimit).map((r) => r.resource);
+  const stalled = reports.filter((r) => r.stalled).map((r) => r.resource);
+  const starved = reports.filter((r) => r.starved).map((r) => r.resource);
+  return (
+    `Replicated ${counts.recordsStaged} record(s) into staging from ` +
+    `${config.endpoint.serviceRootHost} over ${counts.pagesFetched} page(s), feed tier ` +
+    `${config.feed}, ${counts.retries} retry/retries. ` +
+    (behind.length === 0
+      ? 'Every resource reached the end of the feed. '
+      : `Still behind and resuming next run: ${behind.join(', ')}. `) +
+    (stalled.length === 0
+      ? ''
+      : `STALLED CURSOR beyond ${config.replication.cursorMaxAgeHours}h: ${stalled.join(', ')}. `) +
+    (starved.length === 0
+      ? ''
+      : `STARVED on a tie block, the cursor cannot advance: ${starved.join(', ')}. `) +
+    'No consumer row was written: mapping is #93.'
   );
 }
 
@@ -122,6 +201,9 @@ export async function runBrightIngest(
   let outcome: BrightRunOutcome;
   let message: string;
   let metadata: BrightMetadataProbe | undefined;
+  const reports: BrightResourceReport[] = [];
+  let counts: BrightRunCounts = ZERO_COUNTS;
+  let feed: 'test' | 'production' | undefined;
 
   // `config === null` and `configError !== null` are the same condition — resolveBrightConfig either
   // returned or threw. Testing the null rather than the error is what lets the compiler narrow
@@ -137,24 +219,86 @@ export async function runBrightIngest(
     outcome = 'not_configured';
     message = notConfiguredMessage(config);
   } else {
+    feed = config.feed;
     try {
-      const token = await acquireToken(config.endpoint, config.credentials, options);
-      metadata = await probeMetadata(config.endpoint, token, options);
-      outcome = 'probe_succeeded';
-      message =
-        `Authenticated against ${config.endpoint.tokenEndpointHost} and read $metadata from ` +
-        `${config.endpoint.serviceRootHost} (${metadata.byteLength} bytes, OData-Version ` +
-        `${metadata.odataVersion ?? 'not advertised'}). No records were ingested: replication is ` +
-        `#92 and mapping is #93. Confirm the ${BRIGHT_ENV_VARS.serviceRoot} host above is the feed ` +
-        'this environment is meant to read.';
+      const { replication } = config;
+      // `options.now` returns a Date for the run clock; the token cache wants epoch milliseconds.
+      // Derived rather than passed straight through, so one injected clock still drives both.
+      const tokenProvider = createTokenProvider(config.endpoint, config.credentials, {
+        fetchImpl: options.fetchImpl,
+        timeoutMs: options.timeoutMs,
+        now: () => now().getTime(),
+      });
+      metadata = await probeMetadata(config.endpoint, await tokenProvider(), options);
+
+      // ONE limiter for the whole run. Two callers each staying under the ceiling is how a shared
+      // ceiling gets exceeded, which is the criterion this object exists to satisfy.
+      const limiter = new RateLimiter(
+        {
+          requestsPerSecond: replication.requestsPerSecond,
+          requestsPerMinute: replication.requestsPerMinute,
+          maxConcurrency: replication.maxConcurrency,
+        },
+        { sleep: options.sleep },
+      );
+
+      const store = options.store ?? createStagingStore();
+      const resources = replication.resources.map(resolveResource);
+
+      if (replication.fullResync) {
+        for (const resource of resources) {
+          await store.resetCursor(resource.entitySet, runId);
+        }
+      }
+
+      let deletionsDetected = 0;
+      for (const resource of resources) {
+        const result = await replicateResource({
+          resource,
+          serviceRoot: config.endpoint.serviceRoot,
+          serviceRootHost: config.endpoint.serviceRootHost,
+          tokenProvider,
+          store,
+          runId,
+          initialCursor: replication.initialCursor,
+          maxPagesPerRun: replication.maxPagesPerRun,
+          pageOptions: {
+            ...options,
+            limiter,
+            maxRetries: replication.maxRetries,
+          },
+          now,
+        });
+        if (resource.kind === 'deletions') {
+          deletionsDetected += result.recordsStaged;
+        }
+        reports.push(toReport(result, replication.cursorMaxAgeHours));
+      }
+
+      counts = summarise(reports, deletionsDetected);
+      outcome = 'replicated';
+      message = replicatedMessage(config, reports, counts);
     } catch (error) {
       outcome = 'failed';
       message = error instanceof Error ? error.message : String(error);
+      // Keep whatever completed before the failure. A pass that staged 40,000 rows and then hit a
+      // 500 has still moved its cursor, and a report that hid that would make the next run look
+      // like it skipped work.
+      if (error instanceof ReplicationFailure) {
+        reports.push(toReport(error.partial, config.replication.cursorMaxAgeHours));
+      }
+      counts = summarise(
+        reports,
+        reports
+          .filter((report) => BRIGHT_RESOURCES[report.resource]?.kind === 'deletions')
+          .reduce((total, report) => total + report.recordsStaged, 0),
+      );
     }
   }
 
   const finishedAt = now();
   const durationMs = Math.max(0, finishedAt.getTime() - startedAt.getTime());
+  const stalled = reports.some((report) => report.stalled);
 
   sink({
     job: 'bright-mls-ingest',
@@ -165,8 +309,10 @@ export async function runBrightIngest(
     serviceRootHost,
     outcome,
     durationMs,
-    counts: ZERO_COUNTS,
+    counts,
     message,
+    ...(feed === undefined ? {} : { feed }),
+    ...(reports.length === 0 ? {} : { resources: reports, stalled }),
     ...(metadata === undefined
       ? {}
       : {
@@ -182,9 +328,11 @@ export async function runBrightIngest(
     runId,
     outcome,
     durationMs,
-    counts: ZERO_COUNTS,
+    counts,
     message,
     tokenEndpointHost,
     serviceRootHost,
+    resources: reports,
+    stalled,
   };
 }

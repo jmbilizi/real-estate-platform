@@ -46,6 +46,7 @@ type ExpectedCardKeys =
   | 'latitude'
   | 'longitude'
   | 'price'
+  | 'daysOnMarket'
   | 'status'
   | 'listingType'
   | 'source'

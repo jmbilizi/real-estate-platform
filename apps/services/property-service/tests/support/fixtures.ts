@@ -117,6 +117,20 @@ export interface ComplianceFixtureIds {
   /** upcoming but is_cancelled — must NOT match. */
   cancelledOpenHouseListingId: string;
   sampleListingId: string;
+  /** #53. price_display_allowed=false. Stored list price, so a spec can assert it is NOT emitted. */
+  suppressedPriceListingId: string;
+  suppressedPriceStoredListPrice: number;
+  /** #53. price_history_display_allowed=false, with a real original price and a real reduction. */
+  suppressedPriceHistoryListingId: string;
+  suppressedPriceHistoryStoredOriginalListPrice: number;
+  /** #53. days_on_market_display_allowed=false, with a real stored value. */
+  suppressedDaysOnMarketListingId: string;
+  suppressedDaysOnMarketStoredValue: number;
+  /** #53. media_display_allowed=false, with exactly one media row marked retained. */
+  suppressedMediaWithMarkerListingId: string;
+  /** #53. media_display_allowed=false, with NO media row marked retained — the fail-closed case:
+   *  the media replication pass has not run yet and no photo may be emitted, never a fallback. */
+  suppressedMediaNoMarkerListingId: string;
 }
 
 /** The narrow seam this module needs, mirroring src/seed/seed.ts's SeedQueryable/SeedConnectable. */
@@ -208,6 +222,11 @@ const FIXTURE_STREETS = {
   pastOpenHouse: '111 Fixture Test Lane',
   cancelledOpenHouse: '112 Fixture Test Lane',
   sample: '113 Fixture Test Lane',
+  suppressedPrice: '114 Fixture Test Lane',
+  suppressedPriceHistory: '115 Fixture Test Lane',
+  suppressedDaysOnMarket: '116 Fixture Test Lane',
+  suppressedMediaWithMarker: '117 Fixture Test Lane',
+  suppressedMediaNoMarker: '118 Fixture Test Lane',
 } as const;
 
 /** The label discipline (guard 3) every fixture title carries, in one place. */
@@ -326,6 +345,12 @@ function buildFixtureListingRow(input: {
   featuredReason: FeaturedReason | null;
   internetDisplayAllowed: boolean;
   addressDisplayAllowed: boolean;
+  /** #53. Default true (published) so a scenario only has to name the flag(s) it suppresses. */
+  priceDisplayAllowed?: boolean;
+  priceHistoryDisplayAllowed?: boolean;
+  mediaDisplayAllowed?: boolean;
+  daysOnMarketDisplayAllowed?: boolean;
+  daysOnMarket?: number | null;
   amenities?: Amenity[];
 }): ListingRow {
   return {
@@ -364,6 +389,11 @@ function buildFixtureListingRow(input: {
     new_construction: false,
     internet_display_allowed: input.internetDisplayAllowed,
     address_display_allowed: input.addressDisplayAllowed,
+    price_display_allowed: input.priceDisplayAllowed ?? true,
+    price_history_display_allowed: input.priceHistoryDisplayAllowed ?? true,
+    media_display_allowed: input.mediaDisplayAllowed ?? true,
+    days_on_market_display_allowed: input.daysOnMarketDisplayAllowed ?? true,
+    days_on_market: input.daysOnMarket ?? null,
     broker_name: FIXTURE_BROKER_NAME,
     broker_phone: FIXTURE_BROKER_PHONE,
     broker_email: FIXTURE_BROKER_EMAIL,
@@ -496,6 +526,7 @@ export async function loadComplianceFixtures(pool: FixturesPool): Promise<Compli
         alt_text: SUPPRESSED_ADDRESS_MEDIA_ALT_TEXT,
         sort_order: 0,
         is_primary: true,
+        retained_when_suppressed: false,
         is_sample: true,
       },
     ]);
@@ -882,6 +913,252 @@ export async function loadComplianceFixtures(pool: FixturesPool): Promise<Compli
       is_sample: true,
     });
 
+    // --- Field-level suppression (#53): price alone ------------------------------------------------
+    const suppressedPricePropertyId = randomUUID();
+    await getOrCreateProperty(
+      client,
+      buildFixtureProperty({
+        id: suppressedPricePropertyId,
+        communityId,
+        streetLine: FIXTURE_STREETS.suppressedPrice,
+        propertyType: 'Single Family',
+        beds: 3,
+        bathsFull: 2,
+        bathsHalf: 0,
+        livingSqft: 1800,
+        lotSqft: 6000,
+      }),
+    );
+    const suppressedPriceStoredListPrice = 460000;
+    const suppressedPriceListingId = randomUUID();
+    await upsertListing(
+      client,
+      buildFixtureListingRow({
+        id: suppressedPriceListingId,
+        propertyId: suppressedPricePropertyId,
+        title: 'Suppressed Price',
+        offerKind: 'sale',
+        consumerStatus: 'Active',
+        status: 'Active',
+        listPrice: suppressedPriceStoredListPrice,
+        description: 'This E2E Fixture (Sample) listing has a seller-suppressed price.',
+        descriptionModeration: 'approved',
+        featuredReason: null,
+        internetDisplayAllowed: true,
+        addressDisplayAllowed: true,
+        // The scenario under test: price alone is withheld, every other field is published.
+        priceDisplayAllowed: false,
+      }),
+    );
+
+    // --- Field-level suppression (#53): price history (original price + reduced flag) -------------
+    const suppressedPriceHistoryPropertyId = randomUUID();
+    await getOrCreateProperty(
+      client,
+      buildFixtureProperty({
+        id: suppressedPriceHistoryPropertyId,
+        communityId,
+        streetLine: FIXTURE_STREETS.suppressedPriceHistory,
+        propertyType: 'Single Family',
+        beds: 3,
+        bathsFull: 2,
+        bathsHalf: 0,
+        livingSqft: 1800,
+        lotSqft: 6000,
+      }),
+    );
+    const suppressedPriceHistoryStoredOriginalListPrice = 475000;
+    const suppressedPriceHistoryListingId = randomUUID();
+    await upsertListing(
+      client,
+      buildFixtureListingRow({
+        id: suppressedPriceHistoryListingId,
+        propertyId: suppressedPriceHistoryPropertyId,
+        title: 'Suppressed Price History',
+        offerKind: 'sale',
+        consumerStatus: 'Active',
+        status: 'Active',
+        listPrice: 450000,
+        description: 'This E2E Fixture (Sample) listing has a seller-suppressed price history.',
+        descriptionModeration: 'approved',
+        featuredReason: null,
+        internetDisplayAllowed: true,
+        addressDisplayAllowed: true,
+        // The scenario under test: the current price still publishes, but the original price and
+        // the reduced flag — both real here — must not.
+        priceHistoryDisplayAllowed: false,
+      }),
+    );
+    // upsertListing() does not write original_list_price/price_reduced (the writer's INSERT list
+    // does not carry them from ListingRow — see src/db/write.ts), so this fixture sets them
+    // directly, matching how the suppressed-address fixture above accepts that upsertListing()
+    // recomputes the dwelling snapshot rather than trusting the caller's row for everything.
+    await client.query(
+      'UPDATE listings SET original_list_price = $2, price_reduced = true WHERE id = $1',
+      [suppressedPriceHistoryListingId, suppressedPriceHistoryStoredOriginalListPrice],
+    );
+
+    // --- Field-level suppression (#53): days on market ----------------------------------------------
+    const suppressedDaysOnMarketPropertyId = randomUUID();
+    await getOrCreateProperty(
+      client,
+      buildFixtureProperty({
+        id: suppressedDaysOnMarketPropertyId,
+        communityId,
+        streetLine: FIXTURE_STREETS.suppressedDaysOnMarket,
+        propertyType: 'Single Family',
+        beds: 3,
+        bathsFull: 2,
+        bathsHalf: 0,
+        livingSqft: 1800,
+        lotSqft: 6000,
+      }),
+    );
+    const suppressedDaysOnMarketStoredValue = 45;
+    const suppressedDaysOnMarketListingId = randomUUID();
+    await upsertListing(
+      client,
+      buildFixtureListingRow({
+        id: suppressedDaysOnMarketListingId,
+        propertyId: suppressedDaysOnMarketPropertyId,
+        title: 'Suppressed Days On Market',
+        offerKind: 'sale',
+        consumerStatus: 'Active',
+        status: 'Active',
+        listPrice: 450000,
+        description: 'This E2E Fixture (Sample) listing has a seller-suppressed days on market.',
+        descriptionModeration: 'approved',
+        featuredReason: null,
+        internetDisplayAllowed: true,
+        addressDisplayAllowed: true,
+        daysOnMarketDisplayAllowed: false,
+        daysOnMarket: suppressedDaysOnMarketStoredValue,
+      }),
+    );
+
+    // --- Field-level suppression (#53): media, WITH a retained-photo marker -------------------------
+    const suppressedMediaWithMarkerPropertyId = randomUUID();
+    await getOrCreateProperty(
+      client,
+      buildFixtureProperty({
+        id: suppressedMediaWithMarkerPropertyId,
+        communityId,
+        streetLine: FIXTURE_STREETS.suppressedMediaWithMarker,
+        propertyType: 'Single Family',
+        beds: 3,
+        bathsFull: 2,
+        bathsHalf: 0,
+        livingSqft: 1800,
+        lotSqft: 6000,
+      }),
+    );
+    const suppressedMediaWithMarkerListingId = randomUUID();
+    await upsertListing(
+      client,
+      buildFixtureListingRow({
+        id: suppressedMediaWithMarkerListingId,
+        propertyId: suppressedMediaWithMarkerPropertyId,
+        title: 'Suppressed Media With Marker',
+        offerKind: 'sale',
+        consumerStatus: 'Active',
+        status: 'Active',
+        listPrice: 450000,
+        description:
+          'This E2E Fixture (Sample) listing has suppressed media with one retained photo.',
+        descriptionModeration: 'approved',
+        featuredReason: null,
+        internetDisplayAllowed: true,
+        addressDisplayAllowed: true,
+        mediaDisplayAllowed: false,
+      }),
+    );
+    // Three rows: is_primary picks the FIRST by sort_order/is_primary, but the retained marker is
+    // on the THIRD — proving the selection never falls back to sort_order/is_primary once media is
+    // suppressed.
+    await insertMedia(client, [
+      {
+        id: randomUUID(),
+        listing_id: suppressedMediaWithMarkerListingId,
+        source_url: 'https://cdn.example/e2e-fixture-suppressed-media-primary.jpg',
+        alt_text: null,
+        sort_order: 0,
+        is_primary: true,
+        retained_when_suppressed: false,
+        is_sample: true,
+      },
+      {
+        id: randomUUID(),
+        listing_id: suppressedMediaWithMarkerListingId,
+        source_url: 'https://cdn.example/e2e-fixture-suppressed-media-second.jpg',
+        alt_text: null,
+        sort_order: 1,
+        is_primary: false,
+        retained_when_suppressed: false,
+        is_sample: true,
+      },
+      {
+        id: randomUUID(),
+        listing_id: suppressedMediaWithMarkerListingId,
+        source_url: 'https://cdn.example/e2e-fixture-suppressed-media-retained.jpg',
+        alt_text: null,
+        sort_order: 2,
+        is_primary: false,
+        retained_when_suppressed: true,
+        is_sample: true,
+      },
+    ]);
+
+    // --- Field-level suppression (#53): media, WITH NO retained-photo marker ------------------------
+    // The fail-closed case: the media replication pass has not run yet, so no row is marked, and
+    // the response must carry NO photo — never the sort_order/is_primary photo below.
+    const suppressedMediaNoMarkerPropertyId = randomUUID();
+    await getOrCreateProperty(
+      client,
+      buildFixtureProperty({
+        id: suppressedMediaNoMarkerPropertyId,
+        communityId,
+        streetLine: FIXTURE_STREETS.suppressedMediaNoMarker,
+        propertyType: 'Single Family',
+        beds: 3,
+        bathsFull: 2,
+        bathsHalf: 0,
+        livingSqft: 1800,
+        lotSqft: 6000,
+      }),
+    );
+    const suppressedMediaNoMarkerListingId = randomUUID();
+    await upsertListing(
+      client,
+      buildFixtureListingRow({
+        id: suppressedMediaNoMarkerListingId,
+        propertyId: suppressedMediaNoMarkerPropertyId,
+        title: 'Suppressed Media No Marker',
+        offerKind: 'sale',
+        consumerStatus: 'Active',
+        status: 'Active',
+        listPrice: 450000,
+        description:
+          'This E2E Fixture (Sample) listing has suppressed media with no retained-photo marker.',
+        descriptionModeration: 'approved',
+        featuredReason: null,
+        internetDisplayAllowed: true,
+        addressDisplayAllowed: true,
+        mediaDisplayAllowed: false,
+      }),
+    );
+    await insertMedia(client, [
+      {
+        id: randomUUID(),
+        listing_id: suppressedMediaNoMarkerListingId,
+        source_url: 'https://cdn.example/e2e-fixture-suppressed-media-no-marker.jpg',
+        alt_text: null,
+        sort_order: 0,
+        is_primary: true,
+        retained_when_suppressed: false,
+        is_sample: true,
+      },
+    ]);
+
     // --- Sample row: is_sample=true (true of every row above too, but this one is addressed
     // directly by id, with no other scenario attached to it) ----------------------------------------
     const samplePropertyId = randomUUID();
@@ -943,6 +1220,14 @@ export async function loadComplianceFixtures(pool: FixturesPool): Promise<Compli
       pastOpenHouseListingId,
       cancelledOpenHouseListingId,
       sampleListingId,
+      suppressedPriceListingId,
+      suppressedPriceStoredListPrice,
+      suppressedPriceHistoryListingId,
+      suppressedPriceHistoryStoredOriginalListPrice,
+      suppressedDaysOnMarketListingId,
+      suppressedDaysOnMarketStoredValue,
+      suppressedMediaWithMarkerListingId,
+      suppressedMediaNoMarkerListingId,
     };
   } catch (error) {
     await client.query('ROLLBACK');

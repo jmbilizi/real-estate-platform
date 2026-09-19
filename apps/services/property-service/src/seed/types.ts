@@ -162,6 +162,25 @@ export interface ListingRow {
   /** RESO `InternetAddressDisplayYN` — the seller withheld the street address (and, with it, the
    *  coordinates, which the view masks together because the point re-identifies the address). */
   address_display_allowed: boolean;
+  /**
+   * #53. Bright's field-level seller suppression, independent of `internet_display_allowed` and
+   * `address_display_allowed`: a listing can stay syndicated with individual facts withheld.
+   * **Required, not optional**, for the same reason as the two flags above — all four columns
+   * default permissively in the database, so an optional field would let a future MLS mapper that
+   * forgets one of them publish a value the seller withheld, silently and with no error.
+   */
+  price_display_allowed: boolean;
+  /** Masks `original_list_price` AND forces `price_reduced` to false in `listing_search_v` — the
+   *  two travel together, because an unmasked `price_reduced` next to a masked original price
+   *  still discloses that a price change happened. */
+  price_history_display_allowed: boolean;
+  /** Gates media selection in `src/listings/repository.ts`, not a `listings` column mask: false
+   *  means "select only the `listing_media` row `retained_when_suppressed` marks, or none". */
+  media_display_allowed: boolean;
+  days_on_market_display_allowed: boolean;
+  /** Not stored before #53. Null until a feed populates it; never modelled for internal/FSBO
+   *  listings, which have no MLS "days on market" at all. */
+  days_on_market: number | null;
   // Attribution
   broker_name: string;
   broker_phone: string;
@@ -212,6 +231,14 @@ export interface MediaRow {
   alt_text: string | null;
   sort_order: number;
   is_primary: boolean;
+  /**
+   * #53. The explicit marker for "the one photo that survives Bright's photo suppression".
+   * **Required, not optional**: the column has a permissive `false` default, so an optional field
+   * would let a future media mapper forget to carry the feed's marker just as easily as the
+   * `ListingRow` flags above. Never inferred from `sort_order`/`is_primary` — see
+   * `src/listings/repository.ts`.
+   */
+  retained_when_suppressed: boolean;
   is_sample: boolean;
 }
 

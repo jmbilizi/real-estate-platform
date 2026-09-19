@@ -37,7 +37,7 @@ describe('resolveBrightConfig', () => {
 
   /**
    * The single most important behaviour in this module. `infra/k8s/base/secrets/bright-mls.secret.yaml`
-   * ships this literal, and `local`/`test` will hold it forever. Treating it as a real credential
+   * ships this literal, and an unwired environment holds it. Treating it as a real credential
    * would send a guaranteed-bad secret to Bright on every scheduled run and turn a known state into
    * a 401 somebody has to investigate.
    */

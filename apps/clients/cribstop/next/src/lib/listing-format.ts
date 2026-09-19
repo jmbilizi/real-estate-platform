@@ -1,4 +1,5 @@
-import type { ListingType, OpenHouse } from '@cribstop/property-contracts';
+import type { ListingSource, ListingType, OpenHouse } from '@cribstop/property-contracts';
+import { BRAND } from '@/lib/brand';
 import { formatNumber, formatPrice, PROPERTY_TIME_ZONE } from '@/lib/format';
 
 /**
@@ -17,6 +18,25 @@ import { formatNumber, formatPrice, PROPERTY_TIME_ZONE } from '@/lib/format';
  * (PRD §6.3) and a display-rule violation.
  */
 export const PRICE_WITHHELD_COPY = 'Price withheld at the seller’s direction';
+
+/**
+ * The provenance sentence for one row, driven off **that row's** `source` and nothing else.
+ *
+ * It lives here because three surfaces publish it — the detail page, the share text and the link
+ * preview — and a provenance claim that differs between them is a misstatement on whichever one is
+ * wrong. `other` returns null: neither Bright's claim nor ours is true for that row.
+ *
+ * The reasoning behind each sentence is in `components/listing/ListingProvenance`.
+ */
+export function formatListingProvenance(source: ListingSource): string | null {
+  if (source === 'brightMLS') {
+    return 'Information provided by Bright MLS. Deemed reliable but not guaranteed.';
+  }
+  if (source === 'internal') {
+    return `Listing information provided by ${BRAND.siteDomain}. Deemed reliable but not guaranteed.`;
+  }
+  return null;
+}
 
 export interface PriceDisplay {
   text: string;

@@ -31,6 +31,7 @@ export interface ListingCardDbRow {
   latitude: number | null;
   longitude: number | null;
   price: number | null;
+  days_on_market: number | null;
   status: string;
   listing_type: string;
   source: string;
@@ -137,6 +138,7 @@ function commonFields(row: ListingCardDbRow): Record<string, unknown> {
     latitude: row.latitude,
     longitude: row.longitude,
     price: row.price,
+    daysOnMarket: row.days_on_market,
     status: row.status,
     listingType: row.listing_type,
     source: row.source,

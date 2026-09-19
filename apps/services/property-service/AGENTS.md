@@ -192,7 +192,58 @@ The `seed` Nx target still exists for loading the dataset into an arbitrary data
 pointed `DATABASE_URL` at — it is no longer the way to get local data, and it does **not** perform
 the delete-then-insert re-apply.
 
-### Bright MLS ingestion (`src/jobs/bright-ingest/`) — the vehicle, not the cargo (#91)
+### Bright MLS replication (`src/jobs/bright-ingest/`) — what the feed actually allows (#92)
+
+The job now replicates. It reads `BrightProperties` incrementally into `bright_staging_records`,
+advancing `bright_replication_cursor` inside the same transaction that writes each page. Mapping
+staging into `properties`/`units`/`listings` is still #93, and `src/db/write.ts` is still the only
+module that writes a consumer table. `no-consumer-writes.spec.ts` is now an **allowlist**: every
+table named in write SQL in that directory must be a staging table, so a consumer table added by a
+later migration is refused with no edit to the spec.
+
+**Five wire facts, all measured against the live test feed on 2026-09-19. Each one would be a defect
+if rediscovered by guessing.**
+
+- **`$top` suppresses `@odata.nextLink`.** The same query returns 1000 records **with** a nextLink
+  when `$top` is absent and 1000 **without** one when `$top=1000` is present. `$top` means "give me
+  this many and stop", not "page size". Sending it caps every run at one page and the job reports
+  itself caught up. `buildCursorQuery` never sends `$top`; `odata-query.spec.ts` asserts it and the
+  mock server reproduces the suppression so the assertion cannot go vacuous.
+- **Bright rejects `or` in a `$filter`.** The exact resume predicate for a non-unique timestamp is
+  `(cursor gt t) or (cursor eq t and key gt k)`. It answers **400 Query Too Complex — OR Expressions
+  allowed in top 2 levels only**, with or without parentheses. So the filter is inclusive,
+  `cursor ge t`, and the records at the watermark instant are read again next pass. That is free
+  because the staging primary key is `(resource, record_key)` and the write is an upsert.
+- **An inclusive filter can starve.** If a block of records sharing one instant is wider than the
+  per-run page cap, every run re-reads the same pages and the cursor never moves. So the page cap
+  **only applies once the cursor instant has advanced past the one the pass started from**, bounded
+  by `HARD_PAGE_CAP_MULTIPLIER`. A pass that hits the hard cap without advancing reports `starved`,
+  which is a fault and not a slow backfill.
+- **`BrightMedia` and `Deletion` accept no `$filter` at all on the IDX test tier** — not on the
+  timestamp and not on their own key. Both answer
+  `The types 'Edm.Boolean' and 'Edm.Int64' are not compatible`, and `Deletion` refuses `$orderby` as
+  well. They page fine with no query options, at 3.4M and 10.5M rows. Incremental replication of
+  either is therefore not expressible today. `resources.ts` records that as
+  `supportsCursorQuery: false` and the job refuses to start rather than producing a nightly 400.
+  **Do not read that as impossible** — it is one account's entitlement, and lifting it is a flag
+  change in that table, not a code path.
+- **No response carries a rate-limit header**, so client-side limiting is the only control.
+  `rate-limiter.ts` holds a sliding-window ceiling over requests per second, per minute, and
+  concurrency, shared by the whole run. The values are configuration with deliberately slow
+  placeholders until #33 records the licence's real numbers. A sliding window, not a token bucket: a
+  bucket is full when idle, so a nightly run's first requests would arrive as a burst.
+
+Two more things worth knowing before changing this code:
+
+- **The bearer token goes only to the configured service-root host.** An `@odata.nextLink` is a
+  server-supplied URL, so a host change there would hand the credential to that host. `fetchPage`
+  refuses it.
+- **`BRIGHT_MLS_FEED` declares the feed tier** (`test` or `production`). A `test` declaration
+  refuses a service root or token endpoint that is not a recognised test host, and the base default
+  is `test`, so an environment that patches nothing cannot reach production. This guards the
+  ENDPOINT, never the credential — a production credential in a non-production secret is #164.
+
+### Bright MLS ingestion — the vehicle (#91)
 
 The scheduled ingestion job is **this image with a different command**, exactly as the section above
 prescribes: a separate process because the workload is throughput-bound and must not compete with
@@ -201,25 +252,51 @@ request-serving CPU, but the same Nx project because `property_db` is this servi
 (`webpack.config.js` → `additionalEntryPoints`, the same mechanism `seed-on-start` uses), run by the
 `bright-mls-ingest` CronJob in `infra/k8s/base/cronjobs/`.
 
-**It ingests nothing.** Incremental RESO replication into staging is #92; mapping into the consumer
-schema is #93. A run resolves configuration and then either reports `not_configured` or
-authenticates and probes `$metadata`. `no-consumer-writes.spec.ts` asserts that structurally — the
-directory issues no write SQL against any consumer table, never mentions `listing_search_v`, and
-imports neither `db/pool` nor `db/write`. When #92 lands, the allowance to make is **its own staging
-table**, never a relaxation of the consumer-table rule.
+A run resolves configuration and then either reports `not_configured`, or authenticates, probes
+`$metadata`, and replicates (see the section above). `$metadata` is still probed once per run: its
+`sha256` on the run record is comparable with the one in `docs/bright-mls/README.md`, so a schema
+change at Bright arrives as a changed hash rather than as a wrong-looking field weeks later.
 
-Four things here are load-bearing and easy to undo by accident:
+Five things here are load-bearing and easy to undo by accident:
 
-- **"Not configured" is a success, exit 0.** `local` and `test` receive no Bright credentials ever
-  (#117) and hold the committed `StrongBase64Password` placeholder, which `config.ts` treats as
-  absent and never transmits. Making that a failure would give a CronJob a nightly backoff loop over
-  an entirely expected condition and bury real faults in the noise. A value that is present but
-  **unusable** is the opposite case and does fail the run.
-- **Two credential sets, never one** (stakeholder ruling 2026-09-12, #117): dev authenticates
-  against Bright's test/staging feed, prod against the licensed production feed. The field names are
-  identical across environments and only the values differ, which is what makes GitHub _environment_
-  secrets — not repository secrets — the enforcement mechanism. The endpoint is per-environment
-  **configuration** on the CronJob so the feed is inspectable without decoding a Secret.
+- **"Not configured" is a success, exit 0.** An environment that is not wired yet, or that holds the
+  committed `StrongBase64Password` placeholder, completes cleanly — `config.ts` treats the
+  placeholder as absent and never transmits it. Making that a failure would give a CronJob a nightly
+  backoff loop over an entirely expected condition and bury real faults in the noise. A value that
+  is present but **unusable** is the opposite case and does fail the run. **The behaviour is right;
+  do not re-derive it from which environments hold credentials.** It used to be justified by `local`
+  and `test` holding none, and the 2026-09-19 ruling below ended that — the justification changed,
+  the rule did not. An unwired environment is a normal state during rollout, and it is still not a
+  fault.
+- **Which feed am I talking to?** Stakeholder ruling 2026-09-19, superseding the 2026-09-12
+  two-credential ruling. `local`, `dev` and `test` authenticate against Bright's **test/staging**
+  feed, with the real test credentials; they hold real Bright data. `prod` authenticates against the
+  **licensed production** feed. This is the same separation as before with a different default: the
+  old rule protected the production credential by starving three environments, this one protects it
+  by binding three environments to the test feed. **The invariant is unchanged: the production
+  credential never leaves production.** A row from the test feed is not production inventory — it is
+  sample data, **must** be marked `is_sample=true` on ingest, and **must** carry the sample
+  disclosure on every consumer surface (#93, #115). **That marking does not exist yet**: nothing
+  ingests, `is_sample` is set only by the seed path, and nothing derives it from `source`. It is a
+  requirement on #93, not a control to rely on — the condition that must hold before a Bright row
+  reaches a consumer surface, never a reason one already may. The field names stay identical across
+  environments and only the values differ, which is what makes GitHub _environment_ secrets — not
+  repository secrets — the enforcement mechanism, and the endpoint stays per-environment
+  **configuration** on the CronJob so the feed is inspectable without decoding a Secret. Every
+  environment carries an endpoint pair since #176. **Two guards, and they are not the same guard.**
+  `BRIGHT_MLS_FEED` (#92) is a per-environment tier declaration: a `test` declaration refuses a
+  service root or token endpoint that is not a recognised test host, and the base default is `test`,
+  so an environment that patches nothing cannot reach production. That guards the ENDPOINT. #164
+  guards the CREDENTIAL, which nothing in the pod can check, because a client id carries no evidence
+  of which tier issued it.
+- **#164 is parallel hardening, not a blocker on #176** — measured 2026-09-19, not argued. The real
+  **test** credentials return **HTTP 200** at `okta.tst.brightmls.com` and **HTTP 400** at
+  `okta.brightmls.com`. Bright's test and production Okta orgs are separate tenants, so a credential
+  from one cannot authenticate against the other. A production credential in a non-production
+  environment is therefore transmitted to the wrong endpoint and **rejected** — that is credential
+  exposure, not data exposure, and Bright already fails closed across tenants. An earlier version of
+  this guide claimed wiring the endpoint gave a laptop a live authenticated production call. It does
+  not. See the evidence on #164 and #176.
 - **Only endpoint HOSTS are ever logged**, never full URLs and never credential material. The
   containment is structural: no log record type in `run-log.ts` has a field a credential could be
   assigned to. The exception that had to be argued about is `message`, the one free-text field — so

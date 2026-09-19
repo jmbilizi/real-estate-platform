@@ -56,13 +56,28 @@ guide.
    `new-service` skill checklist — Dockerfile, `infra/k8s/` manifests, skaffold artifact, env/secret
    wiring — verified with `pnpm run skaffold:services:deploy`, not just a green `nx build`. A ticket
    that scopes infra out is a defective ticket; flag it and build it correctly.
-8. **Always shut down anything you started in the background.** Dev servers, `skaffold` watches,
-   `kubectl port-forward`, test runners in watch mode — they outlive the command that launched them.
-   Left running they squat on ports (3000/3002/5432/8080) so the next run fails or, worse, silently
-   answers from a stale process and a later check "passes" against nothing. Stop background shells
-   when the task that needed them is done — before reporting or committing — and confirm none
-   survive (`ps -W | grep -E 'skaffold|kubectl|node'`). **On Windows `pkill` silently does nothing**
-   — use `taskkill //F //IM kubectl.exe` (or `skaffold.exe`, `node.exe`).
+8. **Always shut down anything you started in the background, by PID, never by image name.** Dev
+   servers, `skaffold` watches, `kubectl port-forward`, and test runners in watch mode outlive the
+   command that launched them. Left running, they squat on ports (3000/3002/5432/8080). The next run
+   then fails, or worse, silently answers from a stale process and a later check "passes" against
+   nothing. Stop background shells before reporting or committing. Confirm none survive with
+   `ps -W | grep -E 'skaffold|kubectl|node'`.
+
+   Several engineer lanes run at once in this repo. An image-wide kill takes down every other lane's
+   process of that name, not just yours. This has already happened three times: it killed another
+   lane's dev server, then another lane's `dotnet` processes, then this session's own MCP server
+   processes. **Never run `taskkill //F //IM <name>` or `pkill <name>` for cleanup.** Both match by
+   image name and kill every matching process on the machine. `pkill` also silently does nothing on
+   Windows, so it never was a safe fallback there. This is worst for `node.exe`. It is the most
+   shared image in the repo, running every Node dev server, `pnpm` invocation, and MCP server.
+   Killing it by image name is never acceptable, not just discouraged.
+
+   Use `pnpm run dev:stop -- --pid <pid>` or `pnpm run dev:stop -- --port <port>` instead
+   (`tools/dev/stop-process.js`). It resolves one PID, from the value you pass or from whatever
+   listens on the port, and kills only that process tree. It works the same way on Windows, macOS,
+   and Linux. It calls `taskkill` directly from Node, so it needs none of the doubled-slash `//PID`
+   workaround that Git Bash's MSYS path conversion otherwise forces.
+
 9. **Write in ASD-STE100 Simplified Technical English, and write only what the reader needs.** This
    applies to everything an agent writes: ticket bodies, ticket comments, code comments, PR
    descriptions, commit messages, and replies to the user. See
@@ -146,6 +161,38 @@ pnpm run infra:validate:dev            # Kustomize validation per env
 - **Project-specific skills**: nest them in the project (`apps/<...>/.agents/skills/`); the sync
   registers the location. **Project-specific hooks and subagents** (root-only discovery): name them
   with the project prefix, e.g. `cribstop-compliance-reviewer`.
+
+### Model Selection Per Dispatch
+
+Every agent dispatch names a model. Pick the cheapest tier that can do the task. Inheriting the
+orchestrator's model is the default failure mode: silence spends the most expensive option. State
+the model explicitly on every dispatch, never leave it to inherit.
+
+The top tier is for orchestration and genuine architecture or ambiguous diagnosis. Use it least, not
+by default.
+
+Three tiers, named by the work, not the vendor:
+
+- **Cheapest** — mechanical, well-specified work: ticket-text edits, doc wording, renames, inventory
+  and list sweeps, formatting, label and board writes.
+- **Mid — the default for real work** — most implementation and review lanes: a scoped feature, a
+  bug fix, a test suite, a review of a bounded diff.
+- **Top — rare and justified** — cross-cutting architecture, an ambiguous diagnosis nobody has
+  cracked, orchestration itself.
+
+**Escalate on evidence, not anticipation.** Start a lane cheap. Re-dispatch at a higher tier only
+when the cheap lane stalls. A cheap lane that fails costs less than every lane running at the top
+tier.
+
+Parallel fan-out multiplies model cost. Right-sizing matters more, not less, when lanes run wide.
+
+Provider mapping (Claude only — keep vendor names out of the rest of this guide):
+
+| Tier     | Claude model |
+| -------- | ------------ |
+| Cheapest | Haiku        |
+| Mid      | Sonnet       |
+| Top      | Opus         |
 
 ## Repo-Wide Gotchas
 
@@ -408,7 +455,8 @@ regardless of branch (the gate only applies to the `--hook` flag the husky scrip
 **Pre-Push (Complete - ~30s-2min with projects, <1s empty workspace)**
 
 - Format + Lint + Type + Test + Build
-- Mimics CI behavior exactly
+- Runs the same gates CI runs, over the working tree. CI reads the pushed commits, so a dirty tree
+  makes the result advisory — the summary says so instead of predicting CI.
 - Feature branches: affected projects | Base branches: all projects
 - **Kustomize validation**: Full build test for all environments (dev, test, prod)
 - Uses `--skip-reset` flag (no workspace file modifications)
@@ -417,6 +465,24 @@ regardless of branch (the gate only applies to the `--hook` flag the husky scrip
 **Why `--skip-reset` in hooks**: Git operations must not modify workspace files (prevents unstaged
 changes after commit). Manual commands (`pnpm run pre-commit`, `pnpm run pre-push`) DO run reset for
 clean state validation.
+
+**The format gate runs before anything writes, and the write names what it rewrote** (#151). A
+manual run used to call a repo-wide `nx format:write` after `nx:reset` and before
+`nx:workspace-format-check`. The write repaired the working tree, the check then passed, and
+pre-push printed "CI will pass" — over a commit whose content still failed the same gate in CI. The
+repair reached the tree only. Now `nx:workspace-format-check` runs first, ahead of `nx:reset` and
+the write, so it reads the tree CI reads. Do not "fix" this by scoping the write instead:
+`nx format:write --files=…` still rewrites `nx.json` and the root `tsconfig.json` unconditionally,
+because `addRootConfigFiles` returns early only for `--all`. `pnpm run pre-push` also refuses to
+claim anything about CI while a tracked file differs from HEAD, because CI reads the pushed commits,
+not the tree. Untracked files are excluded from that judgement: they are absent from the push, so
+they can only make the local check stricter than CI. `pre-commit` gets the same order. The cost is
+one extra cycle: a formatting failure stops the commit, and the same run then repairs the file, so
+the developer stages the repair and commits again. The gain is that a mis-formatted file the
+developer did NOT stage — the #91 shape — now fails instead of passing. The logic lives in
+`tools/validation/format-gate.js`, the regression guard in `tools/validation/format-gate.test.js`
+(run with `pnpm run tools:test`). That guard reads both scripts and fails if a write is ordered
+ahead of the gate, so reverting either script turns the suite red.
 
 **Performance Optimization**: Both hooks check if any projects exist before running expensive
 operations. On empty workspaces (no projects in `apps/` or `libs/`), they exit in <1 second instead

@@ -6,6 +6,13 @@
       "QuotaExceededMessage": "Too many requests. Please try again later.",
       "HttpStatusCode": 429,
       "ClientIdHeader": "X-Real-IP"
+    },
+    "QoSOptions": {
+      "Timeout": 10000,
+      "MinimumThroughput": 4,
+      "FailureRatio": 0.5,
+      "SamplingDuration": 60000,
+      "BreakDuration": 10000
     }
   },
   "Routes": [],

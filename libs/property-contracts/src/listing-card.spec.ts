@@ -11,6 +11,7 @@ const row = {
   latitude: null,
   longitude: null,
   price: null,
+  daysOnMarket: null,
   status: 'Active',
   listingType: 'sale',
   source: 'internal',

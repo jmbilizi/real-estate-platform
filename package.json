@@ -166,6 +166,8 @@
     "gh:session-brief": "node tools/github/session-brief.js",
     "// → Unit tests for tools/ (node:test; tools/ is not an Nx project):": "",
     "tools:test": "node --test tools",
+    "// → Stop a background process this agent started. PID/port-scoped, never by image name:": "",
+    "dev:stop": "node tools/dev/stop-process.js",
     "// GeoIP Database (Optional)": "",
     "// → One-command setup: pnpm run geoip:download": "",
     "// → Requires:          MAXMIND_LICENSE_KEY env var (free at maxmind.com)": "",

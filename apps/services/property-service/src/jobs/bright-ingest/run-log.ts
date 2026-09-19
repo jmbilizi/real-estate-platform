@@ -32,28 +32,78 @@
 
 /** Every terminal outcome a run can report. `notConfigured` is a success, not a degraded state. */
 export type BrightRunOutcome =
-  /** No Bright credentials in this environment. Expected forever in `local` and `test`. */
+  /** No Bright credentials in this environment. Expected while an environment waits on #117. */
   | 'not_configured'
-  /** Authenticated and reached the service root. Nothing was ingested — that is #92/#93. */
-  | 'probe_succeeded'
+  /**
+   * Replicated into staging. Mapping into the consumer schema is still #93.
+   *
+   * There is deliberately no `probe_succeeded` outcome any more. #91 had one, and nothing emits it
+   * now: a configured run always replicates. Keeping it would advertise a "replication off" switch
+   * that does not exist, which an operator would look for.
+   */
+  | 'replicated'
   /** Something present was unusable, or Bright refused us. Exit code is non-zero. */
   | 'failed';
 
-/** Counts the siblings will populate. Present from day one so the record shape never changes. */
+/** Counts for one run, summed over every resource it worked. */
 export interface BrightRunCounts {
-  /** Records read from Bright. #92 populates this; zero until then. */
+  /** Records read from Bright. */
   readonly recordsFetched: number;
-  /** Records written to the replication staging area. #92 populates this; zero until then. */
+  /** Records written to the replication staging tables. */
   readonly recordsStaged: number;
   /** Records mapped into the consumer schema. #93 populates this; zero until then. */
   readonly recordsUpserted: number;
+  /** Rows staged from the `Deletion` resource — records that left the feed. */
+  readonly deletionsDetected: number;
+  /** Requests retried after a 429 or a 5xx. A rising number is the rate ceiling talking. */
+  readonly retries: number;
+  readonly pagesFetched: number;
 }
 
 export const ZERO_COUNTS: BrightRunCounts = {
   recordsFetched: 0,
   recordsStaged: 0,
   recordsUpserted: 0,
+  deletionsDetected: 0,
+  retries: 0,
+  pagesFetched: 0,
 };
+
+/**
+ * What one resource's pass did. Per resource rather than only summed, because "the run staged 4,000
+ * rows" hides a media pass that has not advanced in a week behind a listings pass that is healthy.
+ */
+export interface BrightResourceReport {
+  readonly resource: string;
+  readonly pagesFetched: number;
+  readonly recordsFetched: number;
+  readonly recordsStaged: number;
+  readonly retries: number;
+  /** The cursor instant this pass reached. `null` before the resource has ever staged a record. */
+  readonly cursorAt: string | null;
+  /** Hours between that instant and the end of the run. */
+  readonly cursorAgeHours: number | null;
+  /** True when the pass read the feed to exhaustion. */
+  readonly caughtUp: boolean;
+  /** True when the per-run page cap stopped the pass with more to read. */
+  readonly cappedByPageLimit: boolean;
+  /**
+   * True when the pass could not cross a block of records that all share one cursor instant.
+   *
+   * Bright rejects the OR a strict resume needs, so the filter is inclusive and progress depends on
+   * the instant advancing. A tie block wider than the hard page cap never advances it, so every
+   * later run repeats this one. This is a fault; `cappedByPageLimit` alone is not.
+   */
+  readonly starved: boolean;
+  /**
+   * True when the cursor is older than `BRIGHT_MLS_CURSOR_MAX_AGE_HOURS`.
+   *
+   * A stalled cursor is the failure this job cannot detect any other way: every run succeeds, every
+   * count is plausible, and the data is a month old. It is a field rather than only a sentence in
+   * `message` so an alert can match on it.
+   */
+  readonly stalled: boolean;
+}
 
 interface BrightRunRecordBase {
   readonly job: 'bright-mls-ingest';
@@ -88,6 +138,12 @@ export interface BrightRunFinishedRecord extends BrightRunRecordBase {
     readonly byteLength: number;
     readonly sha256: string;
   };
+  /** Which Bright feed this environment is allowed to read. See `config.ts`. */
+  readonly feed?: 'test' | 'production';
+  /** Present on `replicated`. One entry per resource the run worked. */
+  readonly resources?: readonly BrightResourceReport[];
+  /** True when any resource reported a stalled cursor. Hoisted so one field answers "is it fresh?". */
+  readonly stalled?: boolean;
 }
 
 export type BrightRunRecord = BrightRunStartedRecord | BrightRunFinishedRecord;

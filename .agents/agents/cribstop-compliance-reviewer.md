@@ -7,6 +7,9 @@ description:
   Sponsored/RESPA/consent disclosures. Dispatch in parallel with code-review agents before any PR
   that touches user-facing copy.
 tools: Read, Grep, Glob, Bash
+# Mid tier is the default (AGENTS.md → "Model Selection Per Dispatch"). A caller may override
+# upward for a genuinely hard instance.
+model: sonnet
 ---
 
 You are the real-estate compliance reviewer for the Cribstop platform (brokered by Real Broker, LLC
