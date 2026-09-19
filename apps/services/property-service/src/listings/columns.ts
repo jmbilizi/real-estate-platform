@@ -21,6 +21,18 @@ export const FORBIDDEN_COLUMNS = [
   'internet_display_allowed',
   'description_moderation',
   'source_status',
+  // #53. Bright's field-level suppression predicate inputs that mask a VALUE in the view. A
+  // handler reading one of these is a handler that can re-implement a rule the view already
+  // enforces. `media_display_allowed` is a DELIBERATE exception, listed separately below: it masks
+  // no view column, so barring it from a projection would forbid nothing real.
+  'price_display_allowed',
+  'price_history_display_allowed',
+  'days_on_market_display_allowed',
+  // `media_display_allowed` gates repository.ts's ad hoc media-join SQL, not a CARD/DETAIL
+  // projection — it never reaches `LISTING_CARD_COLUMNS`, so listing it in the array above would
+  // assert something this file cannot fail on. Named here so a reader auditing the five #53 flags
+  // finds all of them from this one file.
+  'media_display_allowed',
 ] as const;
 
 const CARD_COLUMNS = [
@@ -36,6 +48,8 @@ const CARD_COLUMNS = [
   'latitude',
   'longitude',
   'price',
+  // #53. Nullable when the seller suppressed days-on-market display.
+  'days_on_market',
   'status',
   'listing_type',
   'source',

@@ -2,9 +2,10 @@
 # Bright MLS Ingestion CronJob Patch for Hetzner Dev Environment
 #
 # DEV AUTHENTICATES AGAINST BRIGHT'S TEST/STAGING FEED — never real licensed production inventory
-# (stakeholder ruling 2026-09-12, recorded on #117). The credential in this environment's
-# bright-mls-secret is the STAGING set; the production set lives only in the prod environment's
-# secrets and the two are never promoted across environments.
+# (stakeholder ruling 2026-09-19, superseding part of the 2026-09-12 ruling on #117). Local, dev and
+# test all read the test feed. The credential in this environment's bright-mls-secret is the STAGING
+# set. The production set lives only in the prod environment's secrets, and the two are never
+# promoted across environments.
 #
 # The endpoint pair below is the inspectable half of that ruling. Both values were verified against
 # the live test feed on 2026-09-18 (#163): the token endpoint is the `token_endpoint` of
@@ -43,3 +44,5 @@ spec:
                   value: "https://okta.tst.brightmls.com/oauth2/default/v1/token"
                 - name: BRIGHT_MLS_SERVICE_ROOT
                   value: "https://bright-reso.tst.brightmls.com/RESO/OData/bright"
+                - name: BRIGHT_MLS_FEED
+                  value: "test"

@@ -123,6 +123,13 @@ describe('upsertListing column coverage for the suppression flags', () => {
     'address_display_allowed',
     'description_moderation',
     'featured_reason',
+    // #53. Same failure mode as the four above: a caller-suppressed field silently taking the
+    // permissive database default is a compliance disclosure, not a cosmetic bug.
+    'price_display_allowed',
+    'price_history_display_allowed',
+    'media_display_allowed',
+    'days_on_market_display_allowed',
+    'days_on_market',
   ])('names %s in the INSERT, so the caller-supplied value is not lost to a default', (column) => {
     expect(insertColumns()).toContain(column);
   });
@@ -159,6 +166,7 @@ describe('insertMedia carries alt_text (#105)', () => {
         alt_text: 'Front elevation of 142 Oak St',
         sort_order: 0,
         is_primary: true,
+        retained_when_suppressed: false,
         is_sample: true,
       },
     ]);
@@ -172,6 +180,7 @@ describe('insertMedia carries alt_text (#105)', () => {
       'Front elevation of 142 Oak St',
       0,
       true,
+      false,
       true,
     ]);
   });

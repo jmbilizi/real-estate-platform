@@ -160,6 +160,7 @@ export interface ListingDetailView {
   latitude: number | null;
   longitude: number | null;
   price: number | null;
+  daysOnMarket: number | null;
   status: ListingDetail['listing']['status'];
   listingType: ListingDetail['listing']['listingType'];
   source: ListingDetail['listing']['source'];
@@ -239,6 +240,7 @@ export function toListingDetailView(detail: ListingDetail): ListingDetailView {
     latitude: listing.latitude,
     longitude: listing.longitude,
     price: listing.price,
+    daysOnMarket: listing.daysOnMarket,
     status: listing.status,
     listingType: listing.listingType,
     source: listing.source,
