@@ -1583,8 +1583,9 @@ pnpm run gh:project:sync-schema
 pnpm run gh:ticket:create -- --title "..." --priority P1 --size M --status Ready \
   --scope cribstop-web --label type:feature
 
-# Find work (this is what pick-next-ticket queries):
+# Find work (this is what pick-next-ticket queries). Closed tickets are left out by default:
 pnpm run gh:ticket:list -- --status Ready --priority P0
+pnpm run gh:ticket:list -- --state all --status Done   # --state open (default) | closed | all
 
 # Product owner: reprioritize/groom (Status/Priority/Size — full field access):
 pnpm run gh:ticket:update-fields -- --issue 42 --priority P0
@@ -1654,8 +1655,13 @@ capabilities, so they live only on `update-ticket-fields.js`. Disposal is a prod
 board runs three priority levels on the principle that low-value work is declined, not parked. A
 decline needs `--reason`, which posts as a comment before the close, so a closed ticket always
 records why. The close reason is always `not planned` — completed work closes through the PR's
-`Closes #<n>`. GitHub's own project workflow then moves the board Status of a closed issue to
-`Done`, so read the close reason, not the Status, to tell a declined ticket from a delivered one.
+`Closes #<n>`, so read the close reason to tell a declined ticket from a delivered one.
+
+**A declined ticket keeps its board Status**, which is why `gh:ticket:list` leaves closed issues out
+unless you pass `--state closed` or `--state all`. Without that filter a ticket declined at
+`Status: Ready, Priority: P0` stays at the top of the engineer's queue and gets built. Do not rely
+on the board's built-in "item closed → Done" workflow for this: nothing in the repo asserts that it
+is switched on, and it does not run in reverse on `--reopen`.
 
 `gh:comment` and `gh:label` are separate scripts, not flags. A comment never touches the issue body,
 so both lanes can use it and the Implementation Plan block stays out of reach. `gh:label -- create`

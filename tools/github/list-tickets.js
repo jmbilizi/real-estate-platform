@@ -10,12 +10,18 @@
  * ProjectV2 GraphQL schema (ProjectV2Item / ProjectV2ItemFieldSingleSelectValue) is stable
  * and gives field values directly.
  *
+ * Closed issues are left out by default. A declined ticket (gh:ticket:update-fields --decline) keeps
+ * whatever Status it had, so without this filter `--status Ready` would keep offering it to
+ * pick-next-ticket and the engineer would build work the product owner just refused. Pass
+ * `--state closed` or `--state all` to see them.
+ *
  * Usage:
  *   pnpm run gh:ticket:list -- --status Ready --priority P0
  *   pnpm run gh:ticket:list -- --scope cribstop --format json
+ *   pnpm run gh:ticket:list -- --state all --status Done
  */
 
-const { ensureGhReady, loadSchema, graphql, log } = require('./lib/gh-client');
+const { ensureGhReady, loadSchema, graphql, log, die } = require('./lib/gh-client');
 
 const ITEMS_QUERY = `
   query($projectId: ID!, $after: String) {
@@ -96,6 +102,30 @@ function fetchAllItems(projectId) {
   return items;
 }
 
+// Field-value comparisons are case-insensitive to match resolveFieldOption — board-UI
+// casing edits ("In progress" vs "In Progress") must never break filtering.
+const eq = (a, b) => (a || '').toLowerCase() === (b || '').toLowerCase();
+
+const STATES = ['open', 'closed', 'all'];
+
+/** Applies --state (default open) and the field/label filters. Throws on an unknown --state. */
+function filterItems(items, args) {
+  const state = (args.state || 'open').toLowerCase();
+  if (!STATES.includes(state)) {
+    throw new Error(`--state must be open, closed or all (got "${args.state}")`);
+  }
+
+  return items.filter((item) => {
+    if (state !== 'all' && !eq(item.state, state)) return false;
+    if (args.status && !eq(item.fields.Status, args.status)) return false;
+    if (args.priority && !eq(item.fields.Priority, args.priority)) return false;
+    if (args.size && !eq(item.fields.Size, args.size)) return false;
+    if (args.scope && !item.labels.includes(`scope:${args.scope}`)) return false;
+    if (args.milestone && !eq(item.milestone, args.milestone)) return false;
+    return true;
+  });
+}
+
 function main() {
   ensureGhReady();
   const schema = loadSchema();
@@ -105,17 +135,12 @@ function main() {
 
   const priorityOrder = Object.keys(schema.fields.Priority?.options || {});
 
-  // Field-value comparisons are case-insensitive to match resolveFieldOption — board-UI
-  // casing edits ("In progress" vs "In Progress") must never break filtering.
-  const eq = (a, b) => (a || '').toLowerCase() === (b || '').toLowerCase();
-  const filtered = items.filter((item) => {
-    if (args.status && !eq(item.fields.Status, args.status)) return false;
-    if (args.priority && !eq(item.fields.Priority, args.priority)) return false;
-    if (args.size && !eq(item.fields.Size, args.size)) return false;
-    if (args.scope && !item.labels.includes(`scope:${args.scope}`)) return false;
-    if (args.milestone && !eq(item.milestone, args.milestone)) return false;
-    return true;
-  });
+  let filtered;
+  try {
+    filtered = filterItems(items, args);
+  } catch (error) {
+    die(error.message);
+  }
 
   filtered.sort((a, b) => {
     const rankA = priorityOrder.indexOf(a.fields.Priority);
@@ -129,7 +154,12 @@ function main() {
   }
 
   if (filtered.length === 0) {
-    log('No matching tickets.');
+    const openOnly = !args.state || eq(args.state, 'open');
+    log(
+      openOnly
+        ? 'No matching open tickets. Add --state all to include closed ones.'
+        : 'No matching tickets.',
+    );
     return;
   }
 
@@ -143,4 +173,6 @@ function main() {
   }
 }
 
-main();
+if (require.main === module) main();
+
+module.exports = { filterItems };

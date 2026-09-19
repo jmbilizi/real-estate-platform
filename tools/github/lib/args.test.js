@@ -50,6 +50,19 @@ test('parseArgs uses the per-key noun in a repeatable key error message', () => 
   );
 });
 
+test('parseArgs accepts prose that starts with dashes, which a comment or a reason often does', () => {
+  assert.equal(parseArgs(['--body', '--- superseded by #61']).body, '--- superseded by #61');
+  assert.equal(
+    parseArgs(['--reason', '--decline was premature']).reason,
+    '--decline was premature',
+  );
+});
+
+test('parseArgs does not treat an Object.prototype key as repeatable', () => {
+  const args = parseArgs(['--constructor', 'x'], { repeatable: ['add-label'] });
+  assert.equal(args.constructor, 'x');
+});
+
 test('parseArgs collects positionals only when they are enabled', () => {
   assert.deepEqual(parseArgs(['create', '--name', 'x'], { positionals: true })._, ['create']);
   assert.equal(parseArgs(['create', '--name', 'x']).name, 'x');

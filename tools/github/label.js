@@ -38,17 +38,20 @@ function normalizeColor(raw) {
   return color.toLowerCase();
 }
 
+/**
+ * Every label on the repo. `gh label list` needs a `--limit`, and a limit that silently truncates
+ * turns the duplicate check below into a wrong answer — it would report "no match" and create a
+ * near-duplicate. `gh api --paginate --slurp` returns one array per page instead, so there is no
+ * cap to get wrong.
+ */
 function listLabels(owner, repo) {
-  return ghJson([
-    'label',
-    'list',
-    '--repo',
-    `${owner}/${repo}`,
-    '--limit',
-    '200',
-    '--json',
-    'name,color,description',
+  const pages = ghJson([
+    'api',
+    '--paginate',
+    '--slurp',
+    `repos/${owner}/${repo}/labels?per_page=100`,
   ]);
+  return pages.flat();
 }
 
 function main() {

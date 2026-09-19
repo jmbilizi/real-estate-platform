@@ -15,12 +15,24 @@
  * Throws on a malformed argument. Callers catch and route the message through `die`.
  */
 
-/** `repeatable` accepts an array, or an object mapping a key to the noun used in its error text. */
+/**
+ * A value that is itself a flag — one token, `--` then a letter, no spaces. `--title --decline`
+ * matches and is refused. Prose that only starts with dashes does not: a markdown rule
+ * (`--- superseded by #61`) and a sentence (`--decline was premature`) are legitimate `--body`
+ * and `--reason` values, and rejecting them would send the writer to a file for one line.
+ */
+const FLAG_SHAPED = /^--[A-Za-z][\w-]*$/;
+
+/**
+ * `repeatable` accepts an array, or an object mapping a key to the noun used in its error text.
+ * The result has a null prototype, so `--constructor` or `--toString` reads as an ordinary
+ * unknown key instead of inheriting a function from Object.prototype.
+ */
 function normalizeRepeatable(repeatable) {
-  if (Array.isArray(repeatable)) {
-    return Object.fromEntries(repeatable.map((key) => [key, 'a value']));
-  }
-  return repeatable;
+  const entries = Array.isArray(repeatable)
+    ? repeatable.map((key) => [key, 'a value'])
+    : Object.entries(repeatable);
+  return Object.assign(Object.create(null), Object.fromEntries(entries));
 }
 
 function parseArgs(argv, options = {}) {
@@ -42,12 +54,13 @@ function parseArgs(argv, options = {}) {
       continue;
     }
 
-    const noun = repeatable[key] || 'a value';
+    const isRepeatable = Object.hasOwn(repeatable, key);
+    const noun = isRepeatable ? repeatable[key] : 'a value';
     const value = argv[i + 1];
     if (value === undefined || value === '') throw new Error(`--${key} requires ${noun}`);
-    if (value.startsWith('--')) throw new Error(`--${key} requires ${noun} (got "${value}")`);
+    if (FLAG_SHAPED.test(value)) throw new Error(`--${key} requires ${noun} (got "${value}")`);
 
-    if (key in repeatable) {
+    if (isRepeatable) {
       (args[key] ||= []).push(value);
     } else {
       args[key] = value;
