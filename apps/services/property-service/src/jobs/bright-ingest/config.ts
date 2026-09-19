@@ -1,16 +1,16 @@
 /**
- * Configuration and credential resolution for the Bright MLS ingestion job (#91).
+ * Configuration and credential resolution for the Bright MLS ingestion job.
  *
  * This module answers one question — **which feed are we pointed at, and do we hold a credential for
- * it?** — and deliberately answers nothing else. There is no sync logic here and none anywhere else
- * in `src/jobs/bright-ingest/`; incremental replication is #92 and mapping into the consumer schema
- * is #93. What exists today is the vehicle those two drop into.
+ * it?** — and deliberately answers nothing else. Replication is `replicate.ts`; mapping into the
+ * consumer schema is #93.
  *
- * ## Two credential sets, never one (stakeholder ruling 2026-09-12, recorded on #117)
+ * ## Two feeds, never one (stakeholder ruling 2026-09-19, superseding part of the 2026-09-12 one)
  *
- * `dev` authenticates against Bright's **test/staging** feed; `prod` authenticates against the
- * **licensed production** feed; `test` and `local` get no Bright credentials at all. Three
- * consequences are implemented here rather than left to convention:
+ * `local`, `dev` and `test` authenticate against Bright's **test/staging** feed with real test
+ * credentials; `prod` authenticates against the **licensed production** feed. The surviving
+ * invariant is that **the production credential never leaves production**. Four consequences are
+ * implemented here rather than left to convention:
  *
  *  1. **The endpoint is configuration, not a constant.** `BRIGHT_MLS_TOKEN_ENDPOINT` and
  *     `BRIGHT_MLS_SERVICE_ROOT` are per-environment values on the CronJob, so which feed a run talks
@@ -25,13 +25,16 @@
  *     logs the host so a test-data credential running in production is visible in the first log line
  *     rather than inferred a week later from wrong-looking data. Full URLs are not logged: a token
  *     endpoint's query string is a plausible place for a credential to end up.
+ *  4. **The feed tier is declared, and a non-production environment refuses a production host.**
+ *     See `BrightFeedTier` below. The old ruling protected the production feed by giving three
+ *     environments no credentials; that protection is gone, so this replaces it.
  *
  * ## Placeholders are "absent", not "wrong"
  *
  * `infra/k8s/base/secrets/bright-mls.secret.yaml` ships `StrongBase64Password` placeholders, the
- * same convention as `postgres.secret.yaml`. Treating that literal as absent is what lets `local` and
- * `test` — which will never hold Bright credentials — reach a clean, loud "not configured"
- * completion instead of sending a guaranteed-bad credential to Bright and reading a 401 as news.
+ * same convention as `postgres.secret.yaml`. Treating that literal as absent is what lets an
+ * environment still waiting on #117 reach a clean, loud "not configured" completion instead of
+ * sending a guaranteed-bad credential to Bright and reading a 401 as news.
  */
 
 /**

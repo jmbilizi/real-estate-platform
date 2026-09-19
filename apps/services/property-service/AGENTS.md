@@ -194,16 +194,15 @@ the delete-then-insert re-apply.
 
 ### Bright MLS replication (`src/jobs/bright-ingest/`) — what the feed actually allows (#92)
 
-The job now replicates. It reads `BrightProperties` incrementally into
-`bright_staging_records`, advancing `bright_replication_cursor` inside the same transaction that
-writes each page. Mapping staging into `properties`/`units`/`listings` is still #93, and
-`src/db/write.ts` is still the only module that writes a consumer table.
-`no-consumer-writes.spec.ts` is now an **allowlist**: every table named in write SQL in that
-directory must be a staging table, so a consumer table added by a later migration is refused with
-no edit to the spec.
+The job now replicates. It reads `BrightProperties` incrementally into `bright_staging_records`,
+advancing `bright_replication_cursor` inside the same transaction that writes each page. Mapping
+staging into `properties`/`units`/`listings` is still #93, and `src/db/write.ts` is still the only
+module that writes a consumer table. `no-consumer-writes.spec.ts` is now an **allowlist**: every
+table named in write SQL in that directory must be a staging table, so a consumer table added by a
+later migration is refused with no edit to the spec.
 
-**Five wire facts, all measured against the live test feed on 2026-09-19. Each one would be a
-defect if rediscovered by guessing.**
+**Five wire facts, all measured against the live test feed on 2026-09-19. Each one would be a defect
+if rediscovered by guessing.**
 
 - **`$top` suppresses `@odata.nextLink`.** The same query returns 1000 records **with** a nextLink
   when `$top` is absent and 1000 **without** one when `$top=1000` is present. `$top` means "give me
@@ -211,10 +210,10 @@ defect if rediscovered by guessing.**
   itself caught up. `buildCursorQuery` never sends `$top`; `odata-query.spec.ts` asserts it and the
   mock server reproduces the suppression so the assertion cannot go vacuous.
 - **Bright rejects `or` in a `$filter`.** The exact resume predicate for a non-unique timestamp is
-  `(cursor gt t) or (cursor eq t and key gt k)`. It answers **400 Query Too Complex — OR
-  Expressions allowed in top 2 levels only**, with or without parentheses. So the filter is
-  inclusive, `cursor ge t`, and the records at the watermark instant are read again next pass. That
-  is free because the staging primary key is `(resource, record_key)` and the write is an upsert.
+  `(cursor gt t) or (cursor eq t and key gt k)`. It answers **400 Query Too Complex — OR Expressions
+  allowed in top 2 levels only**, with or without parentheses. So the filter is inclusive,
+  `cursor ge t`, and the records at the watermark instant are read again next pass. That is free
+  because the staging primary key is `(resource, record_key)` and the write is an upsert.
 - **An inclusive filter can starve.** If a block of records sharing one instant is wider than the
   per-run page cap, every run re-reads the same pages and the cursor never moves. So the page cap
   **only applies once the cursor instant has advanced past the one the pass started from**, bounded
@@ -222,8 +221,8 @@ defect if rediscovered by guessing.**
   which is a fault and not a slow backfill.
 - **`BrightMedia` and `Deletion` accept no `$filter` at all on the IDX test tier** — not on the
   timestamp and not on their own key. Both answer
-  `The types 'Edm.Boolean' and 'Edm.Int64' are not compatible`, and `Deletion` refuses `$orderby`
-  as well. They page fine with no query options, at 3.4M and 10.5M rows. Incremental replication of
+  `The types 'Edm.Boolean' and 'Edm.Int64' are not compatible`, and `Deletion` refuses `$orderby` as
+  well. They page fine with no query options, at 3.4M and 10.5M rows. Incremental replication of
   either is therefore not expressible today. `resources.ts` records that as
   `supportsCursorQuery: false` and the job refuses to start rather than producing a nightly 400.
   **Do not read that as impossible** — it is one account's entitlement, and lifting it is a flag
@@ -231,8 +230,8 @@ defect if rediscovered by guessing.**
 - **No response carries a rate-limit header**, so client-side limiting is the only control.
   `rate-limiter.ts` holds a sliding-window ceiling over requests per second, per minute, and
   concurrency, shared by the whole run. The values are configuration with deliberately slow
-  placeholders until #33 records the licence's real numbers. A sliding window, not a token bucket:
-  a bucket is full when idle, so a nightly run's first requests would arrive as a burst.
+  placeholders until #33 records the licence's real numbers. A sliding window, not a token bucket: a
+  bucket is full when idle, so a nightly run's first requests would arrive as a burst.
 
 Two more things worth knowing before changing this code:
 
@@ -265,14 +264,14 @@ Four things here are load-bearing and easy to undo by accident:
   absent and never transmits it. Making it a failure would give a CronJob a nightly backoff loop
   over an expected condition and bury real faults in the noise. A value that is present but
   **unusable** is the opposite case and does fail the run.
-- **Two feeds, never one** (stakeholder ruling 2026-09-19, superseding part of the 2026-09-12 one
-  on #117): `local`, `dev` and `test` authenticate against Bright's test/staging feed with real
-  test credentials; `prod` authenticates against the licensed production feed. The surviving
-  invariant is that **the production credential never leaves production**. The field names are
-  identical across environments and only the values differ, which is what makes GitHub
-  _environment_ secrets — not repository secrets — the enforcement mechanism. The endpoint is
-  per-environment **configuration** on the CronJob so the feed is inspectable without decoding a
-  Secret, and `BRIGHT_MLS_FEED` makes a non-production environment refuse a production host.
+- **Two feeds, never one** (stakeholder ruling 2026-09-19, superseding part of the 2026-09-12 one on
+  #117): `local`, `dev` and `test` authenticate against Bright's test/staging feed with real test
+  credentials; `prod` authenticates against the licensed production feed. The surviving invariant is
+  that **the production credential never leaves production**. The field names are identical across
+  environments and only the values differ, which is what makes GitHub _environment_ secrets — not
+  repository secrets — the enforcement mechanism. The endpoint is per-environment **configuration**
+  on the CronJob so the feed is inspectable without decoding a Secret, and `BRIGHT_MLS_FEED` makes a
+  non-production environment refuse a production host.
 - **Only endpoint HOSTS are ever logged**, never full URLs and never credential material. The
   containment is structural: no log record type in `run-log.ts` has a field a credential could be
   assigned to. The exception that had to be argued about is `message`, the one free-text field — so
