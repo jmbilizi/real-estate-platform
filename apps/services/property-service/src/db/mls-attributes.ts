@@ -44,8 +44,9 @@ export type MlsFieldScope = 'listing' | 'property';
 /**
  * The closed vocabulary for `mls_fields.address_classification` (#128). NULL — omitted at
  * registration — is a valid fourth state meaning "not yet reviewed", and is treated identically to
- * every member here except `not_address_bearing`: see `isAddressBearingClassification()` in
- * `../listings/suppression`, the one function that decides it.
+ * every member here except `not_address_bearing`. The decision is made in SQL, not app code: see
+ * `getListingAttributes()`/`getPropertyAttributes()` in `../listings/repository`, which gate on the
+ * derived `mls_fields.is_address_bearing` column directly.
  */
 export type AddressClassification =
   | 'carries_address'
