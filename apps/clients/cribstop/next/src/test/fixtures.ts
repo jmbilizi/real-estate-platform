@@ -19,6 +19,7 @@ export function aListingCardRow(overrides: Partial<ListingCardRow> = {}): Listin
     latitude: 38.9847,
     longitude: -77.0947,
     price: 750000,
+    daysOnMarket: null,
     status: 'Active',
     listingType: 'sale',
     source: 'internal',
