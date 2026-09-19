@@ -7,11 +7,16 @@
 # are participation risks rather than ordinary incidents (PRD §6.2). Its blast radius is not the
 # staging set's, even though the handling discipline is identical.
 #
-# The endpoint pair is intentionally left EMPTY, exactly as in dev — the production URLs arrive with
-# the credentials and #117 item 1 is where a human records them. Never copy a value from the dev
-# patch into this file: identical field names with different values per environment is the whole
-# mechanism, and a copied endpoint would point production at test data while every credential check
-# still passed.
+# The endpoint pair below is the PRODUCTION pair, verified 2026-09-18 (#163). It was reachability-
+# checked with NO credentials: the service root answers `401 WWW-Authenticate: Bearer`, and the token
+# endpoint is the `token_endpoint` of `okta.brightmls.com`'s OIDC discovery document. Never copy a
+# value between this file and the dev patch in either direction: identical field names with different
+# values per environment is the whole mechanism, and a copied endpoint would point production at test
+# data while every credential check still passed.
+#
+# Setting the endpoint does NOT start a production run. The CronJob stays suspended below, the prod
+# secret is still the committed placeholder, and `infra/deploy-control.yaml` keeps this service
+# `enabled: false` for prod. Three independent barriers; the endpoint is none of them.
 #
 # SUSPENDED until deliberately promoted. #117's rollout order is dev first and prod as a separate
 # confirmation, never an assumption carried over from a green dev run; `infra/deploy-control.yaml`
@@ -50,8 +55,8 @@ spec:
               env:
                 - name: NODE_ENV
                   value: "production"
-                # Bright LICENSED PRODUCTION feed. Filled in by #117 item 1. Never copied from dev.
+                # Bright LICENSED PRODUCTION feed. Verified 2026-09-18 (#163). Never copied from dev.
                 - name: BRIGHT_MLS_TOKEN_ENDPOINT
-                  value: ""
+                  value: "https://okta.brightmls.com/oauth2/default/v1/token"
                 - name: BRIGHT_MLS_SERVICE_ROOT
-                  value: ""
+                  value: "https://bright-reso.brightmls.com/RESO/OData/bright"

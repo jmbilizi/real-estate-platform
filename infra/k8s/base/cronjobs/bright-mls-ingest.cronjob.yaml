@@ -86,10 +86,11 @@ spec:
                 # a Secret. Empty here and overridden per environment; an empty value is treated as
                 # "not configured" and nothing is sent anywhere.
                 #
-                # The real URLs are not in this repo yet: Bright's developer portal is login-gated
-                # (verified 2026-09-13) and the values arrive with the credentials. #117 item 1
-                # records which endpoint each credential set authenticates against — dev against the
-                # TEST/STAGING feed, prod against the LICENSED PRODUCTION feed. Do not guess them.
+                # The real URLs are verified and live in the dev and prod overlays (#163): dev on the
+                # TEST/STAGING feed, prod on the LICENSED PRODUCTION feed. They stay OUT of this base
+                # on purpose. A default here would be inherited by `test` and `local`, which receive
+                # no Bright credentials at all (#117), and by any environment added later — turning
+                # "which feed is this?" from a per-environment decision into an inherited accident.
                 - name: BRIGHT_MLS_TOKEN_ENDPOINT
                   value: ""
                 - name: BRIGHT_MLS_SERVICE_ROOT
