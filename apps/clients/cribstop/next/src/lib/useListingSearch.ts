@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PAGE_SIZE_DEFAULT } from '@cribstop/property-contracts';
-import type { ErrorBody } from '@cribstop/property-contracts';
 import type { ListingCardRow } from '@/lib/types';
 import type { SearchFilters } from '@/lib/types';
-import { ListingsApiError, searchListings } from '@/lib/api/listings';
+import { ListingsApiError, type ListingsErrorCode, searchListings } from '@/lib/api/listings';
 import { useToast } from '@/lib/useToast';
 
 export interface ListingSearchResult {
@@ -41,7 +40,7 @@ export interface ListingSearchResult {
    * `result_window_exceeded` will answer identically forever, so offering "Try again" for it is
    * offering a button that cannot work.
    */
-  errorCode: ErrorBody['error']['code'] | null;
+  errorCode: ListingsErrorCode | null;
   retry: () => void;
 }
 
