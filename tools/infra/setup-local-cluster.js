@@ -593,6 +593,80 @@ function configureNodeContainerdTrust(nodeName, caBuffer) {
   return hostsFailures === 0;
 }
 
+// Confirmed by direct in-cluster testing (#180), not assumed. The node's own `search` domains
+// (an enterprise DNS suffix list, e.g. `str.wwstar.com`) get merged into every ClusterFirst pod's
+// resolv.conf by kubelet, alongside the cluster's own `svc.cluster.local` suffixes. Pods default to
+// `ndots:5`, so a 3-dot hostname like `okta.tst.brightmls.com` is NOT queried as absolute first —
+// glibc tries each search suffix in order and stops at the first one that resolves. One of those
+// suffixes (`str.wwstar.com`) legitimately resolves `okta.tst.brightmls.com.str.wwstar.com` to a
+// real address, so the plain external hostname is never queried at all. That address's TLS
+// endpoint rejects the (wrong) SNI with alert 112 ("unrecognized_name") before any certificate is
+// even sent, which no CA trust fix can address. A raw query for the same hostname with no search
+// suffix, against the SAME nameserver, returns only the legitimate address and lets the handshake
+// proceed — the nameserver was never the problem, only the search list appended ahead of it.
+//
+// The fix drops every `search` line from the node's resolv.conf and leaves its nameservers
+// untouched. Replacing the nameservers too (an earlier version of this fix did exactly that) broke
+// `kind-registry` name resolution: Podman's own per-network DNS answers that name, at the same
+// nameserver address this fix must therefore keep — verified after this change, both directly
+// (`getent hosts kind-registry` on the node) and by a full `skaffold:services:deploy` pulling every
+// image through it. Dropping the whole search list, not only the suffix implicated above, is
+// deliberate: any search domain risks the same ndots false-positive for some other external
+// hostname, and Kubernetes cluster-internal names (`postgres-svc`, service DNS in general) are
+// unaffected either way — CoreDNS's `kubernetes` plugin resolves those from the pod's own
+// namespace, never through this forward/search path at all. A workstation with no search domains
+// on its node has nothing to remove — a true no-op.
+function stripSearchDomains(resolvConf) {
+  return resolvConf
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('search '))
+    .join('\n');
+}
+
+function configureNodeMinimalSearchDomains(nodeName) {
+  const readResult = run(`podman exec ${nodeName} cat /etc/resolv.conf`, { silent: true });
+  if (!readResult.success) {
+    logWarning(`Could not read /etc/resolv.conf on ${nodeName}; skipping DNS fix.`);
+    return false;
+  }
+
+  const resolvConf = stripSearchDomains(readResult.output);
+  // containerd bind-mounts /etc/resolv.conf into the node, so `podman cp` (copyBufferToNode's
+  // mechanism) fails with a 500 rather than overwriting it. Writing through a shell redirection
+  // inside the container, the same way installCABundleInPodmanMachine streams to the podman
+  // machine over ssh, writes through the existing mount instead of replacing it.
+  try {
+    execSync(`podman exec -i ${nodeName} sh -c "cat > /etc/resolv.conf"`, {
+      input: resolvConf,
+      stdio: ['pipe', 'ignore', 'ignore'],
+      shell: true,
+    });
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+// CoreDNS's Corefile forwards external queries to the NODE's own /etc/resolv.conf (its `forward .
+// /etc/resolv.conf` stanza), and kubelet seeds every pod's resolv.conf from that same file by
+// default. Rewriting it here therefore changes every pod's search domains, with no CoreDNS or
+// kubelet configuration to touch.
+function propagateDnsFixToKindNodes() {
+  const nodes = listKindNodes();
+  if (!nodes.length) {
+    logInfo('No Kind nodes detected for DNS fix (cluster may not be running yet).');
+    return;
+  }
+
+  nodes.forEach((node) => {
+    if (configureNodeMinimalSearchDomains(node)) {
+      logSuccess(`Removed enterprise search domains from ${node}'s resolv.conf`);
+    } else {
+      logWarning(`Could not update ${node}'s resolv.conf; external TLS may still fail (#180).`);
+    }
+  });
+}
+
 function propagateTrustToKindNodes() {
   const caBuffer = getHostCABundleBuffer();
   if (!caBuffer) {
@@ -751,6 +825,7 @@ async function main() {
   // Kind network may only exist after cluster creation, so ensure/connect again.
   ensureLocalRegistry();
   propagateTrustToKindNodes();
+  propagateDnsFixToKindNodes();
   ensureKubectlContext();
   applyRegistryHostingConfigMap();
 
