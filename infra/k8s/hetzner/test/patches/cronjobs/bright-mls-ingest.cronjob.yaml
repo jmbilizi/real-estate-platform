@@ -1,21 +1,28 @@
 # yaml-language-server: disable
 # Bright MLS Ingestion CronJob Patch for Hetzner Test Environment
 #
-# TEST RECEIVES NO BRIGHT CREDENTIALS OF ANY KIND (stakeholder ruling 2026-09-12, recorded on #117).
-# It stays on seeded `source='internal'` sample rows, like local. So this job is SUSPENDED here —
-# explicitly, rather than by inheriting the base default, because "test is deliberately excluded" is
-# a decision somebody should be able to read off this file instead of deducing from an absence.
+# TEST AUTHENTICATES AGAINST BRIGHT'S TEST/STAGING FEED (stakeholder ruling 2026-09-19). The ruling
+# supersedes the part of #117 that gave test no feed at all. The credential in this environment's
+# bright-mls-secret is the STAGING set. The production set exists only in the prod environment's
+# secrets, and the two are never promoted across environments.
 #
-# The endpoint pair stays empty from base and the secret keeps its committed placeholder, so even an
-# accidental unsuspend completes with a `not_configured` outcome and transmits nothing. Two
-# independent barriers, neither relying on the other.
+# The endpoint pair is the same verified test-feed pair dev uses. Both values were checked against
+# the live test feed on 2026-09-18 (#163). Do NOT substitute `brightmls.test.okta.com` for the token
+# host. Okta serves the wildcard `*.okta.com`, which cannot match a three-label name, so TLS fails
+# permanently.
+#
+# Load from the default epoch and the default page cap, unlike local. Test is a staging environment
+# and must reproduce the full replication path, not a shortened one.
 
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: bright-mls-ingest
 spec:
-  suspend: true
+  # 05:00 UTC, not dev's 03:00. Both environments read the same Bright test feed under one shared
+  # rate limit, so an overlapping run would make each look throttled by the other.
+  schedule: "0 5 * * *"
+  suspend: false
   jobTemplate:
     spec:
       template:
@@ -27,3 +34,10 @@ spec:
               env:
                 - name: NODE_ENV
                   value: "production"
+                # Bright TEST/STAGING feed. Verified live 2026-09-18 (#163).
+                - name: BRIGHT_MLS_TOKEN_ENDPOINT
+                  value: "https://okta.tst.brightmls.com/oauth2/default/v1/token"
+                - name: BRIGHT_MLS_SERVICE_ROOT
+                  value: "https://bright-reso.tst.brightmls.com/RESO/OData/bright"
+                - name: BRIGHT_MLS_FEED
+                  value: "test"

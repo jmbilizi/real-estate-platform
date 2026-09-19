@@ -1,18 +1,18 @@
 # yaml-language-server: disable
 # Bright MLS Ingestion CronJob Patch for Podman Local Environment
 #
-# Local is never pointed at a Bright feed (#117): it stays on the seeded `source='internal'` sample
-# rows. The job is left UNSUSPENDED anyway, and that is the point — an hourly run that completes with
-# a `not_configured` outcome is the cheapest continuous proof that the vehicle #92 and #93 drop into
-# actually starts, schedules, and finishes.
+# LOCAL AUTHENTICATES AGAINST BRIGHT'S TEST/STAGING FEED (stakeholder ruling 2026-09-19). The ruling
+# supersedes the part of #117 that kept local on seeded `source='internal'` rows only. Local, dev and
+# test all read the test feed now. The invariant that survives is unchanged: the production
+# credential never leaves prod.
 #
-# WHAT HOLDS THAT LINE IS THE EMPTY ENDPOINT PAIR INHERITED FROM BASE, AND ONLY THAT. Do not set
-# BRIGHT_MLS_TOKEN_ENDPOINT or BRIGHT_MLS_SERVICE_ROOT here, not even briefly to test something: the
-# credential half of the barrier is gone. #160's local secret injection derives its injectable keys
-# from every `stringData` key under `infra/k8s/base/secrets/`, which includes both Bright keys — so a
-# developer holding real credentials in `.env` already has them in this cluster's `bright-mls-secret`.
-# Adding an endpoint is the single edit that turns that into a live authenticated call from a laptop.
-# Tracked as #164; the ruling says local holds no Bright credential at all.
+# The mechanism is #160's local secret injection. It derives its injectable keys from every
+# `stringData` key under `infra/k8s/base/secrets/`, which includes both Bright keys. A developer who
+# puts test-feed credentials in `.env` gets them in this cluster's `bright-mls-secret`. A developer
+# who does not gets the committed placeholder and a `not_configured` run.
+#
+# Do NOT substitute `brightmls.test.okta.com` for the token host. Okta serves the wildcard
+# `*.okta.com`, which cannot match a three-label name, so TLS fails permanently.
 
 apiVersion: batch/v1
 kind: CronJob
@@ -42,3 +42,17 @@ spec:
               env:
                 - name: NODE_ENV
                   value: "development"
+                # Bright TEST/STAGING feed. Verified live 2026-09-18 (#163).
+                - name: BRIGHT_MLS_TOKEN_ENDPOINT
+                  value: "https://okta.tst.brightmls.com/oauth2/default/v1/token"
+                - name: BRIGHT_MLS_SERVICE_ROOT
+                  value: "https://bright-reso.tst.brightmls.com/RESO/OData/bright"
+                - name: BRIGHT_MLS_FEED
+                  value: "test"
+                # A laptop cluster must come up with real rows in minutes. This cursor is a local
+                # convenience only. dev and test load from the default epoch. The test feed reports
+                # 1,461 `BrightProperties` modified since this instant (#92).
+                - name: BRIGHT_MLS_INITIAL_CURSOR
+                  value: "2026-09-01T00:00:00Z"
+                - name: BRIGHT_MLS_MAX_PAGES_PER_RUN
+                  value: "5"
