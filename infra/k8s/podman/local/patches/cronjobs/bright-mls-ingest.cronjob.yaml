@@ -25,6 +25,14 @@ spec:
     spec:
       template:
         spec:
+          # Mounts the enterprise CA ConfigMap (#180) — same mechanism and same reasoning as the
+          # property-service Deployment patch. Without it the Bright OAuth2 token call fails at the
+          # transport layer with "unable to get local issuer certificate" under a TLS-intercepting
+          # corporate proxy, before any credential is even checked.
+          volumes:
+            - name: workspace-ca-bundle
+              configMap:
+                name: workspace-ca-bundle
           containers:
             - name: ingest
               image: property-service
@@ -39,12 +47,18 @@ spec:
                 limits:
                   memory: "768Mi"
                   cpu: "400m"
+              volumeMounts:
+                - name: workspace-ca-bundle
+                  mountPath: /etc/workspace-ca
+                  readOnly: true
               # NODE_ENV is repeated here for the same reason the property-service migrate
               # initContainer repeats it: the runtime image bakes NODE_ENV=production, and there is
               # no other container's override to inherit.
               env:
                 - name: NODE_ENV
                   value: "development"
+                - name: NODE_EXTRA_CA_CERTS
+                  value: "/etc/workspace-ca/workspace-enterprise-roots.pem"
                 # Bright TEST/STAGING feed. Verified live 2026-09-18 (#163).
                 - name: BRIGHT_MLS_TOKEN_ENDPOINT
                   value: "https://okta.tst.brightmls.com/oauth2/default/v1/token"

@@ -161,15 +161,28 @@ profiles:
           - --enable-alpha-plugins
 
   # Activated by tools/infra/run-skaffold.js only when `.env` supplies at least one secret key.
-  # The generated overlay chains to infra/k8s/podman/local and strategic-merges the supplied keys
-  # into the cluster Secrets. Never activate it by hand: the overlay does not exist otherwise.
-  # With --module services the services-only overlay chains through this one instead, so the two
-  # profiles are never combined.
+  # The generated overlay chains to infra/k8s/podman/local (or to local-ca-bundle below, when both
+  # exist) and strategic-merges the supplied keys into the cluster Secrets. Never activate it by
+  # hand: the overlay does not exist otherwise. With --module services the services-only overlay
+  # chains through this one instead, so at most one of these three profiles is ever active.
   - name: local-secrets
     manifests:
       kustomize:
         paths:
           - infra/k8s/podman/.generated/secrets
+        buildArgs:
+          - --enable-alpha-plugins
+
+  # Activated by tools/infra/run-skaffold.js only when a corporate enterprise CA is present at
+  # .workspace-certs/workspace-enterprise-roots.pem (#180). The generated overlay chains to
+  # infra/k8s/podman/local and overrides the placeholder workspace-ca-bundle ConfigMap with the real
+  # bundle. A no-op on a workstation with no TLS-intercepting proxy — see
+  # tools/infra/local-ca-overlay.js.
+  - name: local-ca-bundle
+    manifests:
+      kustomize:
+        paths:
+          - infra/k8s/podman/.generated/ca-bundle
         buildArgs:
           - --enable-alpha-plugins
 
