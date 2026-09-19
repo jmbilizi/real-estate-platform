@@ -5,8 +5,8 @@
 #
 # node:20-slim ships no CA bundle at all (unlike python:*-slim or the mcr.microsoft.com/dotnet
 # images), so ca-certificates is installed here, in the shared base, not only in a build stage.
-# runner is FROM base directly (#195) — installing it only in deps left the runtime image with no
-# trust store, breaking all outbound TLS in every environment, not only local.
+# runner is FROM base directly (#195). Installing it only in deps left the runtime image with no
+# trust store. That broke all outbound TLS in every environment, not only local.
 FROM node:20-slim AS base
 
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && \
