@@ -49,24 +49,30 @@ So never read a name in `$metadata` or the service document as a capability. Iss
 
 ## Which feed am I talking to?
 
-Per the stakeholder ruling recorded on #117 (2026-09-12): there are **two credential sets, never one
-promoted across environments.**
+Stakeholder ruling 2026-09-19, superseding the 2026-09-12 two-credential ruling.
 
-- `dev` authenticates against Bright's **test/staging** feed.
+- `local`, `dev` and `test` authenticate against Bright's **test/staging** feed, with the real test
+  credentials. They hold real Bright data.
 - `prod` authenticates against the **licensed production** feed.
-- `test` and `local` receive **no Bright credentials at all** and stay on seeded `source='internal'`
-  sample rows.
+
+This is the same separation as before with a different default. The old rule protected the
+production credential by starving three environments; this one protects it by binding three
+environments to the test feed. **The invariant is unchanged: the production credential never leaves
+production.**
+
+A row from the test feed is not production inventory. It is sample data, is marked `is_sample=true`
+on ingest, and carries the shipped sample disclosure on every consumer surface (#93, #115).
 
 The endpoint identity (token endpoint, service root) is **per-environment configuration on the
-CronJob**, not a constant in code. Both pairs were verified on 2026-09-18 and are now set in the
-overlays:
+CronJob**, not a constant in code. Both pairs were verified on 2026-09-18 and are set in the `dev`
+and `prod` overlays:
 
 | Environment | `BRIGHT_MLS_TOKEN_ENDPOINT`                              | `BRIGHT_MLS_SERVICE_ROOT`                                 |
 | ----------- | -------------------------------------------------------- | --------------------------------------------------------- |
 | `dev`       | `https://okta.tst.brightmls.com/oauth2/default/v1/token` | `https://bright-reso.tst.brightmls.com/RESO/OData/bright` |
 | `prod`      | `https://okta.brightmls.com/oauth2/default/v1/token`     | `https://bright-reso.brightmls.com/RESO/OData/bright`     |
-| `test`      | none                                                     | none                                                      |
-| `local`     | none                                                     | none                                                      |
+| `test`      | not wired yet — #176                                     | not wired yet — #176                                      |
+| `local`     | not wired yet — #176                                     | not wired yet — #176                                      |
 
 The `dev` pair is credential-verified. **The `prod` pair is not.** Its service root was
 reachability-checked with no credentials and answers `401 WWW-Authenticate: Bearer`, but its token
@@ -111,10 +117,11 @@ pnpm run infra:local:cronjob:trigger -- bright-mls-ingest
 
 That wrapper creates the Job, waits for it, prints its logs and exits with the job's real outcome.
 It is local-cluster-only on purpose: triggering an ingestion run against dev or prod is a
-deploy-time decision owned by `infra/deploy-control.yaml`, not a developer convenience. **Locally it
-will always report `not_configured`, by design** — `local` has no endpoint pair, so there is nothing
-for it to authenticate against. To watch a real run, read the logs of the run the dev schedule
-produced (`kubectl logs -l app=bright-mls-ingest --tail=-1`) rather than forcing one.
+deploy-time decision owned by `infra/deploy-control.yaml`, not a developer convenience. **Until #176
+lands it reports `not_configured` locally** — the `local` overlay has no endpoint pair yet, so there
+is nothing for it to authenticate against. That is a wiring gap, no longer the design. To watch a
+real run before then, read the logs of the run the dev schedule produced
+(`kubectl logs -l app=bright-mls-ingest --tail=-1`) rather than forcing one.
 
 Each run emits two JSON lines, `run_started` and `run_finished`, correlated by `runId`.
 

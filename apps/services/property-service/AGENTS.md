@@ -210,16 +210,29 @@ table**, never a relaxation of the consumer-table rule.
 
 Four things here are load-bearing and easy to undo by accident:
 
-- **"Not configured" is a success, exit 0.** `local` and `test` receive no Bright credentials ever
-  (#117) and hold the committed `StrongBase64Password` placeholder, which `config.ts` treats as
-  absent and never transmits. Making that a failure would give a CronJob a nightly backoff loop over
-  an entirely expected condition and bury real faults in the noise. A value that is present but
-  **unusable** is the opposite case and does fail the run.
-- **Two credential sets, never one** (stakeholder ruling 2026-09-12, #117): dev authenticates
-  against Bright's test/staging feed, prod against the licensed production feed. The field names are
-  identical across environments and only the values differ, which is what makes GitHub _environment_
-  secrets — not repository secrets — the enforcement mechanism. The endpoint is per-environment
-  **configuration** on the CronJob so the feed is inspectable without decoding a Secret.
+- **"Not configured" is a success, exit 0.** An environment that is not wired yet, or that holds the
+  committed `StrongBase64Password` placeholder, completes cleanly — `config.ts` treats the
+  placeholder as absent and never transmits it. Making that a failure would give a CronJob a nightly
+  backoff loop over an entirely expected condition and bury real faults in the noise. A value that
+  is present but **unusable** is the opposite case and does fail the run. **The behaviour is right;
+  do not re-derive it from which environments hold credentials.** It used to be justified by `local`
+  and `test` holding none, and the 2026-09-19 ruling below ended that — the justification changed,
+  the rule did not. An unwired environment is a normal state during rollout, and it is still not a
+  fault.
+- **Which feed am I talking to?** Stakeholder ruling 2026-09-19, superseding the 2026-09-12
+  two-credential ruling. `local`, `dev` and `test` authenticate against Bright's **test/staging**
+  feed, with the real test credentials; they hold real Bright data. `prod` authenticates against the
+  **licensed production** feed. This is the same separation as before with a different default: the
+  old rule protected the production credential by starving three environments, this one protects it
+  by binding three environments to the test feed. **The invariant is unchanged: the production
+  credential never leaves production.** A row from the test feed is not production inventory — it is
+  sample data, is marked `is_sample=true` on ingest, and carries the shipped sample disclosure on
+  every consumer surface (#93, #115). The field names stay identical across environments and only
+  the values differ, which is what makes GitHub _environment_ secrets — not repository secrets — the
+  enforcement mechanism, and the endpoint stays per-environment **configuration** on the CronJob so
+  the feed is inspectable without decoding a Secret. Only `dev` and `prod` are wired today; #176
+  wires `local` and `test`, and #164 is the fail-closed check that a non-production environment
+  cannot authenticate with a production credential.
 - **Only endpoint HOSTS are ever logged**, never full URLs and never credential material. The
   containment is structural: no log record type in `run-log.ts` has a field a credential could be
   assigned to. The exception that had to be argued about is `message`, the one free-text field — so

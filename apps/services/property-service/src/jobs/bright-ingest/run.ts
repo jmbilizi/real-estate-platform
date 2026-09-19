@@ -73,10 +73,10 @@ function notConfiguredMessage(config: Extract<BrightConfig, { state: 'not-config
   return (
     'Bright MLS credentials are not configured: ' +
     `${config.missing.join(', ')} ${config.missing.length === 1 ? 'is' : 'are'} unset or still ` +
-    'the committed placeholder. Nothing was ingested and nothing was written. This is the ' +
-    'expected state for the local and test environments, which receive no Bright credentials at ' +
-    "all; elsewhere it means #117 has not yet provisioned this environment's secret. See " +
-    'apps/services/property-service/docs/bright-mls-day-one-checklist.md.'
+    'the committed placeholder. Nothing was ingested and nothing was written. Every environment ' +
+    'except prod authenticates against Bright test/staging (ruling 2026-09-19); local and test are ' +
+    'not wired yet, which is #176. Elsewhere it means #117 has not yet provisioned this ' +
+    "environment's secret. See apps/services/property-service/docs/bright-mls-day-one-checklist.md."
   );
 }
 
