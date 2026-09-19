@@ -17,6 +17,7 @@
 
 const {
   ensureGhReady,
+  cliArgv,
   requireConfig,
   ghJson,
   ghExec,
@@ -59,7 +60,7 @@ function main() {
   const { owner, repo } = requireConfig();
   let args;
   try {
-    args = parseArgs(process.argv.slice(2), PARSE_OPTIONS);
+    args = parseArgs(cliArgv(), PARSE_OPTIONS);
   } catch (error) {
     die(error.message);
   }

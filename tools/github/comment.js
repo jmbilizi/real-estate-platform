@@ -20,6 +20,7 @@ const fs = require('fs');
 
 const {
   ensureGhReady,
+  cliArgv,
   requireConfig,
   ghExec,
   unescapeInlineText,
@@ -46,7 +47,7 @@ function main() {
   const { owner, repo } = requireConfig();
   let args;
   try {
-    args = parseArgs(process.argv.slice(2));
+    args = parseArgs(cliArgv());
   } catch (error) {
     die(error.message);
   }

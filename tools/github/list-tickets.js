@@ -21,7 +21,7 @@
  *   pnpm run gh:ticket:list -- --state all --status Done
  */
 
-const { ensureGhReady, loadSchema, graphql, log, die } = require('./lib/gh-client');
+const { ensureGhReady, cliArgv, loadSchema, graphql, log, die } = require('./lib/gh-client');
 const { parseArgs } = require('./lib/args');
 
 const ITEMS_QUERY = `
@@ -120,7 +120,7 @@ function main() {
   const schema = loadSchema();
   let args;
   try {
-    args = parseArgs(process.argv.slice(2));
+    args = parseArgs(cliArgv());
   } catch (error) {
     die(error.message);
   }
