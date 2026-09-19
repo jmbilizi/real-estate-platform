@@ -228,10 +228,18 @@ Four things here are load-bearing and easy to undo by accident:
   otherwise log the client id through it. The redaction assertions live in `run.spec.ts`
   ("runBrightIngest — redaction"). If one fails, take the field off the record type — do not add a
   scrubbing pass, which is only ever a list of things somebody remembered.
-- **Every Bright-specific fact the pipeline assumes is unverified.** The developer portal is
-  login-gated, so request shapes are inferred from public RESO documentation.
-  `docs/bright-mls-day-one-checklist.md` is the list to work the hour the credentials arrive; an
-  item that comes back different is a product-owner ping, not a quiet local fix.
+- **The test feed is verified; the production feed is not.** A 2026-09-18 run against Bright's
+  staging feed (#163) confirmed the endpoints, the OAuth2 shape and the resource inventory, and
+  `docs/bright-mls/bright-metadata.xml` is the committed `$metadata` document. Work
+  `docs/bright-mls-day-one-checklist.md` for what is answered and what is still assumed; an item
+  that comes back different is a product-owner ping, not a quiet local fix. Three answers overturn
+  what the repo previously assumed, and each one is a day if rediscovered: the property entity set
+  is **`BrightProperties`**, keyed on `ListingKey` — a plain `Property` set does not exist and 404s;
+  `$metadata` declares **no `EnumType`s** and the `Lookup` resource returns 400 for our IDX tier, so
+  enumerations are undiscoverable; and `BrightProperty.Location` is typed `Edm.GeographyPoint` but
+  `geo.intersects` and `geo.distance` both 400, so area search is PostGIS-side (#66). **Visibility
+  is not access** — the service document advertises 50 entity sets and `$metadata` describes 25.
+  Never read a name as a capability.
 
 ### Migration rules (each of these fails silently or confusingly if ignored)
 

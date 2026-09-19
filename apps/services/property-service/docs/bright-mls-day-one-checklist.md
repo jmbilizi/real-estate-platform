@@ -8,12 +8,14 @@ will look."
 
 ## How to use this
 
-- **As of 2026-09-13, nothing in this document has been tested against the live Bright MLS feed.**
-  Bright's developer portal is login-gated (verified 2026-09-13: both `developer.brightmls.com` and
-  `brightmls.portal.swaggerhub.com` return only a "Log in" prompt), so every item marked **(A)**
-  below is an assumption inferred from public RESO documentation and secondary sources. Nothing
-  marked (A) may be cited as fact anywhere in the codebase, a ticket, or a conversation with a
-  stakeholder until it has actually been run against the live feed.
+- **The test credentials were run against the live feed on 2026-09-18 (#163).** Every ticked box
+  below carries the answer that run produced, against Bright's **test/staging** feed with an **IDX**
+  tier account (`BRIGHTIDXTEST`). An item still marked **(A)** is still an assumption inferred from
+  public RESO documentation, and may not be cited as fact anywhere in the codebase, a ticket, or a
+  conversation with a stakeholder.
+- **Nothing here was run against the production feed.** A test-tier answer is evidence about the
+  test tier. Re-run the entitlement items in section 1 and section 5 after the production
+  credentials land, and record the answers separately rather than over these.
 - **Tick a box only when someone has actually run the call and pasted the result** (into this PR, or
   onto the ticket the item cross-references) — not when the item merely sounds plausible or matches
   the RESO spec in general.
@@ -22,9 +24,22 @@ will look."
   answers change ticket scope (field counts, geospatial implementation choice, suppression
   boundaries), so a silent correction here can leave a ticket's acceptance criteria wrong without
   anyone noticing.
-- **Section 0's `$metadata` pull is the first action, before anything else on this list.** One
-  authenticated call settles geospatial support, the real resource list, and most of the field
-  question at once, and every later item is cheaper to verify once that document is in hand.
+- **Section 0's `$metadata` pull is the first action, before anything else on this list.** It is
+  done: the document is committed at `docs/bright-mls/bright-metadata.xml` with its provenance in
+  `docs/bright-mls/README.md`. Read that README before working any later section.
+
+## The one lesson the live run taught: visibility is not access
+
+It is on this list three times over, and each instance cost real time:
+
+1. `Lookup` is advertised in the service document and returns **400 — "User 'BRIGHTIDXTEST' does not
+   have permission to access entity set 'Lookup'"**.
+2. `BrightProperty.Location` is typed `Edm.GeographyPoint` and **no geospatial operator works on
+   it**.
+3. The service document advertises **50** entity sets; `$metadata` declares **25**. Half of what is
+   advertised has no type definition at all.
+
+So never read a name in `$metadata` or the service document as a capability. Issue the call.
 
 ## Which feed am I talking to?
 
@@ -37,7 +52,23 @@ promoted across environments.**
   sample rows.
 
 The endpoint identity (token endpoint, service root) is **per-environment configuration on the
-CronJob**, not a constant in code — see #91's acceptance criteria and Implementation Plan item 6.
+CronJob**, not a constant in code. Both pairs were verified on 2026-09-18 and are now set in the
+overlays:
+
+| Environment | `BRIGHT_MLS_TOKEN_ENDPOINT`                              | `BRIGHT_MLS_SERVICE_ROOT`                                 |
+| ----------- | -------------------------------------------------------- | --------------------------------------------------------- |
+| `dev`       | `https://okta.tst.brightmls.com/oauth2/default/v1/token` | `https://bright-reso.tst.brightmls.com/RESO/OData/bright` |
+| `prod`      | `https://okta.brightmls.com/oauth2/default/v1/token`     | `https://bright-reso.brightmls.com/RESO/OData/bright`     |
+| `test`      | none                                                     | none                                                      |
+| `local`     | none                                                     | none                                                      |
+
+**Do not use `brightmls.test.okta.com`.** It resolves, but Okta serves the wildcard `*.okta.com`,
+which matches exactly one label and therefore cannot be valid for a three-label host. A
+TLS-inspecting proxy rejects the origin certificate and the connection fails permanently with
+`UNABLE_TO_VERIFY_LEAF_SIGNATURE`. `okta.tst.brightmls.com` is Bright's custom Okta domain for test
+and presents a clean chain. **Never disable TLS verification to get past this** — the token request
+carries the OAuth2 client secret, which is why `config.ts` rejects a non-HTTPS endpoint outright.
+
 **Every run logs the endpoint HOST it authenticated against** (never the credential), specifically
 so that a test-data credential accidentally running in production — or the reverse — is visible in
 the first log line of the run rather than inferred later from wrong-looking data.
@@ -66,32 +97,39 @@ pnpm run infra:local:cronjob:trigger -- bright-mls-ingest
 
 That wrapper creates the Job, waits for it, prints its logs and exits with the job's real outcome.
 It is local-cluster-only on purpose: triggering an ingestion run against dev or prod is a
-deploy-time decision owned by `infra/deploy-control.yaml`, not a developer convenience. To watch a
-run in dev, read the logs of the run the schedule produced
-(`kubectl logs -l app=bright-mls-ingest --tail=-1`) rather than forcing one.
+deploy-time decision owned by `infra/deploy-control.yaml`, not a developer convenience. **Locally it
+will always report `not_configured`, by design** — `local` has no endpoint pair, so there is nothing
+for it to authenticate against. To watch a real run, read the logs of the run the dev schedule
+produced (`kubectl logs -l app=bright-mls-ingest --tail=-1`) rather than forcing one.
 
-Each run emits two JSON lines, `run_started` and `run_finished`, correlated by `runId`. Saving the
-`$metadata` document itself into the repo is still a human action — see section 0.
+Each run emits two JSON lines, `run_started` and `run_finished`, correlated by `runId`.
 
 **(V) What we already know and are not re-verifying:** Bright integrates over the **RESO Web API
-(OData v4)** with **OAuth2 `client_credentials`**, `@odata.nextLink` server-driven paging, against
-**Data Dictionary 1.7**, and exposes **Bright-prefixed resources** (`BrightMembers` = agents,
-`BrightOffices` = brokers, `BrightMedia`) alongside standard ones. Legacy RETS still exists; we are
-not using it. **Geospatial querying is explicitly outside RESO Web API Core's scope**, so it is not
-a certification guarantee — see section 4.
+(OData v4)** with **OAuth2 `client_credentials`** and `@odata.nextLink` server-driven paging, and
+exposes **Bright-prefixed resources** (`BrightProperties` = listings, `BrightMembers` = agents,
+`BrightOffices` = brokers, `BrightMedia`). Legacy RETS still exists; we are not using it.
 
-## 0. The `$metadata` pull — do this first, before any mapping work
+## 0. The `$metadata` pull — done 2026-09-18
 
-One authenticated `GET {serviceRoot}/$metadata` settles geospatial support, the real resource list,
-and most of the field question in a single call. It is the highest-value first action of the entire
-integration, and everything below is cheaper once it is in hand. **Save the document into the repo**
-so later tickets diff against it rather than re-fetching.
-
-- [ ] Authenticate (OAuth2 `client_credentials`) and record the service root, token endpoint and
-      token lifetime.
-- [ ] Pull `$metadata` and commit it. Record the advertised OData version.
-- [ ] From it, enumerate: every resource we are entitled to, every field per resource, every field
-      typed `Edm.GeographyPoint`, and every enumeration.
+- [x] Authenticate (OAuth2 `client_credentials`) and record the service root, token endpoint and
+      token lifetime.  
+       **Answer:** both endpoint pairs are in the table above. `token_type=Bearer`,
+      `expires_in=3600` (one hour). The credential may be presented either as a form-encoded body
+      (`client_id`/`client_secret`) or as HTTP Basic — both return 200; the job uses the form body.
+      `scope` is **optional**: with and without `scope=clientcred` the response reports
+      `scope=clientcred`.
+- [x] Pull `$metadata` and commit it. Record the advertised OData version.  
+       **Answer:** committed at `docs/bright-mls/bright-metadata.xml`, 239,839 bytes, sha256
+      `9e05a5a7b8de496823d8fafc4b8bd08782b27e86c9f8a6c412c445e7824bd911`, `OData-Version: 4.0`,
+      namespace `BrightMLS.OData.bright`. It hangs off the service root as
+      `{serviceRoot}/$metadata`, per OData v4.
+- [x] From it, enumerate: every resource we are entitled to, every field per resource, every field
+      typed `Edm.GeographyPoint`, and every enumeration.  
+       **Answer:** the full entity-set table with keys and field counts is in
+      `docs/bright-mls/README.md`. Headlines: **25** entity sets declared (against **50** advertised
+      in the service document); `BrightProperties` / type `BrightProperty` / key `ListingKey` /
+      **931** fields; exactly one `Edm.GeographyPoint` field, `BrightProperty.Location`; and
+      **zero** `EnumType`s.
 
 Discovered fields land in the governed MLS field + lookup registry introduced by #127
 (`registerMlsField()` / `registerMlsLookupValue()` — two INSERTs, no migration and no redeploy; an
@@ -102,71 +140,129 @@ records where the fields discovered here are meant to go.
 
 ## 1. Entitlement and the field set — an extensibility question, not a count
 
-- [ ] (A) Which resources are actually licensed for our product tier, as opposed to merely present.
-      Bright's metadata is reported **not to be role-based**, so a resource or field can appear in
-      `$metadata` and still be unqueryable or always null for us. **Visibility is not access** —
-      spot-check every field the consumer surfaces depend on, individually.
+- [ ] Which resources are actually licensed for our product tier, as opposed to merely present.
+      **Visibility is not access** — spot-check every field the consumer surfaces depend on,
+      individually.  
+       **Partly answered.** The resource half is done: `BrightProperties`, `BrightMembers`,
+      `BrightOffices`, `BrightMedia`, `BrightOpenHouses`, `Deletion`, `City` and `PropertyArea` are
+      readable on the IDX test account. `Lookup` is advertised and returns **400 — no permission**.
+      The **field-level** spot-check has not been run, and it is the half that matters for #93 and
+      #128: a field can be present in `$metadata` and always null for us. Leave this box unticked
+      until a consumer-surface field audit exists.
 - [ ] (A) Which fields are Bright-local (no Data Dictionary equivalent). These cannot be mapped by
       convention and each needs an explicit decision (#93).
 - [ ] (A) Confirm the Data Dictionary version Bright certifies against is 1.7 as believed, and
-      whether the payload is standard-plus-local or a renamed superset.
-- [ ] **Note for whoever runs this: do not treat any field total as a target.** The requirement on
+      whether the payload is standard-plus-local or a renamed superset.  
+       **Not answered.** `$metadata` carries no Data Dictionary version annotation, so this stays a
+      documentation or contract question. Note the entity-set names are **not** the Data Dictionary
+      names (`BrightProperties`, not `Property`), so "renamed superset" is the live hypothesis.
+- [x] **Note for whoever runs this: do not treat any field total as a target.** The requirement on
       #127 is that the schema absorbs the full licensed set _whatever it turns out to be_. Report
-      the number as a fact; do not turn it into scope.
+      the number as a fact; do not turn it into scope.  
+       **The number is 931 fields on `BrightProperty`.** It is a fact, not a backlog.
 
 ## 2. Protocol capabilities
 
-- [ ] (A) `$filter`, `$select`, `$orderby`, `$top`, `$skip` and `$expand` are all permitted for us.
-      `$select` in particular: if it is **not** supported, every response is a full payload and the
-      bandwidth and caching assumptions in #92 and #82 change.
-- [ ] (A) `@odata.nextLink` paging is exhaustible in one run at our volume. Record the server page
-      size.
-- [ ] (A) `$count` is available — needed to reconcile a replication run against the source.
+- [x] `$filter`, `$select`, `$orderby`, `$top`, `$skip` and `$expand` are all permitted for us.  
+       **Answer:** `$select`, `$top`, `$skip`, `$count=true`, `$filter` (on `ModificationTimestamp`)
+      and `$orderby` all work — so the bandwidth and caching assumptions in #92 and #82 hold.
+      **`$expand=Media` does not**: it returns 400, because `BrightProperty` has no `Media`
+      navigation property. Media is a separate resource with its own cursor, not an expansion.
+- [x] `@odata.nextLink` paging is exhaustible in one run at our volume. Record the server page
+      size.  
+       **Answer:** `@odata.nextLink` is present and the **default server page size is 1000**. At the
+      observed test-feed volume of 174,580 `BrightProperties` that is ~175 requests for a full pass.
+      A complete end-to-end pass was not run, and without a known rate limit (section 3) its wall
+      time cannot be predicted — #92 must not assume it fits a single CronJob window.
+- [x] `$count` is available — needed to reconcile a replication run against the source.  
+       **Answer:** `$count=true` works. Observed totals on the test feed: `BrightProperties`
+      **174,580**; `BrightProperties` modified since 2026-09-01 **1,461**; `BrightMedia`
+      **3,403,084**; `Deletion` **10,573,704**.
 
 ## 3. Replication — the assumptions #92 is built on
 
-- [ ] (A) `ModificationTimestamp` is present, populated and monotonic on every licensed resource.
+- [x] `ModificationTimestamp` is present, populated and monotonic on every licensed resource.  
+       **Answer — and it is NOT uniform.** `BrightProperty` has `ModificationTimestamp` and filters
+      on it correctly. **`BrightMedia` does not**: its cursor field is `MediaModificationTimestamp`,
+      and a `$filter` on that works. #92 must carry a per-resource cursor field name, not one
+      constant. Monotonicity over time was not observed and cannot be from a single run.
 - [ ] (A) It is safe as a cursor with `$orderby=ModificationTimestamp asc` — specifically, that the
-      service does not backdate it on republish.
-- [ ] (A) Timestamp **ties** occur (they will) and the chosen tiebreak key (`ListingKey`) is stable
-      and sortable. This is the classic silent-data-loss trap and is worth a deliberate test.
-- [ ] (A) Deleted/withdrawn records remain retrievable with a terminal status rather than vanishing.
-      If they vanish, #92's key-reconciliation pass becomes mandatory rather than optional, and the
-      takedown SLA depends on it.
-- [ ] (A) **The contractual rate limits** — requests/second, requests/day, concurrency, and the
-      penalty for exceeding them. #92 treats these as configuration with placeholders; replace the
-      placeholders with the real numbers and record where they came from.
-- [ ] (A) Whether a full resync is permitted at all, and any separate limit on it.
-- [ ] (A) Whether `BrightMedia` is a separate resource with its own cursor and its own limits.
+      service does not backdate it on republish.  
+       **Backdating is still unverified** and needs observation over time, not one call. But one
+      hard operational finding belongs here now: **`$orderby=ModificationTimestamp asc` with no
+      `$filter` times out (>300 s).** The same query with `$filter=ModificationTimestamp gt <t>` in
+      front returns in **3.3 s**. #92 must never issue a bare ordered scan — always bound the window
+      first.
+- [x] Timestamp **ties** occur (they will) and the chosen tiebreak key (`ListingKey`) is stable and
+      sortable.  
+       **Answer:** the intended cursor query works —
+      `$filter=ModificationTimestamp gt <t>&$orderby=ModificationTimestamp asc,ListingKey asc`
+      returns 200 in 3.3 s. `ListingKey` is the declared key of `BrightProperty` and is usable as
+      the tiebreak.
+- [x] Deleted/withdrawn records remain retrievable with a terminal status rather than vanishing.  
+       **Answer: they do not vanish.** A `Deletion` resource exists, is readable, is keyed on
+      `UniversalKey`, and holds 10,573,704 rows on the test feed. So #92's key-reconciliation pass
+      stays **optional** rather than becoming mandatory.
+- [ ] **The contractual rate limits** — requests/second, requests/day, concurrency, and the penalty
+      for exceeding them.  
+       **Not API-discoverable. No rate-limit headers appear on any response** — no `X-Rate-Limit-*`,
+      no `Retry-After`. This is a contract question for #33/#117, and the absence of headers means
+      #92 cannot back off adaptively either. It must be configuration.
+- [ ] Whether a full resync is permitted at all, and any separate limit on it.  
+       **Contract question. Not answered.**
+- [x] Whether `BrightMedia` is a separate resource with its own cursor and its own limits.  
+       **Answer: yes, separate.** Key `MediaKey`, 56 fields, 3,403,084 rows on the test feed, cursor
+      field `MediaModificationTimestamp`, and no `$expand` path from a listing. Its _limits_ fall
+      under the unanswered rate-limit item above.
 
 ## 4. Geospatial — this decides which of two implementations #66 gets
 
-- [ ] (A) Does `$metadata` expose a **queryable** `Edm.GeographyPoint` field on Property? If yes,
-      server-side `geo.intersects(<field>, POLYGON((...)))` with closed, double-parenthesised WKT
-      rings is available. **If no, that is not a blocker** — the fallback is bounding-box retrieval
-      plus point-in-polygon in our own PostGIS, which is arguably the primary path anyway since
-      consumer searches hit `property_db`, not Bright. Record which branch applies on #66.
-- [ ] (A) Whether `geo.distance` radius filtering is supported.
-- [ ] (A) Any vertex-count or payload-size limit on a polygon filter.
+**Decided: #66 takes the PostGIS fallback branch.**
+
+- [x] Does `$metadata` expose a **queryable** `Edm.GeographyPoint` field on the property resource?  
+       **Answer: the type is there and the capability is not.** `BrightProperty.Location` is
+      `Edm.GeographyPoint` — the only geography-typed field in the whole document — but
+      `geo.intersects(Location, POLYGON(...))` returns **400**:
+      `"The property 'POLYGON' ... is not defined in type 'BrightMLS.OData.bright.BrightProperty'"`.
+      So the fallback applies: bounding-box retrieval plus point-in-polygon in our own PostGIS,
+      which is arguably the primary path anyway since consumer searches hit `property_db`, not
+      Bright.
+- [x] Whether `geo.distance` radius filtering is supported.  
+       **Answer: no.** `geo.distance(Location, POINT(...))` returns 400 with the same shape of error
+      for `POINT`.
+- [ ] Any vertex-count or payload-size limit on a polygon filter.  
+       **Moot while no polygon filter parses at all.** Re-open only if Bright later enables
+      geospatial operators.
 - [ ] (A) Whether coordinates are suppressed alongside the address for opted-out listings, or
       delivered regardless. **If delivered regardless, our mapper is the only thing standing between
       a suppressed address and a map pin** — #93 and the #48 masking rule both depend on this
-      answer.
+      answer.  
+       **Not answered.** It needs a suppressed listing in the response data, which section 6 covers.
 
 ## 5. Lookups, agents, brokers, geography
 
-- [ ] (A) Whether a `Lookup` resource (and/or a field-metadata resource) is exposed, or whether
-      enumerations are only discoverable from `$metadata`.
-- [ ] (A) `BrightMembers` and `BrightOffices` are licensed and readable, and whether they are
-      separately licensed or included. Record their key fields and their relationship to the
-      listing's agent/office fields.
-- [ ] (A) Whether the enumerations are open or closed, and their update cadence. A closed
-      enumeration that changes without notice is the scenario #127's registry exists to survive.
+- [x] Whether a `Lookup` resource (and/or a field-metadata resource) is exposed, or whether
+      enumerations are only discoverable from `$metadata`.  
+       **Answer: neither route works today.** `$metadata` contains **zero** `EnumType`s, and
+      `Lookup` — advertised in the service document — returns **400, "User 'BRIGHTIDXTEST' does not
+      have permission to access entity set 'Lookup'"**. Enumerations are currently
+      **undiscoverable**. #130 must either obtain `Lookup` entitlement or derive vocabularies from
+      observed values. Whether the entitlement can be added is a contract question on #33/#117.
+- [x] `BrightMembers` and `BrightOffices` are licensed and readable. Record their key fields.  
+       **Answer:** both readable on the IDX test account. `BrightMembers` / `BrightMember` /
+      `MemberKey` / 86 fields. `BrightOffices` / `BrightOffice` / `OfficeKey` / 75 fields. Whether
+      they are separately licensed, and their relationship to the listing's agent/office fields, is
+      not established — #129 needs that.
+- [ ] Whether the enumerations are open or closed, and their update cadence.  
+       **Unanswerable while `Lookup` is unreadable.** This is exactly the scenario #127's registry
+      exists to survive.
 - [ ] **"Geographies" has no RESO analog and is ours to model**, not an endpoint to consume. Record
-      the permitted values of the Property geography fields — `City`, `PostalCode`,
-      `CountyOrParish`, `SubdivisionName`, `MLSAreaMajor`/`MLSAreaMinor` — from the Lookup resource
-      or `$metadata`. That value set is the input to #81's structured place filters and to any later
-      area vocabulary.
+      the permitted values of the property geography fields — `City`, `PostalCode`,
+      `CountyOrParish`, `SubdivisionName`, `MLSAreaMajor`/`MLSAreaMinor`.  
+       **Blocked on the same `Lookup` 400.** Partial alternative: `City` (7 fields), `CityZipCode`
+      (8), `PropertyArea` (5) and `Subdivision` (9) are separate readable entity sets, so some of
+      this vocabulary may be reachable as data rather than as an enumeration. #81 and #130 should
+      try that route.
 
 ## 6. Address-bearing content — the input to the default-deny suppression classification
 
@@ -177,13 +273,19 @@ records where the fields discovered here are meant to go.
       `PublicRemarks`, `ShowingInstructions`, `BrightMedia` captions / `ShortDescription`,
       `VirtualTourURLUnbranded`, `ParcelNumber` / `TaxParcelLetter` (an APN resolves to an address
       through public records), `SubdivisionName` combined with lot/block, `PostalCodePlus4` (narrows
-      to a block face), and `Latitude`/`Longitude`.
+      to a block face), and `Latitude`/`Longitude`.  
+       **Not run.** The 2026-09-18 probe read counts and schema only, never record content. This is
+      the highest-value remaining technical item: it also answers the coordinate-suppression
+      question in section 4.
 
 ## Contractual, not technical
 
-Listed only so nobody assumes a successful API call answered them. These belong to #33/#117:
-permitted display statuses, the solds display-delay window length, required attribution fields, the
-takedown SLA, the Clear Cooperation position, and the exact field-level suppression semantics.
+Listed only so nobody assumes a successful API call answered them, and the live run confirmed that
+none of them is API-discoverable. These belong to #33/#117: the permitted display statuses, the
+solds display-delay window length, required attribution fields, the takedown SLA, the Clear
+Cooperation position, the exact field-level suppression semantics, which of the 931 `BrightProperty`
+fields are licensed for IDX display as opposed to merely present, the contractual rate limits,
+whether a full resync is permitted, and whether `Lookup` access can be added to the IDX entitlement.
 
 ## Where to record the answers
 

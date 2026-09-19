@@ -15,17 +15,23 @@
  * (`docs/bright-mls-day-one-checklist.md` section 0). Without it the job could only report that a
  * non-placeholder string exists, which is not the same claim.
  *
- * ## Everything here marked (A) is an assumption
+ * ## Both request shapes are CONFIRMED against the live feed (2026-09-18, #163)
  *
- * Bright's developer portal is login-gated (verified 2026-09-13), so the request shapes below are
- * inferred from public RESO and OAuth2 documentation and have never been run against the live feed.
- * The two that will bite first if wrong:
+ * They were assumptions inferred from public RESO and OAuth2 documentation until the test
+ * credentials were run against Bright's staging feed. Both held, so nothing below changed:
  *
- *  - **(A) `client_credentials` is presented as a form-encoded body**, not HTTP Basic. If Bright
- *    wants Basic, the token call fails with `invalid_client` and this is the line to change.
- *  - **(A) `$metadata` hangs off the service root as `{serviceRoot}/$metadata`**, per OData v4.
+ *  - **Form-encoded `client_credentials` returns 200.** HTTP Basic also works, so the choice is
+ *    ours rather than Bright's. `scope` is optional — the response reports `scope=clientcred`
+ *    whether or not the request asks for it — so this client does not send one.
+ *  - **`{serviceRoot}/$metadata` returns 200** with `OData-Version: 4.0`.
  *
- * Both are checklist items. A different answer is a product-owner ping, not a quiet local fix.
+ * The document that call returns is committed at `docs/bright-mls/bright-metadata.xml`. Read
+ * `docs/bright-mls/README.md` before assuming anything about the resources it declares: the
+ * property entity set is `BrightProperties`, not the RESO-standard `Property`, which does not exist
+ * on this feed.
+ *
+ * Confirmed against the **test** tier only. A production-tier difference is a product-owner ping,
+ * not a quiet local fix.
  */
 
 import { createHash } from 'node:crypto';
@@ -199,7 +205,7 @@ export async function acquireToken(
   const fetchImpl = resolveFetch(options);
   const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
 
-  // (A) Form-encoded client_credentials. See the module header.
+  // Form-encoded client_credentials, confirmed 2026-09-18. No `scope` — Bright makes it optional.
   const body = new URLSearchParams({
     grant_type: 'client_credentials',
     client_id: credentials.clientId,
@@ -241,7 +247,7 @@ export async function acquireToken(
   } catch {
     throw new Error(
       `Bright MLS token endpoint ${endpoint.tokenEndpointHost} returned a non-JSON body. ` +
-        'The token response shape is a day-one checklist item (section 0).',
+        'It returned JSON on 2026-09-18, so this is a change at Bright rather than a wrong guess.',
     );
   }
 
@@ -250,7 +256,7 @@ export async function acquireToken(
   if (typeof accessToken !== 'string' || accessToken.length === 0) {
     throw new Error(
       `Bright MLS token endpoint ${endpoint.tokenEndpointHost} returned no access_token. ` +
-        'Record the actual response shape against the day-one checklist (section 0).',
+        'It returned one on 2026-09-18, so this is a change at Bright rather than a wrong guess.',
     );
   }
 
@@ -263,8 +269,9 @@ export async function acquireToken(
 /**
  * Pulls `{serviceRoot}/$metadata` and reports its shape without keeping or parsing it.
  *
- * Committing the document into the repo so later tickets can diff against it is a day-one HUMAN
- * action (checklist section 0), not something a CronJob should do to its own source tree.
+ * The committed copy lives at `docs/bright-mls/bright-metadata.xml`. Keeping it current is a human
+ * action, not something a CronJob should do to its own source tree — so compare the `sha256` this
+ * probe logs against the one in `docs/bright-mls/README.md` to notice that Bright changed it.
  */
 export async function probeMetadata(
   endpoint: BrightEndpoint,
