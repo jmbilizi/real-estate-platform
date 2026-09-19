@@ -49,24 +49,38 @@ So never read a name in `$metadata` or the service document as a capability. Iss
 
 ## Which feed am I talking to?
 
-Per the stakeholder ruling recorded on #117 (2026-09-12): there are **two credential sets, never one
-promoted across environments.**
+Stakeholder ruling 2026-09-19, superseding the 2026-09-12 two-credential ruling.
 
-- `dev` authenticates against Bright's **test/staging** feed.
+- `local`, `dev` and `test` authenticate against Bright's **test/staging** feed, with the real test
+  credentials. They hold real Bright data.
 - `prod` authenticates against the **licensed production** feed.
-- `test` and `local` receive **no Bright credentials at all** and stay on seeded `source='internal'`
-  sample rows.
+
+This is the same separation as before with a different default. The old rule protected the
+production credential by starving three environments; this one protects it by binding three
+environments to the test feed. **The invariant is unchanged: the production credential never leaves
+production.**
+
+A row from the test feed is not production inventory. It is sample data, **must** be marked
+`is_sample=true` on ingest, and **must** carry the sample disclosure on every consumer surface (#93,
+#115).
+
+**That marking does not exist yet, and the ruling above does not create it.** Nothing ingests today
+— #93 is the mapper, and `no-consumer-writes.spec.ts` structurally forbids this directory from
+writing a consumer table. `is_sample` is currently set only by the seed path
+(`src/seed/transform.ts`), and nothing derives it from `source`. So this paragraph is a requirement
+on #93, not a control anyone can rely on now. Read it as the condition that must hold **before** a
+Bright row reaches a consumer surface, and never as a reason one already may.
 
 The endpoint identity (token endpoint, service root) is **per-environment configuration on the
-CronJob**, not a constant in code. Both pairs were verified on 2026-09-18 and are now set in the
-overlays:
+CronJob**, not a constant in code. Both pairs were verified on 2026-09-18 and are set in the `dev`
+and `prod` overlays:
 
 | Environment | `BRIGHT_MLS_TOKEN_ENDPOINT`                              | `BRIGHT_MLS_SERVICE_ROOT`                                 |
 | ----------- | -------------------------------------------------------- | --------------------------------------------------------- |
 | `dev`       | `https://okta.tst.brightmls.com/oauth2/default/v1/token` | `https://bright-reso.tst.brightmls.com/RESO/OData/bright` |
 | `prod`      | `https://okta.brightmls.com/oauth2/default/v1/token`     | `https://bright-reso.brightmls.com/RESO/OData/bright`     |
-| `test`      | none                                                     | none                                                      |
-| `local`     | none                                                     | none                                                      |
+| `test`      | not wired yet — #176                                     | not wired yet — #176                                      |
+| `local`     | not wired yet — #176                                     | not wired yet — #176                                      |
 
 The `dev` pair is credential-verified. **The `prod` pair is not.** Its service root was
 reachability-checked with no credentials and answers `401 WWW-Authenticate: Bearer`, but its token
@@ -111,10 +125,11 @@ pnpm run infra:local:cronjob:trigger -- bright-mls-ingest
 
 That wrapper creates the Job, waits for it, prints its logs and exits with the job's real outcome.
 It is local-cluster-only on purpose: triggering an ingestion run against dev or prod is a
-deploy-time decision owned by `infra/deploy-control.yaml`, not a developer convenience. **Locally it
-will always report `not_configured`, by design** — `local` has no endpoint pair, so there is nothing
-for it to authenticate against. To watch a real run, read the logs of the run the dev schedule
-produced (`kubectl logs -l app=bright-mls-ingest --tail=-1`) rather than forcing one.
+deploy-time decision owned by `infra/deploy-control.yaml`, not a developer convenience. **Until #176
+lands it reports `not_configured` locally** — the `local` overlay has no endpoint pair yet, so there
+is nothing for it to authenticate against. That is a wiring gap, no longer the design. To watch a
+real run before then, read the logs of the run the dev schedule produced
+(`kubectl logs -l app=bright-mls-ingest --tail=-1`) rather than forcing one.
 
 Each run emits two JSON lines, `run_started` and `run_finished`, correlated by `runId`.
 
@@ -256,45 +271,53 @@ records where the fields discovered here are meant to go.
       `$filter` narrows a window at the source. Verified on 2026-09-19 that it **bounds the result
       set**, not merely that it is accepted — a 200 alone would have proved nothing:
 
-Every row below is `GET BrightProperties?$top=0&$count=true&$filter=<the filter shown>`, so each is
-re-runnable verbatim:
+  Every row below is `GET BrightProperties?$top=0&$count=true&$filter=<the filter shown>`, so each
+  is re-runnable verbatim:
 
-| `$filter`                                                                                 | `@odata.count` |
-| ----------------------------------------------------------------------------------------- | -------------: |
-| _(omitted — no `$filter`)_                                                                |        174,579 |
-| `Latitude ge 38.88 and Latitude le 38.92 and Longitude ge -77.05 and Longitude le -77.0`  |            155 |
-| `Latitude ge 25.0 and Latitude le 25.2 and Longitude ge -80.3 and Longitude le -80.1`     |              0 |
-| `Latitude ge 38.80 and Latitude le 39.00 and Longitude ge -77.12 and Longitude le -76.90` |         14,194 |
+  | `$filter`                                                                                 | `@odata.count` |
+  | ----------------------------------------------------------------------------------------- | -------------: |
+  | _(omitted — no `$filter`)_                                                                |        174,579 |
+  | `Latitude ge 38.88 and Latitude le 38.92 and Longitude ge -77.05 and Longitude le -77.0`  |            155 |
+  | `Latitude ge 25.0 and Latitude le 25.2 and Longitude ge -80.3 and Longitude le -80.1`     |              0 |
+  | `Latitude ge 38.80 and Latitude le 39.00 and Longitude ge -77.12 and Longitude le -76.90` |         14,194 |
 
-**Precision.** All 155 rows of the second box were fetched with
-`$select=ListingKey,Latitude,Longitude`. **Zero fell outside it**; observed range 38.88000..38.91972
-by -77.04994..-77.00046.
+  **Precision.** All 155 rows of the second box were fetched with
+  `$select=ListingKey,Latitude,Longitude`. **Zero fell outside it**; observed range
+  38.88000..38.91972 by -77.04994..-77.00046.
 
-**Recall.** Precision alone would not justify the mandate below — a filter that silently dropped
-in-box rows would look identical. Two consistency checks, neither of which is ground truth but both
-of which a dropping filter would fail. Splitting the second box at latitude 38.90 gives 29 + 126 =
-**155**, exactly the whole. The fourth box geometrically contains the second and returns 14,194
-≥ 155. **Do not measure recall by paging a wide box and intersecting**: the server page size is
-1000, so an unfollowed `@odata.nextLink` truncates the wider set and manufactures a recall failure
-that is not there. That mistake was made once here.
+  **Recall.** Precision alone would not justify the mandate below — a filter that silently dropped
+  in-box rows would look identical. Two consistency checks, neither of which is ground truth but
+  both of which a dropping filter would fail. Splitting the second box at latitude 38.90 into two
+  disjoint, exhaustive halves gives 29 + 126 = **155**, exactly the whole — the split is `lt` on the
+  lower half and `ge` on the upper, so a row at exactly 38.90 is counted once and never twice:
 
-So **#92 and #66 must bound by coordinate on the wire**, never pull a rectangle of rows and discard
-most of them locally.
+  | `$filter`                                                                                | `@odata.count` |
+  | ---------------------------------------------------------------------------------------- | -------------: |
+  | `Latitude ge 38.88 and Latitude lt 38.90 and Longitude ge -77.05 and Longitude le -77.0` |             29 |
+  | `Latitude ge 38.90 and Latitude le 38.92 and Longitude ge -77.05 and Longitude le -77.0` |            126 |
 
-**2,943 listings have no coordinates** — `Latitude eq null` and `Longitude eq null` each return
-2,943, against 171,636 for `Latitude ne null`, summing to the 174,579 total. That is 1.7% of the
-feed, and `ge`/`le` on a nullable column **excludes** every one of them from every bounding-box
-query rather than returning them to be filtered later. The exclusion is correct — the same reasoning
-as this service's no-`COALESCE`-on-`beds`/`baths` rule, and a fabricated 0 would place them off West
-Africa — but 1.7% of inventory being invisible to area search is a product decision for #66, not an
-implementation detail.
+  The fourth box of the first table geometrically contains the second and returns 14,194 ≥ 155. **Do
+  not measure recall by paging a wide box and intersecting**: the server page size is 1000, so an
+  unfollowed `@odata.nextLink` truncates the wider set and manufactures a recall failure that is not
+  there. That mistake was made once here.
 
-**The unfiltered total here is 174,579 and section 2 records 174,580.** Both are correct as
-observed: section 2 counted on 2026-09-18 and these rows on 2026-09-19. The readings differ by one
-and **the cause was not investigated** — a genuine change in the feed and a difference in how the
-two counts were issued are equally consistent with it. Neither is a reconciliation defect, and
-neither is a fixed property of the feed. Treat every count in this document as a reading with a
-date, not as a target for #92 to match.
+  So **#92 and #66 must bound by coordinate on the wire**, never pull a rectangle of rows and
+  discard most of them locally.
+
+  **2,943 listings have no coordinates** — `Latitude eq null` and `Longitude eq null` each return
+  2,943, against 171,636 for `Latitude ne null`, summing to the 174,579 total. That is 1.7% of the
+  feed, and `ge`/`le` on a nullable column **excludes** every one of them from every bounding-box
+  query rather than returning them to be filtered later. The exclusion is correct — the same
+  reasoning as this service's no-`COALESCE`-on-`beds`/`baths` rule, and a fabricated 0 would place
+  them off West Africa — but 1.7% of inventory being invisible to area search is a product decision
+  for #66, not an implementation detail.
+
+  **The unfiltered total here is 174,579 and section 2 records 174,580.** Both are correct as
+  observed: section 2 counted on 2026-09-18 and these rows on 2026-09-19. The readings differ by one
+  and **the cause was not investigated** — a genuine change in the feed and a difference in how the
+  two counts were issued are equally consistent with it. Neither is a reconciliation defect, and
+  neither is a fixed property of the feed. Treat every count in this document as a reading with a
+  date, not as a target for #92 to match.
 
 - [ ] Any vertex-count or payload-size limit on a polygon filter.  
        **Moot while geography literals are not implemented.** Re-open only if Bright later enables

@@ -10,8 +10,9 @@
  *
  * Resolves configuration, and then either:
  *
- *  - reports `not_configured` and finishes **successfully** — the expected steady state in `local`
- *    and `test`, and everywhere until #117 provisions credentials; or
+ *  - reports `not_configured` and finishes **successfully** — the expected state for any
+ *    environment that is not wired yet (`local` and `test` until #176, and anywhere #117 has not
+ *    provisioned a secret); or
  *  - authenticates and probes `$metadata`, reporting `probe_succeeded` with zero counts.
  *
  * It ingests nothing. Incremental RESO replication into a staging area is #92; mapping into
@@ -73,10 +74,10 @@ function notConfiguredMessage(config: Extract<BrightConfig, { state: 'not-config
   return (
     'Bright MLS credentials are not configured: ' +
     `${config.missing.join(', ')} ${config.missing.length === 1 ? 'is' : 'are'} unset or still ` +
-    'the committed placeholder. Nothing was ingested and nothing was written. This is the ' +
-    'expected state for the local and test environments, which receive no Bright credentials at ' +
-    "all; elsewhere it means #117 has not yet provisioned this environment's secret. See " +
-    'apps/services/property-service/docs/bright-mls-day-one-checklist.md.'
+    'the committed placeholder. Nothing was ingested and nothing was written. In local and test ' +
+    'this is expected until #176 wires their endpoint pair. In dev and prod it is a fault: both ' +
+    'are wired, so the secret is missing or the overlay lost its endpoint pair — check those, not ' +
+    '#176. See apps/services/property-service/docs/bright-mls-day-one-checklist.md.'
   );
 }
 

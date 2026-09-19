@@ -6,11 +6,20 @@
  * in `src/jobs/bright-ingest/`; incremental replication is #92 and mapping into the consumer schema
  * is #93. What exists today is the vehicle those two drop into.
  *
- * ## Two credential sets, never one (stakeholder ruling 2026-09-12, recorded on #117)
+ * ## Which feed am I talking to? (stakeholder ruling 2026-09-19, superseding 2026-09-12)
  *
- * `dev` authenticates against Bright's **test/staging** feed; `prod` authenticates against the
- * **licensed production** feed; `test` and `local` get no Bright credentials at all. Three
- * consequences are implemented here rather than left to convention:
+ * `local`, `dev` and `test` authenticate against Bright's **test/staging** feed with the real test
+ * credentials; `prod` authenticates against the **licensed production** feed. This is the same
+ * separation as the ruling it replaces, with a different default — that one protected the production
+ * credential by starving three environments, this one protects it by binding three environments to
+ * the test feed. **The invariant is unchanged: the production credential never leaves production.**
+ *
+ * Nothing in this module enforces that invariant, and it is worth being explicit about the gap:
+ * `resolveBrightConfig` checks that a credential is present and that an endpoint is HTTPS. It does
+ * not check that the credential belongs to the feed the endpoint names, because a client id carries
+ * no evidence of which tier issued it. #164 is where that check lands.
+ *
+ * Three consequences are implemented here rather than left to convention:
  *
  *  1. **The endpoint is configuration, not a constant.** `BRIGHT_MLS_TOKEN_ENDPOINT` and
  *     `BRIGHT_MLS_SERVICE_ROOT` are per-environment values on the CronJob, so which feed a run talks
@@ -29,9 +38,11 @@
  * ## Placeholders are "absent", not "wrong"
  *
  * `infra/k8s/base/secrets/bright-mls.secret.yaml` ships `StrongBase64Password` placeholders, the
- * same convention as `postgres.secret.yaml`. Treating that literal as absent is what lets `local` and
- * `test` — which will never hold Bright credentials — reach a clean, loud "not configured"
- * completion instead of sending a guaranteed-bad credential to Bright and reading a 401 as news.
+ * same convention as `postgres.secret.yaml`. Treating that literal as absent is what lets an
+ * environment that is not wired yet reach a clean, loud "not configured" completion instead of
+ * sending a guaranteed-bad credential to Bright and reading a 401 as news. That is a rollout state,
+ * not a permanent one — `local` and `test` are wired by #176 — and the handling is the same either
+ * way, which is the point of keying it on the value rather than on the environment.
  */
 
 /**
@@ -140,7 +151,8 @@ function resolveEndpoint(env: NodeJS.ProcessEnv): BrightEndpoint | null {
       tokenEndpointRaw === null ? BRIGHT_ENV_VARS.serviceRoot : BRIGHT_ENV_VARS.tokenEndpoint;
     throw new BrightConfigError(
       `${present_} is set but ${missing} is not. The endpoint pair identifies which Bright feed ` +
-        'this environment talks to (dev = test/staging, prod = licensed production) and must be ' +
+        'this environment talks to (prod = licensed production, every other environment = ' +
+        'test/staging) and must be ' +
         'set together, or a run could authenticate against one feed and read another.',
     );
   }
@@ -159,9 +171,9 @@ function resolveEndpoint(env: NodeJS.ProcessEnv): BrightEndpoint | null {
 /**
  * Resolves the job's configuration from the environment.
  *
- * Returns `not-configured` — never throws — when values are simply absent, because that is the
- * expected steady state for `local` and `test` and the expected state everywhere until #117
- * provisions credentials. Throws `BrightConfigError` only when a value is present and unusable.
+ * Returns `not-configured` — never throws — when values are simply absent, because an environment
+ * that is not wired yet is a normal rollout state rather than a fault. Throws `BrightConfigError`
+ * only when a value is present and unusable.
  */
 export function resolveBrightConfig(env: NodeJS.ProcessEnv = process.env): BrightConfig {
   const endpoint = resolveEndpoint(env);

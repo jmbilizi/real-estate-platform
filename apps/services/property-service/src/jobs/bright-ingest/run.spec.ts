@@ -86,7 +86,7 @@ describe('runBrightIngest — not configured', () => {
   });
 
   /**
-   * `local` and `test` hold the committed placeholder forever. This is the exact shape of a run in
+   * An unwired environment holds the committed placeholder. This is the exact shape of a run in
    * those environments, and it must be a clean completion — not a 401, not a failed Job.
    */
   it('treats the committed placeholder as not configured, with the endpoint still reported', async () => {
