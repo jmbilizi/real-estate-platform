@@ -5,210 +5,164 @@ const assert = require('node:assert/strict');
 
 const {
   parseGitStatus,
-  newlyDirtyPaths,
-  buildScopedFormatCommand,
-  repairResetOutput,
+  trackedPaths,
+  allPaths,
+  changedSince,
   describePushVerdict,
   MAX_LISTED_PATHS,
 } = require('./format-gate');
 
-test('parseGitStatus reads modified, staged, untracked and renamed entries', () => {
-  const status = [
-    ' M scripts/pre-push.js',
-    'A  tools/validation/format-gate.js',
-    '?? notes.txt',
-    'R  old/name.ts -> new/name.ts',
-    '',
-  ].join('\n');
+const NUL = '\0';
 
-  assert.deepEqual([...parseGitStatus(status)].sort(), [
-    'new/name.ts',
+test('parseGitStatus reads modified, staged and untracked records', () => {
+  const entries = parseGitStatus(
+    [' M scripts/pre-push.js', 'A  tools/validation/format-gate.js', '?? notes.txt', ''].join(NUL),
+  );
+
+  assert.deepEqual(allPaths(entries).sort(), [
     'notes.txt',
+    'scripts/pre-push.js',
+    'tools/validation/format-gate.js',
+  ]);
+  assert.deepEqual(trackedPaths(entries).sort(), [
     'scripts/pre-push.js',
     'tools/validation/format-gate.js',
   ]);
 });
 
-test('parseGitStatus strips the quotes git adds to an unusual path', () => {
-  assert.deepEqual([...parseGitStatus(' M "apps/a b/file.ts"')], ['apps/a b/file.ts']);
+test('parseGitStatus keeps the destination of a rename and drops the source', () => {
+  const entries = parseGitStatus(['R  new/name.ts', 'old/name.ts', ' M other.ts', ''].join(NUL));
+  assert.deepEqual(allPaths(entries), ['new/name.ts', 'other.ts']);
 });
 
-test('parseGitStatus returns an empty set for a clean tree', () => {
-  assert.equal(parseGitStatus('').size, 0);
-  assert.equal(parseGitStatus(undefined).size, 0);
+test('parseGitStatus returns a path with a space verbatim', () => {
+  // -z output is not quoted and not C-escaped. A quoted path would never match a real file.
+  assert.deepEqual(allPaths(parseGitStatus(` M apps/a b/café.ts${NUL}`)), ['apps/a b/café.ts']);
 });
 
-test('newlyDirtyPaths keeps only what became dirty, sorted', () => {
-  const before = new Set(['b.ts']);
-  const after = new Set(['b.ts', 'c.ts', 'a.ts']);
-  assert.deepEqual(newlyDirtyPaths(before, after), ['a.ts', 'c.ts']);
+test('parseGitStatus returns nothing for a clean tree', () => {
+  assert.deepEqual(parseGitStatus(''), []);
+  assert.deepEqual(parseGitStatus(undefined), []);
 });
 
-test('buildScopedFormatCommand names every path and nothing else', () => {
-  const { command } = buildScopedFormatCommand(['apps/a/project.json', 'apps/b/project.json']);
-  assert.equal(
-    command,
-    'pnpm exec nx format:write --files=apps/a/project.json,apps/b/project.json',
-  );
-});
-
-test('buildScopedFormatCommand returns no command for an empty list', () => {
-  assert.equal(buildScopedFormatCommand([]).command, null);
-});
-
-test('buildScopedFormatCommand skips a path that --files cannot express', () => {
-  const { command, skipped } = buildScopedFormatCommand(['ok.ts', 'has,comma.ts']);
-  assert.equal(command, 'pnpm exec nx format:write --files=ok.ts');
-  assert.deepEqual(skipped, ['has,comma.ts']);
-});
-
-test('repairResetOutput runs no formatter when nx:reset changed nothing', () => {
-  const calls = [];
-  const result = repairResetOutput({
-    run: (command) => {
-      calls.push(command);
-      return { success: true };
-    },
-    gitStatus: () => ' M already/dirty.ts',
-    before: new Set(['already/dirty.ts']),
-  });
-
-  assert.deepEqual(calls, []);
-  assert.equal(result.ran, false);
-  assert.deepEqual(result.formatted, []);
-});
-
-test('repairResetOutput formats only the paths nx:reset made dirty', () => {
-  const calls = [];
-  const result = repairResetOutput({
-    run: (command) => {
-      calls.push(command);
-      return { success: true };
-    },
-    gitStatus: () => [' M apps/a/project.json', ' M src/developer-edit.ts'].join('\n'),
-    before: new Set(['src/developer-edit.ts']),
-  });
-
-  assert.deepEqual(calls, ['pnpm exec nx format:write --files=apps/a/project.json']);
-  assert.deepEqual(result.formatted, ['apps/a/project.json']);
-  assert.equal(result.success, true);
-});
-
-test('repairResetOutput reports a failed formatter instead of swallowing it', () => {
-  const result = repairResetOutput({
-    run: () => ({ success: false }),
-    gitStatus: () => ' M apps/a/project.json',
-    before: new Set(),
-  });
-
-  assert.equal(result.ran, true);
-  assert.equal(result.success, false);
+test('changedSince keeps only what appeared, sorted', () => {
+  assert.deepEqual(changedSince(['b.ts'], ['b.ts', 'c.ts', 'a.ts']), ['a.ts', 'c.ts']);
 });
 
 /**
- * The #91 regression. A committed file fails the format gate CI runs, and the repair cannot reach
- * it — it is not something nx:reset touched. The gate must still fail.
+ * The #151 regression, stated as the property the gate must hold.
  *
- * The old sequence ran a repo-wide `nx format:write` here. It repaired that file in the working
- * tree, the check that followed passed, and pre-push printed "CI will pass" while the pushed
- * commit still failed CI.
+ * `nx format:write` repairs the working tree and never the commit. So a format check that runs
+ * after it reports on content CI does not read. The gate must run before any write.
  */
-test('a format-violating committed file the repair cannot touch leaves the gate failing', () => {
-  const VIOLATING = 'infra/k8s/base/secrets/bright-mls.secret.yaml';
+test('the format gate runs before anything writes', () => {
+  const sequence = [];
+  const gateIndex = () => sequence.findIndex((c) => c.includes('format-check'));
+  const firstWriteIndex = () => sequence.findIndex((c) => c.includes('format:write'));
 
-  // Files that currently fail `prettier --check`. The formatter removes what it is given.
-  const violations = new Set([VIOLATING]);
-  const commands = [];
-
-  const run = (command) => {
-    commands.push(command);
-    const scoped = /--files=(\S+)/.exec(command);
-    if (scoped) {
-      for (const file of scoped[1].split(',')) violations.delete(file);
-      return { success: true };
-    }
-    if (command.includes('format:write')) {
-      // A repo-wide write — the laundering this test exists to catch.
-      violations.clear();
-      return { success: true };
-    }
-    if (command.includes('format-check')) {
-      return { success: violations.size === 0 };
-    }
-    return { success: true };
-  };
-
-  // nx:reset rewrote a generated file. The violating file is committed and clean.
-  repairResetOutput({
-    run,
-    gitStatus: () => ' M apps/account-service/project.json',
-    before: new Set(),
-  });
-
-  const check = run('pnpm run nx:workspace-format-check');
-
-  assert.equal(check.success, false, 'the gate must fail on a file the repair did not touch');
-  assert.ok(violations.has(VIOLATING), 'the violating file must remain unrepaired');
-  assert.ok(
-    commands.every((c) => !c.includes('format:write') || c.includes('--files=')),
-    'no repo-wide format:write may run ahead of the check',
+  // The order the scripts use: check, then reset, then the write.
+  sequence.push(
+    'pnpm run nx:workspace-format-check',
+    'pnpm run nx:reset',
+    'pnpm exec nx format:write',
   );
+
+  assert.ok(gateIndex() >= 0, 'the gate must run');
+  assert.ok(gateIndex() < firstWriteIndex(), 'no write may run before the gate');
 });
 
 /**
- * The counter-case, kept so the test above cannot quietly stop testing anything. It replays the
- * same world through the sequence this ticket removed: a repo-wide `nx format:write` ahead of the
- * check. The check goes green over a commit that fails CI. That is the bug.
+ * The #91 case that produced this ticket, played out over a fake world.
+ *
+ * `infra/k8s/base/secrets/bright-mls.secret.yaml` was committed without a trailing newline. The
+ * old order repaired it in the tree and then reported a pass. The fixed order reports the failure.
  */
-test('the removed sequence — a repo-wide write ahead of the check — produces a false green', () => {
+test('a format-violating committed file fails the gate, and passed it under the old order', () => {
   const VIOLATING = 'infra/k8s/base/secrets/bright-mls.secret.yaml';
-  const violations = new Set([VIOLATING]);
-  const committedContentIsBroken = true;
 
-  const run = (command) => {
-    if (command.includes('format:write')) {
-      violations.clear(); // repairs the working tree, never the commit
-      return { success: true };
-    }
-    if (command.includes('format-check')) return { success: violations.size === 0 };
-    return { success: true };
+  const world = () => {
+    const violations = new Set([VIOLATING]);
+    return {
+      // The commit CI reads never changes. Only the working tree does.
+      committedContentIsBroken: true,
+      run(command) {
+        if (command.includes('format:write')) {
+          violations.clear();
+          return { success: true };
+        }
+        if (command.includes('format-check')) return { success: violations.size === 0 };
+        return { success: true };
+      },
+    };
   };
 
-  run('pnpm exec nx format:write');
-  const check = run('pnpm run nx:workspace-format-check');
+  const fixed = world();
+  const fixedGate = fixed.run('pnpm run nx:workspace-format-check');
+  fixed.run('pnpm exec nx format:write');
 
-  assert.equal(check.success, true, 'the old sequence reports success');
-  assert.equal(committedContentIsBroken, true, 'over a commit CI still rejects');
+  const old = world();
+  old.run('pnpm exec nx format:write');
+  const oldGate = old.run('pnpm run nx:workspace-format-check');
+
+  assert.equal(oldGate.success, true, 'the old order reported success');
+  assert.equal(old.committedContentIsBroken, true, 'over a commit CI still rejects');
+  assert.equal(fixedGate.success, false, 'the fixed order reports the failure');
 });
 
 test('the push verdict claims CI only when the working tree matches HEAD', () => {
-  const clean = describePushVerdict({ dirtyPaths: [] });
-  assert.equal(clean.claimsCi, true);
+  assert.equal(describePushVerdict({}).claimsCi, true);
 
   const dirty = describePushVerdict({
-    dirtyPaths: ['infra/k8s/base/secrets/bright-mls.secret.yaml'],
+    trackedDirty: ['infra/k8s/base/secrets/bright-mls.secret.yaml'],
   });
   assert.equal(dirty.claimsCi, false);
   assert.ok(dirty.lines.some((l) => l.includes('bright-mls.secret.yaml')));
   assert.ok(dirty.lines.some((l) => l.includes('does not predict')));
 });
 
-test('the push verdict never prints the false green', () => {
-  const dirty = describePushVerdict({ dirtyPaths: ['a.ts'] });
-  assert.ok(dirty.lines.every((line) => !line.includes('CI will pass')));
+test('the push verdict claims nothing when git status could not be read', () => {
+  // Fail-open here would print the earned line on no evidence.
+  const verdict = describePushVerdict({ statusKnown: false });
+  assert.equal(verdict.claimsCi, false);
+  assert.ok(verdict.lines.some((l) => l.includes('Could not read git status')));
 });
 
-test('the push verdict names every repaired path', () => {
+test('the push verdict never prints the false green', () => {
+  for (const input of [
+    { trackedDirty: ['a.ts'] },
+    { statusKnown: false },
+    { repaired: ['apps/a/project.json'] },
+  ]) {
+    const verdict = describePushVerdict(input);
+    assert.ok(verdict.lines.every((line) => !line.includes('CI will pass')));
+  }
+});
+
+test('the push verdict reports a repaired file as script output, not as forgotten work', () => {
   const verdict = describePushVerdict({
-    dirtyPaths: [],
-    repairedPaths: ['apps/a/project.json', 'apps/b/project.json'],
+    trackedDirty: ['apps/a/project.json'],
+    repaired: ['apps/a/project.json'],
   });
-  assert.ok(verdict.lines.some((l) => l.includes('apps/a/project.json')));
-  assert.ok(verdict.lines.some((l) => l.includes('apps/b/project.json')));
+
+  assert.ok(verdict.lines.some((l) => l.includes('nx:reset and the format write rewrote 1 file')));
+  assert.ok(
+    verdict.lines.every((l) => !l.includes('are not in your push')),
+    'a repaired path is not also listed as an unexplained difference',
+  );
+  assert.equal(verdict.claimsCi, false, 'it still differs from HEAD, so CI is not predicted');
+});
+
+test('the push verdict ignores untracked files, which cannot cause a false green', () => {
+  // An untracked file is absent from the push. It can make the local check stricter than CI,
+  // never looser, so it must not downgrade the verdict.
+  const entries = parseGitStatus(`?? scratch.md${NUL}`);
+  assert.deepEqual(trackedPaths(entries), []);
+  assert.equal(describePushVerdict({ trackedDirty: trackedPaths(entries) }).claimsCi, true);
 });
 
 test('the push verdict truncates a long path list', () => {
   const many = Array.from({ length: MAX_LISTED_PATHS + 5 }, (_, i) => `file-${i}.ts`);
-  const verdict = describePushVerdict({ dirtyPaths: many });
-  assert.ok(verdict.lines.some((l) => l.includes('and 5 more')));
+  assert.ok(
+    describePushVerdict({ trackedDirty: many }).lines.some((l) => l.includes('and 5 more')),
+  );
 });

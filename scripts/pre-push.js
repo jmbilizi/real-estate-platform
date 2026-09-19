@@ -19,7 +19,9 @@ const path = require('path');
 const fs = require('fs');
 const {
   parseGitStatus,
-  repairResetOutput,
+  trackedPaths,
+  allPaths,
+  changedSince,
   describePushVerdict,
 } = require('../tools/validation/format-gate');
 
@@ -185,9 +187,25 @@ function setupPythonEnvironment() {
 // `pnpm run pre-push` themselves before committing/pushing; CI is the backstop.
 const PROTECTED_BRANCHES = ['main', 'dev', 'test'];
 
+// `-z` keeps paths verbatim. Plain porcelain quotes and C-escapes a path holding a space or a
+// non-ASCII byte, which then matches no real file. A failed read is reported, never treated as a
+// clean tree (#151).
 function readGitStatus() {
-  const result = run('git status --porcelain', { silent: true });
-  return result.success ? result.output || '' : '';
+  const result = run('git status --porcelain -z', { silent: true });
+  return { ok: Boolean(result.success), entries: parseGitStatus(result.output || '') };
+}
+
+// The workspace format gate — the same command CI runs. It must run before anything writes to the
+// tree, or it reports on content the push does not carry (#151).
+function runWorkspaceFormatCheck() {
+  log('\n1. Checking code formatting...', 'blue');
+  const result = run('pnpm run nx:workspace-format-check');
+  if (!result.success) {
+    logError('Code formatting failed - run "pnpm run nx:workspace-format" to fix');
+    return false;
+  }
+  logSuccess('Code formatting passed');
+  return true;
 }
 
 function getCurrentBranch() {
@@ -249,21 +267,19 @@ function detectValidationMode() {
   }
 }
 
-function checkNodeProjects(isAffected, base) {
+function checkNodeProjects(isAffected, base, formatAlreadyChecked) {
   logStep('Validating Node.js/TypeScript Projects');
 
   const affectedFlag = isAffected && base ? `--base=${base} --head=HEAD` : '';
 
-  // 1. Format check (MUST PASS to continue)
-  log('\n1. Checking code formatting...', 'blue');
-  const formatCmd = `pnpm run nx:workspace-format-check`;
-
-  const formatResult = run(formatCmd);
-  if (!formatResult.success) {
-    logError('Code formatting failed - run "pnpm run nx:workspace-format" to fix');
+  // 1. Format check (MUST PASS to continue). A manual run already ran it, ahead of nx:reset and
+  // its format write, so the verdict below belongs to the tree CI reads.
+  if (formatAlreadyChecked === false) {
     return false; // Exit early - don't run remaining checks
   }
-  logSuccess('Code formatting passed');
+  if (formatAlreadyChecked === null && !runWorkspaceFormatCheck()) {
+    return false;
+  }
 
   // 2. Lint (MUST PASS to continue)
   log('\n2. Linting code...', 'blue');
@@ -740,11 +756,19 @@ function main() {
   const skipReset = process.argv.includes('--skip-reset');
 
   let repairedPaths = [];
+  // null means "not run yet — checkNodeProjects runs it". A boolean is a verdict already reached.
+  let formatAlreadyChecked = null;
 
   // Run nx:reset once at the start (unless skipped by git hooks)
   if (!skipReset) {
     logStep('Preparing NX Workspace');
-    const dirtyBeforeReset = parseGitStatus(readGitStatus());
+
+    // The gate runs FIRST, before nx:reset and the format write touch the tree (#151). Run it
+    // after them and the write repairs the developer's file, the gate passes, and this script
+    // reports a green over a commit CI rejects.
+    formatAlreadyChecked = runWorkspaceFormatCheck();
+
+    const before = readGitStatus();
 
     log('Running nx:reset to ensure clean state...', 'cyan');
     const resetResult = run('pnpm run nx:reset');
@@ -754,21 +778,17 @@ function main() {
       logSuccess('NX workspace ready');
     }
 
-    // Format what nx:reset rewrote — and only that (#151). A repo-wide format:write here would
-    // repair a file the developer wrote, so the format check below would then pass over content
-    // CI still rejects.
-    const repair = repairResetOutput({
-      run,
-      gitStatus: readGitStatus,
-      before: dirtyBeforeReset,
-    });
-    repairedPaths = repair.formatted;
-    if (!repair.success) {
-      logWarning('Formatting the files nx:reset rewrote failed - continuing to the checks');
+    // Format what nx:reset rewrote (project.json files, the solution file).
+    log('Formatting workspace files...', 'cyan');
+    const formatResetResult = run('pnpm exec nx format:write');
+    if (!formatResetResult.success) {
+      logWarning('Format after reset had warnings but continuing...');
     }
-    if (repair.skipped.length > 0) {
-      logWarning(`Not formatted (path contains a comma): ${repair.skipped.join(' ')}`);
-    }
+
+    // Name every file this run rewrote. The old script mutated the tree and said nothing.
+    const after = readGitStatus();
+    repairedPaths =
+      before.ok && after.ok ? changedSince(allPaths(before.entries), allPaths(after.entries)) : [];
   } else {
     log('Skipping nx:reset (running in git hook mode)\n', 'cyan');
   }
@@ -799,7 +819,7 @@ function main() {
 
   // Run checks only for affected language projects
   // Note: Node.js checks always run (includes workspace-level configs, nx tooling)
-  const nodeResult = checkNodeProjects(isAffected, base);
+  const nodeResult = checkNodeProjects(isAffected, base, formatAlreadyChecked);
   allPassed = allPassed && nodeResult;
 
   // Only check Python if Python projects are affected
@@ -835,9 +855,11 @@ function main() {
 
   // The checks ran over the working tree. CI runs them over the commits. Say which of the two
   // this result covers, and claim nothing about CI that the run did not verify (#151).
+  const finalStatus = readGitStatus();
   const verdict = describePushVerdict({
-    dirtyPaths: [...parseGitStatus(readGitStatus())],
-    repairedPaths,
+    trackedDirty: trackedPaths(finalStatus.entries),
+    repaired: repairedPaths,
+    statusKnown: finalStatus.ok,
   });
 
   logSuccess('\n✅ All checks passed on the working tree.');
