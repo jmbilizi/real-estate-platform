@@ -440,7 +440,8 @@ regardless of branch (the gate only applies to the `--hook` flag the husky scrip
 **Pre-Push (Complete - ~30s-2min with projects, <1s empty workspace)**
 
 - Format + Lint + Type + Test + Build
-- Mimics CI behavior exactly
+- Runs the same gates CI runs, over the working tree. CI reads the pushed commits, so a dirty tree
+  makes the result advisory — the summary says so instead of predicting CI.
 - Feature branches: affected projects | Base branches: all projects
 - **Kustomize validation**: Full build test for all environments (dev, test, prod)
 - Uses `--skip-reset` flag (no workspace file modifications)
@@ -449,6 +450,24 @@ regardless of branch (the gate only applies to the `--hook` flag the husky scrip
 **Why `--skip-reset` in hooks**: Git operations must not modify workspace files (prevents unstaged
 changes after commit). Manual commands (`pnpm run pre-commit`, `pnpm run pre-push`) DO run reset for
 clean state validation.
+
+**The format gate runs before anything writes, and the write names what it rewrote** (#151). A
+manual run used to call a repo-wide `nx format:write` after `nx:reset` and before
+`nx:workspace-format-check`. The write repaired the working tree, the check then passed, and
+pre-push printed "CI will pass" — over a commit whose content still failed the same gate in CI. The
+repair reached the tree only. Now `nx:workspace-format-check` runs first, ahead of `nx:reset` and
+the write, so it reads the tree CI reads. Do not "fix" this by scoping the write instead:
+`nx format:write --files=…` still rewrites `nx.json` and the root `tsconfig.json` unconditionally,
+because `addRootConfigFiles` returns early only for `--all`. `pnpm run pre-push` also refuses to
+claim anything about CI while a tracked file differs from HEAD, because CI reads the pushed commits,
+not the tree. Untracked files are excluded from that judgement: they are absent from the push, so
+they can only make the local check stricter than CI. `pre-commit` gets the same order. The cost is
+one extra cycle: a formatting failure stops the commit, and the same run then repairs the file, so
+the developer stages the repair and commits again. The gain is that a mis-formatted file the
+developer did NOT stage — the #91 shape — now fails instead of passing. The logic lives in
+`tools/validation/format-gate.js`, the regression guard in `tools/validation/format-gate.test.js`
+(run with `pnpm run tools:test`). That guard reads both scripts and fails if a write is ordered
+ahead of the gate, so reverting either script turns the suite red.
 
 **Performance Optimization**: Both hooks check if any projects exist before running expensive
 operations. On empty workspaces (no projects in `apps/` or `libs/`), they exit in <1 second instead

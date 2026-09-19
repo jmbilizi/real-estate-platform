@@ -18,6 +18,11 @@
 const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const {
+  parseGitStatus,
+  rewrittenPaths,
+  formatPathList,
+} = require('../tools/validation/format-gate');
 
 // ANSI color codes
 const colors = {
@@ -197,6 +202,26 @@ function setupPythonEnvironment() {
 // `pnpm run pre-push` themselves before committing/pushing; CI is the backstop.
 const PROTECTED_BRANCHES = ['main', 'dev', 'test'];
 
+// `-z` keeps paths verbatim. Plain porcelain quotes and C-escapes a path holding a space or a
+// non-ASCII byte, which then matches no real file.
+function readGitStatus() {
+  const result = run('git status --porcelain -z', { silent: true });
+  return { ok: Boolean(result.success), entries: parseGitStatus(result.output || '') };
+}
+
+// The workspace format gate — the same command CI runs. It must run before anything writes to the
+// tree, or it reports on content the commit does not carry (#151).
+function runWorkspaceFormatCheck() {
+  log('\n1. Checking code formatting...', 'blue');
+  const result = run('pnpm run nx:workspace-format-check');
+  if (!result.success) {
+    logError('Formatting failed - run "pnpm run nx:workspace-format" to fix');
+    return false;
+  }
+  logSuccess('Formatting passed');
+  return true;
+}
+
 function getCurrentBranch() {
   try {
     return execSync('git rev-parse --abbrev-ref HEAD', {
@@ -256,19 +281,20 @@ function detectValidationMode() {
   }
 }
 
-function checkNodeProjects(isAffected, base) {
+function checkNodeProjects(isAffected, base, formatAlreadyChecked) {
   logStep('Quick Check: Node.js/TypeScript');
 
-  // 1. Format check (MUST PASS to continue)
-  log('\n1. Checking code formatting...', 'blue');
-  const formatCmd = `pnpm run nx:workspace-format-check`;
-
-  const formatResult = run(formatCmd);
-  if (!formatResult.success) {
-    logError('Formatting failed - run "pnpm run nx:workspace-format" to fix');
+  // 1. Format check (MUST PASS to continue). A manual run already ran it, ahead of nx:reset and
+  // its format write, so the verdict belongs to the content the commit will carry. Restate the
+  // failure here: the check ran earlier and its output has scrolled away.
+  if (formatAlreadyChecked === false) {
+    logError('Formatting failed - see "Preparing NX Workspace" above for the file list');
+    logError('Run "pnpm run nx:workspace-format" to fix');
     return false; // Exit early
   }
-  logSuccess('Formatting passed');
+  if (formatAlreadyChecked === null && !runWorkspaceFormatCheck()) {
+    return false;
+  }
 
   // 2. Lint (MUST PASS to continue)
   log('\n2. Linting code...', 'blue');
@@ -650,9 +676,20 @@ function main() {
         .filter(Boolean)
     : [];
 
+  let formatAlreadyChecked = null;
+  let rewrittenByThisRun = [];
+
   // Run nx:reset once at the start (unless skipped by git hooks)
   if (!skipReset) {
     logStep('Preparing NX Workspace');
+
+    // The gate runs FIRST, before nx:reset and the format write touch the tree (#151). Run it
+    // after them and the write repairs a staged file, the gate passes, and this script reports a
+    // green over content the commit does not carry.
+    formatAlreadyChecked = runWorkspaceFormatCheck();
+
+    const before = readGitStatus();
+
     log('Running nx:reset to ensure clean state...', 'cyan');
     const resetResult = run('pnpm run nx:reset');
     if (!resetResult.success) {
@@ -661,11 +698,20 @@ function main() {
       logSuccess('NX workspace ready');
     }
 
-    // Format any files modified by nx:reset (e.g., .nx/project-graph.json)
+    // Format what nx:reset rewrote (project.json files, the solution file).
     log('Formatting workspace files...', 'cyan');
     const formatResetResult = run('pnpm exec nx format:write');
     if (!formatResetResult.success) {
       logWarning('Format after reset had warnings but continuing...');
+    }
+
+    // Name every file this run rewrote. The old script mutated the tree and said nothing.
+    const after = readGitStatus();
+    rewrittenByThisRun = before.ok && after.ok ? rewrittenPaths(before.entries, after.entries) : [];
+    const rewritten = rewrittenByThisRun;
+    if (rewritten.length > 0) {
+      log(`nx:reset and the format write rewrote ${rewritten.length} file(s):`, 'cyan');
+      for (const line of formatPathList(rewritten)) log(line, 'cyan');
     }
 
     // Re-stage ONLY the files that were originally staged (not all modified tracked files).
@@ -709,7 +755,7 @@ function main() {
 
   // Run checks only for affected language projects
   // Note: Node.js checks always run (includes workspace-level configs, nx tooling)
-  const nodeResult = checkNodeProjects(isAffected, base);
+  const nodeResult = checkNodeProjects(isAffected, base, formatAlreadyChecked);
   allPassed = allPassed && nodeResult;
 
   // Only check Python if Python projects are affected
@@ -739,12 +785,20 @@ function main() {
   // Final summary
   logStep('Summary');
   if (allPassed) {
-    logSuccess('\n✅ Quick checks passed!');
-    logSuccess("Commit is allowed. Run 'pnpm run check' before pushing for full validation.\n");
+    // Format, lint and type-check ran. Tests and builds did not, so this says nothing about CI.
+    // The named script is `pre-push`; the old line named a `check` script that does not exist.
+    logSuccess('\n✅ Format, lint and type checks passed on the working tree.');
+    logSuccess("Commit is allowed. Run 'pnpm run pre-push' for tests and builds before pushing.\n");
     process.exit(0);
   } else {
     logError('\n❌ Quick checks failed.');
     logError('Please fix the issues above before committing.\n');
+    // The gate runs before the write, so a formatting failure can be one this run then repaired.
+    // Say so, or the developer re-runs the same command and cannot tell what changed.
+    if (formatAlreadyChecked === false && rewrittenByThisRun.length > 0) {
+      logWarning(`This run rewrote ${rewrittenByThisRun.length} file(s), listed above.`);
+      logWarning('Review them, stage what you want, and commit again.\n');
+    }
     logError('💡 Tip: Run format commands to auto-fix formatting issues:');
     logError('  - Node: pnpm run nx:node-format');
     logError('  - Python: pnpm run nx:python-format');
