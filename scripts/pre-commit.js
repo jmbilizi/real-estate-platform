@@ -18,6 +18,11 @@
 const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const {
+  parseGitStatus,
+  repairResetOutput,
+  formatPathList,
+} = require('../tools/validation/format-gate');
 
 // ANSI color codes
 const colors = {
@@ -196,6 +201,11 @@ function setupPythonEnvironment() {
 // skip the automatic run — developers and agents run `pnpm run pre-commit` /
 // `pnpm run pre-push` themselves before committing/pushing; CI is the backstop.
 const PROTECTED_BRANCHES = ['main', 'dev', 'test'];
+
+function readGitStatus() {
+  const result = run('git status --porcelain', { silent: true });
+  return result.success ? result.output || '' : '';
+}
 
 function getCurrentBranch() {
   try {
@@ -653,6 +663,8 @@ function main() {
   // Run nx:reset once at the start (unless skipped by git hooks)
   if (!skipReset) {
     logStep('Preparing NX Workspace');
+    const dirtyBeforeReset = parseGitStatus(readGitStatus());
+
     log('Running nx:reset to ensure clean state...', 'cyan');
     const resetResult = run('pnpm run nx:reset');
     if (!resetResult.success) {
@@ -661,11 +673,22 @@ function main() {
       logSuccess('NX workspace ready');
     }
 
-    // Format any files modified by nx:reset (e.g., .nx/project-graph.json)
-    log('Formatting workspace files...', 'cyan');
-    const formatResetResult = run('pnpm exec nx format:write');
-    if (!formatResetResult.success) {
-      logWarning('Format after reset had warnings but continuing...');
+    // Format what nx:reset rewrote — and only that (#151). A repo-wide format:write here would
+    // repair a staged file, so the format check below would then pass over content CI rejects.
+    const repair = repairResetOutput({
+      run,
+      gitStatus: readGitStatus,
+      before: dirtyBeforeReset,
+    });
+    if (!repair.success) {
+      logWarning('Formatting the files nx:reset rewrote failed - continuing to the checks');
+    }
+    if (repair.skipped.length > 0) {
+      logWarning(`Not formatted (path contains a comma): ${repair.skipped.join(' ')}`);
+    }
+    if (repair.formatted.length > 0) {
+      log(`Formatted ${repair.formatted.length} file(s) that nx:reset rewrote:`, 'cyan');
+      for (const line of formatPathList(repair.formatted)) log(line, 'cyan');
     }
 
     // Re-stage ONLY the files that were originally staged (not all modified tracked files).
@@ -739,8 +762,10 @@ function main() {
   // Final summary
   logStep('Summary');
   if (allPassed) {
-    logSuccess('\n✅ Quick checks passed!');
-    logSuccess("Commit is allowed. Run 'pnpm run check' before pushing for full validation.\n");
+    // Format, lint and type-check ran. Tests and builds did not, so this says nothing about CI.
+    // The named script is `pre-push`; the old line named a `check` script that does not exist.
+    logSuccess('\n✅ Format, lint and type checks passed on the working tree.');
+    logSuccess("Commit is allowed. Run 'pnpm run pre-push' for tests and builds before pushing.\n");
     process.exit(0);
   } else {
     logError('\n❌ Quick checks failed.');

@@ -17,6 +17,11 @@
 const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const {
+  parseGitStatus,
+  repairResetOutput,
+  describePushVerdict,
+} = require('../tools/validation/format-gate');
 
 // ANSI color codes
 const colors = {
@@ -179,6 +184,11 @@ function setupPythonEnvironment() {
 // skip the automatic run — developers and agents run `pnpm run pre-commit` /
 // `pnpm run pre-push` themselves before committing/pushing; CI is the backstop.
 const PROTECTED_BRANCHES = ['main', 'dev', 'test'];
+
+function readGitStatus() {
+  const result = run('git status --porcelain', { silent: true });
+  return result.success ? result.output || '' : '';
+}
 
 function getCurrentBranch() {
   try {
@@ -729,9 +739,13 @@ function main() {
   // Check if --skip-reset flag is present
   const skipReset = process.argv.includes('--skip-reset');
 
+  let repairedPaths = [];
+
   // Run nx:reset once at the start (unless skipped by git hooks)
   if (!skipReset) {
     logStep('Preparing NX Workspace');
+    const dirtyBeforeReset = parseGitStatus(readGitStatus());
+
     log('Running nx:reset to ensure clean state...', 'cyan');
     const resetResult = run('pnpm run nx:reset');
     if (!resetResult.success) {
@@ -740,11 +754,20 @@ function main() {
       logSuccess('NX workspace ready');
     }
 
-    // Format any files modified by nx:reset (e.g., .nx/project-graph.json)
-    log('Formatting workspace files...', 'cyan');
-    const formatResetResult = run('pnpm exec nx format:write');
-    if (!formatResetResult.success) {
-      logWarning('Format after reset had warnings but continuing...');
+    // Format what nx:reset rewrote — and only that (#151). A repo-wide format:write here would
+    // repair a file the developer wrote, so the format check below would then pass over content
+    // CI still rejects.
+    const repair = repairResetOutput({
+      run,
+      gitStatus: readGitStatus,
+      before: dirtyBeforeReset,
+    });
+    repairedPaths = repair.formatted;
+    if (!repair.success) {
+      logWarning('Formatting the files nx:reset rewrote failed - continuing to the checks');
+    }
+    if (repair.skipped.length > 0) {
+      logWarning(`Not formatted (path contains a comma): ${repair.skipped.join(' ')}`);
     }
   } else {
     log('Skipping nx:reset (running in git hook mode)\n', 'cyan');
@@ -804,15 +827,29 @@ function main() {
 
   // Final summary
   logStep('Summary');
-  if (allPassed) {
-    logSuccess('\n✅ All checks passed!');
-    logSuccess('Your changes are ready to push. CI will pass.\n');
-    process.exit(0);
-  } else {
+  if (!allPassed) {
     logError('\n❌ Some checks failed.');
     logError('Please fix the issues above before pushing.\n');
     process.exit(1);
   }
+
+  // The checks ran over the working tree. CI runs them over the commits. Say which of the two
+  // this result covers, and claim nothing about CI that the run did not verify (#151).
+  const verdict = describePushVerdict({
+    dirtyPaths: [...parseGitStatus(readGitStatus())],
+    repairedPaths,
+  });
+
+  logSuccess('\n✅ All checks passed on the working tree.');
+  for (const line of verdict.lines) {
+    if (verdict.claimsCi) {
+      logSuccess(line);
+    } else {
+      logWarning(line);
+    }
+  }
+  console.log();
+  process.exit(0);
 }
 
 main();
