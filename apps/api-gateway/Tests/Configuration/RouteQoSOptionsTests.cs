@@ -39,8 +39,11 @@ namespace ApiGateway.Tests.Configuration
                 var data = new TheoryData<string, string>();
                 foreach (var file in Directory.GetFiles(RoutesFolder(), "*.json"))
                 {
-                    var doc = JObject.Parse(File.ReadAllText(file));
-                    foreach (var route in (JArray)doc["Routes"]!)
+                    // `as`, not a cast: a JSON file here with no Routes key is a missing-guard
+                    // case for EveryLiveRouteFile_ShouldDeclareRoutes to name, not a crash during
+                    // theory discovery.
+                    var routes = JObject.Parse(File.ReadAllText(file))["Routes"] as JArray;
+                    foreach (var route in routes ?? new JArray())
                     {
                         data.Add(Path.GetFileName(file), (string)route["UpstreamPathTemplate"]!);
                     }
@@ -51,9 +54,18 @@ namespace ApiGateway.Tests.Configuration
         }
 
         [Fact]
-        public void LiveRouteFiles_ShouldExist()
+        public void EveryLiveRouteFile_ShouldDeclareRoutes()
         {
-            Directory.GetFiles(RoutesFolder(), "*.json").Should().NotBeEmpty();
+            // Without this the Theory below passes by enumerating nothing, which is the one way a
+            // guard test lies.
+            var files = Directory.GetFiles(RoutesFolder(), "*.json");
+            files.Should().NotBeEmpty();
+
+            foreach (var file in files)
+            {
+                var routes = JObject.Parse(File.ReadAllText(file))["Routes"] as JArray;
+                routes.Should().NotBeNullOrEmpty($"{Path.GetFileName(file)} must declare routes");
+            }
         }
 
         [Theory]
@@ -76,6 +88,26 @@ namespace ApiGateway.Tests.Configuration
             timeout.Should().NotBeNull().And.BeInRange(1, MaxTimeout);
             minimumThroughput.Should().NotBeNull().And.BeGreaterThanOrEqualTo(LowMinimumThroughput);
             breakDuration.Should().NotBeNull().And.BeGreaterThanOrEqualTo(LowBreakDuration);
+        }
+
+        [Theory]
+        [MemberData(nameof(LiveRoutes))]
+        public void EveryLiveRoute_ShouldHaveAWindowLongEnoughToOpenTheBreaker(string fileName, string upstreamPath)
+        {
+            // Arrange — Polly counts failures inside SamplingDuration and needs MinimumThroughput
+            // of them. A failing call occupies its whole Timeout, so a window shorter than
+            // MinimumThroughput x Timeout can never collect enough failures: the breaker stays
+            // closed forever and every caller pays the full timeout. Every value below passes
+            // Polly's own floors, so nothing reports this.
+            var qos = Effective(fileName, upstreamPath);
+
+            // Act
+            var shortestRunToOpen = (long)qos.MinimumThroughput * qos.Timeout;
+
+            // Assert — 1.5x, because the window slides and the first failure ages out of it.
+            qos.SamplingDuration.Should().BeGreaterThanOrEqualTo(
+                (int)(shortestRunToOpen * 3 / 2),
+                $"{upstreamPath} needs a window that holds {qos.MinimumThroughput} failures of {qos.Timeout} ms");
         }
 
         [Theory]
@@ -108,9 +140,34 @@ namespace ApiGateway.Tests.Configuration
             ((int?)qos["BreakDuration"]).Should().NotBeNull().And.BeGreaterThanOrEqualTo(LowBreakDuration);
             ((double?)qos["FailureRatio"]).Should().NotBeNull().And.BeInRange(0.01, 1.0);
             ((int?)qos["SamplingDuration"]).Should().NotBeNull().And.BeGreaterThanOrEqualTo(LowBreakDuration);
+
+            // The fallback a future route inherits must be able to open its own breaker.
+            var shortestRunToOpen = (long)(int)qos["MinimumThroughput"]! * (int)qos["Timeout"]!;
+            ((int)qos["SamplingDuration"]!).Should().BeGreaterThanOrEqualTo((int)(shortestRunToOpen * 3 / 2));
         }
 
         private static string RoutesFolder() => Path.Combine(GatewayRoot, "Configuration", "Routes");
+
+        private static JToken GlobalQoS()
+        {
+            var settings = JObject.Parse(File.ReadAllText(Path.Combine(GatewayRoot, "Configuration", "Ocelot.Settings.json")));
+            return settings["GlobalConfiguration"]!["QoSOptions"]!;
+        }
+
+        /// <summary>
+        /// Resolves the values Ocelot really applies. It merges the global block into a route
+        /// property by property, so a route that omits one still runs with the global value.
+        /// </summary>
+        /// <param name="fileName">The route file.</param>
+        /// <param name="upstreamPath">The route's upstream template.</param>
+        /// <returns>The merged timeout, breaker threshold and sampling window.</returns>
+        private static (int Timeout, int MinimumThroughput, int SamplingDuration) Effective(string fileName, string upstreamPath)
+        {
+            var route = FindRoute(fileName, upstreamPath)["QoSOptions"];
+            var global = GlobalQoS();
+            int Merged(string name) => (int?)route?[name] ?? (int)global[name]!;
+            return (Merged("Timeout"), Merged("MinimumThroughput"), Merged("SamplingDuration"));
+        }
 
         private static JToken FindRoute(string fileName, string upstreamPath)
         {

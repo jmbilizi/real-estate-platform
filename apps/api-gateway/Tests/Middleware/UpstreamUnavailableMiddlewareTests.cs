@@ -6,6 +6,7 @@ using System.Text;
 using ApiGateway.Middleware;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Newtonsoft.Json.Linq;
 using Ocelot.Errors;
 using Xunit;
@@ -89,16 +90,43 @@ namespace ApiGateway.Tests.Middleware
         }
 
         [Fact]
-        public async Task Invoke_WithADownstream503_ShouldKeepTheDownstreamBody()
+        public async Task Invoke_WithAStartedResponse_ShouldNotAppendToTheDownstreamBody()
         {
-            // Arrange — the service itself answered 503 and wrote its own body.
+            // Arrange — Ocelot recorded the error AND the downstream body already went out. The
+            // errors check alone would not stop the write here: only the HasStarted guard does,
+            // and appending after those bytes would truncate the response at our ContentLength.
+            var context = NewContext();
+            var downstreamBody = "{\"error\":{\"code\":\"internal_error\",\"message\":\"Internal server error.\"}}";
+            context.Features.Set<IHttpResponseFeature>(new StartedResponseFeature(context.Response.Body));
+
+            var middleware = new UpstreamUnavailableMiddleware(async ctx =>
+            {
+                ctx.Items["Errors"] = new List<Error> { new TestTimedOutError() };
+                ctx.Response.StatusCode = 503;
+                await ctx.Response.Body.WriteAsync(Encoding.UTF8.GetBytes(downstreamBody)).ConfigureAwait(false);
+            });
+
+            // Act
+            await middleware.InvokeAsync(context).ConfigureAwait(true);
+
+            // Assert
+            context.Response.HasStarted.Should().BeTrue("the guard under test must be the one that fires");
+            ReadBody(context).Should().Be(downstreamBody);
+        }
+
+        [Fact]
+        public async Task Invoke_WithABodyAlreadyCounted_ShouldLeaveItAlone()
+        {
+            // Arrange — an unflushed body leaves HasStarted false, so ContentLength is the second
+            // half of the guard.
             var context = NewContext();
             var downstreamBody = "{\"error\":{\"code\":\"internal_error\",\"message\":\"Internal server error.\"}}";
             var middleware = new UpstreamUnavailableMiddleware(async ctx =>
             {
+                ctx.Items["Errors"] = new List<Error> { new TestTimedOutError() };
                 ctx.Response.StatusCode = 503;
+                ctx.Response.ContentLength = downstreamBody.Length;
                 await ctx.Response.Body.WriteAsync(Encoding.UTF8.GetBytes(downstreamBody)).ConfigureAwait(false);
-                await ctx.Response.Body.FlushAsync().ConfigureAwait(false);
             });
 
             // Act
@@ -129,6 +157,36 @@ namespace ApiGateway.Tests.Middleware
         {
             public TestTimedOutError()
                 : base("Timeout", OcelotErrorCode.RequestTimedOutError, 503)
+            {
+            }
+        }
+
+        /// <summary>
+        /// A response feature that reports the response as started. `DefaultHttpContext` over a
+        /// `MemoryStream` never sets `HasStarted`, so the guard would otherwise be untestable.
+        /// </summary>
+        private sealed class StartedResponseFeature : IHttpResponseFeature
+        {
+            public StartedResponseFeature(Stream body)
+            {
+                Body = body;
+            }
+
+            public int StatusCode { get; set; } = 200;
+
+            public string? ReasonPhrase { get; set; }
+
+            public IHeaderDictionary Headers { get; set; } = new HeaderDictionary();
+
+            public Stream Body { get; set; }
+
+            public bool HasStarted => true;
+
+            public void OnStarting(Func<object, Task> callback, object state)
+            {
+            }
+
+            public void OnCompleted(Func<object, Task> callback, object state)
             {
             }
         }

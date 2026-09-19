@@ -82,15 +82,18 @@ namespace ApiGateway.Tests.Qos
             // 3. An open circuit fails immediately — no thread is held waiting on the downstream.
             var whileOpen = await TimedGetAsync(http).ConfigureAwait(true);
             whileOpen.Status.Should().Be(503);
+
+            // Relative to the timed-out call, not an absolute bound: a GC pause on a shared runner
+            // would make a fixed millisecond threshold flake without any regression behind it.
             whileOpen.Elapsed.Should().BeLessThan(
-                TimeSpan.FromMilliseconds(TimeoutMs),
+                first.Elapsed / 2,
                 "an open breaker must reject without calling the downstream");
 
             // 4. Every degraded response carries the documented body.
             whileOpen.Body.Should().Be(UpstreamUnavailableMiddleware.ResponseBody);
 
             // 5. The downstream recovers, and the breaker closes again after the break.
-            downstream.Healthy = true;
+            downstream.BecomeHealthy();
             await Task.Delay(BreakDurationMs + 1000).ConfigureAwait(true);
 
             var afterRecovery = await TimedGetAsync(http).ConfigureAwait(true);
@@ -155,18 +158,25 @@ namespace ApiGateway.Tests.Qos
             """;
 
         /// <summary>
-        /// A real HTTP server that stalls past the gateway's timeout until <see cref="Healthy"/>
-        /// is set. TestServer cannot stand in for it: Ocelot calls the downstream over a socket.
+        /// A real HTTP server that stalls past the gateway's timeout until
+        /// <see cref="BecomeHealthy"/> is called. TestServer cannot stand in for it: Ocelot calls
+        /// the downstream over a socket.
         /// </summary>
         private sealed class StallingDownstream : IAsyncDisposable
         {
-            private IHost? host;
+            /// <summary>
+            /// The test thread writes this and a Kestrel request thread reads it, so it is
+            /// volatile. A 3-second delay is not a memory barrier.
+            /// </summary>
+            private volatile bool healthy;
 
-            /// <summary>Gets or sets a value indicating whether the stub answers at once.</summary>
-            public bool Healthy { get; set; }
+            private IHost? host;
 
             /// <summary>Gets the port the stub listens on.</summary>
             public int Port { get; private set; }
+
+            /// <summary>Makes the stub answer at once, as a recovered service would.</summary>
+            public void BecomeHealthy() => healthy = true;
 
             public async Task StartAsync()
             {
@@ -178,7 +188,7 @@ namespace ApiGateway.Tests.Qos
                         web.UseUrls("http://127.0.0.1:0");
                         web.Configure(app => app.Run(async context =>
                         {
-                            if (!Healthy)
+                            if (!healthy)
                             {
                                 try
                                 {

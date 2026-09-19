@@ -111,9 +111,10 @@ namespace ApiGateway.Middleware
         {
             ArgumentNullException.ThrowIfNull(context);
 
-            // A started response already carries a downstream body. Never overwrite a real answer,
-            // including a 503 the downstream service itself produced.
-            if (context.Response.HasStarted)
+            // Never overwrite a real answer, including a 503 the downstream service produced.
+            // HasStarted alone is not enough: Kestrel leaves it false for a small unflushed body,
+            // and appending after those bytes would truncate the response at our ContentLength.
+            if (context.Response.HasStarted || context.Response.ContentLength is not (null or 0))
             {
                 return false;
             }

@@ -9,9 +9,9 @@
     },
     "QoSOptions": {
       "Timeout": 10000,
-      "MinimumThroughput": 5,
+      "MinimumThroughput": 4,
       "FailureRatio": 0.5,
-      "SamplingDuration": 30000,
+      "SamplingDuration": 60000,
       "BreakDuration": 10000
     }
   },

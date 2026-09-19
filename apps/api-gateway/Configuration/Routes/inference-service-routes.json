@@ -15,7 +15,8 @@
       ],
       "QoSOptions": {
         "Timeout": 30000,
-        "MinimumThroughput": 5,
+        "MinimumThroughput": 2,
+        "SamplingDuration": 90000,
         "BreakDuration": 15000
       }
     },
@@ -33,6 +34,7 @@
       "QoSOptions": {
         "Timeout": 5000,
         "MinimumThroughput": 5,
+        "SamplingDuration": 45000,
         "BreakDuration": 10000
       }
     },
@@ -50,6 +52,7 @@
       "QoSOptions": {
         "Timeout": 3000,
         "MinimumThroughput": 5,
+        "SamplingDuration": 30000,
         "BreakDuration": 10000
       }
     },
@@ -67,6 +70,7 @@
       "QoSOptions": {
         "Timeout": 3000,
         "MinimumThroughput": 5,
+        "SamplingDuration": 30000,
         "BreakDuration": 10000
       }
     }
