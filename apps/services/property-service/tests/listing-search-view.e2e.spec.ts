@@ -155,3 +155,47 @@ describe('listing_search_v withholds the address from every column, not just the
     expect(row.longitude).toBeNull();
   });
 });
+
+describe('field-level seller suppression (#53), against the real view', () => {
+  async function viewRow(id: string): Promise<ViewRow> {
+    const pool = getPool();
+    const result = await pool.query<ViewRow>('SELECT * FROM listing_search_v WHERE id = $1', [id]);
+    const [only] = result.rows;
+    if (!only) {
+      throw new Error(`listing-search-view.e2e: no listing_search_v row for fixture ${id}.`);
+    }
+    return only;
+  }
+
+  it('masks price alone, leaving every other field published', async () => {
+    const priceRow = await viewRow(fixtures.suppressedPriceListingId);
+
+    expect(priceRow.price).toBeNull();
+    expect(String(priceRow.price)).not.toBe(String(fixtures.suppressedPriceStoredListPrice));
+    expect(priceRow.address).not.toBeNull();
+  });
+
+  it('masks original_list_price AND forces price_reduced to false together', async () => {
+    const historyRow = await viewRow(fixtures.suppressedPriceHistoryListingId);
+
+    expect(historyRow.original_list_price).toBeNull();
+    expect(historyRow.price_reduced).toBe(false);
+    // Anti-vacuity: the current price is a DIFFERENT, unsuppressed family and must still publish.
+    expect(historyRow.price).not.toBeNull();
+  });
+
+  it('masks days_on_market, which is not suppressed by any other flag', async () => {
+    const domRow = await viewRow(fixtures.suppressedDaysOnMarketListingId);
+
+    expect(domRow.days_on_market).toBeNull();
+    expect(String(domRow.days_on_market)).not.toBe(
+      String(fixtures.suppressedDaysOnMarketStoredValue),
+    );
+  });
+
+  it('exposes media_display_allowed as a passthrough flag, not a masked value', async () => {
+    const mediaRow = await viewRow(fixtures.suppressedMediaWithMarkerListingId);
+
+    expect(mediaRow.media_display_allowed).toBe(false);
+  });
+});
