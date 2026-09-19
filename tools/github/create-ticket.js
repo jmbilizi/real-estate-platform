@@ -37,6 +37,7 @@ const {
   unescapeInlineText,
   die,
   ok,
+  warn,
   info,
 } = require('./lib/gh-client');
 const { PLAN_START, PLAN_END, containsBarePlanMarker } = require('./lib/issue-body');
@@ -102,18 +103,25 @@ function addToProject({ owner, repo, projectNumber, projectId, issueUrl, issueNu
     }
   }
 
+  const reason = result.stderr || result.stdout;
+  const recovery =
+    `Issue #${issueNumber} was created (${issueUrl}) but could not be added to the board:\n` +
+    `  ${reason}\n` +
+    '  Add it by hand, then set its fields with: pnpm run gh:ticket:update-fields -- --issue ' +
+    `${issueNumber} --status <status> --priority <P0|P1|P2>`;
+
+  // A failure that is not the duplicate is usually a missing `project` scope, and the fallback
+  // lookup needs that same scope — it would die inside gh and take these instructions with it. So
+  // print them first, then still try the lookup: the duplicate wording is gh's, not a contract.
+  if (!/already exists/i.test(reason)) warn(recovery);
+
   const existing = findProjectItemId(owner, repo, issueNumber, projectId, { optional: true });
   if (existing) {
     info('Issue was already on the board — using the existing item.');
     return existing;
   }
 
-  die(
-    `Issue #${issueNumber} was created (${issueUrl}) but could not be added to the board:\n` +
-      `  ${result.stderr || result.stdout}\n` +
-      '  Add it by hand, then set its fields with: pnpm run gh:ticket:update-fields -- --issue ' +
-      `${issueNumber} --status <status> --priority <P0|P1|P2>`,
-  );
+  die(recovery);
 }
 
 function main() {

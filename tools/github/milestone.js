@@ -52,8 +52,12 @@ const BOOLEAN_FLAGS = new Set(['all', 'full', 'append']);
 /**
  * cmd.exe caps a command line at 8191 characters, and `pnpm run` adds the script name and the
  * forwarded `--` before Node ever sees it. An inline description near that cap fails with
- * "The command line is too long." from the shell, which names neither the flag nor the fix. Refuse
- * well below the cap and name `--description-file`, which keeps the text off the command line.
+ * "The command line is too long." from the shell, which names neither the flag nor the fix.
+ *
+ * The check cannot stop that shell error — the shell wins before Node starts. It stops the command
+ * from being written that way at all. It therefore applies on every platform, although only Windows
+ * has the low cap: a milestone command that works on Linux has to work on Windows too, and an
+ * author who is told to use `--description-file` once writes it that way everywhere after.
  */
 const INLINE_DESCRIPTION_MAX = 6000;
 
@@ -124,8 +128,17 @@ function resolveDescription(args) {
   if (hasFile) {
     const path = args['description-file'];
     if (!fs.existsSync(path)) die(`--description-file "${path}" does not exist.`);
+    if (fs.statSync(path).isDirectory()) die(`--description-file "${path}" is a directory.`);
     // Normalize to LF so a file written on Windows does not store CRLF in the release record.
-    return fs.readFileSync(path, 'utf-8').replace(/\r\n/g, '\n');
+    const text = fs.readFileSync(path, 'utf-8').replace(/\r\n/g, '\n');
+    // A truncated file would otherwise erase the release-direction record with no way back.
+    // Clearing a description on purpose stays available through --description "".
+    if (!text.trim()) {
+      die(
+        `--description-file "${path}" is empty. To clear the description, pass --description "".`,
+      );
+    }
+    return text;
   }
   if (!hasInline) return undefined;
 
@@ -203,12 +216,13 @@ function commandUpdate(base, args) {
   }
 
   // The description is the release-direction record, so a replacement always shows what it
-  // replaced. Recovering the old text from the API audit log is not something anyone does.
+  // replaced. Print it BEFORE the write, so the text survives a failed write too. The wording says
+  // "about to replace" for the same reason: the write below can still fail.
   if (payload.description !== undefined && !args.append) {
     if (isEmpty(milestone.description)) {
-      info('Previous description: (empty)');
+      info('This update replaces an empty description.');
     } else {
-      info('Previous description (replaced by this update):');
+      info('This update is about to replace the description below. Copy it if you need it back:');
       for (const line of formatDescription(milestone.description, { full: true })) log(line);
     }
   }

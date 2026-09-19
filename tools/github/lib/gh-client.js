@@ -41,7 +41,10 @@ function die(message) {
  * to it and why the repair belongs in Node.
  */
 function cliArgv(argv = process.argv.slice(2)) {
-  return repairMsysArgv(argv, { onRepair: warn, onReject: die });
+  // stderr, not stdout: list-tickets.js writes a JSON document to stdout, and a diagnostic line
+  // ahead of it breaks every caller that parses that output (session-brief.js does).
+  const onRepair = (message) => process.stderr.write(`${C.yellow}⚠ ${message}${C.reset}\n`);
+  return repairMsysArgv(argv, { onRepair, onReject: die });
 }
 
 /** Run a command synchronously. Returns { success, stdout, stderr }. */
