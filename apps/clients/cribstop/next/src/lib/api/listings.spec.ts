@@ -1,5 +1,13 @@
 import { aListingDetail } from '@/test/fixtures';
-import { toListingDetailView, toSearchParams } from './listings';
+import { getListingsMeta, ListingsApiError, toListingDetailView, toSearchParams } from './listings';
+
+function mockFetchResponse(status: number, body: unknown): void {
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: status >= 200 && status < 300,
+    status,
+    json: () => Promise.resolve(body),
+  }) as jest.Mock;
+}
 
 describe('toListingDetailView', () => {
   it('treats unit === null as a non-subdivided home, not an error or a loading state', () => {
@@ -128,5 +136,56 @@ describe('toSearchParams', () => {
     expect(params.has('query')).toBe(false);
     expect(params.has('neighborhood')).toBe(false);
     expect(params.get('beds')).toBe('3');
+  });
+});
+
+/**
+ * #177: the gateway's own codes must survive `getJson`'s error branch instead of collapsing to
+ * `internal_error`, and the status the gateway chose (429 for a rate limit, not 502) must reach
+ * the caller unchanged.
+ */
+describe('getJson error branching (#177)', () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('carries the gateway rate_limited code and 429 status through to the thrown error', async () => {
+    mockFetchResponse(429, { error: { code: 'rate_limited', message: 'Too many requests.' } });
+
+    await expect(getListingsMeta()).rejects.toMatchObject({
+      code: 'rate_limited',
+      status: 429,
+    });
+  });
+
+  it('carries the gateway upstream_unavailable code through unchanged', async () => {
+    mockFetchResponse(503, {
+      error: { code: 'upstream_unavailable', message: 'The service is temporarily unavailable.' },
+    });
+
+    await expect(getListingsMeta()).rejects.toMatchObject({
+      code: 'upstream_unavailable',
+      status: 503,
+    });
+  });
+
+  it('still falls back to internal_error for a code outside the known set', async () => {
+    mockFetchResponse(500, { error: { code: 'something_new', message: 'x' } });
+
+    await expect(getListingsMeta()).rejects.toMatchObject({
+      code: 'internal_error',
+      status: 500,
+    });
+  });
+
+  it('throws ListingsApiError, carrying a user-facing message for the rate-limit case', async () => {
+    mockFetchResponse(429, { error: { code: 'rate_limited', message: 'Too many requests.' } });
+
+    const error = await getListingsMeta().catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ListingsApiError);
+    expect((error as ListingsApiError).message).toMatch(/too quickly/i);
   });
 });

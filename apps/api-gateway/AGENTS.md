@@ -88,10 +88,23 @@ client can check the outcome first.
 The three surfaces behind these routes do not share one error envelope. `property-service` uses
 `{ "error": { "code", "message" } }`, `account-service` uses `{ "error": "<string>" }`, and the
 inference service uses FastAPI's `{ "detail": "<string>" }`. So this body matches the property
-surface and adds a third shape on the other two. It costs nothing today, because Ocelot's current
-empty body already fails the same client checks, but it is not the same as "one shape everywhere".
-Two related gaps sit with it: a 429 still returns `QuotaExceededMessage` as plain text, and
-`upstream_unavailable` is in no shared contract package. Tracked in #177.
+surface and adds a third shape on the other two. This divergence is recorded, not resolved: it is
+each service's own contract to converge, not a consequence of the gateway's own responses (#177).
+
+**The gateway's own contract lives in `@cribstop/gateway-contracts`** (`libs/gateway-contracts`),
+not in `@cribstop/property-contracts` — a gateway-enforced response is not one service's claim to
+make, and fires on account and inference routes too. It defines two codes:
+
+| Code                   | Status     | Source                                         |
+| ---------------------- | ---------- | ---------------------------------------------- |
+| `upstream_unavailable` | 502 or 503 | `Middleware/UpstreamUnavailableMiddleware.cs`  |
+| `rate_limited`         | 429        | Ocelot's own rate limiter (`RateLimitOptions`) |
+
+A 429's body used to be `RateLimitOptions.QuotaExceededMessage` as a bare, unparsable sentence — a
+client's `Response.json()` threw on it, so the rate-limit fact never reached the browser even though
+the 429 status itself did. `Configuration/Ocelot.Settings.json` now sets that message to the JSON
+envelope `Middleware/RateLimitContract.cs` documents, so it parses like every other gateway
+response. `Tests/Configuration/RateLimitOptionsTests.cs` keeps the two in sync.
 
 QoS does not apply to `/swagger/docs/...`. `MMLib.SwaggerForOcelot` fetches each downstream document
 with its own `HttpClient`, outside Ocelot's request pipeline.

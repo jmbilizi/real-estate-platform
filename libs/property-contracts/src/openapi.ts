@@ -91,7 +91,8 @@ function componentSchemas() {
  * nobody checks.
  *
  * 429 is deliberately NOT documented here: rate limiting is enforced by the gateway's Ocelot route
- * configuration, not by this service, so it is not this document's claim to make.
+ * configuration, not by this service, so it is not this document's claim to make. The gateway's own
+ * 429/502/503 contract lives in `@cribstop/gateway-contracts` instead (#177).
  */
 const serverErrorResponse = {
   description: 'Unexpected server error. The body carries no detail by design.',

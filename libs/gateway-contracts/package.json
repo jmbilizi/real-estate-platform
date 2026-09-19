@@ -1,0 +1,11 @@
+{
+  "name": "@cribstop/gateway-contracts",
+  "version": "0.0.1",
+  "private": true,
+  "description": "The error contract for gateway-emitted responses (429, 502, 503) — one definition for every client behind the API gateway",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "zod": "^4.4.3"
+  }
+}

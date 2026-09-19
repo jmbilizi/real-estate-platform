@@ -66,13 +66,17 @@ function clearOverlay(dir = GENERATED_SECRETS_DIR) {
 /**
  * Write the overlay for the current environment.
  *
- * @param {{ env?: object, dir?: string, records?: Array }} [options]
+ * @param {{ env?: object, dir?: string, records?: Array, baseOverlay?: string }} [options]
  * @returns {{ dir: string|null, overriddenKeys: string[], totalKeys: number }}
  */
 function ensureLocalSecretOverlay(options = {}) {
   const env = options.env || process.env;
   const dir = options.dir || GENERATED_SECRETS_DIR;
   const records = options.records || deriveSecretKeys();
+  // The layer this overlay chains onto. Defaults to the committed local overlay; a caller with its
+  // own generated layer underneath (e.g. the CA-bundle overlay) passes that layer's relative path
+  // instead, so the two generated overlays compose without either one knowing about the other.
+  const baseOverlay = options.baseOverlay || '../../local';
 
   const overrides = selectOverrides(records, env);
 
@@ -109,7 +113,7 @@ function ensureLocalSecretOverlay(options = {}) {
     'kind: Kustomization',
     '',
     'resources:',
-    '  - ../../local',
+    `  - ${baseOverlay}`,
     '',
     'patches:',
     ...patchPaths.map((p) => `  - path: ${p}`),

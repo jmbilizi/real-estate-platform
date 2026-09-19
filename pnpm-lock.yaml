@@ -201,6 +201,9 @@ importers:
 
   apps/clients/cribstop/next:
     dependencies:
+      '@cribstop/gateway-contracts':
+        specifier: workspace:*
+        version: link:../../../../libs/gateway-contracts
       '@cribstop/property-contracts':
         specifier: workspace:*
         version: link:../../../../libs/property-contracts
@@ -286,6 +289,12 @@ importers:
       tslib:
         specifier: ^2.3.0
         version: 2.8.1
+
+  libs/gateway-contracts:
+    dependencies:
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
   libs/property-contracts:
     dependencies:
