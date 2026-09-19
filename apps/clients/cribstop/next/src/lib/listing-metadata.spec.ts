@@ -78,6 +78,19 @@ describe('listingMetadata — the preview must not contradict the page', () => {
   it('adds no status word for an active listing', () => {
     expect(metaFor({ status: 'Active' }).description).not.toContain('Active');
   });
+
+  it('describes a parcel by its lot size, as the card and the detail page do', () => {
+    const description =
+      metaFor({
+        propertyType: 'Land',
+        beds: null,
+        baths: null,
+        sqft: null,
+        lotSqft: 104544,
+      }).description ?? '';
+
+    expect(description).toContain('2.4 acres lot');
+  });
 });
 
 describe('listingMetadata — suppression is never undone by a preview', () => {

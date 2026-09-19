@@ -20,6 +20,7 @@ import {
   formatOpenHouse,
   formatStreetAddress,
 } from '@/lib/listing-format';
+import { copyToClipboard } from '@/lib/clipboard';
 import { buildListingShare, listingShareUrl } from '@/lib/listing-share';
 import { searchListings } from '@/lib/api/listings';
 import type { ListingDetailView } from '@/lib/api/listings';
@@ -82,18 +83,20 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
         await navigator.share(buildListingShare(listing, url));
         return;
       } catch (err) {
-        // A dismissed share sheet is a choice, not a failure — copying behind the user's back
-        // would undo it. Any other rejection falls through to the clipboard.
-        if (err instanceof DOMException && err.name === 'AbortError') return;
+        /*
+         * A dismissed share sheet is a choice, not a failure — copying behind the user's back
+         * would undo it. Any other rejection falls through to the clipboard.
+         *
+         * The name alone decides it. An `instanceof DOMException` guard also holds in a browser,
+         * but a WebView can reject with a plain `Error` named `AbortError`, and there the guard
+         * would read a deliberate cancel as a failure and copy anyway.
+         */
+        if ((err as { name?: string } | null)?.name === 'AbortError') return;
       }
     }
 
-    try {
-      await navigator.clipboard.writeText(url);
-      toast('Link copied');
-    } catch {
-      toast('We could not copy the link. Please try again.', 'error');
-    }
+    if (await copyToClipboard(url)) toast('Link copied');
+    else toast('We could not copy the link.', 'error');
   }
 
   const [similar, setSimilar] = useState<SimilarState>({ status: 'loading', results: [] });

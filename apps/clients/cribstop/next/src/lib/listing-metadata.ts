@@ -6,6 +6,7 @@ import {
   formatDwellingStats,
   formatListingPrice,
   formatListingProvenance,
+  formatLotSize,
 } from '@/lib/listing-format';
 import { listingShareUrl, shareDisclosures, shareTitle, SITE_SENTENCE } from '@/lib/listing-share';
 
@@ -31,10 +32,19 @@ export function listingMetadata(listing: ListingDetailView, origin: string | nul
   const state = closed ?? (listing.status === 'Active' ? null : listing.status);
   const provenance = formatListingProvenance(listing.source);
 
+  /*
+   * A parcel has no dwelling to describe, so it shows its lot size where a home shows
+   * bed/bath/sqft. The card and the detail page make the same switch; a preview that skipped it
+   * described a parcel with nothing but its price.
+   */
+  const size = listing.isParcel
+    ? formatLotSize(listing.lotSqft)
+    : formatDwellingStats(listing.beds, listing.baths, listing.sqft);
+
   const facts = [
     state,
     closed ? null : formatListingPrice(listing.price, listing.listingType).text,
-    formatDwellingStats(listing.beds, listing.baths, listing.sqft),
+    size,
     listing.propertyType,
   ].filter(Boolean);
 

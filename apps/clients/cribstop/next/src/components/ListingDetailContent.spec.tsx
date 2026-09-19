@@ -305,7 +305,41 @@ describe('ListingDetailContent — Share (#135)', () => {
     expect(mockToast).not.toHaveBeenCalled();
   });
 
+  it('reads a dismissal a WebView reports as a plain Error, not only a DOMException', async () => {
+    const writeText = jest.fn();
+    const abort = Object.assign(new Error('dismissed'), { name: 'AbortError' });
+    restores.push(stubNavigator('share', jest.fn().mockRejectedValue(abort)));
+    restores.push(stubNavigator('clipboard', { writeText }));
+
+    await clickShare(toListingDetailView(aListingDetail({ listing: { id: LISTING_ID } })));
+
+    expect(writeText).not.toHaveBeenCalled();
+    expect(mockToast).not.toHaveBeenCalled();
+  });
+
+  it('still copies on a non-secure origin, where navigator.clipboard does not exist', async () => {
+    const execCommand = jest.fn().mockReturnValue(true);
+    Object.defineProperty(document, 'execCommand', { value: execCommand, configurable: true });
+    restores.push(() => {
+      delete (document as unknown as Record<string, unknown>).execCommand;
+    });
+    restores.push(stubNavigator('share', undefined));
+    restores.push(stubNavigator('clipboard', undefined));
+
+    await clickShare(toListingDetailView(aListingDetail({ listing: { id: LISTING_ID } })));
+
+    expect(execCommand).toHaveBeenCalledWith('copy');
+    expect(mockToast).toHaveBeenCalledWith('Link copied');
+  });
+
   it('reports a failed copy rather than leaving the click silent', async () => {
+    Object.defineProperty(document, 'execCommand', {
+      value: jest.fn().mockReturnValue(false),
+      configurable: true,
+    });
+    restores.push(() => {
+      delete (document as unknown as Record<string, unknown>).execCommand;
+    });
     restores.push(stubNavigator('share', undefined));
     restores.push(
       stubNavigator('clipboard', { writeText: jest.fn().mockRejectedValue(new Error('denied')) }),
