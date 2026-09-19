@@ -1,11 +1,18 @@
 # yaml-language-server: disable
 # Bright MLS Ingestion CronJob Patch for Podman Local Environment
 #
-# Local receives NO Bright credentials, ever (#117): it stays on the seeded `source='internal'`
-# sample rows. The job is left UNSUSPENDED anyway, and that is the point — an hourly run that
-# completes with a `not_configured` outcome is the cheapest continuous proof that the vehicle #92 and
-# #93 drop into actually starts, schedules, and finishes. Nothing leaves the cluster: the committed
-# `StrongBase64Password` placeholder is treated as absent and is never transmitted.
+# Local is never pointed at a Bright feed (#117): it stays on the seeded `source='internal'` sample
+# rows. The job is left UNSUSPENDED anyway, and that is the point — an hourly run that completes with
+# a `not_configured` outcome is the cheapest continuous proof that the vehicle #92 and #93 drop into
+# actually starts, schedules, and finishes.
+#
+# WHAT HOLDS THAT LINE IS THE EMPTY ENDPOINT PAIR INHERITED FROM BASE, AND ONLY THAT. Do not set
+# BRIGHT_MLS_TOKEN_ENDPOINT or BRIGHT_MLS_SERVICE_ROOT here, not even briefly to test something: the
+# credential half of the barrier is gone. #160's local secret injection derives its injectable keys
+# from every `stringData` key under `infra/k8s/base/secrets/`, which includes both Bright keys — so a
+# developer holding real credentials in `.env` already has them in this cluster's `bright-mls-secret`.
+# Adding an endpoint is the single edit that turns that into a live authenticated call from a laptop.
+# Tracked as #164; the ruling says local holds no Bright credential at all.
 
 apiVersion: batch/v1
 kind: CronJob

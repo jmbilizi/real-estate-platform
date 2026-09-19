@@ -6,16 +6,19 @@
 # bright-mls-secret is the STAGING set; the production set lives only in the prod environment's
 # secrets and the two are never promoted across environments.
 #
-# The endpoint pair below is the inspectable half of that ruling. It is intentionally left EMPTY:
-# Bright's developer portal is login-gated (verified 2026-09-13) and the staging URLs arrive with
-# the credentials in the week of 2026-09-15. #117 item 1 is where a human records them, and this is
-# the slot they go in. Do not guess a hostname here — an environment pointed at the wrong feed is
-# the single most expensive mistake this file can make, which is why the value is a per-environment
-# blank rather than a default inherited from anywhere.
+# The endpoint pair below is the inspectable half of that ruling. Both values were verified against
+# the live test feed on 2026-09-18 (#163): the token endpoint is the `token_endpoint` of
+# `okta.tst.brightmls.com`'s OIDC discovery document, and the service root answers `$metadata` with
+# `OData-Version: 4.0`. Never copy either value into the prod patch — identical field names with
+# different values per environment is the whole mechanism.
 #
-# Until then an empty endpoint is treated as "not configured": each run completes cleanly, logs the
-# missing variables, and transmits nothing. #117's definition of done is observing this job leave
-# that state here first, before prod is attempted at all.
+# Do NOT substitute `brightmls.test.okta.com` for the token host. It resolves, but Okta serves the
+# wildcard `*.okta.com`, which matches one label and cannot be valid for a three-label name, so TLS
+# fails permanently. `okta.tst.brightmls.com` is Bright's custom Okta domain for test.
+#
+# #117's definition of done is observing this job leave its `not_configured` state here first,
+# before prod is attempted at all. That still needs #117 to provision this environment's secret:
+# the endpoint pair alone resolves to `not_configured` while the credential is the placeholder.
 
 apiVersion: batch/v1
 kind: CronJob
@@ -35,8 +38,8 @@ spec:
               env:
                 - name: NODE_ENV
                   value: "development"
-                # Bright TEST/STAGING feed. Filled in by #117 item 1.
+                # Bright TEST/STAGING feed. Verified live 2026-09-18 (#163).
                 - name: BRIGHT_MLS_TOKEN_ENDPOINT
-                  value: ""
+                  value: "https://okta.tst.brightmls.com/oauth2/default/v1/token"
                 - name: BRIGHT_MLS_SERVICE_ROOT
-                  value: ""
+                  value: "https://bright-reso.tst.brightmls.com/RESO/OData/bright"
