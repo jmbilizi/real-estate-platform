@@ -1,5 +1,10 @@
+import type { ListingSource } from '@cribstop/property-contracts';
 import { BRAND } from '@/lib/brand';
-import { formatListingLocation, formatStreetAddress } from '@/lib/listing-format';
+import {
+  formatListingLocation,
+  formatListingProvenance,
+  formatStreetAddress,
+} from '@/lib/listing-format';
 
 /**
  * The share payload for one listing, and the metadata a shared link unfurls into.
@@ -19,10 +24,12 @@ import { formatListingLocation, formatStreetAddress } from '@/lib/listing-format
  *    `title` or `description` (an open server-side gap, #59), and a real feed routinely puts the
  *    street line in both. Putting either in a share title or an `og:description` would hand back
  *    the address the seller withheld — to a preview card that gets cached and re-posted.
- * 3. **Never claim provenance a row does not have.** A `isSample` row is labelled as sample data, a
- *    `sponsored` row is labelled as a paid placement, and no share text asserts MLS provenance.
- *    Per-listing attribution is the row's own `listedBy` — the listing office is a third party on
- *    a `brightMLS` row, so "brokered by Real Broker, LLC" describes the site and never the home.
+ * 3. **State the row's provenance, and only the row's.** A `isSample` row is labelled as sample
+ *    data, a `sponsored` row is labelled as a paid placement, and the provenance sentence is
+ *    `formatListingProvenance(source)` — the same one the detail page renders, so a `brightMLS`
+ *    row carries its IDX line and an `internal` row never claims one. Per-listing attribution is
+ *    the row's own `listedBy`: the listing office is a third party on a `brightMLS` row, so any
+ *    Real Broker, LLC sentence describes the site and never the home.
  */
 
 /** The fields a share reads. A subset of `ListingDetailView`, so a card row can share too. */
@@ -35,6 +42,8 @@ export interface ShareableListing {
   neighborhood: string | null;
   isSample: boolean;
   sponsored: boolean;
+  /** Drives the provenance sentence. Never a build flag, an env var or a default. */
+  source: ListingSource;
   /** NAR 7.58 attribution, derived server-side. Rendered as-is on every surface that shows a row. */
   listedBy: string;
 }
@@ -97,26 +106,39 @@ export interface ListingSharePayload {
 export function buildListingShare(listing: ShareableListing, url: string): ListingSharePayload {
   const heading = shareHeading(listing);
 
+  const provenance = formatListingProvenance(listing.source);
+
   return {
     title: shareTitle(listing),
     text: [
       ...shareDisclosures(listing),
       `${heading}.`,
       `Listed by ${listing.listedBy}.`,
-      `From ${BRAND.brokerage} on ${BRAND.siteDomain}.`,
+      // The brokerage sentence leads the provenance line, which names the site: the brokerage is
+      // the most prominent brand on every surface, and on a text surface order is prominence.
+      SITE_SENTENCE,
+      ...(provenance ? [provenance] : []),
     ].join(' '),
     url,
   };
 }
 
+/** Names the brokerage, and names it as what it is: the operator of the site, not of the home. */
+export const SITE_SENTENCE = `${BRAND.brokerage} operates ${BRAND.siteDomain}.`;
+
 /**
  * The share-sheet and preview-card title.
  *
- * The sample label belongs here and not only in the body text: a share sheet and a compact unfurl
- * both show the title alone, so a label that lives only in the description is a label a recipient
- * may never see.
+ * The required labels belong here and not only in the body text: a share sheet and a compact
+ * unfurl both show the title alone, so a disclosure that lives only in the description is one a
+ * recipient may never see. That is the whole test of "clear and conspicuous".
  */
 export function shareTitle(listing: ShareableListing): string {
   const heading = shareHeading(listing);
-  return listing.isSample ? `Sample listing — ${heading}` : heading;
+  const prefix = [
+    ...(listing.sponsored ? ['Sponsored'] : []),
+    ...(listing.isSample ? ['Sample listing'] : []),
+  ];
+
+  return prefix.length > 0 ? `${prefix.join(' · ')} — ${heading}` : heading;
 }

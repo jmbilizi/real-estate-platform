@@ -26,11 +26,18 @@ function publishedText(meta: ReturnType<typeof listingMetadata>): string {
 }
 
 describe('listingMetadata — canonical URL', () => {
-  it('points at the canonical listing route on the requesting origin', () => {
+  it('points at the canonical listing route on the configured origin', () => {
     const meta = metaFor({ id: 'abc-123' });
 
     expect(meta.alternates?.canonical).toBe(`${ORIGIN}/listing/abc-123`);
     expect(meta.openGraph?.url).toBe(`${ORIGIN}/listing/abc-123`);
+  });
+
+  it('publishes no canonical URL at all when no origin is vouched for', () => {
+    const meta = listingMetadata(toListingDetailView(aListingDetail()), null);
+
+    expect(meta.alternates).toBeUndefined();
+    expect(meta.openGraph?.url).toBeUndefined();
   });
 });
 
@@ -51,17 +58,21 @@ describe('listingMetadata — attribution', () => {
 });
 
 describe('listingMetadata — the preview must not contradict the page', () => {
-  it('shows a closed sale at its close price, with its status', () => {
-    const meta = metaFor({
-      status: 'Sold',
-      price: 750000,
-      closePrice: 712000,
-      closeDate: '2026-03-04',
-    });
+  it('shows a closed sale at its close price, and says Sold exactly once', () => {
+    const description =
+      metaFor({ status: 'Sold', price: 750000, closePrice: 712000, closeDate: '2026-03-04' })
+        .description ?? '';
 
-    expect(meta.description).toContain('Sold');
-    expect(meta.description).toContain('$712,000');
-    expect(meta.description).not.toContain('$750,000');
+    expect(description).toContain('Sold for $712,000');
+    expect(description).not.toContain('$750,000');
+    expect(description.match(/Sold/g)).toHaveLength(1);
+  });
+
+  it('names a Pending status and keeps the asking price', () => {
+    const description = metaFor({ status: 'Pending', price: 750000 }).description ?? '';
+
+    expect(description).toContain('Pending');
+    expect(description).toContain('$750,000');
   });
 
   it('adds no status word for an active listing', () => {
@@ -122,8 +133,14 @@ describe('listingMetadata — required labels survive truncation', () => {
     );
   });
 
-  it('claims no MLS provenance', () => {
-    expect(publishedText(metaFor({ isSample: true }))).not.toMatch(/\bMLS\b/i);
+  it('claims no MLS provenance for a row we hold ourselves', () => {
+    expect(publishedText(metaFor({ source: 'internal', isSample: true }))).not.toMatch(/\bMLS\b/i);
+  });
+
+  it('carries the Bright IDX line for a row Bright supplied', () => {
+    expect(metaFor({ source: 'brightMLS' }).description).toContain(
+      'Information provided by Bright MLS.',
+    );
   });
 });
 

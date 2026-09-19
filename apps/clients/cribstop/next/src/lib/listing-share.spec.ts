@@ -19,6 +19,7 @@ function aShareable(overrides: Partial<ShareableListing> = {}): ShareableListing
     neighborhood: 'Downtown',
     isSample: false,
     sponsored: false,
+    source: 'internal',
     listedBy: 'Jane Q. Agent – Bright Partner Realty',
     ...overrides,
   };
@@ -68,19 +69,20 @@ describe('buildListingShare', () => {
     expect(share.url).toBe(URL_);
   });
 
-  it('names the brokerage ahead of the site, and attaches it to the site rather than the home', () => {
+  it('names the brokerage ahead of the site, and as the operator of the site', () => {
     const { text } = buildListingShare(aShareable(), URL_);
 
-    expect(text).toContain(`From ${BRAND.brokerage} on ${BRAND.siteDomain}.`);
+    expect(text).toContain(`${BRAND.brokerage} operates ${BRAND.siteDomain}.`);
     expect(text.indexOf(BRAND.brokerage)).toBeLessThan(text.indexOf(BRAND.siteDomain));
-    // A third party listed this home. Nothing may say our brokerage did.
-    expect(text).not.toMatch(/Brokered by Real Broker/);
+    // A third party listed this home. Nothing may say our brokerage did, or that it came from us.
+    expect(text).not.toMatch(/Brokered by Real Broker|From Real Broker/);
   });
 
-  it('discloses a paid placement', () => {
-    expect(buildListingShare(aShareable({ sponsored: true }), URL_).text).toContain(
-      SPONSORED_SHARE_LABEL,
-    );
+  it('discloses a paid placement in both the title and the text', () => {
+    const share = buildListingShare(aShareable({ sponsored: true }), URL_);
+
+    expect(share.title).toContain('Sponsored');
+    expect(share.text).toContain(SPONSORED_SHARE_LABEL);
   });
 
   it('leads with the disclosures, which a truncating share sheet keeps', () => {
@@ -90,11 +92,23 @@ describe('buildListingShare', () => {
     expect(text.indexOf(SPONSORED_SHARE_LABEL)).toBeLessThan(text.indexOf('Listed by'));
   });
 
-  it('claims no MLS provenance', () => {
-    const share = buildListingShare(aShareable(), URL_);
+  it('claims no MLS provenance for a row we hold ourselves', () => {
+    const share = buildListingShare(aShareable({ source: 'internal' }), URL_);
 
-    // The office name may legitimately contain "Bright"; a provenance *claim* may not appear.
     expect(`${share.title} ${share.text}`).not.toMatch(/\bMLS\b/i);
+    expect(share.text).toContain('Listing information provided by Cribstop.com.');
+  });
+
+  it('carries the Bright IDX line for a row Bright supplied', () => {
+    const share = buildListingShare(aShareable({ source: 'brightMLS' }), URL_);
+
+    expect(share.text).toContain('Information provided by Bright MLS.');
+  });
+
+  it('claims neither provenance for a row from a third source', () => {
+    const share = buildListingShare(aShareable({ source: 'other' }), URL_);
+
+    expect(share.text).not.toMatch(/\bMLS\b|provided by/i);
   });
 
   it('labels a sample row as sample data in both the title and the text', () => {

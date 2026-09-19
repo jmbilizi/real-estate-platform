@@ -1,8 +1,13 @@
 import type { Metadata } from 'next';
 import type { ListingDetailView } from '@/lib/api/listings';
 import { BRAND } from '@/lib/brand';
-import { formatClosePrice, formatDwellingStats, formatListingPrice } from '@/lib/listing-format';
-import { listingShareUrl, shareDisclosures, shareTitle } from '@/lib/listing-share';
+import {
+  formatClosePrice,
+  formatDwellingStats,
+  formatListingPrice,
+  formatListingProvenance,
+} from '@/lib/listing-format';
+import { listingShareUrl, shareDisclosures, shareTitle, SITE_SENTENCE } from '@/lib/listing-share';
 
 /**
  * Link-preview metadata for a shared listing.
@@ -13,7 +18,7 @@ import { listingShareUrl, shareDisclosures, shareTitle } from '@/lib/listing-sha
  * sample. The feed's `title` and `description` are deliberately unused — address suppression does
  * not reach them (#59), and a preview card outlives the page it was cut from.
  */
-export function listingMetadata(listing: ListingDetailView, origin: string): Metadata {
+export function listingMetadata(listing: ListingDetailView, origin: string | null): Metadata {
   const title = `${shareTitle(listing)} · ${BRAND.brokerage}`;
 
   /*
@@ -22,10 +27,13 @@ export function listingMetadata(listing: ListingDetailView, origin: string): Met
    * the market contradicts the page it links to for as long as the card is cached.
    */
   const closed = formatClosePrice(listing.closePrice, listing.closeDate);
+  // "Sold for $712,000 on Mar 4, 2026" already says Sold, so the status word would repeat it.
+  const state = closed ?? (listing.status === 'Active' ? null : listing.status);
+  const provenance = formatListingProvenance(listing.source);
 
   const facts = [
-    ...(listing.status === 'Active' ? [] : [listing.status]),
-    closed ?? formatListingPrice(listing.price, listing.listingType).text,
+    state,
+    closed ? null : formatListingPrice(listing.price, listing.listingType).text,
     formatDwellingStats(listing.beds, listing.baths, listing.sqft),
     listing.propertyType,
   ].filter(Boolean);
@@ -34,7 +42,8 @@ export function listingMetadata(listing: ListingDetailView, origin: string): Met
     ...shareDisclosures(listing),
     `${facts.join(' · ')}.`,
     `Listed by ${listing.listedBy}.`,
-    `From ${BRAND.brokerage} on ${BRAND.siteDomain}.`,
+    SITE_SENTENCE,
+    ...(provenance ? [provenance] : []),
   ].join(' ');
 
   /*
@@ -43,19 +52,27 @@ export function listingMetadata(listing: ListingDetailView, origin: string): Met
    * rule left here is to add nothing the service did not send.
    */
   const preview = listing.media[0];
-  // The same URL the Share button copies. The two must not be able to disagree.
-  const url = listingShareUrl(listing.id, origin);
+  /*
+   * The same URL the Share button copies, and null when no trustworthy origin is configured.
+   *
+   * A canonical link and an `og:url` are instructions to a crawler about where this page really
+   * lives, so they may only carry an origin we vouch for. Deriving one from the request's own
+   * `Host` header would let a crafted header publish a real listing's canonical URL on somebody
+   * else's domain. Omitting the tags costs nothing — an unfurler falls back to the URL it fetched,
+   * which is the right one.
+   */
+  const url = origin === null ? null : listingShareUrl(listing.id, origin);
 
   return {
     title,
     description,
-    alternates: { canonical: url },
+    ...(url ? { alternates: { canonical: url } } : {}),
     openGraph: {
       type: 'website',
       siteName: BRAND.brokerage,
       title,
       description,
-      url,
+      ...(url ? { url } : {}),
       images: preview ? [{ url: preview.url, alt: preview.altText ?? undefined }] : undefined,
     },
     twitter: {
