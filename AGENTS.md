@@ -419,16 +419,18 @@ regardless of branch (the gate only applies to the `--hook` flag the husky scrip
 changes after commit). Manual commands (`pnpm run pre-commit`, `pnpm run pre-push`) DO run reset for
 clean state validation.
 
-**The format step repairs only what `nx:reset` rewrote, and says which files** (#151). A manual run
-used to call a repo-wide `nx format:write` before `nx:workspace-format-check`. The write repaired
-the working tree, the check then passed, and pre-push printed "CI will pass" — over a commit whose
-content still failed the same gate in CI. The repair never reached the commit. Now the reset step
-snapshots `git status --porcelain`, formats only the paths the reset made dirty
-(`nx format:write --files=…`), and lists them. A file the developer wrote is never repaired behind
-the gate, so the check that follows is a real verdict on it. `pnpm run pre-push` also refuses to
-claim anything about CI while the working tree differs from HEAD, because CI reads the pushed
-commits, not the tree. The logic and its regression tests live in `tools/validation/format-gate.js`
-(run with `pnpm run tools:test`).
+**The format gate runs before anything writes, and the write names what it rewrote** (#151). A
+manual run used to call a repo-wide `nx format:write` after `nx:reset` and before
+`nx:workspace-format-check`. The write repaired the working tree, the check then passed, and
+pre-push printed "CI will pass" — over a commit whose content still failed the same gate in CI. The
+repair reached the tree only. Now `nx:workspace-format-check` runs first, ahead of `nx:reset` and
+the write, so it reads the tree CI reads. Do not "fix" this by scoping the write instead:
+`nx format:write --files=…` still rewrites `nx.json` and the root `tsconfig.json` unconditionally,
+because `addRootConfigFiles` returns early only for `--all`. `pnpm run pre-push` also refuses to
+claim anything about CI while a tracked file differs from HEAD, because CI reads the pushed commits,
+not the tree. Untracked files are excluded from that judgement: they are absent from the push, so
+they can only make the local check stricter than CI. The logic and its regression tests live in
+`tools/validation/format-gate.js` (run with `pnpm run tools:test`).
 
 **Performance Optimization**: Both hooks check if any projects exist before running expensive
 operations. On empty workspaces (no projects in `apps/` or `libs/`), they exit in <1 second instead
