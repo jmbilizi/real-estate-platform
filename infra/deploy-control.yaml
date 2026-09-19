@@ -88,9 +88,9 @@ environments:
       bright-mls-ingest:
         # The scheduled Bright MLS ingestion CronJob (#91). It runs the property-service image with
         # a different entry point but carries its own identity label and therefore its own key here,
-        # because dev reads Bright's TEST/STAGING feed while prod reads the licensed production feed
-        # (#117) — whether the job ships to an environment has to be decidable separately from
-        # whether the Property API does.
+        # because local, dev and test read Bright's TEST/STAGING feed while prod reads the licensed
+        # production feed (ruling 2026-09-19) — whether the job ships to an environment has to be
+        # decidable separately from whether the Property API does.
         #
         # Shipping it to dev now, before credentials exist, is the point of #91: the run completes
         # with a "credentials not configured" outcome and transmits nothing, so the moment #117
@@ -174,10 +174,11 @@ environments:
         rollback_on_failure: false # Disabled for manual validation
 
       bright-mls-ingest:
-        # test receives NO Bright credentials of any kind and stays on seeded sample rows (#117), so
-        # this stays shut — and the CronJob is independently `suspend: true` in the test overlay.
-        enabled: false # Not deployed to test; test is never pointed at a Bright feed
-        auto_deploy: false # Manual deployment in test
+        # test reads Bright's TEST/STAGING feed under the 2026-09-19 ruling, which supersedes the
+        # #117 rule that gave test no feed. The gate opens here and the test overlay sets
+        # `suspend: false`. The credential stays the staging set; prod holds the production set.
+        enabled: true
+        auto_deploy: false # Manual deployment in test, like every other service in this block
         require_approval: false # Optional approval
         rollback_on_failure: false # Disabled for manual validation
 
