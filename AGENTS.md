@@ -26,6 +26,7 @@ guide.
 - `apps/services/multi-model-inference/AGENTS.md` — Multi-Model Inference Service
   (multi-model-inference)
 - `apps/services/property-service/AGENTS.md` — Property Service (property-service)
+- `libs/gateway-contracts/AGENTS.md` — gateway-contracts (`@cribstop/gateway-contracts`)
 - `libs/property-contracts/AGENTS.md` — property-contracts (`@cribstop/property-contracts`)
 
 <!-- project-guides:end -->
