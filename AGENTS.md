@@ -1696,10 +1696,30 @@ pnpm run gh:ticket:view -- --issue 42
 # Product owner: epics (milestone = epic, issue = story, plan item = task; list shows
 # delivered/total per epic; assignment via gh:ticket:create/update-fields -- --milestone
 # "<title>" / --remove-milestone; close refuses while stories are open):
-pnpm run gh:milestone -- list
-pnpm run gh:milestone -- create --title "Services MVP" --description "..."
-pnpm run gh:milestone -- update --title "Services MVP" --description "..." [--new-title "..."]
+# list prints each description under its summary line, truncated; --full prints all of it.
+pnpm run gh:milestone -- list [--all] [--full]
+pnpm run gh:milestone -- create --title "Services MVP" --description-file ./epic.md
+# update prints the description it replaces; --append adds to it instead of overwriting.
+pnpm run gh:milestone -- update --title "Services MVP" --description-file ./epic.md [--new-title "..."]
+pnpm run gh:milestone -- update --title "Services MVP" --append --description "Ruling 2026-09-19: ..."
 ```
+
+**Milestone descriptions**: `--description` is for one line. Anything longer goes in
+`--description-file`, because the whole text otherwise crosses the command line, which cmd.exe caps
+at 8191 characters. The script refuses an inline description over 6000 characters by name. Writes
+send the payload as JSON on stdin, so length, newlines and backticks are all safe. `update` never
+overwrites silently: it prints the previous description first, and `--append` adds to it. `list`
+warns when a milestone has no description, or a first line that is not a `Release:` marker. Erasing
+a description needs `--clear-description`; an empty `--description-file` is refused, because that is
+a truncated file far more often than an intent.
+
+**Leading-slash arguments**: Git Bash rewrites an argument that starts with `/` into a Windows path
+before it reaches `pnpm`, so `--title "/api/overpass check"` arrives as
+`C:/Program Files/Git/api/overpass check` (this is how #113 got its title). Quoting does not stop
+it. `tools/github/lib/msys-args.js` strips the MSYS root back off and prints what it restored. A
+`--body-file` / `--plan-file` / `--description-file` value keeps the converted path, because
+conversion of a real path is correct. It is refused only when the conversion pointed it at a file
+that is absent. Every function there is a no-op on macOS and Linux.
 
 `update-ticket-fields.js` vs `update-ticket-status.js` is a deliberate least-privilege split:
 engineer-facing flows (`pick-next-ticket`, `close-ticket` skills) only ever get the script that

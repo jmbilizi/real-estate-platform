@@ -12,6 +12,7 @@ const os = require('os');
 const path = require('path');
 
 const config = require('../project.config.js');
+const { repairMsysArgv } = require('./msys-args');
 
 const SCHEMA_PATH = path.join(__dirname, '..', 'project-schema.json');
 
@@ -32,6 +33,18 @@ const info = (m) => log(`  ${m}`, C.cyan);
 function die(message) {
   log(`✗ ${message}`, C.red);
   process.exit(1);
+}
+
+/**
+ * The script arguments, with MSYS path conversion undone. Every script starts its parse here, so
+ * a value that begins with `/` survives Git Bash — see lib/msys-args.js for what the shell does
+ * to it and why the repair belongs in Node.
+ */
+function cliArgv(argv = process.argv.slice(2)) {
+  // stderr, not stdout: list-tickets.js writes a JSON document to stdout, and a diagnostic line
+  // ahead of it breaks every caller that parses that output (session-brief.js does).
+  const onRepair = (message) => process.stderr.write(`${C.yellow}⚠ ${message}${C.reset}\n`);
+  return repairMsysArgv(argv, { onRepair, onReject: die });
 }
 
 /** Run a command synchronously. Returns { success, stdout, stderr }. */
@@ -178,14 +191,25 @@ const ITEM_LOOKUP_QUERY = `
   }
 `;
 
-/** Resolve the ProjectV2Item id for an issue on the configured board. Dies if not found. */
-function findProjectItemId(owner, repo, issueNumber, projectId) {
+/**
+ * Resolve the ProjectV2Item id for an issue on the configured board.
+ * Dies if not found, unless `optional` is set — then it returns null and the caller decides.
+ * `optional` covers "the issue is not on the board". An issue number that does not exist is still
+ * fatal, because `gh` refuses the query itself.
+ */
+function findProjectItemId(owner, repo, issueNumber, projectId, { optional = false } = {}) {
   const result = graphql(ITEM_LOOKUP_QUERY, { owner, repo, number: Number(issueNumber) });
   const issue = result.data.repository.issue;
-  if (!issue) die(`Issue #${issueNumber} not found in ${owner}/${repo}`);
+  if (!issue) {
+    if (optional) return null;
+    die(`Issue #${issueNumber} not found in ${owner}/${repo}`);
+  }
 
   const match = issue.projectItems.nodes.find((node) => node.project.id === projectId);
-  if (!match) die(`Issue #${issueNumber} is not on the configured project board`);
+  if (!match) {
+    if (optional) return null;
+    die(`Issue #${issueNumber} is not on the configured project board`);
+  }
   return match.id;
 }
 
@@ -254,6 +278,7 @@ module.exports = {
   info,
   die,
   unescapeInlineText,
+  cliArgv,
   run,
   ghJson,
   ghExec,
