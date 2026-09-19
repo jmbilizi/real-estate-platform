@@ -27,6 +27,7 @@
 const fs = require('fs');
 const {
   ensureGhReady,
+  cliArgv,
   requireConfig,
   loadSchema,
   ghExec,
@@ -72,7 +73,7 @@ function main() {
   ensureGhReady();
   const { owner, repo, projectNumber } = requireConfig();
   const schema = loadSchema();
-  const args = parseArgs(process.argv.slice(2));
+  const args = parseArgs(cliArgv());
 
   if (!args.title) {
     die('--title is required');

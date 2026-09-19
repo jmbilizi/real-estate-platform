@@ -15,7 +15,7 @@
  *   pnpm run gh:ticket:list -- --scope cribstop --format json
  */
 
-const { ensureGhReady, loadSchema, graphql, log } = require('./lib/gh-client');
+const { ensureGhReady, cliArgv, loadSchema, graphql, log } = require('./lib/gh-client');
 
 const ITEMS_QUERY = `
   query($projectId: ID!, $after: String) {
@@ -99,7 +99,7 @@ function fetchAllItems(projectId) {
 function main() {
   ensureGhReady();
   const schema = loadSchema();
-  const args = parseArgs(process.argv.slice(2));
+  const args = parseArgs(cliArgv());
 
   const items = fetchAllItems(schema.projectId);
 

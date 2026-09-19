@@ -10,6 +10,7 @@
 
 const {
   ensureGhReady,
+  cliArgv,
   requireConfig,
   loadSchema,
   ghJson,
@@ -56,7 +57,7 @@ function main() {
   ensureGhReady();
   const { owner, repo } = requireConfig();
   const schema = loadSchema();
-  const args = parseArgs(process.argv.slice(2));
+  const args = parseArgs(cliArgv());
 
   if (!args.issue) die('--issue <number> is required');
 

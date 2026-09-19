@@ -22,6 +22,7 @@
 
 const {
   ensureGhReady,
+  cliArgv,
   requireConfig,
   ghJson,
   ghExec,
@@ -66,7 +67,7 @@ function findByTitle(base, title) {
 function main() {
   ensureGhReady();
   const { owner, repo } = requireConfig();
-  const args = parseArgs(process.argv.slice(2));
+  const args = parseArgs(cliArgv());
   const base = `repos/${owner}/${repo}/milestones`;
   const command = args._[0];
 
