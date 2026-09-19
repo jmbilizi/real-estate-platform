@@ -24,11 +24,34 @@
  * it, which reads as a hung run rather than a completed one.
  */
 
-import { closePool } from '../../db/pool';
+import { closePool, getPool } from '../../db/pool';
+
+import { mapStagedBrightProperties } from '../bright-map/run';
 
 import { runBrightIngest } from './run';
 
-runBrightIngest()
+/**
+ * The licensed display-delay window for solds (#33). Unconfigured (unset or non-numeric) fails
+ * closed: `map-record.ts` refuses every Sold record rather than publishing one with no delay at
+ * all. Read directly from `process.env` here, not through `config.ts`, because this value is a
+ * mapping policy, not a Bright endpoint/credential concern.
+ */
+function resolveSoldDisplayDelayDays(env: NodeJS.ProcessEnv): number | null {
+  const raw = env.BRIGHT_SOLD_DISPLAY_DELAY_DAYS;
+  if (raw === undefined || raw.trim().length === 0) {
+    return null;
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+runBrightIngest({
+  mapRecords: ({ feed }) =>
+    mapStagedBrightProperties(getPool(), {
+      feed,
+      soldDisplayDelayDays: resolveSoldDisplayDelayDays(process.env),
+    }),
+})
   .then((result) => {
     process.exitCode = result.outcome === 'failed' ? 1 : 0;
   })
