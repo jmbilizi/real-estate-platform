@@ -114,7 +114,8 @@ namespace ApiGateway
                 .Build();
 
             // AddPolly() activates the QoS provider. Without it Ocelot parses every QoSOptions
-            // block in Configuration/Routes/*.json and applies none of it — no timeout, no breaker.
+            // block in Configuration/Routes/*.json and applies none of it: each route falls back to
+            // Ocelot's 90-second default timeout, and no circuit breaker runs at all.
             services.AddOcelot(configuration).AddPolly();
 
             // Add services for Swagger generation

@@ -25,7 +25,8 @@ pnpm run nx:dotnet-build               # All .NET projects
 
 Every route in `Configuration/Routes/*.json` carries `QoSOptions`. `Startup.cs` calls
 `AddOcelot(...).AddPolly()`. **A `QoSOptions` block with no `AddPolly()` registration parses and
-does nothing** — no timeout, no breaker, and no error. Never remove that call.
+applies none of it**, with no error: every configured timeout falls back to Ocelot's 90-second
+default handler timeout, and there is no breaker at all. Never remove that call.
 
 Use the current property names. Ocelot 24.1 still honours `TimeoutValue`,
 `ExceptionsAllowedBeforeBreaking` and `DurationOfBreak`, but marks them obsolete and removes them in
