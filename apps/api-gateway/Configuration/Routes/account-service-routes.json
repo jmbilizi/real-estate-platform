@@ -144,6 +144,12 @@
         "Period": "1m",
         "PeriodTimespan": 60,
         "Limit": 5
+      },
+      "QoSOptions": {
+        "Timeout": 10000,
+        "MinimumThroughput": 4,
+        "SamplingDuration": 60000,
+        "BreakDuration": 10000
       }
     },
     {
