@@ -188,7 +188,9 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
                 .OnDelete(DeleteBehavior.Cascade)
                 .IsRequired();
 
-            entity.HasIndex(wi => wi.UserId);
+            // No separate UserId index. The composite key leads with UserId, so it already serves
+            // the only query shape here ("this account's interests"). UserApps above does carry
+            // one; it is redundant there too, and is not copied forward.
 
             // Fixed vocabulary (see WaitlistInterestKinds) is validated at the API boundary, not
             // with a DB CHECK constraint — same approach as the onboarding intents above.

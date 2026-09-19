@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -29,11 +29,6 @@ namespace AccountService.Migrations
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_WaitlistInterests_UserId",
-                table: "WaitlistInterests",
-                column: "UserId");
         }
 
         /// <inheritdoc />

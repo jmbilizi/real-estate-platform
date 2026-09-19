@@ -190,13 +190,39 @@ namespace AccountService.Tests.Integration
         }
 
         [Fact]
-        public async Task DeleteWaitlist_WithUnknownInterest_ReturnsValidationProblem()
+        public async Task DeleteWaitlist_WithUnknownInterest_ReturnsSuccess()
         {
-            var client = await this.AuthenticateAsync("waitlist-bad-delete");
+            // Withdrawal treats an unknown kind exactly like an absent one. That keeps a row
+            // withdrawable after its kind leaves the vocabulary.
+            var client = await this.AuthenticateAsync("waitlist-unknown-delete");
 
             var response = await client.DeleteAsync("/account/waitlist/homes");
 
+            response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        }
+
+        [Fact]
+        public async Task DeleteWaitlist_WithUnknownInterest_RemovesNothing()
+        {
+            var client = await this.AuthenticateAsync("waitlist-unknown-delete-noop");
+
+            await client.PostAsJsonAsync("/account/waitlist", new { interest = "connect" });
+            await client.DeleteAsync("/account/waitlist/homes");
+
+            (await ReadInterestsAsync(client)).Should().Equal("connect");
+        }
+
+        [Fact]
+        public async Task PostWaitlist_ValidationMessage_DoesNotEchoTheRejectedValue()
+        {
+            var client = await this.AuthenticateAsync("waitlist-no-echo");
+            const string Rejected = "not-a-pillar-<script>";
+
+            var response = await client.PostAsJsonAsync("/account/waitlist", new { interest = Rejected });
+            var body = await response.Content.ReadAsStringAsync();
+
             response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+            body.Should().NotContain("not-a-pillar");
         }
 
         [Fact]

@@ -362,8 +362,6 @@ namespace AccountService.Migrations
 
                     b.HasKey("UserId", "InterestKind");
 
-                    b.HasIndex("UserId");
-
                     b.ToTable("WaitlistInterests", (string)null);
                 });
 

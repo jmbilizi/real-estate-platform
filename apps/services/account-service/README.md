@@ -210,6 +210,10 @@ Valid `interest` values: `services-consumer`, `services-provider`, `connect`. An
 any combination of them. The account id always comes from the authenticated principal, so a caller
 reaches only its own rows.
 
+`POST` rejects a value outside the vocabulary with `400`. `DELETE` does not check the vocabulary:
+the lookup is already scoped to the caller, so an unknown value removes nothing and reports the same
+success as an absent one. That keeps a row withdrawable after its kind leaves the vocabulary.
+
 ```jsonc
 // POST /account/waitlist — the interest kind is the entire payload
 { "interest": "connect" }
@@ -340,6 +344,11 @@ at the storage layer.
 The row holds no signal beyond the pillar and the date. No protected-class or eligibility field
 exists on it (PRD §6). Interests are independent, so nothing collapses them to a persona (PRD
 §11.2).
+
+Account soft-delete keeps these rows, because it stamps `DeletedAt` and never hard-deletes the user,
+so the cascade FK does not fire. The endpoints hide the rows from a soft-deleted account. Any later
+query that reads the table directly — an invite or announcement export, for example — must join
+`AspNetUsers` and filter on `DeletedAt IS NULL`, or it contacts accounts that asked to be deleted.
 
 ---
 

@@ -8,6 +8,7 @@ using AccountService.Dtos;
 using AccountService.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace AccountService.Routes;
 
@@ -73,7 +74,7 @@ internal static class Waitlist
             var interest = request?.Interest;
             if (!WaitlistInterestKinds.IsValid(interest))
             {
-                return InvalidInterest(interest);
+                return InvalidInterest();
             }
 
             var alreadyRegistered = await dbContext.WaitlistInterests
@@ -96,10 +97,12 @@ internal static class Waitlist
             {
                 await dbContext.SaveChangesAsync().ConfigureAwait(false);
             }
-            catch (DbUpdateException)
+            catch (DbUpdateException exception) when (IsDuplicateKeyViolation(exception))
             {
                 // Two concurrent registrations of the same pair: the composite primary key rejects
                 // the loser. The account is registered either way, so report the same success.
+                // Every other save failure stays unhandled, so a lost write surfaces as a 500
+                // instead of a success the client would render as a durable registration.
                 return Results.NoContent();
             }
 
@@ -124,11 +127,9 @@ internal static class Waitlist
                 return Results.NotFound();
             }
 
-            if (!WaitlistInterestKinds.IsValid(interest))
-            {
-                return InvalidInterest(interest);
-            }
-
+            // Withdrawal deliberately does not check the vocabulary. The lookup is already scoped to
+            // the caller, so an unknown value finds no row and reports the same success as an
+            // absent one. Checking here would strand a row whose kind the vocabulary later retires.
             var existing = await dbContext.WaitlistInterests
                 .FirstOrDefaultAsync(wi => wi.UserId == user.Id && wi.InterestKind == interest)
                 .ConfigureAwait(false);
@@ -147,12 +148,23 @@ internal static class Waitlist
         return app;
     }
 
-    private static IResult InvalidInterest(string? interest) =>
+    /// <summary>
+    /// Reports whether the save failed because the row already exists. Postgres raises SQLSTATE
+    /// 23505 for a unique or primary key violation.
+    /// </summary>
+    /// <param name="exception">The save failure.</param>
+    /// <returns><see langword="true"/> for a duplicate-key violation.</returns>
+    internal static bool IsDuplicateKeyViolation(DbUpdateException exception) =>
+        exception?.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
+
+    // The rejected value is named, never echoed. Reflecting caller input into the response body
+    // lets a client render text no user authored, and bounds nothing on its length.
+    private static IResult InvalidInterest() =>
         Results.ValidationProblem(new Dictionary<string, string[]>
         {
             ["interest"] =
             [
-                $"Unknown interest value: {interest ?? "(none)"}. Valid values: {string.Join(", ", WaitlistInterestKinds.All.Order(StringComparer.Ordinal))}.",
+                $"Unknown interest. Valid values: {string.Join(", ", WaitlistInterestKinds.All.Order(StringComparer.Ordinal))}.",
             ],
         });
 }
