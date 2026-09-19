@@ -6,11 +6,13 @@ using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
 using ApiGateway.Extensions;
+using ApiGateway.Middleware;
 using ApiGateway.Services;
 using Microsoft.AspNetCore.HttpOverrides;
 using MMLib.SwaggerForOcelot.Configuration;
 using Ocelot.DependencyInjection;
 using Ocelot.Middleware;
+using Ocelot.Provider.Polly;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -111,7 +113,10 @@ namespace ApiGateway
                 .AddEnvironmentVariables() // Allows GlobalConfiguration__BaseUrl override in K8s
                 .Build();
 
-            services.AddOcelot(configuration);
+            // AddPolly() activates the QoS provider. Without it Ocelot parses every QoSOptions
+            // block in Configuration/Routes/*.json and applies none of it: each route falls back to
+            // Ocelot's 90-second default timeout, and no circuit breaker runs at all.
+            services.AddOcelot(configuration).AddPolly();
 
             // Add services for Swagger generation
             services.AddSwaggerGen();
@@ -222,6 +227,9 @@ namespace ApiGateway
                     // Swagger UI's "urls.primaryName" config selects the default entry by name.
                     uiOption.ConfigObject.AdditionalItems["urls.primaryName"] = GatewaySwaggerTitle;
                 });
+
+            // Must wrap UseOcelot: it reports the QoS failure and then terminates the pipeline.
+            app.UseMiddleware<UpstreamUnavailableMiddleware>();
 
             app.UseOcelot().Wait();
         }
