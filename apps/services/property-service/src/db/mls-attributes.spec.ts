@@ -364,6 +364,22 @@ describe('putListingAttributes — typed storage', () => {
     expect(inserts(queries, 'listing_attributes')).toHaveLength(0);
   });
 
+  it('rejects TWO SEPARATE scalar inputs for one field instead of letting the second silently win', async () => {
+    // Same failure as the array case above, arriving as two entries instead of one array: both
+    // would upsert onto the same row (NULLS NOT DISTINCT), the second overwriting the first, while
+    // `stored` reported 2 for the 1 row that actually exists.
+    const { client, queries } = createFakeClient({ fields: { LotSizeAcres: numericField } });
+
+    const result = await putListingAttributes(client, 'listing-1', [
+      { ...BRIGHT_KEY, value: 0.34 },
+      { ...BRIGHT_KEY, value: 0.5 },
+    ]);
+
+    expect(result.rejected[0]?.reason).toBe('type_mismatch');
+    expect(result.stored).toBe(0);
+    expect(inserts(queries, 'listing_attributes')).toHaveLength(0);
+  });
+
   it('writes one row per value of a multi-valued lookup field', async () => {
     const { client, queries } = createFakeClient({
       fields: { ArchitecturalStyle: lookupField },

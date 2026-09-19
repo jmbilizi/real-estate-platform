@@ -406,7 +406,7 @@ export async function getOrCreateUnit(client: Queryable, row: UnitRow): Promise<
  * what this module assumes. Failing loudly beats returning `undefined` as an id and writing a listing
  * that references nothing.
  */
-function requireId(rows: Record<string, unknown>[], table: string): string {
+export function requireId(rows: Record<string, unknown>[], table: string): string {
   const id = rows[0]?.id;
   if (typeof id !== 'string') {
     throw new Error(`Upsert on ${table} returned no id.`);

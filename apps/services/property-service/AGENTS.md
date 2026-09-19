@@ -236,28 +236,44 @@ the offending value to 120 characters, because a value long enough to be prose i
 lookup token.
 
 **A field's address exposure is a closed-vocabulary classification, not a bare flag** (#128, after a
-2026-09-19 regression: this whole section and the migration it describes were deleted by the #91
-merge and restored by #128 — see #188 for the root cause). `mls_fields.address_classification` is
-one of `carries_address`, `re_identifies_address`, `free_text_may_contain_address` or
-`not_address_bearing`, and it may be **NULL** — an explicitly unreviewed field. `is_address_bearing`
-is derived from it (`registerMlsField` computes `classification !== 'not_address_bearing'`, true for
-NULL too) and a CHECK ties the two so they cannot disagree. **A field nobody has classified is
-therefore invisible rather than public** — the inverse of the column-by-column suppression rule that
-fails open on every field nobody thought about (#53). `registerMlsField()` deliberately offers no
-way to set `is_consumer_displayable`, and its `ON CONFLICT` never re-asserts
-`address_classification` or `is_address_bearing`, so a `$metadata` re-pull cannot silently revert a
-human's review.
+2026-09-19 regression: this whole section, the registry migration and its writer module were deleted
+by the #91 merge — see #188 for the root cause — and restored across #128 and a separate
+migration-only fix). `mls_fields.address_classification` is one of `carries_address`,
+`re_identifies_address`, `free_text_may_contain_address` or `not_address_bearing`, and it may be
+**NULL** — an explicitly unreviewed field. `is_address_bearing` is derived from it
+(`registerMlsField` computes `classification !== 'not_address_bearing'`, true for NULL too) and a
+CHECK ties the two so they cannot disagree. **A field nobody has classified is therefore invisible
+rather than public** — the inverse of the column-by-column suppression rule that fails open on every
+field nobody thought about (#53). `registerMlsField()` deliberately offers no way to set
+`is_consumer_displayable`, and its `ON CONFLICT` never re-asserts `address_classification` or
+`is_address_bearing`, so a `$metadata` re-pull cannot silently revert a human's review.
 
-The enforcement mechanism is the same one #48/#59/#105 already established, extended rather than
-duplicated: `filterAddressBearingAttributes()` in `suppression.ts` withholds any attribute row whose
-field is missing a classification or is classified as address-bearing, keyed on the same
-`address === null` OUTCOME the other suppression functions use — never on `address_display_allowed`
-directly. There is no third mechanism. **Nothing is exposed to a consumer yet**: no
-`listing_search_v` change, no contract change, no API field. `columns.ts` and `repository.ts` carry
-the enumerated projection and the query that join `listing_attributes`/`property_attributes` to
-`mls_fields`, ready for #93 to call — whatever eventually exposes an attribute filters on
-`is_consumer_displayable` **and** routes through `suppression.ts`; neither substitutes for the
-other.
+**The exclusion happens in SQL, inside `getListingAttributes()`/`getPropertyAttributes()` in
+`repository.ts`, not in app code.** This is a genuinely different guarantee from #48/#59/#105, and
+weaker language would hide that: those three null or drop a few already-fetched fields on rows
+`listing_search_v` already returned. This filters a WHOLE TABLE FAMILY the view never projects, read
+by a statement of its own — there is no row for a suppressed value to arrive on and then be
+stripped. `getListingAttributes()` joins `listing_search_v` on the listing's OWN id and gates
+`mls_fields.is_address_bearing` in the WHERE clause, so an address-bearing row for a suppressed
+listing never leaves Postgres: no caller-supplied flag, nothing for a debug log or an early return
+to leak. A listing absent from the view (excluded, soft-deleted) fails the join and returns nothing,
+matching the view's own row-visibility rule.
+
+**`property_attributes` has no single listing to key on, so its rule is deliberately different and
+conservative.** A durable, offer-independent fact belongs to the property across every listing it
+has ever carried. `getPropertyAttributes()` excludes an address-bearing attribute when ANY VISIBLE
+listing on the property has its address suppressed, via
+`NOT EXISTS (... listing_search_v ... address IS NULL)` — never keyed on one caller-chosen listing.
+A property with one suppressed and one published listing withholds its address-bearing attributes
+from both, because publishing them through the published listing would still hand a reader the fact
+the other listing's seller opted out of. Fail-closed, matching the default-deny rule the rest of
+#128 already applies. "Visible" means visible in `listing_search_v`; an excluded or soft-deleted
+listing contributes no suppression state.
+
+**Nothing is exposed to a consumer yet**: no contract change, no API field, and nothing outside
+these two functions' own tests calls them. `columns.ts` carries the enumerated projection. Whatever
+eventually exposes an attribute filters on `is_consumer_displayable` too — a separate governance
+axis neither function here decides.
 
 `listings.amenities` and `properties.property_type` keep their CHECKs and are untouched; whether to
 converge them onto this store later is deliberately left open in both directions.

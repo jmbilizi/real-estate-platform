@@ -16,23 +16,24 @@ import {
   toListingDetail,
   toListingsMeta,
 } from './map-row';
-import {
-  applyAddressSuppression,
-  applyCardAddressSuppression,
-  filterAddressBearingAttributes,
-} from './suppression';
+import { applyAddressSuppression, applyCardAddressSuppression } from './suppression';
 
 /**
  * The only module in this service that executes read SQL.
  *
- * Every statement here reads `listing_search_v` and nothing else drives row visibility. The view
- * ENFORCES the display rules — address and coordinates masked together on seller opt-out, whole
+ * Every statement here reads `listing_search_v`, and it is still the sole source of LISTING
+ * visibility and display masking — address and coordinates masked together on seller opt-out, whole
  * listing excluded when `internet_display_allowed` is false, unapproved descriptions withheld,
  * statuses with no `consumer_status` excluded, solds gated on `close_date`, `is_sample`
- * OR-propagated — so a query that read the base tables instead would reopen every one of those holes
- * at once, silently. There is deliberately no parameter, header or flag that bypasses it, and none of
- * its predicates is restated in a WHERE clause here: a second copy of a compliance rule is a second
- * place for it to drift.
+ * OR-propagated. None of those predicates is restated in a WHERE clause here: a second copy of a
+ * compliance rule is a second place for it to drift.
+ *
+ * `getListingAttributes()`/`getPropertyAttributes()` (#128) add a SECOND governance table to that
+ * picture: they join or reference `listing_search_v` for the listing-visibility rule above, AND gate
+ * on `mls_fields.is_address_bearing`, the field-level closed-vocabulary rule #127/#128 enforce on a
+ * table the view does not project. That is a field's own governance, not a restatement of the
+ * view's — read their doc comments before treating "no WHERE clause restates the view" as covering
+ * them too.
  *
  * Columns are enumerated from `columns.ts`, never `SELECT *`. The view no longer projects the
  * unmasked `street_line` beside the masked `address` (#48, closed), so this is now defence in depth
@@ -255,74 +256,70 @@ export interface AttributeDbRow {
   is_consumer_displayable: boolean;
 }
 
-/** `listing_attributes` vs `property_attributes` differ only by table and owner column. */
-interface AttributeQueryTarget {
-  table: 'listing_attributes' | 'property_attributes';
-  ownerColumn: 'listing_id' | 'property_id';
-}
-
-const LISTING_ATTRIBUTE_TARGET: AttributeQueryTarget = {
-  table: 'listing_attributes',
-  ownerColumn: 'listing_id',
-};
-const PROPERTY_ATTRIBUTE_TARGET: AttributeQueryTarget = {
-  table: 'property_attributes',
-  ownerColumn: 'property_id',
-};
-
 /**
- * Every governed attribute of one entity (#127), with address-bearing fields already withheld
- * when the owning listing's address is suppressed (#128).
+ * Every governed attribute of one listing (#127), address-bearing ones excluded IN SQL when the
+ * listing's address is suppressed (#128).
  *
- * `listingAddress` is the SAME value `applyAddressSuppression()`/`applyCardAddressSuppression()`
- * read off their own object (`.address === null`) — passed here as the address itself, never as a
- * pre-computed boolean, so a caller cannot supply a suppression outcome that belongs to a different
- * listing. This service still never reads `address_display_allowed` outside `listing_search_v`
- * (`FORBIDDEN_COLUMNS`); the OUTCOME is the only signal that ever crosses this boundary.
+ * The suppression decision belongs to this query, not to the caller: it joins `listing_search_v` on
+ * the listing's OWN id and gates `mls_fields.is_address_bearing` in the WHERE clause. That is what
+ * makes it structural rather than opt-in — no address-bearing row for a suppressed listing ever
+ * leaves Postgres, so there is no "remember to filter" step, no signal to pass wrong, and nothing
+ * for a future debug log or early return to leak. A listing absent from the view (excluded,
+ * soft-deleted) fails the join and returns nothing, exactly like every other read in this file.
+ *
+ * `is_address_bearing` is the governance flag itself; `address_classification` (still projected by
+ * `ATTRIBUTE_SELECT`) is descriptive context for a caller, never re-derived into a second decision.
  *
  * Ready for #93 to call: nothing in this service exposes an "attributes" field on the wire yet, so
- * nothing calls `getListingAttributes()`/`getPropertyAttributes()` outside their own tests.
- * Shipping the query and its suppression ahead of the exposure is the point — see `AGENTS.md`
- * §"The MLS attribute model".
+ * nothing calls this function outside its own tests.
  */
-async function queryAttributes(
+export async function getListingAttributes(
   pool: ReadClient,
-  target: AttributeQueryTarget,
-  ownerId: string,
-  listingAddress: string | null,
+  listingId: string,
 ): Promise<AttributeDbRow[]> {
   const result = await pool.query<AttributeDbRow>(
     `SELECT ${ATTRIBUTE_SELECT}
-       FROM ${target.table} a
+       FROM listing_attributes a
        JOIN mls_fields f ON f.id = a.field_id
-      WHERE a.${target.ownerColumn} = $1`,
-    [ownerId],
+       JOIN listing_search_v v ON v.id = a.listing_id
+      WHERE a.listing_id = $1
+        AND (NOT f.is_address_bearing OR v.address IS NOT NULL)`,
+    [listingId],
   );
-  return filterAddressBearingAttributes(
-    result.rows.map((row) => ({ ...row, addressClassification: row.address_classification })),
-    listingAddress === null,
-  );
-}
-
-/** Every governed attribute of one listing. See `queryAttributes()` for the suppression contract. */
-export function getListingAttributes(
-  pool: ReadClient,
-  listingId: string,
-  listingAddress: string | null,
-): Promise<AttributeDbRow[]> {
-  return queryAttributes(pool, LISTING_ATTRIBUTE_TARGET, listingId, listingAddress);
+  return result.rows;
 }
 
 /**
- * Every governed attribute of one property, durable across the property's listings. See
- * `queryAttributes()` for the suppression contract — identical, over `property_attributes`.
+ * Every governed attribute of one property (#127), durable across every listing the property has
+ * ever carried.
+ *
+ * DELIBERATE CHOICE: address-bearing attributes are excluded when ANY visible listing on the
+ * property has its address suppressed — never keyed on one caller-chosen listing. A durable,
+ * offer-independent fact cannot correctly take its visibility from a single offer among possibly
+ * several: a property with one suppressed listing and one published listing withholds its
+ * address-bearing attributes from BOTH, because publishing them through the published listing would
+ * still hand a reader the fact the other listing's seller opted out of. Conservative and
+ * fail-closed, matching the default-deny rule the rest of #128 already applies.
+ *
+ * "Visible" means visible in `listing_search_v` — an excluded or soft-deleted listing contributes
+ * no suppression state, matching the view's own row-visibility rule.
  */
-export function getPropertyAttributes(
+export async function getPropertyAttributes(
   pool: ReadClient,
   propertyId: string,
-  listingAddress: string | null,
 ): Promise<AttributeDbRow[]> {
-  return queryAttributes(pool, PROPERTY_ATTRIBUTE_TARGET, propertyId, listingAddress);
+  const result = await pool.query<AttributeDbRow>(
+    `SELECT ${ATTRIBUTE_SELECT}
+       FROM property_attributes a
+       JOIN mls_fields f ON f.id = a.field_id
+      WHERE a.property_id = $1
+        AND (NOT f.is_address_bearing OR NOT EXISTS (
+              SELECT 1 FROM listing_search_v v
+               WHERE v.property_id = a.property_id AND v.address IS NULL
+            ))`,
+    [propertyId],
+  );
+  return result.rows;
 }
 
 export { NOT_FOUND_BODY };

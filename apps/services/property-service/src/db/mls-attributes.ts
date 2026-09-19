@@ -1,4 +1,4 @@
-import { Queryable } from './write';
+import { Queryable, requireId } from './write';
 
 /**
  * THE ONLY MODULE THAT WRITES THE MLS ATTRIBUTE MODEL — `mls_fields`, `mls_lookup_values`,
@@ -185,11 +185,7 @@ export async function registerMlsField(
       field.notes ?? null,
     ],
   );
-  const id = rows[0]?.id;
-  if (typeof id !== 'string') {
-    throw new Error('Upsert on mls_fields returned no id.');
-  }
-  return id;
+  return requireId(rows, 'mls_fields');
 }
 
 /**
@@ -221,11 +217,7 @@ export async function registerMlsLookupValue(
       value.sortOrder ?? 0,
     ],
   );
-  const id = rows[0]?.id;
-  if (typeof id !== 'string') {
-    throw new Error('Upsert on mls_lookup_values returned no id.');
-  }
-  return id;
+  return requireId(rows, 'mls_lookup_values');
 }
 
 interface RegisteredField {
@@ -375,19 +367,25 @@ async function resolveLookupValues(
   );
 }
 
-interface AttributeTarget {
+/**
+ * `listing_attributes` vs `property_attributes` differ only by table, owner column and scope.
+ * Exported so `repository.ts`'s read side shares this ONE mapping instead of keeping its own copy
+ * — two independent table/owner-column maps is exactly the drift mode that would let the read and
+ * write sides disagree about which owner column a scope maps to.
+ */
+export interface AttributeTarget {
   table: 'listing_attributes' | 'property_attributes';
   ownerColumn: 'listing_id' | 'property_id';
   scope: MlsFieldScope;
 }
 
-const LISTING_TARGET: AttributeTarget = {
+export const LISTING_TARGET: AttributeTarget = {
   table: 'listing_attributes',
   ownerColumn: 'listing_id',
   scope: 'listing',
 };
 
-const PROPERTY_TARGET: AttributeTarget = {
+export const PROPERTY_TARGET: AttributeTarget = {
   table: 'property_attributes',
   ownerColumn: 'property_id',
   scope: 'property',
@@ -512,6 +510,20 @@ async function putAttributes(
       } else {
         raw.push({ value: attribute.value, timestamp });
       }
+    }
+
+    // Two SEPARATE scalar inputs for the same field are the same mistake the array guard above
+    // rejects, arriving as two entries in `group` instead of one array: both would resolve and
+    // both upsert onto the same row (the unique index is NULLS NOT DISTINCT on `value_lookup_id`,
+    // so a scalar row has none to distinguish it), and the second would silently overwrite the
+    // first while `stored` counted both. A lookup field is exempt — multiple resolved lookup
+    // values are the normal multi-valued case, each keyed by its own `value_lookup_id`.
+    if (!fieldRejected && field.data_type !== 'lookup' && raw.length > 1) {
+      reject(
+        'type_mismatch',
+        raw.map((entry) => entry.value),
+      );
+      fieldRejected = true;
     }
 
     // Resolved in one round trip for the whole field, rather than one per value.

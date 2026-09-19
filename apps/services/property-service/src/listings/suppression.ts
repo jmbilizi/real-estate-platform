@@ -1,5 +1,4 @@
 import type { ListingCardRow, ListingDetail, Media } from '@cribstop/property-contracts';
-import type { AddressClassification } from '../db/mls-attributes';
 
 /**
  * The ONE rule for media on an address-suppressed listing, written once and applied by both of the
@@ -95,47 +94,4 @@ export function applyAddressSuppression(detail: ListingDetail): ListingDetail {
       })),
     },
   };
-}
-
-/**
- * A row from `listing_attributes`/`property_attributes`, joined to its field's registered
- * classification (#128). `repository.ts` is the only module that produces this shape.
- */
-export interface ClassifiedAttributeRow {
-  addressClassification: AddressClassification | null;
-}
-
-/**
- * THE default-deny rule for the MLS attribute path (#128): a field's classification decides whether
- * its value can carry or re-identify a suppressed address. `not_address_bearing` is the ONLY value
- * that clears it — a missing classification (NULL, an unreviewed field) is treated exactly like
- * `carries_address`. No column value and no code path here means "unclassified, therefore publish",
- * which is the failure #48/#59/#105 each shipped once against enumerated columns; this closes the
- * same gap for the attribute store by inverting the default instead of enumerating fields.
- */
-function isAddressBearingClassification(classification: AddressClassification | null): boolean {
-  return classification !== 'not_address_bearing';
-}
-
-/**
- * THE address-suppression boundary for the MLS attribute path (#128).
- *
- * `mls_fields`/`listing_attributes`/`property_attributes` (#127) are unreachable from
- * `listing_search_v` — they are governance tables the view never joins — so, exactly like
- * `primaryMedia.altText` and `openHouses[].remarks` above, they are suppressed HERE rather than by
- * a view predicate. Keyed on the same `addressSuppressed` OUTCOME the other two functions in this
- * file use (`address === null` at the call site in `repository.ts`), never on
- * `address_display_allowed`, which this service never reads outside the view (`FORBIDDEN_COLUMNS`).
- *
- * A non-suppressed listing's attributes pass through untouched — this function only ever removes
- * rows, never adds or edits one, so it cannot introduce a fact `listing_attributes` does not have.
- */
-export function filterAddressBearingAttributes<T extends ClassifiedAttributeRow>(
-  rows: T[],
-  addressSuppressed: boolean,
-): T[] {
-  if (!addressSuppressed) {
-    return rows;
-  }
-  return rows.filter((row) => !isAddressBearingClassification(row.addressClassification));
 }

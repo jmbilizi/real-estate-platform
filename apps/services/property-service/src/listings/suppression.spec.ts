@@ -1,10 +1,4 @@
-import type { AddressClassification } from '../db/mls-attributes';
-import {
-  applyAddressSuppression,
-  applyCardAddressSuppression,
-  type ClassifiedAttributeRow,
-  filterAddressBearingAttributes,
-} from './suppression';
+import { applyAddressSuppression, applyCardAddressSuppression } from './suppression';
 import { cardFixture, detailFixture } from './test-fixtures';
 
 const OPEN_HOUSE = {
@@ -186,78 +180,7 @@ describe('applyCardAddressSuppression (#105)', () => {
   });
 });
 
-/** One attribute row, identified only by the field it belongs to (`repository.ts` carries more). */
-function attributeRow(addressClassification: AddressClassification | null): ClassifiedAttributeRow {
-  return { addressClassification };
-}
-
-describe('filterAddressBearingAttributes (#128)', () => {
-  it('withholds a field with NO classification on a suppressed listing — default-deny', () => {
-    // This is the core requirement: an attribute nobody has reviewed is treated as address-bearing,
-    // never published by omission. No column value and no code path means "unclassified, therefore
-    // publish" is exactly the bug this function exists to rule out.
-    const rows = [attributeRow(null)];
-
-    expect(filterAddressBearingAttributes(rows, true)).toEqual([]);
-  });
-
-  it('publishes an unclassified field when the listing is not suppressed', () => {
-    const rows = [attributeRow(null)];
-
-    expect(filterAddressBearingAttributes(rows, false)).toEqual(rows);
-  });
-
-  it.each<AddressClassification>([
-    'carries_address',
-    're_identifies_address',
-    'free_text_may_contain_address',
-  ])('withholds a field classified %s on a suppressed listing', (addressClassification) => {
-    const rows = [attributeRow(addressClassification)];
-
-    expect(filterAddressBearingAttributes(rows, true)).toEqual([]);
-  });
-
-  it('publishes a field classified not_address_bearing even on a suppressed listing', () => {
-    // What is NOT suppressed: a field explicitly reviewed and cleared publishes exactly as it
-    // would on any other listing.
-    const rows = [attributeRow('not_address_bearing')];
-
-    expect(filterAddressBearingAttributes(rows, true)).toEqual(rows);
-  });
-
-  /**
-   * Regression fixtures for the three historical leaks (#48 street_line, #59 free-text remarks,
-   * #105 media alt text), reframed against the attribute path this ticket adds. Each is an
-   * attribute whose VALUE would carry the leak; the classification is what has to withhold it,
-   * since there is no view predicate over this table to catch it (#127's tables are unreachable
-   * from `listing_search_v`).
-   */
-  describe('the three historical leaks, on the attribute path', () => {
-    it('withholds an address-line-shaped attribute (#48) on a suppressed listing', () => {
-      const rows = [attributeRow('carries_address')];
-      expect(filterAddressBearingAttributes(rows, true)).toEqual([]);
-    });
-
-    it('withholds a free-text attribute that may embed an address (#59) on a suppressed listing', () => {
-      const rows = [attributeRow('free_text_may_contain_address')];
-      expect(filterAddressBearingAttributes(rows, true)).toEqual([]);
-    });
-
-    it('withholds a re-identifying attribute — e.g. a media caption field (#105) — on a suppressed listing', () => {
-      const rows = [attributeRow('re_identifies_address')];
-      expect(filterAddressBearingAttributes(rows, true)).toEqual([]);
-    });
-  });
-
-  it('keeps every other row untouched, filtering only the address-bearing ones', () => {
-    const rows = [
-      attributeRow('not_address_bearing'),
-      attributeRow('carries_address'),
-      attributeRow(null),
-    ];
-
-    expect(filterAddressBearingAttributes(rows, true)).toEqual([
-      attributeRow('not_address_bearing'),
-    ]);
-  });
-});
+// The MLS attribute path's address-suppression rule (#128) is enforced in SQL, inside
+// `getListingAttributes()`/`getPropertyAttributes()` in `repository.ts` — see those doc comments
+// and `repository.spec.ts` for the query-shape tests. There is no app-code filter function here to
+// test: the decision never leaves Postgres.

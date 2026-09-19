@@ -1,140 +1,83 @@
 import { getListingAttributes, getPropertyAttributes, type ReadClient } from './repository';
 
 /**
- * `getListingAttributes()`/`getPropertyAttributes()` (#128) are the repository-level mechanism the
- * ticket's acceptance criteria mean by "search and detail responses": the query that will back both
- * `searchListings()` and `findListingById()` once #93 exposes attributes on the wire, proven here
- * against a fake `ReadClient` — no database, matching every other test in this file's siblings.
- *
- * The suppression signal passed in is the listing's ADDRESS itself (`null` on a suppressed
- * listing), never a pre-computed boolean — the same shape `applyAddressSuppression()` and
- * `applyCardAddressSuppression()` read off their own object, so a caller cannot pass a suppression
- * outcome that belongs to a different listing.
+ * `getListingAttributes()`/`getPropertyAttributes()` (#128) push the address-suppression decision
+ * into the SQL statement itself, so there is no app-code filter step left to unit-test in
+ * isolation — the guarantee IS the query text. These tests assert the query shape: the join/EXISTS
+ * that derives visibility from `listing_search_v`, and the `is_address_bearing` gate, against a
+ * fake `ReadClient` — no database, matching every other test in this file's siblings. Proving the
+ * WHERE clause actually filters correctly needs a real Postgres and is out of this project's
+ * DB-free unit-test scope; see the ticket for the outstanding integration/e2e step.
  */
-const SUPPRESSED_ADDRESS = null;
-const PUBLISHED_ADDRESS = '900 King St';
 
-interface AttributeFixture {
-  id?: string;
-  field_id?: string;
-  value_kind?: string;
-  value_numeric?: string | null;
-  value_boolean?: boolean | null;
-  value_date?: string | null;
-  value_timestamp?: string | null;
-  value_lookup_id?: string | null;
-  originating_system?: string;
-  reso_resource?: string;
-  field_name?: string;
-  address_classification?: string | null;
-  is_consumer_displayable?: boolean;
-}
-
-function row(overrides: AttributeFixture = {}): Required<AttributeFixture> {
-  return {
-    id: 'attr-1',
-    field_id: 'field-1',
-    value_kind: 'decimal',
-    value_numeric: '0.34',
-    value_boolean: null,
-    value_date: null,
-    value_timestamp: null,
-    value_lookup_id: null,
-    originating_system: 'testMLS',
-    reso_resource: 'Property',
-    field_name: 'LotSizeAcres',
-    address_classification: null,
-    is_consumer_displayable: false,
-    ...overrides,
+function fakeClient(rows: unknown[] = []): {
+  client: ReadClient;
+  captured: { text: string; values: unknown[] }[];
+} {
+  const captured: { text: string; values: unknown[] }[] = [];
+  const client: ReadClient = {
+    query: <T>(text: string, values?: unknown[]) => {
+      captured.push({ text, values: values ?? [] });
+      return Promise.resolve({ rows: rows as T[] });
+    },
   };
-}
-
-function fakeClient(rows: AttributeFixture[]): ReadClient {
-  return {
-    query: <T>() => Promise.resolve({ rows: rows as unknown as T[] }),
-  };
+  return { client, captured };
 }
 
 describe('getListingAttributes', () => {
-  it('withholds an unclassified attribute when the listing is address-suppressed — default-deny', async () => {
-    const client = fakeClient([row({ address_classification: null })]);
+  it('joins listing_search_v on the listing itself, so suppression is derived, not passed in', async () => {
+    const { client, captured } = fakeClient();
 
-    const attributes = await getListingAttributes(client, 'listing-1', SUPPRESSED_ADDRESS);
+    await getListingAttributes(client, 'listing-1');
 
-    expect(attributes).toEqual([]);
+    const [query] = captured;
+    expect(query?.text).toContain('FROM listing_attributes a');
+    expect(query?.text).toContain('JOIN mls_fields f ON f.id = a.field_id');
+    // The join key is the row's OWN listing_id — there is no second, caller-supplied argument that
+    // could name a different listing than the one being queried.
+    expect(query?.text).toContain('JOIN listing_search_v v ON v.id = a.listing_id');
+    expect(query?.values).toEqual(['listing-1']);
   });
 
-  it('publishes an unclassified attribute when the listing is not suppressed', async () => {
-    const client = fakeClient([row({ address_classification: null })]);
+  it('gates on mls_fields.is_address_bearing, never re-deriving it from address_classification', async () => {
+    const { client, captured } = fakeClient();
 
-    const attributes = await getListingAttributes(client, 'listing-1', PUBLISHED_ADDRESS);
+    await getListingAttributes(client, 'listing-1');
 
-    expect(attributes).toHaveLength(1);
+    expect(captured[0]?.text).toContain('NOT f.is_address_bearing OR v.address IS NOT NULL');
   });
 
-  it('publishes an attribute explicitly classified not_address_bearing even when suppressed', async () => {
-    const client = fakeClient([row({ address_classification: 'not_address_bearing' })]);
+  it('returns exactly what the query answers, with no app-code re-filtering', async () => {
+    const rows = [{ id: 'attr-1', address_classification: 'carries_address' }];
+    const { client } = fakeClient(rows);
 
-    const attributes = await getListingAttributes(client, 'listing-1', SUPPRESSED_ADDRESS);
-
-    expect(attributes).toHaveLength(1);
-  });
-
-  it.each(['carries_address', 're_identifies_address', 'free_text_may_contain_address'])(
-    'withholds an attribute classified %s when the listing is suppressed',
-    async (addressClassification) => {
-      const client = fakeClient([row({ address_classification: addressClassification })]);
-
-      const attributes = await getListingAttributes(client, 'listing-1', SUPPRESSED_ADDRESS);
-
-      expect(attributes).toEqual([]);
-    },
-  );
-
-  it('reads listing_attributes joined to mls_fields, scoped to the requested listing', async () => {
-    let capturedText = '';
-    let capturedValues: unknown[] = [];
-    const client: ReadClient = {
-      query: (text, values) => {
-        capturedText = text;
-        capturedValues = values ?? [];
-        return Promise.resolve({ rows: [] });
-      },
-    };
-
-    await getListingAttributes(client, 'listing-1', PUBLISHED_ADDRESS);
-
-    expect(capturedText).toContain('FROM listing_attributes a');
-    expect(capturedText).toContain('JOIN mls_fields f ON f.id = a.field_id');
-    expect(capturedText).toContain('WHERE a.listing_id = $1');
-    expect(capturedValues).toEqual(['listing-1']);
+    await expect(getListingAttributes(client, 'listing-1')).resolves.toEqual(rows);
   });
 });
 
 describe('getPropertyAttributes', () => {
-  it('withholds an unclassified attribute when the owning listing is address-suppressed', async () => {
-    const client = fakeClient([row({ address_classification: null })]);
+  it('excludes address-bearing rows via NOT EXISTS over every visible listing on the property', async () => {
+    const { client, captured } = fakeClient();
 
-    const attributes = await getPropertyAttributes(client, 'property-1', SUPPRESSED_ADDRESS);
+    await getPropertyAttributes(client, 'property-1');
 
-    expect(attributes).toEqual([]);
+    const [query] = captured;
+    expect(query?.text).toContain('FROM property_attributes a');
+    expect(query?.text).toContain('JOIN mls_fields f ON f.id = a.field_id');
+    // Deliberately no single listing id: a durable, offer-independent fact cannot correctly take
+    // its visibility from one caller-chosen listing among possibly several (see the doc comment).
+    expect(query?.text).toContain('NOT EXISTS (');
+    expect(query?.text).toContain(
+      'SELECT 1 FROM listing_search_v v\n               WHERE v.property_id = a.property_id AND v.address IS NULL',
+    );
+    expect(query?.values).toEqual(['property-1']);
   });
 
-  it('reads property_attributes joined to mls_fields, scoped to the requested property', async () => {
-    let capturedText = '';
-    let capturedValues: unknown[] = [];
-    const client: ReadClient = {
-      query: (text, values) => {
-        capturedText = text;
-        capturedValues = values ?? [];
-        return Promise.resolve({ rows: [] });
-      },
-    };
+  it('has no listingId parameter — only the property id is bound', async () => {
+    const { client, captured } = fakeClient();
 
-    await getPropertyAttributes(client, 'property-1', PUBLISHED_ADDRESS);
+    await getPropertyAttributes(client, 'property-1');
 
-    expect(capturedText).toContain('FROM property_attributes a');
-    expect(capturedText).toContain('WHERE a.property_id = $1');
-    expect(capturedValues).toEqual(['property-1']);
+    expect(captured[0]?.values).toHaveLength(1);
   });
 });
