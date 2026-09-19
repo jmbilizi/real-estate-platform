@@ -47,16 +47,20 @@ Timeouts are per route class; the breaker threshold is uniform (`MinimumThroughp
 global 30-second window), because five failures in thirty seconds is an outage on any of these
 services:
 
-| Class                  | Routes                                               | `Timeout` |
-| ---------------------- | ---------------------------------------------------- | --------- |
-| Fast public read       | `/property/listings/meta`, `/property/listings/{id}` | 3000      |
-| Public search          | `/property/listings` (exact `COUNT(*)` per search)   | 5000      |
-| Auth write             | `/account/*` (password hashing, outbound email)      | 10000     |
-| Model inference        | `/inference/embeddings`                              | 30000     |
-| Inference read / probe | `/inference/models`, `/inference/health`, `/ready`   | 5000/3000 |
+| Class                  | Routes                                                       | `Timeout`  |
+| ---------------------- | ------------------------------------------------------------ | ---------- |
+| Fast public read       | `/property/listings/meta`, `/property/listings/{id}`         | 3000       |
+| Public search          | `/property/listings` (exact `COUNT(*)` per search)           | 5000       |
+| Auth write             | `/account/*` (password hashing, outbound email)              | 10000      |
+| Model inference        | `/inference/embeddings`                                      | 30000      |
+| Inference read / probe | `/inference/models`; `/inference/health`, `/inference/ready` | 5000; 3000 |
+
+The search timeout is a product judgement, not a measurement: a shopper abandons a search well
+before five seconds. Measure the p95 of `/property/listings` against a populated Bright dataset and
+revisit this one value alone. Never raise the global fallback to cover one slow route.
 
 **Degraded-response contract.** `Middleware/UpstreamUnavailableMiddleware.cs` replaces Ocelot's
-empty error body with the envelope the services already use:
+empty error body with the envelope the property surface uses:
 
 ```json
 { "error": { "code": "upstream_unavailable", "message": "..." } }
@@ -67,6 +71,14 @@ connection that never opened. A client treats `error.code === "upstream_unavaila
 later" and tells it apart from a 404 or a validation error by the code alone. Timeout and
 breaker-open share one code because Ocelot maps both to `RequestTimedOutError`, and the difference
 changes nothing a client can do.
+
+The three surfaces behind these routes do not share one error envelope. `property-service` uses
+`{ "error": { "code", "message" } }`, `account-service` uses `{ "error": "<string>" }`, and the
+inference service uses FastAPI's `{ "detail": "<string>" }`. So this body matches the property
+surface and adds a third shape on the other two. It costs nothing today, because Ocelot's current
+empty body already fails the same client checks, but it is not the same as "one shape everywhere".
+Two related gaps sit with it: a 429 still returns `QuotaExceededMessage` as plain text, and
+`upstream_unavailable` is in no shared contract package. Tracked in #177.
 
 QoS does not apply to `/swagger/docs/...`. `MMLib.SwaggerForOcelot` fetches each downstream document
 with its own `HttpClient`, outside Ocelot's request pipeline.

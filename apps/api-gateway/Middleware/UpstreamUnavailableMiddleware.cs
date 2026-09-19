@@ -16,9 +16,10 @@ namespace ApiGateway.Middleware
     /// <see cref="OcelotErrorCode.RequestTimedOutError"/> (503), and a refused connection to
     /// <see cref="OcelotErrorCode.ConnectionToDownstreamServiceError"/> (502). It answers all three
     /// with an empty body, which forces every client to special-case the gateway. This middleware
-    /// writes the same <c>{ "error": { "code", "message" } }</c> envelope the downstream services
-    /// use, so a client parses one shape for every failure and tells "we are having trouble" apart
-    /// from a 404 or a validation error by <see cref="ErrorCode"/>.
+    /// writes the <c>{ "error": { "code", "message" } }</c> envelope the property surface uses, so
+    /// a client tells "we are having trouble" apart from a 404 or a validation error by
+    /// <see cref="ErrorCode"/> alone. The account and inference surfaces carry different envelopes;
+    /// see the project AGENTS.md and #177.
     /// <para>
     /// All three share one code on purpose. They are the same fact to a caller — the service did
     /// not answer, retry later — and the distinction between them changes nothing the client can
