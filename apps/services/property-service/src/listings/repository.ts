@@ -6,7 +6,8 @@ import {
   resultOffsetFor,
   type SearchRequest,
 } from '@cribstop/property-contracts';
-import { LISTING_CARD_SELECT, LISTING_DETAIL_SELECT } from './columns';
+import type { AddressClassification } from '../db/mls-attributes';
+import { ATTRIBUTE_SELECT, LISTING_CARD_SELECT, LISTING_DETAIL_SELECT } from './columns';
 import { buildSearchQuery } from './search-query';
 import {
   type ListingCardDbRow,
@@ -20,14 +21,19 @@ import { applyAddressSuppression, applyCardAddressSuppression } from './suppress
 /**
  * The only module in this service that executes read SQL.
  *
- * Every statement here reads `listing_search_v` and nothing else drives row visibility. The view
- * ENFORCES the display rules — address and coordinates masked together on seller opt-out, whole
+ * Every statement here reads `listing_search_v`, and it is still the sole source of LISTING
+ * visibility and display masking — address and coordinates masked together on seller opt-out, whole
  * listing excluded when `internet_display_allowed` is false, unapproved descriptions withheld,
  * statuses with no `consumer_status` excluded, solds gated on `close_date`, `is_sample`
- * OR-propagated — so a query that read the base tables instead would reopen every one of those holes
- * at once, silently. There is deliberately no parameter, header or flag that bypasses it, and none of
- * its predicates is restated in a WHERE clause here: a second copy of a compliance rule is a second
- * place for it to drift.
+ * OR-propagated. None of those predicates is restated in a WHERE clause here: a second copy of a
+ * compliance rule is a second place for it to drift.
+ *
+ * `getListingAttributes()`/`getPropertyAttributes()` (#128) add a SECOND governance table to that
+ * picture: they join or reference `listing_search_v` for the listing-visibility rule above, AND gate
+ * on `mls_fields.is_address_bearing`, the field-level closed-vocabulary rule #127/#128 enforce on a
+ * table the view does not project. That is a field's own governance, not a restatement of the
+ * view's — read their doc comments before treating "no WHERE clause restates the view" as covering
+ * them too.
  *
  * Columns are enumerated from `columns.ts`, never `SELECT *`. The view no longer projects the
  * unmasked `street_line` beside the masked `address` (#48, closed), so this is now defence in depth
@@ -231,6 +237,89 @@ export async function getListingsMeta(pool: ReadClient): Promise<ListingsMeta> {
     throw new Error('Aggregate query over listing_search_v returned no row.');
   }
   return toListingsMeta(row);
+}
+
+/** One `mls_fields`-joined attribute row, as `ATTRIBUTE_SELECT` projects it. */
+export interface AttributeDbRow {
+  id: string;
+  field_id: string;
+  value_kind: string;
+  value_numeric: string | null;
+  value_boolean: boolean | null;
+  value_date: string | null;
+  value_timestamp: string | null;
+  value_lookup_id: string | null;
+  originating_system: string;
+  reso_resource: string;
+  field_name: string;
+  address_classification: AddressClassification | null;
+  is_consumer_displayable: boolean;
+}
+
+/**
+ * Every governed attribute of one listing (#127), address-bearing ones excluded IN SQL when the
+ * listing's address is suppressed (#128).
+ *
+ * The suppression decision belongs to this query, not to the caller: it joins `listing_search_v` on
+ * the listing's OWN id and gates `mls_fields.is_address_bearing` in the WHERE clause. That is what
+ * makes it structural rather than opt-in — no address-bearing row for a suppressed listing ever
+ * leaves Postgres, so there is no "remember to filter" step, no signal to pass wrong, and nothing
+ * for a future debug log or early return to leak. A listing absent from the view (excluded,
+ * soft-deleted) fails the join and returns nothing, exactly like every other read in this file.
+ *
+ * `is_address_bearing` is the governance flag itself; `address_classification` (still projected by
+ * `ATTRIBUTE_SELECT`) is descriptive context for a caller, never re-derived into a second decision.
+ *
+ * Ready for #93 to call: nothing in this service exposes an "attributes" field on the wire yet, so
+ * nothing calls this function outside its own tests.
+ */
+export async function getListingAttributes(
+  pool: ReadClient,
+  listingId: string,
+): Promise<AttributeDbRow[]> {
+  const result = await pool.query<AttributeDbRow>(
+    `SELECT ${ATTRIBUTE_SELECT}
+       FROM listing_attributes a
+       JOIN mls_fields f ON f.id = a.field_id
+       JOIN listing_search_v v ON v.id = a.listing_id
+      WHERE a.listing_id = $1
+        AND (NOT f.is_address_bearing OR v.address IS NOT NULL)`,
+    [listingId],
+  );
+  return result.rows;
+}
+
+/**
+ * Every governed attribute of one property (#127), durable across every listing the property has
+ * ever carried.
+ *
+ * DELIBERATE CHOICE: address-bearing attributes are excluded when ANY visible listing on the
+ * property has its address suppressed — never keyed on one caller-chosen listing. A durable,
+ * offer-independent fact cannot correctly take its visibility from a single offer among possibly
+ * several: a property with one suppressed listing and one published listing withholds its
+ * address-bearing attributes from BOTH, because publishing them through the published listing would
+ * still hand a reader the fact the other listing's seller opted out of. Conservative and
+ * fail-closed, matching the default-deny rule the rest of #128 already applies.
+ *
+ * "Visible" means visible in `listing_search_v` — an excluded or soft-deleted listing contributes
+ * no suppression state, matching the view's own row-visibility rule.
+ */
+export async function getPropertyAttributes(
+  pool: ReadClient,
+  propertyId: string,
+): Promise<AttributeDbRow[]> {
+  const result = await pool.query<AttributeDbRow>(
+    `SELECT ${ATTRIBUTE_SELECT}
+       FROM property_attributes a
+       JOIN mls_fields f ON f.id = a.field_id
+      WHERE a.property_id = $1
+        AND (NOT f.is_address_bearing OR NOT EXISTS (
+              SELECT 1 FROM listing_search_v v
+               WHERE v.property_id = a.property_id AND v.address IS NULL
+            ))`,
+    [propertyId],
+  );
+  return result.rows;
 }
 
 export { NOT_FOUND_BODY };

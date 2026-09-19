@@ -192,6 +192,92 @@ The `seed` Nx target still exists for loading the dataset into an arbitrary data
 pointed `DATABASE_URL` at — it is no longer the way to get local data, and it does **not** perform
 the delete-then-insert re-apply.
 
+### The MLS attribute model — the long tail of the feed (#127)
+
+A licensed MLS feed carries a couple hundred fields. The shape decision, made in migration
+`1785801600013` and not reversible cheaply once #93 writes real data: **the columns the product
+filters and sorts on stay first-class columns on `listings`** (price, beds, baths, living area,
+status, city/state/zip, geo — `idx_listings_live_price` is why), **and everything else goes into a
+governed typed attribute store.** Four tables:
+
+- **`mls_fields`** — one row per field we accept. Identity is
+  `(originating_system, reso_resource, field_name)`, so onboarding a second MLS is rows, not DDL,
+  and the same RESO standard field from two systems is deliberately two rows (entitlement and
+  classification differ per market).
+- **`mls_lookup_values`** — one row per permitted value of an enumerated field. This generalises the
+  `listing_statuses` precedent to every field. **Adding a value Bright invented last week is an
+  INSERT** — no migration, no redeploy.
+- **`listing_attributes` / `property_attributes`** — the typed stores. Offer-scoped vs durable, the
+  same split `listings` vs `properties` already makes.
+
+**There is no text value column, and there must never be one.** A value is either a reference to a
+registered lookup value or a typed scalar (`value_numeric` / `value_boolean` / `value_date` /
+`value_timestamp`). That is what keeps this from being the `attributes jsonb` bag forbidden below —
+free text here is unrepresentable rather than merely discouraged, so a steering phrase has no column
+to land in. A consequence that looks like an omission but is not: an identifier-shaped field (parcel
+number, subdivision name) is also unstorable this way, and gets a reviewed column if the product
+needs it. `src/db/mls-attribute-model.spec.ts` asserts all of this against the DDL the migrations
+actually emit, across every migration, so a later append cannot quietly add one.
+
+**Governance is enforced by composite foreign keys, not by the writer's discipline** — an
+unregistered field or value, a field written to the wrong table, or a value in the wrong typed
+column are all constraint violations even from a manual `psql` session. `value_kind` and
+`field_scope` on the attribute rows are denormalised copies of `mls_fields` columns that exist only
+to be the second half of those keys; they are not data.
+
+**`src/db/mls-attributes.ts` is the only module that writes these four tables**, mirroring (not
+merged into) `write.ts`'s rule — `seed.spec.ts` asserts both directions. The reason differs and is
+worth keeping straight: `write.ts` exists because the dwelling snapshot is drift-capable and
+_cannot_ be constrained; this module exists for the fail-closed **behaviour** the constraints cannot
+express — an unregistered value is detected first and returned as a structured rejection, so one
+unknown vocabulary token does not abort the ingest of a whole batch. Rejections are diagnostics for
+an ingestion run to record (#93 owns retention); this module persists none of them, and truncates
+the offending value to 120 characters, because a value long enough to be prose is by that fact not a
+lookup token.
+
+**A field's address exposure is a closed-vocabulary classification, not a bare flag** (#128, after a
+2026-09-19 regression: this whole section, the registry migration and its writer module were deleted
+by the #91 merge — see #188 for the root cause — and restored across #128 and a separate
+migration-only fix). `mls_fields.address_classification` is one of `carries_address`,
+`re_identifies_address`, `free_text_may_contain_address` or `not_address_bearing`, and it may be
+**NULL** — an explicitly unreviewed field. `is_address_bearing` is derived from it
+(`registerMlsField` computes `classification !== 'not_address_bearing'`, true for NULL too) and a
+CHECK ties the two so they cannot disagree. **A field nobody has classified is therefore invisible
+rather than public** — the inverse of the column-by-column suppression rule that fails open on every
+field nobody thought about (#53). `registerMlsField()` deliberately offers no way to set
+`is_consumer_displayable`, and its `ON CONFLICT` never re-asserts `address_classification` or
+`is_address_bearing`, so a `$metadata` re-pull cannot silently revert a human's review.
+
+**The exclusion happens in SQL, inside `getListingAttributes()`/`getPropertyAttributes()` in
+`repository.ts`, not in app code.** This is a genuinely different guarantee from #48/#59/#105, and
+weaker language would hide that: those three null or drop a few already-fetched fields on rows
+`listing_search_v` already returned. This filters a WHOLE TABLE FAMILY the view never projects, read
+by a statement of its own — there is no row for a suppressed value to arrive on and then be
+stripped. `getListingAttributes()` joins `listing_search_v` on the listing's OWN id and gates
+`mls_fields.is_address_bearing` in the WHERE clause, so an address-bearing row for a suppressed
+listing never leaves Postgres: no caller-supplied flag, nothing for a debug log or an early return
+to leak. A listing absent from the view (excluded, soft-deleted) fails the join and returns nothing,
+matching the view's own row-visibility rule.
+
+**`property_attributes` has no single listing to key on, so its rule is deliberately different and
+conservative.** A durable, offer-independent fact belongs to the property across every listing it
+has ever carried. `getPropertyAttributes()` excludes an address-bearing attribute when ANY VISIBLE
+listing on the property has its address suppressed, via
+`NOT EXISTS (... listing_search_v ... address IS NULL)` — never keyed on one caller-chosen listing.
+A property with one suppressed and one published listing withholds its address-bearing attributes
+from both, because publishing them through the published listing would still hand a reader the fact
+the other listing's seller opted out of. Fail-closed, matching the default-deny rule the rest of
+#128 already applies. "Visible" means visible in `listing_search_v`; an excluded or soft-deleted
+listing contributes no suppression state.
+
+**Nothing is exposed to a consumer yet**: no contract change, no API field, and nothing outside
+these two functions' own tests calls them. `columns.ts` carries the enumerated projection. Whatever
+eventually exposes an attribute filters on `is_consumer_displayable` too — a separate governance
+axis neither function here decides.
+
+`listings.amenities` and `properties.property_type` keep their CHECKs and are untouched; whether to
+converge them onto this store later is deliberately left open in both directions.
+
 ### Bright MLS replication (`src/jobs/bright-ingest/`) — what the feed actually allows (#92)
 
 The job now replicates. It reads `BrightProperties` incrementally into `bright_staging_records`,
