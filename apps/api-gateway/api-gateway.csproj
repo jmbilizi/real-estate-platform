@@ -21,6 +21,7 @@
     <PackageReference Include="Swashbuckle.AspNetCore" />
     <PackageReference Include="MMLib.SwaggerForOcelot" />
     <PackageReference Include="Ocelot" />
+    <PackageReference Include="Ocelot.Provider.Polly" />
     <PackageReference Include="OpenTelemetry" />
     <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
     <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" />

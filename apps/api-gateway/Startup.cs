@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using MMLib.SwaggerForOcelot.Configuration;
 using Ocelot.DependencyInjection;
 using Ocelot.Middleware;
+using Ocelot.Provider.Polly;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -111,7 +112,9 @@ namespace ApiGateway
                 .AddEnvironmentVariables() // Allows GlobalConfiguration__BaseUrl override in K8s
                 .Build();
 
-            services.AddOcelot(configuration);
+            // AddPolly() activates the QoS provider. Without it Ocelot parses every QoSOptions
+            // block in Configuration/Routes/*.json and applies none of it — no timeout, no breaker.
+            services.AddOcelot(configuration).AddPolly();
 
             // Add services for Swagger generation
             services.AddSwaggerGen();
