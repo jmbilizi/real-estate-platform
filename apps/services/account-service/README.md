@@ -332,10 +332,10 @@ the link or the code, both of which are bearer credentials for the account. Supp
 
 #### Requiring a confirmed address
 
-`AccountRecovery:RequireConfirmedEmailToSignIn` drives `SignInOptions.RequireConfirmedEmail` and is
+`AccountRecovery:RequireConfirmedEmail` drives `SignInOptions.RequireConfirmedAccount` and is
 **`false`**. That is deliberate and temporary: Identity issues its confirmation link through the
 sender above, and until #133 provisions a transactional provider nothing can deliver it — so
-requiring confirmation today would mean nobody can create a usable account at all. #138 owns the
+requiring confirmation today would mean nobody can create a usable account at all. #149 owns the
 flip, and both states are already covered by tests, so it is a configuration change rather than a
 code change.
 
@@ -546,12 +546,17 @@ query that reads the table directly — an invite or announcement export, for ex
     "AllowedApps": ["cribstop", "admin-portal"]
   },
   "AccountRecovery": {
-    "RequireConfirmedEmailToSignIn": false,
+    "RequireConfirmedEmail": false,
+    "WebBaseUrl": "https://cribstop.com",
+    "ConfirmationPath": "/confirm-email",
+    "ConfirmationTokenLifetime": "1.00:00:00",
     "TokenLifetime": "01:00:00",
+    "ResendMinimumInterval": "00:01:00",
+    "ResendsPerEmailPerHour": 3,
+    "ResendsPerEmailPerDay": 10,
     "RequestsPerEmail": 5,
-    "RequestsPerAddress": 15,
-    "ResendsPerEmail": 3,
     "ResendsPerAddress": 10,
+    "RequestsPerAddress": 15,
     "RedemptionsPerAddress": 30,
     "RegistrationsPerAddress": 30,
     "RequestWindow": "00:15:00",
@@ -571,11 +576,11 @@ Unknown values are rejected with `400` (API keys) or silently ignored (login hea
 email confirmation and password reset — configuration rather than constants so an environment can
 tighten it without a code change. One section rather than three because it is one policy: a single
 window and a single response floor over endpoints that all answer the same question about the same
-address. `TokenLifetime` is bound into the password-reset token provider, so it is the lifetime
-actually enforced at redemption, and it does not touch the confirmation token.
-`MinimumResponseDuration` is the floor the reset and confirmation requests are padded to, which is
-what keeps the work actually done off the clock. `RequireConfirmedEmailToSignIn` is documented in
-Account Recovery above — read it before flipping it.
+address. `TokenLifetime` is bound into the password-reset token provider and
+`ConfirmationTokenLifetime` into the confirmation one, so each is the lifetime actually enforced at
+redemption, and neither touches the other's token. `MinimumResponseDuration` is the floor the reset
+and confirmation requests are padded to, which is what keeps the work actually done off the clock.
+`RequireConfirmedEmail` is documented in Account Recovery above — read it before flipping it.
 
 ---
 
