@@ -10,8 +10,9 @@
  *
  * Resolves configuration, and then either:
  *
- *  - reports `not_configured` and finishes **successfully** — the expected steady state in `local`
- *    and `test`, and everywhere until #117 provisions credentials; or
+ *  - reports `not_configured` and finishes **successfully** — the expected state for any
+ *    environment that is not wired yet (`local` and `test` until #176, and anywhere #117 has not
+ *    provisioned a secret); or
  *  - authenticates and probes `$metadata`, reporting `probe_succeeded` with zero counts.
  *
  * It ingests nothing. Incremental RESO replication into a staging area is #92; mapping into

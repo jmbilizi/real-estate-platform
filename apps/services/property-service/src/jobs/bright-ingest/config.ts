@@ -151,7 +151,8 @@ function resolveEndpoint(env: NodeJS.ProcessEnv): BrightEndpoint | null {
       tokenEndpointRaw === null ? BRIGHT_ENV_VARS.serviceRoot : BRIGHT_ENV_VARS.tokenEndpoint;
     throw new BrightConfigError(
       `${present_} is set but ${missing} is not. The endpoint pair identifies which Bright feed ` +
-        'this environment talks to (dev = test/staging, prod = licensed production) and must be ' +
+        'this environment talks to (prod = licensed production, every other environment = ' +
+        'test/staging) and must be ' +
         'set together, or a run could authenticate against one feed and read another.',
     );
   }
@@ -170,9 +171,9 @@ function resolveEndpoint(env: NodeJS.ProcessEnv): BrightEndpoint | null {
 /**
  * Resolves the job's configuration from the environment.
  *
- * Returns `not-configured` — never throws — when values are simply absent, because that is the
- * expected steady state for `local` and `test` and the expected state everywhere until #117
- * provisions credentials. Throws `BrightConfigError` only when a value is present and unusable.
+ * Returns `not-configured` — never throws — when values are simply absent, because an environment
+ * that is not wired yet is a normal rollout state rather than a fault. Throws `BrightConfigError`
+ * only when a value is present and unusable.
  */
 export function resolveBrightConfig(env: NodeJS.ProcessEnv = process.env): BrightConfig {
   const endpoint = resolveEndpoint(env);

@@ -234,8 +234,13 @@ Four things here are load-bearing and easy to undo by accident:
   environments and only the values differ, which is what makes GitHub _environment_ secrets — not
   repository secrets — the enforcement mechanism, and the endpoint stays per-environment
   **configuration** on the CronJob so the feed is inspectable without decoding a Secret. Only `dev`
-  and `prod` are wired today; #176 wires `local` and `test`, and #164 is the fail-closed check that
-  a non-production environment cannot authenticate with a production credential.
+  and `prod` are wired today. **#164 must land before #176, and they are not peers.** #164 is the
+  fail-closed check that a non-production environment cannot authenticate with a production
+  credential. #176 wires `local` and `test`, and the empty endpoint pair it fills in is the last
+  barrier left on a workstation: #160's secret injection already puts whatever Bright credential a
+  developer holds locally into the local cluster, under one key name shared by every environment.
+  Wire the endpoint before the check exists and a developer holding a production credential gets a
+  live authenticated production call from a laptop, with nothing fail-closed in between.
 - **Only endpoint HOSTS are ever logged**, never full URLs and never credential material. The
   containment is structural: no log record type in `run-log.ts` has a field a credential could be
   assigned to. The exception that had to be argued about is `message`, the one free-text field — so
