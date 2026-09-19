@@ -22,6 +22,7 @@
  */
 
 const { ensureGhReady, loadSchema, graphql, log, die } = require('./lib/gh-client');
+const { parseArgs } = require('./lib/args');
 
 const ITEMS_QUERY = `
   query($projectId: ID!, $after: String) {
@@ -55,18 +56,6 @@ const ITEMS_QUERY = `
     }
   }
 `;
-
-function parseArgs(argv) {
-  const args = {};
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === '--') continue; // pnpm forwards the literal '--' separator — never a flag
-    if (!arg.startsWith('--')) continue;
-    args[arg.slice(2)] = argv[i + 1];
-    i++;
-  }
-  return args;
-}
 
 function fetchAllItems(projectId) {
   const items = [];
@@ -129,7 +118,12 @@ function filterItems(items, args) {
 function main() {
   ensureGhReady();
   const schema = loadSchema();
-  const args = parseArgs(process.argv.slice(2));
+  let args;
+  try {
+    args = parseArgs(process.argv.slice(2));
+  } catch (error) {
+    die(error.message);
+  }
 
   const items = fetchAllItems(schema.projectId);
 

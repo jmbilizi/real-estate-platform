@@ -183,11 +183,6 @@ appropriate `human-action` or decision packet instead of silently changing the s
 - **A cross-lane note is a comment, not a body edit.** Use
   `pnpm run gh:comment -- --issue <n> --body-file <path>` (or `--pr <n>`) for a decision, an answer
   to an engineer's question, or a priority rationale. Keep the spec sections for the spec.
-- **A new component needs its label before its first ticket.** `gh issue create` rejects an unknown
-  label, so run
-  `pnpm run gh:label -- create --name scope:<nx-project> --color 1D76DB --description "..."` while
-  grooming the ticket that introduces the component. `gh:label -- list --search scope:` shows what
-  exists. Create refuses a name already in use.
 - **Split on deployability, never on artifact type.** Every ticket must leave the system in a
   working state; a slice whose output cannot run is a defect no matter how cleanly it reads. So when
   you split a body of work, the seam goes between "this is deployed and nothing depends on it yet"
