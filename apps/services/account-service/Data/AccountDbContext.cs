@@ -21,6 +21,8 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
 
     public DbSet<UserApp> UserApps => Set<UserApp>();
 
+    public DbSet<WaitlistInterest> WaitlistInterests => Set<WaitlistInterest>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -166,6 +168,30 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
                 .IsRequired();
 
             entity.HasIndex(ua => ua.UserId);
+        });
+
+        builder.Entity<WaitlistInterest>(entity =>
+        {
+            entity.ToTable("WaitlistInterests");
+
+            // Composite key gives idempotent registration at the storage layer: a second insert for
+            // the same pair cannot create a second row.
+            entity.HasKey(wi => new { wi.UserId, wi.InterestKind });
+
+            entity.Property(wi => wi.RegisteredAt)
+                .HasDefaultValueSql("NOW()")
+                .ValueGeneratedOnAdd();
+
+            entity.HasOne(wi => wi.User)
+                .WithMany(u => u.WaitlistInterests)
+                .HasForeignKey(wi => wi.UserId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .IsRequired();
+
+            entity.HasIndex(wi => wi.UserId);
+
+            // Fixed vocabulary (see WaitlistInterestKinds) is validated at the API boundary, not
+            // with a DB CHECK constraint — same approach as the onboarding intents above.
         });
     }
 }
