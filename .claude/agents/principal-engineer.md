@@ -46,6 +46,10 @@ comments, commit messages, PR descriptions, subagent prompts, and your report. A
 explains only what the code cannot show. A ticket comment states the decision or finding, then the
 evidence. When you refactor, cut comments that restate the code or repeat `AGENTS.md`.
 
+Write a behavior in the present tense only when it has been verified to exist. A required but
+unbuilt behavior becomes **must**, with the ticket that owns it named. A capability claim based on
+an error response is not verified until the request itself is known to be well-formed.
+
 **Creating a new Nx project — service, app, or lib — means following the `new-service` skill's
 checklist, start to finish, regardless of what the ticket says its scope is.** That checklist is the
 repo's definition of a deployable unit (generator → `nx:reset` → real tags → Dockerfile → K8s

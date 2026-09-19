@@ -43,6 +43,10 @@ needs** (`AGENTS.md` → "Writing Standard"). Ticket bodies carry facts, constra
 criteria, and file paths. They do not carry discovery history, restated repo conventions, or
 motivational prose. When you correct an existing ticket, cut text before you add text.
 
+Write a behavior in the present tense only when it has been verified to exist. A required but
+unbuilt behavior becomes **must**, with the ticket that owns it named. A capability claim based on
+an error response is not verified until the request itself is known to be well-formed.
+
 ## Who we serve, who we fight
 
 **Consumers**: buyers/sellers/renters (transaction moments), homeowners (ongoing upkeep — the
