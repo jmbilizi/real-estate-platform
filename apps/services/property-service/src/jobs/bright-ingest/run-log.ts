@@ -84,6 +84,14 @@ export interface BrightResourceReport {
   /** True when the per-run page cap stopped the pass with more to read. */
   readonly cappedByPageLimit: boolean;
   /**
+   * True when the pass could not cross a block of records that all share one cursor instant.
+   *
+   * Bright rejects the OR a strict resume needs, so the filter is inclusive and progress depends on
+   * the instant advancing. A tie block wider than the hard page cap never advances it, so every
+   * later run repeats this one. This is a fault; `cappedByPageLimit` alone is not.
+   */
+  readonly starved: boolean;
+  /**
    * True when the cursor is older than `BRIGHT_MLS_CURSOR_MAX_AGE_HOURS`.
    *
    * A stalled cursor is the failure this job cannot detect any other way: every run succeeds, every

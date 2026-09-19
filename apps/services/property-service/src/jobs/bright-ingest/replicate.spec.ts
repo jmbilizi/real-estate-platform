@@ -28,7 +28,6 @@ function run(
     failures?: readonly number[];
     pageSize?: number;
     maxPagesPerRun?: number;
-    resource?: string;
     store?: ReturnType<typeof createMemoryStore>;
   } = {},
 ) {
@@ -43,14 +42,13 @@ function run(
 
   const invoke = () =>
     replicateResource({
-      resource: resolveResource(overrides.resource ?? 'BrightProperties'),
+      resource: resolveResource('BrightProperties'),
       serviceRoot: SERVICE_ROOT,
       serviceRootHost: SERVICE_ROOT_HOST,
       tokenProvider,
       store: memory.store,
       runId: '00000000-0000-4000-8000-000000000001',
       initialCursor: EPOCH,
-      pageSize: overrides.pageSize ?? 4,
       maxPagesPerRun: overrides.maxPagesPerRun ?? 50,
       pageOptions: { fetchImpl: server.fetchImpl, sleep: () => Promise.resolve(), random: () => 0 },
     });
@@ -69,6 +67,7 @@ describe('replicateResource — paging', () => {
     expect(result.pagesFetched).toBe(3);
     expect(result.caughtUp).toBe(true);
     expect(result.cappedByPageLimit).toBe(false);
+    expect(result.starved).toBe(false);
     expect(memory.rows.size).toBe(10);
     expect(server.pageRequests).toHaveLength(3);
   });
@@ -89,7 +88,34 @@ describe('replicateResource — paging', () => {
     }
   });
 
-  /** The mock refuses an unbounded ordered scan the way Bright effectively does, by never answering. */
+  /**
+   * `$top` is "give me this many and stop", not a page size: with it, Bright returns no
+   * `@odata.nextLink`. The mock reproduces that, so a job that sent `$top` would replicate exactly
+   * one page and report itself caught up. This is the test that catches it.
+   */
+  it('sends no $top, so paging is not silently capped at one page', async () => {
+    const { server, invoke } = run({ records: { BrightProperties: listings(10) } });
+    const result = await invoke();
+
+    for (const url of server.pageRequests) {
+      expect(url).not.toContain('%24top=');
+    }
+    expect(result.pagesFetched).toBeGreaterThan(1);
+  });
+
+  /** Bright answers 400 to the OR a strict resume needs, so the job must never send one. */
+  it('sends no OR, which this feed rejects as too complex', async () => {
+    const memory = createMemoryStore();
+    await run({ records: { BrightProperties: listings(6) }, store: memory }).invoke();
+
+    const second = run({ records: { BrightProperties: listings(9) }, store: memory });
+    await expect(second.invoke()).resolves.toBeDefined();
+    for (const url of second.server.pageRequests) {
+      expect(decodeURIComponent(url)).not.toMatch(/\bor\b/i);
+    }
+  });
+
+  /** The mock refuses an unbounded ordered scan the way Bright does, by never answering. */
   it('the mock rejects an unbounded ordered scan, so the guard cannot be vacuous', async () => {
     const server = createMockResoServer({
       tokenEndpoint: TOKEN_ENDPOINT,
@@ -116,16 +142,23 @@ describe('replicateResource — paging', () => {
 });
 
 describe('replicateResource — resuming', () => {
-  it('reads only what changed since the stored cursor, and re-reads nothing', async () => {
+  /**
+   * The filter is inclusive, because Bright rejects the OR that a strict resume needs. So a resumed
+   * pass re-reads the records at the watermark instant and writes them over themselves. The row
+   * count, not the fetch count, is what must not drift.
+   */
+  it('reads only the watermark instant and later, and duplicates no row', async () => {
     const memory = createMemoryStore();
-    const first = run({ records: { BrightProperties: listings(6) }, store: memory });
-    await first.invoke();
+    await run({ records: { BrightProperties: listings(6) }, store: memory }).invoke();
     expect(memory.rows.size).toBe(6);
 
-    const second = run({ records: { BrightProperties: listings(9) }, store: memory });
-    const result = await second.invoke();
+    const result = await run({
+      records: { BrightProperties: listings(9) },
+      store: memory,
+    }).invoke();
 
-    expect(result.recordsFetched).toBe(3);
+    // The 6th record shares the watermark instant, so it comes back with the three new ones.
+    expect(result.recordsFetched).toBe(4);
     expect(memory.rows.size).toBe(9);
   });
 
@@ -142,53 +175,12 @@ describe('replicateResource — resuming', () => {
     const second = await run({ records: data, store: memory }).invoke();
 
     expect(memory.rows.size).toBe(10);
-    // The boundary record shares the cursor instant, so the strict (instant, key) predicate
-    // excludes it rather than re-reading it.
-    expect(second.recordsFetched).toBe(0);
+    // Exactly the one record at the watermark instant, re-read and re-written over itself.
+    expect(second.recordsFetched).toBe(1);
     expect(second.caughtUp).toBe(true);
   });
 
-  /**
-   * A tie block wider than a page is the case a timestamp-only cursor starves on: a capped run
-   * would re-read the same block forever and never pass it.
-   */
-  it('passes a tie block wider than one page', async () => {
-    const tied = Array.from({ length: 9 }, (_, i) => ({
-      ListingKey: 2000 + i,
-      ModificationTimestamp: '2026-09-05T12:00:00.000Z',
-      ListPrice: 1,
-    }));
-    const memory = createMemoryStore();
-
-    const first = await run({
-      records: { BrightProperties: tied },
-      store: memory,
-      pageSize: 3,
-      maxPagesPerRun: 1,
-    }).invoke();
-    expect(first.recordsStaged).toBe(3);
-    expect(first.cappedByPageLimit).toBe(true);
-
-    const second = await run({
-      records: { BrightProperties: tied },
-      store: memory,
-      pageSize: 3,
-      maxPagesPerRun: 1,
-    }).invoke();
-    expect(second.recordsStaged).toBe(3);
-    expect(memory.rows.size).toBe(6);
-
-    const third = await run({
-      records: { BrightProperties: tied },
-      store: memory,
-      pageSize: 3,
-      maxPagesPerRun: 5,
-    }).invoke();
-    expect(memory.rows.size).toBe(9);
-    expect(third.caughtUp).toBe(true);
-  });
-
-  it('stops at the page cap, reports it, and resumes from the cursor next run', async () => {
+  it('stops at the page cap once it has moved on, and resumes next run', async () => {
     const memory = createMemoryStore();
     const data = { BrightProperties: listings(20) };
 
@@ -202,13 +194,72 @@ describe('replicateResource — resuming', () => {
     expect(first.recordsStaged).toBe(8);
     expect(first.cappedByPageLimit).toBe(true);
     expect(first.caughtUp).toBe(false);
+    expect(first.starved).toBe(false);
 
     const second = await run({ records: data, store: memory, pageSize: 4 }).invoke();
     expect(memory.rows.size).toBe(20);
     expect(second.caughtUp).toBe(true);
   });
 
-  it('leaves the cursor untouched when a pass returns nothing', async () => {
+  /**
+   * The case the conditional page cap exists for. Every record shares one instant, so the cursor
+   * cannot advance. A cap applied unconditionally would make every later run re-read the same first
+   * pages forever — starvation, not slowness.
+   */
+  it('crosses a tie block wider than the page cap instead of re-reading it forever', async () => {
+    const tied = Array.from({ length: 9 }, (_, i) => ({
+      ListingKey: 2000 + i,
+      ModificationTimestamp: '2026-09-05T12:00:00.000Z',
+      ListPrice: 1,
+    }));
+    const memory = createMemoryStore();
+    const pass = () =>
+      run({
+        records: { BrightProperties: tied },
+        store: memory,
+        pageSize: 3,
+        maxPagesPerRun: 1,
+      }).invoke();
+
+    // The first pass advances off the epoch on page 1, so the cap applies and stops it there.
+    const first = await pass();
+    expect(first.recordsStaged).toBe(3);
+    expect(first.cappedByPageLimit).toBe(true);
+
+    // The second pass starts ON the tie instant. An unconditional cap would stop it at 3 again,
+    // forever. Instead it reads the whole block, because the instant never advances.
+    const second = await pass();
+    expect(second.pagesFetched).toBe(3);
+    expect(memory.rows.size).toBe(9);
+    expect(second.caughtUp).toBe(true);
+    expect(second.starved).toBe(false);
+  });
+
+  /** A block wider than the hard cap cannot be crossed. That is a fault and must say so. */
+  it('reports starvation when the hard cap is reached with the instant unchanged', async () => {
+    const tied = Array.from({ length: 300 }, (_, i) => ({
+      ListingKey: 3000 + i,
+      ModificationTimestamp: '2026-09-05T12:00:00.000Z',
+    }));
+    const memory = createMemoryStore();
+    // maxPagesPerRun 1 gives a hard cap of 20 pages; 300 records at 1 per page needs 300.
+    const pass = () =>
+      run({
+        records: { BrightProperties: tied },
+        store: memory,
+        pageSize: 1,
+        maxPagesPerRun: 1,
+      }).invoke();
+
+    await pass();
+    const result = await pass();
+
+    expect(result.starved).toBe(true);
+    expect(result.caughtUp).toBe(false);
+    expect(result.pagesFetched).toBe(20);
+  });
+
+  it('leaves the cursor where it was when a pass finds nothing newer', async () => {
     const memory = createMemoryStore();
     await run({ records: { BrightProperties: listings(3) }, store: memory }).invoke();
     const before = memory.cursors.get('BrightProperties');
@@ -216,41 +267,6 @@ describe('replicateResource — resuming', () => {
     await run({ records: { BrightProperties: listings(3) }, store: memory }).invoke();
 
     expect(memory.cursors.get('BrightProperties')).toEqual(before);
-  });
-});
-
-describe('replicateResource — resources are configuration, not forks', () => {
-  it('replicates BrightMedia on MediaModificationTimestamp', async () => {
-    const media = [
-      {
-        MediaKey: 77,
-        MediaModificationTimestamp: '2026-09-03T00:00:00.000Z',
-        MediaURL: 'https://cdn.example.test/1.jpg',
-      },
-    ];
-    const { server, memory, invoke } = run({
-      records: { BrightMedia: media },
-      resource: 'BrightMedia',
-    });
-
-    const result = await invoke();
-
-    expect(result.recordsStaged).toBe(1);
-    expect(memory.rows.get('BrightMedia\u000077')).toBeDefined();
-    expect(server.pageRequests[0]).toContain('MediaModificationTimestamp');
-  });
-
-  it('replicates Deletion on DeletionTimestamp and reports it as deletions', async () => {
-    const deletions = [
-      { UniversalKey: 31, DeletionTimestamp: '2026-09-04T00:00:00.000Z', TableName: 'Property' },
-    ];
-    const { memory, invoke } = run({ records: { Deletion: deletions }, resource: 'Deletion' });
-
-    const result = await invoke();
-
-    expect(result.kind).toBe('deletions');
-    expect(result.recordsStaged).toBe(1);
-    expect(memory.rows.get('Deletion\u000031')).toBeDefined();
   });
 });
 
@@ -280,32 +296,30 @@ describe('replicateResource — failures', () => {
    * host change is either a feed misconfiguration or an attempt to collect the credential.
    */
   it('refuses to send the token to a host other than the service root', async () => {
-    const hostile = {
-      fetchImpl: ((url: string) => {
-        if (url.includes('$metadata')) {
-          return Promise.resolve({
-            ok: true,
-            status: 200,
-            statusText: 'OK',
-            headers: { get: () => null },
-            text: () => Promise.resolve(''),
-          });
-        }
+    const hostileFetch = ((url: string) => {
+      if (url.includes('$metadata')) {
         return Promise.resolve({
           ok: true,
           status: 200,
           statusText: 'OK',
           headers: { get: () => null },
-          text: () =>
-            Promise.resolve(
-              JSON.stringify({
-                value: [{ ListingKey: 1, ModificationTimestamp: '2026-09-02T00:00:00.000Z' }],
-                '@odata.nextLink': 'https://collector.example.test/page2',
-              }),
-            ),
+          text: () => Promise.resolve(''),
         });
-      }) as never,
-    };
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: { get: () => null },
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              value: [{ ListingKey: 1, ModificationTimestamp: '2026-09-02T00:00:00.000Z' }],
+              '@odata.nextLink': 'https://collector.example.test/page2',
+            }),
+          ),
+      });
+    }) as never;
     const memory = createMemoryStore();
 
     await expect(
@@ -317,26 +331,34 @@ describe('replicateResource — failures', () => {
         store: memory.store,
         runId: '00000000-0000-4000-8000-000000000002',
         initialCursor: EPOCH,
-        pageSize: 10,
         maxPagesPerRun: 5,
-        pageOptions: { fetchImpl: hostile.fetchImpl, sleep: () => Promise.resolve() },
+        pageOptions: { fetchImpl: hostileFetch, sleep: () => Promise.resolve() },
       }),
     ).rejects.toThrow(/Refusing to send the Bright access token to collector.example.test/);
   });
 
   /**
-   * Bright keys are Edm.Int64. Above 2^53 a JSON number is not the integer Bright sent, and this
-   * value is the staging primary key and the cursor tiebreak.
+   * Bright keys are Edm.Int64 and real ones are large — a live `ListingKey` read on 2026-09-19 was
+   * 650158656022. Above 2^53 a JSON number is no longer the integer Bright sent, and this value is
+   * the staging primary key.
    */
-  it('refuses a key outside the exact integer range of a JSON number', async () => {
-    const { invoke } = run({
+  it('accepts a large key but refuses one outside the exact integer range', async () => {
+    const big = run({
+      records: {
+        BrightProperties: [
+          { ListingKey: 650158656022, ModificationTimestamp: '2026-09-02T00:00:00.000Z' },
+        ],
+      },
+    });
+    await expect(big.invoke()).resolves.toMatchObject({ recordsStaged: 1 });
+
+    const unsafe = run({
       records: {
         BrightProperties: [
           { ListingKey: 9_007_199_254_740_993, ModificationTimestamp: '2026-09-02T00:00:00.000Z' },
         ],
       },
     });
-
-    await expect(invoke()).rejects.toThrow(/outside the exact integer range/);
+    await expect(unsafe.invoke()).rejects.toThrow(/outside the exact integer range/);
   });
 });

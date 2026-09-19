@@ -15,24 +15,26 @@
  * without the other. `odata-query.spec.ts` asserts it for every resource, and
  * `no-consumer-writes.spec.ts` asserts no other file in the directory contains the token `$orderby`.
  *
- * ## Resuming exactly, rather than approximately
+ * ## Two wire facts that shaped this, both measured on 2026-09-19
  *
- * A timestamp is not unique. Bright bulk-loads records that share a `ModificationTimestamp` to the
- * second, so "resume after instant t" has to mean "after the record (t, k) we actually reached".
- * With `ge t` alone, a run capped at N pages would re-read the same tie block on every later run and
- * never pass it — starvation, not slowness, and most likely on `Deletion`, which holds 10.5 million
- * rows on the test feed.
+ * **Bright rejects OR.** The exact resume predicate for a non-unique timestamp is
+ * `(cursorField gt t) or (cursorField eq t and keyField gt k)`. Bright answers it **400**:
+ * `SubSystem(SearchEngine) = 20015 - Query Too Complex - OR Expressions allowed in top 2 levels
+ * only`. Removing the parentheses does not help; `and` binds tighter, the meaning is identical, and
+ * the answer is the same 400. So a strict resume predicate is not expressible on this feed.
  *
- * So the resume predicate carries the key:
+ * The filter is therefore `cursorField ge t`, inclusive, and the records sharing the watermark
+ * instant are read again on the next pass. That costs nothing: the staging primary key is
+ * `(resource, record_key)` and the write is an upsert, so a re-read writes each row over itself.
+ * The cursor still carries the key, because `replicate.ts` needs it to tell "this pass made
+ * progress" from "this pass re-read the same tie block" — see the page-cap rule there.
  *
- *     (cursorField gt t) or (cursorField eq t and keyField gt k)
- *
- * and the ordering carries the same tiebreak, `cursorField asc, keyField asc`, which was verified on
- * the wire. Every Bright key in `resources.ts` is `Edm.Int64`, so the key literal is a bare number
- * and `gt` on it is a total order.
- *
- * The first pass of a resource has no key yet and uses `ge t`, where `t` is the configured epoch.
- * That is still a bounding filter, which is the rule that matters.
+ * **`$top` suppresses `@odata.nextLink`.** Measured against `BrightProperties` with the same filter:
+ * no `$top` returns 1000 records **with** a nextLink; `$top=1000` returns 1000 records **with no
+ * nextLink**; `$top=10` returns 10 with none. So `$top` is a "give me this many and stop", not a
+ * page size. Sending it would have capped every run at one page and looked like a feed that was
+ * always caught up. This module therefore never sends `$top`, and page size is Bright's own default
+ * of 1000.
  */
 
 import type { BrightResource } from './resources';
@@ -49,8 +51,6 @@ export interface CursorQueryParams {
   readonly serviceRoot: string;
   readonly resource: BrightResource;
   readonly cursor: QueryCursor;
-  /** `$top`. Bright's own default page size is 1000. */
-  readonly pageSize: number;
   /** `$select`. Omitted when empty, which asks for every field. */
   readonly select?: readonly string[];
 }
@@ -74,47 +74,29 @@ function timestampLiteral(iso: string): string {
 }
 
 /**
- * Every Bright key in `resources.ts` is `Edm.Int64`, so a key literal is bare digits.
- *
- * Validated rather than assumed: this value comes back from Bright's own payload and is then spliced
- * into a query string. Rejecting anything that is not an integer keeps that splice from being a
- * place where a feed can write OData of its own.
- */
-function keyLiteral(resource: BrightResource, key: string): string {
-  if (!/^-?\d{1,19}$/.test(key)) {
-    throw new Error(
-      `Cursor key "${key}" for ${resource.entitySet} is not an integer. ${resource.keyField} is ` +
-        'Edm.Int64 in the committed $metadata document, and a non-integer here means either a feed ' +
-        'schema change or a corrupted cursor row.',
-    );
-  }
-  return key;
-}
-
-/**
- * Builds one page request. Always a bounding `$filter`, always the matching `$orderby`.
+ * Builds one page request. Always a bounding `$filter`, always the matching `$orderby`, never
+ * `$top`.
  *
  * Returns the absolute URL. `URLSearchParams` percent-encodes the filter, which Bright accepts —
- * the 2026-09-18 probes were encoded the same way.
+ * every probe that returned 200 was encoded the same way.
  */
 export function buildCursorQuery(params: CursorQueryParams): string {
-  const { resource, cursor, pageSize } = params;
+  const { resource, cursor } = params;
 
-  if (!Number.isInteger(pageSize) || pageSize < 1) {
-    throw new Error(`Page size must be a positive integer, got ${pageSize}.`);
+  if (!resource.supportsCursorQuery) {
+    throw new Error(
+      `${resource.entitySet} does not accept a $filter on this feed tier, so it cannot be ` +
+        'replicated incrementally. See resources.ts for the wire evidence.',
+    );
   }
 
   const instant = timestampLiteral(cursor.modifiedAt);
-  const filter =
-    cursor.recordKey === null
-      ? `${resource.cursorField} ge ${instant}`
-      : `(${resource.cursorField} gt ${instant}) or (${resource.cursorField} eq ${instant} and ` +
-        `${resource.keyField} gt ${keyLiteral(resource, cursor.recordKey)})`;
 
   const search = new URLSearchParams();
-  search.set('$filter', filter);
+  // Inclusive, because Bright rejects the OR that a strict `(t, key)` resume needs. The staging
+  // upsert makes re-reading the watermark instant free. See the header.
+  search.set('$filter', `${resource.cursorField} ge ${instant}`);
   search.set('$orderby', `${resource.cursorField} asc,${resource.keyField} asc`);
-  search.set('$top', String(pageSize));
   if (params.select !== undefined && params.select.length > 0) {
     search.set('$select', params.select.join(','));
   }

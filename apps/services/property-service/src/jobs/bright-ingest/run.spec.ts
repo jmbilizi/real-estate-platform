@@ -205,34 +205,25 @@ describe('runBrightIngest — replication', () => {
     }
   });
 
-  it('works a second resource from configuration, with its own cursor field', async () => {
-    const { server, memory, invoke } = mockRun({
-      env: configuredEnv({ [BRIGHT_ENV_VARS.resources]: 'BrightProperties,BrightMedia' }),
-      records: {
-        BrightProperties: listings(2),
-        BrightMedia: [{ MediaKey: 9, MediaModificationTimestamp: '2026-09-03T00:00:00.000Z' }],
-      },
-    });
+  /**
+   * Measured 2026-09-19 on the BRIGHTIDXTEST account: `BrightMedia` and `Deletion` answer 400 to
+   * every `$filter`, including one on their own key, and `Deletion` refuses `$orderby` as well.
+   * Configuring either must fail at startup with the evidence, not turn into a nightly failed Job.
+   */
+  it.each(['BrightMedia', 'Deletion'])(
+    'refuses %s, which this feed tier will not filter',
+    async (resource) => {
+      const { server, invoke } = mockRun({
+        env: configuredEnv({ [BRIGHT_ENV_VARS.resources]: resource }),
+      });
 
-    const result = await invoke();
+      const result = await invoke();
 
-    expect(result.resources.map((r) => r.resource)).toEqual(['BrightProperties', 'BrightMedia']);
-    expect(memory.cursors.has('BrightMedia')).toBe(true);
-    expect(server.pageRequests.some((url) => url.includes('MediaModificationTimestamp'))).toBe(
-      true,
-    );
-  });
-
-  it('counts Deletion rows as deletions detected', async () => {
-    const { invoke } = mockRun({
-      env: configuredEnv({ [BRIGHT_ENV_VARS.resources]: 'Deletion' }),
-      records: {
-        Deletion: [{ UniversalKey: 4, DeletionTimestamp: '2026-09-03T00:00:00.000Z' }],
-      },
-    });
-
-    await expect(invoke()).resolves.toMatchObject({ counts: { deletionsDetected: 1 } });
-  });
+      expect(result.outcome).toBe('failed');
+      expect(result.message).toContain('cannot be replicated incrementally');
+      expect(server.pageRequests).toHaveLength(0);
+    },
+  );
 
   it('clears every cursor first when a full resync is requested', async () => {
     const memory = createMemoryStore();
@@ -468,21 +459,25 @@ describe('runBrightIngest — failure', () => {
     expect(result.message).toContain('getaddrinfo ENOTFOUND');
   });
 
-  /** A pass that staged rows and then failed has still moved its cursor. Hiding that misleads. */
+  /**
+   * A pass that staged rows and then failed has still moved its cursor, because the cursor advances
+   * inside the transaction that writes each page. A report that hid those rows would make the next
+   * run look like it skipped work.
+   */
   it('keeps the counts of whatever completed before the failure', async () => {
-    const { invoke } = mockRun({
-      env: configuredEnv({
-        [BRIGHT_ENV_VARS.resources]: 'BrightProperties,BrightMedia',
-        [BRIGHT_ENV_VARS.maxRetries]: '0',
-      }),
-      records: { BrightProperties: listings(3) },
-      pageSize: 10,
+    const { memory, invoke } = mockRun({
+      env: configuredEnv({ [BRIGHT_ENV_VARS.maxRetries]: '0' }),
+      records: { BrightProperties: listings(9) },
+      pageSize: 3,
+      // The first page succeeds, the second is a 400, which is not retryable.
+      failures: [0, 400],
     });
 
     const result = await invoke();
 
     expect(result.outcome).toBe('failed');
     expect(result.counts.recordsStaged).toBe(3);
+    expect(memory.rows.size).toBe(3);
   });
 });
 

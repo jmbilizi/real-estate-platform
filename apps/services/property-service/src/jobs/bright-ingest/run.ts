@@ -47,8 +47,8 @@ import {
 } from './bright-client';
 import { type BrightConfig, resolveBrightConfig } from './config';
 import { RateLimiter } from './rate-limiter';
-import { replicateResource, type ReplicateResourceResult } from './replicate';
-import { resolveResource } from './resources';
+import { replicateResource, type ReplicateResourceResult, ReplicationFailure } from './replicate';
+import { BRIGHT_RESOURCES, resolveResource } from './resources';
 import {
   type BrightResourceReport,
   type BrightRunCounts,
@@ -112,6 +112,7 @@ function toReport(
     cursorAgeHours: result.cursorAgeHours,
     caughtUp: result.caughtUp,
     cappedByPageLimit: result.cappedByPageLimit,
+    starved: result.starved,
     stalled: result.cursorAgeHours !== null && result.cursorAgeHours > cursorMaxAgeHours,
   };
 }
@@ -138,6 +139,7 @@ function replicatedMessage(
 ): string {
   const behind = reports.filter((r) => r.cappedByPageLimit).map((r) => r.resource);
   const stalled = reports.filter((r) => r.stalled).map((r) => r.resource);
+  const starved = reports.filter((r) => r.starved).map((r) => r.resource);
   return (
     `Replicated ${counts.recordsStaged} record(s) into staging from ` +
     `${config.endpoint.serviceRootHost} over ${counts.pagesFetched} page(s), feed tier ` +
@@ -148,6 +150,9 @@ function replicatedMessage(
     (stalled.length === 0
       ? ''
       : `STALLED CURSOR beyond ${config.replication.cursorMaxAgeHours}h: ${stalled.join(', ')}. `) +
+    (starved.length === 0
+      ? ''
+      : `STARVED on a tie block, the cursor cannot advance: ${starved.join(', ')}. `) +
     'No consumer row was written: mapping is #93.'
   );
 }
@@ -254,7 +259,6 @@ export async function runBrightIngest(
           store,
           runId,
           initialCursor: replication.initialCursor,
-          pageSize: replication.pageSize,
           maxPagesPerRun: replication.maxPagesPerRun,
           pageOptions: {
             ...options,
@@ -278,7 +282,15 @@ export async function runBrightIngest(
       // Keep whatever completed before the failure. A pass that staged 40,000 rows and then hit a
       // 500 has still moved its cursor, and a report that hid that would make the next run look
       // like it skipped work.
-      counts = summarise(reports, 0);
+      if (error instanceof ReplicationFailure) {
+        reports.push(toReport(error.partial, config.replication.cursorMaxAgeHours));
+      }
+      counts = summarise(
+        reports,
+        reports
+          .filter((report) => BRIGHT_RESOURCES[report.resource]?.kind === 'deletions')
+          .reduce((total, report) => total + report.recordsStaged, 0),
+      );
     }
   }
 

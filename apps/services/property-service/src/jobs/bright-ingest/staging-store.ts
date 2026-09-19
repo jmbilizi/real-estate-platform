@@ -64,8 +64,13 @@ export interface StagingConnectable {
  * Postgres caps a statement at 65535 bound parameters, and a Bright page is up to 1000 records
  * wide. Five parameters per record puts the record cap first, so it is the one that binds. Chunks
  * stay inside the same transaction, so a split batch is still all-or-nothing.
+ *
+ * The record cap is 200 rather than 1000 because of payload SIZE, not parameter count.
+ * `BrightProperty` has 931 fields, so a 1000-row multi-row INSERT carries several megabytes of
+ * jsonb in one statement. That is what the server has to buffer, and it OOMKilled the local
+ * Postgres container before this was lowered.
  */
-const MAX_RECORDS_PER_STATEMENT = 1000;
+const MAX_RECORDS_PER_STATEMENT = 200;
 const MAX_PARAMETERS_PER_STATEMENT = 30000;
 const PARAMETERS_PER_RECORD = 5;
 const CHUNK_SIZE = Math.min(

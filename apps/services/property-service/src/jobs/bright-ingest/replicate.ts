@@ -16,11 +16,20 @@
  * granularity. The AC "a re-run after a mid-run failure resumes without missing or duplicating
  * records" is that transaction plus the `(resource, record_key)` primary key, not a claim in prose.
  *
- * ## Ties
+ * ## Ties, and why the page cap is conditional
  *
- * The cursor is a pair, `(modified_at, record_key)`, and the resume predicate is strict on that
- * pair. See `odata-query.ts` for why a timestamp alone starves a capped run on a tie block rather
- * than merely repeating work.
+ * Bright rejects the OR that a strict `(instant, key)` resume needs, so the filter is inclusive —
+ * `cursorField ge t` — and the records sharing the watermark instant are read again next pass. The
+ * staging upsert makes that free.
+ *
+ * It is not free if a tie block is wider than the page cap. Then every run reads the same first N
+ * pages of one instant, writes the same rows, and stops with the cursor where it started. That is
+ * starvation, not slowness, and no amount of waiting fixes it.
+ *
+ * So the page cap only applies once the pass has moved off the instant it started from. While the
+ * cursor instant is unchanged the pass keeps reading, bounded by `HARD_PAGE_CAP_MULTIPLIER` so a run
+ * still cannot run forever. A pass that hits the hard cap without advancing reports `starved`, which
+ * is a real fault and says so rather than looking like a quiet success.
  */
 
 import { type BrightPageOptions, fetchPage, type TokenProvider } from './bright-client';
@@ -37,10 +46,37 @@ export interface ReplicateResourceParams {
   readonly runId: string;
   /** Where a pass starts when the stored cursor is empty. */
   readonly initialCursor: string;
-  readonly pageSize: number;
   readonly maxPagesPerRun: number;
   readonly pageOptions?: BrightPageOptions;
   readonly now?: () => Date;
+}
+
+/**
+ * How far past the page cap a pass may go while the cursor instant has not advanced.
+ *
+ * The cap exists to bound a run's cost. The multiplier exists so a tie block wider than the cap is
+ * crossed instead of re-read forever. Both are needed; neither alone is safe.
+ */
+export const HARD_PAGE_CAP_MULTIPLIER = 20;
+
+/**
+ * A pass that failed part way, carrying what it had already done.
+ *
+ * The cursor advances inside the transaction that writes each page, so a pass that staged 40,000
+ * rows and then met a 500 has really moved. Throwing a bare error would drop that from the run
+ * report, and the next run would look like it had skipped the work.
+ */
+export class ReplicationFailure extends Error {
+  readonly partial: ReplicateResourceResult;
+  /** The original error. Named `reason` rather than `cause`, which needs a newer lib target. */
+  readonly reason: unknown;
+
+  constructor(reason: unknown, partial: ReplicateResourceResult) {
+    super(reason instanceof Error ? reason.message : String(reason));
+    this.name = 'ReplicationFailure';
+    this.reason = reason;
+    this.partial = partial;
+  }
 }
 
 export interface ReplicateResourceResult {
@@ -58,6 +94,12 @@ export interface ReplicateResourceResult {
   readonly caughtUp: boolean;
   /** True when the page cap stopped the pass with more to read. */
   readonly cappedByPageLimit: boolean;
+  /**
+   * True when the pass read `maxPagesPerRun * HARD_PAGE_CAP_MULTIPLIER` pages without the cursor
+   * instant advancing. A tie block wider than that cannot be crossed, so every later run repeats
+   * this one. It is a fault, not a slow backfill.
+   */
+  readonly starved: boolean;
 }
 
 /**
@@ -126,75 +168,92 @@ export async function replicateResource(
     },
   };
 
+  // The instant this pass starts from. The page cap is not applied until the cursor moves past it.
+  const startInstant = cursor.modifiedAt ?? params.initialCursor;
+
   let url: string | null = buildCursorQuery({
     serviceRoot: params.serviceRoot,
     resource,
-    cursor: {
-      modifiedAt: cursor.modifiedAt ?? params.initialCursor,
-      recordKey: cursor.modifiedAt === null ? null : cursor.recordKey,
-    },
-    pageSize: params.pageSize,
+    cursor: { modifiedAt: startInstant, recordKey: cursor.recordKey },
   });
 
+  const hardCap = params.maxPagesPerRun * HARD_PAGE_CAP_MULTIPLIER;
   let pagesFetched = 0;
   let recordsFetched = 0;
   let recordsStaged = 0;
   let caughtUp = false;
   let cappedByPageLimit = false;
+  let starved = false;
 
-  while (url !== null) {
-    const page = await fetchPage(url, params.tokenProvider, params.serviceRootHost, pageOptions);
-    pagesFetched += 1;
-    recordsFetched += page.records.length;
-
-    const staged: StagedRecord[] = page.records.map((record) => ({
-      recordKey: readKey(record, resource),
-      modifiedAt: readCursorInstant(record, resource),
-      payload: record,
-    }));
-
-    // Ordered ascending by (cursorField, keyField), so the last record is the high-water mark. The
-    // cursor is left untouched by an empty page: advancing it to "now" would skip anything Bright
-    // had not yet made visible at that instant.
-    const last = staged[staged.length - 1];
-    if (last !== undefined) {
-      cursor = { modifiedAt: last.modifiedAt, recordKey: last.recordKey };
-    }
-
-    recordsStaged += await store.commitBatch({
+  const snapshot = (): ReplicateResourceResult => {
+    const ageHours =
+      cursor.modifiedAt === null
+        ? null
+        : Math.max(0, (now().getTime() - new Date(cursor.modifiedAt).getTime()) / 3_600_000);
+    return {
       resource: resource.entitySet,
-      runId,
-      records: staged,
-      cursor,
-    });
+      kind: resource.kind,
+      pagesFetched,
+      recordsFetched,
+      recordsStaged,
+      retries,
+      cursorBefore,
+      cursorAfter: cursor,
+      cursorAgeHours: ageHours === null ? null : Math.round(ageHours * 100) / 100,
+      caughtUp,
+      cappedByPageLimit,
+      starved,
+    };
+  };
 
-    if (page.nextLink === null) {
-      caughtUp = true;
-      url = null;
-    } else if (pagesFetched >= params.maxPagesPerRun) {
-      cappedByPageLimit = true;
-      url = null;
-    } else {
-      url = page.nextLink;
+  try {
+    while (url !== null) {
+      const page = await fetchPage(url, params.tokenProvider, params.serviceRootHost, pageOptions);
+      pagesFetched += 1;
+      recordsFetched += page.records.length;
+
+      const staged: StagedRecord[] = page.records.map((record) => ({
+        recordKey: readKey(record, resource),
+        modifiedAt: readCursorInstant(record, resource),
+        payload: record,
+      }));
+
+      // Ordered ascending by (cursorField, keyField), so the last record is the high-water mark. The
+      // cursor is left untouched by an empty page: advancing it to "now" would skip anything Bright
+      // had not yet made visible at that instant.
+      const last = staged[staged.length - 1];
+      if (last !== undefined) {
+        cursor = { modifiedAt: last.modifiedAt, recordKey: last.recordKey };
+      }
+
+      recordsStaged += await store.commitBatch({
+        resource: resource.entitySet,
+        runId,
+        records: staged,
+        cursor,
+      });
+
+      const advanced = cursor.modifiedAt !== null && cursor.modifiedAt !== startInstant;
+
+      if (page.nextLink === null) {
+        caughtUp = true;
+        url = null;
+      } else if (pagesFetched >= params.maxPagesPerRun && advanced) {
+        cappedByPageLimit = true;
+        url = null;
+      } else if (pagesFetched >= hardCap) {
+        // Past the cap and still on the instant this pass started from: the tie block is wider than
+        // the run can cross, so every later run would repeat exactly this.
+        starved = !advanced;
+        cappedByPageLimit = true;
+        url = null;
+      } else {
+        url = page.nextLink;
+      }
     }
+  } catch (error) {
+    throw new ReplicationFailure(error, snapshot());
   }
 
-  const cursorAgeHours =
-    cursor.modifiedAt === null
-      ? null
-      : Math.max(0, (now().getTime() - new Date(cursor.modifiedAt).getTime()) / 3_600_000);
-
-  return {
-    resource: resource.entitySet,
-    kind: resource.kind,
-    pagesFetched,
-    recordsFetched,
-    recordsStaged,
-    retries,
-    cursorBefore,
-    cursorAfter: cursor,
-    cursorAgeHours: cursorAgeHours === null ? null : Math.round(cursorAgeHours * 100) / 100,
-    caughtUp,
-    cappedByPageLimit,
-  };
+  return snapshot();
 }

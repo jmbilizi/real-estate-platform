@@ -18,9 +18,9 @@
  *     `rate-limiter.ts` is client-side.
  *  4. **A 429 or a 5xx is a bare status.** The injected failure queue produces them.
  *
- * `$filter` support is deliberately narrow: the two predicate shapes `odata-query.ts` emits, and a
- * hard error for anything else. A permissive parser would quietly accept a malformed filter and the
- * suite would stop testing the thing it exists to test.
+ * `$filter` support is deliberately narrow: the one predicate `odata-query.ts` emits, Bright's own
+ * 400 for an `or`, and a hard error for anything else. A permissive parser would quietly accept a
+ * filter the real feed rejects, and the suite would stop testing the thing it exists to test.
  */
 
 import type { FetchLike } from './bright-client';
@@ -36,7 +36,10 @@ export interface MockResoOptions {
   readonly records: Readonly<Record<string, readonly Record<string, unknown>[]>>;
   /** Bright's own default. */
   readonly pageSize?: number;
-  /** Consumed in order by data requests. A number is a status to return instead of the page. */
+  /**
+   * Consumed in order by data requests. A positive number is the status to answer instead of the
+   * page; `0` answers the page normally, so a test can fail the second request and not the first.
+   */
   readonly failures?: readonly number[];
   readonly accessToken?: string;
   readonly expiresInSeconds?: number;
@@ -58,10 +61,27 @@ interface ParsedFilter {
   /** Inclusive of the instant when there is no key, strictly after `(instant, key)` when there is. */
   readonly keyField: string | null;
   readonly key: number | null;
+  /** True when Bright would answer 400 rather than run the query. */
+  readonly rejected: boolean;
 }
 
-/** Parses only the two shapes `buildCursorQuery()` emits. Anything else is a test failure. */
+export const OR_REJECTED_ERROR =
+  'SubSystem(SearchEngine) = 20015 - Query Too Complex - Message = OR Expressions allowed in top ' +
+  '2 levels only. Actual level = 2';
+
+/**
+ * Parses the one predicate shape Bright accepts from this job, and refuses the rest the way Bright
+ * refuses it.
+ *
+ * `or` is rejected with Bright's own message. Measured 2026-09-19: the strict `(t, key)` resume
+ * predicate answers 400, parenthesised or not. A mock that quietly accepted it would let the job
+ * ship a query the feed will never answer.
+ */
 function parseFilter(filter: string): ParsedFilter {
+  if (/\bor\b/i.test(filter)) {
+    return { cursorField: '', instant: Number.NaN, keyField: null, key: null, rejected: true };
+  }
+
   const simple = /^(\w+) ge (\S+)$/.exec(filter);
   if (simple !== null) {
     return {
@@ -69,24 +89,12 @@ function parseFilter(filter: string): ParsedFilter {
       instant: Date.parse(simple[2] ?? ''),
       keyField: null,
       key: null,
-    };
-  }
-
-  const compound = /^\((\w+) gt (\S+)\) or \((\w+) eq (\S+) and (\w+) gt (-?\d+)\)$/.exec(filter);
-  if (compound !== null) {
-    if (compound[1] !== compound[3] || compound[2] !== compound[4]) {
-      throw new Error(`MOCK RESO: inconsistent compound filter "${filter}".`);
-    }
-    return {
-      cursorField: compound[1] ?? '',
-      instant: Date.parse(compound[2] ?? ''),
-      keyField: compound[5] ?? '',
-      key: Number(compound[6]),
+      rejected: false,
     };
   }
 
   throw new Error(
-    `MOCK RESO: unsupported $filter "${filter}". The mock supports only the predicates ` +
+    `MOCK RESO: unsupported $filter "${filter}". The mock supports only the predicate ` +
       'odata-query.ts emits. Widening it is a deliberate change, not a fix.',
   );
 }
@@ -175,8 +183,9 @@ export function createMockResoServer(options: MockResoOptions): MockResoServer {
 
     server.pageRequests.push(url);
 
+    // `0` lets a request through while still consuming a slot, so a test can fail the Nth page.
     const injected = failures.shift();
-    if (injected !== undefined) {
+    if (injected !== undefined && injected > 0) {
       return Promise.resolve(response(injected, ''));
     }
 
@@ -192,6 +201,11 @@ export function createMockResoServer(options: MockResoOptions): MockResoServer {
       return Promise.reject(new Error(UNBOUNDED_SCAN_ERROR));
     }
     const filter = parseFilter(filterRaw);
+    if (filter.rejected) {
+      return Promise.resolve(
+        response(400, JSON.stringify({ error: { code: '400', message: OR_REJECTED_ERROR } })),
+      );
+    }
 
     const orderBy = parsed.searchParams.get('$orderby') ?? '';
     const [cursorField, keyField] = orderBy.split(',').map((part) => part.trim().split(/\s+/)[0]);
@@ -207,13 +221,19 @@ export function createMockResoServer(options: MockResoOptions): MockResoServer {
         return Number(a[keyField ?? '']) - Number(b[keyField ?? '']);
       });
 
-    const top = Number(parsed.searchParams.get('$top') ?? pageSize);
-    const size = Math.min(Number.isFinite(top) && top > 0 ? top : pageSize, pageSize);
+    // `$top` is "give me this many and stop", NOT a page size. Measured 2026-09-19: `$top=1000`
+    // returns 1000 records with NO `@odata.nextLink`, where the same query without it returns 1000
+    // WITH one. Reproduced here so a job that sends `$top` fails the paging tests instead of
+    // silently replicating one page and reporting itself caught up.
+    const topRaw = parsed.searchParams.get('$top');
+    const top = topRaw === null ? null : Number(topRaw);
     const skip = Number(parsed.searchParams.get('$skiptoken') ?? '0');
+    const size =
+      top !== null && Number.isFinite(top) && top > 0 ? Math.min(top, pageSize) : pageSize;
     const page = selected.slice(skip, skip + size);
 
     const body: Record<string, unknown> = { value: page };
-    if (skip + page.length < selected.length) {
+    if (top === null && skip + page.length < selected.length) {
       const next = new URL(url);
       next.searchParams.set('$skiptoken', String(skip + page.length));
       body['@odata.nextLink'] = next.toString();

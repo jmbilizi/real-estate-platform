@@ -49,7 +49,6 @@ export const BRIGHT_ENV_VARS = {
   feed: 'BRIGHT_MLS_FEED',
   resources: 'BRIGHT_MLS_RESOURCES',
   initialCursor: 'BRIGHT_MLS_INITIAL_CURSOR',
-  pageSize: 'BRIGHT_MLS_PAGE_SIZE',
   maxPagesPerRun: 'BRIGHT_MLS_MAX_PAGES_PER_RUN',
   requestsPerSecond: 'BRIGHT_MLS_REQUESTS_PER_SECOND',
   requestsPerMinute: 'BRIGHT_MLS_REQUESTS_PER_MINUTE',
@@ -305,8 +304,6 @@ export interface BrightReplicationConfig {
   readonly resources: readonly string[];
   /** Where a first pass, or a pass after a full resync, starts. ISO-8601 with a `Z` suffix. */
   readonly initialCursor: string;
-  /** `$top` per page. Bright's own default is 1000. */
-  readonly pageSize: number;
   /** Pages per resource per run. A capped run resumes on the next run, because the cursor advances
    * with each page rather than at the end. */
   readonly maxPagesPerRun: number;
@@ -331,7 +328,6 @@ export interface BrightReplicationConfig {
 export const DEFAULT_REPLICATION: BrightReplicationConfig = {
   resources: ['BrightProperties'],
   initialCursor: '1970-01-01T00:00:00.000Z',
-  pageSize: 1000,
   maxPagesPerRun: 50,
   requestsPerSecond: 2,
   requestsPerMinute: 60,
@@ -387,7 +383,6 @@ export function resolveReplicationConfig(
   return {
     resources,
     initialCursor,
-    pageSize: positiveInt(env, BRIGHT_ENV_VARS.pageSize, DEFAULT_REPLICATION.pageSize),
     maxPagesPerRun: positiveInt(
       env,
       BRIGHT_ENV_VARS.maxPagesPerRun,
