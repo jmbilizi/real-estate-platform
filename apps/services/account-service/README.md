@@ -195,6 +195,33 @@ window.
 | `GET`    | `/account/api-keys`      | Self          | List own API keys (prefix visible, hash never returned) |
 | `DELETE` | `/account/api-keys/{id}` | Self          | Revoke an API key                                       |
 
+### Waitlist (early-access interest)
+
+Services and Connect ship as gated preview. These endpoints record which pillars an account wants
+early access to. They grant no access and commit to no date.
+
+| Method   | Path                           | Auth required | Description                                 |
+| -------- | ------------------------------ | ------------- | ------------------------------------------- |
+| `GET`    | `/account/waitlist`            | Self          | List own early-access interests             |
+| `POST`   | `/account/waitlist`            | Self          | Register one interest (idempotent)          |
+| `DELETE` | `/account/waitlist/{interest}` | Self          | Withdraw one interest (absent is a success) |
+
+Valid `interest` values: `services-consumer`, `services-provider`, `connect`. An account may hold
+any combination of them. The account id always comes from the authenticated principal, so a caller
+reaches only its own rows.
+
+`POST` rejects a value outside the vocabulary with `400`. `DELETE` does not check the vocabulary:
+the lookup is already scoped to the caller, so an unknown value removes nothing and reports the same
+success as an absent one. That keeps a row withdrawable after its kind leaves the vocabulary.
+
+```jsonc
+// POST /account/waitlist — the interest kind is the entire payload
+{ "interest": "connect" }
+
+// GET /account/waitlist
+{ "interests": [{ "interest": "connect", "registeredAt": "2026-09-19T05:12:35Z" }] }
+```
+
 ### Internal Credential Introspection (service-to-service)
 
 | Method | Path                           | Auth shape (forwarded as-is)                          | Description                                                         |
@@ -302,6 +329,26 @@ Key additions on top of the standard Identity columns:
 
 One row per `(UserId, AppId)` pair. Upserted atomically on login. Powers the `app_access` claims
 enrichment pipeline.
+
+### `WaitlistInterest`
+
+One row per `(UserId, InterestKind)` pair. The composite primary key makes registration idempotent
+at the storage layer.
+
+| Field          | Purpose                                                                                          |
+| -------------- | ------------------------------------------------------------------------------------------------ |
+| `UserId`       | FK → `AspNetUsers.Id`, cascade delete                                                            |
+| `InterestKind` | Fixed vocabulary — `services-consumer`, `services-provider`, `connect` (`WaitlistInterestKinds`) |
+| `RegisteredAt` | Cohort date for the waitlist-to-active conversion metric (PRD §16)                               |
+
+The row holds no signal beyond the pillar and the date. No protected-class or eligibility field
+exists on it (PRD §6). Interests are independent, so nothing collapses them to a persona (PRD
+§11.2).
+
+Account soft-delete keeps these rows, because it stamps `DeletedAt` and never hard-deletes the user,
+so the cascade FK does not fire. The endpoints hide the rows from a soft-deleted account. Any later
+query that reads the table directly — an invite or announcement export, for example — must join
+`AspNetUsers` and filter on `DeletedAt IS NULL`, or it contacts accounts that asked to be deleted.
 
 ---
 

@@ -128,6 +128,9 @@ internal static class Program
         // API Keys: POST/GET/DELETE /account/api-keys
         app.MapApiKeyRoutes();
 
+        // Waitlist: GET/POST /account/waitlist, DELETE /account/waitlist/{interest}
+        app.MapWaitlistRoutes();
+
         // Internal identity resolution: forwarded cookie/bearer/api-key -> account id
         app.MapCredentialIntrospectionRoutes();
 
