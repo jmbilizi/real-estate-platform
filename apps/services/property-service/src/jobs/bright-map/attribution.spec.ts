@@ -40,9 +40,9 @@ describe('mapAttribution', () => {
   });
 
   it('fails closed when the office email is absent entirely', () => {
-    expect(mapAttribution({ ListOfficeName: 'Acme Realty', ListOfficePhone: '2025551234' })).toEqual(
-      { ok: false, reason: 'missing_required_attribution' },
-    );
+    expect(
+      mapAttribution({ ListOfficeName: 'Acme Realty', ListOfficePhone: '2025551234' }),
+    ).toEqual({ ok: false, reason: 'missing_required_attribution' });
   });
 
   it('leaves the optional agent fields null when Bright omits them', () => {

@@ -12,7 +12,12 @@
  * that forbids importing `db/write` — this module's whole job is to use it.
  */
 
-import { getOrCreateProperty, getOrCreateUnit, Queryable, upsertListingBySourceKey } from '../../db/write';
+import {
+  getOrCreateProperty,
+  getOrCreateUnit,
+  Queryable,
+  upsertListingBySourceKey,
+} from '../../db/write';
 import { PropertyRow, UnitRow } from '../../seed/types';
 import { randomUUID } from 'node:crypto';
 

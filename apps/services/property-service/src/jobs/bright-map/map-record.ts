@@ -28,6 +28,8 @@ export type RejectReason =
   | 'unrecognized_property_type'
   | 'unrecognized_status'
   | 'sold_display_delay_not_configured'
+  | 'sold_missing_close_date'
+  | 'sold_still_in_display_delay_window'
   | 'missing_required_attribution';
 
 export interface MappedPropertyInput {
@@ -159,13 +161,17 @@ export function mapBrightPropertyRecord(
     if (ctx.soldDisplayDelayDays === null) {
       return reject(listingKey, 'sold_display_delay_not_configured');
     }
-    if (!closeDate) {
-      return reject(listingKey, 'sold_display_delay_not_configured');
+    const closedAt = closeDate ? new Date(`${closeDate}T00:00:00Z`).getTime() : NaN;
+    // A malformed CloseDate (or none at all) parses to NaN, and every comparison against NaN is
+    // false — including `Date.now() < NaN`, which would otherwise fall through as "not still in
+    // the delay window" and publish an undated sold with zero delay. Reject explicitly instead of
+    // relying on the comparison to fail safe.
+    if (!closeDate || Number.isNaN(closedAt)) {
+      return reject(listingKey, 'sold_missing_close_date');
     }
-    const closedAt = new Date(`${closeDate}T00:00:00Z`).getTime();
     const delayMs = ctx.soldDisplayDelayDays * 24 * 60 * 60 * 1000;
     if (Date.now() < closedAt + delayMs) {
-      return reject(listingKey, 'sold_display_delay_not_configured');
+      return reject(listingKey, 'sold_still_in_display_delay_window');
     }
   }
 
@@ -182,8 +188,7 @@ export function mapBrightPropertyRecord(
 
   const suppression = mapSuppressionFlags(payload);
 
-  const lastUpdated =
-    nonBlank(payload.ModificationTimestamp) ?? new Date().toISOString();
+  const lastUpdated = nonBlank(payload.ModificationTimestamp) ?? new Date().toISOString();
 
   return {
     kind: 'mapped',

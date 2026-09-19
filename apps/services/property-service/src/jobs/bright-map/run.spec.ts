@@ -15,9 +15,19 @@ function createFakeDb(options: {
   const properties = new Map<string, Record<string, unknown>>(); // address_key -> row
   const listings = new Map<string, Record<string, unknown>>(); // id -> row
   const statuses = options.statuses ?? [
-    { code: 'Active', consumer_status: 'Active', is_terminal: false, reso_standard_status: 'Active' },
+    {
+      code: 'Active',
+      consumer_status: 'Active',
+      is_terminal: false,
+      reso_standard_status: 'Active',
+    },
     { code: 'Closed', consumer_status: 'Sold', is_terminal: true, reso_standard_status: 'Closed' },
-    { code: 'Withdrawn', consumer_status: null, is_terminal: true, reso_standard_status: 'Withdrawn' },
+    {
+      code: 'Withdrawn',
+      consumer_status: null,
+      is_terminal: true,
+      reso_standard_status: 'Withdrawn',
+    },
   ];
 
   const client: Queryable = {
@@ -89,8 +99,18 @@ function createFakeDb(options: {
         };
       }
       if (text.includes('INSERT INTO listings')) {
-        const [id, propertyId, unitId, title, offerKind, consumerStatus, status, source, sourceSystem, sourceListingKey] =
-          values;
+        const [
+          id,
+          propertyId,
+          unitId,
+          title,
+          offerKind,
+          consumerStatus,
+          status,
+          source,
+          sourceSystem,
+          sourceListingKey,
+        ] = values;
         listings.set(String(id), {
           id,
           propertyId,
@@ -132,7 +152,10 @@ const ACTIVE_PAYLOAD = {
 describe('mapStagedBrightProperties', () => {
   it('reports zero work when nothing is staged', async () => {
     const { client } = createFakeDb({ stagedPayloads: [] });
-    const report = await mapStagedBrightProperties(client, { feed: 'test', soldDisplayDelayDays: null });
+    const report = await mapStagedBrightProperties(client, {
+      feed: 'test',
+      soldDisplayDelayDays: null,
+    });
     expect(report.staged).toBe(0);
     expect(report.mapped).toBe(0);
   });

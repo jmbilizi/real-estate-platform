@@ -88,11 +88,18 @@ describe('mapBrightPropertyRecord', () => {
       { ...BASE_PAYLOAD, PropertySubType: 'Houseboat' },
       ctx(),
     );
-    expect(result).toEqual({ kind: 'rejected', listingKey: 'BR-1', reason: 'unrecognized_property_type' });
+    expect(result).toEqual({
+      kind: 'rejected',
+      listingKey: 'BR-1',
+      reason: 'unrecognized_property_type',
+    });
   });
 
   it('rejects an unrecognised StandardStatus', () => {
-    const result = mapBrightPropertyRecord({ ...BASE_PAYLOAD, StandardStatus: 'Registered' }, ctx());
+    const result = mapBrightPropertyRecord(
+      { ...BASE_PAYLOAD, StandardStatus: 'Registered' },
+      ctx(),
+    );
     expect(result).toEqual({ kind: 'rejected', listingKey: 'BR-1', reason: 'unrecognized_status' });
   });
 
@@ -127,7 +134,33 @@ describe('mapBrightPropertyRecord', () => {
     expect(result).toEqual({
       kind: 'rejected',
       listingKey: 'BR-1',
-      reason: 'sold_display_delay_not_configured',
+      reason: 'sold_still_in_display_delay_window',
+    });
+  });
+
+  it('rejects a Sold record with no CloseDate even once a delay window is configured', () => {
+    const result = mapBrightPropertyRecord(
+      { ...BASE_PAYLOAD, StandardStatus: 'Closed', ClosePrice: 495000 },
+      ctx({ soldDisplayDelayDays: 30 }),
+    );
+    expect(result).toEqual({
+      kind: 'rejected',
+      listingKey: 'BR-1',
+      reason: 'sold_missing_close_date',
+    });
+  });
+
+  it('rejects a Sold record with an unparseable CloseDate rather than publishing with zero delay', () => {
+    // A comparison against NaN is always false, so `Date.now() < NaN` must not be read as
+    // "the delay window has passed" — this is the failure mode a malformed CloseDate exercises.
+    const result = mapBrightPropertyRecord(
+      { ...BASE_PAYLOAD, StandardStatus: 'Closed', ClosePrice: 495000, CloseDate: 'N/A' },
+      ctx({ soldDisplayDelayDays: 30 }),
+    );
+    expect(result).toEqual({
+      kind: 'rejected',
+      listingKey: 'BR-1',
+      reason: 'sold_missing_close_date',
     });
   });
 
