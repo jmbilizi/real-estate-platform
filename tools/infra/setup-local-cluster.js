@@ -605,11 +605,17 @@ function configureNodeContainerdTrust(nodeName, caBuffer) {
 // suffix, against the SAME nameserver, returns only the legitimate address and lets the handshake
 // proceed — the nameserver was never the problem, only the search list appended ahead of it.
 //
-// The fix removes ONLY the enterprise search domains from the node's resolv.conf and leaves its
-// nameservers untouched. Replacing the nameservers too (an earlier version of this fix did exactly
-// that) breaks `kind-registry` name resolution: Podman's own per-network DNS answers that name, at
-// the same nameserver address this fix must therefore keep. A workstation with no enterprise search
-// domains has nothing to remove — a true no-op.
+// The fix drops every `search` line from the node's resolv.conf and leaves its nameservers
+// untouched. Replacing the nameservers too (an earlier version of this fix did exactly that) broke
+// `kind-registry` name resolution: Podman's own per-network DNS answers that name, at the same
+// nameserver address this fix must therefore keep — verified after this change, both directly
+// (`getent hosts kind-registry` on the node) and by a full `skaffold:services:deploy` pulling every
+// image through it. Dropping the whole search list, not only the suffix implicated above, is
+// deliberate: any search domain risks the same ndots false-positive for some other external
+// hostname, and Kubernetes cluster-internal names (`postgres-svc`, service DNS in general) are
+// unaffected either way — CoreDNS's `kubernetes` plugin resolves those from the pod's own
+// namespace, never through this forward/search path at all. A workstation with no search domains
+// on its node has nothing to remove — a true no-op.
 function stripSearchDomains(resolvConf) {
   return resolvConf
     .split('\n')
