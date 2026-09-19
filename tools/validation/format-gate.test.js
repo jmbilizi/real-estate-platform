@@ -2,12 +2,14 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { readFileSync } = require('node:fs');
+const { join } = require('node:path');
 
 const {
   parseGitStatus,
   trackedPaths,
   allPaths,
-  changedSince,
+  rewrittenPaths,
   describePushVerdict,
   MAX_LISTED_PATHS,
 } = require('./format-gate');
@@ -45,69 +47,55 @@ test('parseGitStatus returns nothing for a clean tree', () => {
   assert.deepEqual(parseGitStatus(undefined), []);
 });
 
-test('changedSince keeps only what appeared, sorted', () => {
-  assert.deepEqual(changedSince(['b.ts'], ['b.ts', 'c.ts', 'a.ts']), ['a.ts', 'c.ts']);
+test('rewrittenPaths reports a path that appeared', () => {
+  const before = parseGitStatus(` M b.ts${NUL}`);
+  const after = parseGitStatus([' M b.ts', ' M a.ts', '?? c.ts', ''].join(NUL));
+  assert.deepEqual(rewrittenPaths(before, after), ['a.ts', 'c.ts']);
+});
+
+test('rewrittenPaths reports a staged file whose status code changed', () => {
+  // The case a path-membership diff misses: the write rewrote a file that was already staged, so
+  // the path is in both snapshots and only its code moved from `M ` to `MM`.
+  const before = parseGitStatus(`M  staged.ts${NUL}`);
+  const after = parseGitStatus(`MM staged.ts${NUL}`);
+  assert.deepEqual(rewrittenPaths(before, after), ['staged.ts']);
+});
+
+test('rewrittenPaths reports nothing when no status changed', () => {
+  const same = parseGitStatus([' M a.ts', 'M  b.ts', ''].join(NUL));
+  assert.deepEqual(rewrittenPaths(same, same), []);
 });
 
 /**
- * The #151 regression, stated as the property the gate must hold.
+ * The #151 regression guard, asserted against the shipped scripts rather than a simulation.
  *
- * `nx format:write` repairs the working tree and never the commit. So a format check that runs
- * after it reports on content CI does not read. The gate must run before any write.
- */
-test('the format gate runs before anything writes', () => {
-  const sequence = [];
-  const gateIndex = () => sequence.findIndex((c) => c.includes('format-check'));
-  const firstWriteIndex = () => sequence.findIndex((c) => c.includes('format:write'));
-
-  // The order the scripts use: check, then reset, then the write.
-  sequence.push(
-    'pnpm run nx:workspace-format-check',
-    'pnpm run nx:reset',
-    'pnpm exec nx format:write',
-  );
-
-  assert.ok(gateIndex() >= 0, 'the gate must run');
-  assert.ok(gateIndex() < firstWriteIndex(), 'no write may run before the gate');
-});
-
-/**
- * The #91 case that produced this ticket, played out over a fake world.
+ * `nx format:write` repairs the working tree and never the commit, so a format check that runs
+ * after it reports on content CI does not read. That is how #91 shipped a file which failed CI
+ * while `pre-push` printed "CI will pass".
  *
- * `infra/k8s/base/secrets/bright-mls.secret.yaml` was committed without a trailing newline. The
- * old order repaired it in the tree and then reported a pass. The fixed order reports the failure.
+ * This reads the two scripts and fails if a write is ordered ahead of the gate. A simulation of
+ * the sequence would not: reverting either script would leave it green.
  */
-test('a format-violating committed file fails the gate, and passed it under the old order', () => {
-  const VIOLATING = 'infra/k8s/base/secrets/bright-mls.secret.yaml';
+for (const script of ['pre-push.js', 'pre-commit.js']) {
+  test(`scripts/${script} runs the format gate before any format write`, () => {
+    const source = readFileSync(join(__dirname, '..', '..', 'scripts', script), 'utf8');
 
-  const world = () => {
-    const violations = new Set([VIOLATING]);
-    return {
-      // The commit CI reads never changes. Only the working tree does.
-      committedContentIsBroken: true,
-      run(command) {
-        if (command.includes('format:write')) {
-          violations.clear();
-          return { success: true };
-        }
-        if (command.includes('format-check')) return { success: violations.size === 0 };
-        return { success: true };
-      },
-    };
-  };
+    const gateAt = source.indexOf('formatAlreadyChecked = runWorkspaceFormatCheck()');
+    const writeAt = source.indexOf("run('pnpm exec nx format:write')");
 
-  const fixed = world();
-  const fixedGate = fixed.run('pnpm run nx:workspace-format-check');
-  fixed.run('pnpm exec nx format:write');
+    assert.ok(gateAt > 0, 'the script must call the format gate before the reset block');
+    assert.ok(writeAt > 0, 'the script must still format what nx:reset rewrote');
+    assert.ok(gateAt < writeAt, 'the format write must not run before the gate');
+  });
 
-  const old = world();
-  old.run('pnpm exec nx format:write');
-  const oldGate = old.run('pnpm run nx:workspace-format-check');
-
-  assert.equal(oldGate.success, true, 'the old order reported success');
-  assert.equal(old.committedContentIsBroken, true, 'over a commit CI still rejects');
-  assert.equal(fixedGate.success, false, 'the fixed order reports the failure');
-});
+  test(`scripts/${script} never scopes the format write with --files`, () => {
+    // `nx format:write --files=…` still rewrites nx.json and the root tsconfig.json, because
+    // addRootConfigFiles returns early only for --all. Scoping the write therefore launders
+    // those two files past the gate. Ordering is the fix, not scoping.
+    const source = readFileSync(join(__dirname, '..', '..', 'scripts', script), 'utf8');
+    assert.ok(!source.includes('format:write --files'), 'the write must stay unscoped');
+  });
+}
 
 test('the push verdict claims CI only when the working tree matches HEAD', () => {
   assert.equal(describePushVerdict({}).claimsCi, true);
@@ -150,6 +138,19 @@ test('the push verdict reports a repaired file as script output, not as forgotte
     'a repaired path is not also listed as an unexplained difference',
   );
   assert.equal(verdict.claimsCi, false, 'it still differs from HEAD, so CI is not predicted');
+});
+
+test('an untracked file nx:reset created does not downgrade the claim', () => {
+  // nx:reset writes a project.json for a newly added project. It is untracked, so it is absent
+  // from the push and cannot mislead CI. The same rule as trackedDirty applies.
+  const verdict = describePushVerdict({
+    trackedDirty: [],
+    repaired: ['apps/new-service/project.json'],
+    repairedTracked: [],
+  });
+
+  assert.equal(verdict.claimsCi, true);
+  assert.ok(verdict.lines.some((l) => l.includes('apps/new-service/project.json')));
 });
 
 test('the push verdict ignores untracked files, which cannot cause a false green', () => {

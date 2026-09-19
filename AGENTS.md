@@ -429,8 +429,13 @@ the write, so it reads the tree CI reads. Do not "fix" this by scoping the write
 because `addRootConfigFiles` returns early only for `--all`. `pnpm run pre-push` also refuses to
 claim anything about CI while a tracked file differs from HEAD, because CI reads the pushed commits,
 not the tree. Untracked files are excluded from that judgement: they are absent from the push, so
-they can only make the local check stricter than CI. The logic and its regression tests live in
-`tools/validation/format-gate.js` (run with `pnpm run tools:test`).
+they can only make the local check stricter than CI. `pre-commit` gets the same order. The cost is
+one extra cycle: a formatting failure stops the commit, and the same run then repairs the file, so
+the developer stages the repair and commits again. The gain is that a mis-formatted file the
+developer did NOT stage — the #91 shape — now fails instead of passing. The logic lives in
+`tools/validation/format-gate.js`, the regression guard in `tools/validation/format-gate.test.js`
+(run with `pnpm run tools:test`). That guard reads both scripts and fails if a write is ordered
+ahead of the gate, so reverting either script turns the suite red.
 
 **Performance Optimization**: Both hooks check if any projects exist before running expensive
 operations. On empty workspaces (no projects in `apps/` or `libs/`), they exit in <1 second instead

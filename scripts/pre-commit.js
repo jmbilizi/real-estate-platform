@@ -20,8 +20,7 @@ const path = require('path');
 const fs = require('fs');
 const {
   parseGitStatus,
-  allPaths,
-  changedSince,
+  rewrittenPaths,
   formatPathList,
 } = require('../tools/validation/format-gate');
 
@@ -286,8 +285,11 @@ function checkNodeProjects(isAffected, base, formatAlreadyChecked) {
   logStep('Quick Check: Node.js/TypeScript');
 
   // 1. Format check (MUST PASS to continue). A manual run already ran it, ahead of nx:reset and
-  // its format write, so the verdict belongs to the content the commit will carry.
+  // its format write, so the verdict belongs to the content the commit will carry. Restate the
+  // failure here: the check ran earlier and its output has scrolled away.
   if (formatAlreadyChecked === false) {
+    logError('Formatting failed - see "Preparing NX Workspace" above for the file list');
+    logError('Run "pnpm run nx:workspace-format" to fix');
     return false; // Exit early
   }
   if (formatAlreadyChecked === null && !runWorkspaceFormatCheck()) {
@@ -675,6 +677,7 @@ function main() {
     : [];
 
   let formatAlreadyChecked = null;
+  let rewrittenByThisRun = [];
 
   // Run nx:reset once at the start (unless skipped by git hooks)
   if (!skipReset) {
@@ -704,8 +707,8 @@ function main() {
 
     // Name every file this run rewrote. The old script mutated the tree and said nothing.
     const after = readGitStatus();
-    const rewritten =
-      before.ok && after.ok ? changedSince(allPaths(before.entries), allPaths(after.entries)) : [];
+    rewrittenByThisRun = before.ok && after.ok ? rewrittenPaths(before.entries, after.entries) : [];
+    const rewritten = rewrittenByThisRun;
     if (rewritten.length > 0) {
       log(`nx:reset and the format write rewrote ${rewritten.length} file(s):`, 'cyan');
       for (const line of formatPathList(rewritten)) log(line, 'cyan');
@@ -790,6 +793,12 @@ function main() {
   } else {
     logError('\n❌ Quick checks failed.');
     logError('Please fix the issues above before committing.\n');
+    // The gate runs before the write, so a formatting failure can be one this run then repaired.
+    // Say so, or the developer re-runs the same command and cannot tell what changed.
+    if (formatAlreadyChecked === false && rewrittenByThisRun.length > 0) {
+      logWarning(`This run rewrote ${rewrittenByThisRun.length} file(s), listed above.`);
+      logWarning('Review them, stage what you want, and commit again.\n');
+    }
     logError('💡 Tip: Run format commands to auto-fix formatting issues:');
     logError('  - Node: pnpm run nx:node-format');
     logError('  - Python: pnpm run nx:python-format');

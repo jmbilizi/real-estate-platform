@@ -20,8 +20,8 @@ const fs = require('fs');
 const {
   parseGitStatus,
   trackedPaths,
-  allPaths,
-  changedSince,
+  rewrittenPaths,
+  formatPathList,
   describePushVerdict,
 } = require('../tools/validation/format-gate');
 
@@ -273,8 +273,11 @@ function checkNodeProjects(isAffected, base, formatAlreadyChecked) {
   const affectedFlag = isAffected && base ? `--base=${base} --head=HEAD` : '';
 
   // 1. Format check (MUST PASS to continue). A manual run already ran it, ahead of nx:reset and
-  // its format write, so the verdict below belongs to the tree CI reads.
+  // its format write, so the verdict below belongs to the tree CI reads. Restate the failure
+  // here: the check ran minutes ago and its output has scrolled away.
   if (formatAlreadyChecked === false) {
+    logError('Code formatting failed - see "Preparing NX Workspace" above for the file list');
+    logError('Run "pnpm run nx:workspace-format" to fix');
     return false; // Exit early - don't run remaining checks
   }
   if (formatAlreadyChecked === null && !runWorkspaceFormatCheck()) {
@@ -756,6 +759,7 @@ function main() {
   const skipReset = process.argv.includes('--skip-reset');
 
   let repairedPaths = [];
+  let repairedTracked = [];
   // null means "not run yet — checkNodeProjects runs it". A boolean is a verdict already reached.
   let formatAlreadyChecked = null;
 
@@ -785,10 +789,20 @@ function main() {
       logWarning('Format after reset had warnings but continuing...');
     }
 
-    // Name every file this run rewrote. The old script mutated the tree and said nothing.
+    // Name every file this run rewrote, here rather than only in the summary — a run that fails a
+    // later gate still mutated the tree. The old script mutated it and said nothing.
     const after = readGitStatus();
-    repairedPaths =
-      before.ok && after.ok ? changedSince(allPaths(before.entries), allPaths(after.entries)) : [];
+    if (before.ok && after.ok) {
+      repairedPaths = rewrittenPaths(before.entries, after.entries);
+      repairedTracked = rewrittenPaths(
+        before.entries.filter((e) => !e.untracked),
+        after.entries.filter((e) => !e.untracked),
+      );
+    }
+    if (repairedPaths.length > 0) {
+      log(`nx:reset and the format write rewrote ${repairedPaths.length} file(s):`, 'cyan');
+      for (const line of formatPathList(repairedPaths)) log(line, 'cyan');
+    }
   } else {
     log('Skipping nx:reset (running in git hook mode)\n', 'cyan');
   }
@@ -859,6 +873,7 @@ function main() {
   const verdict = describePushVerdict({
     trackedDirty: trackedPaths(finalStatus.entries),
     repaired: repairedPaths,
+    repairedTracked,
     statusKnown: finalStatus.ok,
   });
 

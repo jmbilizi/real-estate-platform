@@ -51,10 +51,20 @@ function allPaths(entries) {
   return entries.map((e) => e.path);
 }
 
-/** Paths present in `after` and absent from `before`, sorted for a stable report. */
-function changedSince(before, after) {
-  const was = new Set(before);
-  return [...new Set(after)].filter((p) => !was.has(p)).sort();
+/**
+ * Paths this run rewrote, read from two `git status` snapshots.
+ *
+ * The comparison is on the status CODE per path, not on path membership. A staged file is already
+ * listed before the write (`M `), and rewriting it only changes the code to `MM`. A membership
+ * diff would miss it, so the run would rewrite a staged file and report nothing — the silence
+ * this ticket removes.
+ */
+function rewrittenPaths(before, after) {
+  const was = new Map(before.map((e) => [e.path, e.code]));
+  return after
+    .filter((e) => was.get(e.path) !== e.code)
+    .map((e) => e.path)
+    .sort();
 }
 
 const MAX_LISTED_PATHS = 10;
@@ -82,9 +92,16 @@ function formatPathList(paths) {
  *   stricter than CI, never looser.
  * - `repaired` — what `nx:reset` and the format write rewrote during this run. Reported in its own
  *   category, because "the script generated this" is different advice from "you forgot to commit
- *   this".
+ *   this". Only its TRACKED members bear on the claim, by the same rule as `trackedDirty`: a file
+ *   `nx:reset` newly created is untracked, so it is absent from the push and cannot mislead CI.
  */
-function describePushVerdict({ trackedDirty = [], repaired = [], statusKnown = true } = {}) {
+function describePushVerdict({
+  trackedDirty = [],
+  repaired = [],
+  repairedTracked = null,
+  statusKnown = true,
+} = {}) {
+  const tracked = repairedTracked === null ? repaired : repairedTracked;
   const repairedSet = new Set(repaired);
   const unexplained = [...trackedDirty].filter((p) => !repairedSet.has(p)).sort();
   const lines = [];
@@ -106,7 +123,7 @@ function describePushVerdict({ trackedDirty = [], repaired = [], statusKnown = t
     lines.push(...formatPathList(unexplained));
   }
 
-  if (unexplained.length === 0 && repaired.length === 0) {
+  if (unexplained.length === 0 && tracked.length === 0) {
     lines.push('Working tree matches HEAD. CI runs these same gates on the commits you push.');
     return { claimsCi: true, lines };
   }
@@ -120,7 +137,7 @@ module.exports = {
   parseGitStatus,
   trackedPaths,
   allPaths,
-  changedSince,
+  rewrittenPaths,
   formatPathList,
   describePushVerdict,
 };
