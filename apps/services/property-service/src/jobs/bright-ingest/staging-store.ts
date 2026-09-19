@@ -73,7 +73,7 @@ export interface StagingConnectable {
 const MAX_RECORDS_PER_STATEMENT = 200;
 const MAX_PARAMETERS_PER_STATEMENT = 30000;
 const PARAMETERS_PER_RECORD = 5;
-const CHUNK_SIZE = Math.min(
+export const CHUNK_SIZE = Math.min(
   MAX_RECORDS_PER_STATEMENT,
   Math.floor(MAX_PARAMETERS_PER_STATEMENT / PARAMETERS_PER_RECORD),
 );
@@ -157,12 +157,23 @@ function buildUpsert(
   return { sql, params };
 }
 
-/** `timestamptz` arrives as a `Date`; the wire format for this service is the `Z`-suffixed string. */
+/**
+ * `timestamptz` arrives as a `Date`; the wire format for this service is the `Z`-suffixed string.
+ *
+ * An unparseable value degrades to `null`, which `readCursor` reports as "never replicated" and the
+ * next pass starts from the configured epoch. It does not throw: the alternative is a `RangeError`
+ * with no context out of a cursor read, which would fail the run rather than re-read data the
+ * staging upsert would absorb anyway.
+ */
 function instantOrNull(value: unknown): string | null {
   if (value instanceof Date) {
-    return value.toISOString();
+    return Number.isNaN(value.getTime()) ? null : value.toISOString();
   }
-  return typeof value === 'string' ? new Date(value).toISOString() : null;
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
 export function createStagingStoreOver(pool: StagingConnectable): BrightStagingStore {

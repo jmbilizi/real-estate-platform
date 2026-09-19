@@ -34,9 +34,13 @@
 export type BrightRunOutcome =
   /** No Bright credentials in this environment. Expected while an environment waits on #117. */
   | 'not_configured'
-  /** Authenticated and reached the service root, with replication switched off. */
-  | 'probe_succeeded'
-  /** Replicated into staging. Mapping into the consumer schema is still #93. */
+  /**
+   * Replicated into staging. Mapping into the consumer schema is still #93.
+   *
+   * There is deliberately no `probe_succeeded` outcome any more. #91 had one, and nothing emits it
+   * now: a configured run always replicates. Keeping it would advertise a "replication off" switch
+   * that does not exist, which an operator would look for.
+   */
   | 'replicated'
   /** Something present was unusable, or Bright refused us. Exit code is non-zero. */
   | 'failed';

@@ -1,4 +1,5 @@
 import {
+  CHUNK_SIZE,
   createStagingStoreOver,
   StagedRecord,
   StagingConnectable,
@@ -195,7 +196,10 @@ describe('BrightStagingStore — commitBatch', () => {
     });
 
     const inserts = calls.filter((call) => call.sql.includes('INSERT INTO bright_staging_records'));
-    expect(inserts.length).toBe(3);
+    // Derived from the chunk size rather than hardcoded: the constant is tuned against payload
+    // size (BrightProperty has 931 fields), and a literal here goes stale every time it moves.
+    expect(inserts.length).toBe(Math.ceil(2500 / CHUNK_SIZE));
+    expect(inserts.length).toBeGreaterThan(1);
     expect(sqlOf(calls).filter((sql) => sql === 'BEGIN')).toHaveLength(1);
     expect(sqlOf(calls).filter((sql) => sql === 'COMMIT')).toHaveLength(1);
     for (const insert of inserts) {
@@ -267,6 +271,22 @@ describe('BrightStagingStore — readCursor', () => {
     await expect(createStagingStoreOver(pool).readCursor('BrightProperties')).resolves.toEqual({
       modifiedAt: null,
       recordKey: null,
+    });
+  });
+
+  /**
+   * A cursor value that will not parse degrades to "never replicated" rather than throwing a bare
+   * RangeError out of a cursor read. The next pass then starts from the configured epoch, and the
+   * staging upsert absorbs the re-read.
+   */
+  it('degrades an unparseable cursor instant to null instead of throwing', async () => {
+    const { pool } = createFakePool({
+      selectRows: [{ cursor_modified_at: 'not a date', cursor_record_key: '42' }],
+    });
+
+    await expect(createStagingStoreOver(pool).readCursor('BrightProperties')).resolves.toEqual({
+      modifiedAt: null,
+      recordKey: '42',
     });
   });
 

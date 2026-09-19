@@ -45,4 +45,17 @@ runBrightIngest()
     );
     process.exitCode = 1;
   })
-  .finally(() => closePool());
+  // `.catch` AFTER `.finally`: a pool that fails to drain would otherwise reject with nothing
+  // attached, and Node 20 turns an unhandled rejection into a crash — converting a successful run
+  // that has already set exit 0 into ERR_UNHANDLED_REJECTION.
+  .finally(() => closePool())
+  .catch((error: unknown) => {
+    console.error(
+      JSON.stringify({
+        job: 'bright-mls-ingest',
+        event: 'pool_close_failed',
+        at: new Date().toISOString(),
+        message: error instanceof Error ? error.message : String(error),
+      }),
+    );
+  });

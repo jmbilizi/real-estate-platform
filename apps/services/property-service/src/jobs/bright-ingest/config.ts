@@ -340,6 +340,29 @@ export const DEFAULT_REPLICATION: BrightReplicationConfig = {
   cursorMaxAgeHours: 48,
 };
 
+/**
+ * Reads the full-resync switch.
+ *
+ * `'1'` is the repo's convention for a boolean environment flag, matching
+ * `PROPERTY_SERVICE_SEED_ON_START`. An unrecognised value THROWS rather than reading as false: an
+ * operator who sets `BRIGHT_MLS_FULL_RESYNC=true` to force a resync would otherwise get an ordinary
+ * incremental run, with no cursor reset and nothing in the log saying the flag was ignored.
+ */
+function resolveFullResync(env: NodeJS.ProcessEnv): boolean {
+  const raw = present(env[BRIGHT_ENV_VARS.fullResync]);
+  if (raw === null || raw === '0') {
+    return false;
+  }
+  if (raw === '1') {
+    return true;
+  }
+  throw new BrightConfigError(
+    `${BRIGHT_ENV_VARS.fullResync} must be "1" to request a full resync, "0" or unset otherwise. ` +
+      `Got "${raw}". It is rejected rather than read as false, because a resync that silently did ` +
+      'not happen is the worst of the three outcomes.',
+  );
+}
+
 function positiveInt(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
   const raw = present(env[name]);
   if (raw === null) {
@@ -420,7 +443,7 @@ export function resolveReplicationConfig(
       }
       return value;
     })(),
-    fullResync: present(env[BRIGHT_ENV_VARS.fullResync]) === '1',
+    fullResync: resolveFullResync(env),
     cursorMaxAgeHours: positiveInt(
       env,
       BRIGHT_ENV_VARS.cursorMaxAgeHours,

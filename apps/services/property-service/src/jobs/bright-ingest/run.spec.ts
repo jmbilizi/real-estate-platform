@@ -323,6 +323,23 @@ describe('runBrightIngest — feed tier', () => {
     await expect(invoke()).resolves.toMatchObject({ outcome: 'replicated' });
   });
 
+  /**
+   * A resync that silently did not happen is the worst of the three outcomes. `true` is the likely
+   * guess for a boolean flag, and reading it as false would leave the cursor in place with nothing
+   * in the log to say so.
+   */
+  it('rejects a full-resync value other than 1 or 0 rather than reading it as false', async () => {
+    const { sink } = collectRecords();
+    const result = await runBrightIngest({
+      env: configuredEnv({ [BRIGHT_ENV_VARS.fullResync]: 'true' }),
+      sink,
+      fetchImpl: stubFetch([]).fetchImpl,
+    });
+
+    expect(result.outcome).toBe('failed');
+    expect(result.message).toContain(BRIGHT_ENV_VARS.fullResync);
+  });
+
   it('rejects a feed value that is neither tier', async () => {
     const { sink } = collectRecords();
     const result = await runBrightIngest({
