@@ -31,7 +31,8 @@ const {
   requireConfig,
   loadSchema,
   ghExec,
-  ghJson,
+  run,
+  findProjectItemId,
   resolveFieldOption,
   unescapeInlineText,
   die,
@@ -67,6 +68,52 @@ function resolveBody(args) {
     info('Body contained literal \\n / \\t escapes — unescaping. Prefer --body-file for markdown.');
   }
   return unescaped;
+}
+
+/**
+ * Put the issue on the board and return its item id.
+ *
+ * A project automation can add the issue between `gh issue create` and this call. `gh project
+ * item-add` then answers "Content already exists in this project" on stderr and exits non-zero,
+ * although the state this script wants already holds. Aborting there is what left #118 on the board
+ * with Status, Priority and Size unset, which hides it from every `gh:ticket:list` filter. So any
+ * item-add failure falls back to resolving the item that is already there, and only a genuinely
+ * absent item is fatal.
+ */
+function addToProject({ owner, repo, projectNumber, projectId, issueUrl, issueNumber }) {
+  const result = run('gh', [
+    'project',
+    'item-add',
+    String(projectNumber),
+    '--owner',
+    owner,
+    '--url',
+    issueUrl,
+    '--format',
+    'json',
+  ]);
+
+  if (result.success) {
+    try {
+      const item = JSON.parse(result.stdout);
+      if (item.id) return item.id;
+    } catch {
+      // Fall through to the lookup — an item that exists is what matters, not gh's output shape.
+    }
+  }
+
+  const existing = findProjectItemId(owner, repo, issueNumber, projectId, { optional: true });
+  if (existing) {
+    info('Issue was already on the board — using the existing item.');
+    return existing;
+  }
+
+  die(
+    `Issue #${issueNumber} was created (${issueUrl}) but could not be added to the board:\n` +
+      `  ${result.stderr || result.stdout}\n` +
+      '  Add it by hand, then set its fields with: pnpm run gh:ticket:update-fields -- --issue ' +
+      `${issueNumber} --status <status> --priority <P0|P1|P2>`,
+  );
 }
 
 function main() {
@@ -118,17 +165,14 @@ function main() {
   ok(`Created issue #${issueNumber}: ${issueUrl}`);
 
   info('Adding to project board...');
-  const item = ghJson([
-    'project',
-    'item-add',
-    String(projectNumber),
-    '--owner',
+  const itemId = addToProject({
     owner,
-    '--url',
+    repo,
+    projectNumber,
+    projectId: schema.projectId,
     issueUrl,
-    '--format',
-    'json',
-  ]);
+    issueNumber,
+  });
 
   const fieldsToSet = {
     Status: args.status || 'Backlog',
@@ -143,7 +187,7 @@ function main() {
       'project',
       'item-edit',
       '--id',
-      item.id,
+      itemId,
       '--project-id',
       schema.projectId,
       '--field-id',

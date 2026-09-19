@@ -27,7 +27,10 @@ test('unmangleMsysValue restores the leading slash the shell ate', () => {
 test('unmangleMsysValue leaves an untouched value alone', () => {
   assert.equal(unmangleMsysValue('Add saved-search alerts', ROOT), 'Add saved-search alerts');
   assert.equal(unmangleMsysValue('C:/tmp/notes.md', ROOT), 'C:/tmp/notes.md');
-  assert.equal(unmangleMsysValue('See C:/Program Files/Git/etc', ROOT), 'See C:/Program Files/Git/etc');
+  assert.equal(
+    unmangleMsysValue('See C:/Program Files/Git/etc', ROOT),
+    'See C:/Program Files/Git/etc',
+  );
 });
 
 test('unmangleMsysValue matches the root case-insensitively', () => {
@@ -91,7 +94,10 @@ test('repairMsysArgv rejects a path flag that conversion broke', () => {
 });
 
 test('repairMsysArgv throws on a broken path flag when no onReject is given', () => {
-  assert.throws(() => repairMsysArgv(['--plan-file', `${ROOT}/plan.md`], { root: ROOT }), /plan-file/);
+  assert.throws(
+    () => repairMsysArgv(['--plan-file', `${ROOT}/plan.md`], { root: ROOT }),
+    /plan-file/,
+  );
 });
 
 test('describeMangledFileArg says nothing about an ordinary missing file', () => {

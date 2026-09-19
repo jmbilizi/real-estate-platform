@@ -185,21 +185,21 @@ function commandUpdate(base, args) {
   if (!args.title) die('--title is required');
   // Resolve the flags before the lookup, so a malformed command fails without a round trip.
   let description = resolveDescription(args);
-  const milestone = findByTitle(base, args.title);
-
-  if (args.append) {
-    if (description === undefined) {
-      die('--append needs the text to add — pass --description or --description-file with it.');
-    }
-    description = appendDescription(milestone.description, description);
+  if (args.append && description === undefined) {
+    die('--append needs the text to add — pass --description or --description-file with it.');
   }
+
+  const milestone = findByTitle(base, args.title);
+  if (args.append) description = appendDescription(milestone.description, description);
 
   const payload = {};
   if (args['new-title']) payload.title = args['new-title'];
   if (args.due) payload.due_on = `${args.due}T08:00:00Z`;
   if (description !== undefined) payload.description = description;
   if (Object.keys(payload).length === 0) {
-    die('Nothing to update — pass at least one of --new-title, --description, --description-file, --due');
+    die(
+      'Nothing to update — pass at least one of --new-title, --description, --description-file, --due',
+    );
   }
 
   // The description is the release-direction record, so a replacement always shows what it

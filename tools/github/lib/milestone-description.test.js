@@ -68,7 +68,10 @@ test('formatDescription --full prints every line', () => {
 });
 
 test('formatDescription reads a CRLF description the same as an LF one', () => {
-  assert.deepEqual(formatDescription('Release: MVP\r\nHomes.'), formatDescription('Release: MVP\nHomes.'));
+  assert.deepEqual(
+    formatDescription('Release: MVP\r\nHomes.'),
+    formatDescription('Release: MVP\nHomes.'),
+  );
 });
 
 test('appendDescription separates the old text from the new with one blank line', () => {

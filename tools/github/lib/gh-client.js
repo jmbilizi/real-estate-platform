@@ -188,14 +188,25 @@ const ITEM_LOOKUP_QUERY = `
   }
 `;
 
-/** Resolve the ProjectV2Item id for an issue on the configured board. Dies if not found. */
-function findProjectItemId(owner, repo, issueNumber, projectId) {
+/**
+ * Resolve the ProjectV2Item id for an issue on the configured board.
+ * Dies if not found, unless `optional` is set — then it returns null and the caller decides.
+ * `optional` covers "the issue is not on the board". An issue number that does not exist is still
+ * fatal, because `gh` refuses the query itself.
+ */
+function findProjectItemId(owner, repo, issueNumber, projectId, { optional = false } = {}) {
   const result = graphql(ITEM_LOOKUP_QUERY, { owner, repo, number: Number(issueNumber) });
   const issue = result.data.repository.issue;
-  if (!issue) die(`Issue #${issueNumber} not found in ${owner}/${repo}`);
+  if (!issue) {
+    if (optional) return null;
+    die(`Issue #${issueNumber} not found in ${owner}/${repo}`);
+  }
 
   const match = issue.projectItems.nodes.find((node) => node.project.id === projectId);
-  if (!match) die(`Issue #${issueNumber} is not on the configured project board`);
+  if (!match) {
+    if (optional) return null;
+    die(`Issue #${issueNumber} is not on the configured project board`);
+  }
   return match.id;
 }
 
