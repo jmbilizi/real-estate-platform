@@ -6,7 +6,8 @@ import {
   resultOffsetFor,
   type SearchRequest,
 } from '@cribstop/property-contracts';
-import { LISTING_CARD_SELECT, LISTING_DETAIL_SELECT } from './columns';
+import type { AddressClassification } from '../db/mls-attributes';
+import { ATTRIBUTE_SELECT, LISTING_CARD_SELECT, LISTING_DETAIL_SELECT } from './columns';
 import { buildSearchQuery } from './search-query';
 import {
   type ListingCardDbRow,
@@ -15,7 +16,11 @@ import {
   toListingDetail,
   toListingsMeta,
 } from './map-row';
-import { applyAddressSuppression, applyCardAddressSuppression } from './suppression';
+import {
+  applyAddressSuppression,
+  applyCardAddressSuppression,
+  filterAddressBearingAttributes,
+} from './suppression';
 
 /**
  * The only module in this service that executes read SQL.
@@ -214,6 +219,93 @@ export async function getListingsMeta(pool: ReadClient): Promise<ListingsMeta> {
     throw new Error('Aggregate query over listing_search_v returned no row.');
   }
   return toListingsMeta(row);
+}
+
+/** One `mls_fields`-joined attribute row, as `ATTRIBUTE_SELECT` projects it. */
+export interface AttributeDbRow {
+  id: string;
+  field_id: string;
+  value_kind: string;
+  value_numeric: string | null;
+  value_boolean: boolean | null;
+  value_date: string | null;
+  value_timestamp: string | null;
+  value_lookup_id: string | null;
+  originating_system: string;
+  reso_resource: string;
+  field_name: string;
+  address_classification: AddressClassification | null;
+  is_consumer_displayable: boolean;
+}
+
+/** `listing_attributes` vs `property_attributes` differ only by table and owner column. */
+interface AttributeQueryTarget {
+  table: 'listing_attributes' | 'property_attributes';
+  ownerColumn: 'listing_id' | 'property_id';
+}
+
+const LISTING_ATTRIBUTE_TARGET: AttributeQueryTarget = {
+  table: 'listing_attributes',
+  ownerColumn: 'listing_id',
+};
+const PROPERTY_ATTRIBUTE_TARGET: AttributeQueryTarget = {
+  table: 'property_attributes',
+  ownerColumn: 'property_id',
+};
+
+/**
+ * Every governed attribute of one entity (#127), with address-bearing fields already withheld
+ * when the owning listing's address is suppressed (#128).
+ *
+ * `listingAddress` is the SAME value `applyAddressSuppression()`/`applyCardAddressSuppression()`
+ * read off their own object (`.address === null`) — passed here as the address itself, never as a
+ * pre-computed boolean, so a caller cannot supply a suppression outcome that belongs to a different
+ * listing. This service still never reads `address_display_allowed` outside `listing_search_v`
+ * (`FORBIDDEN_COLUMNS`); the OUTCOME is the only signal that ever crosses this boundary.
+ *
+ * Ready for #93 to call: nothing in this service exposes an "attributes" field on the wire yet, so
+ * nothing calls `getListingAttributes()`/`getPropertyAttributes()` outside their own tests.
+ * Shipping the query and its suppression ahead of the exposure is the point — see `AGENTS.md`
+ * §"The MLS attribute model".
+ */
+async function queryAttributes(
+  pool: ReadClient,
+  target: AttributeQueryTarget,
+  ownerId: string,
+  listingAddress: string | null,
+): Promise<AttributeDbRow[]> {
+  const result = await pool.query<AttributeDbRow>(
+    `SELECT ${ATTRIBUTE_SELECT}
+       FROM ${target.table} a
+       JOIN mls_fields f ON f.id = a.field_id
+      WHERE a.${target.ownerColumn} = $1`,
+    [ownerId],
+  );
+  return filterAddressBearingAttributes(
+    result.rows.map((row) => ({ ...row, addressClassification: row.address_classification })),
+    listingAddress === null,
+  );
+}
+
+/** Every governed attribute of one listing. See `queryAttributes()` for the suppression contract. */
+export function getListingAttributes(
+  pool: ReadClient,
+  listingId: string,
+  listingAddress: string | null,
+): Promise<AttributeDbRow[]> {
+  return queryAttributes(pool, LISTING_ATTRIBUTE_TARGET, listingId, listingAddress);
+}
+
+/**
+ * Every governed attribute of one property, durable across the property's listings. See
+ * `queryAttributes()` for the suppression contract — identical, over `property_attributes`.
+ */
+export function getPropertyAttributes(
+  pool: ReadClient,
+  propertyId: string,
+  listingAddress: string | null,
+): Promise<AttributeDbRow[]> {
+  return queryAttributes(pool, PROPERTY_ATTRIBUTE_TARGET, propertyId, listingAddress);
 }
 
 export { NOT_FOUND_BODY };

@@ -41,6 +41,18 @@ export type MlsDataType = 'integer' | 'decimal' | 'boolean' | 'date' | 'timestam
 /** Which entity a field attaches to, mirroring `mls_fields.scope`. */
 export type MlsFieldScope = 'listing' | 'property';
 
+/**
+ * The closed vocabulary for `mls_fields.address_classification` (#128). NULL — omitted at
+ * registration — is a valid fourth state meaning "not yet reviewed", and is treated identically to
+ * every member here except `not_address_bearing`: see `isAddressBearingClassification()` in
+ * `../listings/suppression`, the one function that decides it.
+ */
+export type AddressClassification =
+  | 'carries_address'
+  | 're_identifies_address'
+  | 'free_text_may_contain_address'
+  | 'not_address_bearing';
+
 /** The natural key of a registered field. Market-agnostic: the system is part of the identity. */
 export interface MlsFieldKey {
   originatingSystem: string;
@@ -55,10 +67,12 @@ export interface MlsFieldRegistration extends MlsFieldKey {
   scope: MlsFieldScope;
   unitOfMeasure?: string | null;
   /**
-   * Defaults to TRUE — presumed capable of re-identifying a suppressed address until a human says
-   * otherwise (#53). Pass `false` only as a reviewed decision, never to make an ingest run quieter.
+   * The default-deny address classification (#128). Omitted means NOT YET REVIEWED — stored as
+   * NULL — and `mls_fields.is_address_bearing` is derived from this value rather than passed
+   * separately, so the two can never disagree (`mls_fields_classification_matches_bearing`). Pass
+   * `'not_address_bearing'` only as a reviewed decision, never to make an ingest run quieter.
    */
-  isAddressBearing?: boolean;
+  addressClassification?: AddressClassification | null;
   notes?: string | null;
 }
 
@@ -133,20 +147,23 @@ function describeValue(value: unknown): string | null {
  * Registers a field, or returns the id of the one already registered under this natural key.
  *
  * Idempotent so a `$metadata` re-pull (#91) is a no-op rather than a conflict. The DO UPDATE touches
- * only the descriptive columns: it deliberately does NOT re-assert `is_address_bearing`, so a human's
- * reviewed declassification is never silently reverted by the next metadata sync. Nor does it touch
- * `data_type` or `scope` — attribute rows already reference those through composite foreign keys, so
- * changing one is a data migration, not an upsert.
+ * only the descriptive columns: it deliberately does NOT re-assert `address_classification` or
+ * `is_address_bearing`, so a human's reviewed declassification is never silently reverted by the
+ * next metadata sync. Nor does it touch `data_type` or `scope` — attribute rows already reference
+ * those through composite foreign keys, so changing one is a data migration, not an upsert.
  */
 export async function registerMlsField(
   client: Queryable,
   field: MlsFieldRegistration,
 ): Promise<string> {
+  // `?? null` rather than a bare pass-through: an omitted classification is the "not yet reviewed"
+  // state, stored as NULL, never silently coerced to a specific vocabulary member.
+  const addressClassification = field.addressClassification ?? null;
   const { rows } = await client.query(
     `INSERT INTO mls_fields
        (originating_system, reso_resource, field_name, reso_standard_name,
-        data_type, scope, unit_of_measure, is_address_bearing, notes)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        data_type, scope, unit_of_measure, address_classification, is_address_bearing, notes)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      ON CONFLICT (originating_system, reso_resource, field_name)
        DO UPDATE SET reso_standard_name = EXCLUDED.reso_standard_name,
                      unit_of_measure    = EXCLUDED.unit_of_measure,
@@ -160,9 +177,11 @@ export async function registerMlsField(
       field.dataType,
       field.scope,
       field.unitOfMeasure ?? null,
-      // `?? true` rather than a bare pass-through: an omitted flag must land on the safe side, and
-      // the database default only applies when the column is absent from the INSERT, which it is not.
-      field.isAddressBearing ?? true,
+      addressClassification,
+      // Derived, never passed separately, so it cannot disagree with the classification above
+      // (mls_fields_classification_matches_bearing). Default-deny: NULL and every classification
+      // except 'not_address_bearing' land on TRUE.
+      addressClassification !== 'not_address_bearing',
       field.notes ?? null,
     ],
   );

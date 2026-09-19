@@ -471,7 +471,7 @@ describe('putPropertyAttributes', () => {
 });
 
 describe('registerMlsField', () => {
-  it('defaults is_address_bearing to TRUE when the caller omits it', async () => {
+  it('leaves address_classification NULL and derives is_address_bearing TRUE when omitted', async () => {
     const { client, queries } = createFakeClient({});
 
     await registerMlsField(client, {
@@ -481,12 +481,14 @@ describe('registerMlsField', () => {
       scope: 'listing',
     });
 
-    // Default-deny (#53): an unclassified field is presumed able to re-identify a suppressed address.
-    // The database default alone would NOT cover this — the column is named in the INSERT.
-    expect(queries[0]?.values?.[7]).toBe(true);
+    // Default-deny (#128): an unclassified field is presumed able to re-identify a suppressed
+    // address. Column order: ... unit_of_measure(6), address_classification(7),
+    // is_address_bearing(8), notes(9).
+    expect(queries[0]?.values?.[7]).toBeNull();
+    expect(queries[0]?.values?.[8]).toBe(true);
   });
 
-  it('does not re-assert is_address_bearing on conflict, so a reviewed declassification survives a re-pull', async () => {
+  it('derives is_address_bearing FALSE only when the classification is not_address_bearing', async () => {
     const { client, queries } = createFakeClient({});
 
     await registerMlsField(client, {
@@ -494,16 +496,51 @@ describe('registerMlsField', () => {
       resoStandardName: 'LotSizeAcres',
       dataType: 'decimal',
       scope: 'listing',
-      isAddressBearing: false,
+      addressClassification: 'not_address_bearing',
+    });
+
+    expect(queries[0]?.values?.[7]).toBe('not_address_bearing');
+    expect(queries[0]?.values?.[8]).toBe(false);
+  });
+
+  it.each<[import('./mls-attributes').AddressClassification]>([
+    ['carries_address'],
+    ['re_identifies_address'],
+    ['free_text_may_contain_address'],
+  ])('derives is_address_bearing TRUE for the %s classification', async (addressClassification) => {
+    const { client, queries } = createFakeClient({});
+
+    await registerMlsField(client, {
+      ...BRIGHT_KEY,
+      resoStandardName: 'LotSizeAcres',
+      dataType: 'decimal',
+      scope: 'listing',
+      addressClassification,
+    });
+
+    expect(queries[0]?.values?.[8]).toBe(true);
+  });
+
+  it('does not re-assert address_classification or is_address_bearing on conflict, so a reviewed declassification survives a re-pull', async () => {
+    const { client, queries } = createFakeClient({});
+
+    await registerMlsField(client, {
+      ...BRIGHT_KEY,
+      resoStandardName: 'LotSizeAcres',
+      dataType: 'decimal',
+      scope: 'listing',
+      addressClassification: 'not_address_bearing',
     });
 
     const update = queries[0]?.text ?? '';
     expect(update).toContain('DO UPDATE SET');
-    expect(update.slice(update.indexOf('DO UPDATE SET'))).not.toContain('is_address_bearing');
+    const updateClause = update.slice(update.indexOf('DO UPDATE SET'));
+    expect(updateClause).not.toContain('address_classification');
+    expect(updateClause).not.toContain('is_address_bearing');
     // Nor may a metadata sync silently change the type or the table a field lands in — attribute rows
     // already reference both through composite foreign keys.
-    expect(update.slice(update.indexOf('DO UPDATE SET'))).not.toContain('data_type');
-    expect(update.slice(update.indexOf('DO UPDATE SET'))).not.toContain('scope');
+    expect(updateClause).not.toContain('data_type');
+    expect(updateClause).not.toContain('scope');
   });
 
   it('never writes is_consumer_displayable, leaving exposure default-denied in this change', async () => {

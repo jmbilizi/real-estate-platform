@@ -291,6 +291,33 @@ describe('nothing is exposed to a consumer by this change', () => {
   );
 });
 
+describe('address classification is a closed vocabulary, default-deny (#128)', () => {
+  it('accepts NULL or exactly the four documented values', () => {
+    const constraint = recording.constraints.find(
+      (c) => c.name === 'mls_fields_address_classification_vocabulary',
+    );
+    expect(constraint?.definition.check).toBe(
+      'address_classification IS NULL OR address_classification IN ' +
+        "('carries_address', 're_identifies_address', 'free_text_may_contain_address', 'not_address_bearing')",
+    );
+  });
+
+  it('ties the classification to is_address_bearing so the two axes cannot disagree', () => {
+    const constraint = recording.constraints.find(
+      (c) => c.name === 'mls_fields_classification_matches_bearing',
+    );
+    expect(constraint?.definition.check).toBe(
+      "is_address_bearing = (address_classification IS DISTINCT FROM 'not_address_bearing')",
+    );
+  });
+
+  it('adds the column as nullable, so "unclassified" is representable rather than defaulted away', () => {
+    const column = recording.columns.get('mls_fields.address_classification');
+    expect(column?.notNull).not.toBe(true);
+    expect(column?.default).toBeUndefined();
+  });
+});
+
 describe('the existing closed sets are untouched', () => {
   it.each([
     ['listings.amenities', 'amenities'],

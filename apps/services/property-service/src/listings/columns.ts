@@ -80,3 +80,31 @@ export const LISTING_CARD_SELECT = qualify(CARD_COLUMNS);
  * Housing steering risk, so it does not belong on the widest and most-cached surface.
  */
 export const LISTING_DETAIL_SELECT = `${LISTING_CARD_SELECT}, v.description`;
+
+/**
+ * The governed MLS attribute path (#127/#128). `listing_attributes`/`property_attributes` are
+ * unreachable from `listing_search_v`, so every read joins `mls_fields` for `address_classification`
+ * — whether a value can re-identify a suppressed address is a property of the FIELD, never of one
+ * instance of it. Enumerated for the same reason as the columns above: no `SELECT *` on a table that
+ * will eventually carry a few hundred distinct fields.
+ */
+const ATTRIBUTE_VALUE_COLUMNS = [
+  'a.id',
+  'a.field_id',
+  'a.value_kind',
+  'a.value_numeric',
+  'a.value_boolean',
+  'a.value_date',
+  'a.value_timestamp',
+  'a.value_lookup_id',
+] as const;
+
+const ATTRIBUTE_FIELD_COLUMNS = [
+  'f.originating_system',
+  'f.reso_resource',
+  'f.field_name',
+  'f.address_classification',
+  'f.is_consumer_displayable',
+] as const;
+
+export const ATTRIBUTE_SELECT = [...ATTRIBUTE_VALUE_COLUMNS, ...ATTRIBUTE_FIELD_COLUMNS].join(', ');
