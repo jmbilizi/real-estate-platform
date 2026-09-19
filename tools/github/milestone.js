@@ -20,7 +20,8 @@
  *   pnpm run gh:milestone -- create --title "Services MVP" [--due 2026-09-15]
  *                                   [--description "..." | --description-file ./epic.md]
  *   pnpm run gh:milestone -- update --title "Services MVP" [--new-title "..."] [--due 2026-09-15]
- *                                   [--description "..." | --description-file ./epic.md] [--append]
+ *                                   [--description "..." | --description-file ./epic.md]
+ *                                   [--append] [--clear-description]
  *   pnpm run gh:milestone -- close --title "Services MVP"
  *   pnpm run gh:milestone -- delete --title "Services MVP"
  */
@@ -45,9 +46,13 @@ const {
   appendDescription,
   isEmpty,
 } = require('./lib/milestone-description');
+const { parseArgs } = require('./lib/args');
 
-/** Flags that carry no value. Everything else consumes the next argv element. */
-const BOOLEAN_FLAGS = new Set(['all', 'full', 'append']);
+/** `list | create | update | close | delete` arrives as a bare word; the rest are `--key value`. */
+const PARSE_OPTIONS = {
+  flags: ['all', 'full', 'append', 'clear-description'],
+  positionals: true,
+};
 
 /**
  * cmd.exe caps a command line at 8191 characters, and `pnpm run` adds the script name and the
@@ -60,26 +65,6 @@ const BOOLEAN_FLAGS = new Set(['all', 'full', 'append']);
  * author who is told to use `--description-file` once writes it that way everywhere after.
  */
 const INLINE_DESCRIPTION_MAX = 6000;
-
-function parseArgs(argv) {
-  const args = { _: [] };
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === '--') continue; // pnpm forwards the literal '--' separator — never a flag
-    if (!arg.startsWith('--')) {
-      args._.push(arg);
-      continue;
-    }
-    const key = arg.slice(2);
-    if (BOOLEAN_FLAGS.has(key)) {
-      args[key] = true;
-    } else {
-      args[key] = argv[i + 1];
-      i++;
-    }
-  }
-  return args;
-}
 
 /**
  * Send a write to the REST API with the payload as JSON on stdin.
@@ -125,6 +110,15 @@ function resolveDescription(args) {
   if (hasInline && hasFile) {
     die('Pass --description or --description-file, not both.');
   }
+  // The shared parser refuses an empty value, so erasing a description needs its own flag rather
+  // than `--description ""`. Erasing is also the one destructive edit here, so it should be typed.
+  if (args['clear-description']) {
+    if (hasInline || hasFile) {
+      die('Pass --clear-description on its own, without --description or --description-file.');
+    }
+    if (args.append) die('--clear-description and --append do the opposite of each other.');
+    return '';
+  }
   if (hasFile) {
     const path = args['description-file'];
     if (!fs.existsSync(path)) die(`--description-file "${path}" does not exist.`);
@@ -132,10 +126,10 @@ function resolveDescription(args) {
     // Normalize to LF so a file written on Windows does not store CRLF in the release record.
     const text = fs.readFileSync(path, 'utf-8').replace(/\r\n/g, '\n');
     // A truncated file would otherwise erase the release-direction record with no way back.
-    // Clearing a description on purpose stays available through --description "".
+    // Erasing a description on purpose stays available through --clear-description.
     if (!text.trim()) {
       die(
-        `--description-file "${path}" is empty. To clear the description, pass --description "".`,
+        `--description-file "${path}" is empty. To erase the description, pass --clear-description.`,
       );
     }
     return text;
@@ -211,7 +205,8 @@ function commandUpdate(base, args) {
   if (description !== undefined) payload.description = description;
   if (Object.keys(payload).length === 0) {
     die(
-      'Nothing to update — pass at least one of --new-title, --description, --description-file, --due',
+      'Nothing to update — pass at least one of --new-title, --description, ' +
+        '--description-file, --clear-description, --due',
     );
   }
 
@@ -264,7 +259,12 @@ function commandDelete(base, args) {
 function main() {
   ensureGhReady();
   const { owner, repo } = requireConfig();
-  const args = parseArgs(cliArgv());
+  let args;
+  try {
+    args = parseArgs(cliArgv(), PARSE_OPTIONS);
+  } catch (error) {
+    die(error.message);
+  }
   const base = `repos/${owner}/${repo}/milestones`;
   const command = args._[0] || 'list';
 

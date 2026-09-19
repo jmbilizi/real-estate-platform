@@ -7,13 +7,20 @@
  * can't touch Priority/Size, so an engineer session can't accidentally reprioritize the
  * backlog while just moving a ticket through the workflow.
  *
+ * Disposal is a product decision, so `--decline` lives here and never on update-ticket-status.js.
+ * The board runs three priority levels on the principle that low-value work is declined, not parked
+ * at a priority that never ships, and that principle needs a wrapper that can actually close.
+ *
  * Usage:
  *   pnpm run gh:ticket:update-fields -- --issue 42 --priority P0 --size L
  *   pnpm run gh:ticket:update-fields -- --issue 42 --status Ready
+ *   pnpm run gh:ticket:update-fields -- --issue 42 --title "New title"
  *   pnpm run gh:ticket:update-fields -- --issue 42 --milestone "Beta Launch"
  *   pnpm run gh:ticket:update-fields -- --issue 42 --remove-milestone
  *   pnpm run gh:ticket:update-fields -- --issue 42 --body-file ./spec.md
  *   pnpm run gh:ticket:update-fields -- --issue 42 --add-label blocked --remove-label type:chore
+ *   pnpm run gh:ticket:update-fields -- --issue 42 --decline --reason "Superseded by #61"
+ *   pnpm run gh:ticket:update-fields -- --issue 42 --reopen --reason "Stakeholder reversed the call"
  */
 
 const fs = require('fs');
@@ -28,40 +35,31 @@ const {
   ghExec,
   ghEditBody,
   ghJson,
+  unescapeInlineText,
   die,
   ok,
 } = require('./lib/gh-client');
+const { parseArgs: parseFlags } = require('./lib/args');
 const { replaceBodyPreservingPlan, findPlanBlock } = require('./lib/issue-body');
 
-const FLAGS = new Set(['remove-milestone']);
-const REPEATABLE = new Set(['add-label', 'remove-label']);
+const PARSE_OPTIONS = {
+  flags: ['remove-milestone', 'decline', 'reopen'],
+  repeatable: { 'add-label': 'a label name', 'remove-label': 'a label name' },
+};
 
 function parseArgs(argv) {
-  const args = {};
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === '--') continue; // pnpm forwards the literal '--' separator — never a flag
-    if (!arg.startsWith('--')) continue;
-    const key = arg.slice(2);
-    if (FLAGS.has(key)) {
-      args[key] = true;
-    } else if (REPEATABLE.has(key)) {
-      const value = argv[i + 1];
-      if (!value || value.startsWith('--')) {
-        throw new Error(
-          value
-            ? `--${key} requires a label name (got "${value}")`
-            : `--${key} requires a label name`,
-        );
-      }
-      (args[key] ||= []).push(value);
-      i++;
-    } else {
-      args[key] = argv[i + 1];
-      i++;
-    }
-  }
-  return args;
+  return parseFlags(argv, PARSE_OPTIONS);
+}
+
+/**
+ * A title is one line. `gh issue edit --title` accepts a newline and GitHub then renders the
+ * remainder nowhere, so a pasted multi-line value silently truncates the title on the board.
+ */
+function resolveTitle(raw) {
+  const title = String(raw).trim();
+  if (!title) throw new Error('--title is empty');
+  if (/[\r\n]/.test(title)) throw new Error('--title must be a single line');
+  return title;
 }
 
 function main() {
@@ -91,18 +89,37 @@ function main() {
   const labelsToAdd = args['add-label'] || [];
   const labelsToRemove = args['remove-label'] || [];
 
+  // A declined ticket must always record why, so the reason is mandatory and is posted as a
+  // comment before the state change. Same for a reopen: the board shows the state, the comment
+  // shows the decision behind it.
+  if (args.decline && args.reopen) die('--decline and --reopen are mutually exclusive');
+  const stateChange = args.decline ? 'decline' : args.reopen ? 'reopen' : null;
+  if (!stateChange && args.reason) die('--reason only applies to --decline or --reopen');
+  if (stateChange && !args.reason) die(`--${stateChange} requires --reason "<why>"`);
+  const reason = stateChange ? unescapeInlineText(args.reason).trim() : null;
+  if (stateChange && !reason) die('--reason is empty');
+
   if (
     provided.length === 0 &&
+    !args.title &&
     !args.milestone &&
     !args['remove-milestone'] &&
     !args['body-file'] &&
+    !stateChange &&
     labelsToAdd.length === 0 &&
     labelsToRemove.length === 0
   ) {
     die(
-      'Provide at least one of --status, --priority, --size, --milestone, --remove-milestone, ' +
-        '--body-file, --add-label, --remove-label',
+      'Provide at least one of --status, --priority, --size, --title, --milestone, ' +
+        '--remove-milestone, --body-file, --add-label, --remove-label, --decline, --reopen',
     );
+  }
+
+  let title = null;
+  try {
+    if (args.title !== undefined) title = resolveTitle(args.title);
+  } catch (error) {
+    die(error.message);
   }
 
   // Resolve the whole body up front: a refused --body-file must leave the ticket completely
@@ -148,6 +165,11 @@ function main() {
     }
   }
 
+  if (title !== null) {
+    ghExec(['issue', 'edit', args.issue, ...issueRef, '--title', title]);
+    ok(`Issue #${args.issue}: title = ${title}`);
+  }
+
   if (bodyToWrite !== null) {
     ghEditBody(owner, repo, args.issue, bodyToWrite);
     ok(
@@ -180,8 +202,25 @@ function main() {
     ghExec(['issue', 'edit', args.issue, ...issueRef, '--remove-milestone']);
     ok(`Issue #${args.issue}: Milestone removed`);
   }
+
+  if (stateChange) {
+    // Comment first. If the comment fails, the ticket stays open and the reason is not lost in a
+    // closed ticket nobody reads.
+    ghExec(['issue', 'comment', args.issue, ...issueRef, '--body', reason]);
+    ok(`Issue #${args.issue}: reason commented`);
+
+    if (stateChange === 'decline') {
+      // "not planned" is the only close reason this wrapper writes. Completed work closes through
+      // the PR's `Closes #<n>`, which is the engineer's path, not a product-owner decision.
+      ghExec(['issue', 'close', args.issue, ...issueRef, '--reason', 'not planned']);
+      ok(`Issue #${args.issue}: declined (closed as not planned)`);
+    } else {
+      ghExec(['issue', 'reopen', args.issue, ...issueRef]);
+      ok(`Issue #${args.issue}: reopened`);
+    }
+  }
 }
 
 if (require.main === module) main();
 
-module.exports = { parseArgs };
+module.exports = { parseArgs, resolveTitle };

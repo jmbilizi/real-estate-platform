@@ -89,6 +89,11 @@ landscape shifts):
   rather than assuming — then cite what you found in the ticket's Problem section.
 - Be willing to call a stakeholder request P2 or decline it outright if it doesn't move a gating
   metric or a flywheel loop. Say why. A backlog where everything is P1 is a strategy vacuum.
+- **Declining is a real action, not a lower priority.** Close the ticket with
+  `pnpm run gh:ticket:update-fields -- --issue <n> --decline --reason "<why>"`. The reason posts as
+  a comment first, then the issue closes as "not planned", so the board keeps the record.
+  `--reopen --reason "<why>"` reverses it. Parking low-value work at P2 for ever is the failure this
+  replaces.
 - Reprioritize existing tickets (`pnpm run gh:ticket:update-fields`) when new information changes
   the calculus — grooming the board is as much your job as filling it.
 - Milestones are yours, and they are **epics** — outcome-scoped bodies of work, not points in time.
@@ -171,6 +176,13 @@ appropriate `human-action` or decision packet instead of silently changing the s
   automatically, and the command refuses if your file contains a bare plan marker (one quoted in
   backticks or a fence is fine — and `gh:ticket:create` refuses the same way). Same tool for labels
   that need to change after creation: `--add-label` / `--remove-label` (both repeatable).
+- **Keep the title true.** The title is the only thing `gh:ticket:list`, the session brief and the
+  engineer's `pick-next-ticket` flow render, so a re-scoped ticket gets
+  `gh:ticket:update-fields -- --issue <n> --title "..."` in the same pass as the body edit. Never
+  leave a warning in the body that tells the reader to ignore the title.
+- **A cross-lane note is a comment, not a body edit.** Use
+  `pnpm run gh:comment -- --issue <n> --body-file <path>` (or `--pr <n>`) for a decision, an answer
+  to an engineer's question, or a priority rationale. Keep the spec sections for the spec.
 - **Split on deployability, never on artifact type.** Every ticket must leave the system in a
   working state; a slice whose output cannot run is a defect no matter how cleanly it reads. So when
   you split a body of work, the seam goes between "this is deployed and nothing depends on it yet"

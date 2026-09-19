@@ -93,5 +93,10 @@ Three facts worth reading off this file before it costs someone a day:
   literals not implemented"**, and `geo.distance` the same for `GeographyPoint`. A bare
   `POLYGON((...))` instead returns a misleading "property not defined" parse error — do not cite
   that one. The type's presence is not a capability, so #66 takes the PostGIS fallback. `Latitude`
-  and `Longitude` are `Edm.Double` and a numeric `$filter` over them works, so the bounding-box half
-  of that fallback still runs on Bright's side.
+  and `Longitude` are `Edm.Double`, and a numeric `$filter` over them genuinely bounds the result
+  set — 174,579 rows down to 155 for a small box, none of them outside it, 0 for a disjoint control
+  box, and the two halves of that box summing back to 155 — so the bounding-box half of that
+  fallback still runs on Bright's side, and must. Counts here are dated readings, never targets:
+  174,579 was read 2026-09-19 and the checklist's 174,580 a day earlier. **2,943 listings carry no
+  coordinates**, and a `ge`/`le` predicate excludes every one of them from area search. Section 4 of
+  the checklist holds the full evidence.

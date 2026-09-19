@@ -24,6 +24,12 @@ will look."
   answers change ticket scope (field counts, geospatial implementation choice, suppression
   boundaries), so a silent correction here can leave a ticket's acceptance criteria wrong without
   anyone noticing.
+- **An error is not a capability answer until the query is known to be well formed.** Bright returns
+  400 for a malformed query and for an unsupported feature. Before you record "Bright does not
+  support X", re-issue the call in correct syntax and paste both attempts. A parser error that names
+  part of your own query text — a property that "is not defined in type", where the name is a
+  literal you sent — is a syntax fault, not a refusal. (#167, from the geospatial near-miss in
+  section 4.)
 - **Section 0's `$metadata` pull is the first action, before anything else on this list.** It is
   done: the document is committed at `docs/bright-mls/bright-metadata.xml` with its provenance in
   `docs/bright-mls/README.md`. Read that README before working any later section.
@@ -183,9 +189,11 @@ records where the fields discovered here are meant to go.
       A complete end-to-end pass was not run, and without a known rate limit (section 3) its wall
       time cannot be predicted — #92 must not assume it fits a single CronJob window.
 - [x] `$count` is available — needed to reconcile a replication run against the source.  
-       **Answer:** `$count=true` works. Observed totals on the test feed: `BrightProperties`
-      **174,580**; `BrightProperties` modified since 2026-09-01 **1,461**; `BrightMedia`
-      **3,403,084**; `Deletion` **10,573,704**.
+       **Answer:** `$count=true` works. Totals on the test feed, **all read 2026-09-18**:
+      `BrightProperties` **174,580**; `BrightProperties` modified since 2026-09-01 **1,461**;
+      `BrightMedia` **3,403,084**; `Deletion` **10,573,704**. Every count in this document is a
+      reading with a date, not a fixed property — `BrightProperties` read **174,579** a day later
+      (section 4). Never build a reconciliation assertion against a number recorded here.
 
 ## 3. Replication — the assumptions #92 is built on
 
@@ -245,10 +253,49 @@ records where the fields discovered here are meant to go.
       returns **400, "GeographyPoint literals not implemented"**.
 - [x] **Server-side bounding-box filtering works, and it is what makes the fallback cheap.**  
        `BrightProperty.Latitude` and `BrightProperty.Longitude` are `Edm.Double`, so a plain numeric
-      `$filter` narrows a window at the source:
-      `Latitude ge 38.80 and Latitude le 39.00 and Longitude ge -77.12 and Longitude le -76.90`
-      returns 200. #92 must bound by coordinate on the wire rather than pulling unbounded pages and
-      filtering locally.
+      `$filter` narrows a window at the source. Verified on 2026-09-19 that it **bounds the result
+      set**, not merely that it is accepted — a 200 alone would have proved nothing:
+
+Every row below is `GET BrightProperties?$top=0&$count=true&$filter=<the filter shown>`, so each is
+re-runnable verbatim:
+
+| `$filter`                                                                                 | `@odata.count` |
+| ----------------------------------------------------------------------------------------- | -------------: |
+| _(omitted — no `$filter`)_                                                                |        174,579 |
+| `Latitude ge 38.88 and Latitude le 38.92 and Longitude ge -77.05 and Longitude le -77.0`  |            155 |
+| `Latitude ge 25.0 and Latitude le 25.2 and Longitude ge -80.3 and Longitude le -80.1`     |              0 |
+| `Latitude ge 38.80 and Latitude le 39.00 and Longitude ge -77.12 and Longitude le -76.90` |         14,194 |
+
+**Precision.** All 155 rows of the second box were fetched with
+`$select=ListingKey,Latitude,Longitude`. **Zero fell outside it**; observed range 38.88000..38.91972
+by -77.04994..-77.00046.
+
+**Recall.** Precision alone would not justify the mandate below — a filter that silently dropped
+in-box rows would look identical. Two consistency checks, neither of which is ground truth but both
+of which a dropping filter would fail. Splitting the second box at latitude 38.90 gives 29 + 126 =
+**155**, exactly the whole. The fourth box geometrically contains the second and returns 14,194
+≥ 155. **Do not measure recall by paging a wide box and intersecting**: the server page size is
+1000, so an unfollowed `@odata.nextLink` truncates the wider set and manufactures a recall failure
+that is not there. That mistake was made once here.
+
+So **#92 and #66 must bound by coordinate on the wire**, never pull a rectangle of rows and discard
+most of them locally.
+
+**2,943 listings have no coordinates** — `Latitude eq null` and `Longitude eq null` each return
+2,943, against 171,636 for `Latitude ne null`, summing to the 174,579 total. That is 1.7% of the
+feed, and `ge`/`le` on a nullable column **excludes** every one of them from every bounding-box
+query rather than returning them to be filtered later. The exclusion is correct — the same reasoning
+as this service's no-`COALESCE`-on-`beds`/`baths` rule, and a fabricated 0 would place them off West
+Africa — but 1.7% of inventory being invisible to area search is a product decision for #66, not an
+implementation detail.
+
+**The unfiltered total here is 174,579 and section 2 records 174,580.** Both are correct as
+observed: section 2 counted on 2026-09-18 and these rows on 2026-09-19. The readings differ by one
+and **the cause was not investigated** — a genuine change in the feed and a difference in how the
+two counts were issued are equally consistent with it. Neither is a reconciliation defect, and
+neither is a fixed property of the feed. Treat every count in this document as a reading with a
+date, not as a target for #92 to match.
+
 - [ ] Any vertex-count or payload-size limit on a polygon filter.  
        **Moot while geography literals are not implemented.** Re-open only if Bright later enables
       geospatial operators.

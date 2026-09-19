@@ -137,4 +137,7 @@ internal class ApplicationUser : IdentityUser
 
     /// <summary>Gets or sets the apps this user has authenticated with.</summary>
     public ICollection<UserApp> UserApps { get; set; } = new List<UserApp>();
+
+    /// <summary>Gets or sets the early-access interests this user registered.</summary>
+    public ICollection<WaitlistInterest> WaitlistInterests { get; set; } = new List<WaitlistInterest>();
 }
