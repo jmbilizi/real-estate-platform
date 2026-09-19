@@ -226,13 +226,16 @@ Four things here are load-bearing and easy to undo by accident:
   old rule protected the production credential by starving three environments, this one protects it
   by binding three environments to the test feed. **The invariant is unchanged: the production
   credential never leaves production.** A row from the test feed is not production inventory — it is
-  sample data, is marked `is_sample=true` on ingest, and carries the shipped sample disclosure on
-  every consumer surface (#93, #115). The field names stay identical across environments and only
-  the values differ, which is what makes GitHub _environment_ secrets — not repository secrets — the
-  enforcement mechanism, and the endpoint stays per-environment **configuration** on the CronJob so
-  the feed is inspectable without decoding a Secret. Only `dev` and `prod` are wired today; #176
-  wires `local` and `test`, and #164 is the fail-closed check that a non-production environment
-  cannot authenticate with a production credential.
+  sample data, **must** be marked `is_sample=true` on ingest, and **must** carry the sample
+  disclosure on every consumer surface (#93, #115). **That marking does not exist yet**: nothing
+  ingests, `is_sample` is set only by the seed path, and nothing derives it from `source`. It is a
+  requirement on #93, not a control to rely on — the condition that must hold before a Bright row
+  reaches a consumer surface, never a reason one already may. The field names stay identical across
+  environments and only the values differ, which is what makes GitHub _environment_ secrets — not
+  repository secrets — the enforcement mechanism, and the endpoint stays per-environment
+  **configuration** on the CronJob so the feed is inspectable without decoding a Secret. Only `dev`
+  and `prod` are wired today; #176 wires `local` and `test`, and #164 is the fail-closed check that
+  a non-production environment cannot authenticate with a production credential.
 - **Only endpoint HOSTS are ever logged**, never full URLs and never credential material. The
   containment is structural: no log record type in `run-log.ts` has a field a credential could be
   assigned to. The exception that had to be argued about is `message`, the one free-text field — so
