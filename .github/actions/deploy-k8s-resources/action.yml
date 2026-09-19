@@ -65,7 +65,7 @@ runs:
         kubectl version --client
         kubectl cluster-info
 
-    - name: Substitute secrets (Postgres, Redis, Jaeger, Bright MLS)
+    - name: Substitute secrets (Postgres, Redis, Jaeger, Bright MLS, Postmark)
       shell: bash
       run: |
         # In-memory substitution pattern; overwrite templates in workspace
@@ -119,6 +119,24 @@ runs:
         else
           echo "ℹ️  No Bright MLS credentials for this environment — keeping the committed placeholder."
           echo "   The ingestion job will complete with a 'credentials not configured' outcome (#91)."
+        fi
+
+        # Postmark (#175). Guarded for the same reason as Bright MLS above: the token is absent
+        # until #133 provisions it, and an unguarded `env(VAR)` on an unset variable writes a null
+        # into stringData, which kubectl rejects. That would abort postgres, redis, jaeger, the
+        # gateway and the web client over one credential — the #45 blast radius.
+        #
+        # One variable name serves every environment. GitHub *environment* secrets hold the values,
+        # so `dev` and `test` read a Postmark sandbox server token and only `prod` reads the live
+        # sender (#133). No repository secret of this name exists, which closes the fallback path
+        # that could otherwise leak the prod token into a non-prod run.
+        if [ -n "$POSTMARK_SERVER_TOKEN" ]; then
+          echo "🔐 Postmark server token present for this environment — substituting."
+          yq eval '.stringData.POSTMARK_SERVER_TOKEN = env(POSTMARK_SERVER_TOKEN)' infra/k8s/base/secrets/postmark.secret.yaml \
+          > /tmp/postmark.secret.processed.yaml
+          mv /tmp/postmark.secret.processed.yaml infra/k8s/base/secrets/postmark.secret.yaml
+        else
+          echo "::warning::POSTMARK_SERVER_TOKEN is not set for this environment. The committed placeholder stays in the Secret and the sending code treats it as 'not configured' (#138). Provisioning is #133."
         fi
 
     - name: Substitute domain placeholders in ingress manifests
