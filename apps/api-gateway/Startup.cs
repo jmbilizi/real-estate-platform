@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
 using ApiGateway.Extensions;
+using ApiGateway.Middleware;
 using ApiGateway.Services;
 using Microsoft.AspNetCore.HttpOverrides;
 using MMLib.SwaggerForOcelot.Configuration;
@@ -225,6 +226,9 @@ namespace ApiGateway
                     // Swagger UI's "urls.primaryName" config selects the default entry by name.
                     uiOption.ConfigObject.AdditionalItems["urls.primaryName"] = GatewaySwaggerTitle;
                 });
+
+            // Must wrap UseOcelot: it reports the QoS failure and then terminates the pipeline.
+            app.UseMiddleware<UpstreamUnavailableMiddleware>();
 
             app.UseOcelot().Wait();
         }
