@@ -1,4 +1,5 @@
 import { GATEWAY_ERROR_CODES, type GatewayErrorCode } from '@cribstop/gateway-contracts';
+import { errorBodySchema } from '@cribstop/property-contracts';
 import type {
   ErrorBody,
   ListingDetail,
@@ -36,18 +37,19 @@ export type ListingSearchQuery = Partial<SearchRequest>;
  */
 export type ListingsErrorCode = ErrorBody['error']['code'] | GatewayErrorCode;
 
-const KNOWN_LISTINGS_ERROR_CODES: ReadonlySet<string> = new Set<ListingsErrorCode>([
-  'invalid_request',
-  'result_window_exceeded',
-  'not_found',
-  'internal_error',
-  ...GATEWAY_ERROR_CODES,
-]);
+/**
+ * Validated against the schemas themselves, not a hand-copied list of code strings — a set copied
+ * from `errorBodySchema`'s enum would silently stop matching a code the contract added later, and
+ * the drift is invisible because this set is a runtime value, not derived from `ErrorBody`'s type.
+ */
+function isKnownListingsCode(code: unknown): code is ListingsErrorCode {
+  if (typeof code !== 'string') return false;
+  if ((GATEWAY_ERROR_CODES as readonly string[]).includes(code)) return true;
+  return errorBodySchema.safeParse({ error: { code, message: '' } }).success;
+}
 
 function toKnownCode(code: unknown): ListingsErrorCode {
-  return typeof code === 'string' && KNOWN_LISTINGS_ERROR_CODES.has(code)
-    ? (code as ListingsErrorCode)
-    : 'internal_error';
+  return isKnownListingsCode(code) ? code : 'internal_error';
 }
 
 /** Thrown for any non-2xx response, carrying the contract's error code so callers can branch. */
