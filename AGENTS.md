@@ -1716,7 +1716,7 @@ before it reaches `pnpm`, so `--title "/api/overpass check"` arrives as
 `C:/Program Files/Git/api/overpass check` (this is how #113 got its title). Quoting does not stop
 it. `tools/github/lib/msys-args.js` strips the MSYS root back off and prints what it restored. A
 `--body-file` / `--plan-file` / `--description-file` value keeps the converted path, because
-conversion of a real path is correct; it is refused only when the conversion pointed it at a file
+conversion of a real path is correct. It is refused only when the conversion pointed it at a file
 that is absent. Every function there is a no-op on macOS and Linux.
 
 `update-ticket-fields.js` vs `update-ticket-status.js` is a deliberate least-privilege split:

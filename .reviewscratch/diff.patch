@@ -1,0 +1,1145 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 010cc29..f474c8c 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -1694,11 +1694,31 @@ pnpm run gh:ticket:view -- --issue 42
+ # Product owner: epics (milestone = epic, issue = story, plan item = task; list shows
+ # delivered/total per epic; assignment via gh:ticket:create/update-fields -- --milestone
+ # "<title>" / --remove-milestone; close refuses while stories are open):
+-pnpm run gh:milestone -- list
+-pnpm run gh:milestone -- create --title "Services MVP" --description "..."
+-pnpm run gh:milestone -- update --title "Services MVP" --description "..." [--new-title "..."]
++# list prints each description under its summary line, truncated; --full prints all of it.
++pnpm run gh:milestone -- list [--all] [--full]
++pnpm run gh:milestone -- create --title "Services MVP" --description-file ./epic.md
++# update prints the description it replaces; --append adds to it instead of overwriting.
++pnpm run gh:milestone -- update --title "Services MVP" --description-file ./epic.md [--new-title "..."]
++pnpm run gh:milestone -- update --title "Services MVP" --append --description "Ruling 2026-09-19: ..."
+ ```
+ 
++**Milestone descriptions**: `--description` is for one line. Anything longer goes in
++`--description-file`, because the whole text otherwise crosses the command line, which cmd.exe caps
++at 8191 characters. The script refuses an inline description over 6000 characters by name. Writes
++send the payload as JSON on stdin, so length, newlines and backticks are all safe. `update` never
++overwrites silently: it prints the previous description first, and `--append` adds to it. `list`
++warns when a milestone has no description, or a first line that is not a `Release:` marker. Erasing
++a description needs `--clear-description`; an empty `--description-file` is refused, because that is
++a truncated file far more often than an intent.
++
++**Leading-slash arguments**: Git Bash rewrites an argument that starts with `/` into a Windows path
++before it reaches `pnpm`, so `--title "/api/overpass check"` arrives as
++`C:/Program Files/Git/api/overpass check` (this is how #113 got its title). Quoting does not stop
++it. `tools/github/lib/msys-args.js` strips the MSYS root back off and prints what it restored. A
++`--body-file` / `--plan-file` / `--description-file` value keeps the converted path, because
++conversion of a real path is correct; it is refused only when the conversion pointed it at a file
++that is absent. Every function there is a no-op on macOS and Linux.
++
+ `update-ticket-fields.js` vs `update-ticket-status.js` is a deliberate least-privilege split:
+ engineer-facing flows (`pick-next-ticket`, `close-ticket` skills) only ever get the script that
+ can't touch Priority/Size, enforced at the script level rather than by trusting an agent's prompt.
+diff --git a/tools/github/comment.js b/tools/github/comment.js
+index 9bf80fa..be09e47 100644
+--- a/tools/github/comment.js
++++ b/tools/github/comment.js
+@@ -20,6 +20,7 @@ const fs = require('fs');
+ 
+ const {
+   ensureGhReady,
++  cliArgv,
+   requireConfig,
+   ghExec,
+   unescapeInlineText,
+@@ -46,7 +47,7 @@ function main() {
+   const { owner, repo } = requireConfig();
+   let args;
+   try {
+-    args = parseArgs(process.argv.slice(2));
++    args = parseArgs(cliArgv());
+   } catch (error) {
+     die(error.message);
+   }
+diff --git a/tools/github/create-ticket.js b/tools/github/create-ticket.js
+index 022009c..cf1cf74 100644
+--- a/tools/github/create-ticket.js
++++ b/tools/github/create-ticket.js
+@@ -27,14 +27,17 @@
+ const fs = require('fs');
+ const {
+   ensureGhReady,
++  cliArgv,
+   requireConfig,
+   loadSchema,
+   ghExec,
+-  ghJson,
++  run,
++  findProjectItemId,
+   resolveFieldOption,
+   unescapeInlineText,
+   die,
+   ok,
++  warn,
+   info,
+ } = require('./lib/gh-client');
+ const { PLAN_START, PLAN_END, containsBarePlanMarker } = require('./lib/issue-body');
+@@ -68,11 +71,64 @@ function resolveBody(args) {
+   return unescaped;
+ }
+ 
++/**
++ * Put the issue on the board and return its item id.
++ *
++ * A project automation can add the issue between `gh issue create` and this call. `gh project
++ * item-add` then answers "Content already exists in this project" on stderr and exits non-zero,
++ * although the state this script wants already holds. Aborting there is what left #118 on the board
++ * with Status, Priority and Size unset, which hides it from every `gh:ticket:list` filter. So any
++ * item-add failure falls back to resolving the item that is already there, and only a genuinely
++ * absent item is fatal.
++ */
++function addToProject({ owner, repo, projectNumber, projectId, issueUrl, issueNumber }) {
++  const result = run('gh', [
++    'project',
++    'item-add',
++    String(projectNumber),
++    '--owner',
++    owner,
++    '--url',
++    issueUrl,
++    '--format',
++    'json',
++  ]);
++
++  if (result.success) {
++    try {
++      const item = JSON.parse(result.stdout);
++      if (item.id) return item.id;
++    } catch {
++      // Fall through to the lookup — an item that exists is what matters, not gh's output shape.
++    }
++  }
++
++  const reason = result.stderr || result.stdout;
++  const recovery =
++    `Issue #${issueNumber} was created (${issueUrl}) but could not be added to the board:\n` +
++    `  ${reason}\n` +
++    '  Add it by hand, then set its fields with: pnpm run gh:ticket:update-fields -- --issue ' +
++    `${issueNumber} --status <status> --priority <P0|P1|P2>`;
++
++  // A failure that is not the duplicate is usually a missing `project` scope, and the fallback
++  // lookup needs that same scope — it would die inside gh and take these instructions with it. So
++  // print them first, then still try the lookup: the duplicate wording is gh's, not a contract.
++  if (!/already exists/i.test(reason)) warn(recovery);
++
++  const existing = findProjectItemId(owner, repo, issueNumber, projectId, { optional: true });
++  if (existing) {
++    info('Issue was already on the board — using the existing item.');
++    return existing;
++  }
++
++  die(recovery);
++}
++
+ function main() {
+   ensureGhReady();
+   const { owner, repo, projectNumber } = requireConfig();
+   const schema = loadSchema();
+-  const args = parseArgs(process.argv.slice(2));
++  const args = parseArgs(cliArgv());
+ 
+   if (!args.title) {
+     die('--title is required');
+@@ -117,17 +173,14 @@ function main() {
+   ok(`Created issue #${issueNumber}: ${issueUrl}`);
+ 
+   info('Adding to project board...');
+-  const item = ghJson([
+-    'project',
+-    'item-add',
+-    String(projectNumber),
+-    '--owner',
++  const itemId = addToProject({
+     owner,
+-    '--url',
++    repo,
++    projectNumber,
++    projectId: schema.projectId,
+     issueUrl,
+-    '--format',
+-    'json',
+-  ]);
++    issueNumber,
++  });
+ 
+   const fieldsToSet = {
+     Status: args.status || 'Backlog',
+@@ -142,7 +195,7 @@ function main() {
+       'project',
+       'item-edit',
+       '--id',
+-      item.id,
++      itemId,
+       '--project-id',
+       schema.projectId,
+       '--field-id',
+diff --git a/tools/github/label.js b/tools/github/label.js
+index 0d9f050..b4d36d2 100644
+--- a/tools/github/label.js
++++ b/tools/github/label.js
+@@ -17,6 +17,7 @@
+ 
+ const {
+   ensureGhReady,
++  cliArgv,
+   requireConfig,
+   ghJson,
+   ghExec,
+@@ -59,7 +60,7 @@ function main() {
+   const { owner, repo } = requireConfig();
+   let args;
+   try {
+-    args = parseArgs(process.argv.slice(2), PARSE_OPTIONS);
++    args = parseArgs(cliArgv(), PARSE_OPTIONS);
+   } catch (error) {
+     die(error.message);
+   }
+diff --git a/tools/github/lib/gh-client.js b/tools/github/lib/gh-client.js
+index 9c8aac9..f7822c3 100644
+--- a/tools/github/lib/gh-client.js
++++ b/tools/github/lib/gh-client.js
+@@ -12,6 +12,7 @@ const os = require('os');
+ const path = require('path');
+ 
+ const config = require('../project.config.js');
++const { repairMsysArgv } = require('./msys-args');
+ 
+ const SCHEMA_PATH = path.join(__dirname, '..', 'project-schema.json');
+ 
+@@ -34,6 +35,18 @@ function die(message) {
+   process.exit(1);
+ }
+ 
++/**
++ * The script arguments, with MSYS path conversion undone. Every script starts its parse here, so
++ * a value that begins with `/` survives Git Bash — see lib/msys-args.js for what the shell does
++ * to it and why the repair belongs in Node.
++ */
++function cliArgv(argv = process.argv.slice(2)) {
++  // stderr, not stdout: list-tickets.js writes a JSON document to stdout, and a diagnostic line
++  // ahead of it breaks every caller that parses that output (session-brief.js does).
++  const onRepair = (message) => process.stderr.write(`${C.yellow}⚠ ${message}${C.reset}\n`);
++  return repairMsysArgv(argv, { onRepair, onReject: die });
++}
++
+ /** Run a command synchronously. Returns { success, stdout, stderr }. */
+ function run(cmd, args = [], opts = {}) {
+   const result = spawnSync(cmd, args, {
+@@ -178,14 +191,25 @@ const ITEM_LOOKUP_QUERY = `
+   }
+ `;
+ 
+-/** Resolve the ProjectV2Item id for an issue on the configured board. Dies if not found. */
+-function findProjectItemId(owner, repo, issueNumber, projectId) {
++/**
++ * Resolve the ProjectV2Item id for an issue on the configured board.
++ * Dies if not found, unless `optional` is set — then it returns null and the caller decides.
++ * `optional` covers "the issue is not on the board". An issue number that does not exist is still
++ * fatal, because `gh` refuses the query itself.
++ */
++function findProjectItemId(owner, repo, issueNumber, projectId, { optional = false } = {}) {
+   const result = graphql(ITEM_LOOKUP_QUERY, { owner, repo, number: Number(issueNumber) });
+   const issue = result.data.repository.issue;
+-  if (!issue) die(`Issue #${issueNumber} not found in ${owner}/${repo}`);
++  if (!issue) {
++    if (optional) return null;
++    die(`Issue #${issueNumber} not found in ${owner}/${repo}`);
++  }
+ 
+   const match = issue.projectItems.nodes.find((node) => node.project.id === projectId);
+-  if (!match) die(`Issue #${issueNumber} is not on the configured project board`);
++  if (!match) {
++    if (optional) return null;
++    die(`Issue #${issueNumber} is not on the configured project board`);
++  }
+   return match.id;
+ }
+ 
+@@ -254,6 +278,7 @@ module.exports = {
+   info,
+   die,
+   unescapeInlineText,
++  cliArgv,
+   run,
+   ghJson,
+   ghExec,
+diff --git a/tools/github/lib/milestone-description.js b/tools/github/lib/milestone-description.js
+new file mode 100644
+index 0000000..f58b853
+--- /dev/null
++++ b/tools/github/lib/milestone-description.js
+@@ -0,0 +1,71 @@
++/**
++ * Rendering and validation of a milestone description.
++ *
++ * A milestone is an epic, and its description is the durable release-direction record: the first
++ * line is a release marker (`Release: MVP` or `Release: post-MVP`), and the set of `Release: MVP`
++ * epics is the current first-release scope. See AGENTS.md -> Product Backlog -> Milestones.
++ *
++ * `gh:milestone -- list` therefore has to print the text back. A product owner that cannot read the
++ * marker re-derives release direction from scratch every session.
++ */
++
++/** The first line of a description. `Release:` then a non-empty word. */
++const RELEASE_MARKER = /^Release:\s*\S/;
++
++/** Lines of description printed by `list` before it truncates. `--full` prints all of them. */
++const PREVIEW_LINES = 10;
++
++const INDENT = '    ';
++
++/** Split on either line ending, so a CRLF description from the API reads the same as an LF one. */
++const toLines = (description) => String(description).replace(/\r\n/g, '\n').split('\n');
++
++/** `null`, `undefined` and whitespace all mean the same thing: the epic has no direction recorded. */
++const isEmpty = (description) => !description || !String(description).trim();
++
++/**
++ * The problem with this description, or `null` when it is well-formed.
++ * Both cases cost the same thing — the release marker cannot be read.
++ */
++function releaseMarkerProblem(description) {
++  if (isEmpty(description)) {
++    return 'no description — the release marker is missing (first line must be "Release: MVP" or "Release: post-MVP")';
++  }
++  const first = toLines(description).find((line) => line.trim() !== '');
++  if (!RELEASE_MARKER.test(first.trim())) {
++    return `first line is not a release marker (found "${first.trim()}")`;
++  }
++  return null;
++}
++
++/**
++ * The indented description block for one milestone, as an array of lines.
++ * Returns `[]` when there is nothing to print, so the caller prints only the warning.
++ */
++function formatDescription(description, { full = false, previewLines = PREVIEW_LINES } = {}) {
++  if (isEmpty(description)) return [];
++  const lines = toLines(description);
++  if (full || lines.length <= previewLines) return lines.map((line) => INDENT + line);
++
++  const hidden = lines.length - previewLines;
++  return [
++    ...lines.slice(0, previewLines).map((line) => INDENT + line),
++    `${INDENT}… ${hidden} more line(s) — run with --full`,
++  ];
++}
++
++/** The description that `--append` produces. One blank line separates the old text from the new. */
++function appendDescription(previous, addition) {
++  if (isEmpty(previous)) return addition;
++  return `${String(previous).replace(/\s+$/, '')}\n\n${addition}`;
++}
++
++module.exports = {
++  RELEASE_MARKER,
++  PREVIEW_LINES,
++  INDENT,
++  isEmpty,
++  releaseMarkerProblem,
++  formatDescription,
++  appendDescription,
++};
+diff --git a/tools/github/lib/milestone-description.test.js b/tools/github/lib/milestone-description.test.js
+new file mode 100644
+index 0000000..9f0cca8
+--- /dev/null
++++ b/tools/github/lib/milestone-description.test.js
+@@ -0,0 +1,87 @@
++const test = require('node:test');
++const assert = require('node:assert/strict');
++
++const {
++  INDENT,
++  isEmpty,
++  releaseMarkerProblem,
++  formatDescription,
++  appendDescription,
++} = require('./milestone-description');
++
++test('isEmpty covers null, undefined and whitespace', () => {
++  assert.equal(isEmpty(null), true);
++  assert.equal(isEmpty(undefined), true);
++  assert.equal(isEmpty('   \n  '), true);
++  assert.equal(isEmpty('Release: MVP'), false);
++});
++
++test('releaseMarkerProblem flags an empty description as a missing marker', () => {
++  assert.match(releaseMarkerProblem(''), /release marker is missing/);
++  assert.match(releaseMarkerProblem(null), /release marker is missing/);
++});
++
++test('releaseMarkerProblem accepts a well-formed marker', () => {
++  assert.equal(releaseMarkerProblem('Release: MVP\n\nHomes search.'), null);
++  assert.equal(releaseMarkerProblem('Release: post-MVP'), null);
++});
++
++test('releaseMarkerProblem skips leading blank lines before judging', () => {
++  assert.equal(releaseMarkerProblem('\n\nRelease: MVP\n'), null);
++});
++
++test('releaseMarkerProblem names the line it found instead of the marker', () => {
++  const problem = releaseMarkerProblem('Homes-first scope.\nRelease: MVP');
++  assert.match(problem, /not a release marker/);
++  assert.match(problem, /Homes-first scope\./);
++});
++
++test('releaseMarkerProblem rejects a marker with no value', () => {
++  assert.match(releaseMarkerProblem('Release:'), /not a release marker/);
++});
++
++test('formatDescription indents every line', () => {
++  assert.deepEqual(formatDescription('Release: MVP\nHomes.'), [
++    `${INDENT}Release: MVP`,
++    `${INDENT}Homes.`,
++  ]);
++});
++
++test('formatDescription prints nothing for an empty description', () => {
++  assert.deepEqual(formatDescription(''), []);
++  assert.deepEqual(formatDescription(null), []);
++});
++
++test('formatDescription truncates with an explicit marker', () => {
++  const description = Array.from({ length: 25 }, (_, i) => `line ${i + 1}`).join('\n');
++  const lines = formatDescription(description, { previewLines: 10 });
++  assert.equal(lines.length, 11);
++  assert.equal(lines[9], `${INDENT}line 10`);
++  assert.match(lines[10], /… 15 more line\(s\) — run with --full/);
++});
++
++test('formatDescription --full prints every line', () => {
++  const description = Array.from({ length: 25 }, (_, i) => `line ${i + 1}`).join('\n');
++  const lines = formatDescription(description, { full: true, previewLines: 10 });
++  assert.equal(lines.length, 25);
++  assert.equal(lines[24], `${INDENT}line 25`);
++});
++
++test('formatDescription reads a CRLF description the same as an LF one', () => {
++  assert.deepEqual(
++    formatDescription('Release: MVP\r\nHomes.'),
++    formatDescription('Release: MVP\nHomes.'),
++  );
++});
++
++test('appendDescription separates the old text from the new with one blank line', () => {
++  assert.equal(
++    appendDescription('Release: MVP\n\nHomes search.\n', 'Ruling 2026-09-19: Connect is gated.'),
++    'Release: MVP\n\nHomes search.\n\nRuling 2026-09-19: Connect is gated.',
++  );
++});
++
++test('appendDescription onto an empty description keeps only the new text', () => {
++  assert.equal(appendDescription('', 'Release: MVP'), 'Release: MVP');
++  assert.equal(appendDescription(null, 'Release: MVP'), 'Release: MVP');
++});
+diff --git a/tools/github/lib/msys-args.js b/tools/github/lib/msys-args.js
+new file mode 100644
+index 0000000..bb9656c
+--- /dev/null
++++ b/tools/github/lib/msys-args.js
+@@ -0,0 +1,142 @@
++/**
++ * Undo MSYS path conversion on the arguments of the tools/github/*.js scripts.
++ *
++ * Git Bash and MSYS2 rewrite an argument that starts with `/` into a Windows path before the
++ * argument reaches a native program. `pnpm` is a native program, so the value is already corrupt
++ * in `process.argv` — the conversion happens one hop above Node, and quoting does not stop it:
++ *
++ *   pnpm run gh:ticket:create -- --title "/api/overpass check"
++ *   -> process.argv holds "C:/Program Files/Git/api/overpass check"
++ *
++ * That is how #113 got its title. `MSYS_NO_PATHCONV=1` fixes it only if the caller exports it
++ * before the command, which no agent and no reader of AGENTS.md does. So the scripts repair the
++ * value themselves: the conversion prepends the MSYS installation root and nothing else, so
++ * stripping that exact prefix restores the original byte for byte.
++ *
++ * The repair is deliberately narrow. It runs only when MSYS reports itself through `MSYSTEM`, and
++ * only on a value whose prefix is the MSYS root. On macOS and Linux every function here is a no-op.
++ */
++
++const fs = require('fs');
++const path = require('path');
++
++/**
++ * Flags whose value is a filesystem path. MSYS conversion of those is the feature working as
++ * intended (`--body-file /c/tmp/x.md` must become `C:/tmp/x.md`), so they are never repaired.
++ * They get a diagnosis instead: see `describeMangledFileArg`.
++ */
++const PATH_FLAGS = new Set(['body-file', 'plan-file', 'description-file', 'input-file']);
++
++const toPosix = (value) => value.replace(/\\/g, '/').replace(/\/+$/, '');
++
++/**
++ * The directory that MSYS maps to `/`. Git Bash maps it to the Git install root
++ * (`C:/Program Files/Git`), MSYS2 to the MSYS root (`C:/msys64`). Neither exports it directly, so
++ * derive it from the interpreter location by dropping the `bin` and `usr/bin` tail.
++ */
++function deriveRoot(candidate) {
++  let dir = toPosix(candidate);
++  for (let i = 0; i < 2; i++) {
++    const base = path.posix.basename(dir).toLowerCase();
++    if (base !== 'bin' && base !== 'usr') break;
++    dir = path.posix.dirname(dir);
++  }
++  return dir;
++}
++
++let cachedRoot;
++
++/** The MSYS root for this process, or `null` when not running under MSYS. */
++function msysRoot(env = process.env) {
++  if (env === process.env && cachedRoot !== undefined) return cachedRoot;
++
++  let root = null;
++  if (process.platform === 'win32' && env.MSYSTEM) {
++    // SHELL is the bash executable, EXEPATH the directory it was launched from. Either can be
++    // absent or already be the root itself, so try both and keep the first that exists on disk.
++    const candidates = [env.SHELL && path.posix.dirname(toPosix(env.SHELL)), env.EXEPATH].filter(
++      Boolean,
++    );
++    for (const candidate of candidates) {
++      const derived = deriveRoot(candidate);
++      if (/^[A-Za-z]:\/./.test(derived) && fs.existsSync(derived)) {
++        root = derived;
++        break;
++      }
++    }
++  }
++
++  if (env === process.env) cachedRoot = root;
++  return root;
++}
++
++/** Reset the memoized root. Tests only. */
++function resetMsysRootCache() {
++  cachedRoot = undefined;
++}
++
++/**
++ * Strip the MSYS root prefix from `value`, restoring the leading `/` the shell ate.
++ * Returns the value unchanged when it was not converted.
++ */
++function unmangleMsysValue(value, root = msysRoot()) {
++  if (!root || typeof value !== 'string') return value;
++  const prefix = `${root}/`;
++  if (value.slice(0, prefix.length).toLowerCase() !== prefix.toLowerCase()) return value;
++  return `/${value.slice(prefix.length)}`;
++}
++
++/** True when `value` looks like a path flag that MSYS conversion pointed at a file that is absent. */
++function describeMangledFileArg(key, value, root = msysRoot()) {
++  if (!root || typeof value !== 'string') return null;
++  if (unmangleMsysValue(value, root) === value) return null;
++  if (fs.existsSync(value)) return null;
++  return (
++    `--${key} points at "${value}", which does not exist.\n` +
++    `  Git Bash rewrote a leading "/" into the MSYS root "${root}". Pass the file as a relative ` +
++    'path ("./notes.md") or a Windows path ("C:/tmp/notes.md").'
++  );
++}
++
++/**
++ * Repair every value in `argv` that MSYS conversion corrupted, and refuse a path flag it broke.
++ *
++ * `onRepair` reports each repaired value, so a false positive is visible instead of silent.
++ * `onReject` receives the explanation for a broken path flag; the caller routes it through `die`.
++ */
++function repairMsysArgv(argv, { onRepair, onReject, env, root = msysRoot(env) } = {}) {
++  if (!root) return argv;
++
++  const repaired = argv.slice();
++  for (let i = 0; i < repaired.length - 1; i++) {
++    const arg = repaired[i];
++    if (typeof arg !== 'string' || !arg.startsWith('--') || arg === '--') continue;
++    const key = arg.slice(2);
++    const value = repaired[i + 1];
++
++    if (PATH_FLAGS.has(key)) {
++      const problem = describeMangledFileArg(key, value, root);
++      if (problem) {
++        if (onReject) onReject(problem);
++        else throw new Error(problem);
++      }
++      continue;
++    }
++
++    const fixed = unmangleMsysValue(value, root);
++    if (fixed !== value) {
++      repaired[i + 1] = fixed;
++      if (onRepair) onRepair(`--${key}: Git Bash rewrote the leading "/" — restored "${fixed}".`);
++    }
++  }
++  return repaired;
++}
++
++module.exports = {
++  PATH_FLAGS,
++  msysRoot,
++  resetMsysRootCache,
++  unmangleMsysValue,
++  describeMangledFileArg,
++  repairMsysArgv,
++};
+diff --git a/tools/github/lib/msys-args.test.js b/tools/github/lib/msys-args.test.js
+new file mode 100644
+index 0000000..e2d4ff5
+--- /dev/null
++++ b/tools/github/lib/msys-args.test.js
+@@ -0,0 +1,105 @@
++const test = require('node:test');
++const assert = require('node:assert/strict');
++const fs = require('fs');
++const os = require('os');
++const path = require('path');
++
++const {
++  msysRoot,
++  resetMsysRootCache,
++  unmangleMsysValue,
++  describeMangledFileArg,
++  repairMsysArgv,
++} = require('./msys-args');
++
++const ROOT = 'C:/Program Files/Git';
++
++test('msysRoot is null when the shell is not MSYS', () => {
++  resetMsysRootCache();
++  assert.equal(msysRoot({ SHELL: '/bin/bash' }), null);
++  resetMsysRootCache();
++});
++
++test('unmangleMsysValue restores the leading slash the shell ate', () => {
++  assert.equal(unmangleMsysValue(`${ROOT}/api/overpass check`, ROOT), '/api/overpass check');
++});
++
++test('unmangleMsysValue leaves an untouched value alone', () => {
++  assert.equal(unmangleMsysValue('Add saved-search alerts', ROOT), 'Add saved-search alerts');
++  assert.equal(unmangleMsysValue('C:/tmp/notes.md', ROOT), 'C:/tmp/notes.md');
++  assert.equal(
++    unmangleMsysValue('See C:/Program Files/Git/etc', ROOT),
++    'See C:/Program Files/Git/etc',
++  );
++});
++
++test('unmangleMsysValue matches the root case-insensitively', () => {
++  assert.equal(unmangleMsysValue('c:/program files/git/api/x', ROOT), '/api/x');
++});
++
++test('unmangleMsysValue is a no-op with no MSYS root', () => {
++  assert.equal(unmangleMsysValue(`${ROOT}/api/x`, null), `${ROOT}/api/x`);
++});
++
++test('repairMsysArgv repairs a value flag and reports it', () => {
++  const reported = [];
++  const argv = repairMsysArgv(['--title', `${ROOT}/api/overpass check`, '--priority', 'P1'], {
++    root: ROOT,
++    onRepair: (m) => reported.push(m),
++  });
++  assert.deepEqual(argv, ['--title', '/api/overpass check', '--priority', 'P1']);
++  assert.equal(reported.length, 1);
++  assert.match(reported[0], /--title/);
++});
++
++test('repairMsysArgv does not mutate the argv it was given', () => {
++  const original = ['--title', `${ROOT}/api/x`];
++  const argv = repairMsysArgv(original, { root: ROOT });
++  assert.deepEqual(original, ['--title', `${ROOT}/api/x`]);
++  assert.deepEqual(argv, ['--title', '/api/x']);
++});
++
++test('repairMsysArgv is a no-op off MSYS', () => {
++  const argv = ['--title', `${ROOT}/api/x`];
++  assert.equal(repairMsysArgv(argv, { root: null }), argv);
++});
++
++test('repairMsysArgv never rewrites a subcommand or a bare word', () => {
++  const argv = repairMsysArgv(['update', '--title', 'Homes MVP'], { root: ROOT });
++  assert.deepEqual(argv, ['update', '--title', 'Homes MVP']);
++});
++
++test('repairMsysArgv leaves a real file path alone', () => {
++  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'msys-args-'));
++  const file = path.join(dir, 'body.md').replace(/\\/g, '/');
++  fs.writeFileSync(file, 'body');
++  try {
++    const argv = repairMsysArgv(['--body-file', file], { root: ROOT });
++    assert.deepEqual(argv, ['--body-file', file]);
++  } finally {
++    fs.rmSync(dir, { recursive: true, force: true });
++  }
++});
++
++test('repairMsysArgv rejects a path flag that conversion broke', () => {
++  let rejected = null;
++  repairMsysArgv(['--body-file', `${ROOT}/tickets/118.md`], {
++    root: ROOT,
++    onReject: (m) => {
++      rejected = m;
++    },
++  });
++  assert.match(rejected, /--body-file/);
++  assert.match(rejected, /MSYS root/);
++});
++
++test('repairMsysArgv throws on a broken path flag when no onReject is given', () => {
++  assert.throws(
++    () => repairMsysArgv(['--plan-file', `${ROOT}/plan.md`], { root: ROOT }),
++    /plan-file/,
++  );
++});
++
++test('describeMangledFileArg says nothing about an ordinary missing file', () => {
++  assert.equal(describeMangledFileArg('body-file', './does-not-exist.md', ROOT), null);
++});
+diff --git a/tools/github/list-tickets.js b/tools/github/list-tickets.js
+index fe1bf78..4849ad2 100644
+--- a/tools/github/list-tickets.js
++++ b/tools/github/list-tickets.js
+@@ -21,7 +21,7 @@
+  *   pnpm run gh:ticket:list -- --state all --status Done
+  */
+ 
+-const { ensureGhReady, loadSchema, graphql, log, die } = require('./lib/gh-client');
++const { ensureGhReady, cliArgv, loadSchema, graphql, log, die } = require('./lib/gh-client');
+ const { parseArgs } = require('./lib/args');
+ 
+ const ITEMS_QUERY = `
+@@ -120,7 +120,7 @@ function main() {
+   const schema = loadSchema();
+   let args;
+   try {
+-    args = parseArgs(process.argv.slice(2));
++    args = parseArgs(cliArgv());
+   } catch (error) {
+     die(error.message);
+   }
+diff --git a/tools/github/milestone.js b/tools/github/milestone.js
+index 8ef1a14..6c2ef93 100644
+--- a/tools/github/milestone.js
++++ b/tools/github/milestone.js
+@@ -9,46 +9,82 @@
+  * `close` refuses while stories are still open — an epic is done when its scope is delivered.
+  * Due dates are optional context, not deadlines.
+  *
++ * The description is the durable release-direction record (first line `Release: MVP` or
++ * `Release: post-MVP`), so `list` prints it back and `update` never overwrites it silently.
++ *
+  * The gh CLI has no native milestone command, so CRUD goes through the REST API; assignment to
+  * tickets goes through `gh:ticket:create/update-fields -- --milestone "<title>"`.
+  *
+  * Usage:
+- *   pnpm run gh:milestone -- list [--all]
+- *   pnpm run gh:milestone -- create --title "Services MVP" [--due 2026-09-15] [--description "..."]
+- *   pnpm run gh:milestone -- update --title "Services MVP" [--new-title "..."] [--description "..."] [--due 2026-09-15]
++ *   pnpm run gh:milestone -- list [--all] [--full]
++ *   pnpm run gh:milestone -- create --title "Services MVP" [--due 2026-09-15]
++ *                                   [--description "..." | --description-file ./epic.md]
++ *   pnpm run gh:milestone -- update --title "Services MVP" [--new-title "..."] [--due 2026-09-15]
++ *                                   [--description "..." | --description-file ./epic.md]
++ *                                   [--append] [--clear-description]
+  *   pnpm run gh:milestone -- close --title "Services MVP"
+  *   pnpm run gh:milestone -- delete --title "Services MVP"
+  */
+ 
++const fs = require('fs');
+ const {
+   ensureGhReady,
++  cliArgv,
+   requireConfig,
++  run,
+   ghJson,
+-  ghExec,
+   unescapeInlineText,
+   die,
+   ok,
++  warn,
++  info,
+   log,
+ } = require('./lib/gh-client');
++const {
++  releaseMarkerProblem,
++  formatDescription,
++  appendDescription,
++  isEmpty,
++} = require('./lib/milestone-description');
++const { parseArgs } = require('./lib/args');
+ 
+-function parseArgs(argv) {
+-  const args = { _: [] };
+-  for (let i = 0; i < argv.length; i++) {
+-    const arg = argv[i];
+-    if (arg === '--') continue; // pnpm forwards the literal '--' separator — never a flag
+-    if (!arg.startsWith('--')) {
+-      args._.push(arg);
+-      continue;
+-    }
+-    const key = arg.slice(2);
+-    if (key === 'all') {
+-      args.all = true;
+-    } else {
+-      args[key] = argv[i + 1];
+-      i++;
+-    }
++/** `list | create | update | close | delete` arrives as a bare word; the rest are `--key value`. */
++const PARSE_OPTIONS = {
++  flags: ['all', 'full', 'append', 'clear-description'],
++  positionals: true,
++};
++
++/**
++ * cmd.exe caps a command line at 8191 characters, and `pnpm run` adds the script name and the
++ * forwarded `--` before Node ever sees it. An inline description near that cap fails with
++ * "The command line is too long." from the shell, which names neither the flag nor the fix.
++ *
++ * The check cannot stop that shell error — the shell wins before Node starts. It stops the command
++ * from being written that way at all. It therefore applies on every platform, although only Windows
++ * has the low cap: a milestone command that works on Linux has to work on Windows too, and an
++ * author who is told to use `--description-file` once writes it that way everywhere after.
++ */
++const INLINE_DESCRIPTION_MAX = 6000;
++
++/**
++ * Send a write to the REST API with the payload as JSON on stdin.
++ *
++ * `-f field=value` puts the whole description on the command line, which caps it at what the shell
++ * accepts and mangles nothing predictably. `--input -` carries any length, and newlines and
++ * backticks survive because JSON escapes them.
++ */
++function ghApiWrite(method, path, payload) {
++  const result = run('gh', ['api', '--method', method, path, '--input', '-'], {
++    input: JSON.stringify(payload),
++  });
++  if (!result.success) {
++    die(`gh api --method ${method} ${path} failed:\n${result.stderr || result.stdout}`);
++  }
++  try {
++    return JSON.parse(result.stdout);
++  } catch {
++    return die(`gh api --method ${method} ${path} returned non-JSON output:\n${result.stdout}`);
+   }
+-  return args;
+ }
+ 
+ function listMilestones(base, state) {
+@@ -63,86 +99,185 @@ function findByTitle(base, title) {
+   return match;
+ }
+ 
+-function main() {
+-  ensureGhReady();
+-  const { owner, repo } = requireConfig();
+-  const args = parseArgs(process.argv.slice(2));
+-  const base = `repos/${owner}/${repo}/milestones`;
+-  const command = args._[0];
++/**
++ * The description to write, from `--description` or `--description-file`.
++ * Returns `undefined` when the caller passed neither.
++ */
++function resolveDescription(args) {
++  const hasInline = args.description !== undefined;
++  const hasFile = args['description-file'] !== undefined;
+ 
+-  if (command === 'list' || !command) {
+-    const milestones = listMilestones(base, args.all ? 'all' : 'open');
+-    if (milestones.length === 0) {
+-      log(args.all ? 'No milestones.' : 'No open milestones.');
+-      return;
++  if (hasInline && hasFile) {
++    die('Pass --description or --description-file, not both.');
++  }
++  // The shared parser refuses an empty value, so erasing a description needs its own flag rather
++  // than `--description ""`. Erasing is also the one destructive edit here, so it should be typed.
++  if (args['clear-description']) {
++    if (hasInline || hasFile) {
++      die('Pass --clear-description on its own, without --description or --description-file.');
+     }
+-    for (const m of milestones) {
+-      const done = m.closed_issues;
+-      const total = m.closed_issues + m.open_issues;
+-      const due = m.due_on ? `due ${m.due_on.slice(0, 10)}` : 'no due date';
+-      log(`${m.title} [${m.state}] — ${due} — ${done}/${total} done — ${m.html_url}`);
++    if (args.append) die('--clear-description and --append do the opposite of each other.');
++    return '';
++  }
++  if (hasFile) {
++    const path = args['description-file'];
++    if (!fs.existsSync(path)) die(`--description-file "${path}" does not exist.`);
++    if (fs.statSync(path).isDirectory()) die(`--description-file "${path}" is a directory.`);
++    // Normalize to LF so a file written on Windows does not store CRLF in the release record.
++    const text = fs.readFileSync(path, 'utf-8').replace(/\r\n/g, '\n');
++    // A truncated file would otherwise erase the release-direction record with no way back.
++    // Erasing a description on purpose stays available through --clear-description.
++    if (!text.trim()) {
++      die(
++        `--description-file "${path}" is empty. To erase the description, pass --clear-description.`,
++      );
+     }
+-    return;
++    return text;
+   }
++  if (!hasInline) return undefined;
+ 
+-  if (command === 'create') {
+-    if (!args.title) die('--title is required');
+-    const apiArgs = ['api', '--method', 'POST', base, '-f', `title=${args.title}`];
+-    // T08:00:00Z (US-Pacific midnight) is GitHub's own storage convention for milestone due
+-    // dates — midnight UTC gets rendered as the *previous* day.
+-    if (args.due) apiArgs.push('-f', `due_on=${args.due}T08:00:00Z`);
+-    if (args.description) apiArgs.push('-f', `description=${unescapeInlineText(args.description)}`);
+-    const created = JSON.parse(ghExec(apiArgs));
+-    ok(`Created milestone "${created.title}" (#${created.number}): ${created.html_url}`);
+-    return;
++  const raw = args.description;
++  if (raw.length > INLINE_DESCRIPTION_MAX) {
++    die(
++      `--description is ${raw.length} characters, over the ${INLINE_DESCRIPTION_MAX}-character ` +
++        'inline limit. Write it to a file and pass --description-file <path>, which keeps the text ' +
++        'off the command line.',
++    );
+   }
++  return unescapeInlineText(raw);
++}
+ 
+-  if (command === 'update') {
+-    if (!args.title) die('--title is required');
+-    const milestone = findByTitle(base, args.title);
+-    const apiArgs = ['api', '--method', 'PATCH', `${base}/${milestone.number}`];
+-    if (args['new-title']) apiArgs.push('-f', `title=${args['new-title']}`);
+-    if (args.description !== undefined)
+-      apiArgs.push('-f', `description=${unescapeInlineText(args.description)}`);
+-    if (args.due) apiArgs.push('-f', `due_on=${args.due}T08:00:00Z`);
+-    if (apiArgs.length === 4) {
+-      die('Nothing to update — pass at least one of --new-title, --description, --due');
+-    }
+-    const updated = JSON.parse(ghExec(apiArgs));
+-    ok(`Updated milestone "${updated.title}" (#${updated.number}): ${updated.html_url}`);
++/** Print a milestone's description under its summary line, plus any release-marker problem. */
++function printDescription(description, full) {
++  const problem = releaseMarkerProblem(description);
++  // Two spaces, not four: warn() prefixes "⚠ ", so this lines the text up with the description.
++  if (problem) warn(`  ${problem}`);
++  for (const line of formatDescription(description, { full })) log(line);
++}
++
++function commandList(base, args) {
++  const milestones = listMilestones(base, args.all ? 'all' : 'open');
++  if (milestones.length === 0) {
++    log(args.all ? 'No milestones.' : 'No open milestones.');
+     return;
+   }
++  for (const m of milestones) {
++    const done = m.closed_issues;
++    const total = m.closed_issues + m.open_issues;
++    const due = m.due_on ? `due ${m.due_on.slice(0, 10)}` : 'no due date';
++    log(`${m.title} [${m.state}] — ${due} — ${done}/${total} done — ${m.html_url}`);
++    printDescription(m.description, args.full);
++    log('');
++  }
++}
+ 
+-  if (command === 'close') {
+-    if (!args.title) die('--title is required');
+-    const milestone = findByTitle(base, args.title);
+-    if (milestone.open_issues > 0) {
+-      die(
+-        `Milestone "${milestone.title}" still has ${milestone.open_issues} open issue(s) — ` +
+-          'an epic closes when its scope is delivered. Ship them, or move them out ' +
+-          '(gh:ticket:update-fields -- --issue <n> --remove-milestone) if they were descoped.',
+-      );
+-    }
+-    ghExec(['api', '--method', 'PATCH', `${base}/${milestone.number}`, '-f', 'state=closed']);
+-    ok(`Closed milestone "${milestone.title}"`);
+-    return;
++function commandCreate(base, args) {
++  if (!args.title) die('--title is required');
++  if (args.append) die('--append needs an existing milestone — use: update --append');
++
++  const description = resolveDescription(args);
++  const payload = { title: args.title };
++  // T08:00:00Z (US-Pacific midnight) is GitHub's own storage convention for milestone due
++  // dates — midnight UTC gets rendered as the *previous* day.
++  if (args.due) payload.due_on = `${args.due}T08:00:00Z`;
++  if (description !== undefined) payload.description = description;
++
++  const created = ghApiWrite('POST', base, payload);
++  ok(`Created milestone "${created.title}" (#${created.number}): ${created.html_url}`);
++  const problem = releaseMarkerProblem(created.description);
++  if (problem) warn(`  ${problem}`);
++}
++
++function commandUpdate(base, args) {
++  if (!args.title) die('--title is required');
++  // Resolve the flags before the lookup, so a malformed command fails without a round trip.
++  let description = resolveDescription(args);
++  if (args.append && description === undefined) {
++    die('--append needs the text to add — pass --description or --description-file with it.');
+   }
+ 
+-  if (command === 'delete') {
+-    if (!args.title) die('--title is required');
+-    const milestone = findByTitle(base, args.title);
+-    if (milestone.open_issues > 0) {
+-      die(
+-        `Milestone "${milestone.title}" still has ${milestone.open_issues} open issue(s) — ` +
+-          'reassign or close them first (deleting would silently detach them).',
+-      );
++  const milestone = findByTitle(base, args.title);
++  if (args.append) description = appendDescription(milestone.description, description);
++
++  const payload = {};
++  if (args['new-title']) payload.title = args['new-title'];
++  if (args.due) payload.due_on = `${args.due}T08:00:00Z`;
++  if (description !== undefined) payload.description = description;
++  if (Object.keys(payload).length === 0) {
++    die(
++      'Nothing to update — pass at least one of --new-title, --description, ' +
++        '--description-file, --clear-description, --due',
++    );
++  }
++
++  // The description is the release-direction record, so a replacement always shows what it
++  // replaced. Print it BEFORE the write, so the text survives a failed write too. The wording says
++  // "about to replace" for the same reason: the write below can still fail.
++  if (payload.description !== undefined && !args.append) {
++    if (isEmpty(milestone.description)) {
++      info('This update replaces an empty description.');
++    } else {
++      info('This update is about to replace the description below. Copy it if you need it back:');
++      for (const line of formatDescription(milestone.description, { full: true })) log(line);
+     }
+-    ghExec(['api', '--method', 'DELETE', `${base}/${milestone.number}`]);
+-    ok(`Deleted milestone "${milestone.title}"`);
+-    return;
+   }
+ 
+-  die(`Unknown command "${command}". Use: list | create | update | close | delete`);
++  const updated = ghApiWrite('PATCH', `${base}/${milestone.number}`, payload);
++  ok(`Updated milestone "${updated.title}" (#${updated.number}): ${updated.html_url}`);
++  const problem = releaseMarkerProblem(updated.description);
++  if (problem) warn(`  ${problem}`);
++}
++
++function commandClose(base, args) {
++  if (!args.title) die('--title is required');
++  const milestone = findByTitle(base, args.title);
++  if (milestone.open_issues > 0) {
++    die(
++      `Milestone "${milestone.title}" still has ${milestone.open_issues} open issue(s) — ` +
++        'an epic closes when its scope is delivered. Ship them, or move them out ' +
++        '(gh:ticket:update-fields -- --issue <n> --remove-milestone) if they were descoped.',
++    );
++  }
++  ghApiWrite('PATCH', `${base}/${milestone.number}`, { state: 'closed' });
++  ok(`Closed milestone "${milestone.title}"`);
++}
++
++function commandDelete(base, args) {
++  if (!args.title) die('--title is required');
++  const milestone = findByTitle(base, args.title);
++  if (milestone.open_issues > 0) {
++    die(
++      `Milestone "${milestone.title}" still has ${milestone.open_issues} open issue(s) — ` +
++        'reassign or close them first (deleting would silently detach them).',
++    );
++  }
++  const result = run('gh', ['api', '--method', 'DELETE', `${base}/${milestone.number}`]);
++  if (!result.success) die(`gh api --method DELETE failed:\n${result.stderr || result.stdout}`);
++  ok(`Deleted milestone "${milestone.title}"`);
++}
++
++function main() {
++  ensureGhReady();
++  const { owner, repo } = requireConfig();
++  let args;
++  try {
++    args = parseArgs(cliArgv(), PARSE_OPTIONS);
++  } catch (error) {
++    die(error.message);
++  }
++  const base = `repos/${owner}/${repo}/milestones`;
++  const command = args._[0] || 'list';
++
++  const commands = {
++    list: commandList,
++    create: commandCreate,
++    update: commandUpdate,
++    close: commandClose,
++    delete: commandDelete,
++  };
++  const handler = commands[command];
++  if (!handler) die(`Unknown command "${command}". Use: ${Object.keys(commands).join(' | ')}`);
++  handler(base, args);
+ }
+ 
+ main();
+diff --git a/tools/github/update-ticket-fields.js b/tools/github/update-ticket-fields.js
+index ffbdfe6..d137300 100644
+--- a/tools/github/update-ticket-fields.js
++++ b/tools/github/update-ticket-fields.js
+@@ -27,6 +27,7 @@ const fs = require('fs');
+ 
+ const {
+   ensureGhReady,
++  cliArgv,
+   requireConfig,
+   loadSchema,
+   findProjectItemId,
+@@ -67,7 +68,7 @@ function main() {
+   const schema = loadSchema();
+   let args;
+   try {
+-    args = parseArgs(process.argv.slice(2));
++    args = parseArgs(cliArgv());
+   } catch (error) {
+     die(error.message);
+   }
+diff --git a/tools/github/update-ticket-status.js b/tools/github/update-ticket-status.js
+index 2da7d44..a858536 100644
+--- a/tools/github/update-ticket-status.js
++++ b/tools/github/update-ticket-status.js
+@@ -21,6 +21,7 @@ const fs = require('fs');
+ 
+ const {
+   ensureGhReady,
++  cliArgv,
+   requireConfig,
+   loadSchema,
+   findProjectItemId,
+@@ -57,7 +58,7 @@ function main() {
+   ensureGhReady();
+   const { owner, repo } = requireConfig();
+   const schema = loadSchema();
+-  const args = parseArgs(process.argv.slice(2));
++  const args = parseArgs(cliArgv());
+ 
+   if (!args.issue) die('--issue <number> is required');
+   if (!args.status && !args.claim && !args.comment && !args['plan-file']) {
+diff --git a/tools/github/view-ticket.js b/tools/github/view-ticket.js
+index 3698003..0cd597c 100644
+--- a/tools/github/view-ticket.js
++++ b/tools/github/view-ticket.js
+@@ -10,6 +10,7 @@
+ 
+ const {
+   ensureGhReady,
++  cliArgv,
+   requireConfig,
+   loadSchema,
+   ghJson,
+@@ -56,7 +57,7 @@ function main() {
+   ensureGhReady();
+   const { owner, repo } = requireConfig();
+   const schema = loadSchema();
+-  const args = parseArgs(process.argv.slice(2));
++  const args = parseArgs(cliArgv());
+ 
+   if (!args.issue) die('--issue <number> is required');
+ 

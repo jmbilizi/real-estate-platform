@@ -99,8 +99,18 @@ function addToProject({ owner, repo, projectNumber, projectId, issueUrl, issueNu
       const item = JSON.parse(result.stdout);
       if (item.id) return item.id;
     } catch {
-      // Fall through to the lookup — an item that exists is what matters, not gh's output shape.
+      // gh exited 0 — the item-add itself worked — but its stdout did not parse as expected. This
+      // is not the failure the lookup below exists for, so it gets its own message: "could not be
+      // added" would be false when gh just told us it succeeded.
+      info('gh reported success but its output did not include an item id. Resolving it directly.');
     }
+    const item = findProjectItemId(owner, repo, issueNumber, projectId, { optional: true });
+    if (item) return item;
+    die(
+      `gh reported the issue was added to the board, but it cannot be found there. Check ` +
+        `${issueUrl} by hand, then set its fields with: pnpm run gh:ticket:update-fields -- ` +
+        `--issue ${issueNumber} --status <status> --priority <P0|P1|P2>`,
+    );
   }
 
   const reason = result.stderr || result.stdout;

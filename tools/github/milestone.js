@@ -147,11 +147,16 @@ function resolveDescription(args) {
   return unescapeInlineText(raw);
 }
 
-/** Print a milestone's description under its summary line, plus any release-marker problem. */
-function printDescription(description, full) {
+/** Warn when a description has no release marker. Shared by list/create/update. */
+function warnIfNoReleaseMarker(description) {
   const problem = releaseMarkerProblem(description);
   // Two spaces, not four: warn() prefixes "⚠ ", so this lines the text up with the description.
   if (problem) warn(`  ${problem}`);
+}
+
+/** Print a milestone's description under its summary line, plus any release-marker problem. */
+function printDescription(description, full) {
+  warnIfNoReleaseMarker(description);
   for (const line of formatDescription(description, { full })) log(line);
 }
 
@@ -184,8 +189,7 @@ function commandCreate(base, args) {
 
   const created = ghApiWrite('POST', base, payload);
   ok(`Created milestone "${created.title}" (#${created.number}): ${created.html_url}`);
-  const problem = releaseMarkerProblem(created.description);
-  if (problem) warn(`  ${problem}`);
+  warnIfNoReleaseMarker(created.description);
 }
 
 function commandUpdate(base, args) {
@@ -224,8 +228,7 @@ function commandUpdate(base, args) {
 
   const updated = ghApiWrite('PATCH', `${base}/${milestone.number}`, payload);
   ok(`Updated milestone "${updated.title}" (#${updated.number}): ${updated.html_url}`);
-  const problem = releaseMarkerProblem(updated.description);
-  if (problem) warn(`  ${problem}`);
+  warnIfNoReleaseMarker(updated.description);
 }
 
 function commandClose(base, args) {

@@ -25,7 +25,7 @@ const path = require('path');
  * intended (`--body-file /c/tmp/x.md` must become `C:/tmp/x.md`), so they are never repaired.
  * They get a diagnosis instead: see `describeMangledFileArg`.
  */
-const PATH_FLAGS = new Set(['body-file', 'plan-file', 'description-file', 'input-file']);
+const PATH_FLAGS = new Set(['body-file', 'plan-file', 'description-file']);
 
 const toPosix = (value) => value.replace(/\\/g, '/').replace(/\/+$/, '');
 
@@ -78,6 +78,12 @@ function resetMsysRootCache() {
 /**
  * Strip the MSYS root prefix from `value`, restoring the leading `/` the shell ate.
  * Returns the value unchanged when it was not converted.
+ *
+ * The conversion is lossy: once it runs, a value that started with `/api/x` and a value typed
+ * literally as `C:/Program Files/Git/api/x` are indistinguishable. This repairs both the same way,
+ * favoring the common case (an unwanted rewrite) over the rare one (a value that names the MSYS
+ * root by coincidence). The `onRepair` callback in `repairMsysArgv` reports every repair it makes,
+ * so that rare case is visible rather than silent.
  */
 function unmangleMsysValue(value, root = msysRoot()) {
   if (!root || typeof value !== 'string') return value;
