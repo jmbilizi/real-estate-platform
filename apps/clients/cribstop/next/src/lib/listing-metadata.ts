@@ -38,12 +38,20 @@ export function listingMetadata(listing: ListingDetailView, origin: string | nul
     listing.propertyType,
   ].filter(Boolean);
 
+  /*
+   * Required text first, optional text last.
+   *
+   * Every unfurl surface truncates a description — Twitter near 200 characters — so whatever sits
+   * at the tail is what a recipient never reads. The labels, the brokerage, the provenance
+   * sentence and the listing office are all owed; the price and the bed/bath line are not. So the
+   * facts go last, and are the only part a cut can take.
+   */
   const description = [
     ...shareDisclosures(listing),
-    `${facts.join(' · ')}.`,
-    `Listed by ${listing.listedBy}.`,
     SITE_SENTENCE,
     ...(provenance ? [provenance] : []),
+    `Listed by ${listing.listedBy}.`,
+    `${facts.join(' · ')}.`,
   ].join(' ');
 
   /*
@@ -66,6 +74,15 @@ export function listingMetadata(listing: ListingDetailView, origin: string | nul
   return {
     title,
     description,
+    /*
+     * A sample row is kept out of the search index.
+     *
+     * The `Sample listing` label answers a person who reads the card. A search index does not read
+     * it: it would carry a fabricated home into results as though it were inventory, and keep it
+     * there after the row is gone. Every row is a sample until #33 lands, so this is the normal
+     * case rather than an edge one, and it lifts by itself when real rows arrive.
+     */
+    ...(listing.isSample ? { robots: { index: false } } : {}),
     ...(url ? { alternates: { canonical: url } } : {}),
     openGraph: {
       type: 'website',

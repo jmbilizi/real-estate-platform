@@ -133,6 +133,27 @@ describe('listingMetadata — required labels survive truncation', () => {
     );
   });
 
+  it('puts every owed sentence ahead of the optional facts, which a truncated card may lose', () => {
+    const description = metaFor({ source: 'brightMLS', isSample: true, sponsored: true })
+      .description as string;
+    const facts = description.indexOf('3 bd');
+
+    for (const owed of [
+      SAMPLE_SHARE_LABEL,
+      SPONSORED_SHARE_LABEL,
+      'Real Broker, LLC operates',
+      'Information provided by Bright MLS.',
+      'Listed by',
+    ]) {
+      expect(description.indexOf(owed)).toBeLessThan(facts);
+    }
+  });
+
+  it('keeps a sample row out of the search index', () => {
+    expect(metaFor({ isSample: true }).robots).toEqual({ index: false });
+    expect(metaFor({ isSample: false }).robots).toBeUndefined();
+  });
+
   it('claims no MLS provenance for a row we hold ourselves', () => {
     expect(publishedText(metaFor({ source: 'internal', isSample: true }))).not.toMatch(/\bMLS\b/i);
   });
