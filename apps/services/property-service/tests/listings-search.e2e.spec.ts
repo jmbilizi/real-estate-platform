@@ -180,6 +180,16 @@ describe('field-level seller suppression on search cards (#53)', () => {
     }
   });
 
+  it('masks days_on_market, distinct from every other family', async () => {
+    const results = await fetchAllResults();
+    const row = results.find((result) => result.id === fixtures.suppressedDaysOnMarketListingId);
+
+    expect(row).toBeDefined();
+    expect(row?.daysOnMarket).toBeNull();
+    // Anti-vacuity: the other families are unsuppressed on this fixture and must still publish.
+    expect(row?.price).not.toBeNull();
+  });
+
   it('withholds price_reduced when price history is suppressed', async () => {
     const results = await fetchAllResults();
     const row = results.find((result) => result.id === fixtures.suppressedPriceHistoryListingId);

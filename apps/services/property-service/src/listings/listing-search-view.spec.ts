@@ -333,9 +333,11 @@ describe('field-level seller suppression (#53)', () => {
     expect(mediaDisplayAllowed?.expression).not.toMatch(/CASE/i);
   });
 
-  it('does not let any of the new flags leak into a masked expression by name alone', () => {
-    // Anti-regression for the columns.ts FORBIDDEN_COLUMNS list: none of these four flag names may
-    // appear as an OUTPUT NAME (a caller-visible column), only as a predicate INPUT inside a CASE.
+  it('does not let the masked-value flags leak into a projection by name alone', () => {
+    // Anti-regression for the columns.ts FORBIDDEN_COLUMNS list: none of these three flag names
+    // may appear as an OUTPUT NAME (a caller-visible column), only as a predicate INPUT inside a
+    // CASE. `media_display_allowed` is deliberately excluded here — it IS a plain output column
+    // (see the test above), the intentional exception FORBIDDEN_COLUMNS documents.
     for (const flag of [
       'price_display_allowed',
       'price_history_display_allowed',

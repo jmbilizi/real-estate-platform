@@ -227,6 +227,14 @@ describe('field-level seller suppression on detail (#53)', () => {
     expect(detail.listing.address).not.toBeNull();
   });
 
+  it('masks days_on_market, distinct from every other family', async () => {
+    const response = await axios.get(`/listings/${fixtures.suppressedDaysOnMarketListingId}`);
+    const detail = listingDetailSchema.parse(response.data);
+
+    expect(detail.listing.daysOnMarket).toBeNull();
+    expect(detail.listing.price).not.toBeNull();
+  });
+
   it('withholds price_reduced along with the original price it was derived from', async () => {
     // Only closePrice/closeDate are exposed on the wire from the "price history" family today;
     // priceReduced is asserted here because it IS on the wire and is the field this fixture's

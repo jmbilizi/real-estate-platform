@@ -19,6 +19,7 @@ const detail = {
     latitude: 38.8,
     longitude: -77.04,
     price: 750000,
+    daysOnMarket: null,
     status: 'Active',
     listingType: 'sale',
     source: 'internal',

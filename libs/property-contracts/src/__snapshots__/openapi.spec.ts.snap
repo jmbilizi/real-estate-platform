@@ -101,6 +101,12 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "nullable": true,
             "type": "number",
           },
+          "daysOnMarket": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer",
+          },
           "featured": {
             "type": "boolean",
           },
@@ -284,6 +290,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
           "latitude",
           "longitude",
           "price",
+          "daysOnMarket",
           "status",
           "listingType",
           "source",
@@ -383,6 +390,12 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "minimum": 0,
                 "nullable": true,
                 "type": "number",
+              },
+              "daysOnMarket": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "nullable": true,
+                "type": "integer",
               },
               "description": {
                 "nullable": true,
@@ -575,6 +588,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
               "latitude",
               "longitude",
               "price",
+              "daysOnMarket",
               "status",
               "listingType",
               "source",
