@@ -941,7 +941,7 @@ runs:
           exit 0
         fi
 
-        if ! jq -e '.services | index("bright-mls-ingest")' scope-plan.json > /dev/null 2>&1; then
+        if ! jq -e --arg s bright-mls-ingest '.services | any(.name == $s)' scope-plan.json > /dev/null 2>&1; then
           echo "ℹ️  bright-mls-ingest is not in this run's deploy scope - nothing to re-run."
           exit 0
         fi
