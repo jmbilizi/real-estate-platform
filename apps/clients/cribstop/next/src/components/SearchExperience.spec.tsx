@@ -547,7 +547,7 @@ describe('the filter modal actually filters', () => {
       // `propertyType=Land&beds=3` is a guaranteed empty page with nothing on screen to explain it.
       expect(screen.getByLabelText('More bedrooms')).toBeDisabled();
       expect(screen.getByLabelText('Fewer bedrooms')).toBeDisabled();
-      expect(screen.getByLabelText('Min square feet')).toBeDisabled();
+      expect(screen.getByLabelText('Square Feet')).toBeDisabled();
       expect(screen.getByText(PARCEL_INTERLOCK_HINT)).toBeInTheDocument();
 
       showHomes();

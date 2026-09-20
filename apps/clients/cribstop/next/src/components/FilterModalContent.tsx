@@ -62,6 +62,26 @@ function sanitizeMaxPriceInput(raw: string): { digits: string; invalid: boolean 
   return { digits: stripped, invalid: !/^\d+$/.test(stripped) };
 }
 
+/**
+ * One row label style for every filter row (Bedrooms, Bathrooms, Price, Square Feet), so a reader
+ * cannot tell which control it sits next to from its typography alone.
+ *
+ * Renders a `<label>` when the row's control is a single focusable element with an `id` (Price,
+ * Square Feet), so the visible text stays its programmatic label. Bedrooms/Bathrooms have no such
+ * element — each is a pair of buttons plus a live-region span — so those stay a `<span>`; the
+ * buttons carry their own `aria-label`.
+ */
+function rowLabel(text: string, { htmlFor, disabled }: { htmlFor?: string; disabled?: boolean }) {
+  const className = `text-sm font-medium ${disabled ? 'text-ink-subtle' : 'text-ink'}`;
+  return htmlFor ? (
+    <label htmlFor={htmlFor} className={className}>
+      {text}
+    </label>
+  ) : (
+    <span className={className}>{text}</span>
+  );
+}
+
 export default function FilterModalContent({ value, onChange }: FilterModalContentProps) {
   const set = (patch: SearchFilters) => onChange({ ...value, ...patch });
 
@@ -164,10 +184,8 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
     };
 
     return (
-      <div className="flex items-center justify-between py-1">
-        <span className={`text-sm font-medium ${disabled ? 'text-ink-subtle' : 'text-ink'}`}>
-          {label}
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-y-2 py-1">
+        {rowLabel(label, { disabled })}
         <div className="flex items-center gap-5">
           {stepperButton({
             label: '–',
@@ -232,57 +250,60 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
 
       {/* ── Price ────────────────────────────────────────────────────────
           Max-only (#243): people search for what they can afford at most, not a minimum. `minPrice`
-          stays in the contract for existing links, but this control never sets it. */}
-      <fieldset>
-        <legend className="mb-2 font-semibold uppercase text-xs tracking-wider text-ink">
-          Max Price
-        </legend>
-        <div className="flex items-center gap-4">
-          {stepperButton({
-            label: '–',
-            accessibleName: 'Decrease maximum price',
-            disabled: false,
-            onClick: () => stepMaxPrice(-MAX_PRICE_STEP),
-          })}
-          <input
-            id="filter-max-price"
-            type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            aria-label="Maximum price"
-            aria-invalid={maxPriceError}
-            aria-describedby={maxPriceError ? 'filter-max-price-error' : undefined}
-            placeholder="No max"
-            value={maxPriceText}
-            onChange={(event) => handleMaxPriceChange(event.target.value)}
-            onBlur={commitMaxPrice}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter') return;
-              event.preventDefault();
-              commitMaxPrice();
-              event.currentTarget.blur();
-            }}
-            className={`w-32 rounded-full border px-3 py-1.5 text-center text-[15px] font-normal focus:outline-none focus:ring-1 ${
-              maxPriceError
-                ? 'border-red-400 text-red-600 focus:ring-red-400'
-                : 'border-surface-border text-ink focus:ring-surface-border-strong'
-            }`}
-          />
-          {stepperButton({
-            label: '+',
-            accessibleName: 'Increase maximum price',
-            disabled: false,
-            onClick: () => stepMaxPrice(MAX_PRICE_STEP),
-          })}
+          stays in the contract for existing links, but this control never sets it.
+
+          Label-left/control-right, matching Bedrooms and Bathrooms below (#256) — the row's own
+          "Price" label replaces the section-title styling #254 gave it, so no separate legend. */}
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-y-2 py-1">
+          {rowLabel('Price', { htmlFor: 'filter-max-price' })}
+          <div className="flex items-center gap-5">
+            {stepperButton({
+              label: '–',
+              accessibleName: 'Decrease maximum price',
+              disabled: false,
+              onClick: () => stepMaxPrice(-MAX_PRICE_STEP),
+            })}
+            <input
+              id="filter-max-price"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              aria-label="Maximum price"
+              aria-invalid={maxPriceError}
+              aria-describedby={maxPriceError ? 'filter-max-price-error' : undefined}
+              placeholder="No max"
+              value={maxPriceText}
+              onChange={(event) => handleMaxPriceChange(event.target.value)}
+              onBlur={commitMaxPrice}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter') return;
+                event.preventDefault();
+                commitMaxPrice();
+                event.currentTarget.blur();
+              }}
+              className={`w-28 rounded-full border px-3 py-1.5 text-center text-[15px] font-normal focus:outline-none focus:ring-1 ${
+                maxPriceError
+                  ? 'border-red-400 text-red-600 focus:ring-red-400'
+                  : 'border-surface-border text-ink focus:ring-surface-border-strong'
+              }`}
+            />
+            {stepperButton({
+              label: '+',
+              accessibleName: 'Increase maximum price',
+              disabled: false,
+              onClick: () => stepMaxPrice(MAX_PRICE_STEP),
+            })}
+          </div>
         </div>
         {maxPriceError && (
-          <p id="filter-max-price-error" className="mt-1 text-xs text-red-600">
+          <p id="filter-max-price-error" className="text-xs text-red-600">
             Enter a whole number, like 450000.
           </p>
         )}
-      </fieldset>
+      </div>
 
-      {/* ── Beds / Baths / Min sqft — the dwelling group the interlock governs ── */}
+      {/* ── Beds / Baths / Square Feet — the dwelling group the interlock governs ── */}
       <fieldset>
         <legend className="mb-2 font-semibold uppercase text-xs tracking-wider text-ink">
           Size
@@ -295,10 +316,8 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
         <div className="flex flex-col gap-3">
           {stepper('beds', 'Bedrooms', parcelOnly)}
           {stepper('baths', 'Bathrooms', parcelOnly)}
-          <div>
-            <label className="mb-1 block text-xs font-medium text-ink-muted" htmlFor="filter-sqft">
-              Min square feet
-            </label>
+          <div className="flex flex-wrap items-center justify-between gap-y-2 py-1">
+            {rowLabel('Square Feet', { htmlFor: 'filter-sqft', disabled: parcelOnly })}
             <input
               id="filter-sqft"
               type="number"
@@ -308,7 +327,7 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
               placeholder={parcelOnly ? 'Not applicable to land' : 'No min'}
               disabled={parcelOnly}
               aria-describedby={parcelHintId}
-              className="w-full rounded-xl border border-surface-border px-3 py-2 text-sm font-normal disabled:bg-surface-alt disabled:text-ink-subtle disabled:cursor-not-allowed"
+              className="w-28 rounded-full border border-surface-border px-3 py-1.5 text-center text-[15px] font-normal focus:outline-none focus:ring-1 focus:ring-surface-border-strong disabled:bg-surface-alt disabled:text-ink-subtle disabled:cursor-not-allowed"
               value={parcelOnly ? '' : (value.minSqft ?? '')}
               onChange={(event) => set({ minSqft: wholeNumberOrUndefined(event.target.value) })}
             />
