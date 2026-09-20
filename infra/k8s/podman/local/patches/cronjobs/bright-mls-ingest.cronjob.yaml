@@ -66,9 +66,9 @@ spec:
                   value: "https://bright-reso.tst.brightmls.com/RESO/OData/bright"
                 - name: BRIGHT_MLS_FEED
                   value: "test"
-                # A laptop cluster must come up with real rows in minutes. This cursor is a local
-                # convenience only. dev and test load from the default epoch. The test feed reports
-                # 1,461 `BrightProperties` modified since this instant (#92).
+                # A laptop cluster must come up with real rows in minutes. dev and test use this same
+                # bounded cursor (#239) — none of the three needs full feed history. The test feed
+                # reports 1,461 `BrightProperties` modified since this instant (#92).
                 - name: BRIGHT_MLS_INITIAL_CURSOR
                   value: "2026-09-01T00:00:00Z"
                 - name: BRIGHT_MLS_MAX_PAGES_PER_RUN
