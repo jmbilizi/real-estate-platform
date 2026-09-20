@@ -89,9 +89,11 @@ RUN groupadd --system --gid 1001 nodejs && \
 # The bundle plus the node_modules resolved in the builder stage.
 COPY --from=builder --chown=nodeapp:nodejs /app/dist/apps/services/property-service ./
 
-# migrate.js and migrations/ are read at runtime and are not in the webpack bundle, so they must be
-# copied explicitly — without them the migrate initContainer has nothing to run or nothing to apply.
+# migrate.js, migrate-self-heal.js and migrations/ are read at runtime and are not in the webpack
+# bundle, so they must be copied explicitly — without them the migrate initContainer has nothing
+# to run, nothing to require (#223), or nothing to apply.
 COPY --from=builder --chown=nodeapp:nodejs /app/apps/services/property-service/migrate.js ./migrate.js
+COPY --from=builder --chown=nodeapp:nodejs /app/apps/services/property-service/migrate-self-heal.js ./migrate-self-heal.js
 COPY --from=builder --chown=nodeapp:nodejs /app/apps/services/property-service/migrations ./migrations
 
 USER nodeapp
