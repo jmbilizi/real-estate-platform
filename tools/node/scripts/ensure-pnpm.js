@@ -94,7 +94,7 @@ function ttyStdio() {
 function installPnpm(version) {
   // Prefer Corepack (bundled with Node.js 16.9+) over npm install -g.
   if (isCorepackAvailable()) {
-    log(`\n⚠️  pnpm is not in PATH.`);
+    log('\n⚠️  pnpm is not in PATH.');
     try {
       if (!isPnpmInCorepack()) {
         // Corepack doesn't have pnpm cached yet — install it.
@@ -111,7 +111,7 @@ function installPnpm(version) {
       log('\n✓ pnpm installed via npm!');
     }
   } else {
-    log(`\n⚠️  pnpm is not installed.`);
+    log('\n⚠️  pnpm is not installed.');
     log(`📦 Installing pnpm@${version} globally...\n`);
     try {
       execSync(`npm install -g pnpm@${version}`, { stdio: ttyStdio(), ...shellOpt });

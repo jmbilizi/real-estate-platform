@@ -97,7 +97,7 @@ function detectDockerfile(projectName) {
     }
     throw new Error(
       `Dockerfile not found at override path: ${overridePath}\n` +
-        `Check tools/docker/image-name-map.json`,
+        'Check tools/docker/image-name-map.json',
     );
   }
 
@@ -118,7 +118,7 @@ function detectDockerfile(projectName) {
 
   throw new Error(
     `Dockerfile not found for project: ${projectName}\n` +
-      `Searched:\n` +
+      'Searched:\n' +
       searchPatterns.map((p) => `  - ${p}`).join('\n'),
   );
 }

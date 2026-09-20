@@ -125,10 +125,10 @@ if (!candidates) {
 const current = capture('kubectl', ['config', 'current-context']);
 if (!current.ok || !candidates.includes(current.stdout)) {
   console.error(
-    `ERROR: refusing to trigger a job outside the local cluster.\n` +
+    'ERROR: refusing to trigger a job outside the local cluster.\n' +
       `  Current context: ${current.ok ? current.stdout : '<none>'}\n` +
       `  Expected one of: ${candidates.join(', ')}\n` +
-      `  Bring the local cluster up with: pnpm run infra:local:cluster:setup`,
+      '  Bring the local cluster up with: pnpm run infra:local:cluster:setup',
   );
   process.exit(1);
 }
@@ -145,7 +145,7 @@ const exists = capture('kubectl', [
 if (!exists.ok) {
   console.error(
     `ERROR: CronJob '${options.cronjob}' not found in namespace '${options.namespace}'.\n` +
-      `  Deploy it first with: pnpm run skaffold:services:deploy`,
+      '  Deploy it first with: pnpm run skaffold:services:deploy',
   );
   process.exit(1);
 }
@@ -171,7 +171,7 @@ if (created.status !== 0) {
 console.log(`⏳ Waiting up to ${options.timeout}s for completion...`);
 const waited = capture('kubectl', [
   'wait',
-  `--for=condition=complete`,
+  '--for=condition=complete',
   `--timeout=${options.timeout}s`,
   `job/${jobName}`,
   '-n',

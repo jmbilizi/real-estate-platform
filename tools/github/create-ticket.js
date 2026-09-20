@@ -107,7 +107,7 @@ function addToProject({ owner, repo, projectNumber, projectId, issueUrl, issueNu
     const item = findProjectItemId(owner, repo, issueNumber, projectId, { optional: true });
     if (item) return item;
     die(
-      `gh reported the issue was added to the board, but it cannot be found there. Check ` +
+      'gh reported the issue was added to the board, but it cannot be found there. Check ' +
         `${issueUrl} by hand, then set its fields with: pnpm run gh:ticket:update-fields -- ` +
         `--issue ${issueNumber} --status <status> --priority <P0|P1|P2>`,
     );

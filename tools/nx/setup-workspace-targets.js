@@ -85,7 +85,7 @@ function runJsonSilent(command) {
 function tryGetProjectConfig(projectName) {
   try {
     return runJsonSilent(`pnpm exec nx show project ${projectName} --json`);
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -97,7 +97,7 @@ function tryGetProjectConfig(projectName) {
 function isDotNetProject(projectRootAbs) {
   try {
     return fs.readdirSync(projectRootAbs).some((f) => f.endsWith('.csproj'));
-  } catch (e) {
+  } catch {
     return false;
   }
 }
@@ -105,7 +105,7 @@ function isDotNetProject(projectRootAbs) {
 function isPythonProject(projectRootAbs) {
   try {
     return fs.existsSync(path.join(projectRootAbs, 'pyproject.toml'));
-  } catch (e) {
+  } catch {
     return false;
   }
 }
@@ -366,7 +366,7 @@ function findCompanionTestSubdir(projectRootAbs) {
  * Determine if a project root is a companion Tests/ subfolder of another project.
  * e.g. "apps/api-gateway/Tests" is a companion of "apps/api-gateway"
  */
-function isCompanionTestSubfolder(projectRootRel, allProjectNames) {
+function isCompanionTestSubfolder(projectRootRel, _allProjectNames) {
   const posixRoot = toPosix(projectRootRel);
   // Check if the root ends with /Tests (case-insensitive for safety)
   if (!/\/Tests$/i.test(posixRoot)) return false;

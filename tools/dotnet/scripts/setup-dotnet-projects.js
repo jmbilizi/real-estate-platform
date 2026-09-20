@@ -94,7 +94,7 @@ function getProjectConfig(projectName) {
       encoding: 'utf8',
     });
     return JSON.parse(output);
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -492,18 +492,12 @@ function addProjectsToSolution() {
           csprojFiles.push(fullPath);
         }
       }
-    } catch (error) {
+    } catch {
       // Ignore errors reading directories
     }
   }
 
   findCsprojFiles(process.cwd());
-
-  // Normalize current .csproj paths for comparison
-  const currentProjectPaths = csprojFiles.map((csprojPath) => {
-    const relativePath = path.relative(process.cwd(), csprojPath);
-    return relativePath.replace(/\\/g, '/');
-  });
 
   // Remove projects that no longer exist
   let removedCount = 0;
@@ -601,7 +595,7 @@ function cleanupSolutionFile() {
       ? Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(solutionContent, 'utf8')])
       : Buffer.from(solutionContent, 'utf8');
     fs.writeFileSync(solutionPath, outputBuffer);
-  } catch (error) {
+  } catch {
     // Ignore cleanup errors
   }
 }
@@ -629,7 +623,7 @@ function main() {
       }
     }
 
-    log(`\n✅ Project.json setup complete!`, 'green');
+    log('\n✅ Project.json setup complete!', 'green');
     log(`   Total projects: ${dotNetProjects.length}`, 'blue');
     log(`   Updated/Created: ${updatedCount}`, 'green');
   }
@@ -640,7 +634,7 @@ function main() {
 
   cleanupSolutionFile();
 
-  log(`\n✅ Solution synchronization complete!`, 'green');
+  log('\n✅ Solution synchronization complete!', 'green');
   log(`   Added to solution: ${solutionResult.added}`, 'green');
   if (solutionResult.removed > 0) {
     log(`   Removed from solution: ${solutionResult.removed}`, 'yellow');

@@ -369,12 +369,12 @@ function main() {
   }
 
   // --- Summary ---
-  log(`\n✅ Auto-tagging complete!`, 'green');
+  log('\n✅ Auto-tagging complete!', 'green');
   log(`   Processed: ${processedCount} projects`, 'blue');
   log(`   Tagged/updated: ${taggedCount} projects`, 'blue');
 
   if (warnings.length > 0) {
-    log(`\n⚠  Warnings:`, 'yellow');
+    log('\n⚠  Warnings:', 'yellow');
     for (const w of warnings) {
       log(`   ${w}`, 'yellow');
     }
@@ -382,7 +382,7 @@ function main() {
 
   if (taggedCount > 0) {
     log(
-      `\n💡 Tip: Your nx:*-lint, nx:*-test, and nx:*-build commands use tag:runtime:* selectors.`,
+      '\n💡 Tip: Your nx:*-lint, nx:*-test, and nx:*-build commands use tag:runtime:* selectors.',
       'blue',
     );
   }

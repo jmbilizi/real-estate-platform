@@ -34,7 +34,6 @@ function getClusterName() {
 }
 
 const CLUSTER_NAME = getClusterName();
-const KIND_CONTEXT = `kind-${CLUSTER_NAME}`;
 
 const colors = {
   reset: '\x1b[0m',

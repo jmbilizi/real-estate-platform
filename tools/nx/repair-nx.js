@@ -67,7 +67,7 @@ if (nxJsonExists) {
   try {
     nxJson = JSON.parse(fs.readFileSync(nxJsonPath, 'utf8'));
     console.log('✅ Found existing nx.json');
-  } catch (error) {
+  } catch {
     console.log('⚠️ Error reading nx.json, creating a new one');
     nxJsonExists = false;
   }
@@ -282,7 +282,7 @@ try {
   console.log('⚙️ Verifying NX installation...');
   const version = execSync('pnpm exec nx --version', { stdio: 'pipe' }).toString().trim();
   console.log(`✅ NX is installed: ${version}`);
-} catch (error) {
+} catch {
   console.log('⚠️ Error verifying NX. Trying to reinstall NX...');
   try {
     execSync('pnpm add -D nx@latest', { stdio: 'inherit' });

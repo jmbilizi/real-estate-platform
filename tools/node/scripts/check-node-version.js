@@ -8,7 +8,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
 
 // Colors for terminal output
 const colors = {
@@ -89,7 +88,7 @@ function printInstallationInstructions(requiredVersion) {
 
   console.log(`${colors.bold}Using Node Version Manager (recommended):${colors.reset}`);
   console.log(
-    `1. Install nvm: https://github.com/nvm-sh/nvm (Unix/macOS) or https://github.com/coreybutler/nvm-windows (Windows)`,
+    '1. Install nvm: https://github.com/nvm-sh/nvm (Unix/macOS) or https://github.com/coreybutler/nvm-windows (Windows)',
   );
   console.log(`2. Run: ${colors.blue}nvm install ${requiredVersion}${colors.reset}`);
   console.log(`3. Run: ${colors.blue}nvm use ${requiredVersion}${colors.reset}`);
@@ -98,7 +97,7 @@ function printInstallationInstructions(requiredVersion) {
   console.log(
     `1. Download Node.js ${requiredVersion} from: https://nodejs.org/download/release/v${requiredVersion}/`,
   );
-  console.log(`2. Follow the installation instructions for your platform\n`);
+  console.log('2. Follow the installation instructions for your platform\n');
 }
 
 /**

@@ -67,7 +67,7 @@ function renderPatch(bundle) {
     BANNER,
     'apiVersion: v1',
     'kind: ConfigMap',
-    `metadata:`,
+    'metadata:',
     `  name: ${CONFIG_MAP_NAME}`,
     'data:',
     `  ${BUNDLE_KEY}: |`,

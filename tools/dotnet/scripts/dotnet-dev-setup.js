@@ -42,7 +42,6 @@ const requiredDotNetMajor = '10'; // Required .NET SDK major version
 
 // Determine if we're running on Windows
 const isWindows = os.platform() === 'win32';
-const isUnix = !isWindows;
 
 /**
  * Automatically writes PATH entries to the user's shell profile if not already present.
@@ -215,7 +214,7 @@ function checkNxDotNetPluginInstalled() {
       fs.readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf8'),
     );
     return packageJson.devDependencies && packageJson.devDependencies['@nx/dotnet'];
-  } catch (error) {
+  } catch {
     return false;
   }
 }
@@ -293,7 +292,7 @@ function installDotNetSdk() {
   // Clean up installer script
   try {
     fs.unlinkSync(installerPath);
-  } catch (error) {
+  } catch {
     // Ignore cleanup errors
   }
 
@@ -315,7 +314,7 @@ function listInstalledDotNetSdks() {
       }
     }
     return [];
-  } catch (error) {
+  } catch {
     return [];
   }
 }
@@ -409,7 +408,7 @@ async function setupDotNetEnvironment() {
           try {
             const newVersion = execSync('dotnet --version', { stdio: 'pipe' }).toString().trim();
             console.log(`Now using .NET SDK version: ${newVersion}`);
-          } catch (e) {
+          } catch {
             // Ignore errors
           }
         }
@@ -434,7 +433,7 @@ async function setupDotNetEnvironment() {
         ? execSync('echo %PATH%', { stdio: 'pipe' }).toString()
         : execSync('echo $PATH', { stdio: 'pipe' }).toString();
       console.log(pathVar);
-    } catch (e) {
+    } catch {
       console.log('Unable to display PATH variable');
     }
 
@@ -468,11 +467,11 @@ async function setupDotNetEnvironment() {
 
               // Skip auto-install since we found it
               break;
-            } catch (retryError) {
+            } catch {
               console.log('Still unable to run dotnet command. PATH update may require a restart.');
             }
           }
-        } catch (e) {
+        } catch {
           // Ignore errors
         }
       }
@@ -507,7 +506,7 @@ async function setupDotNetEnvironment() {
           listInstalledDotNetSdks();
 
           // Continue with the script since we now have .NET installed
-        } catch (postInstallError) {
+        } catch {
           // Try adding ~/.dotnet to PATH and retry once more
           const dotnetHome = path.join(os.homedir(), '.dotnet');
           process.env.PATH = `${dotnetHome}${isWindows ? ';' : ':'}${process.env.PATH}`;
@@ -523,7 +522,7 @@ async function setupDotNetEnvironment() {
             console.error(
               'Installation appeared to succeed, but dotnet command still not available.',
             );
-            console.error(`Please add to your shell profile: export PATH="$HOME/.dotnet:$PATH"`);
+            console.error('Please add to your shell profile: export PATH="$HOME/.dotnet:$PATH"');
             console.error('Then restart your terminal and run: pnpm run dotnet:env');
             process.exit(1);
           }
@@ -601,7 +600,7 @@ async function setupDotNetEnvironment() {
   const isInteractive = Boolean(process.stdout.isTTY && process.stdin.isTTY);
   if (!isWindows && !isCI && isInteractive) {
     const shell = process.env.SHELL || '/bin/zsh';
-    console.log(`\n🔄 Reloading shell to apply PATH changes...`);
+    console.log('\n🔄 Reloading shell to apply PATH changes...');
     // Use spawnSync with stdio:'inherit' so the new shell takes over the terminal
     spawnSync(shell, ['-l'], { stdio: 'inherit' });
   }
