@@ -78,32 +78,16 @@ export type SearchPanel = (typeof SEARCH_PANELS)[number];
  * the trap #24 exists to close. The UI's job is to clear and disable those controls, never to
  * quietly drop the filter from the request: the API is meant to receive exactly what was asked.
  *
- * Two labels, one meaning: `'Land'` is the wire-contract value (`PROPERTY_TYPES` in
- * `@cribstop/property-contracts`), `'Lot/Land'` is the older chip label still used by the search
- * bar and the filter modal. Both are recognised so the interlock cannot be defeated by whichever
- * vocabulary a surface happens to be on.
+ * The interlock itself (`isLandOnly`/`applyLandInterlock`) lives in `lib/listing-filters.ts`, the
+ * filter modal's only remaining home for a property-type selection since #243 moved Property Type
+ * out of the search bar. This file used to carry a second, array-based copy for the search bar's
+ * own selection (`isParcelOnlySelection`/`PARCEL_PROPERTY_TYPES`) — removed with that control
+ * rather than left as an unused, driftable duplicate.
  */
-export const PARCEL_PROPERTY_TYPES = ['Land', 'Lot/Land'] as const;
 
 /** Visible, factual explanation for the controls the parcel interlock disables. */
 export const PARCEL_INTERLOCK_HINT =
   'Land parcels have no bedrooms, bathrooms or living area, so these filters do not apply.';
-
-/**
- * True when a parcel type is the *only* thing selected. A mixed selection (land + condo) leaves the
- * dwelling controls alone, because those listings can satisfy them.
- */
-export function isParcelOnlySelection(
-  selected: readonly (string | null | undefined)[] | string | null | undefined,
-): boolean {
-  const values = (
-    typeof selected === 'string' ? [selected] : Array.isArray(selected) ? selected : []
-  ).filter((value): value is string => !!value && value !== 'all');
-  return (
-    values.length > 0 &&
-    values.every((value) => (PARCEL_PROPERTY_TYPES as readonly string[]).includes(value))
-  );
-}
 
 export interface SearchSuggestionValue {
   display_name?: string;

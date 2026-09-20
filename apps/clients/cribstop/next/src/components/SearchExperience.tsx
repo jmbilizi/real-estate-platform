@@ -80,7 +80,12 @@ export default function SearchExperience({
   ownsUrl = true,
   deferred = false,
 }: SearchExperienceProps) {
-  const { savedIds, setSearchLocation: setLocation, setSearchSuggestion } = useApp();
+  const {
+    savedIds,
+    setSearchLocation: setLocation,
+    setSearchSuggestion,
+    setSearchListingType,
+  } = useApp();
 
   /**
    * Follows the Back and Forward buttons, but only while this instance owns the URL.
@@ -119,13 +124,18 @@ export default function SearchExperience({
       } else if (!q) {
         setSearchSuggestion(null);
       }
-      setFilters(parseFiltersFromSearchParams(params));
+      const parsedFilters = parseFiltersFromSearchParams(params);
+      setFilters(parsedFilters);
       setPage(parsePageFromSearchParams(params));
+      // Keeps the search bar's own "What" summary honest for a shared/bookmarked filtered link
+      // (`?type=rent`) — without this, the bar showed "All listings" and a resubmission from it
+      // silently dropped the listing type the results page was actually applying (#243 review).
+      setSearchListingType(parsedFilters.listingType ?? 'all');
     };
 
     window.addEventListener('popstate', updateFromParams);
     return () => window.removeEventListener('popstate', updateFromParams);
-  }, [ownsUrl, setLocation, setSearchSuggestion]);
+  }, [ownsUrl, setLocation, setSearchSuggestion, setSearchListingType]);
   // Track hovered property for map highlight
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   // Map center for search location (lat/lng)
@@ -336,9 +346,13 @@ export default function SearchExperience({
     } else if (!q) {
       setSearchSuggestion(null);
     }
-    setFilters(parseFiltersFromSearchParams(params));
+    const parsedFilters = parseFiltersFromSearchParams(params);
+    setFilters(parsedFilters);
     setPage(parsePageFromSearchParams(params));
-  }, [initialQuery, deferred, setLocation, setSearchSuggestion]);
+    // See the popstate effect above for why the search bar's own listing-type state is seeded
+    // here too — a resubmission from the bar must not silently drop the applied `type=`.
+    setSearchListingType(parsedFilters.listingType ?? 'all');
+  }, [initialQuery, deferred, setLocation, setSearchSuggestion, setSearchListingType]);
 
   const { results, total, pageCount, pageSize, status, error, errorCode, retry } = useListingSearch(
     filters,

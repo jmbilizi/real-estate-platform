@@ -68,6 +68,7 @@ const mockAppContext = {
   savedIds: new Set<string>(),
   setSearchLocation: jest.fn(),
   setSearchSuggestion: jest.fn(),
+  setSearchListingType: jest.fn(),
   toggleSave: jest.fn(),
   isSaved: () => false,
 };
@@ -142,6 +143,22 @@ describe('SearchExperience follows the URL it is given', () => {
     // Re-seeding builds a new filters object every time; the search must key on its *value*, or
     // every parent re-render costs a round trip.
     await waitFor(() => expect(mockedSearchListings).toHaveBeenCalledTimes(1));
+  });
+
+  /**
+   * The search bar's own "What" state (#243) must match what the results page is actually
+   * applying, or a shared/bookmarked `?type=rent` link shows "All listings" in the bar and a
+   * resubmission from it silently drops the listing type back to "all".
+   */
+  it('seeds the search bar listing type from the URL, including on a later re-seed', async () => {
+    mockAppContext.setSearchListingType.mockClear();
+    const { rerender } = render(<SearchExperience initialQuery="q=Alexandria&type=rent" />);
+
+    await waitFor(() => expect(mockAppContext.setSearchListingType).toHaveBeenCalledWith('rent'));
+
+    rerender(<SearchExperience initialQuery="q=Alexandria" />);
+
+    await waitFor(() => expect(mockAppContext.setSearchListingType).toHaveBeenCalledWith('all'));
   });
 });
 
