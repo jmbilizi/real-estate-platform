@@ -104,10 +104,8 @@ namespace ApiGateway
             // Register GeoIP service as singleton (thread-safe, one database reader for app lifetime)
             services.AddSingleton<GeoIpService>();
 
-            // Store OTEL_ENABLED flag for use in Configure method
-            _otelEnabled = Configuration.GetValue("OTEL_ENABLED", true);
-
             // Configure OpenTelemetry (conditional based on environment)
+            // ConfigureOpenTelemetry sets _otelEnabled based on whether MeterProvider was registered
             ConfigureOpenTelemetry(services);
 
             string serviceRoutesFolderPath = "Configuration/Routes";
@@ -539,6 +537,7 @@ namespace ApiGateway
             if (!otelEnabled)
             {
                 LogTracingDisabled(logger);
+                _otelEnabled = false;  // MeterProvider will not be registered
                 return;
             }
 
@@ -563,6 +562,7 @@ namespace ApiGateway
             if (!Uri.TryCreate(otlpEndpoint, UriKind.Absolute, out Uri? endpoint))
             {
                 LogInvalidEndpoint(logger, otlpEndpoint);
+                _otelEnabled = false;  // MeterProvider will not be registered due to endpoint validation failure
                 return;
             }
 
