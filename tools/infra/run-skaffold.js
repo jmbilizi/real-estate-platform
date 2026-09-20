@@ -20,7 +20,11 @@ if (args.length === 0) {
 }
 
 const { withDefaultRepoArg } = require('./registry-settings');
-const { ensureLocalSecretOverlay, describeOverrides } = require('./local-secret-overlay');
+const {
+  ensureLocalSecretOverlay,
+  describeOverrides,
+  ClusterSecretReadError,
+} = require('./local-secret-overlay');
 const { ensureLocalCaBundleOverlay, describeCaBundleOverlay } = require('./local-ca-overlay');
 
 // Keep package.json scripts simple, and allow CI to override via env.
@@ -266,6 +270,11 @@ function getLocalKubeContextCandidates() {
   return candidates;
 }
 
+// Commands that actually reach the live cluster. Secret preservation (#218) needs a reachable
+// cluster to check against, so it is only attempted for these; `render` builds manifests with no
+// cluster required, and must keep working with no context configured at all.
+const CLUSTER_TOUCHING_COMMANDS = new Set(['dev', 'debug', 'run', 'delete', 'deploy']);
+
 function ensureLocalKubeContext() {
   // If user explicitly targets a context, don't override it.
   if (args.includes('--kube-context') || args.some((a) => a.startsWith('--kube-context='))) {
@@ -273,8 +282,7 @@ function ensureLocalKubeContext() {
   }
 
   const command = args[0];
-  const commandsThatTouchCluster = new Set(['dev', 'debug', 'run', 'delete', 'deploy']);
-  if (!commandsThatTouchCluster.has(command)) {
+  if (!CLUSTER_TOUCHING_COMMANDS.has(command)) {
     return;
   }
 
@@ -464,7 +472,24 @@ function ensureLocalSecrets(baseOverlay) {
     return null;
   }
   loadDotEnvOnce();
-  return ensureLocalSecretOverlay({ baseOverlay });
+  // Preservation (#218) reads the live cluster, so it only runs for commands that reach one.
+  // `render` has no cluster requirement today and must not gain one here.
+  const preserveFromCluster = CLUSTER_TOUCHING_COMMANDS.has(args[0]);
+  try {
+    return ensureLocalSecretOverlay({ baseOverlay, preserveFromCluster });
+  } catch (error) {
+    if (error instanceof ClusterSecretReadError) {
+      console.error(
+        "ERROR: Refusing to deploy — cannot confirm the local cluster's existing secret values.\n" +
+          `${error.message}\n` +
+          'A deploy that cannot check this must not risk overwriting a real credential with the ' +
+          'committed placeholder. Fix cluster access, or set LOCAL_SECRET_RESET_TO_PLACEHOLDER=1 ' +
+          'to deploy anyway and intentionally reset unset keys to the placeholder.',
+      );
+      process.exit(1);
+    }
+    throw error;
+  }
 }
 
 function ensureLocalCa(baseOverlay) {
