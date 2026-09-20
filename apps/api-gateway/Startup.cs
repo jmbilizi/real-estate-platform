@@ -37,6 +37,12 @@ namespace ApiGateway
         /// </summary>
         private const string GatewaySwaggerTitle = "Gateway";
 
+        /// <summary>
+        /// Indicates whether OpenTelemetry (tracing and metrics) is enabled.
+        /// Set during ConfigureServices; checked in Configure to conditionally register endpoints.
+        /// </summary>
+        private bool _otelEnabled = true;
+
         // LoggerMessage delegates for performance (CA1848)
         private static readonly Action<ILogger, Exception?> LogTracingDisabledAction =
             LoggerMessage.Define(
@@ -96,6 +102,9 @@ namespace ApiGateway
 
             // Register GeoIP service as singleton (thread-safe, one database reader for app lifetime)
             services.AddSingleton<GeoIpService>();
+
+            // Store OTEL_ENABLED flag for use in Configure method
+            _otelEnabled = Configuration.GetValue("OTEL_ENABLED", true);
 
             // Configure OpenTelemetry (conditional based on environment)
             ConfigureOpenTelemetry(services);
@@ -196,7 +205,11 @@ namespace ApiGateway
             });
 
             // OpenTelemetry Prometheus exporter middleware (must be between UseRouting and UseEndpoints)
-            app.UseOpenTelemetryPrometheusScrapingEndpoint();
+            // Only register if OTEL is enabled; /metrics is absent when disabled.
+            if (_otelEnabled)
+            {
+                app.UseOpenTelemetryPrometheusScrapingEndpoint();
+            }
 
             app.UseEndpoints(endpoints =>
             {
