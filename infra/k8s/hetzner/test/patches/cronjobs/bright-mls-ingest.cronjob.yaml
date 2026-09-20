@@ -11,8 +11,12 @@
 # host. Okta serves the wildcard `*.okta.com`, which cannot match a three-label name, so TLS fails
 # permanently.
 #
-# Load from the default epoch and the default page cap, unlike local. Test is a staging environment
-# and must reproduce the full replication path, not a shortened one.
+# CURSOR (#232, supersedes the "load from the default epoch" note this comment used to carry): test
+# is not production and does not need full feed history either. Loading from the epoch with no page
+# cap under `activeDeadlineSeconds: 900` and `concurrencyPolicy: Forbid` repeats a full backfill on
+# every tick and never completes (#231). Same bounded window as dev and local: the test feed reports
+# 1,461 `BrightProperties` modified since this instant (#92). The replication PATH is unchanged —
+# only the starting point and per-run page count are bounded, same as dev.
 #
 # SCHEDULE (#224): raised from once a day to every 15 minutes, offset 7 minutes from dev's `*/15`,
 # so a mapping fix reaches test within minutes instead of a day. Dev and test still read the same
@@ -44,3 +48,7 @@ spec:
                   value: "https://bright-reso.tst.brightmls.com/RESO/OData/bright"
                 - name: BRIGHT_MLS_FEED
                   value: "test"
+                - name: BRIGHT_MLS_INITIAL_CURSOR
+                  value: "2026-09-01T00:00:00Z"
+                - name: BRIGHT_MLS_MAX_PAGES_PER_RUN
+                  value: "5"

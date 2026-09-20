@@ -53,3 +53,12 @@ spec:
                   value: "https://bright-reso.tst.brightmls.com/RESO/OData/bright"
                 - name: BRIGHT_MLS_FEED
                   value: "test"
+                # dev is not production and does not need full feed history. Without this, a run
+                # starts from the epoch default with no page cap, and repeats that full backfill on
+                # every scheduled tick under `activeDeadlineSeconds: 900` and `concurrencyPolicy:
+                # Forbid` (#231). Same cutoff as the local overlay: the test feed reports 1,461
+                # `BrightProperties` modified since this instant (#92), a bounded, known-good window.
+                - name: BRIGHT_MLS_INITIAL_CURSOR
+                  value: "2026-09-01T00:00:00Z"
+                - name: BRIGHT_MLS_MAX_PAGES_PER_RUN
+                  value: "5"
