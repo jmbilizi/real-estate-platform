@@ -931,6 +931,10 @@ runs:
       # CronJob's next tick. Jobs are immutable, so a fixed-name Job committed to the
       # manifests could never re-run on redeploy — delete-then-create belongs here instead.
       # Prod keeps its own schedule and `suspend: true`; this step never touches prod.
+      #
+      # #232: the rollout already succeeded by the time this step runs. Ingest is a separate
+      # concern. Every exit path below returns 0. A bad, slow, or unrunnable ingest run
+      # prints a `::warning::` instead. It never fails this step or trips the rollback path.
       if: ${{ steps.rollout.outputs.rollout_success == 'true' || steps.pvc_cleanup.outputs.rollout_success == 'true' }}
       shell: bash
       run: |
@@ -948,8 +952,95 @@ runs:
 
         JOB_NAME="bright-mls-ingest-on-deploy"
         echo "🔄 Re-running bright-mls-ingest so today's mapping fix reaches $ENVIRONMENT now."
-        kubectl delete job "$JOB_NAME" --ignore-not-found
-        kubectl create job "$JOB_NAME" --from=cronjob/bright-mls-ingest
+        if ! kubectl delete job "$JOB_NAME" --ignore-not-found; then
+          echo "::warning::bright-mls-ingest-on-deploy: could not delete the previous Job on $ENVIRONMENT - skipping this ingest run."
+          exit 0
+        fi
+        if ! kubectl create job "$JOB_NAME" --from=cronjob/bright-mls-ingest; then
+          echo "::warning::bright-mls-ingest-on-deploy: could not create the Job on $ENVIRONMENT - skipping this ingest run."
+          exit 0
+        fi
+
+        # #232: wait for the Job, then report its outcome. Bound is derived from the Job's own
+        # limits (infra/k8s/base/cronjobs/bright-mls-ingest.cronjob.yaml): activeDeadlineSeconds
+        # 900s caps how long Kubernetes lets it run at all, backoffLimit 2 caps retries within
+        # that same window. 960s gives a 60s margin so a hung run is reported as "still running"
+        # by OUR timeout, never confused with the Job's own deadline firing.
+        WAIT_SECONDS=960
+        POLL_SECONDS=10
+        ELAPSED=0
+        JOB_RESULT="timeout"
+        echo "⏳ Waiting up to ${WAIT_SECONDS}s for $JOB_NAME to reach a terminal state..."
+        while [ "$ELAPSED" -lt "$WAIT_SECONDS" ]; do
+          # One fetch, both conditions read from it. A separate `kubectl get` per condition
+          # would double the API calls over a wait this long for no extra information.
+          JOB_JSON=$(kubectl get job "$JOB_NAME" -o json 2>/dev/null || true)
+          COMPLETE=$(echo "$JOB_JSON" | jq -r '([.status.conditions[]? | select(.type=="Complete") | .status] | first) // empty' 2>/dev/null || true)
+          FAILED=$(echo "$JOB_JSON" | jq -r '([.status.conditions[]? | select(.type=="Failed") | .status] | first) // empty' 2>/dev/null || true)
+          if [ "$COMPLETE" = "True" ]; then
+            JOB_RESULT="complete"
+            break
+          fi
+          if [ "$FAILED" = "True" ]; then
+            JOB_RESULT="failed"
+            break
+          fi
+          sleep "$POLL_SECONDS"
+          ELAPSED=$((ELAPSED + POLL_SECONDS))
+        done
+
+        # Read by pod name, not `job/$JOB_NAME`. A retried Job (backoffLimit 2) can have more
+        # than one pod. This fetch is the single source for both the printed excerpt below and
+        # the outcome parsed from it, so it is one API round trip and one consistent view.
+        # Sorted oldest-to-newest, then `tail -1` in bash picks the latest attempt, the one
+        # that actually decided the Job's Complete/Failed condition.
+        POD_NAME=$(kubectl get pods -l job-name="$JOB_NAME" --sort-by=.metadata.creationTimestamp \
+          -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | tail -1 || true)
+
+        if [ -n "$POD_NAME" ]; then
+          echo "── $JOB_NAME pod logs ($POD_NAME) ──"
+          POD_LOGS=$(kubectl logs "$POD_NAME" --all-containers --tail=500 2>&1 || true)
+        else
+          echo "── $JOB_NAME pod logs ──"
+          POD_LOGS=""
+        fi
+        if [ -n "$POD_LOGS" ]; then
+          echo "$POD_LOGS"
+        else
+          echo "⚠️  Could not fetch pod logs for $JOB_NAME."
+        fi
+
+        # The job's own run_finished line carries the real outcome (not_configured/replicated
+        # both exit 0, failed exits 1 — see bright-ingest.main.ts and run-log.ts) plus the
+        # published/withheld histogram, already printed above. Pulled out again here only to
+        # build the one-line summary below.
+        RUN_LINE=$(echo "$POD_LOGS" | grep '"event":"run_finished"' | tail -1 || true)
+        OUTCOME=""
+        MESSAGE=""
+        if [ -n "$RUN_LINE" ]; then
+          OUTCOME=$(echo "$RUN_LINE" | jq -r '.outcome // empty' 2>/dev/null || true)
+          MESSAGE=$(echo "$RUN_LINE" | jq -r '.message // empty' 2>/dev/null || true)
+        fi
+
+        case "$JOB_RESULT" in
+          complete)
+            if [ "$OUTCOME" = "failed" ]; then
+              # Should not happen — a `failed` outcome exits 1, which the Job reports as Failed,
+              # not Complete. Reported defensively in case that contract ever drifts.
+              echo "::warning::bright-mls-ingest-on-deploy completed but reported outcome=failed on $ENVIRONMENT: ${MESSAGE:-no message}"
+            else
+              echo "✅ bright-mls-ingest-on-deploy finished on $ENVIRONMENT: outcome=${OUTCOME:-unknown}${MESSAGE:+ ($MESSAGE)}"
+            fi
+            ;;
+          failed)
+            echo "::warning::bright-mls-ingest-on-deploy failed on $ENVIRONMENT: ${MESSAGE:-see pod logs above}"
+            ;;
+          timeout)
+            echo "::warning::bright-mls-ingest-on-deploy did not reach a terminal state within ${WAIT_SECONDS}s on $ENVIRONMENT - check the Job manually."
+            ;;
+        esac
+
+        exit 0
 
     - name: Conditional rollback
       if: ${{ steps.rollout.outputs.rollout_success != 'true' && steps.pvc_cleanup.outputs.rollout_success != 'true' }}
