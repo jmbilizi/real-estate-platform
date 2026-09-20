@@ -38,11 +38,13 @@ const STRUCTURE_DESIGN_TYPE_MAP: Readonly<Record<string, PropertyType>> = {
 
 export function mapPropertyType(payload: Readonly<Record<string, unknown>>): PropertyType | null {
   const subType = payload.PropertySubType;
+  // A blank PropertySubType falls through to StructureDesignType (#207). A PRESENT-but-unrecognised
+  // PropertySubType does NOT fall through: it is an explicit value this map has not reviewed, and
+  // falling through would let an unrelated StructureDesignType override a deliberate rejection —
+  // e.g. a mobile home with PropertySubType 'Mobile Home' and a StructureDesignType of 'Detached'
+  // must stay rejected, not resolve to 'Single Family'.
   if (typeof subType === 'string' && subType.trim().length > 0) {
-    const mapped = PROPERTY_SUB_TYPE_MAP[subType.trim()];
-    if (mapped) {
-      return mapped;
-    }
+    return PROPERTY_SUB_TYPE_MAP[subType.trim()] ?? null;
   }
   const structureDesignType = payload.StructureDesignType;
   if (typeof structureDesignType === 'string') {

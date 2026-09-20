@@ -142,10 +142,16 @@ function reject(listingKey: string | null, reason: RejectReason): RejectedRecord
  * unchanged would misrepresent a rental as for-sale inventory. Rent support is a product decision
  * (offer_kind mapping, listing_type interaction, rent-specific search) that this ticket does not
  * make, so a lease record fails closed with its own reason rather than a silent misrepresentation.
+ *
+ * A closed set of observed values, not a `.includes('Lease')` substring test: RESO also uses "Lease"
+ * inside non-rental descriptors (e.g. a ground-lease land tenure), and a substring match would
+ * reject a genuine sale on a word that does not actually mean "this is a rental".
  */
+const LEASE_PROPERTY_TYPES = new Set(['Residential Lease', 'CommercialLease']);
+
 function isLeaseOffer(payload: Readonly<Record<string, unknown>>): boolean {
   const propertyType = nonBlank(payload.PropertyType);
-  return propertyType !== null && propertyType.includes('Lease');
+  return propertyType !== null && LEASE_PROPERTY_TYPES.has(propertyType);
 }
 
 export function mapBrightPropertyRecord(

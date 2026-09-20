@@ -130,6 +130,16 @@ describe('mapBrightPropertyRecord', () => {
     });
   });
 
+  it('does not reject a sale PropertyType that merely contains the word "Lease"', () => {
+    // A closed-set check, not a substring test: RESO also uses "Lease" in non-rental descriptors
+    // (e.g. ground-lease land tenure), which must not be misread as a rental offer.
+    const result = mapBrightPropertyRecord(
+      { ...BASE_PAYLOAD, PropertyType: 'Residential Leasehold' },
+      ctx(),
+    );
+    expect(result.kind).toBe('mapped');
+  });
+
   it('rejects an unrecognised StandardStatus', () => {
     const result = mapBrightPropertyRecord(
       { ...BASE_PAYLOAD, StandardStatus: 'Registered' },

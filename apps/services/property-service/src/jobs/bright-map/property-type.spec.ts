@@ -37,4 +37,13 @@ describe('mapPropertyType', () => {
     expect(mapPropertyType({ StructureDesignType: 'Mobile Pre 1976' })).toBeNull();
     expect(mapPropertyType({ StructureDesignType: 'Other' })).toBeNull();
   });
+
+  it('does not fall back to StructureDesignType when PropertySubType is present but unrecognised', () => {
+    // Verified on the live feed (#216 code review): a commercial PropertySubType like 'Retail' can
+    // co-occur with a StructureDesignType of 'Detached'. Falling through would misclassify a
+    // commercial listing as 'Single Family' instead of leaving the explicit rejection in place.
+    expect(
+      mapPropertyType({ PropertySubType: 'Retail', StructureDesignType: 'Detached' }),
+    ).toBeNull();
+  });
 });
