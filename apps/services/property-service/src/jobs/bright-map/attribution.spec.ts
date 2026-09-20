@@ -45,6 +45,48 @@ describe('mapAttribution', () => {
     ).toEqual({ ok: false, reason: 'missing_required_attribution' });
   });
 
+  it('falls back to the agent office phone (a genuine office line) when ListOfficePhone is blank', () => {
+    const result = mapAttribution({
+      ListOfficeName: 'Acme Realty',
+      ListOfficePhone: null,
+      ListOfficeEmail: 'office@acme.example',
+      ListAgentOfficePhone: '2025555678',
+    });
+    expect(result).toEqual({
+      ok: true,
+      fields: {
+        brokerName: 'Acme Realty',
+        brokerPhone: '2025555678',
+        brokerEmail: 'office@acme.example',
+        officeName: 'Acme Realty',
+        officeBrokerLeadPhone: '2025555678',
+        officeBrokerLeadEmail: null,
+        listingAgentName: null,
+      },
+    });
+  });
+
+  it('never falls back to the agent direct or preferred phone — those are personal, not office, lines', () => {
+    expect(
+      mapAttribution({
+        ListOfficeName: 'Acme Realty',
+        ListOfficeEmail: 'office@acme.example',
+        ListAgentDirectPhone: '2025558888',
+        ListAgentPreferredPhone: '2025559999',
+      }),
+    ).toEqual({ ok: false, reason: 'missing_required_attribution' });
+  });
+
+  it('never falls back to the agent email — an individual address is not the brokerage email', () => {
+    expect(
+      mapAttribution({
+        ListOfficeName: 'Acme Realty',
+        ListOfficePhone: '2025551234',
+        ListAgentEmail: 'agent@acme.example',
+      }),
+    ).toEqual({ ok: false, reason: 'missing_required_attribution' });
+  });
+
   it('leaves the optional agent fields null when Bright omits them', () => {
     const result = mapAttribution({
       ListOfficeName: 'Acme Realty',
