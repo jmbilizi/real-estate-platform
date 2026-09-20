@@ -36,4 +36,7 @@ export const BRAND = {
 
   /** Default meta description. */
   metaDescription: 'Browse homes for sale and rent in the DMV area. Brokered by Real Broker, LLC.',
+
+  /** Fair Housing Act statement text (PRD §6.1). Wording is fixed by HUD, not brand style. */
+  equalHousingOpportunity: 'Equal Housing Opportunity',
 } as const;

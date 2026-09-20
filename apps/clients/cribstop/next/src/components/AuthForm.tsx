@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff } from 'lucide-react';
 import { useApp } from '@/lib/context';
@@ -211,6 +212,20 @@ export default function AuthForm({
                 Forgot password?
               </button>
             </div>
+          )}
+
+          {mode === 'signup' && (
+            <p className="text-center text-xs text-ink-muted">
+              By creating an account, you agree to our{' '}
+              <Link href="/terms" className="font-medium text-brand hover:underline">
+                Terms of Service
+              </Link>{' '}
+              and{' '}
+              <Link href="/privacy" className="font-medium text-brand hover:underline">
+                Privacy Policy
+              </Link>
+              .
+            </p>
           )}
 
           <button
