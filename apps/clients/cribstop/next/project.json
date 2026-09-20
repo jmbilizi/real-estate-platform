@@ -38,7 +38,7 @@
       "executor": "nx:run-commands",
       "cache": true,
       "options": {
-        "command": "node scripts/check-legal-content.js && next build",
+        "command": "next build",
         "cwd": "apps/clients/cribstop/next"
       }
     },

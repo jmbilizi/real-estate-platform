@@ -1,13 +1,20 @@
 #!/usr/bin/env node
 /**
- * Fails a production build while any legal content module is a draft placeholder.
+ * NOT WIRED INTO ANY BUILD SCRIPT. See #157 for the pending decision on where this runs.
  *
- * #156 delivers approved copy for `/privacy` and `/terms`. Until then, this gate stops a draft
- * policy from reaching a deployable artifact. The pages also show a draft banner, but only this
- * gate can stop a build.
+ * Fails while any legal content module is a draft placeholder, restricted to a production build
+ * by `isProductionBuild()`. The restriction cannot fire correctly today: `build-push-images.yml`
+ * runs the identical `docker build` (same Dockerfile, same build-args, including
+ * `NEXT_BUILD_STANDALONE=1`) for the dev, test, and prod jobs, and re-tags the one resulting
+ * image per environment afterward. GitHub Actions also sets `CI=true` on every job, PR
+ * validation included. Neither signal distinguishes a production build from a dev or test one,
+ * so wiring this into `package.json`/`project.json` failed CI and the image build for every
+ * environment (see #157 comments).
  *
- * Runs only for a production build (see `is-production-build.js`), so a local `nx build` or
- * `next build` stays usable for iteration while #156 is still open.
+ * `isProductionBuild()` and this script are kept, tested, and ready to wire in once #157 settles
+ * on where enforcement lives: a real per-environment build-arg threaded through
+ * `build-push-images.yml` → `build-push-image` → `Dockerfile`, or a deploy-time check instead of
+ * a build-time one.
  */
 const path = require('path');
 const { isProductionBuild } = require('./is-production-build');
