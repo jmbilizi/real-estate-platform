@@ -103,3 +103,8 @@ jobs:
           JAEGER_BASIC_AUTH: ${{ secrets.JAEGER_BASIC_AUTH }}
           API_GATEWAY_DOMAIN: ${{ secrets.API_GATEWAY_DOMAIN }}
           CRIBSTOP_DOMAIN: ${{ secrets.CRIBSTOP_DOMAIN }}
+          # Gateway/web basic-auth gate (#256). One credential per environment, shared by the
+          # api-gateway Ingress (every environment) and the cribstop-web Ingress (dev/test only).
+          # environment: ${{ matrix.environment }} above scopes this to that environment's value,
+          # so a leaked dev credential cannot open prod.
+          GATEWAY_BASIC_AUTH: ${{ secrets.GATEWAY_BASIC_AUTH }}

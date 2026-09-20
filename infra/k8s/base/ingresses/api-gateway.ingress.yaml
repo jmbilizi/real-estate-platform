@@ -10,6 +10,12 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "3600"
+    # Basic auth in every environment, including prod (#256). The browser never calls this
+    # Ingress: cribstop-web reaches the gateway over cluster-internal DNS
+    # (API_GATEWAY_URL, server-side only). This gate stops external Swagger/Postman access.
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: api-gateway-secret
+    nginx.ingress.kubernetes.io/auth-realm: "Authentication Required - API Gateway"
 spec:
   ingressClassName: nginx
   rules:
