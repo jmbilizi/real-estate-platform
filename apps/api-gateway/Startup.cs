@@ -37,7 +37,6 @@ namespace ApiGateway
         /// </summary>
         private const string GatewaySwaggerTitle = "Gateway";
 
-
         // LoggerMessage delegates for performance (CA1848)
         private static readonly Action<ILogger, Exception?> LogTracingDisabledAction =
             LoggerMessage.Define(
