@@ -1,5 +1,5 @@
-import React from 'react';
-import { AMENITIES, LISTING_TYPES, PROPERTY_TYPES } from '@cribstop/property-contracts';
+import React, { useEffect, useState } from 'react';
+import { AMENITIES, PROPERTY_TYPES } from '@cribstop/property-contracts';
 import type { Amenity, PropertyType, SearchFilters } from '@/lib/types';
 import { isLandOnly } from '@/lib/listing-filters';
 import { PARCEL_INTERLOCK_HINT } from '@/lib/store/types';
@@ -41,16 +41,26 @@ const PROPERTY_TYPE_ICONS: Record<PropertyType, string> = {
   'Manufactured/Mobile': '🏚️',
 };
 
-const LISTING_TYPE_LABELS: Record<(typeof LISTING_TYPES)[number] | 'all', string> = {
-  all: 'All',
-  sale: 'Buy',
-  rent: 'Rent',
-  sold: 'Sold',
-};
-
 /** The stepper's rungs: `0` reads as "Any" and is sent as no filter at all. */
 const COUNT_MIN = 0;
 const COUNT_MAX = 8;
+
+/** The max-price stepper's rung size (#243). */
+const MAX_PRICE_STEP = 25_000;
+
+/**
+ * Strips the formatting a user would naturally type or paste (`$`, thousands commas, spaces) and
+ * reports whether what remains is a valid whole number.
+ *
+ * Formatting characters are not "junk" — stripping them silently is what a currency field is
+ * supposed to do. Anything else left over (a letter, a decimal point, a minus sign) is junk: it
+ * would fail the contract's `maxPrice` pattern (`^\d+$`), so it is flagged rather than forwarded.
+ */
+function sanitizeMaxPriceInput(raw: string): { digits: string; invalid: boolean } {
+  const stripped = raw.replace(/[$,\s]/g, '');
+  if (stripped === '') return { digits: '', invalid: false };
+  return { digits: stripped, invalid: !/^\d+$/.test(stripped) };
+}
 
 export default function FilterModalContent({ value, onChange }: FilterModalContentProps) {
   const set = (patch: SearchFilters) => onChange({ ...value, ...patch });
@@ -78,29 +88,63 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
     set({ amenities: next.length > 0 ? next : undefined });
   };
 
-  const priceInput = (
-    key: 'minPrice' | 'maxPrice',
-    label: string,
-    placeholder: string,
-    inputId: string,
-  ) => (
-    <div>
-      <label className="mb-1 block text-xs font-medium text-ink-muted" htmlFor={inputId}>
-        {label}
-      </label>
-      <input
-        id={inputId}
-        type="number"
-        min={0}
-        step={1}
-        inputMode="numeric"
-        placeholder={placeholder}
-        className="w-full rounded-xl border border-surface-border px-3 py-2 text-sm font-normal"
-        value={value[key] ?? ''}
-        onChange={(event) => set({ [key]: wholeNumberOrUndefined(event.target.value) })}
-      />
-    </div>
+  /*
+   * The max-price control's own draft (#243): a "−"/"+" stepper flanking a typable input,
+   * matching the visual style the "What" search bar panel used for this control before it moved
+   * here.
+   *
+   * The input holds a local draft rather than `value.maxPrice` directly, so a keystroke never
+   * fires a request — only blur or Enter commits it (`commitMaxPrice`), and only when it is not
+   * mid-error. Resyncing from `value.maxPrice` (not from `maxPriceText`) is what lets an external
+   * change — "Clear all", or the modal reopening with a different applied value — update the field
+   * without stomping on text the user is still typing.
+   */
+  const [maxPriceText, setMaxPriceText] = useState(() =>
+    value.maxPrice !== undefined ? String(value.maxPrice) : '',
   );
+  const [maxPriceError, setMaxPriceError] = useState(false);
+
+  useEffect(() => {
+    setMaxPriceText(value.maxPrice !== undefined ? String(value.maxPrice) : '');
+    setMaxPriceError(false);
+  }, [value.maxPrice]);
+
+  const handleMaxPriceChange = (raw: string) => {
+    const { digits, invalid } = sanitizeMaxPriceInput(raw);
+    setMaxPriceText(digits);
+    setMaxPriceError(invalid);
+  };
+
+  /** Never emits a value `searchRequestSchema` would reject, and never emits `0` — a `maxPrice`
+   *  of zero returns nothing, which reads as a broken search rather than "no maximum". */
+  const commitMaxPrice = () => {
+    if (maxPriceError) return; // the error message stays up until the user fixes it
+    const trimmed = maxPriceText.trim();
+    if (trimmed === '') {
+      set({ maxPrice: undefined });
+      return;
+    }
+    const parsed = Number(trimmed);
+    set({ maxPrice: parsed === 0 ? undefined : parsed });
+  };
+
+  /**
+   * Steps by `MAX_PRICE_STEP` from whatever the user would see committed right now — the pending
+   * typed draft when it is valid, the last applied value otherwise. This is what lets a value
+   * typed off the 25,000 grid (say 460,000) still step by exactly 25,000 from that value, rather
+   * than snapping to the nearest rung and discarding what was typed.
+   */
+  const stepMaxPrice = (delta: number) => {
+    const base =
+      !maxPriceError && maxPriceText.trim() !== ''
+        ? Number(maxPriceText.trim())
+        : (value.maxPrice ?? 0);
+    const next = Math.max(0, base + delta);
+    const committed = next === 0 ? undefined : next;
+    set({ maxPrice: committed });
+    setMaxPriceText(committed !== undefined ? String(committed) : '');
+    setMaxPriceError(false);
+  };
 
   const stepper = (key: 'beds' | 'baths', label: string, disabled: boolean) => {
     const current = value[key] ?? COUNT_MIN;
@@ -154,31 +198,6 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
 
   return (
     <div className="grid grid-cols-1 gap-y-6">
-      {/* ── Listing type ─────────────────────────────────────────────── */}
-      <fieldset>
-        <legend className="mb-2 font-semibold uppercase text-xs tracking-wider text-ink">
-          Listing Type
-        </legend>
-        <div className="inline-flex w-full rounded-full bg-surface-alt p-1">
-          {(['all', ...LISTING_TYPES] as const).map((option) => {
-            const active = (value.listingType ?? 'all') === option;
-            return (
-              <button
-                key={option}
-                type="button"
-                aria-pressed={active}
-                onClick={() => set({ listingType: option === 'all' ? undefined : option })}
-                className={`flex-1 rounded-full px-3 py-1.5 text-sm font-semibold transition ${
-                  active ? 'bg-white text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
-                }`}
-              >
-                {LISTING_TYPE_LABELS[option]}
-              </button>
-            );
-          })}
-        </div>
-      </fieldset>
-
       {/* ── Home type ────────────────────────────────────────────────────
           Single-select, because the contract's `propertyType` is one enum value. The old grid was
           multi-select and produced `propertyType=Condo,Townhome`, which the API rejects. */}
@@ -211,15 +230,56 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
         </div>
       </fieldset>
 
-      {/* ── Price ────────────────────────────────────────────────────── */}
+      {/* ── Price ────────────────────────────────────────────────────────
+          Max-only (#243): people search for what they can afford at most, not a minimum. `minPrice`
+          stays in the contract for existing links, but this control never sets it. */}
       <fieldset>
         <legend className="mb-2 font-semibold uppercase text-xs tracking-wider text-ink">
-          Price Range
+          Max Price
         </legend>
-        <div className="grid grid-cols-2 gap-3">
-          {priceInput('minPrice', 'Min price', 'No min', 'filter-min-price')}
-          {priceInput('maxPrice', 'Max price', 'No max', 'filter-max-price')}
+        <div className="flex items-center gap-4">
+          {stepperButton({
+            label: '–',
+            accessibleName: 'Decrease maximum price',
+            disabled: false,
+            onClick: () => stepMaxPrice(-MAX_PRICE_STEP),
+          })}
+          <input
+            id="filter-max-price"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            aria-label="Maximum price"
+            aria-invalid={maxPriceError}
+            aria-describedby={maxPriceError ? 'filter-max-price-error' : undefined}
+            placeholder="No max"
+            value={maxPriceText}
+            onChange={(event) => handleMaxPriceChange(event.target.value)}
+            onBlur={commitMaxPrice}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter') return;
+              event.preventDefault();
+              commitMaxPrice();
+              event.currentTarget.blur();
+            }}
+            className={`w-32 rounded-full border px-3 py-1.5 text-center text-[15px] font-normal focus:outline-none focus:ring-1 ${
+              maxPriceError
+                ? 'border-red-400 text-red-600 focus:ring-red-400'
+                : 'border-surface-border text-ink focus:ring-surface-border-strong'
+            }`}
+          />
+          {stepperButton({
+            label: '+',
+            accessibleName: 'Increase maximum price',
+            disabled: false,
+            onClick: () => stepMaxPrice(MAX_PRICE_STEP),
+          })}
         </div>
+        {maxPriceError && (
+          <p id="filter-max-price-error" className="mt-1 text-xs text-red-600">
+            Enter a whole number, like 450000.
+          </p>
+        )}
       </fieldset>
 
       {/* ── Beds / Baths / Min sqft — the dwelling group the interlock governs ── */}

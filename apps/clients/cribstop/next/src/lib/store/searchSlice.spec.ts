@@ -1,10 +1,5 @@
 import searchReducer, * as searchActions from '@/lib/store/slices/searchSlice';
-import {
-  isParcelOnlySelection,
-  PARCEL_PROPERTY_TYPES,
-  SEARCH_PANELS,
-  type SearchPanel,
-} from '@/lib/store/types';
+import { SEARCH_PANELS, type SearchPanel } from '@/lib/store/types';
 
 /**
  * The occupancy vocabulary the removed "Who" picker used (#34). Asserted BY NAME rather than only
@@ -33,15 +28,12 @@ describe('search slice carries no occupancy state (#34)', () => {
 
   it('enumerates exactly the search fields the bar still collects', () => {
     expect(Object.keys(initialSearchState).sort()).toEqual([
-      'searchBaths',
-      'searchBedsIdx',
       'searchDateRange',
       'searchDescription',
+      'searchListingType',
       'searchLocation',
-      'searchMaxPrice',
       'searchMoveInDate',
       'searchPriceIdx',
-      'searchPropertyTypes',
       'searchSuggestion',
     ]);
   });
@@ -73,24 +65,6 @@ describe("the search bar has no 'who' panel (#34)", () => {
   });
 });
 
-describe('Lot/Land filter interlock (#24)', () => {
-  it('recognises the parcel type under both the contract and legacy chip labels', () => {
-    expect([...PARCEL_PROPERTY_TYPES]).toEqual(['Land', 'Lot/Land']);
-    expect(isParcelOnlySelection(['Land'])).toBe(true);
-    expect(isParcelOnlySelection(['Lot/Land'])).toBe(true);
-    expect(isParcelOnlySelection('Land')).toBe(true);
-  });
-
-  it('leaves a mixed selection alone, because dwellings can satisfy beds and baths', () => {
-    expect(isParcelOnlySelection(['Lot/Land', 'Condo'])).toBe(false);
-    expect(isParcelOnlySelection(['Condo'])).toBe(false);
-  });
-
-  it('does not fire on an empty or unset selection', () => {
-    expect(isParcelOnlySelection([])).toBe(false);
-    expect(isParcelOnlySelection(undefined)).toBe(false);
-    expect(isParcelOnlySelection(null)).toBe(false);
-    // 'all' is the contract's default propertyType — the absence of a filter, not a parcel.
-    expect(isParcelOnlySelection('all')).toBe(false);
-  });
-});
+// The Lot/Land interlock's own coverage moved to `lib/listing-filters.spec.ts` (`isLandOnly`,
+// `applyLandInterlock`) when #243 removed the search bar's property-type selection — the
+// array-based `isParcelOnlySelection` that lived here had no caller left afterward.

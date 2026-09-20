@@ -1,5 +1,9 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { LISTING_TYPES } from '@cribstop/property-contracts';
 import { SearchDateRange, SearchSuggestion } from '@/lib/store/types';
+
+/** The search bar's own Listing Type filter — the contract's enum plus `'all'`, its default. */
+export type SearchListingType = (typeof LISTING_TYPES)[number] | 'all';
 
 /**
  * There is deliberately no occupancy field here (#34). The removed "Who" picker collected age
@@ -15,10 +19,12 @@ interface SearchState {
   searchMoveInDate: string;
   searchDateRange: SearchDateRange;
   searchPriceIdx: number;
-  searchBedsIdx: number;
-  searchPropertyTypes: string[];
-  searchBaths: string;
-  searchMaxPrice: number;
+  searchListingType: SearchListingType;
+  /**
+   * Retained for #244 to remove. The "What" panel no longer offers this input (Fair Housing:
+   * a keyword filter over agent-authored remarks makes phrases like "great for families" a
+   * matchable term), but the field itself is out of this ticket's scope.
+   */
   searchDescription: string;
 }
 
@@ -28,10 +34,7 @@ const initialState: SearchState = {
   searchMoveInDate: '',
   searchDateRange: { start: '', end: '', flexibility: 'exact' },
   searchPriceIdx: 0,
-  searchBedsIdx: 0,
-  searchPropertyTypes: [],
-  searchBaths: '',
-  searchMaxPrice: 0,
+  searchListingType: 'all',
   searchDescription: '',
 };
 
@@ -54,17 +57,8 @@ const searchSlice = createSlice({
     setSearchPriceIdx: (state, action: PayloadAction<number>) => {
       state.searchPriceIdx = action.payload;
     },
-    setSearchBedsIdx: (state, action: PayloadAction<number>) => {
-      state.searchBedsIdx = action.payload;
-    },
-    setSearchPropertyTypes: (state, action: PayloadAction<string[]>) => {
-      state.searchPropertyTypes = action.payload;
-    },
-    setSearchBaths: (state, action: PayloadAction<string>) => {
-      state.searchBaths = action.payload;
-    },
-    setSearchMaxPrice: (state, action: PayloadAction<number>) => {
-      state.searchMaxPrice = action.payload;
+    setSearchListingType: (state, action: PayloadAction<SearchListingType>) => {
+      state.searchListingType = action.payload;
     },
     setSearchDescription: (state, action: PayloadAction<string>) => {
       state.searchDescription = action.payload;
@@ -78,10 +72,7 @@ export const {
   setSearchMoveInDate,
   setSearchDateRange,
   setSearchPriceIdx,
-  setSearchBedsIdx,
-  setSearchPropertyTypes,
-  setSearchBaths,
-  setSearchMaxPrice,
+  setSearchListingType,
   setSearchDescription,
 } = searchSlice.actions;
 export default searchSlice.reducer;

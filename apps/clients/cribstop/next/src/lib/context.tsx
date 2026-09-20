@@ -19,15 +19,12 @@ import {
   selectListingType,
   selectMobileSearchOpen,
   selectSavedIds,
-  selectSearchBaths,
-  selectSearchBedsIdx,
   selectSearchDateRange,
   selectSearchDescription,
+  selectSearchListingType,
   selectSearchLocation,
-  selectSearchMaxPrice,
   selectSearchMoveInDate,
   selectSearchPriceIdx,
-  selectSearchPropertyTypes,
   selectSearchSuggestion,
   selectSessionChecked,
   selectShowHeaderPill,
@@ -47,15 +44,13 @@ import { addToast } from '@/lib/store/slices/toastSlice';
 // useLayoutEffect on the client (fires before first paint), useEffect on the server (no-op)
 const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 import {
-  setSearchBaths,
-  setSearchBedsIdx,
+  type SearchListingType,
   setSearchDateRange,
   setSearchDescription,
+  setSearchListingType,
   setSearchLocation,
-  setSearchMaxPrice,
   setSearchMoveInDate,
   setSearchPriceIdx,
-  setSearchPropertyTypes,
   setSearchSuggestion,
 } from '@/lib/store/slices/searchSlice';
 import {
@@ -106,14 +101,8 @@ interface AppContextValue {
   setSearchDateRange: (v: SearchDateRange) => void;
   searchPriceIdx: number;
   setSearchPriceIdx: (v: number) => void;
-  searchBedsIdx: number;
-  setSearchBedsIdx: (v: number) => void;
-  searchPropertyTypes: string[];
-  setSearchPropertyTypes: (v: string[]) => void;
-  searchBaths: string;
-  setSearchBaths: (v: string) => void;
-  searchMaxPrice: number;
-  setSearchMaxPrice: (v: number) => void;
+  searchListingType: SearchListingType;
+  setSearchListingType: (v: SearchListingType) => void;
   searchDescription: string;
   setSearchDescription: (v: string) => void;
 }
@@ -222,10 +211,7 @@ export function useApp(): AppContextValue {
   const searchMoveInDate = useAppSelector(selectSearchMoveInDate);
   const searchDateRange = useAppSelector(selectSearchDateRange);
   const searchPriceIdx = useAppSelector(selectSearchPriceIdx);
-  const searchBedsIdx = useAppSelector(selectSearchBedsIdx);
-  const searchPropertyTypes = useAppSelector(selectSearchPropertyTypes);
-  const searchBaths = useAppSelector(selectSearchBaths);
-  const searchMaxPrice = useAppSelector(selectSearchMaxPrice);
+  const searchListingType = useAppSelector(selectSearchListingType);
   const searchDescription = useAppSelector(selectSearchDescription);
 
   const savedIds = useMemo(() => new Set(savedIdList), [savedIdList]);
@@ -386,30 +372,9 @@ export function useApp(): AppContextValue {
     [dispatch],
   );
 
-  const setBedsIdx = useCallback(
-    (v: number) => {
-      dispatch(setSearchBedsIdx(v));
-    },
-    [dispatch],
-  );
-
-  const setPropertyTypes = useCallback(
-    (v: string[]) => {
-      dispatch(setSearchPropertyTypes(v));
-    },
-    [dispatch],
-  );
-
-  const setBathsCtx = useCallback(
-    (v: string) => {
-      dispatch(setSearchBaths(v));
-    },
-    [dispatch],
-  );
-
-  const setMaxPriceCtx = useCallback(
-    (v: number) => {
-      dispatch(setSearchMaxPrice(v));
+  const setSearchListingTypeCtx = useCallback(
+    (v: SearchListingType) => {
+      dispatch(setSearchListingType(v));
     },
     [dispatch],
   );
@@ -452,14 +417,8 @@ export function useApp(): AppContextValue {
     setSearchDateRange: setDateRange,
     searchPriceIdx,
     setSearchPriceIdx: setPriceIdx,
-    searchBedsIdx,
-    setSearchBedsIdx: setBedsIdx,
-    searchPropertyTypes,
-    setSearchPropertyTypes: setPropertyTypes,
-    searchBaths,
-    setSearchBaths: setBathsCtx,
-    searchMaxPrice,
-    setSearchMaxPrice: setMaxPriceCtx,
+    searchListingType,
+    setSearchListingType: setSearchListingTypeCtx,
     searchDescription,
     setSearchDescription: setDescriptionCtx,
   };
