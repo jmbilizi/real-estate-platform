@@ -199,6 +199,29 @@ describe('mapStagedBrightProperties', () => {
     expect(listings()).toHaveLength(1);
   });
 
+  it('maps a Residential Lease record to offer_kind rent and publishes it (#225)', async () => {
+    const { client, listings } = createFakeDb({
+      stagedPayloads: [
+        {
+          ...ACTIVE_PAYLOAD,
+          PropertyType: 'Residential Lease',
+          InternetEntireListingDisplayYN: true,
+        },
+      ],
+    });
+
+    const report = await mapStagedBrightProperties(client, {
+      feed: 'test',
+      soldDisplayDelayDays: null,
+    });
+
+    expect(report.mapped).toBe(1);
+    expect(report.published).toBe(1);
+    expect(report.withheld).toBe(0);
+    const [written] = listings();
+    expect(written?.offerKind).toBe('rent');
+  });
+
   it('does not count a Withdrawn record as published, but does count it taken down', async () => {
     const { client } = createFakeDb({
       stagedPayloads: [{ ...ACTIVE_PAYLOAD, StandardStatus: 'Withdrawn' }],

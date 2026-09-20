@@ -106,38 +106,34 @@ describe('mapBrightPropertyRecord', () => {
     expect(result.property.property_type).toBe('Townhome');
   });
 
-  it('rejects a Residential Lease record instead of publishing a rental as a sale (#207)', () => {
+  it('maps a Residential Lease record to offer_kind rent (#225)', () => {
     const result = mapBrightPropertyRecord(
       { ...BASE_PAYLOAD, PropertyType: 'Residential Lease' },
       ctx(),
     );
-    expect(result).toEqual({
-      kind: 'rejected',
-      listingKey: 'BR-1',
-      reason: 'offer_kind_not_supported',
-    });
+    if (result.kind !== 'mapped') throw new Error('expected mapped');
+    expect(result.listing.offerKind).toBe('rent');
+    expect(result.listing.listPrice).toBe(500000);
   });
 
-  it('rejects a CommercialLease record the same way', () => {
+  it('maps a CommercialLease record to offer_kind rent the same way', () => {
     const result = mapBrightPropertyRecord(
       { ...BASE_PAYLOAD, PropertyType: 'CommercialLease' },
       ctx(),
     );
-    expect(result).toEqual({
-      kind: 'rejected',
-      listingKey: 'BR-1',
-      reason: 'offer_kind_not_supported',
-    });
+    if (result.kind !== 'mapped') throw new Error('expected mapped');
+    expect(result.listing.offerKind).toBe('rent');
   });
 
-  it('does not reject a sale PropertyType that merely contains the word "Lease"', () => {
+  it('maps a non-lease PropertyType to offer_kind sale, including one merely containing "Lease"', () => {
     // A closed-set check, not a substring test: RESO also uses "Lease" in non-rental descriptors
     // (e.g. ground-lease land tenure), which must not be misread as a rental offer.
     const result = mapBrightPropertyRecord(
       { ...BASE_PAYLOAD, PropertyType: 'Residential Leasehold' },
       ctx(),
     );
-    expect(result.kind).toBe('mapped');
+    if (result.kind !== 'mapped') throw new Error('expected mapped');
+    expect(result.listing.offerKind).toBe('sale');
   });
 
   it('rejects an unrecognised StandardStatus', () => {

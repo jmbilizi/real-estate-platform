@@ -14,6 +14,7 @@
 import { buildAddressKey, splitUnitDesignator } from '../../seed/address';
 import { PropertyType } from '../../seed/constants';
 import { ListingStatus } from '../../seed/constants';
+import { OfferKind } from '../../seed/types';
 
 import { AttributionFields, mapAttribution } from './attribution';
 import { mapPropertyType } from './property-type';
@@ -30,8 +31,7 @@ export type RejectReason =
   | 'sold_display_delay_not_configured'
   | 'sold_missing_close_date'
   | 'sold_still_in_display_delay_window'
-  | 'missing_required_attribution'
-  | 'offer_kind_not_supported';
+  | 'missing_required_attribution';
 
 export interface MappedPropertyInput {
   readonly address_raw: string;
@@ -55,6 +55,7 @@ export interface MappedPropertyInput {
 
 export interface MappedListingInput {
   readonly title: string;
+  readonly offerKind: OfferKind;
   readonly status: string;
   readonly consumerStatus: ListingStatus | null;
   readonly listPrice: number;
@@ -137,15 +138,12 @@ function reject(listingKey: string | null, reason: RejectReason): RejectedRecord
 
 /**
  * Bright's `PropertyType` carries the sale/lease split as a suffix on the value itself — observed on
- * the wire as `Residential Lease` and `CommercialLease` (Bright is inconsistent about the space).
- * `mapStagedBrightProperties` always writes `offer_kind: 'sale'` (#93), so a lease record published
- * unchanged would misrepresent a rental as for-sale inventory. Rent support is a product decision
- * (offer_kind mapping, listing_type interaction, rent-specific search) that this ticket does not
- * make, so a lease record fails closed with its own reason rather than a silent misrepresentation.
+ * the wire as `Residential Lease` and `CommercialLease` (Bright is inconsistent about the space). A
+ * lease record maps to `offer_kind: 'rent'` (#225); Homes is scoped as buy/sell/rent (PRD line 229).
  *
  * A closed set of observed values, not a `.includes('Lease')` substring test: RESO also uses "Lease"
  * inside non-rental descriptors (e.g. a ground-lease land tenure), and a substring match would
- * reject a genuine sale on a word that does not actually mean "this is a rental".
+ * misclassify a genuine sale on a word that does not actually mean "this is a rental".
  */
 const LEASE_PROPERTY_TYPES = new Set(['Residential Lease', 'CommercialLease']);
 
@@ -176,9 +174,7 @@ export function mapBrightPropertyRecord(
     return reject(listingKey, 'missing_price');
   }
 
-  if (isLeaseOffer(payload)) {
-    return reject(listingKey, 'offer_kind_not_supported');
-  }
+  const offerKind: OfferKind = isLeaseOffer(payload) ? 'rent' : 'sale';
 
   const propertyType = mapPropertyType(payload);
   if (!propertyType) {
@@ -251,6 +247,7 @@ export function mapBrightPropertyRecord(
     },
     listing: {
       title,
+      offerKind,
       status: statusMap.code,
       consumerStatus: statusMap.consumerStatus,
       listPrice,
