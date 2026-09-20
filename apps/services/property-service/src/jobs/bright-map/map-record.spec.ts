@@ -107,7 +107,10 @@ describe('mapBrightPropertyRecord', () => {
   });
 
   it('rejects a Residential Lease record instead of publishing a rental as a sale (#207)', () => {
-    const result = mapBrightPropertyRecord({ ...BASE_PAYLOAD, PropertyType: 'Residential Lease' }, ctx());
+    const result = mapBrightPropertyRecord(
+      { ...BASE_PAYLOAD, PropertyType: 'Residential Lease' },
+      ctx(),
+    );
     expect(result).toEqual({
       kind: 'rejected',
       listingKey: 'BR-1',
@@ -116,7 +119,10 @@ describe('mapBrightPropertyRecord', () => {
   });
 
   it('rejects a CommercialLease record the same way', () => {
-    const result = mapBrightPropertyRecord({ ...BASE_PAYLOAD, PropertyType: 'CommercialLease' }, ctx());
+    const result = mapBrightPropertyRecord(
+      { ...BASE_PAYLOAD, PropertyType: 'CommercialLease' },
+      ctx(),
+    );
     expect(result).toEqual({
       kind: 'rejected',
       listingKey: 'BR-1',

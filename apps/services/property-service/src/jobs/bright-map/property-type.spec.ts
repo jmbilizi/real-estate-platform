@@ -27,9 +27,9 @@ describe('mapPropertyType', () => {
   });
 
   it('prefers PropertySubType over StructureDesignType when both are present', () => {
-    expect(
-      mapPropertyType({ PropertySubType: 'Land', StructureDesignType: 'Detached' }),
-    ).toBe('Land');
+    expect(mapPropertyType({ PropertySubType: 'Land', StructureDesignType: 'Detached' })).toBe(
+      'Land',
+    );
   });
 
   it('fails closed on an unrecognised structure design type', () => {
