@@ -81,6 +81,31 @@ describe('buildSearchQuery', () => {
     }
   });
 
+  it('filters by city alone, case-insensitively and by exact match', () => {
+    const { where, params } = build({ city: 'rockville' });
+    expect(where).toContain('lower(v.city) = lower(');
+    expect(params).toContainEqual('rockville');
+  });
+
+  it('filters by state alone, case-insensitively', () => {
+    const { where, params } = build({ state: 'md' });
+    expect(where).toContain('lower(v.state) = lower(');
+    expect(params).toContainEqual('md');
+  });
+
+  it('ANDs city and state together', () => {
+    const { where } = build({ city: 'Rockville', state: 'MD' });
+    expect(where).toContain('lower(v.city) = lower(');
+    expect(where).toContain('lower(v.state) = lower(');
+  });
+
+  it('ANDs city, state and free-text query together — none suppresses another', () => {
+    const { where } = build({ city: 'Rockville', state: 'MD', query: 'pool' });
+    expect(where).toContain('lower(v.city) = lower(');
+    expect(where).toContain('lower(v.state) = lower(');
+    expect(where).toContain('lower(v.title)');
+  });
+
   it('requires every requested amenity, not any', () => {
     const { where, params } = build({ amenities: 'Pool,Garage' });
     expect(where).toContain('v.amenities @> ');

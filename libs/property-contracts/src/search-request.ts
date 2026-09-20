@@ -90,6 +90,16 @@ const queryPageSize = z
 
 const queryBoolean = z.enum(['true', 'false']).transform((value) => value === 'true');
 
+/** Exactly two letters, case-insensitive. Anything else is the contract's normal 400. */
+const stateCode = z
+  .string()
+  .regex(/^[A-Za-z]{2}$/, 'must be a two-letter state code')
+  .describe(
+    'Two-letter state code, case-insensitive exact match (e.g. `MD`). ANDed with every other ' +
+      'filter, including `query` — no parameter suppresses another. Full state names are the ' +
+      'client’s job to normalize before sending this parameter.',
+  );
+
 /**
  * Repeated param (`?amenities=Pool&amenities=Garage`) or comma list (`?amenities=Pool,Garage`).
  * The closed 15-value set is enforced by `.pipe(z.array(amenitySchema))`, but that enforcement
@@ -134,6 +144,15 @@ export const searchRequestSchema = z.strictObject({
   query: z.string().optional(),
   zip: z.string().optional(),
   street: z.string().optional(),
+  city: z
+    .string()
+    .optional()
+    .describe(
+      'Case-insensitive EXACT match, not substring — a place name, not a search term. ANDed ' +
+        'with every other filter, including `query`. Mirrors `neighborhood`: a substring match ' +
+        'would make `Ken` match `Kensington`.',
+    ),
+  state: stateCode.optional(),
   // A flat enum, not `z.union([enumSchema, z.literal('all')])`: the inferred TS type is identical
   // (a literal union is flat regardless of which schema shape produced it) but the union form
   // renders in the published contract as a two-branch `anyOf` that loses the dropdown-friendly

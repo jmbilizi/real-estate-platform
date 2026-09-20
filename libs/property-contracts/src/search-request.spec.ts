@@ -85,6 +85,21 @@ describe('searchRequestSchema', () => {
     expect(parsed.page).toBe(9999);
     expect(exceedsResultWindow(parsed)).toBe(true);
   });
+
+  it('accepts a two-letter state code, case-insensitive', () => {
+    expect(searchRequestSchema.parse({ state: 'md' }).state).toBe('md');
+    expect(searchRequestSchema.parse({ state: 'VA' }).state).toBe('VA');
+  });
+
+  it('rejects a state code that is not exactly two letters', () => {
+    expect(searchRequestSchema.safeParse({ state: 'MDX' }).success).toBe(false);
+    expect(searchRequestSchema.safeParse({ state: 'M' }).success).toBe(false);
+    expect(searchRequestSchema.safeParse({ state: '12' }).success).toBe(false);
+  });
+
+  it('accepts a free-text city', () => {
+    expect(searchRequestSchema.parse({ city: 'Rockville' }).city).toBe('Rockville');
+  });
 });
 
 describe('the result window (#65)', () => {

@@ -33,6 +33,17 @@ describe('listings gateway query allowlist', () => {
     expect(forwarded.get('pageSize')).toBe('20');
   });
 
+  // #81: the allowlist is derived from `searchRequestSchema.shape`, so adding `city`/`state` to
+  // the contract forwards them with no edit to this proxy.
+  it('forwards city and state, added to the contract in #81, with no proxy code change', () => {
+    const forwarded = new URLSearchParams(
+      buildListingsQuery(new URLSearchParams({ city: 'Rockville', state: 'MD' })),
+    );
+
+    expect(forwarded.get('city')).toBe('Rockville');
+    expect(forwarded.get('state')).toBe('MD');
+  });
+
   it('preserves repeated amenities rather than collapsing them', () => {
     const incoming = new URLSearchParams();
     incoming.append('amenities', 'Pool');
