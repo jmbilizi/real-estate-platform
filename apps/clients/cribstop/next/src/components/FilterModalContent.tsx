@@ -38,6 +38,7 @@ const PROPERTY_TYPE_ICONS: Record<PropertyType, string> = {
   Loft: '🏬',
   Land: '🌳',
   'New Construction': '🏗️',
+  'Manufactured/Mobile': '🏚️',
 };
 
 const LISTING_TYPE_LABELS: Record<(typeof LISTING_TYPES)[number] | 'all', string> = {

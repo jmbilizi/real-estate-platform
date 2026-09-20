@@ -34,6 +34,7 @@ export const PROPERTY_TYPES = [
   'Loft',
   'Land',
   'New Construction',
+  'Manufactured/Mobile',
 ] as const;
 export type PropertyType = (typeof PROPERTY_TYPES)[number];
 

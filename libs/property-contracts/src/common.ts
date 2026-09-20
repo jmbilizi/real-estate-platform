@@ -10,6 +10,7 @@ export const PROPERTY_TYPES = [
   'Loft',
   'Land',
   'New Construction',
+  'Manufactured/Mobile',
 ] as const;
 /** Closed set — mirrors the CHECK on `listings.amenities`. Adding a value here without a
  *  migration produces a filter the database can never satisfy. */
