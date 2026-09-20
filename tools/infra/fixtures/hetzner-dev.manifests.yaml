@@ -123,6 +123,8 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: api-gateway-secret
+  labels:
+    app: api-gateway
 ---
 apiVersion: v1
 kind: Secret
