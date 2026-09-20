@@ -69,7 +69,7 @@ export function buildSearchQuery(request: SearchRequest): {
   // `street` needed care: `listing_search_v` masks `address`/`latitude`/`longitude` for a
   // seller-suppressed address but still publishes `city`/`state` unmasked, so this filter cannot
   // become a confirmation oracle for a withheld street address (#48 context). Indexed by migration
-  // 022 (`idx_listings_city_lower`/`idx_listings_state_lower`) — the plain `idx_listings_city_state_zip`
+  // 023 (`idx_listings_city_lower`/`idx_listings_state_lower`) — the plain `idx_listings_city_state_zip`
   // btree cannot serve an expression predicate, same reasoning as `idx_listings_neighborhood_lower`.
   if (request.city) {
     conditions.push(`lower(v.city) = lower(${bind(request.city)})`);
