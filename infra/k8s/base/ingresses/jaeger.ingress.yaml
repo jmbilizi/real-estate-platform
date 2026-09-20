@@ -10,9 +10,10 @@ metadata:
     nginx.ingress.kubernetes.io/session-cookie-name: "jaeger-route"
     nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
     nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
-    # Basic auth for monitoring UI (consistent testing local to prod)
+    # Basic auth for monitoring UI (consistent testing local to prod). Shared
+    # credential with api-gateway and the dev/test cribstop-web Ingress (#255).
     nginx.ingress.kubernetes.io/auth-type: basic
-    nginx.ingress.kubernetes.io/auth-secret: jaeger-secret
+    nginx.ingress.kubernetes.io/auth-secret: ingress-secret
     nginx.ingress.kubernetes.io/auth-realm: "Authentication Required - Jaeger Monitoring"
 spec:
   ingressClassName: nginx

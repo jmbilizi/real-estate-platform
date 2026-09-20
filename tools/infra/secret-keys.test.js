@@ -58,7 +58,7 @@ test('a SCREAMING_SNAKE key becomes its own variable name', () => {
 });
 
 test('a generic key is qualified with the secret name, so it cannot collide in process.env', () => {
-  assert.equal(envVarForKey('jaeger-secret', 'auth'), 'JAEGER_AUTH');
+  assert.equal(envVarForKey('ingress-secret', 'auth'), 'INGRESS_AUTH');
   assert.equal(envVarForKey('beta-basic-auth-secret', 'auth'), 'BETA_BASIC_AUTH_AUTH');
 });
 

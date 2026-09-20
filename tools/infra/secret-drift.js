@@ -19,8 +19,9 @@
  *   R3  `.env.example` matches the derivation.
  *
  * R1 is keyed on the manifest key and R2 on the variable name, because the two are not always
- * equal — the jaeger manifest key is `auth` and CI feeds it from `JAEGER_BASIC_AUTH`. A gate that
- * compared one flat set of names would report that correct wiring as drift.
+ * equal — a manifest key stays lowercase (e.g. `auth`) while its CI variable is qualified and
+ * SCREAMING_SNAKE (e.g. `INGRESS_AUTH`). A gate that compared one flat set of names would
+ * report that correct wiring as drift.
  */
 
 const fs = require('fs');

@@ -4,6 +4,11 @@ metadata:
   name: cribstop-web
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod # TLS cert for dev
+    # Basic auth in dev only (#255). Same credential as jaeger/api-gateway. Not on
+    # prod: the public web app stays open there.
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: ingress-secret
+    nginx.ingress.kubernetes.io/auth-realm: "Authentication Required - Cribstop Web (dev)"
 spec:
   ingressClassName: nginx
   tls:

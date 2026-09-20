@@ -256,8 +256,10 @@ Provider mapping (Claude only — keep vendor names out of the rest of this guid
   committed value changed — ahead of the feature-branch gate, because that is the branch a
   credential gets experimented with on. To change a committed default on purpose, run the commit
   with `ALLOW_SECRET_VALUE_CHANGE=1`. Note the two name spaces are not one: the manifest KEY drives
-  the action relation (`auth`), the VARIABLE name drives the workflow relation (`JAEGER_BASIC_AUTH`
-  in CI, `JAEGER_AUTH` locally). A gate comparing one flat set would call correct wiring drift.
+  the action relation (`auth`), the VARIABLE name drives the workflow relation. `ingress-secret`
+  uses `INGRESS_AUTH` for both CI and local, by deliberate choice — a key and its variable name can
+  still differ (`auth` vs `INGRESS_AUTH`) even when CI and local agree with each other. A gate
+  comparing one flat set would call correct wiring drift.
 - **`pnpm-lock.yaml` is Prettier-ignored** — pnpm owns its formatting, so never reformat it. After
   any dependency change the gate is correctness, not style: `pnpm install --frozen-lockfile` must
   exit 0 (CI runs it in six places). Reconcile a failure with an install, never by hand-editing.
