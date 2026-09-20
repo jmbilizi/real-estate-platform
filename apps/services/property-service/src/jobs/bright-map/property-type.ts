@@ -19,10 +19,34 @@ const PROPERTY_SUB_TYPE_MAP: Readonly<Record<string, PropertyType>> = {
   Land: 'Land',
 };
 
+/**
+ * Bright leaves `PropertySubType` blank on every `Residential`/`Residential Lease` record on the
+ * live test feed (#207) — verified against all 1,216 such staged records on 2026-09-19, none of
+ * which carry a `PropertySubType`. `StructureDesignType` is the field Bright actually populates for
+ * a residential dwelling's structure, so it is the fallback vocabulary rather than a second guess:
+ * still a closed, wire-observed map, still fails closed on anything not listed (mobile/manufactured
+ * homes, parking spaces, and "Other" have no safe mapping and stay withheld).
+ */
+const STRUCTURE_DESIGN_TYPE_MAP: Readonly<Record<string, PropertyType>> = {
+  Detached: 'Single Family',
+  'Twin/Semi-Detached': 'Single Family',
+  'End of Row/Townhouse': 'Townhome',
+  'Interior Row/Townhouse': 'Townhome',
+  'Unit/Flat/Apartment': 'Condo',
+  'Penthouse Unit/Flat/Apartment': 'Condo',
+};
+
 export function mapPropertyType(payload: Readonly<Record<string, unknown>>): PropertyType | null {
   const subType = payload.PropertySubType;
-  if (typeof subType !== 'string') {
-    return null;
+  if (typeof subType === 'string' && subType.trim().length > 0) {
+    const mapped = PROPERTY_SUB_TYPE_MAP[subType.trim()];
+    if (mapped) {
+      return mapped;
+    }
   }
-  return PROPERTY_SUB_TYPE_MAP[subType.trim()] ?? null;
+  const structureDesignType = payload.StructureDesignType;
+  if (typeof structureDesignType === 'string') {
+    return STRUCTURE_DESIGN_TYPE_MAP[structureDesignType.trim()] ?? null;
+  }
+  return null;
 }

@@ -9,11 +9,32 @@ describe('mapPropertyType', () => {
     expect(mapPropertyType({ PropertySubType: 'Land' })).toBe('Land');
   });
 
-  it('fails closed on an unrecognised sub type', () => {
+  it('fails closed on an unrecognised sub type with no structure design type to fall back on', () => {
     expect(mapPropertyType({ PropertySubType: 'Mobile Home' })).toBeNull();
   });
 
   it('fails closed when the field is missing', () => {
     expect(mapPropertyType({})).toBeNull();
+  });
+
+  it('falls back to StructureDesignType when PropertySubType is blank (#207)', () => {
+    expect(mapPropertyType({ StructureDesignType: 'Detached' })).toBe('Single Family');
+    expect(mapPropertyType({ StructureDesignType: 'Twin/Semi-Detached' })).toBe('Single Family');
+    expect(mapPropertyType({ StructureDesignType: 'End of Row/Townhouse' })).toBe('Townhome');
+    expect(mapPropertyType({ StructureDesignType: 'Interior Row/Townhouse' })).toBe('Townhome');
+    expect(mapPropertyType({ StructureDesignType: 'Unit/Flat/Apartment' })).toBe('Condo');
+    expect(mapPropertyType({ StructureDesignType: 'Penthouse Unit/Flat/Apartment' })).toBe('Condo');
+  });
+
+  it('prefers PropertySubType over StructureDesignType when both are present', () => {
+    expect(
+      mapPropertyType({ PropertySubType: 'Land', StructureDesignType: 'Detached' }),
+    ).toBe('Land');
+  });
+
+  it('fails closed on an unrecognised structure design type', () => {
+    expect(mapPropertyType({ StructureDesignType: 'Manufactured' })).toBeNull();
+    expect(mapPropertyType({ StructureDesignType: 'Mobile Pre 1976' })).toBeNull();
+    expect(mapPropertyType({ StructureDesignType: 'Other' })).toBeNull();
   });
 });
