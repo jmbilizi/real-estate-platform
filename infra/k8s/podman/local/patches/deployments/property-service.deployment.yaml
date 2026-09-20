@@ -28,6 +28,12 @@ spec:
               value: "development"
             - name: PROPERTY_SERVICE_SEED_ON_START
               value: "1"
+            # Local-only recovery from a renumbered migration file (#223): a `pgmigrations` row
+            # with no matching file is stale local state here, never real deploy history. Only
+            # this overlay sets it — not hetzner/dev, which is a persistent environment where the
+            # same row would be genuine history.
+            - name: PROPERTY_SERVICE_MIGRATION_SELF_HEAL
+              value: "1"
           # Raised only where seeding runs. The base 128Mi limit was sized for ONE short-lived
           # migration process; seeding spawns a second Node process while migrate.js is still
           # resident, so two Node runtimes share this cgroup. Exceeding it is a SIGKILL, which

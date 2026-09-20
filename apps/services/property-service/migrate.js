@@ -15,13 +15,28 @@
  * same way account-service devs use the EF Core CLI rather than this path.
  */
 
+const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { Client } = require('pg');
 const { runner } = require('node-pg-migrate');
+const {
+  isSelfHealEnabled,
+  parseOrphanedMigrationName,
+  findRenumberedMigrationName,
+  renameOrphanedMigrationRecord,
+} = require('./migrate-self-heal');
 
 // Mirrors MigrateWithRetryAsync: 12 attempts, 2s backoff doubling to a 10s ceiling.
 const MAX_ATTEMPTS = 12;
 const INITIAL_DELAY_MS = 2000;
 const MAX_DELAY_MS = 10000;
+
+const MIGRATIONS_TABLE = 'pgmigrations';
+const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
+
+// Bounds the local self-heal loop. One stale record is the observed case (#223); this allows a
+// few more without risking an infinite loop if something else keeps reproducing the condition.
+const MAX_SELF_HEAL_ATTEMPTS = 5;
 
 /**
  * Transient startup failures only — anything else (bad SQL, a genuinely wrong credential)
@@ -57,6 +72,58 @@ function isTransientStartupFailure(error) {
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Renames one stale `pgmigrations` row via a short-lived connection of its own, so the retry
+ * loop's connection lifecycle stays untouched by this local-only path.
+ */
+async function healOrphanedMigrationRecord(databaseUrl, oldName, newName) {
+  const client = new Client({ connectionString: databaseUrl });
+  await client.connect();
+  try {
+    await renameOrphanedMigrationRecord(client, MIGRATIONS_TABLE, oldName, newName);
+  } finally {
+    await client.end();
+  }
+}
+
+/**
+ * Runs the transient-retry loop once. Throws whatever `runner()` throws once startup retries
+ * are exhausted or the failure is not transient.
+ *
+ * `checkOrder` stays true until a rename happens: a renamed row keeps its ORIGINAL position in
+ * run order (`ORDER BY run_on, id`), which no longer matches its position in the renumbered file
+ * list once migrations were inserted between the old and new numbers. `getMigrationsToRun()`
+ * decides what to apply purely by name membership, so disabling the position check after a
+ * rename is what lets the genuinely-pending migrations run in file order without re-executing
+ * the renamed one.
+ */
+async function attemptMigrations(databaseUrl, checkOrder) {
+  let delay = INITIAL_DELAY_MS;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      await runner({
+        databaseUrl,
+        dir: 'migrations',
+        direction: 'up',
+        migrationsTable: MIGRATIONS_TABLE,
+        checkOrder,
+      });
+      console.info('Migrations completed successfully.');
+      return;
+    } catch (error) {
+      if (!isTransientStartupFailure(error) || attempt === MAX_ATTEMPTS) {
+        throw error;
+      }
+      console.error(
+        `Database not ready. Retrying ${attempt}/${MAX_ATTEMPTS} in ${delay / 1000}s. ${error.message}`,
+      );
+      await sleep(delay);
+      delay = Math.min(delay * 2, MAX_DELAY_MS);
+    }
+  }
+}
 
 /**
  * Sample-data seeding for the environments that opt in (#111), run here rather than on a
@@ -104,38 +171,32 @@ async function main() {
     throw new Error('DATABASE_URL is not set — the Deployment composes it from PROPERTY_DB_*.');
   }
 
-  let delay = INITIAL_DELAY_MS;
-  let migrated = false;
+  const selfHealAllowed = isSelfHealEnabled();
+  let selfHealAttemptsLeft = selfHealAllowed ? MAX_SELF_HEAL_ATTEMPTS : 0;
+  // checkOrder flips to false after the first rename and stays false — see attemptMigrations().
+  let checkOrder = true;
 
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  for (;;) {
     try {
-      await runner({
-        databaseUrl,
-        dir: 'migrations',
-        direction: 'up',
-        migrationsTable: 'pgmigrations',
-      });
-      console.info('Migrations completed successfully.');
-      // Outside the catch below on purpose: a seed failure is never a transient startup failure and
-      // must not be fed back into the migration retry loop.
-      migrated = true;
+      await attemptMigrations(databaseUrl, checkOrder);
       break;
     } catch (error) {
-      if (!isTransientStartupFailure(error) || attempt === MAX_ATTEMPTS) {
+      const orphanedName = selfHealAttemptsLeft > 0 ? parseOrphanedMigrationName(error) : null;
+      const newName = orphanedName ? findRenumberedMigrationName(orphanedName, MIGRATIONS_DIR) : null;
+      // Only the exact "renamed migration, one unambiguous current file" condition self-heals.
+      // Any other failure — including a genuine ordering problem, or an orphan whose migration
+      // was truly removed rather than renumbered — rethrows untouched.
+      if (!newName) {
         throw error;
       }
-      console.error(
-        `Database not ready. Retrying ${attempt}/${MAX_ATTEMPTS} in ${delay / 1000}s. ${error.message}`,
+      console.warn(
+        `Migration self-heal: "${orphanedName}" is recorded in ${MIGRATIONS_TABLE} but was ` +
+          `renumbered to "${newName}" (local only). Renaming the record and retrying.`,
       );
-      await sleep(delay);
-      delay = Math.min(delay * 2, MAX_DELAY_MS);
+      await healOrphanedMigrationRecord(databaseUrl, orphanedName, newName);
+      checkOrder = false;
+      selfHealAttemptsLeft -= 1;
     }
-  }
-
-  // Unreachable: the loop either sets this or throws on its last attempt. Asserted rather than
-  // assumed, because seeding an unmigrated database would fail in a far more confusing place.
-  if (!migrated) {
-    throw new Error('Migrations did not complete and no error was raised.');
   }
 
   seedIfRequested();
