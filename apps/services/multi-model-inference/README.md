@@ -57,7 +57,7 @@ pnpm run nx:python-test
 uv run pytest apps/services/multi-model-inference/tests -v
 ```
 
-18 tests covering model registry, embeddings, health probes, input validation, and service info.
+21 tests covering model registry, embeddings, health probes, input validation, and service info.
 
 ## API Reference
 
@@ -102,7 +102,8 @@ Liveness probe — returns `{"status": "ok"}` if the process is running.
 
 ### `GET /ready`
 
-Readiness probe — returns `{"status": "ready"}` only when all models are loaded.
+Readiness probe. Returns 200 with `{"status": "ready"}` when all models are loaded. Returns 503 with
+`{"status": "loading"}` otherwise.
 
 ### `GET /`
 
@@ -183,7 +184,7 @@ multi-model-inference/
 │   │   └── embeddings.py    # POST /api/v1/embeddings
 │   └── schemas/
 │       └── embeddings.py    # Request/response Pydantic models
-├── tests/                   # 18 unit tests
+├── tests/                   # 21 unit tests
 ├── Dockerfile               # Multi-stage production build
 ├── pyproject.toml           # Dependencies + tool config
 └── project.json             # Nx project configuration
