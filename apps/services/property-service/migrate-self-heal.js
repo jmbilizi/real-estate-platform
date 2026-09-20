@@ -100,10 +100,7 @@ function findRenumberedMigrationName(orphanedName, migrationsDir) {
  * controls the connection's lifetime and this module never has to construct one.
  */
 async function renameOrphanedMigrationRecord(client, migrationsTable, oldName, newName) {
-  await client.query(`UPDATE ${migrationsTable} SET name = $1 WHERE name = $2`, [
-    newName,
-    oldName,
-  ]);
+  await client.query(`UPDATE ${migrationsTable} SET name = $1 WHERE name = $2`, [newName, oldName]);
 }
 
 module.exports = {

@@ -182,7 +182,9 @@ async function main() {
       break;
     } catch (error) {
       const orphanedName = selfHealAttemptsLeft > 0 ? parseOrphanedMigrationName(error) : null;
-      const newName = orphanedName ? findRenumberedMigrationName(orphanedName, MIGRATIONS_DIR) : null;
+      const newName = orphanedName
+        ? findRenumberedMigrationName(orphanedName, MIGRATIONS_DIR)
+        : null;
       // Only the exact "renamed migration, one unambiguous current file" condition self-heals.
       // Any other failure — including a genuine ordering problem, or an orphan whose migration
       // was truly removed rather than renumbered — rethrows untouched.
