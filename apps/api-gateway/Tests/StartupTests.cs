@@ -3,109 +3,95 @@
 // </copyright>
 
 using FluentAssertions;
-using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Ocelot.DependencyInjection;
 using Xunit;
 
 namespace ApiGateway.Tests
 {
     /// <summary>
-    /// Tests for the gateway startup configuration.
-    /// Regression test for issue #170: the gateway crashed on startup when OTEL_ENABLED=false
-    /// or when OTEL_EXPORTER_OTLP_ENDPOINT was invalid, because Configure called
-    /// UseOpenTelemetryPrometheusScrapingEndpoint() unconditionally without verifying that
-    /// MeterProvider was actually registered. The fix conditionally registers the endpoint only
-    /// when ConfigureOpenTelemetry successfully completes.
+    /// Host-startup tests for <see cref="Startup"/> (#170).
+    /// <para>
+    /// The gateway crashed at startup whenever <c>ConfigureOpenTelemetry</c> returned early, because
+    /// <c>Configure</c> called <c>UseOpenTelemetryPrometheusScrapingEndpoint()</c> unconditionally
+    /// and that resolves a <c>MeterProvider</c> which was never registered. Two paths return early:
+    /// <c>OTEL_ENABLED=false</c>, and an <c>OTEL_EXPORTER_OTLP_ENDPOINT</c> that fails URI validation.
+    /// </para>
+    /// <para>
+    /// These start a real host, because the defect only appears when the full pipeline runs.
+    /// Constructing <see cref="Startup"/> or reading configuration proves nothing — an earlier
+    /// version of this file did exactly that and passed with the fix reverted.
+    /// </para>
+    /// <para>
+    /// ONE <see cref="Startup"/> instance spans both phases on purpose. The flag the fix sets lives
+    /// on the instance, so a test that built a second instance for <c>Configure</c> would not be
+    /// exercising the fix at all.
+    /// </para>
     /// </summary>
     public class StartupTests
     {
         /// <summary>
-        /// Verifies that the gateway host starts successfully when OTEL_ENABLED=false.
-        /// Without the fix, this would crash when Configure() calls
-        /// UseOpenTelemetryPrometheusScrapingEndpoint() unconditionally.
+        /// The host starts when tracing is switched off. Without the fix this throws.
         /// </summary>
+        /// <returns>A task that completes when the assertion has run.</returns>
         [Fact]
         public async Task GatewayHost_WithOtelDisabled_StartsSuccessfully()
         {
-            // Arrange
-            var configuration = new ConfigurationBuilder()
-                .AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    { "OTEL_ENABLED", "false" },
-                })
-                .Build();
+            using var host = await StartHostAsync(new Dictionary<string, string?>
+            {
+                { "OTEL_ENABLED", "false" },
+            }).ConfigureAwait(true);
 
-            // Act — start the host; this would crash before the fix
-            using var host = await new HostBuilder()
-                .ConfigureLogging(logging => logging.ClearProviders())
-                .ConfigureWebHost(web =>
-                {
-                    web.UseTestServer();
-                    web.ConfigureServices(services =>
-                    {
-                        // Minimal Ocelot setup to exercise the gateway startup path
-                        services.AddOcelot(configuration).AddPolly();
-                    });
-                    web.Configure(app =>
-                    {
-                        var startup = new Startup(configuration);
-                        startup.ConfigureServices(services);
-                        startup.Configure(app);
-                    });
-                })
-                .StartAsync();
-
-            // Assert — the host should start without throwing
-            host.Should().NotBeNull();
-            var client = host.GetTestClient();
-            client.Should().NotBeNull();
+            host.GetTestClient().Should().NotBeNull();
         }
 
         /// <summary>
-        /// Verifies that the gateway host starts successfully with an invalid OTLP endpoint.
-        /// ConfigureOpenTelemetry should detect the invalid endpoint, set _otelEnabled=false,
-        /// and Configure() should skip registering the Prometheus endpoint, avoiding the crash.
+        /// The host starts when the OTLP endpoint is malformed. Without the fix this throws.
         /// </summary>
+        /// <returns>A task that completes when the assertion has run.</returns>
         [Fact]
         public async Task GatewayHost_WithInvalidOtlpEndpoint_StartsSuccessfully()
         {
-            // Arrange
+            using var host = await StartHostAsync(new Dictionary<string, string?>
+            {
+                { "OTEL_ENABLED", "true" },
+                { "OTEL_EXPORTER_OTLP_ENDPOINT", "not-a-valid-uri" },
+            }).ConfigureAwait(true);
+
+            host.GetTestClient().Should().NotBeNull();
+        }
+
+        /// <summary>
+        /// Starts a test host driven by the real <see cref="Startup"/>.
+        /// </summary>
+        /// <param name="settings">Configuration values for this case.</param>
+        /// <returns>The started host.</returns>
+        private static async Task<IHost> StartHostAsync(Dictionary<string, string?> settings)
+        {
             var configuration = new ConfigurationBuilder()
-                .AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    { "OTEL_ENABLED", "true" },
-                    { "OTEL_EXPORTER_OTLP_ENDPOINT", "not-a-valid-uri" },
-                })
+                .AddInMemoryCollection(settings)
                 .Build();
 
-            // Act — start the host; this would crash before the fix
-            using var host = await new HostBuilder()
+            // One instance across both phases — see the class remarks.
+            var startup = new Startup(configuration);
+
+            return await new HostBuilder()
                 .ConfigureLogging(logging => logging.ClearProviders())
                 .ConfigureWebHost(web =>
                 {
                     web.UseTestServer();
-                    web.ConfigureServices(services =>
-                    {
-                        services.AddOcelot(configuration).AddPolly();
-                    });
+                    web.ConfigureServices(startup.ConfigureServices);
                     web.Configure(app =>
-                    {
-                        var startup = new Startup(configuration);
-                        startup.ConfigureServices(services);
-                        startup.Configure(app);
-                    });
+                        startup.Configure(
+                            app,
+                            app.ApplicationServices.GetRequiredService<IWebHostEnvironment>()));
                 })
-                .StartAsync();
-
-            // Assert — the host should start without throwing
-            host.Should().NotBeNull();
-            var client = host.GetTestClient();
-            client.Should().NotBeNull();
+                .StartAsync()
+                .ConfigureAwait(true);
         }
     }
 }
