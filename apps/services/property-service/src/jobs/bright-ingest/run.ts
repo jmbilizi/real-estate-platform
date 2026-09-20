@@ -60,6 +60,8 @@ import {
 } from './run-log';
 import { type BrightStagingStore, createStagingStore } from './staging-store';
 
+import { type BrightMapRunReport, ZERO_MAP_REPORT } from '../bright-map/report';
+
 export interface BrightIngestRunResult {
   readonly runId: string;
   readonly outcome: BrightRunOutcome;
@@ -82,7 +84,17 @@ export interface RunBrightIngestOptions extends BrightClientOptions {
   readonly store?: BrightStagingStore;
   readonly sleep?: (ms: number) => Promise<void>;
   readonly random?: () => number;
+  /**
+   * Maps `bright_staging_records` into the consumer schema (#93), run after every resource has
+   * replicated. Defaults to a no-op that reports zero work: a test that does not inject this (and
+   * every test in this file today) exercises replication only, exactly as before #93. Production
+   * wiring lives in `bright-ingest.main.ts`, which passes the real
+   * `mapStagedBrightProperties(getPool(), ...)` — never here, so this file never imports `db/pool`.
+   */
+  readonly mapRecords?: (params: { feed: 'test' | 'production' }) => Promise<BrightMapRunReport>;
 }
+
+const NO_OP_MAP_RECORDS = async (): Promise<BrightMapRunReport> => ZERO_MAP_REPORT;
 
 /** ISO-8601 with a `Z` suffix — one wire format per service (see the project guide). */
 function instant(at: Date): string {
@@ -122,12 +134,13 @@ function toReport(
 function summarise(
   reports: readonly BrightResourceReport[],
   deletionsDetected: number,
+  mapping: BrightMapRunReport = ZERO_MAP_REPORT,
 ): BrightRunCounts {
   return {
     recordsFetched: reports.reduce((total, r) => total + r.recordsFetched, 0),
     recordsStaged: reports.reduce((total, r) => total + r.recordsStaged, 0),
-    // #93 maps staging into the consumer schema. This run writes no consumer row.
-    recordsUpserted: 0,
+    // #93 maps staging into the consumer schema. Zero until mapRecords() actually ran and published.
+    recordsUpserted: mapping.published,
     deletionsDetected,
     retries: reports.reduce((total, r) => total + r.retries, 0),
     pagesFetched: reports.reduce((total, r) => total + r.pagesFetched, 0),
@@ -138,6 +151,7 @@ function replicatedMessage(
   config: Extract<BrightConfig, { state: 'configured' }>,
   reports: readonly BrightResourceReport[],
   counts: BrightRunCounts,
+  mapping: BrightMapRunReport,
 ): string {
   const behind = reports.filter((r) => r.cappedByPageLimit).map((r) => r.resource);
   const stalled = reports.filter((r) => r.stalled).map((r) => r.resource);
@@ -155,7 +169,11 @@ function replicatedMessage(
     (starved.length === 0
       ? ''
       : `STARVED on a tie block, the cursor cannot advance: ${starved.join(', ')}. `) +
-    'No consumer row was written: mapping is #93.'
+    (mapping.staged === 0
+      ? 'No consumer row was written: mapping is #93.'
+      : `Mapped ${mapping.mapped}/${mapping.staged} staged record(s), published ${mapping.published}, ` +
+        `withheld ${mapping.withheld}, taken down ${mapping.takenDown}, sample-marked ` +
+        `${mapping.sampleMarked}.`)
   );
 }
 
@@ -275,9 +293,12 @@ export async function runBrightIngest(
         reports.push(toReport(result, replication.cursorMaxAgeHours));
       }
 
-      counts = summarise(reports, deletionsDetected);
+      const mapRecords = options.mapRecords ?? NO_OP_MAP_RECORDS;
+      const mapping = await mapRecords({ feed: config.feed });
+
+      counts = summarise(reports, deletionsDetected, mapping);
       outcome = 'replicated';
-      message = replicatedMessage(config, reports, counts);
+      message = replicatedMessage(config, reports, counts, mapping);
     } catch (error) {
       outcome = 'failed';
       message = error instanceof Error ? error.message : String(error);

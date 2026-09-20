@@ -90,6 +90,7 @@ export async function upsertListing(client: Queryable, row: ListingRow): Promise
   await client.query(
     `INSERT INTO listings
        (id, property_id, unit_id, title, offer_kind, consumer_status, status, source,
+        source_system, source_listing_key, source_listing_id, source_modification_timestamp,
         list_price, close_price, close_date,
         beds, baths_full, baths_half, living_sqft, lot_sqft, year_built,
         neighborhood, city, state, zip5, latitude, longitude,
@@ -102,17 +103,62 @@ export async function upsertListing(client: Queryable, row: ListingRow): Promise
         office_broker_lead_phone, office_broker_lead_email, listing_agent_name,
         is_sample, last_updated)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
-             $9, $10, $11,
-             $12, $13, $14, $15, $16, $17,
-             $18, $19, $20, $21, $22, $23,
-             $24, $25, $26, $27,
+             $9, $10, $11, $12,
+             $13, $14, $15,
+             $16, $17, $18, $19, $20, $21,
+             $22, $23, $24, $25, $26, $27,
              $28, $29, $30, $31,
-             $32, $33,
-             $34, $35, $36,
-             $37, $38,
-             $39, $40, $41, $42,
-             $43, $44, $45,
-             $46, $47)`,
+             $32, $33, $34, $35,
+             $36, $37,
+             $38, $39, $40,
+             $41, $42,
+             $43, $44, $45, $46,
+             $47, $48, $49,
+             $50, $51)
+     -- Re-ingesting the same feed record (source_system, source_listing_key) reuses the SAME id
+     -- (resolved by the caller, see upsertListingBySourceKey), so this is the idempotent re-run
+     -- path (#93): every column the INSERT list carries is also refreshed on conflict.
+     ON CONFLICT (id) DO UPDATE SET
+       title = EXCLUDED.title,
+       consumer_status = EXCLUDED.consumer_status,
+       status = EXCLUDED.status,
+       source_system = EXCLUDED.source_system,
+       source_listing_id = EXCLUDED.source_listing_id,
+       source_modification_timestamp = EXCLUDED.source_modification_timestamp,
+       list_price = EXCLUDED.list_price,
+       close_price = EXCLUDED.close_price,
+       close_date = EXCLUDED.close_date,
+       beds = EXCLUDED.beds,
+       baths_full = EXCLUDED.baths_full,
+       baths_half = EXCLUDED.baths_half,
+       living_sqft = EXCLUDED.living_sqft,
+       lot_sqft = EXCLUDED.lot_sqft,
+       year_built = EXCLUDED.year_built,
+       neighborhood = EXCLUDED.neighborhood,
+       city = EXCLUDED.city,
+       state = EXCLUDED.state,
+       zip5 = EXCLUDED.zip5,
+       latitude = EXCLUDED.latitude,
+       longitude = EXCLUDED.longitude,
+       description = EXCLUDED.description,
+       description_source = EXCLUDED.description_source,
+       description_moderation = EXCLUDED.description_moderation,
+       amenities = EXCLUDED.amenities,
+       internet_display_allowed = EXCLUDED.internet_display_allowed,
+       address_display_allowed = EXCLUDED.address_display_allowed,
+       price_display_allowed = EXCLUDED.price_display_allowed,
+       price_history_display_allowed = EXCLUDED.price_history_display_allowed,
+       media_display_allowed = EXCLUDED.media_display_allowed,
+       days_on_market_display_allowed = EXCLUDED.days_on_market_display_allowed,
+       days_on_market = EXCLUDED.days_on_market,
+       broker_name = EXCLUDED.broker_name,
+       broker_phone = EXCLUDED.broker_phone,
+       broker_email = EXCLUDED.broker_email,
+       office_name = EXCLUDED.office_name,
+       office_broker_lead_phone = EXCLUDED.office_broker_lead_phone,
+       office_broker_lead_email = EXCLUDED.office_broker_lead_email,
+       listing_agent_name = EXCLUDED.listing_agent_name,
+       last_updated = EXCLUDED.last_updated`,
     [
       row.id,
       row.property_id,
@@ -122,6 +168,10 @@ export async function upsertListing(client: Queryable, row: ListingRow): Promise
       row.consumer_status,
       row.status,
       row.source,
+      row.source_system ?? null,
+      row.source_listing_key ?? null,
+      row.source_listing_id ?? null,
+      row.source_modification_timestamp ?? null,
       row.list_price,
       row.close_price,
       row.close_date,
@@ -181,6 +231,36 @@ export async function upsertListing(client: Queryable, row: ListingRow): Promise
   });
 
   return row.id;
+}
+
+/**
+ * Idempotent upsert keyed on the feed's own identity, `(source_system, source_listing_key)` — the
+ * natural key a re-ingested MLS record carries, not the internal `id` a caller could otherwise mint
+ * fresh on every pass and duplicate the listing (#93).
+ *
+ * Resolves the existing `id` for that key, if any, then delegates to `upsertListing()` with that same
+ * `id` so its `ON CONFLICT (id) DO UPDATE` — and its terminal-freeze check — apply unchanged. A
+ * terminal listing is left untouched rather than re-snapshotted: `upsertListing()` throws on that
+ * path, so a re-run of the same batch fails on the very record the freeze exists to protect. Callers
+ * that map from a staging table are expected to be re-run after correcting a rejection, not to retry
+ * every record blindly — this returns the frozen id for a terminal match instead of throwing.
+ */
+export async function upsertListingBySourceKey(
+  client: Queryable,
+  row: Omit<ListingRow, 'id'> & { source_system: string; source_listing_key: string },
+): Promise<string> {
+  const { rows: existing } = await client.query(
+    `SELECT l.id, s.is_terminal
+       FROM listings l JOIN listing_statuses s ON s.code = l.status
+      WHERE l.source_system = $1 AND l.source_listing_key = $2`,
+    [row.source_system, row.source_listing_key],
+  );
+  const existingId = existing[0]?.id;
+  if (typeof existingId === 'string' && existing[0]?.is_terminal) {
+    return existingId;
+  }
+  const id = typeof existingId === 'string' ? existingId : randomUUID();
+  return upsertListing(client, { ...row, id });
 }
 
 /**

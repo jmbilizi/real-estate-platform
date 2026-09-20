@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { applyTerminalCorrection, insertMedia, Queryable } from './write';
+import { applyTerminalCorrection, insertMedia, Queryable, upsertListingBySourceKey } from './write';
+import { ListingRow } from '../seed/types';
 
 /**
  * Guards on the terminal-correction escape hatch.
@@ -197,5 +198,145 @@ describe('insertMedia carries alt_text (#105)', () => {
       .size;
 
     expect(placeholderCount).toBe(columnCount);
+  });
+});
+
+/**
+ * Idempotent re-ingest keyed on the feed's own identity (#93). A Bright pass is re-run from
+ * staging whenever a mapping bug is fixed, so re-processing the same `ListingKey` must land on the
+ * SAME `properties`/`listings` rows, never mint a second copy.
+ */
+describe('upsertListingBySourceKey', () => {
+  const baseRow: Omit<ListingRow, 'id'> & { source_system: string; source_listing_key: string } = {
+    property_id: 'property-1',
+    unit_id: null,
+    title: 'Single Family in Arlington, VA',
+    offer_kind: 'sale',
+    consumer_status: 'Active',
+    status: 'Active',
+    source: 'brightMLS',
+    source_system: 'BrightMLS',
+    source_listing_key: 'BR-1',
+    source_listing_id: 'MLS123',
+    source_modification_timestamp: '2026-09-18T00:00:00Z',
+    list_price: 500000,
+    close_price: null,
+    close_date: null,
+    beds: null,
+    baths_full: null,
+    baths_half: null,
+    living_sqft: null,
+    lot_sqft: null,
+    year_built: null,
+    neighborhood: null,
+    city: 'Arlington',
+    state: 'VA',
+    zip5: '22201',
+    latitude: null,
+    longitude: null,
+    description: null,
+    description_source: null,
+    amenities: [],
+    description_moderation: 'approved',
+    featured: false,
+    featured_reason: null,
+    price_reduced: false,
+    new_construction: false,
+    internet_display_allowed: true,
+    address_display_allowed: true,
+    price_display_allowed: false,
+    price_history_display_allowed: false,
+    media_display_allowed: false,
+    days_on_market_display_allowed: false,
+    days_on_market: null,
+    broker_name: 'Acme Realty',
+    broker_phone: '2025551234',
+    broker_email: 'office@acme.example',
+    office_name: 'Acme Realty',
+    office_broker_lead_phone: null,
+    office_broker_lead_email: null,
+    listing_agent_name: null,
+    is_sample: true,
+    last_updated: '2026-09-18T00:00:00Z',
+  };
+
+  function createFakeClient(options: {
+    lookupRows: Record<string, unknown>[];
+    factsRows?: Record<string, unknown>[];
+  }): { client: Queryable; queries: RecordedQuery[] } {
+    const queries: RecordedQuery[] = [];
+    const client: Queryable = {
+      query: (text: string, values?: unknown[]) => {
+        queries.push({ text, values });
+        if (text.includes('l.source_system')) {
+          return Promise.resolve({ rows: options.lookupRows });
+        }
+        if (text.includes('is_terminal') && text.includes('l.id = $1')) {
+          // assertNotTerminal, called from upsertListing itself.
+          return Promise.resolve({
+            rows: options.lookupRows.length > 0 ? [{ is_terminal: false }] : [],
+          });
+        }
+        if (text.includes('FROM properties p')) {
+          return Promise.resolve({
+            rows: options.factsRows ?? [
+              {
+                beds: 3,
+                baths_full: 2,
+                baths_half: 0,
+                living_sqft: 1500,
+                lot_sqft: 4000,
+                year_built: 1990,
+                neighborhood: null,
+                city: 'Arlington',
+                state: 'VA',
+                zip5: '22201',
+                latitude: null,
+                longitude: null,
+                is_sample: true,
+              },
+            ],
+          });
+        }
+        return Promise.resolve({ rows: [] });
+      },
+    };
+    return { client, queries };
+  }
+
+  it('inserts a new listing with a fresh id when no match exists', async () => {
+    const { client, queries } = createFakeClient({ lookupRows: [] });
+
+    const id = await upsertListingBySourceKey(client, baseRow);
+
+    expect(typeof id).toBe('string');
+    const insert = queries.find((q) => q.text.includes('INSERT INTO listings'));
+    expect(insert?.values?.[0]).toBe(id);
+    expect(insert?.values?.[8]).toBe('BrightMLS');
+    expect(insert?.values?.[9]).toBe('BR-1');
+  });
+
+  it('reuses the existing id and updates in place on a second pass', async () => {
+    const { client, queries } = createFakeClient({
+      lookupRows: [{ id: 'listing-1', is_terminal: false }],
+    });
+
+    const id = await upsertListingBySourceKey(client, baseRow);
+
+    expect(id).toBe('listing-1');
+    const insert = queries.find((q) => q.text.includes('INSERT INTO listings'));
+    expect(insert?.text).toContain('ON CONFLICT (id) DO UPDATE');
+    expect(insert?.values?.[0]).toBe('listing-1');
+  });
+
+  it('leaves a terminal match untouched instead of re-snapshotting it', async () => {
+    const { client, queries } = createFakeClient({
+      lookupRows: [{ id: 'listing-1', is_terminal: true }],
+    });
+
+    const id = await upsertListingBySourceKey(client, baseRow);
+
+    expect(id).toBe('listing-1');
+    expect(queries.some((q) => q.text.includes('INSERT INTO listings'))).toBe(false);
   });
 });

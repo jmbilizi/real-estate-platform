@@ -113,6 +113,19 @@ export interface ListingRow {
   consumer_status: ListingStatus | null;
   status: string;
   source: ListingSource;
+  /**
+   * RESO `OriginatingSystemName`-equivalent identity for a feed-sourced listing, and the natural key
+   * `upsertListingBySourceKey()` re-ingests on (#93). Optional and defaults to `null`: a seed/internal
+   * row has no feed origin, and a permissive default here is safe — unlike the suppression flags
+   * below, omitting it cannot publish anything a seller withheld.
+   */
+  source_system?: string | null;
+  /** The feed's own listing key (e.g. Bright `ListingKey`). Paired with `source_system` above. */
+  source_listing_key?: string | null;
+  /** The feed's human-facing MLS number (e.g. Bright `ListingId`), display-only. */
+  source_listing_id?: string | null;
+  /** The feed's own last-modified instant, for freshness — independent of `last_updated`. */
+  source_modification_timestamp?: string | null;
   list_price: number;
   close_price: number | null;
   close_date: string | null;
