@@ -37,11 +37,6 @@ namespace ApiGateway
         /// </summary>
         private const string GatewaySwaggerTitle = "Gateway";
 
-        /// <summary>
-        /// Indicates whether OpenTelemetry (tracing and metrics) is enabled.
-        /// Set during ConfigureServices; checked in Configure to conditionally register endpoints.
-        /// </summary>
-        private bool _otelEnabled = true;
 
         // LoggerMessage delegates for performance (CA1848)
         private static readonly Action<ILogger, Exception?> LogTracingDisabledAction =
@@ -61,6 +56,12 @@ namespace ApiGateway
                 LogLevel.Information,
                 new EventId(3, "OpenTelemetryConfigured"),
                 "OpenTelemetry configured: Endpoint={Endpoint}, Service={Service}, Sampler={Sampler}:{Rate}, Pod={Pod}");
+
+        /// <summary>
+        /// Indicates whether OpenTelemetry (tracing and metrics) is enabled.
+        /// Set during ConfigureServices; checked in Configure to conditionally register endpoints.
+        /// </summary>
+        private bool _otelEnabled = true;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Startup"/> class.

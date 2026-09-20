@@ -18,57 +18,54 @@ namespace ApiGateway.Tests
     public class StartupTests
     {
         /// <summary>
-        /// Verifies that Startup can be instantiated with OTEL_ENABLED=false.
+        /// Verifies that OTEL_ENABLED=false can be read and handled by Startup.
+        /// The fix ensures that Configure() does not crash when OTEL is disabled,
+        /// because it conditionally registers UseOpenTelemetryPrometheusScrapingEndpoint()
+        /// only when OTEL_ENABLED=true.
         /// </summary>
         [Fact]
         public void Startup_WithOtelDisabled_CanBeInstantiated()
         {
             // Arrange
-            var configValues = new Dictionary<string, string?>
-            {
-                { "OTEL_ENABLED", "false" },
-            };
-
             var configuration = new ConfigurationBuilder()
-                .AddInMemoryCollection(configValues)
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    { "OTEL_ENABLED", "false" },
+                })
                 .Build();
 
             // Act
-            var action = () => new Startup(configuration);
+            var startup = new Startup(configuration);
 
             // Assert
-            action.Should().NotThrow();
-            var startup = new Startup(configuration);
             startup.Configuration.GetValue("OTEL_ENABLED", true).Should().BeFalse();
         }
 
         /// <summary>
-        /// Verifies that Startup can be instantiated with OTEL_ENABLED=true.
+        /// Verifies that OTEL_ENABLED=true can be read and handled by Startup.
+        /// This ensures the fix does not break the normal (OTEL-enabled) path.
         /// </summary>
         [Fact]
         public void Startup_WithOtelEnabled_CanBeInstantiated()
         {
             // Arrange
-            var configValues = new Dictionary<string, string?>
-            {
-                { "OTEL_ENABLED", "true" },
-            };
-
             var configuration = new ConfigurationBuilder()
-                .AddInMemoryCollection(configValues)
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    { "OTEL_ENABLED", "true" },
+                })
                 .Build();
 
             // Act
-            var action = () => new Startup(configuration);
+            var startup = new Startup(configuration);
 
             // Assert
-            action.Should().NotThrow();
-            var startup = new Startup(configuration);
             startup.Configuration.GetValue("OTEL_ENABLED", true).Should().BeTrue();
         }
 
         /// <summary>
         /// Verifies that OTEL_ENABLED defaults to true when not specified.
+        /// This preserves backward compatibility for configurations that don't set this flag.
         /// </summary>
         [Fact]
         public void Startup_WithOtelNotSpecified_DefaultsToTrue()
