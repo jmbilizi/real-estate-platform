@@ -12,6 +12,7 @@ const {
   selectOverrides,
   renderPatch,
   describeOverrides,
+  ClusterSecretReadError,
 } = require('./local-secret-overlay');
 
 const FIXTURES = path.join(__dirname, 'fixtures/secret-keys');
@@ -20,6 +21,10 @@ const fixtureOptions = { secretsDir: FIXTURES };
 function tempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
+
+// A cluster with none of the fixture Secrets deployed yet — the correct default for tests that are
+// not exercising preservation itself, so they never depend on a real kubectl or cluster.
+const noExistingCluster = () => null;
 
 test('process.loadEnvFile lets the real environment win, which AC 3 depends on', () => {
   // Guards the Node behaviour the override rule is built on, so a runtime upgrade that reversed it
@@ -65,6 +70,7 @@ test('no supplied key generates no overlay at all', () => {
       env: {},
       dir,
       records: deriveSecretKeys(fixtureOptions),
+      readClusterSecret: noExistingCluster,
     });
     assert.equal(result.dir, null);
     assert.equal(fs.existsSync(dir), false);
@@ -82,9 +88,11 @@ test('one supplied key writes one patch and chains to the committed overlay', ()
       env: { BETA_PASSWORD: 'supplied' },
       dir,
       records: deriveSecretKeys(fixtureOptions),
+      readClusterSecret: noExistingCluster,
     });
     assert.equal(result.dir, dir);
     assert.deepEqual(result.overriddenKeys, ['BETA_PASSWORD']);
+    assert.deepEqual(result.preservedKeys, []);
     assert.deepEqual(fs.readdirSync(dir).sort(), ['beta-secret.secret.yaml', 'kustomization.yaml']);
 
     const kustomization = fs.readFileSync(path.join(dir, 'kustomization.yaml'), 'utf-8');
@@ -100,9 +108,14 @@ test('a later run with no supplied key removes the stale overlay', () => {
   const dir = path.join(parent, 'secrets');
   const records = deriveSecretKeys(fixtureOptions);
   try {
-    ensureLocalSecretOverlay({ env: { BETA_PASSWORD: 'supplied' }, dir, records });
+    ensureLocalSecretOverlay({
+      env: { BETA_PASSWORD: 'supplied' },
+      dir,
+      records,
+      readClusterSecret: noExistingCluster,
+    });
     assert.equal(fs.existsSync(dir), true);
-    ensureLocalSecretOverlay({ env: {}, dir, records });
+    ensureLocalSecretOverlay({ env: {}, dir, records, readClusterSecret: noExistingCluster });
     assert.equal(fs.existsSync(dir), false);
   } finally {
     fs.rmSync(parent, { recursive: true, force: true });
@@ -117,10 +130,129 @@ test('the summary names keys and a count, never a value', () => {
       env: { BETA_PASSWORD: 'a-real-looking-secret' },
       dir,
       records: deriveSecretKeys(fixtureOptions),
+      readClusterSecret: noExistingCluster,
     });
     const summary = describeOverrides(result);
-    assert.match(summary, /Overriding 1 of 4 keys: BETA_PASSWORD/);
+    assert.match(summary, /Overriding 1 of 4 keys from \.env: BETA_PASSWORD/);
     assert.equal(summary.includes('a-real-looking-secret'), false);
+  } finally {
+    fs.rmSync(parent, { recursive: true, force: true });
+  }
+});
+
+// --- #218: a deploy must never downgrade a real cluster secret to the committed placeholder ---
+
+test('a key omitted from .env is preserved when the cluster already holds a real value', () => {
+  const parent = tempDir('overlay-');
+  const dir = path.join(parent, 'secrets');
+  try {
+    const result = ensureLocalSecretOverlay({
+      env: {}, // The exact defect trigger: an agent worktree with no .env at all.
+      dir,
+      records: deriveSecretKeys(fixtureOptions),
+      readClusterSecret: (secretName) =>
+        secretName === 'beta-secret' ? { BETA_PASSWORD: 'cluster-real-value' } : null,
+    });
+
+    assert.deepEqual(result.overriddenKeys, ['BETA_PASSWORD']);
+    assert.deepEqual(result.preservedKeys, ['BETA_PASSWORD']);
+
+    const patch = fs.readFileSync(path.join(dir, 'beta-secret.secret.yaml'), 'utf-8');
+    assert.match(patch, /BETA_PASSWORD: cluster-real-value/);
+
+    const summary = describeOverrides(result);
+    assert.match(summary, /Preserving 1 existing cluster value\(s\) not in \.env: BETA_PASSWORD/);
+    assert.equal(summary.includes('cluster-real-value'), false);
+  } finally {
+    fs.rmSync(parent, { recursive: true, force: true });
+  }
+});
+
+test('a Secret absent from the cluster falls back to the committed placeholder, not preservation', () => {
+  const parent = tempDir('overlay-');
+  const dir = path.join(parent, 'secrets');
+  try {
+    // First deploy into an empty cluster: readClusterSecret reports "not found" for everything.
+    const result = ensureLocalSecretOverlay({
+      env: {},
+      dir,
+      records: deriveSecretKeys(fixtureOptions),
+      readClusterSecret: noExistingCluster,
+    });
+    assert.equal(result.dir, null);
+    assert.deepEqual(result.preservedKeys, []);
+  } finally {
+    fs.rmSync(parent, { recursive: true, force: true });
+  }
+});
+
+test('an env override always wins over a preserved cluster value', () => {
+  const parent = tempDir('overlay-');
+  const dir = path.join(parent, 'secrets');
+  try {
+    const result = ensureLocalSecretOverlay({
+      env: { BETA_PASSWORD: 'from-dotenv' },
+      dir,
+      records: deriveSecretKeys(fixtureOptions),
+      readClusterSecret: () => ({ BETA_PASSWORD: 'cluster-real-value' }),
+    });
+    assert.deepEqual(result.preservedKeys, []);
+    const patch = fs.readFileSync(path.join(dir, 'beta-secret.secret.yaml'), 'utf-8');
+    assert.match(patch, /BETA_PASSWORD: from-dotenv/);
+  } finally {
+    fs.rmSync(parent, { recursive: true, force: true });
+  }
+});
+
+test('an undeterminable cluster state refuses the overlay instead of guessing', () => {
+  const records = deriveSecretKeys(fixtureOptions);
+  assert.throws(
+    () =>
+      ensureLocalSecretOverlay({
+        env: {},
+        dir: path.join(tempDir('overlay-'), 'secrets'),
+        records,
+        readClusterSecret: () => {
+          throw new ClusterSecretReadError('kubectl: connection refused');
+        },
+      }),
+    ClusterSecretReadError,
+  );
+});
+
+test('LOCAL_SECRET_RESET_TO_PLACEHOLDER=1 opts out of preservation on purpose', () => {
+  const parent = tempDir('overlay-');
+  const dir = path.join(parent, 'secrets');
+  try {
+    const result = ensureLocalSecretOverlay({
+      env: { LOCAL_SECRET_RESET_TO_PLACEHOLDER: '1' },
+      dir,
+      records: deriveSecretKeys(fixtureOptions),
+      readClusterSecret: () => {
+        throw new Error('must not be called when preservation is opted out');
+      },
+    });
+    assert.equal(result.dir, null);
+    assert.deepEqual(result.preservedKeys, []);
+  } finally {
+    fs.rmSync(parent, { recursive: true, force: true });
+  }
+});
+
+test('preserveFromCluster: false skips preservation without needing the reset flag', () => {
+  const parent = tempDir('overlay-');
+  const dir = path.join(parent, 'secrets');
+  try {
+    const result = ensureLocalSecretOverlay({
+      env: {},
+      dir,
+      records: deriveSecretKeys(fixtureOptions),
+      preserveFromCluster: false,
+      readClusterSecret: () => {
+        throw new Error('must not be called when preservation is disabled');
+      },
+    });
+    assert.equal(result.dir, null);
   } finally {
     fs.rmSync(parent, { recursive: true, force: true });
   }
