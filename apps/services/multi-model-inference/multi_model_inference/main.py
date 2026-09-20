@@ -46,7 +46,9 @@ async def lifespan(app: FastAPI):
     registry.load_all()
 
     failed = [
-        info["name"] for info in registry.list_models() if info["status"] != "loaded"
+        model_name
+        for model_name in registry.model_names
+        if not registry.get(model_name).is_ready
     ]
     if failed:
         logger.error(

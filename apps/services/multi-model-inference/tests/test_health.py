@@ -39,13 +39,13 @@ def _clear_registry():
 
 def _register_not_loaded():
     """Register one model that fails to load, isolating the registry."""
-    registry._models.clear()
+    _clear_registry()
     registry.register("fake", _FakeModel(loaded=False))
 
 
 def _register_loaded():
     """Register one model that loads successfully, isolating the registry."""
-    registry._models.clear()
+    _clear_registry()
     registry.register("fake", _FakeModel(loaded=True))
 
 

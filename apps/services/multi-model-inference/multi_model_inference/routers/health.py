@@ -25,7 +25,7 @@ async def health():
 async def ready() -> JSONResponse:
     """Readiness probe -- 200 only when every enabled model is loaded, else 503.
 
-    K8s readiness probes key on the status code, not the body, so a 200 here
+    K8s readiness probes key on the status code, not the body. A 200 here
     would route traffic to a pod with no working model (#37).
     """
     models_info = {info["name"]: info["status"] for info in registry.list_models()}
