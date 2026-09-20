@@ -926,6 +926,31 @@ runs:
           echo "rollout_success=true" >> $GITHUB_OUTPUT
         fi
 
+    - name: Re-run Bright MLS ingest on deploy (dev/test only)
+      # #224: a mapping fix in property-service must take effect without waiting for the
+      # CronJob's next tick. Jobs are immutable, so a fixed-name Job committed to the
+      # manifests could never re-run on redeploy — delete-then-create belongs here instead.
+      # Prod keeps its own schedule and `suspend: true`; this step never touches prod.
+      if: ${{ steps.rollout.outputs.rollout_success == 'true' || steps.pvc_cleanup.outputs.rollout_success == 'true' }}
+      shell: bash
+      run: |
+        set -eo pipefail
+        ENVIRONMENT="$(basename "${{ inputs.kustomizePath }}")"
+        if [ "$ENVIRONMENT" != "dev" ] && [ "$ENVIRONMENT" != "test" ]; then
+          echo "ℹ️  $ENVIRONMENT is not dev or test - bright-mls-ingest keeps its own schedule."
+          exit 0
+        fi
+
+        if ! jq -e --arg s bright-mls-ingest '.services | any(.name == $s)' scope-plan.json > /dev/null 2>&1; then
+          echo "ℹ️  bright-mls-ingest is not in this run's deploy scope - nothing to re-run."
+          exit 0
+        fi
+
+        JOB_NAME="bright-mls-ingest-on-deploy"
+        echo "🔄 Re-running bright-mls-ingest so today's mapping fix reaches $ENVIRONMENT now."
+        kubectl delete job "$JOB_NAME" --ignore-not-found
+        kubectl create job "$JOB_NAME" --from=cronjob/bright-mls-ingest
+
     - name: Conditional rollback
       if: ${{ steps.rollout.outputs.rollout_success != 'true' && steps.pvc_cleanup.outputs.rollout_success != 'true' }}
       shell: bash

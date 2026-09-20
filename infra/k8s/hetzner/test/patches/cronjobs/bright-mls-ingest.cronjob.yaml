@@ -13,15 +13,18 @@
 #
 # Load from the default epoch and the default page cap, unlike local. Test is a staging environment
 # and must reproduce the full replication path, not a shortened one.
+#
+# SCHEDULE (#224): raised from once a day to every 15 minutes, offset 7 minutes from dev's `*/15`,
+# so a mapping fix reaches test within minutes instead of a day. Dev and test still read the same
+# Bright test feed under one shared rate limit, so the offset keeps their runs from overlapping.
+# Prod is licensed production inventory on its own conservative cadence and is unaffected.
 
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: bright-mls-ingest
 spec:
-  # 05:00 UTC, not dev's 03:00. Both environments read the same Bright test feed under one shared
-  # rate limit, so an overlapping run would make each look throttled by the other.
-  schedule: "0 5 * * *"
+  schedule: "7-59/15 * * * *"
   suspend: false
   jobTemplate:
     spec:
