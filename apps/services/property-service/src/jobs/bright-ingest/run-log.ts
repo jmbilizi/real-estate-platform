@@ -150,6 +150,13 @@ export interface BrightRunFinishedRecord extends BrightRunRecordBase {
    * tell a genuine data gap from a mapping defect (#207).
    */
   readonly mappingWithheldByReason?: Readonly<Record<string, number>>;
+  /**
+   * Present on `replicated` when a mapped record had a Bright field dropped to `null` for
+   * overflowing its `integer` column (#237) — e.g. `LotSizeSquareFeet` outside Postgres's `integer`
+   * range. Counts only, keyed by the Bright field name. The record still publishes; unlike
+   * `mappingWithheldByReason` this is a data-quality signal, not a rejection.
+   */
+  readonly mappingOutOfRangeFieldCounts?: Readonly<Record<string, number>>;
   /** True when any resource reported a stalled cursor. Hoisted so one field answers "is it fresh?". */
   readonly stalled?: boolean;
 }

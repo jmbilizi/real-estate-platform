@@ -20,6 +20,13 @@ export interface BrightMapRunReport {
   readonly withheldByReason: Readonly<Record<string, number>>;
   readonly takenDown: number;
   readonly sampleMarked: number;
+  /**
+   * Count of mapped records whose named Bright field was dropped to `null` because the value
+   * overflowed the `integer` column it maps to (#237) — e.g. a `LotSizeSquareFeet` outside
+   * Postgres's `integer` range. The record still publishes; this is a data-quality signal, not a
+   * rejection, so it is tracked separately from `withheldByReason`.
+   */
+  readonly outOfRangeFieldCounts: Readonly<Record<string, number>>;
 }
 
 export const ZERO_MAP_REPORT: BrightMapRunReport = {
@@ -30,4 +37,5 @@ export const ZERO_MAP_REPORT: BrightMapRunReport = {
   withheldByReason: {},
   takenDown: 0,
   sampleMarked: 0,
+  outOfRangeFieldCounts: {},
 };
