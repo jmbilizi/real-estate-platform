@@ -174,16 +174,23 @@ function replicatedMessage(
       : `Mapped ${mapping.mapped}/${mapping.staged} staged record(s), published ${mapping.published}, ` +
         `withheld ${mapping.withheld}, taken down ${mapping.takenDown}, sample-marked ` +
         `${mapping.sampleMarked}.` +
-        (mapping.withheld === 0 ? '' : ` Withheld by reason: ${formatWithheldByReason(mapping)}.`))
+        (mapping.withheld === 0 ? '' : ` Withheld by reason: ${formatWithheldByReason(mapping)}.`) +
+        (Object.keys(mapping.outOfRangeFieldCounts).length === 0
+          ? ''
+          : ` Field(s) dropped for an out-of-range value: ${formatCounts(mapping.outOfRangeFieldCounts)}.`))
   );
 }
 
-/** `{reason: count}` sorted by count descending, so the largest rejection cause reads first. */
-function formatWithheldByReason(mapping: BrightMapRunReport): string {
-  return Object.entries(mapping.withheldByReason)
+/** `{key: count}` sorted by count descending, so the largest cause reads first. */
+function formatCounts(counts: Readonly<Record<string, number>>): string {
+  return Object.entries(counts)
     .sort(([, a], [, b]) => b - a)
-    .map(([reason, count]) => `${reason}=${count}`)
+    .map(([key, count]) => `${key}=${count}`)
     .join(', ');
+}
+
+function formatWithheldByReason(mapping: BrightMapRunReport): string {
+  return formatCounts(mapping.withheldByReason);
 }
 
 /**
@@ -232,6 +239,7 @@ export async function runBrightIngest(
   let counts: BrightRunCounts = ZERO_COUNTS;
   let feed: 'test' | 'production' | undefined;
   let mappingWithheldByReason: Readonly<Record<string, number>> | undefined;
+  let mappingOutOfRangeFieldCounts: Readonly<Record<string, number>> | undefined;
 
   // `config === null` and `configError !== null` are the same condition — resolveBrightConfig either
   // returned or threw. Testing the null rather than the error is what lets the compiler narrow
@@ -312,6 +320,9 @@ export async function runBrightIngest(
       if (mapping.withheld > 0) {
         mappingWithheldByReason = mapping.withheldByReason;
       }
+      if (Object.keys(mapping.outOfRangeFieldCounts).length > 0) {
+        mappingOutOfRangeFieldCounts = mapping.outOfRangeFieldCounts;
+      }
     } catch (error) {
       outcome = 'failed';
       message = error instanceof Error ? error.message : String(error);
@@ -348,6 +359,7 @@ export async function runBrightIngest(
     ...(feed === undefined ? {} : { feed }),
     ...(reports.length === 0 ? {} : { resources: reports, stalled }),
     ...(mappingWithheldByReason === undefined ? {} : { mappingWithheldByReason }),
+    ...(mappingOutOfRangeFieldCounts === undefined ? {} : { mappingOutOfRangeFieldCounts }),
     ...(metadata === undefined
       ? {}
       : {

@@ -74,6 +74,8 @@ export interface MappedRecord {
   readonly unitNumber: string | null;
   readonly property: MappedPropertyInput;
   readonly listing: MappedListingInput;
+  /** Bright field names dropped to `null` this record because their value overflowed `integer` (#237). */
+  readonly outOfRangeFields: readonly string[];
 }
 
 export interface RejectedRecord {
@@ -122,6 +124,35 @@ function toNumber(value: unknown): number | null {
 function toRoundedNumber(value: unknown): number | null {
   const n = toNumber(value);
   return n === null ? null : Math.round(n);
+}
+
+/** Postgres `integer` range. Every field this module maps into an `integer` column must fit here. */
+const INT4_MAX = 2147483647;
+const INT4_MIN = -2147483648;
+
+/**
+ * Same class of bug as #207, one magnitude further: a Bright numeric field can carry a value too
+ * LARGE for the `integer` column it lands in (`lot_sqft`, `year_built`, `beds`, `baths_full`,
+ * `baths_half`, `living_sqft`), not only one with a fractional part. `4216172400` in
+ * `LotSizeSquareFeet` (151 square miles — not a real lot) crashed the whole mapping pass the same
+ * way the fractional value did before #207, and stopped every later record from being mapped (#237).
+ *
+ * A value outside the column's range cannot be true, so it is dropped to `null` rather than stored —
+ * storing it would publish a fabricated fact (PRD §6.3). The field name is returned alongside the
+ * value so the caller can count how often each field carries implausible data.
+ */
+function toBoundedInteger(
+  fieldName: string,
+  value: unknown,
+): { readonly value: number | null; readonly outOfRangeField: string | null } {
+  const n = toRoundedNumber(value);
+  if (n === null) {
+    return { value: null, outOfRangeField: null };
+  }
+  if (n > INT4_MAX || n < INT4_MIN) {
+    return { value: null, outOfRangeField: fieldName };
+  }
+  return { value: n, outOfRangeField: null };
 }
 
 function toDateOnly(value: unknown): string | null {
@@ -222,10 +253,21 @@ export function mapBrightPropertyRecord(
 
   const lastUpdated = nonBlank(payload.ModificationTimestamp) ?? new Date().toISOString();
 
+  const yearBuilt = toBoundedInteger('YearBuilt', payload.YearBuilt);
+  const lotSqft = toBoundedInteger('LotSizeSquareFeet', payload.LotSizeSquareFeet);
+  const beds = toBoundedInteger('BedroomsTotal', payload.BedroomsTotal);
+  const bathsFull = toBoundedInteger('BathroomsFull', payload.BathroomsFull);
+  const bathsHalf = toBoundedInteger('BathroomsHalf', payload.BathroomsHalf);
+  const livingSqft = toBoundedInteger('LivingArea', payload.LivingArea);
+  const outOfRangeFields = [yearBuilt, lotSqft, beds, bathsFull, bathsHalf, livingSqft]
+    .map((f) => f.outOfRangeField)
+    .filter((f): f is string => f !== null);
+
   return {
     kind: 'mapped',
     listingKey,
     unitNumber,
+    outOfRangeFields,
     property: {
       address_raw: unparsedAddress,
       street_line: streetLine,
@@ -237,12 +279,12 @@ export function mapBrightPropertyRecord(
       longitude: toNumber(payload.Longitude),
       neighborhood: nonBlank(payload.SubdivisionName),
       property_type: propertyType,
-      year_built: toNumber(payload.YearBuilt),
-      lot_sqft: toRoundedNumber(payload.LotSizeSquareFeet),
-      beds: toNumber(payload.BedroomsTotal),
-      baths_full: toNumber(payload.BathroomsFull),
-      baths_half: toNumber(payload.BathroomsHalf),
-      living_sqft: toNumber(payload.LivingArea),
+      year_built: yearBuilt.value,
+      lot_sqft: lotSqft.value,
+      beds: beds.value,
+      baths_full: bathsFull.value,
+      baths_half: bathsHalf.value,
+      living_sqft: livingSqft.value,
       is_sample: isSample,
     },
     listing: {

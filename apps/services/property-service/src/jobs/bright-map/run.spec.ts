@@ -236,4 +236,24 @@ describe('mapStagedBrightProperties', () => {
     expect(report.published).toBe(0);
     expect(report.takenDown).toBe(1);
   });
+
+  it('publishes a record with an out-of-range field and processes the rest of the batch (#237)', async () => {
+    const { client, listings } = createFakeDb({
+      stagedPayloads: [
+        { ...ACTIVE_PAYLOAD, ListingKey: 'BR-1', LotSizeSquareFeet: 4216172400 },
+        { ...ACTIVE_PAYLOAD, ListingKey: 'BR-2', UnparsedAddress: '456 Elm St' },
+      ],
+    });
+
+    const report = await mapStagedBrightProperties(client, {
+      feed: 'test',
+      soldDisplayDelayDays: null,
+    });
+
+    expect(report.staged).toBe(2);
+    expect(report.mapped).toBe(2);
+    expect(report.withheld).toBe(0);
+    expect(report.outOfRangeFieldCounts).toEqual({ LotSizeSquareFeet: 1 });
+    expect(listings()).toHaveLength(2);
+  });
 });

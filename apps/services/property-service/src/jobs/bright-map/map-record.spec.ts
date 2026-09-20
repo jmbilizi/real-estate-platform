@@ -220,6 +220,33 @@ describe('mapBrightPropertyRecord', () => {
     expect(result.property.lot_sqft).toBe(127195);
   });
 
+  it('drops a LotSizeSquareFeet that overflows the integer column instead of crashing (#237)', () => {
+    const result = mapBrightPropertyRecord(
+      { ...BASE_PAYLOAD, LotSizeSquareFeet: 4216172400 },
+      ctx(),
+    );
+    if (result.kind !== 'mapped') throw new Error('expected mapped');
+    expect(result.property.lot_sqft).toBeNull();
+    expect(result.outOfRangeFields).toEqual(['LotSizeSquareFeet']);
+  });
+
+  it('drops a negative overflow too, and keeps other fields when only one overflows (#237)', () => {
+    const result = mapBrightPropertyRecord(
+      { ...BASE_PAYLOAD, LotSizeSquareFeet: -4216172400, BedroomsTotal: 3 },
+      ctx(),
+    );
+    if (result.kind !== 'mapped') throw new Error('expected mapped');
+    expect(result.property.lot_sqft).toBeNull();
+    expect(result.property.beds).toBe(3);
+    expect(result.outOfRangeFields).toEqual(['LotSizeSquareFeet']);
+  });
+
+  it('keeps outOfRangeFields empty when every numeric field is in range', () => {
+    const result = mapBrightPropertyRecord(BASE_PAYLOAD, ctx());
+    if (result.kind !== 'mapped') throw new Error('expected mapped');
+    expect(result.outOfRangeFields).toEqual([]);
+  });
+
   it('splits a unit designator out of the address into unitNumber', () => {
     const result = mapBrightPropertyRecord(
       { ...BASE_PAYLOAD, UnparsedAddress: '123 Oak St Unit 4B' },

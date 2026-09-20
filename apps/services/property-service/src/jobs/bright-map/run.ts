@@ -75,6 +75,7 @@ export async function mapStagedBrightProperties(
 
   const statuses = await loadListingStatuses(client);
   const withheldByReason: Record<string, number> = {};
+  const outOfRangeFieldCounts: Record<string, number> = {};
   let mapped = 0;
   let published = 0;
   let takenDown = 0;
@@ -98,6 +99,10 @@ export async function mapStagedBrightProperties(
     }
 
     mapped += 1;
+
+    for (const field of result.outOfRangeFields) {
+      outOfRangeFieldCounts[field] = (outOfRangeFieldCounts[field] ?? 0) + 1;
+    }
 
     const propertyRow: PropertyRow = { id: randomUUID(), community_id: null, ...result.property };
     const propertyId = await getOrCreateProperty(client, propertyRow);
@@ -192,5 +197,6 @@ export async function mapStagedBrightProperties(
     withheldByReason,
     takenDown,
     sampleMarked,
+    outOfRangeFieldCounts,
   };
 }
