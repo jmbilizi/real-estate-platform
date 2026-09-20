@@ -23,6 +23,14 @@
  *
  * Real values are written only under `infra/k8s/podman/.generated/`, which
  * `infra/k8s/.gitignore` ignores. The working tree is never modified.
+ *
+ * Known limitation: the cluster read happens at render time, before Skaffold builds and pushes
+ * images and applies the manifest. Two concurrent lane deploys against the same shared local
+ * cluster can race in that window, reverting a preserved key to a stale-but-real value. This never
+ * reintroduces the placeholder downgrade #218 fixes; it narrows an existing hazard (any concurrent
+ * local deploy can overwrite another lane's change) rather than removing it. Coordinating
+ * concurrent access to the single-tenant local cluster is a lane-scheduling concern, out of scope
+ * here.
  */
 
 const fs = require('fs');
@@ -174,6 +182,10 @@ function ensureLocalSecretOverlay(options = {}) {
   const mergedEnv = { ...env };
   if (preserveFromCluster) {
     const omitted = records.filter((record) => !envOverrideVars.has(record.envVar));
+    // One `kubectl get` per distinct Secret with an omitted key, capped at the manifest count
+    // (5 today). A single batched read across all Secret names would save calls, but a partial
+    // failure (one name missing, another erroring) is then ambiguous per name — and attributing
+    // that ambiguity to "not found" is the same wrong-direction guess #218 exists to forbid.
     for (const [secretName, group] of groupBySecretName(omitted)) {
       const current = readCluster(secretName); // Throws when undeterminable — never guesses.
       if (!current) continue; // Secret absent: first deploy, the placeholder is correct.
