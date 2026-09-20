@@ -57,6 +57,12 @@ namespace ApiGateway
                 "OpenTelemetry configured: Endpoint={Endpoint}, Service={Service}, Sampler={Sampler}:{Rate}, Pod={Pod}");
 
         /// <summary>
+        /// Indicates whether OpenTelemetry (tracing and metrics) is enabled.
+        /// Set during ConfigureServices; checked in Configure to conditionally register endpoints.
+        /// </summary>
+        private bool _otelEnabled = true;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="Startup"/> class.
         /// </summary>
         /// <param name="configuration">The application configuration.</param>
@@ -98,6 +104,7 @@ namespace ApiGateway
             services.AddSingleton<GeoIpService>();
 
             // Configure OpenTelemetry (conditional based on environment)
+            // ConfigureOpenTelemetry sets _otelEnabled based on whether MeterProvider was registered
             ConfigureOpenTelemetry(services);
 
             string serviceRoutesFolderPath = "Configuration/Routes";
@@ -196,7 +203,11 @@ namespace ApiGateway
             });
 
             // OpenTelemetry Prometheus exporter middleware (must be between UseRouting and UseEndpoints)
-            app.UseOpenTelemetryPrometheusScrapingEndpoint();
+            // Only register if OTEL is enabled; /metrics is absent when disabled.
+            if (_otelEnabled)
+            {
+                app.UseOpenTelemetryPrometheusScrapingEndpoint();
+            }
 
             app.UseEndpoints(endpoints =>
             {
@@ -525,6 +536,7 @@ namespace ApiGateway
             if (!otelEnabled)
             {
                 LogTracingDisabled(logger);
+                _otelEnabled = false;  // MeterProvider will not be registered
                 return;
             }
 
@@ -549,6 +561,7 @@ namespace ApiGateway
             if (!Uri.TryCreate(otlpEndpoint, UriKind.Absolute, out Uri? endpoint))
             {
                 LogInvalidEndpoint(logger, otlpEndpoint);
+                _otelEnabled = false;  // MeterProvider will not be registered due to endpoint validation failure
                 return;
             }
 
