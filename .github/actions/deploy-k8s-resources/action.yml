@@ -65,7 +65,7 @@ runs:
         kubectl version --client
         kubectl cluster-info
 
-    - name: Substitute secrets (Postgres, Redis, Jaeger, Bright MLS, Postmark)
+    - name: Substitute secrets (Postgres, Redis, Jaeger, API Gateway, Bright MLS, Postmark)
       shell: bash
       run: |
         # In-memory substitution pattern; overwrite templates in workspace
@@ -87,6 +87,13 @@ runs:
         yq eval '.stringData.auth = env(JAEGER_BASIC_AUTH)' infra/k8s/base/secrets/jaeger.secret.yaml \
         > /tmp/jaeger.secret.processed.yaml
         mv /tmp/jaeger.secret.processed.yaml infra/k8s/base/secrets/jaeger.secret.yaml
+
+        # api-gateway / cribstop-web basic-auth gate (#255). One credential per environment,
+        # shared by the api-gateway Ingress (every environment) and the cribstop-web Ingress
+        # (dev/test only).
+        yq eval '.stringData.auth = env(GATEWAY_BASIC_AUTH)' infra/k8s/base/secrets/api-gateway.secret.yaml \
+        > /tmp/api-gateway.secret.processed.yaml
+        mv /tmp/api-gateway.secret.processed.yaml infra/k8s/base/secrets/api-gateway.secret.yaml
 
         # Bright MLS (#91). Guarded, unlike the blocks above, because these two are the only secrets
         # here that are legitimately ABSENT in some environments: `test` never receives Bright

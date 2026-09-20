@@ -122,6 +122,11 @@ metadata:
 apiVersion: v1
 kind: Secret
 metadata:
+  name: api-gateway-secret
+---
+apiVersion: v1
+kind: Secret
+metadata:
   name: bright-mls-secret
   labels:
     app: bright-mls-ingest
