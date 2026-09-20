@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { BRAND } from '@/lib/brand';
 import { getListingsMeta } from '@/lib/api/listings';
 import { PROPERTY_TIME_ZONE } from '@/lib/format';
@@ -98,10 +99,14 @@ export default function Footer() {
             <h4 className="mb-3 text-sm font-semibold text-ink">Legal</h4>
             <ul className="space-y-2 text-sm text-ink-muted">
               <li>
-                <span>Terms of Service</span>
+                <Link href="/terms" className="hover:text-ink">
+                  Terms of Service
+                </Link>
               </li>
               <li>
-                <span>Privacy Policy</span>
+                <Link href="/privacy" className="hover:text-ink">
+                  Privacy Policy
+                </Link>
               </li>
               <li>
                 <span>Fair Housing</span>
@@ -210,7 +215,7 @@ export default function Footer() {
               rel="noopener noreferrer"
               className="underline hover:text-ink"
             >
-              Equal Housing Opportunity
+              {BRAND.equalHousingOpportunity}
             </a>
           </p>
         </div>
