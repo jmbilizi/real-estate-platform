@@ -329,7 +329,7 @@ describe('the filter modal actually filters', () => {
     // The modal used to keep its own state and was never handed the applied filters, so reopening
     // it showed defaults while the badge beside the button said three filters were active.
     render(
-      <SearchExperience initialQuery="q=Alexandria&beds=3&propertyType=Condo&minPrice=500000" />,
+      <SearchExperience initialQuery="q=Alexandria&beds=3&propertyType=Condo&maxPrice=500000" />,
     );
     await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
 
@@ -337,7 +337,108 @@ describe('the filter modal actually filters', () => {
 
     expect(screen.getByText('3+')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Condo/ })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByLabelText('Min price')).toHaveValue(500000);
+    expect(screen.getByLabelText('Maximum price')).toHaveValue('500000');
+  });
+
+  /**
+   * The max-price control (#243): a "−"/"+" stepper flanking a typable input, max-only — people
+   * search for what they can afford at most, never a minimum.
+   */
+  describe('the max-price control', () => {
+    const maxPriceInput = () => screen.getByLabelText('Maximum price') as HTMLInputElement;
+    const stepUp = () => fireEvent.click(screen.getByLabelText('Increase maximum price'));
+    const stepDown = () => fireEvent.click(screen.getByLabelText('Decrease maximum price'));
+
+    it('steps up from no max by the 25,000 rung', async () => {
+      render(<SearchExperience initialQuery="q=Alexandria" />);
+      await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
+
+      openFilters();
+      stepUp();
+
+      expect(maxPriceInput()).toHaveValue('25000');
+    });
+
+    it('steps down by 25,000 from an applied value', async () => {
+      render(<SearchExperience initialQuery="q=Alexandria&maxPrice=100000" />);
+      await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
+
+      openFilters();
+      stepDown();
+
+      expect(maxPriceInput()).toHaveValue('75000');
+    });
+
+    it('never steps below zero, and treats zero as no max rather than a filter', async () => {
+      render(<SearchExperience initialQuery="q=Alexandria&maxPrice=10000" />);
+      await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
+
+      openFilters();
+      stepDown(); // 10000 -> 0, clamped, read as "no max"
+
+      expect(maxPriceInput()).toHaveValue('');
+
+      stepDown(); // already at "no max" — must not go negative
+      expect(maxPriceInput()).toHaveValue('');
+
+      showHomes();
+      expect(currentParams().has('maxPrice')).toBe(false);
+    });
+
+    it('clears to no max when the field is emptied and committed', async () => {
+      render(<SearchExperience initialQuery="q=Alexandria&maxPrice=500000" />);
+      await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
+
+      openFilters();
+      fireEvent.change(maxPriceInput(), { target: { value: '' } });
+      fireEvent.blur(maxPriceInput());
+      showHomes();
+
+      expect(currentParams().has('maxPrice')).toBe(false);
+      await waitFor(() => expect(lastRequest()?.maxPrice).toBeUndefined());
+    });
+
+    it('accepts a typed value, stripping currency formatting, and commits on blur', async () => {
+      render(<SearchExperience initialQuery="q=Alexandria" />);
+      await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
+
+      openFilters();
+      fireEvent.change(maxPriceInput(), { target: { value: '$450,000' } });
+      expect(maxPriceInput()).toHaveValue('450000');
+      fireEvent.blur(maxPriceInput());
+      showHomes();
+
+      expect(currentParams().get('maxPrice')).toBe('450000');
+    });
+
+    it('flags junk input with an error and never applies it', async () => {
+      render(<SearchExperience initialQuery="q=Alexandria" />);
+      await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
+
+      openFilters();
+      fireEvent.change(maxPriceInput(), { target: { value: '450k' } });
+
+      expect(maxPriceInput()).toHaveAttribute('aria-invalid', 'true');
+      expect(screen.getByText(/Enter a whole number/)).toBeInTheDocument();
+
+      fireEvent.blur(maxPriceInput());
+      showHomes();
+
+      expect(currentParams().has('maxPrice')).toBe(false);
+    });
+
+    it('steps from a typed, uncommitted value rather than the last applied one', async () => {
+      render(<SearchExperience initialQuery="q=Alexandria&maxPrice=100000" />);
+      await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
+
+      openFilters();
+      // Off the 25,000 grid, and never blurred/committed.
+      fireEvent.change(maxPriceInput(), { target: { value: '460000' } });
+      stepUp();
+
+      // Steps by exactly 25,000 from the typed value, not from the applied 100000.
+      expect(maxPriceInput()).toHaveValue('485000');
+    });
   });
 
   it('clears a filter it no longer wants instead of leaving it in the URL', async () => {

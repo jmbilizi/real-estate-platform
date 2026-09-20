@@ -17,8 +17,5 @@ export const selectSearchSuggestion = (state: RootState) => state.search.searchS
 export const selectSearchMoveInDate = (state: RootState) => state.search.searchMoveInDate;
 export const selectSearchDateRange = (state: RootState) => state.search.searchDateRange;
 export const selectSearchPriceIdx = (state: RootState) => state.search.searchPriceIdx;
-export const selectSearchBedsIdx = (state: RootState) => state.search.searchBedsIdx;
-export const selectSearchPropertyTypes = (state: RootState) => state.search.searchPropertyTypes;
-export const selectSearchBaths = (state: RootState) => state.search.searchBaths;
-export const selectSearchMaxPrice = (state: RootState) => state.search.searchMaxPrice;
+export const selectSearchListingType = (state: RootState) => state.search.searchListingType;
 export const selectSearchDescription = (state: RootState) => state.search.searchDescription;

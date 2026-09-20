@@ -10,34 +10,30 @@ import {
   formatLocationLabel,
   highlightMatch,
 } from '@/lib/search-utils';
-import { isParcelOnlySelection, PARCEL_INTERLOCK_HINT, SearchPanel } from '@/lib/store/types';
+import { SearchPanel } from '@/lib/store/types';
+import type { SearchListingType } from '@/lib/store/slices/searchSlice';
 import { Z_LAYERS } from '@/lib/z-layers';
-import { BED_OPTIONS, DateRangePanel } from './DateRangePanel';
-import { PROPERTY_TYPES } from '@cribstop/property-contracts';
-import type { ListingType } from '@/lib/types';
+import { DateRangePanel } from './DateRangePanel';
+import { LISTING_TYPES } from '@cribstop/property-contracts';
 
 /**
- * The bar's tab vocabulary is UI state; the contract's is what may go in a URL.
- *
- * These are deliberately separate: `'for-sale'`/`'for-rent'` is the `ListingTab` identity the
- * header tabs and `uiSlice` share, while the API's `listingType` is `sale`/`rent`/`sold`. The bar
- * used to put the tab value straight into `?type=`, which the search page then dropped as an
- * unrecognised enum — so every "For Sale" search silently returned sale *and* rent inventory.
- * Translating here keeps the tab identity intact and the URL contract-valid.
+ * Labels for the full Listing Type control (#243) — the same vocabulary `FilterModalContent` used
+ * before this control moved here from the filter modal.
  */
-const LISTING_TYPE_FOR_TAB: Record<'for-sale' | 'for-rent', ListingType> = {
-  'for-sale': 'sale',
-  'for-rent': 'rent',
+const LISTING_TYPE_FILTER_LABELS: Record<SearchListingType, string> = {
+  all: 'All',
+  sale: 'Buy',
+  rent: 'Rent',
+  sold: 'Sold',
 };
 
-/**
- * `'2+'` is a label, not a value. The contract's `baths` is `^\d+(\.5)?$`, so the label was dropped
- * client-side (and would have been a 400 if forwarded) — the bathrooms filter never applied.
- */
-function bathsParamValue(label: string): string | undefined {
-  const numeric = label.replace('+', '').trim();
-  return /^\d+(\.5)?$/.test(numeric) ? numeric : undefined;
-}
+/** The "What" pill's closed-state summary — one word, matching the tone of the other segments. */
+const LISTING_TYPE_SUMMARY_LABELS: Record<SearchListingType, string> = {
+  all: 'All listings',
+  sale: 'For Sale',
+  rent: 'For Rent',
+  sold: 'Sold',
+};
 
 // Shape/position transition for the dock wrapper below. Only pill <-> expanded
 // is handed to Framer's `layout` (not `layoutId` — no shared/cross-tree
@@ -173,10 +169,6 @@ const BAR_MORPH_PROPS = [
 // keeps that a fact rather than an assumption.
 const SHELL_ATTR = 'data-search-bar-shell';
 const GHOST_ATTR = 'data-search-bar-ghost';
-
-// Ties the disabled beds/baths steppers to their visible explanation. One id is enough: only one
-// "What" panel is mounted at a time (the three render paths are mutually exclusive branches).
-const PARCEL_HINT_ID = 'search-parcel-interlock-hint';
 
 type DockMode = 'large' | 'pill' | 'expanded';
 type MorphBox = { left: number; top: number; width: number; height: number };
@@ -342,15 +334,8 @@ export default function CompactSearchBar({
     setSearchMoveInDate,
     searchDateRange,
     setSearchDateRange,
-    searchBedsIdx,
-    setSearchBedsIdx,
-    searchPropertyTypes,
-    setSearchPropertyTypes,
-    searchBaths,
-    setSearchBaths,
-    searchMaxPrice: searchMaxPriceCtx,
-    setSearchMaxPrice: setSearchMaxPriceCtx,
-    searchDescription,
+    searchListingType,
+    setSearchListingType,
     setSearchDescription,
     showHeaderPill,
     headerExpanded,
@@ -532,7 +517,6 @@ export default function CompactSearchBar({
   const [rangePickStep, setRangePickStep] = useState<'start' | 'end'>('start');
   // hovered date for visual range preview
   const [hoveredDate, setHoveredDate] = useState<string | null>(null);
-  const bedsIdx = searchBedsIdx;
   const listingTab = ctxTab;
   // State for nearby locations and loading
   const [nearbyLocations, setNearbyLocations] = useState<any[]>([]);
@@ -934,38 +918,15 @@ export default function CompactSearchBar({
     return () => mq.removeEventListener('change', handler);
   }, [mobileSheetMode, onClose]);
 
-  // "What" property criteria — shared via context
-  const selectedPropertyTypes = searchPropertyTypes;
-  const setSelectedPropertyTypes = setSearchPropertyTypes;
-  const baths = searchBaths;
-  const setBaths = setSearchBaths;
-  const description = searchDescription;
-  const setDescription = setSearchDescription;
-  const searchMaxPrice = searchMaxPriceCtx;
-  const setSearchMaxPrice = setSearchMaxPriceCtx;
   const _whatSuggestionsRef = useRef<HTMLDivElement>(null);
   const whatHighlightRef = useRef<HTMLDivElement>(null);
   const whereHighlightRef = useRef<HTMLDivElement>(null);
   const whereHighlightRef2 = useRef<HTMLDivElement>(null);
   const whatHighlightRef2 = useRef<HTMLDivElement>(null);
 
-  // --- Lot/Land interlock (#24) --------------------------------------------
-  //
-  // A parcel has no dwelling, so `beds`/`baths` are NULL on it and any dwelling predicate the API
-  // is handed excludes every parcel — a stale `beds=2` next to a Lot/Land chip returns zero results
-  // with nothing on screen to explain why. The fix is in the UI, not in the request builder: the
-  // controls are cleared and disabled, so the API still receives exactly what the user asked for.
-  const parcelOnly = isParcelOnlySelection(selectedPropertyTypes);
-  const parcelHintId = parcelOnly ? PARCEL_HINT_ID : undefined;
-
-  // Clearing on the chip's own click would miss the other way in: state restored from a URL that
-  // already carries both (`?propertyType=Lot/Land&beds=2`). Reconciling here catches every path,
-  // and the guard makes it a single converging pass rather than a loop.
-  useEffect(() => {
-    if (!parcelOnly) return;
-    if (searchBedsIdx !== 0) setSearchBedsIdx(0);
-    if (baths !== '') setBaths('');
-  }, [parcelOnly, searchBedsIdx, baths]);
+  // Property Type, Bedrooms and Bathrooms moved to the filter modal (#243); the Lot/Land
+  // dwelling-control interlock now lives only there (`FilterModalContent`/`applyLandInterlock`),
+  // since this bar no longer has a property-type control to reconcile against.
 
   const SLIDE_TRANSITION =
     'top 0.22s cubic-bezier(0.4,0,0.2,1), height 0.22s cubic-bezier(0.4,0,0.2,1), opacity 0.12s';
@@ -1001,207 +962,53 @@ export default function CompactSearchBar({
     el.style.opacity = '0';
   }
 
+  /**
+   * The "What" panel content — the full Listing Type control, moved here from the filter modal
+   * (#243). Property Type, Bedrooms, Bathrooms and Price now live only in the filter modal; the
+   * bar's own "What" section shows nothing else, open or closed.
+   */
   function renderWhatPanelContent(_highlightRef: React.RefObject<HTMLDivElement | null>) {
-    const BATHS_OPTS = ['Any', '1+', '2+', '3+', '4+', '5+'];
-    const bathIdx = baths === '' ? 0 : BATHS_OPTS.indexOf(baths);
-    const bedsOpts = BED_OPTIONS.map((b) => (b.value ? b.value + '+' : 'Any'));
-    const stepperBtn = (
-      disabled: boolean,
-      onClick: () => void,
-      label: string,
-      describedBy?: string,
-    ) => (
-      <button
-        type="button"
-        disabled={disabled}
-        aria-disabled={disabled}
-        aria-describedby={describedBy}
-        onClick={onClick}
-        className={`h-8 w-8 rounded-full border inline-flex items-center justify-center leading-none select-none transition-colors ${
-          disabled
-            ? 'border-[rgba(0,0,0,0.12)] text-[rgba(0,0,0,0.2)] cursor-default'
-            : 'border-[rgba(0,0,0,0.4)] text-ink hover:border-ink cursor-pointer'
-        }`}
-        style={{ fontSize: '18px', paddingBottom: label === '–' ? '1px' : '0' }}
-      >
-        {label}
-      </button>
-    );
-
     return (
-      <div className="flex flex-col gap-5">
-        {/* Listing type selector */}
-        <div>
-          <p className="text-xs font-semibold text-ink uppercase tracking-wider mb-2">
-            Listing type
-          </p>
-          <div className="flex gap-2">
-            {(['for-sale', 'for-rent'] as const).map((tab) => (
+      <div>
+        <p
+          className="text-xs font-semibold text-ink uppercase tracking-wider mb-2"
+          id="what-listing-type-label"
+        >
+          Listing type
+        </p>
+        <div
+          className="inline-flex w-full rounded-full bg-surface-alt p-1"
+          role="radiogroup"
+          aria-labelledby="what-listing-type-label"
+        >
+          {(['all', ...LISTING_TYPES] as const).map((option) => {
+            const active = searchListingType === option;
+            return (
               <button
-                key={tab}
+                key={option}
                 type="button"
+                aria-pressed={active}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setListingType(tab);
-                  setListingTab(tab);
+                  setSearchListingType(option);
+                  // The 'for-sale'/'for-rent' tab drives the "When" panel's buy-vs-rent date
+                  // wording (DateRangePanel) and the header tab, so it stays in sync for the two
+                  // values it can express. 'all'/'sold' have no date-flexibility equivalent, so
+                  // the tab is left as it was.
+                  if (option === 'sale' || option === 'rent') {
+                    const tab = option === 'sale' ? 'for-sale' : 'for-rent';
+                    setListingType(tab);
+                    setListingTab(tab);
+                  }
                 }}
-                className={`flex-1 py-2.5 rounded-full text-sm font-semibold transition-colors duration-150 ${
-                  listingType === tab
-                    ? 'bg-ink text-white shadow-sm'
-                    : 'bg-surface-alt text-ink-muted hover:bg-surface-soft'
+                className={`flex-1 rounded-full px-3 py-1.5 text-sm font-semibold transition ${
+                  active ? 'bg-white text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
                 }`}
               >
-                {tab === 'for-sale' ? 'For Sale' : 'For Rent'}
+                {LISTING_TYPE_FILTER_LABELS[option]}
               </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Property Type */}
-        {/*
-         * One property type at a time, because that is what the API can apply: the wire contract's
-         * `propertyType` is a single enum value under a strict-parsed request. These were checkboxes
-         * emitting `propertyType=Condo,Townhome`, which the search page never read before #24 — so
-         * the control looked multi-select and filtered nothing at all. Reading the parameter makes
-         * it real, and a comma-joined value would now be rejected outright with a 400. Radios keep
-         * the UI able to express only what the request can carry.
-         *
-         * Multi-select is a genuine product capability, not a regression being papered over: it
-         * needs `searchRequestSchema` to accept a set, the repository predicate to match on it, and
-         * the Lot/Land interlock to keep firing only for a parcels-and-nothing-else selection.
-         * Flagged to the product owner on #24 rather than assumed here.
-         */}
-        <div>
-          <p
-            className="text-xs font-semibold text-ink uppercase tracking-wider mb-2"
-            id="property-type-label"
-          >
-            Property Type
-          </p>
-          <div
-            className="grid grid-cols-3 gap-x-4 gap-y-1.5"
-            role="radiogroup"
-            aria-labelledby="property-type-label"
-          >
-            {PROPERTY_TYPES.map((type) => {
-              const active = selectedPropertyTypes.includes(type);
-              return (
-                <label
-                  key={type}
-                  className="flex items-center gap-2 text-sm text-ink cursor-pointer select-none py-0.5"
-                >
-                  <input
-                    type="radio"
-                    name="propertyType"
-                    checked={active}
-                    // Clicking the active type clears it, which is how "any type" is expressed.
-                    onClick={() => setSelectedPropertyTypes(active ? [] : [type])}
-                    onChange={() => undefined}
-                    className="h-4 w-4 border-gray-300 text-brand focus:ring-brand/30"
-                  />
-                  <span className="font-normal">{type}</span>
-                </label>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Beds, Baths & Price */}
-        <div className="border-t border-surface-border pt-4">
-          {parcelOnly && (
-            <p id={PARCEL_HINT_ID} className="text-[13px] text-ink-muted pb-2">
-              {PARCEL_INTERLOCK_HINT}
-            </p>
-          )}
-          <div className="flex items-center justify-between py-1">
-            <span className={`text-sm font-medium ${parcelOnly ? 'text-ink-subtle' : 'text-ink'}`}>
-              Bedrooms
-            </span>
-            <div className="flex items-center gap-4">
-              {stepperBtn(
-                parcelOnly || bedsIdx === 0,
-                () => setSearchBedsIdx(bedsIdx - 1),
-                '–',
-                parcelHintId,
-              )}
-              <span
-                className={`w-8 text-center text-[15px] font-normal ${parcelOnly ? 'text-ink-subtle' : 'text-ink'}`}
-              >
-                {parcelOnly ? 'Any' : bedsOpts[bedsIdx]}
-              </span>
-              {stepperBtn(
-                parcelOnly || bedsIdx === BED_OPTIONS.length - 1,
-                () => setSearchBedsIdx(bedsIdx + 1),
-                '+',
-                parcelHintId,
-              )}
-            </div>
-          </div>
-          <div className="flex items-center justify-between py-1 mt-2">
-            <span className={`text-sm font-medium ${parcelOnly ? 'text-ink-subtle' : 'text-ink'}`}>
-              Bathrooms
-            </span>
-            <div className="flex items-center gap-4">
-              {stepperBtn(
-                parcelOnly || bathIdx === 0,
-                () => setBaths(bathIdx === 1 ? '' : BATHS_OPTS[bathIdx - 1]),
-                '–',
-                parcelHintId,
-              )}
-              <span
-                className={`w-8 text-center text-[15px] font-normal ${parcelOnly ? 'text-ink-subtle' : 'text-ink'}`}
-              >
-                {parcelOnly || bathIdx === 0 ? 'Any' : BATHS_OPTS[bathIdx]}
-              </span>
-              {stepperBtn(
-                parcelOnly || bathIdx === BATHS_OPTS.length - 1,
-                () => setBaths(BATHS_OPTS[bathIdx + 1]),
-                '+',
-                parcelHintId,
-              )}
-            </div>
-          </div>
-          <div className="flex items-center justify-between py-1 mt-2">
-            <span className="text-sm font-medium text-ink">Price</span>
-            <div className="flex items-center gap-4">
-              {stepperBtn(
-                searchMaxPrice === 0,
-                () => setSearchMaxPrice(Math.max(0, searchMaxPrice - 25000)),
-                '–',
-              )}
-              <span className="w-24 text-center text-[15px] font-normal text-ink whitespace-nowrap">
-                {searchMaxPrice === 0
-                  ? 'Any'
-                  : searchMaxPrice >= 1000000
-                    ? `≤ $${(searchMaxPrice / 1000000).toFixed(searchMaxPrice % 1000000 === 0 ? 0 : 2)}M`
-                    : `≤ $${(searchMaxPrice / 1000).toFixed(0)}k`}
-              </span>
-              {stepperBtn(false, () => setSearchMaxPrice(searchMaxPrice + 25000), '+')}
-            </div>
-          </div>
-        </div>
-
-        {/* Description */}
-        <div className="border-t border-surface-border pt-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-ink uppercase tracking-wider">Description</p>
-            {description && (
-              <button
-                type="button"
-                onClick={() => setDescription('')}
-                className="text-xs font-semibold text-red-500 hover:text-red-700"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-          <textarea
-            rows={2}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Describe your ideal home..."
-            className="w-full resize-none rounded-xl border border-surface-border px-4 py-3 text-[15px] text-ink placeholder:text-ink-muted focus:outline-none focus:border-surface-border-strong focus:ring-1 focus:ring-surface-border-strong"
-          />
+            );
+          })}
         </div>
       </div>
     );
@@ -1546,6 +1353,14 @@ export default function CompactSearchBar({
     if (listingTab && listingTab !== listingType) setListingType(listingTab);
   }, [listingTab]);
 
+  // `searchListingType` already carries the contract's own vocabulary (`sale`/`rent`/`sold`), so no
+  // translation table is needed here — only 'all' (the contract's default) has to be omitted rather
+  // than sent literally.
+  function withListingTypeParam(params: URLSearchParams): URLSearchParams {
+    if (searchListingType !== 'all') params.set('type', searchListingType);
+    return params;
+  }
+
   // Enhanced search: if location is empty, use geolocation; else require valid suggestion
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1591,14 +1406,7 @@ export default function CompactSearchBar({
     params.set('lon', finalSuggestion.lon);
     if (zip) params.set('zip', zip);
     if (street) params.set('street', street);
-    if (searchMaxPrice > 0) params.set('maxPrice', String(searchMaxPrice));
-    const beds = BED_OPTIONS[bedsIdx].value;
-    if (beds) params.set('beds', beds);
-    const bathsValue = baths ? bathsParamValue(baths) : undefined;
-    if (bathsValue) params.set('baths', bathsValue);
-    if (selectedPropertyTypes.length > 0)
-      params.set('propertyType', selectedPropertyTypes.join(','));
-    params.set('type', LISTING_TYPE_FOR_TAB[listingType]);
+    withListingTypeParam(params);
     setIsSearching(true);
     router.push(`/search?${params.toString()}`);
     setIsDropdownOpen(false);
@@ -1661,14 +1469,7 @@ export default function CompactSearchBar({
               if (typeof setLocation === 'function') setLocation(displayName);
               const params = new URLSearchParams();
               params.set('q', displayName);
-              if (searchMaxPrice > 0) params.set('maxPrice', String(searchMaxPrice));
-              const beds = BED_OPTIONS[bedsIdx].value;
-              if (beds) params.set('beds', beds);
-              const bathsValue = baths ? bathsParamValue(baths) : undefined;
-              if (bathsValue) params.set('baths', bathsValue);
-              if (selectedPropertyTypes.length > 0)
-                params.set('propertyType', selectedPropertyTypes.join(','));
-              params.set('type', LISTING_TYPE_FOR_TAB[listingType]);
+              withListingTypeParam(params);
               router.push(`/search?${params.toString()}`);
               resolve();
             })();
@@ -1685,14 +1486,7 @@ export default function CompactSearchBar({
             if (typeof setLocation === 'function') setLocation('');
             const params = new URLSearchParams();
             params.set('q', '');
-            if (searchMaxPrice > 0) params.set('maxPrice', String(searchMaxPrice));
-            const beds = BED_OPTIONS[bedsIdx].value;
-            if (beds) params.set('beds', beds);
-            const bathsValue = baths ? bathsParamValue(baths) : undefined;
-            if (bathsValue) params.set('baths', bathsValue);
-            if (selectedPropertyTypes.length > 0)
-              params.set('propertyType', selectedPropertyTypes.join(','));
-            params.set('type', LISTING_TYPE_FOR_TAB[listingType]);
+            withListingTypeParam(params);
             router.push(`/search?${params.toString()}`);
             resolve();
           },
@@ -1702,14 +1496,7 @@ export default function CompactSearchBar({
         if (typeof setLocation === 'function') setLocation('');
         const params = new URLSearchParams();
         params.set('q', '');
-        if (searchMaxPrice > 0) params.set('maxPrice', String(searchMaxPrice));
-        const beds = BED_OPTIONS[bedsIdx].value;
-        if (beds) params.set('beds', beds);
-        const bathsValue = baths ? bathsParamValue(baths) : undefined;
-        if (bathsValue) params.set('baths', bathsValue);
-        if (selectedPropertyTypes.length > 0)
-          params.set('propertyType', selectedPropertyTypes.join(','));
-        params.set('type', LISTING_TYPE_FOR_TAB[listingType]);
+        withListingTypeParam(params);
         router.push(`/search?${params.toString()}`);
         resolve();
       }
@@ -1819,10 +1606,10 @@ export default function CompactSearchBar({
       setSuggestions([]);
       setDateRange({ start: '', end: '', flexibility: 'exact' });
       setRangePickStep('start');
-      setSelectedPropertyTypes([]);
-      setBaths('');
-      setDescription('');
-      setSearchMaxPrice(0);
+      setSearchListingType('all');
+      // Description has no control in this panel any more (#243) but is cleared here for
+      // hygiene until #244 removes the field outright.
+      setSearchDescription('');
       setActivePanel('where');
     };
 
@@ -1835,7 +1622,7 @@ export default function CompactSearchBar({
       } else if ((location || '').trim()) {
         params.set('q', (location || '').trim());
       }
-      params.set('type', LISTING_TYPE_FOR_TAB[listingType]);
+      withListingTypeParam(params);
       if (dateRange.start) params.set('moveIn', dateRange.start);
       if (dateRange.end && dateRange.end !== dateRange.start)
         params.set('moveInEnd', dateRange.end);
@@ -1875,22 +1662,8 @@ export default function CompactSearchBar({
               </svg>
             </button>
           </div>
-          {/* Listing type tabs */}
-          <div className="flex gap-2 px-4 pb-3">
-            {(['for-sale', 'for-rent'] as const).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setListingTab(tab)}
-                className={`flex-1 py-2 rounded-full text-[13px] font-semibold transition-colors duration-150 ${
-                  listingType === tab
-                    ? 'bg-ink text-white shadow-sm'
-                    : 'bg-surface-alt text-ink-muted hover:bg-surface-soft'
-                }`}
-              >
-                {tab === 'for-sale' ? 'For Sale' : 'For Rent'}
-              </button>
-            ))}
-          </div>
+          {/* Listing type now lives only in the "What" card below (#243) — this bar used to show
+              it twice, with no guarantee the two stayed in sync. */}
         </div>
 
         {/* ── Cards ────────────────────────────────────────────────────── */}
@@ -2264,21 +2037,8 @@ export default function CompactSearchBar({
               {activePanel === 'what' ? (
                 <div className="mt-3">{renderWhatPanelContent(whatHighlightRef)}</div>
               ) : (
-                <p className="text-[14px] text-ink-muted mt-1 flex items-center">
-                  {listingType === 'for-rent' ? 'For Rent' : 'For Sale'}
-                  {(() => {
-                    const n =
-                      (selectedPropertyTypes.length > 0 ? 1 : 0) +
-                      (bedsIdx > 0 ? 1 : 0) +
-                      (baths ? 1 : 0) +
-                      (searchMaxPrice > 0 ? 1 : 0) +
-                      (description ? 1 : 0);
-                    return n > 0 ? (
-                      <span className="ml-1.5 inline-flex items-center justify-center h-[18px] px-1.5 rounded-full bg-black/[0.07] text-ink/60 text-[10px] font-semibold leading-none">
-                        +{n} {n === 1 ? 'filter' : 'filters'}
-                      </span>
-                    ) : null;
-                  })()}
+                <p className="text-[14px] text-ink-muted mt-1">
+                  {LISTING_TYPE_SUMMARY_LABELS[searchListingType]}
                 </p>
               )}
             </div>
@@ -2374,20 +2134,7 @@ export default function CompactSearchBar({
             What
           </span>
           <span className="text-[13px] text-ink font-bold leading-snug flex items-center">
-            {listingType === 'for-rent' ? 'For Rent' : 'For Sale'}
-            {(() => {
-              const n =
-                (selectedPropertyTypes.length > 0 ? 1 : 0) +
-                (bedsIdx > 0 ? 1 : 0) +
-                (baths ? 1 : 0) +
-                (searchMaxPrice > 0 ? 1 : 0) +
-                (description ? 1 : 0);
-              return n > 0 ? (
-                <span className="ml-1.5 inline-flex items-center justify-center h-[18px] px-1.5 rounded-full bg-black/[0.07] text-ink/60 text-[10px] font-semibold leading-none whitespace-nowrap">
-                  +{n}
-                </span>
-              ) : null;
-            })()}
+            {LISTING_TYPE_SUMMARY_LABELS[searchListingType]}
           </span>
         </button>
         {/* Search icon button — grows back (or expands) the same as a field
@@ -2562,7 +2309,7 @@ export default function CompactSearchBar({
               What
             </span>
             <span className="text-[11px] sm:text-[13px] text-ink font-bold leading-snug truncate">
-              {listingType === 'for-rent' ? 'For Rent' : 'For Sale'}
+              {LISTING_TYPE_SUMMARY_LABELS[searchListingType]}
             </span>
           </button>
           {/* Search */}
@@ -2781,20 +2528,7 @@ export default function CompactSearchBar({
                   What
                 </span>
                 <span className="text-[11px] sm:text-[13px] text-ink font-bold leading-snug truncate flex items-center">
-                  {listingType === 'for-rent' ? 'For Rent' : 'For Sale'}
-                  {(() => {
-                    const n =
-                      (selectedPropertyTypes.length > 0 ? 1 : 0) +
-                      (bedsIdx > 0 ? 1 : 0) +
-                      (baths ? 1 : 0) +
-                      (searchMaxPrice > 0 ? 1 : 0) +
-                      (description ? 1 : 0);
-                    return n > 0 ? (
-                      <span className="ml-1.5 inline-flex items-center justify-center h-[18px] px-1.5 rounded-full bg-black/[0.07] text-ink/60 text-[10px] font-semibold leading-none">
-                        +{n} {n === 1 ? 'filter' : 'filters'}
-                      </span>
-                    ) : null;
-                  })()}
+                  {LISTING_TYPE_SUMMARY_LABELS[searchListingType]}
                 </span>
               </button>
 
