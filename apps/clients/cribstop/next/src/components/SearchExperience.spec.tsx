@@ -354,7 +354,7 @@ describe('the filter modal actually filters', () => {
 
     expect(screen.getByText('3+')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Condo/ })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByLabelText('Maximum price')).toHaveValue('500000');
+    expect(screen.getByLabelText('Price')).toHaveValue('500000');
   });
 
   /**
@@ -362,7 +362,7 @@ describe('the filter modal actually filters', () => {
    * search for what they can afford at most, never a minimum.
    */
   describe('the max-price control', () => {
-    const maxPriceInput = () => screen.getByLabelText('Maximum price') as HTMLInputElement;
+    const maxPriceInput = () => screen.getByLabelText('Price') as HTMLInputElement;
     const stepUp = () => fireEvent.click(screen.getByLabelText('Increase maximum price'));
     const stepDown = () => fireEvent.click(screen.getByLabelText('Decrease maximum price'));
 

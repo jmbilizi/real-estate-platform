@@ -269,7 +269,6 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
               type="text"
               inputMode="numeric"
               pattern="[0-9]*"
-              aria-label="Maximum price"
               aria-invalid={maxPriceError}
               aria-describedby={maxPriceError ? 'filter-max-price-error' : undefined}
               placeholder="No max"
