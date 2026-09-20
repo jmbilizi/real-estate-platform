@@ -833,6 +833,25 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
           },
           {
             "in": "query",
+            "name": "city",
+            "required": false,
+            "schema": {
+              "description": "Case-insensitive EXACT match, not substring — a place name, not a search term. ANDed with every other filter, including \`query\`. Mirrors \`neighborhood\`: a substring match would make \`Ken\` match \`Kensington\`.",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "description": "Two-letter state code, case-insensitive exact match (e.g. \`MD\`). ANDed with every other filter, including \`query\` — no parameter suppresses another. Full state names are the client’s job to normalize before sending this parameter.",
+              "pattern": "^[A-Za-z]{2}$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
             "name": "listingType",
             "required": false,
             "schema": {

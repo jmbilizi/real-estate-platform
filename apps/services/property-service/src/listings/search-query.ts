@@ -65,6 +65,17 @@ export function buildSearchQuery(request: SearchRequest): {
     conditions.push(`strpos(lower(v.address), lower(${bind(request.street)})) > 0`);
   }
 
+  // Case-insensitive EXACT equality, not substring — a place name, not a search term. Safe where
+  // `street` needed care: `listing_search_v` masks `address`/`latitude`/`longitude` for a
+  // seller-suppressed address but still publishes `city`/`state` unmasked, so this filter cannot
+  // become a confirmation oracle for a withheld street address (#48 context).
+  if (request.city) {
+    conditions.push(`lower(v.city) = lower(${bind(request.city)})`);
+  }
+  if (request.state) {
+    conditions.push(`lower(v.state) = lower(${bind(request.state)})`);
+  }
+
   // Free-text search: title, address (masked), city, neighborhood, zip — never `description`,
   // which is third-party MLS remarks carrying a moderation state; making it searchable would be
   // keyword-based steering (PRD §6.3).
