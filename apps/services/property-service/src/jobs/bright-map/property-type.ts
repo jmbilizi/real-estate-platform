@@ -24,8 +24,8 @@ const PROPERTY_SUB_TYPE_MAP: Readonly<Record<string, PropertyType>> = {
  * live test feed (#207) — verified against all 1,216 such staged records on 2026-09-19, none of
  * which carry a `PropertySubType`. `StructureDesignType` is the field Bright actually populates for
  * a residential dwelling's structure, so it is the fallback vocabulary rather than a second guess:
- * still a closed, wire-observed map, still fails closed on anything not listed (mobile/manufactured
- * homes, parking spaces, and "Other" have no safe mapping and stay withheld).
+ * still a closed, wire-observed map, still fails closed on anything not listed (parking spaces and
+ * "Other" have no safe mapping and stay withheld).
  */
 const STRUCTURE_DESIGN_TYPE_MAP: Readonly<Record<string, PropertyType>> = {
   Detached: 'Single Family',
@@ -34,6 +34,10 @@ const STRUCTURE_DESIGN_TYPE_MAP: Readonly<Record<string, PropertyType>> = {
   'Interior Row/Townhouse': 'Townhome',
   'Unit/Flat/Apartment': 'Condo',
   'Penthouse Unit/Flat/Apartment': 'Condo',
+  // #226: Bright's manufactured/mobile dwelling values. 'Other' and blank-on-both stay unmapped —
+  // no catch-all.
+  Manufactured: 'Manufactured/Mobile',
+  'Mobile Pre 1976': 'Manufactured/Mobile',
 };
 
 export function mapPropertyType(payload: Readonly<Record<string, unknown>>): PropertyType | null {

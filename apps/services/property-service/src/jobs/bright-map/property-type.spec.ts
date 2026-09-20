@@ -32,9 +32,12 @@ describe('mapPropertyType', () => {
     );
   });
 
+  it('maps a manufactured/mobile StructureDesignType (#226)', () => {
+    expect(mapPropertyType({ StructureDesignType: 'Manufactured' })).toBe('Manufactured/Mobile');
+    expect(mapPropertyType({ StructureDesignType: 'Mobile Pre 1976' })).toBe('Manufactured/Mobile');
+  });
+
   it('fails closed on an unrecognised structure design type', () => {
-    expect(mapPropertyType({ StructureDesignType: 'Manufactured' })).toBeNull();
-    expect(mapPropertyType({ StructureDesignType: 'Mobile Pre 1976' })).toBeNull();
     expect(mapPropertyType({ StructureDesignType: 'Other' })).toBeNull();
   });
 
