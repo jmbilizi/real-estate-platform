@@ -123,7 +123,7 @@ export async function mapStagedBrightProperties(
       property_id: propertyId,
       unit_id: unitId,
       title: listing.title,
-      offer_kind: 'sale',
+      offer_kind: listing.offerKind,
       consumer_status: listing.consumerStatus,
       status: listing.status,
       source: 'brightMLS',
