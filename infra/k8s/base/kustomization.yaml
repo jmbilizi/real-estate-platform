@@ -24,7 +24,7 @@ resources:
   # Secrets (all first)
   - secrets/postgres.secret.yaml
   - secrets/redis.secret.yaml
-  - secrets/jaeger.secret.yaml
+  - secrets/ingress.secret.yaml
   - secrets/bright-mls.secret.yaml
   - secrets/postmark.secret.yaml
 
