@@ -142,6 +142,14 @@ export interface BrightRunFinishedRecord extends BrightRunRecordBase {
   readonly feed?: 'test' | 'production';
   /** Present on `replicated`. One entry per resource the run worked. */
   readonly resources?: readonly BrightResourceReport[];
+  /**
+   * Present on `replicated` when mapping withheld at least one staged record. Counts only, keyed by
+   * the fixed `RejectReason` enum from `bright-map/map-record.ts` — never a record payload, address
+   * or listing key, so this carries nothing the redaction rule above would forbid. Without this a
+   * mass rejection is visible only as one aggregate `withheld` number in `message`, with no way to
+   * tell a genuine data gap from a mapping defect (#207).
+   */
+  readonly mappingWithheldByReason?: Readonly<Record<string, number>>;
   /** True when any resource reported a stalled cursor. Hoisted so one field answers "is it fresh?". */
   readonly stalled?: boolean;
 }
