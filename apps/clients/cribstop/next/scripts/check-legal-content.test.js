@@ -9,31 +9,49 @@ const SCRIPT_PATH = path.join(__dirname, 'check-legal-content.js');
 /**
  * Runs as a child process, not a `require`, because the script's failure path is
  * `process.exit(1)` — asserting on a real exit code is what proves the build actually stops.
+ * `env` lets each test control the production-build signal without touching the real process.
  */
-function runGate() {
-  return execFileSync(process.execPath, [SCRIPT_PATH], { encoding: 'utf8' });
+function runGate(env) {
+  return execFileSync(process.execPath, [SCRIPT_PATH], {
+    encoding: 'utf8',
+    env: { ...process.env, CI: '', NEXT_BUILD_STANDALONE: '', ...env },
+  });
 }
 
 describe('check-legal-content.js', () => {
-  it('fails while a legal content module is a draft placeholder (current state, pending #156)', () => {
-    expect(() => runGate()).toThrow(/Command failed/);
+  describe('production build (CI=true)', () => {
+    it('fails while a legal content module is a draft placeholder (current state, pending #156)', () => {
+      expect(() => runGate({ CI: 'true' })).toThrow(/Command failed/);
+    });
+
+    it('reports both content modules by name when both are drafts', () => {
+      try {
+        runGate({ CI: 'true' });
+        throw new Error('expected the gate script to exit non-zero');
+      } catch (error) {
+        const output = error.stderr ?? '';
+        expect(output).toMatch(/privacy\.json/);
+        expect(output).toMatch(/terms\.json/);
+      }
+    });
   });
 
-  it('reports both content modules by name when both are drafts', () => {
-    try {
-      runGate();
-      throw new Error('expected the gate script to exit non-zero');
-    } catch (error) {
-      const output = error.stderr ?? '';
-      expect(output).toMatch(/privacy\.json/);
-      expect(output).toMatch(/terms\.json/);
-    }
+  describe('production build (NEXT_BUILD_STANDALONE=1, the Docker build signal)', () => {
+    it('fails the same way as the CI signal', () => {
+      expect(() => runGate({ NEXT_BUILD_STANDALONE: '1' })).toThrow(/Command failed/);
+    });
+  });
+
+  describe('non-production build (neither signal set, e.g. a local `nx build`)', () => {
+    it('does not fail, even with a draft module present', () => {
+      expect(runGate({})).toBe('');
+    });
   });
 
   /**
-   * Exercises `findDraftFiles` against fixture modules, not the real content, so the success
-   * path stays covered after #156 sets the real `isDraft` values to false and the two tests
-   * above are rewritten for the approved-copy state.
+   * Exercises `findDraftFiles` against fixture modules, not the real content, so the pass case
+   * stays covered after #156 sets the real `isDraft` values to false and the tests above are
+   * rewritten for the approved-copy state.
    */
   describe('findDraftFiles', () => {
     let tmpDir;

@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 /**
- * Fails the production build while any legal content module is a draft placeholder.
+ * Fails a production build while any legal content module is a draft placeholder.
  *
  * #156 delivers approved copy for `/privacy` and `/terms`. Until then, this gate stops a draft
- * policy from reaching a build. The pages also show a draft banner, but only this gate can stop
- * a build.
+ * policy from reaching a deployable artifact. The pages also show a draft banner, but only this
+ * gate can stop a build.
+ *
+ * Runs only for a production build (see `is-production-build.js`), so a local `nx build` or
+ * `next build` stays usable for iteration while #156 is still open.
  */
 const path = require('path');
+const { isProductionBuild } = require('./is-production-build');
 
 const CONTENT_DIR = path.join(__dirname, '..', 'src', 'content', 'legal');
 const CONTENT_FILES = ['privacy.json', 'terms.json'];
@@ -20,6 +24,10 @@ function findDraftFiles(contentDir, files) {
 }
 
 function main() {
+  if (!isProductionBuild()) {
+    return;
+  }
+
   const draftFiles = findDraftFiles(CONTENT_DIR, CONTENT_FILES);
 
   if (draftFiles.length > 0) {
