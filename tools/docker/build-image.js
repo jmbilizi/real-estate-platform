@@ -289,7 +289,7 @@ function buildImage(projectName, options) {
     `org.opencontainers.image.source=https://github.com/${options.owner}/${options.repo}`,
   );
   buildArgs.push('--label', `org.opencontainers.image.description=${projectName} service`);
-  buildArgs.push('--label', `org.opencontainers.image.licenses=MIT`);
+  buildArgs.push('--label', 'org.opencontainers.image.licenses=MIT');
 
   // Context is workspace root (needed for monorepo COPY commands)
   buildArgs.push(workspaceRoot);
@@ -313,7 +313,7 @@ function buildImage(projectName, options) {
 
   // Push if requested
   if (options.push) {
-    logInfo(`Pushing image to registry...`);
+    logInfo('Pushing image to registry...');
     const pushResult = run(`docker push ${fullImageRef}`);
 
     if (!pushResult.success) {

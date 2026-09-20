@@ -122,7 +122,7 @@ function ensureNodeTargets(
   projectName,
   projectRootRel,
   projectRootAbs,
-  workspaceRoot,
+  _workspaceRoot,
 ) {
   projectJson.targets = projectJson.targets || {};
 

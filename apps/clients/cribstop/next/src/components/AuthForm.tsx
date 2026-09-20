@@ -1,10 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { useToast } from '@/lib/useToast';
+import privacyContent from '@/content/legal/privacy.json';
+import termsContent from '@/content/legal/terms.json';
+
+// Neither page has approved copy yet, so signup must not claim a binding agreement to a page
+// that says, on its own face, "carries no approved legal copy" (#156, #157).
+const legalCopyApproved = !privacyContent.isDraft && !termsContent.isDraft;
 
 /** Keyed by hostname so it never collides across environments or domains. */
 function getRememberEmailKey() {
@@ -211,6 +218,20 @@ export default function AuthForm({
                 Forgot password?
               </button>
             </div>
+          )}
+
+          {mode === 'signup' && (
+            <p className="text-center text-xs text-ink-muted">
+              {legalCopyApproved ? 'By creating an account, you agree to our' : 'Review our'}{' '}
+              <Link href="/terms" className="font-medium text-brand hover:underline">
+                Terms of Service
+              </Link>{' '}
+              and{' '}
+              <Link href="/privacy" className="font-medium text-brand hover:underline">
+                Privacy Policy
+              </Link>
+              {legalCopyApproved ? '.' : ' (draft, pending approval).'}
+            </p>
           )}
 
           <button

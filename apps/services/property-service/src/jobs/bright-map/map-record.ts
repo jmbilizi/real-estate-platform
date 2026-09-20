@@ -30,7 +30,8 @@ export type RejectReason =
   | 'sold_display_delay_not_configured'
   | 'sold_missing_close_date'
   | 'sold_still_in_display_delay_window'
-  | 'missing_required_attribution';
+  | 'missing_required_attribution'
+  | 'offer_kind_not_supported';
 
 export interface MappedPropertyInput {
   readonly address_raw: string;
@@ -110,6 +111,18 @@ function toNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+/**
+ * `properties.lot_sqft` is `integer`, but Bright's `LotSizeSquareFeet` is `Edm.Double` (#207) — a lot
+ * converted from acres routinely carries a fractional value (e.g. `127195.2`). Postgres rejects that
+ * text verbatim against an integer column, which crashed the whole mapping pass rather than
+ * rejecting the one record: an uncaught error, not a `RejectReason`. Rounding to the nearest square
+ * foot loses nothing a consumer would notice and keeps the column's existing type.
+ */
+function toRoundedNumber(value: unknown): number | null {
+  const n = toNumber(value);
+  return n === null ? null : Math.round(n);
+}
+
 function toDateOnly(value: unknown): string | null {
   if (typeof value !== 'string' || value.trim().length === 0) {
     return null;
@@ -120,6 +133,25 @@ function toDateOnly(value: unknown): string | null {
 
 function reject(listingKey: string | null, reason: RejectReason): RejectedRecord {
   return { kind: 'rejected', listingKey, reason };
+}
+
+/**
+ * Bright's `PropertyType` carries the sale/lease split as a suffix on the value itself — observed on
+ * the wire as `Residential Lease` and `CommercialLease` (Bright is inconsistent about the space).
+ * `mapStagedBrightProperties` always writes `offer_kind: 'sale'` (#93), so a lease record published
+ * unchanged would misrepresent a rental as for-sale inventory. Rent support is a product decision
+ * (offer_kind mapping, listing_type interaction, rent-specific search) that this ticket does not
+ * make, so a lease record fails closed with its own reason rather than a silent misrepresentation.
+ *
+ * A closed set of observed values, not a `.includes('Lease')` substring test: RESO also uses "Lease"
+ * inside non-rental descriptors (e.g. a ground-lease land tenure), and a substring match would
+ * reject a genuine sale on a word that does not actually mean "this is a rental".
+ */
+const LEASE_PROPERTY_TYPES = new Set(['Residential Lease', 'CommercialLease']);
+
+function isLeaseOffer(payload: Readonly<Record<string, unknown>>): boolean {
+  const propertyType = nonBlank(payload.PropertyType);
+  return propertyType !== null && LEASE_PROPERTY_TYPES.has(propertyType);
 }
 
 export function mapBrightPropertyRecord(
@@ -142,6 +174,10 @@ export function mapBrightPropertyRecord(
   const listPrice = toNumber(payload.ListPrice);
   if (listPrice === null) {
     return reject(listingKey, 'missing_price');
+  }
+
+  if (isLeaseOffer(payload)) {
+    return reject(listingKey, 'offer_kind_not_supported');
   }
 
   const propertyType = mapPropertyType(payload);
@@ -206,7 +242,7 @@ export function mapBrightPropertyRecord(
       neighborhood: nonBlank(payload.SubdivisionName),
       property_type: propertyType,
       year_built: toNumber(payload.YearBuilt),
-      lot_sqft: toNumber(payload.LotSizeSquareFeet),
+      lot_sqft: toRoundedNumber(payload.LotSizeSquareFeet),
       beds: toNumber(payload.BedroomsTotal),
       baths_full: toNumber(payload.BathroomsFull),
       baths_half: toNumber(payload.BathroomsHalf),

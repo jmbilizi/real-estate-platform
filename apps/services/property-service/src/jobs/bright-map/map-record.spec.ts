@@ -95,6 +95,51 @@ describe('mapBrightPropertyRecord', () => {
     });
   });
 
+  it('maps a residential record via StructureDesignType when PropertySubType is blank (#207)', () => {
+    const { PropertySubType, ...rest } = BASE_PAYLOAD;
+    void PropertySubType;
+    const result = mapBrightPropertyRecord(
+      { ...rest, PropertyType: 'Residential', StructureDesignType: 'Interior Row/Townhouse' },
+      ctx(),
+    );
+    if (result.kind !== 'mapped') throw new Error('expected mapped');
+    expect(result.property.property_type).toBe('Townhome');
+  });
+
+  it('rejects a Residential Lease record instead of publishing a rental as a sale (#207)', () => {
+    const result = mapBrightPropertyRecord(
+      { ...BASE_PAYLOAD, PropertyType: 'Residential Lease' },
+      ctx(),
+    );
+    expect(result).toEqual({
+      kind: 'rejected',
+      listingKey: 'BR-1',
+      reason: 'offer_kind_not_supported',
+    });
+  });
+
+  it('rejects a CommercialLease record the same way', () => {
+    const result = mapBrightPropertyRecord(
+      { ...BASE_PAYLOAD, PropertyType: 'CommercialLease' },
+      ctx(),
+    );
+    expect(result).toEqual({
+      kind: 'rejected',
+      listingKey: 'BR-1',
+      reason: 'offer_kind_not_supported',
+    });
+  });
+
+  it('does not reject a sale PropertyType that merely contains the word "Lease"', () => {
+    // A closed-set check, not a substring test: RESO also uses "Lease" in non-rental descriptors
+    // (e.g. ground-lease land tenure), which must not be misread as a rental offer.
+    const result = mapBrightPropertyRecord(
+      { ...BASE_PAYLOAD, PropertyType: 'Residential Leasehold' },
+      ctx(),
+    );
+    expect(result.kind).toBe('mapped');
+  });
+
   it('rejects an unrecognised StandardStatus', () => {
     const result = mapBrightPropertyRecord(
       { ...BASE_PAYLOAD, StandardStatus: 'Registered' },
@@ -171,6 +216,12 @@ describe('mapBrightPropertyRecord', () => {
       ctx({ soldDisplayDelayDays: 30 }),
     );
     expect(result.kind).toBe('mapped');
+  });
+
+  it('rounds a fractional LotSizeSquareFeet to fit the integer lot_sqft column (#207)', () => {
+    const result = mapBrightPropertyRecord({ ...BASE_PAYLOAD, LotSizeSquareFeet: 127195.2 }, ctx());
+    if (result.kind !== 'mapped') throw new Error('expected mapped');
+    expect(result.property.lot_sqft).toBe(127195);
   });
 
   it('splits a unit designator out of the address into unitNumber', () => {

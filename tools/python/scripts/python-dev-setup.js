@@ -26,7 +26,7 @@
  */
 
 const path = require('path');
-const { spawnSync, execSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const os = require('os');
 const fs = require('fs');
 

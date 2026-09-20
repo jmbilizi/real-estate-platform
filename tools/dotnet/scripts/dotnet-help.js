@@ -4,8 +4,6 @@
  * This script displays help information for .NET-related commands in the monorepo.
  */
 
-const packageJson = require('../../../package.json');
-
 function printHeader(text) {
   console.log(`\n${text}`);
   console.log('-'.repeat(text.length));

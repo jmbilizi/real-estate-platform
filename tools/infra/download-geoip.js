@@ -146,7 +146,7 @@ async function main() {
     // Extract using tar (cross-platform)
     try {
       execSync(`tar -xzf "${tarFile}" -C "${tempDir}"`, { stdio: 'ignore' });
-    } catch (err) {
+    } catch {
       log('tar command not found, trying manual extraction...', 'warn');
       throw new Error('Please install tar or 7-zip to extract the database');
     }
@@ -199,9 +199,9 @@ async function main() {
         envContent += `MAXMIND_LICENSE_KEY=${process.env.MAXMIND_LICENSE_KEY}\n`;
 
         fs.writeFileSync(ROOT_ENV_FILE, envContent, 'utf8');
-        log(`Added MAXMIND_LICENSE_KEY to .env file`, 'success');
+        log('Added MAXMIND_LICENSE_KEY to .env file', 'success');
       } else if (hasMaxMindKey) {
-        log(`MAXMIND_LICENSE_KEY already in .env file`, 'info');
+        log('MAXMIND_LICENSE_KEY already in .env file', 'info');
       }
     } catch (error) {
       log(`Warning: Could not update .env file: ${error.message}`, 'warn');

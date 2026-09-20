@@ -173,8 +173,17 @@ function replicatedMessage(
       ? 'No consumer row was written: mapping is #93.'
       : `Mapped ${mapping.mapped}/${mapping.staged} staged record(s), published ${mapping.published}, ` +
         `withheld ${mapping.withheld}, taken down ${mapping.takenDown}, sample-marked ` +
-        `${mapping.sampleMarked}.`)
+        `${mapping.sampleMarked}.` +
+        (mapping.withheld === 0 ? '' : ` Withheld by reason: ${formatWithheldByReason(mapping)}.`))
   );
+}
+
+/** `{reason: count}` sorted by count descending, so the largest rejection cause reads first. */
+function formatWithheldByReason(mapping: BrightMapRunReport): string {
+  return Object.entries(mapping.withheldByReason)
+    .sort(([, a], [, b]) => b - a)
+    .map(([reason, count]) => `${reason}=${count}`)
+    .join(', ');
 }
 
 /**
@@ -222,6 +231,7 @@ export async function runBrightIngest(
   const reports: BrightResourceReport[] = [];
   let counts: BrightRunCounts = ZERO_COUNTS;
   let feed: 'test' | 'production' | undefined;
+  let mappingWithheldByReason: Readonly<Record<string, number>> | undefined;
 
   // `config === null` and `configError !== null` are the same condition — resolveBrightConfig either
   // returned or threw. Testing the null rather than the error is what lets the compiler narrow
@@ -299,6 +309,9 @@ export async function runBrightIngest(
       counts = summarise(reports, deletionsDetected, mapping);
       outcome = 'replicated';
       message = replicatedMessage(config, reports, counts, mapping);
+      if (mapping.withheld > 0) {
+        mappingWithheldByReason = mapping.withheldByReason;
+      }
     } catch (error) {
       outcome = 'failed';
       message = error instanceof Error ? error.message : String(error);
@@ -334,6 +347,7 @@ export async function runBrightIngest(
     message,
     ...(feed === undefined ? {} : { feed }),
     ...(reports.length === 0 ? {} : { resources: reports, stalled }),
+    ...(mappingWithheldByReason === undefined ? {} : { mappingWithheldByReason }),
     ...(metadata === undefined
       ? {}
       : {

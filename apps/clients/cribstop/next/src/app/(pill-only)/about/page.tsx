@@ -71,7 +71,7 @@ export default function AboutPage() {
             rent.
           </p>
           <p className="font-medium text-ink">
-            Brokered by {BRAND.brokerageShort}. Equal Housing Opportunity.
+            Brokered by {BRAND.brokerageShort}. {BRAND.equalHousingOpportunity}.
           </p>
         </div>
       </div>

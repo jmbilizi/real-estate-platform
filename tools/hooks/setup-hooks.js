@@ -12,20 +12,14 @@
 
 const path = require('path');
 const fs = require('fs');
-const { spawnSync, execSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const os = require('os');
 
 // Determine OS
 const isWindows = os.platform() === 'win32';
-const isMacOS = os.platform() === 'darwin';
-const isLinux = os.platform() === 'linux';
 
 // Define paths
 const rootDir = process.cwd();
-const toolsDir = path.join(rootDir, 'tools');
-const pythonToolsDir = path.join(toolsDir, 'python');
-const scriptsDir = path.join(pythonToolsDir, 'scripts');
-const huskyDir = path.join(rootDir, '.husky');
 const venvPath = path.join(rootDir, '.venv');
 const venvBinDir = isWindows ? path.join(venvPath, 'Scripts') : path.join(venvPath, 'bin');
 
@@ -54,45 +48,6 @@ function execute(cmd, args = [], options = {}) {
     success: result.status === 0,
     error: result.error,
   };
-}
-
-// Check if Python is installed
-function isPythonInstalled() {
-  log('Checking if Python is installed...');
-
-  try {
-    if (isWindows) {
-      const whereResult = spawnSync('where', ['python'], { shell: true });
-      if (whereResult.status === 0 && whereResult.stdout.toString().trim().length > 0) {
-        return true;
-      }
-
-      const versionResult = spawnSync('python', ['--version'], { shell: true });
-      if (versionResult.status === 0) {
-        return true;
-      }
-
-      const pyResult = spawnSync('py', ['--version'], { shell: true });
-      if (pyResult.status === 0) {
-        return true;
-      }
-    } else {
-      const py3Result = spawnSync('python3', ['--version'], { shell: true });
-      if (py3Result.status === 0) {
-        return true;
-      }
-
-      const pyResult = spawnSync('python', ['--version'], { shell: true });
-      if (pyResult.status === 0) {
-        return true;
-      }
-    }
-
-    return false;
-  } catch (error) {
-    log(`Error checking Python: ${error.message}`, true);
-    return false;
-  }
 }
 
 // Setup Python environment for hooks (UV workspace shared venv)

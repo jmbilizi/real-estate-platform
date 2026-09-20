@@ -44,7 +44,20 @@ async def lifespan(app: FastAPI):
     """Application lifespan: load models on startup, unload on shutdown."""
     _register_models()
     registry.load_all()
-    logger.info("All models loaded. Service is ready.")
+
+    failed = [
+        model_name
+        for model_name in registry.model_names
+        if not registry.get(model_name).is_ready
+    ]
+    if failed:
+        logger.error(
+            "Model load failed for: %s. Service is running but NOT ready.",
+            ", ".join(failed),
+        )
+    else:
+        logger.info("All models loaded. Service is ready.")
+
     yield
     registry.unload_all()
     logger.info("All models unloaded. Service shutting down.")

@@ -103,7 +103,7 @@ function validateIngressAnnotations() {
       if (conflicts.length > 0) {
         hasErrors = true;
         const relPath = path.relative(process.cwd(), patchFile);
-        console.error(`❌ Annotation conflict detected:`);
+        console.error('❌ Annotation conflict detected:');
         console.error(`   Base:  ${base.file}`);
         console.error(`   Patch: ${relPath}`);
         console.error(`   Conflicting annotations: ${conflicts.join(', ')}`);
