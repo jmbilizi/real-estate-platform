@@ -10,7 +10,6 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
-const os = require('os');
 
 // Constants
 const USAGE = `
@@ -46,9 +45,6 @@ if (args.length === 0 || args[0] === 'help' || args[0] === '--help' || args[0] =
   console.log(USAGE);
   process.exit(0);
 }
-
-// Check if we're running on Windows
-const isWindows = os.platform() === 'win32';
 
 // Parse command line arguments
 const command = args[0];
@@ -118,7 +114,7 @@ function findDotNetProjects() {
               if (projectJson.name) {
                 nxProjectName = projectJson.name;
               }
-            } catch (err) {
+            } catch {
               // If there's an error reading project.json, just use the file name
             }
           }
@@ -193,7 +189,7 @@ function updateDirectoryPackagesProps(packageName, version) {
       const newPackage = `    <PackageVersion Include="${packageName}" Version="${version}" />\n`;
       content = content.slice(0, insertionPoint) + newPackage + content.slice(insertionPoint);
     } else {
-      console.error(`Error: Could not find insertion point in Directory.Packages.props`);
+      console.error('Error: Could not find insertion point in Directory.Packages.props');
       return false;
     }
   }
@@ -210,7 +206,6 @@ function updateDirectoryPackagesProps(packageName, version) {
 
     // Detect line ending style from content
     const hasCRLF = content.includes('\r\n');
-    const lineEnding = hasCRLF ? '\r\n' : '\n';
 
     // Normalize line endings to match original
     if (hasCRLF) {
@@ -228,7 +223,7 @@ function updateDirectoryPackagesProps(packageName, version) {
     console.log(`Updated ${packageName} to version ${version} in Directory.Packages.props`);
     return true;
   } catch (error) {
-    console.error(`Error updating Directory.Packages.props:`, error);
+    console.error('Error updating Directory.Packages.props:', error);
     return false;
   }
 }
@@ -284,7 +279,6 @@ async function main() {
           }
 
           console.log(`Installing ${packageName} to ${projectName}...`);
-          const versionFlag = version ? `--version ${version}` : '';
           if (
             runDotNetCommand(
               'add',
@@ -385,7 +379,7 @@ async function main() {
           console.log(
             '\n🔄 Central package version updated. Run the following to update projects:',
           );
-          console.log(`dotnet restore`);
+          console.log('dotnet restore');
         } else {
           // Update a specific project
           const projects = findDotNetProjects();

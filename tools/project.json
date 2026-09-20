@@ -1,0 +1,17 @@
+{
+  "name": "tools",
+  "$schema": "../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "tools",
+  "tags": ["runtime:node", "type:lib", "framework:cli", "scope:shared", "devteam:platform"],
+  "targets": {
+    "lint": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "command": "eslint --config tools/node/configs/eslint.config.js tools",
+        "cwd": "."
+      }
+    }
+  }
+}

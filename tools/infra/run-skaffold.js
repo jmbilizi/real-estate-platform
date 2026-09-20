@@ -407,7 +407,7 @@ function resolvePodmanDockerHost() {
     );
     if (fs.existsSync(macSocket)) return `unix://${macSocket}`;
     // Fallback: rootless socket via XDG_RUNTIME_DIR
-    const xdgRuntime = process.env.XDG_RUNTIME_DIR || `/var/folders`;
+    const xdgRuntime = process.env.XDG_RUNTIME_DIR || '/var/folders';
     const xdgSocket = `${xdgRuntime}/podman/podman.sock`;
     if (fs.existsSync(xdgSocket)) return `unix://${xdgSocket}`;
     return undefined;

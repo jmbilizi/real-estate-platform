@@ -211,7 +211,7 @@ function getPodmanMachines() {
   try {
     const parsed = JSON.parse(result.output || '[]');
     return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
+  } catch {
     return [];
   }
 }
@@ -279,7 +279,7 @@ function installCABundleInPodmanMachine(machineName) {
     return;
   }
 
-  const remoteTempPath = `/tmp/workspace-enterprise-roots.pem`;
+  const remoteTempPath = '/tmp/workspace-enterprise-roots.pem';
   if (!streamBufferToPodmanMachine(machineName, remoteTempPath, hostCABundle)) {
     logWarning(
       'Failed to stream enterprise CA bundle into Podman machine. Try running setup as Administrator.',
@@ -365,7 +365,7 @@ Set-Content -Path '${pemPath}' -Value $sb.ToString() -Encoding ascii
       return null;
     }
     return buffer;
-  } catch (error) {
+  } catch {
     logWarning(
       'Failed to export Windows trust store. Run VS Code as Administrator or export the CA manually.',
     );
@@ -373,7 +373,7 @@ Set-Content -Path '${pemPath}' -Value $sb.ToString() -Encoding ascii
   } finally {
     try {
       fs.rmSync(tempDir, { recursive: true, force: true });
-    } catch (error) {
+    } catch {
       // ignore cleanup errors
     }
   }
@@ -397,7 +397,7 @@ function exportMacOSRootCertificates() {
           stdio: 'pipe',
         },
       );
-    } catch (error) {
+    } catch {
       // System.keychain might not exist or be accessible, continue with just system roots
       logInfo('Skipping System.keychain (may require elevated permissions)');
     }
@@ -475,7 +475,7 @@ function streamBufferToPodmanMachine(machineName, remotePath, buffer) {
       shell: true,
     });
     return true;
-  } catch (error) {
+  } catch {
     return false;
   }
 }
@@ -518,14 +518,14 @@ function copyBufferToNode(nodeName, buffer, targetPath) {
     }
     const copyResult = run(`podman cp "${tempPath}" ${nodeName}:${targetPath}`, { silent: true });
     return copyResult.success;
-  } catch (error) {
+  } catch {
     return false;
   } finally {
     try {
       if (fs.existsSync(tempPath)) {
         fs.unlinkSync(tempPath);
       }
-    } catch (error) {
+    } catch {
       // ignore cleanup errors
     }
   }
@@ -555,16 +555,6 @@ function buildHostsToml(server) {
     `[host."${server}"]`,
     '  capabilities = ["pull", "resolve"]',
     `  ca = ["${CONTAINERD_CA_PATH}"]`,
-    '',
-  ].join('\n');
-}
-
-function buildLocalRegistryHostsToml(endpoint) {
-  return [
-    `server = "${endpoint}"`,
-    '',
-    `[host."${endpoint}"]`,
-    '  capabilities = ["pull", "resolve"]',
     '',
   ].join('\n');
 }
@@ -642,7 +632,7 @@ function configureNodeMinimalSearchDomains(nodeName) {
       shell: true,
     });
     return true;
-  } catch (error) {
+  } catch {
     return false;
   }
 }

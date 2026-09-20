@@ -7,7 +7,7 @@
  * It's designed to avoid pipeline failures and provide clear error messages.
  */
 
-const { spawnSync, execSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const args = process.argv.slice(2);
 
 // Extract target and project type for better error messages
