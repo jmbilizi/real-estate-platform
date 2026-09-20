@@ -14,18 +14,25 @@ export interface LegalContent {
   effectiveDate: string | null;
   sections: readonly LegalSection[];
   /**
-   * True until #156 delivers approved copy. `scripts/check-legal-content.js` fails the
-   * production build while any legal content module has this set — see #157.
+   * True until #156 delivers approved copy. `LegalPage` shows a draft banner while this is set;
+   * see #157 for the pending decision on a build- or deploy-time block.
    */
   isDraft: boolean;
 }
 
-/** Formats an ISO effective date for display, or a pending note while there is none. */
+/**
+ * Formats an ISO effective date for display, or a pending note while there is none or the value
+ * does not parse — a malformed date must never render "Invalid Date" on a public legal page.
+ */
 export function formatEffectiveDate(effectiveDate: string | null): string {
   if (!effectiveDate) {
     return 'Pending legal approval';
   }
-  return new Date(`${effectiveDate}T00:00:00Z`).toLocaleDateString('en-US', {
+  const date = new Date(`${effectiveDate}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) {
+    return 'Pending legal approval';
+  }
+  return date.toLocaleDateString('en-US', {
     timeZone: 'UTC',
     month: 'long',
     day: 'numeric',
