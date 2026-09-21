@@ -132,10 +132,15 @@ for `AccountRecovery:ConfirmationTokenLifetime` (24h) on a dedicated token provi
 
 **Enforcement is off** (`AccountRecovery:RequireConfirmedEmail = false` in every environment). An
 unconfirmed account can sign in. The service logs a warning (event 1364) at startup while this is
-so. #149 turns it on after #133 and #138 make delivery real.
+so. #149 turns it on.
 
-**No delivery transport exists yet.** `UndeliveredIdentityEmailSender` logs one warning per message
-(events 1360, 1361) and never logs the link or code. #138 replaces it.
+**Mail sends through Postmark.** `PostmarkEmailSender` queues every message onto
+`PostmarkDeliveryQueue` (a background service) and returns immediately, so a send never blocks the
+request that triggered it. The queue retries a transport failure a bounded number of times, then
+logs loudly. If `Postmark:ServerToken` is still the committed placeholder — no real token has been
+substituted for this environment — nothing is sent and that is logged (event 1370) rather than
+attempted. Accepted, rejected, and exhausted-retry outcomes log events 1371/1372/1373, keyed by
+message kind, never the link, the code, or the body.
 
 **Sender identity** (configuration, section `Email`): from
 `Cribstop (Real Broker, LLC) <no-reply@cribstop.com>`, reply-to `contact@cribstop.com`. Every body
@@ -268,11 +273,13 @@ policy is reported as itself, but only after the token has proven valid. `/confi
 an opaque `userId` rather than an address and answers a bare `401` for both an unknown user and a
 bad code.
 
-**`/register` is the exception, and it is a real one.** Identity returns `400` with
-`{"errors":{"DuplicateUserName":["Username 'alice@example.com' is already taken."]}}` for an address
-that exists, and an empty `200` for one that does not — so registration discloses membership, and
-the framework offers no way out of it. Pre-existing rather than introduced here, recorded on #136
-with a recommended course rather than absorbed.
+**`/register` used to be the exception.** Identity itself returns `400` with
+`{"errors":{"DuplicateUserName":[...]}}` for an address that exists and an empty `200` for one that
+does not, disclosing membership with no way out from inside the framework.
+`Helpers/IdentityResponseShapingFilter.cs` closes that gap (#147): a duplicate address now answers
+the identical `200` empty body. What happened is told only to the mailbox — an unconfirmed account
+gets a fresh confirmation link, a confirmed account gets an already-registered notice (#138) — never
+the caller.
 
 #### Tokens, and what a reset invalidates
 
@@ -325,10 +332,12 @@ already confirmed or not, and the address is chosen entirely by the caller.
 confirmation link and reset code with a `200`, no exception and no log line. This service did
 exactly that until #136.
 
-`Helpers/UndeliveredIdentityEmailSender.cs` stands in and logs a `Warning` per message — event id
-`1360` `PasswordResetTokenUndelivered`, `1361` `EmailConfirmationLinkUndelivered` — and never logs
-the link or the code, both of which are bearer credentials for the account. Supplying a real channel
-(#138) means registering an `IEmailSender<ApplicationUser>`; nothing about these contracts changes.
+`Helpers/PostmarkEmailSender.cs` registers as that `IEmailSender<ApplicationUser>` and composes
+through `Helpers/IdentityEmailComposer.cs`, then hands the message to
+`Helpers/PostmarkDeliveryQueue.cs` (the `IOutboundEmailSender` transport, also a background service)
+rather than sending inline. The link, the code, and the message body are never logged — only the
+recipient, the message kind, and the provider's own outcome (accepted, rejected, or failed after
+retries).
 
 #### Requiring a confirmed address
 

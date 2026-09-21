@@ -19,8 +19,8 @@ namespace AccountService.Helpers;
 /// <remarks>
 /// <list type="bullet">
 /// <item><c>/register</c>: a duplicate address answers exactly like a success. What happened is told
-/// only to the mailbox owner: an unconfirmed account gets a fresh confirmation link through the
-/// delivery seam. A confirmed account is logged for #138 to notify.</item>
+/// only to the mailbox owner: an unconfirmed account gets a fresh confirmation link, a confirmed
+/// account gets an already-registered notice, both through the delivery seam (#138).</item>
 /// <item><c>/login</c>: <c>NotAllowed</c> (unconfirmed) and <c>Lockedout</c> collapse into
 /// <c>Failed</c>. <c>RequiresTwoFactor</c> stays because the client drives the flow from it.</item>
 /// <item><c>/confirmEmail</c>: every failure answers one problem body that says only to request a
@@ -28,10 +28,12 @@ namespace AccountService.Helpers;
 /// </list>
 /// </remarks>
 /// <param name="links">The confirmation link builder.</param>
+/// <param name="composer">The message composer, for the already-registered notice.</param>
 /// <param name="rateLimiter">The shared counters, so a duplicate registration spends the resend budget.</param>
 /// <param name="logger">The logger.</param>
 internal sealed partial class IdentityResponseShapingFilter(
     ConfirmationLinkBuilder links,
+    IdentityEmailComposer composer,
     AccountRecoveryRateLimiter rateLimiter,
     ILogger<IdentityResponseShapingFilter> logger) : IEndpointFilter
 {
@@ -107,7 +109,7 @@ internal sealed partial class IdentityResponseShapingFilter(
         context.GetEndpoint()?.Metadata.GetMetadata<EndpointNameMetadata>()?.EndpointName
             is { } name && name.EndsWith("/confirmEmail", StringComparison.Ordinal);
 
-    [LoggerMessage(1362, LogLevel.Information, "Registration attempted for {Email}, which already has a confirmed account. The caller was answered as a success.", EventName = "RegistrationForConfirmedAddress")]
+    [LoggerMessage(1362, LogLevel.Information, "Registration attempted for {Email}, which already has a confirmed account. An already-registered notice was sent. The caller was answered as a success.", EventName = "RegistrationForConfirmedAddress")]
     private static partial void LogDuplicateConfirmed(ILogger logger, string email);
 
     [LoggerMessage(1363, LogLevel.Information, "Registration attempted for {Email}, which already has an unconfirmed account. Fresh confirmation link sent: {Sent}. The caller was answered as a success.", EventName = "RegistrationForUnconfirmedAddress")]
@@ -128,6 +130,11 @@ internal sealed partial class IdentityResponseShapingFilter(
 
         if (await userManager.IsEmailConfirmedAsync(user).ConfigureAwait(false))
         {
+            // #147's non-enumeration guarantee: the caller sees an ordinary success. Only the
+            // mailbox owner is told, so an attacker cannot use registration to learn who has an
+            // account.
+            var outbound = httpContext.RequestServices.GetRequiredService<IOutboundEmailSender>();
+            await outbound.SendAsync(composer.AlreadyRegistered(email)).ConfigureAwait(false);
             LogDuplicateConfirmed(logger, email);
             return TypedResults.Ok();
         }
