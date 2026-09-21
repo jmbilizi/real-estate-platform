@@ -7,9 +7,19 @@
 # credential never leaves prod.
 #
 # The mechanism is #160's local secret injection. It derives its injectable keys from every
-# `stringData` key under `infra/k8s/base/secrets/`, which includes both Bright keys. A developer who
-# puts test-feed credentials in `.env` gets them in this cluster's `bright-mls-secret`. A developer
-# who does not gets the committed placeholder and a `not_configured` run.
+# `stringData` key under `infra/k8s/base/secrets/`, which includes all six Bright keys (#246). A
+# developer who puts test-feed credentials in `.env` gets them in this cluster's `bright-mls-secret`.
+# A developer who does not gets the committed placeholder and a `not_configured` run.
+#
+# CREDENTIAL SELECTION (#246, closes most of #164). `BRIGHT_MLS_ENV` picks which credential pair the
+# run reads. This overlay declares `test` (inherited from the base CronJob, not repeated here), so
+# the run reads `BRIGHT_MLS_TEST_CLIENT_ID` / `BRIGHT_MLS_TEST_CLIENT_SECRET` and NEVER reads
+# `BRIGHT_MLS_PROD_CLIENT_ID` / `BRIGHT_MLS_PROD_CLIENT_SECRET`, whatever value that pair holds. A
+# production credential pasted into this cluster's `.env` therefore sits under a key this run never
+# looks at — the key NAME carries the tier, so the misfile is visible in the manifest rather than
+# hidden in a value nobody may print. The pre-#246 unsuffixed pair (`BRIGHT_MLS_CLIENT_ID` /
+# `BRIGHT_MLS_CLIENT_SECRET`) is read only as a fallback when the tier-suffixed pair is entirely
+# unset, and is scheduled for removal once every environment is provisioned on the new names.
 #
 # Do NOT substitute `brightmls.test.okta.com` for the token host. Okta serves the wildcard
 # `*.okta.com`, which cannot match a three-label name, so TLS fails permanently.

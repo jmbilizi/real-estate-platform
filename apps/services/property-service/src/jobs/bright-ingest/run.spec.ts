@@ -319,11 +319,55 @@ describe('runBrightIngest — feed tier', () => {
     expect(result.message).toContain('BRIGHT_MLS_TOKEN_ENDPOINT');
   });
 
-  it('allows a production host only under the production declaration', async () => {
-    const { invoke } = mockRun({
-      env: configuredEnv({ [BRIGHT_ENV_VARS.feed]: 'production' }),
+  it('refuses a test-labelled host when the environment declares the production tier (#246)', async () => {
+    // Ticket #246: the host check is now two-directional. The shared mock server binds to
+    // `TOKEN_ENDPOINT`/`SERVICE_ROOT`, both test-labelled, so declaring `production` here must
+    // fail on the same hosts that `test` accepts.
+    const { sink } = collectRecords();
+    const result = await runBrightIngest({
+      env: configuredEnv({ [BRIGHT_ENV_VARS.env]: 'production' }),
+      sink,
+      fetchImpl: stubFetch([]).fetchImpl,
     });
-    await expect(invoke()).resolves.toMatchObject({ outcome: 'replicated' });
+
+    expect(result.outcome).toBe('failed');
+    expect(result.message).toContain('is a recognised test-feed host');
+  });
+
+  /**
+   * #246: any environment may declare `production`, subject only to the host and credential
+   * checks — `config.ts` carries no overlay-name restriction. Verified against a second mock
+   * server whose hosts carry no non-production label, using the PROD credential pair.
+   */
+  it('allows a production host under the production declaration, with no overlay restriction', async () => {
+    const prodTokenEndpoint = 'https://okta.brightmls.invalid-tld/oauth2/default/v1/token';
+    const prodServiceRoot = 'https://bright-reso.brightmls.invalid-tld/RESO/OData/bright';
+    const server = createMockResoServer({
+      tokenEndpoint: prodTokenEndpoint,
+      serviceRoot: prodServiceRoot,
+      records: { BrightProperties: listings(6) },
+      pageSize: 4,
+    });
+    const memory = createMemoryStore();
+    const { sink, records } = collectRecords();
+
+    const result = await runBrightIngest({
+      env: {
+        [BRIGHT_ENV_VARS.tokenEndpoint]: prodTokenEndpoint,
+        [BRIGHT_ENV_VARS.serviceRoot]: prodServiceRoot,
+        [BRIGHT_ENV_VARS.env]: 'production',
+        [BRIGHT_ENV_VARS.prodClientId]: 'fixture-prod-client-id',
+        [BRIGHT_ENV_VARS.prodClientSecret]: 'fixture-prod-client-secret',
+      },
+      sink,
+      fetchImpl: server.fetchImpl,
+      store: memory.store,
+      sleep: () => Promise.resolve(),
+      random: () => 0,
+    });
+
+    expect(result.outcome).toBe('replicated');
+    expect((records[1] as BrightRunFinishedRecord).feed).toBe('production');
   });
 
   /**

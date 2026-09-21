@@ -124,25 +124,31 @@ spec:
                   value: ""
                 - name: BRIGHT_MLS_SERVICE_ROOT
                   value: ""
-                # Which TIER the feed belongs to, declared separately from the URLs. The job refuses
-                # to run if a `test` declaration meets a non-test host, so this value is a check on
-                # the endpoint pair rather than a duplicate of it.
+                # Which TIER the feed belongs to. `BRIGHT_MLS_ENV` is the selector (#246); the job
+                # refuses to run if a `test` declaration meets a non-test host, and now also refuses
+                # a `production` declaration meeting a recognised non-production host.
                 #
                 # The base default is the safe tier, and ONLY the prod overlay overrides it. An
                 # environment that forgets to patch this cannot read the production feed.
+                - name: BRIGHT_MLS_ENV
+                  value: "test"
+                # `BRIGHT_MLS_FEED` is the pre-#246 name for the same declaration, kept for one
+                # release as a migration fallback (config.ts reads BRIGHT_MLS_ENV first). Delete
+                # once every overlay is confirmed on BRIGHT_MLS_ENV.
                 - name: BRIGHT_MLS_FEED
                   value: "test"
                 # ── The credential itself ────────────────────────────────────────────────────
-                # Same field names in every environment, different values, sourced from GitHub
-                # ENVIRONMENT secrets (#117 item 2) — repository secrets are precisely how a staging
-                # value and a production value become interchangeable. The committed template holds
-                # `StrongBase64Password` placeholders, which the job treats as "not configured" and
-                # never transmits. An environment whose secret is not provisioned yet therefore runs
-                # to a clean completion rather than a 401.
+                # Tier-suffixed pairs (#246): BRIGHT_MLS_ENV picks which pair a run reads, and the
+                # resolver never reads the other pair, so a credential filed under the wrong tier
+                # key is inert rather than transmitted. The unsuffixed pair below is the pre-#246
+                # fallback, kept for one release. Same field names in every environment, different
+                # values, sourced from GitHub ENVIRONMENT secrets (#117 item 4). The committed
+                # template holds `StrongBase64Password` placeholders, which the job treats as "not
+                # configured" and never transmits.
                 #
-                # The reference is deliberately NOT `optional: true`: if bright-mls-secret is missing
-                # from a cluster the pod must fail to start with an obvious reason, rather than run
-                # and quietly report "no credentials" for a wiring mistake.
+                # None of these references is `optional: true`: if bright-mls-secret is missing from
+                # a cluster the pod must fail to start with an obvious reason, rather than run and
+                # quietly report "no credentials" for a wiring mistake.
                 - name: BRIGHT_MLS_CLIENT_ID
                   valueFrom:
                     secretKeyRef:
@@ -153,3 +159,23 @@ spec:
                     secretKeyRef:
                       name: bright-mls-secret
                       key: BRIGHT_MLS_CLIENT_SECRET
+                - name: BRIGHT_MLS_TEST_CLIENT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: bright-mls-secret
+                      key: BRIGHT_MLS_TEST_CLIENT_ID
+                - name: BRIGHT_MLS_TEST_CLIENT_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: bright-mls-secret
+                      key: BRIGHT_MLS_TEST_CLIENT_SECRET
+                - name: BRIGHT_MLS_PROD_CLIENT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: bright-mls-secret
+                      key: BRIGHT_MLS_PROD_CLIENT_ID
+                - name: BRIGHT_MLS_PROD_CLIENT_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: bright-mls-secret
+                      key: BRIGHT_MLS_PROD_CLIENT_SECRET
