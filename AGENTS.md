@@ -281,6 +281,25 @@ Provider mapping (Claude only — keep vendor names out of the rest of this guid
   `apps/**/Dockerfile`.
 - Jest `<rootDir>` inside `testMatch` / `testPathIgnorePatterns` silently matches nothing on Windows
   (native backslashes read as escapes). Write the patterns without it.
+- **Never pass a Go template (`{{...}}`) as a `spawnSync` argument when `shell: true`.** cmd.exe
+  re-parses every argument, so podman/docker receives a mangled template and fails with
+  `template: inspect:1: bad character U+007B '{'`. The call then returns its failure default, and a
+  boolean helper reads `false` on Windows only. This made `local-registry.js` force-recreate the
+  local registry on every `ensure`; each recreate orphaned a netavark DNAT rule for port 5001 until
+  the port resolved to a deleted container and image pushes failed with `no route to host` (#274).
+  Read the whole object with plain `podman inspect <name>` and parse the JSON. A template inside a
+  single `execSync` command string (`--format {{.ID}}`) is safe and is used elsewhere in `tools/`.
+  `tools/infra/local-registry.test.js` guards the file.
+- **A failed probe must never read as "absent".** `getPodmanMachines()` returned `[]` both when
+  podman listed no machine and when the query failed, so a wedged WSL distro printed
+  `No Podman machine found`, ran `podman machine init`, and died on `VM already exists` — hiding the
+  fault and pointing the developer at deleting a healthy cluster (#274). Report the real error
+  instead.
+- **Recover a wedged Podman WSL distro with `wsl.exe --terminate podman-machine-default`.** The
+  symptom is `wsl -l -v` showing the distro `Running` while every command into it fails with
+  `Wsl/Service/E_UNEXPECTED` or `0xffffffff`, so `podman machine list` cannot answer at all. Never
+  use `wsl --shutdown`: it kills every other lane's distro, the same failure mode as an image-wide
+  `taskkill`.
 
 ---
 
