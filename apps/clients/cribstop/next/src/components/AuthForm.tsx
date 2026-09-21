@@ -149,6 +149,7 @@ export default function AuthForm({
 
   const switchMode = (next: Mode) => {
     setMode(next);
+    setFormError(null);
     setLoginFailed(false);
     setResetRequested(false);
     if (next !== 'signup') setSignupRequested(false);
