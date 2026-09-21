@@ -8,6 +8,7 @@ import {
   maxReachablePage,
   SORT_VALUES,
 } from '@cribstop/property-contracts';
+import { payloadLeaksAddress } from './support/address-leak-scan';
 import { complianceFixtureIds } from './support/fixture-ids';
 
 /**
@@ -145,8 +146,33 @@ describe('suppressed address (address_display_allowed = false)', () => {
 
       expect(row).toBeDefined();
       const serialised = JSON.stringify(row);
-      expect(serialised).not.toContain(fixtures.suppressedAddressStreetLine);
+      expect(
+        payloadLeaksAddress(
+          serialised,
+          fixtures.suppressedAddressStreetLine,
+          fixtures.suppressedAddressStreetSlug,
+        ),
+      ).toBe(false);
       expect(serialised).not.toContain(fixtures.suppressedAddressUnitNumber);
+    });
+
+    it('the strengthened scan catches a street rendered as a URL slug — a literal-only match would have missed it (#153)', () => {
+      // Not fetched from the real endpoint: this fixture URL exists only to prove the scan's
+      // detection logic, not to assert anything about applyCardAddressSuppression() (which
+      // deliberately keeps media URLs — "an image URL is not the address").
+      const leakyMediaUrl = `https://cdn.example/${fixtures.suppressedAddressStreetSlug}-front-elevation.jpg`;
+      const hypotheticalPayload = JSON.stringify({ primaryMedia: { url: leakyMediaUrl } });
+
+      // Demonstrates the gap #153 closed: the OLD literal-only check passes unnoticed...
+      expect(hypotheticalPayload).not.toContain(fixtures.suppressedAddressStreetLine);
+      // ...but the strengthened scan catches it.
+      expect(
+        payloadLeaksAddress(
+          hypotheticalPayload,
+          fixtures.suppressedAddressStreetLine,
+          fixtures.suppressedAddressStreetSlug,
+        ),
+      ).toBe(true);
     });
   });
 });

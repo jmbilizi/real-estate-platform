@@ -615,7 +615,7 @@ by `main.ts` and the harness alike) to run the suite while `skaffold` holds that
 ### The writer carries the suppression flags — keep it that way
 
 `ListingRow` requires `internet_display_allowed`, `address_display_allowed`,
-`description_moderation` and `featured_reason`, `OpenHouseRow` requires `remarks` and
+`description_moderation` and `featured_reason`, and `OpenHouseRow` requires `remarks` and
 `is_cancelled`. They are **required, not optional-with-default**: all of these columns have
 permissive database defaults, so an optional field would let a future MLS mapper that forgets to
 carry `InternetEntireListingDisplayYN` publish a listing the seller withheld, silently and with no
