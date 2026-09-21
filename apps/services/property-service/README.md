@@ -7,8 +7,8 @@ Backed by the `property_db` PostgreSQL database, which infra already provisions 
 `postgis`, `pg_trgm`, and `btree_gist` (`infra/k8s/base/configmaps/postgres.configmap.yaml`).
 
 > **Scope today.** Schema, migrations, a seed dataset, and the **Property API** — listings search,
-> detail and dataset freshness. Saved/favorited listings are #23; property relationship claims (PRD
-> §3.2) are not modelled yet.
+> detail, dataset freshness, and listing inquiries (#131). Saved/favorited listings are #23;
+> property relationship claims (PRD §3.2) are not modelled yet.
 
 ## The Property API
 
@@ -24,13 +24,14 @@ Through the gateway these are namespaced by bounded context — `/property/listi
 `/property/listings/meta`, `/property/listings/{id}` — and Ocelot rewrites them onto the paths
 below. The service itself never sees the `/property` prefix.
 
-| Endpoint             | Purpose                                                                     |
-| -------------------- | --------------------------------------------------------------------------- |
-| `GET /listings`      | Search. Envelope with an **exact** `total`, page info, and `appliedFilters` |
-| `GET /listings/meta` | Dataset freshness — callable without running a search                       |
-| `GET /listings/{id}` | Detail: the nested `{ property, unit, listing }` graph                      |
-| `GET /openapi.json`  | The generated document the gateway's `MMLib.SwaggerForOcelot` aggregates    |
-| `GET /health`        | Liveness/readiness                                                          |
+| Endpoint                        | Purpose                                                                     |
+| ------------------------------- | --------------------------------------------------------------------------- |
+| `GET /listings`                 | Search. Envelope with an **exact** `total`, page info, and `appliedFilters` |
+| `GET /listings/meta`            | Dataset freshness — callable without running a search                       |
+| `GET /listings/{id}`            | Detail: the nested `{ property, unit, listing }` graph                      |
+| `POST /listings/{id}/inquiries` | A consumer's message or tour request (#131). No read endpoint.              |
+| `GET /openapi.json`             | The generated document the gateway's `MMLib.SwaggerForOcelot` aggregates    |
+| `GET /health`                   | Liveness/readiness                                                          |
 
 Request parsing, response shapes and the published OpenAPI document all come from
 `@cribstop/property-contracts`. This service adds SQL and HTTP and **never** a second copy of a
@@ -94,10 +95,14 @@ no PII and must not start to. `/listings/meta` is
 
 ## Configuration
 
-| Variable       | Purpose                                                     |
-| -------------- | ----------------------------------------------------------- |
-| `DATABASE_URL` | Postgres connection string for `property_db`. Required.     |
-| `PORT`         | HTTP port. Defaults to `3002` per the PRD §2.1 service map. |
+| Variable                                            | Purpose                                                                            |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `DATABASE_URL`                                      | Postgres connection string for `property_db`. Required.                            |
+| `PORT`                                              | HTTP port. Defaults to `3002` per the PRD §2.1 service map.                        |
+| `ACCOUNT_SERVICE_INTROSPECT_URL`                    | account-service's #86 introspection endpoint. Defaults to the in-cluster DNS name. |
+| `ACCOUNT_SERVICE_INTROSPECT_TIMEOUT_MS`             | Timeout before an inquiry is treated as signed-out. Default `2000`.                |
+| `INQUIRY_RATE_LIMIT_PER_IP_MAX` / `_WINDOW_MS`      | Per-IP limit for `POST /listings/{id}/inquiries`. Default 5 / 1 hour.              |
+| `INQUIRY_RATE_LIMIT_PER_LISTING_MAX` / `_WINDOW_MS` | Per-listing limit for the same endpoint. Default 20 / 1 hour.                      |
 
 Copy `.env.example` to `.env` for local work. Credentials never belong in source.
 
