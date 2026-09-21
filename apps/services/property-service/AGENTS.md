@@ -468,6 +468,7 @@ Five things here are load-bearing and easy to undo by accident:
   in `src/seed/mock-listings.spec.ts`, not just against the transform.
 - Every listing response must carry the full broker/office attribution block (PRD §6.2, NAR 7.58).
 - Saved/favorited listings are #23. Property relationship claims (PRD §3.2) are not modelled yet.
+- Listing inquiries are #131 (`src/inquiries/`). Never add a read endpoint for them.
 
 ## The Property API (`src/listings/`)
 
@@ -626,3 +627,29 @@ because the argument above does not transfer: the column has no default and omit
 nothing, so the failure is not fail-open. It is required so that a mapper must **declare** whether
 it carries a feed's photo caption — and so the address suppression over it has a real value to
 withhold. While no writer could set it, every assertion about it was vacuously true.
+
+## Listing inquiries (`src/inquiries/`)
+
+`POST /listings/{id}/inquiries` (#131) — a consumer's message or tour request. **There is no read
+endpoint and there must never be one**: an inquiry is never returned by any listings response.
+
+- `write.ts` is the only module that writes `listing_inquiries`, mirroring `src/db/write.ts`'s rule
+  for `listings`.
+- The listing existence/visibility check reuses `listing_search_v` via `isListingPublishable()` in
+  `listings/repository.ts` — the same single source of listing visibility every other route reads,
+  never a second copy of the predicate.
+- **Consent** (stakeholder ruling 2026-09-13): `consent_to_contact`, `consent_disclosure_text` and
+  `consent_given_at` are kept consistent by a DB CHECK — all three present or all three absent,
+  never a bare `true`. The disclosure text is always `CONSENT_DISCLOSURE_TEXT`
+  (`@cribstop/property-contracts`), never a caller-supplied string, so the persisted record and the
+  checkbox copy `#132` renders cannot drift. Consent adds a recipient; routing to the listing agent
+  is unconditional and is not built in this ticket.
+- **Account resolution** (`account-introspection.ts`) calls account-service's #86 endpoint and
+  **fails open to signed-out** on any network error or timeout — an infra hiccup must not block this
+  ticket's primary conversion path. Worst case: a signed-in consumer's inquiry is recorded with no
+  account id, the same shape a signed-out submission already has.
+- **Rate limiting** (`rate-limit.ts`) is in-memory, fixed-window, per client IP and per listing,
+  configuration-driven (`INQUIRY_RATE_LIMIT_*` env vars). Per process, like the gateway's Ocelot
+  limiter and account-service's `AccountRecoveryRateLimiter` — the effective limit multiplies by
+  replica count. Redis is the scale-out path if that bound stops being acceptable; this ticket does
+  not introduce it for one endpoint.

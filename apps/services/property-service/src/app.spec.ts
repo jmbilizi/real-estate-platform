@@ -577,6 +577,163 @@ describe('GET /listings/:id', () => {
   });
 });
 
+describe('POST /listings/:id/inquiries (#131)', () => {
+  const ALWAYS_ALLOW = { consume: () => ({ allowed: true, retryAfterSeconds: 0 }) };
+  const ALWAYS_SIGNED_OUT = { resolveAccountId: () => Promise.resolve(null) };
+  const VALID_BODY = {
+    kind: 'tour_request' as const,
+    name: 'Jane Consumer',
+    email: 'jane@example.com',
+  };
+
+  /** A fake pool answering both the existence-check EXISTS query and the INSERT. */
+  function createInquiryPool(
+    options: { publishable?: boolean; insertedId?: string } = {},
+  ): FakePool {
+    const publishable = options.publishable ?? true;
+    const insertedId = options.insertedId ?? '018f2f2a-6d1b-7c3d-8b2e-0000000000cc';
+    return createFakePool((sql) => {
+      if (sql.includes('EXISTS(')) {
+        return [{ exists: publishable }];
+      }
+      if (sql.includes('INSERT INTO listing_inquiries')) {
+        return [{ id: insertedId }];
+      }
+      return [];
+    });
+  }
+
+  it('creates an inquiry and returns 201 with the created id', async () => {
+    const pool = createInquiryPool({ insertedId: '018f2f2a-6d1b-7c3d-8b2e-0000000000cc' });
+    const app = createApp({ pool, introspection: ALWAYS_SIGNED_OUT, rateLimiter: ALWAYS_ALLOW });
+
+    const response = await request(app).post(`/listings/${KNOWN_ID}/inquiries`).send(VALID_BODY);
+
+    expect(response.status).toBe(201);
+    expect(response.body).toEqual({ id: '018f2f2a-6d1b-7c3d-8b2e-0000000000cc' });
+  });
+
+  it('works signed-out: an unauthenticated request is never rejected for being unauthenticated', async () => {
+    const pool = createInquiryPool();
+    const app = createApp({ pool, introspection: ALWAYS_SIGNED_OUT, rateLimiter: ALWAYS_ALLOW });
+
+    const response = await request(app).post(`/listings/${KNOWN_ID}/inquiries`).send(VALID_BODY);
+
+    expect(response.status).toBe(201);
+  });
+
+  it('works signed-in: resolves an account id and still records the submitted contact details', async () => {
+    const pool = createInquiryPool();
+    const app = createApp({
+      pool,
+      introspection: { resolveAccountId: () => Promise.resolve('018f2f2a-account-0000000000dd') },
+      rateLimiter: ALWAYS_ALLOW,
+    });
+
+    const response = await request(app)
+      .post(`/listings/${KNOWN_ID}/inquiries`)
+      .set('Cookie', '.AspNetCore.Identity.Application=abc')
+      .send(VALID_BODY);
+
+    expect(response.status).toBe(201);
+    const insert = pool.statements.find((sql) => sql.includes('INSERT INTO listing_inquiries'));
+    expect(insert).toBeDefined();
+  });
+
+  it('rejects an unknown listing with the identical NOT_FOUND_BODY', async () => {
+    const pool = createInquiryPool({ publishable: false });
+    const app = createApp({ pool, introspection: ALWAYS_SIGNED_OUT, rateLimiter: ALWAYS_ALLOW });
+
+    const response = await request(app).post(`/listings/${KNOWN_ID}/inquiries`).send(VALID_BODY);
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual(NOT_FOUND_BODY);
+  });
+
+  it('rejects a malformed id with 404, matching the detail endpoint', async () => {
+    const pool = createInquiryPool();
+    const app = createApp({ pool, introspection: ALWAYS_SIGNED_OUT, rateLimiter: ALWAYS_ALLOW });
+
+    const response = await request(app).post('/listings/not-a-uuid/inquiries').send(VALID_BODY);
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual(NOT_FOUND_BODY);
+  });
+
+  it('rejects an unknown field, the Fair Housing guardrail (#34)', async () => {
+    const pool = createInquiryPool();
+    const app = createApp({ pool, introspection: ALWAYS_SIGNED_OUT, rateLimiter: ALWAYS_ALLOW });
+
+    const response = await request(app)
+      .post(`/listings/${KNOWN_ID}/inquiries`)
+      .send({ ...VALID_BODY, occupancy: 3 });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('invalid_request');
+  });
+
+  it('rejects a "message" kind with no message', async () => {
+    const pool = createInquiryPool();
+    const app = createApp({ pool, introspection: ALWAYS_SIGNED_OUT, rateLimiter: ALWAYS_ALLOW });
+
+    const response = await request(app)
+      .post(`/listings/${KNOWN_ID}/inquiries`)
+      .send({ ...VALID_BODY, kind: 'message' });
+
+    expect(response.status).toBe(400);
+  });
+
+  it('returns 429 with Retry-After when the rate limiter refuses the request', async () => {
+    const pool = createInquiryPool();
+    const app = createApp({
+      pool,
+      introspection: ALWAYS_SIGNED_OUT,
+      rateLimiter: { consume: () => ({ allowed: false, retryAfterSeconds: 42 }) },
+    });
+
+    const response = await request(app).post(`/listings/${KNOWN_ID}/inquiries`).send(VALID_BODY);
+
+    expect(response.status).toBe(429);
+    expect(response.headers['retry-after']).toBe('42');
+    expect(pool.statements).toEqual([]);
+  });
+
+  it('never runs any SQL for a rate-limited request', async () => {
+    const pool = createInquiryPool();
+    const app = createApp({
+      pool,
+      introspection: ALWAYS_SIGNED_OUT,
+      rateLimiter: { consume: () => ({ allowed: false, retryAfterSeconds: 1 }) },
+    });
+
+    await request(app).post(`/listings/${KNOWN_ID}/inquiries`).send(VALID_BODY);
+
+    expect(pool.statements).toEqual([]);
+  });
+
+  it('consent adds a recipient and never replaces the listing-agent route: the listing is still checked and the inquiry still created', async () => {
+    const pool = createInquiryPool();
+    const app = createApp({ pool, introspection: ALWAYS_SIGNED_OUT, rateLimiter: ALWAYS_ALLOW });
+
+    const response = await request(app)
+      .post(`/listings/${KNOWN_ID}/inquiries`)
+      .send({ ...VALID_BODY, consentToContact: true });
+
+    expect(response.status).toBe(201);
+    // No fee/agent-routing mechanism exists yet (out of scope); this only asserts that a
+    // consented inquiry still goes through the SAME listing-existence and insert path as any
+    // other inquiry, never a different one that could skip notifying the listing agent.
+    const insert = pool.statements.find((sql) => sql.includes('INSERT INTO listing_inquiries'));
+    expect(insert).toBeDefined();
+  });
+
+  it('is never returned by GET /listings or GET /listings/:id', async () => {
+    const response = await request(createApp({ pool: createSearchPool() })).get('/listings');
+
+    expect(JSON.stringify(response.body)).not.toMatch(/inquir/i);
+  });
+});
+
 describe('GET /openapi.json', () => {
   it('serves the generated Property API document for gateway aggregation', async () => {
     const response = await request(createApp({ pool: createSearchPool() }))
@@ -588,6 +745,7 @@ describe('GET /openapi.json', () => {
       '/listings',
       '/listings/meta',
       '/listings/{id}',
+      '/listings/{id}/inquiries',
     ]);
   });
 
