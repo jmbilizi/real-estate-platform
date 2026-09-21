@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { ATTRIBUTION_KEYS, listingDetailSchema } from '@cribstop/property-contracts';
+import { payloadLeaksAddress } from './support/address-leak-scan';
 import { complianceFixtureIds } from './support/fixture-ids';
 
 /**
@@ -122,8 +123,27 @@ describe('suppressed address on detail (address_display_allowed = false)', () =>
       const response = await axios.get(`/listings/${fixtures.suppressedAddressListingId}`);
 
       const serialised = JSON.stringify(response.data);
-      expect(serialised).not.toContain(fixtures.suppressedAddressStreetLine);
+      expect(
+        payloadLeaksAddress(
+          serialised,
+          fixtures.suppressedAddressStreetLine,
+          fixtures.suppressedAddressStreetSlug,
+        ),
+      ).toBe(false);
       expect(serialised).not.toContain(fixtures.suppressedAddressUnitNumber);
+    });
+
+    it('keeps media urls verbatim — "an image URL is not the address" (#153)', async () => {
+      // The design decision suppression.ts's withheldAltText() comment records: withholding the
+      // photos would remove the listing from the market rather than mask an address. Asserted here
+      // against the real endpoint, not only the unit tests in suppression.spec.ts.
+      const response = await axios.get(`/listings/${fixtures.suppressedAddressListingId}`);
+      const detail = listingDetailSchema.parse(response.data);
+
+      expect(detail.listing.media.length).toBeGreaterThan(0);
+      for (const item of detail.listing.media) {
+        expect(item.url).toMatch(/^https?:\/\//);
+      }
     });
   });
 });

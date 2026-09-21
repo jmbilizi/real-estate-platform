@@ -18,4 +18,3 @@ export const selectSearchMoveInDate = (state: RootState) => state.search.searchM
 export const selectSearchDateRange = (state: RootState) => state.search.searchDateRange;
 export const selectSearchPriceIdx = (state: RootState) => state.search.searchPriceIdx;
 export const selectSearchListingType = (state: RootState) => state.search.searchListingType;
-export const selectSearchDescription = (state: RootState) => state.search.searchDescription;

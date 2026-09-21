@@ -29,20 +29,29 @@ function withheldAltText<T extends Media>(media: T): T {
 }
 
 /**
- * THE address-suppression boundary for the CARD response (#105).
+ * THE address-suppression boundary for the CARD response (#105, #153).
  *
  * Until now the card path had no response boundary at all: `searchListings()` relied entirely on
  * `listing_search_v`, which is correct for every field the view projects and silently wrong for the
- * one it does not — `primaryMedia`, joined in from `listing_media` alongside the view rather than
- * through it. Introduced as a sibling of `applyAddressSuppression()` in this same file, keyed on the
- * same signal and applied at the same edge of `repository.ts`, so the two paths stay one mechanism
- * rather than becoming two places to remember.
+ * ones it does not — `primaryMedia` and `openHouse.remarks`, both joined in from tables the view
+ * never touches. Introduced as a sibling of `applyAddressSuppression()` in this same file, keyed on
+ * the same signal and applied at the same edge of `repository.ts`, so the two paths stay one
+ * mechanism rather than becoming two places to remember.
+ *
+ * `openHouse.remarks` is defended here as well as by the view's `CASE WHEN
+ * address_display_allowed` (migration `1785801600011`). That CASE expression has been rewritten
+ * three times already (migrations 009, 010, 011); this boundary layer is the net beneath it, the
+ * same defence-in-depth the detail path already has (#59).
  */
 export function applyCardAddressSuppression(card: ListingCardRow): ListingCardRow {
-  if (card.address !== null || card.primaryMedia === null) {
+  if (card.address !== null) {
     return card;
   }
-  return { ...card, primaryMedia: withheldAltText(card.primaryMedia) };
+  return {
+    ...card,
+    primaryMedia: card.primaryMedia === null ? null : withheldAltText(card.primaryMedia),
+    openHouse: card.openHouse === null ? null : { ...card.openHouse, remarks: null },
+  };
 }
 
 /**

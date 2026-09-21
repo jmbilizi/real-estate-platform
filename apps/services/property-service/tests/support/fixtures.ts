@@ -80,6 +80,12 @@ export interface ComplianceFixtureIds {
   /** The real street line, so a spec can assert `street=` does NOT match it. */
   suppressedAddressStreetLine: string;
   /**
+   * The street line as a CDN-style URL slug (#153): lowercased, spaces to hyphens. A payload scan
+   * that only matches the literal street line misses the same address rendered this way in a media
+   * URL, which is exactly how a real CDN names files.
+   */
+  suppressedAddressStreetSlug: string;
+  /**
    * The real point, so a spec can assert NO column of the view carries it. Distinct from every
    * other fixture's 0/0 precisely so that assertion cannot pass vacuously.
    */
@@ -232,6 +238,14 @@ const FIXTURE_STREETS = {
 /** The label discipline (guard 3) every fixture title carries, in one place. */
 function fixtureTitle(subject: string): string {
   return `${FIXTURE_TITLE_PREFIX}: ${subject} (Sample)`;
+}
+
+/** Matches the slug style a real CDN would derive from a street line (#153). */
+function slugify(streetLine: string): string {
+  return streetLine
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
 /**
@@ -1202,6 +1216,7 @@ export async function loadComplianceFixtures(pool: FixturesPool): Promise<Compli
       suppressedAddressListingId,
       suppressedAddressUnitNumber,
       suppressedAddressStreetLine: FIXTURE_STREETS.suppressedAddress,
+      suppressedAddressStreetSlug: slugify(FIXTURE_STREETS.suppressedAddress),
       suppressedAddressLatitude: SUPPRESSED_ADDRESS_LATITUDE,
       suppressedAddressLongitude: SUPPRESSED_ADDRESS_LONGITUDE,
       suppressedAddressStoredTitle: SUPPRESSED_ADDRESS_STORED_TITLE,

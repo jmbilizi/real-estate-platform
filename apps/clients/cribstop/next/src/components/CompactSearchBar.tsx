@@ -337,7 +337,6 @@ export default function CompactSearchBar({
     setSearchDateRange,
     searchListingType,
     setSearchListingType,
-    setSearchDescription,
     showHeaderPill,
     headerExpanded,
     setHeaderExpanded,
@@ -1630,9 +1629,6 @@ export default function CompactSearchBar({
       setDateRange({ start: '', end: '', flexibility: 'exact' });
       setRangePickStep('start');
       setSearchListingType('all');
-      // Description has no control in this panel any more (#243) but is cleared here for
-      // hygiene until #244 removes the field outright.
-      setSearchDescription('');
       setActivePanel('where');
     };
 
