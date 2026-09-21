@@ -256,8 +256,14 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
          * Required labels get a guaranteed slot that is reserved even when empty. They are never
          * what gets truncated or crowded out to make heights match — that is why they sit outside
          * the image's single badge slot in the first place. If the row is visible, these are visible.
+         *
+         * `flex-nowrap`, not `flex-wrap`: on a narrow card, wrapping put the second badge on a row
+         * the fixed `h-5` then clipped out of existence (#121) — a required disclosure silently
+         * dropped. `SampleBadge`/`SponsoredBadge` are sized to fit one row at the narrowest
+         * supported card (~155px); this row must never gain `overflow-hidden` or `truncate`, or a
+         * disclosure can go invisible again the same way.
          */}
-        <div className="mb-1 flex h-5 flex-wrap items-center gap-1 overflow-hidden">
+        <div className="mb-1 flex h-5 flex-nowrap items-center gap-1">
           {listing.isSample && <SampleBadge />}
           {listing.sponsored && <SponsoredBadge />}
         </div>

@@ -126,6 +126,29 @@ describe('ListingCard', () => {
       expect(screen.getByText('Sponsored')).toBeInTheDocument();
       expect(screen.getByText('Price reduced')).toBeInTheDocument();
     });
+
+    /**
+     * jsdom computes no layout, so a wrap-then-clip bug (#121) does not fail under a plain
+     * presence assertion — both badges are in the DOM whether or not the row's CSS clips one of
+     * them. This pins the CSS itself: the row cannot wrap, so a second badge can never land on a
+     * row a fixed height then clips, and neither badge carries `truncate`, so neither label can be
+     * cut mid-word. `SampleBadge`/`SponsoredBadge` are sized to fit one row at the narrowest
+     * supported card (~155px) — measured in a real browser during #121's fix, see the PR.
+     */
+    it('reserves one non-wrapping row for both labels, with neither truncated (#121)', () => {
+      render(<ListingCard listing={aListingCardRow({ isSample: true, sponsored: true })} />);
+
+      const sample = screen.getByText(/sample data/i);
+      const sponsored = screen.getByText('Sponsored');
+      const row = sample.parentElement;
+
+      expect(row).toBe(sponsored.parentElement);
+      expect(row?.className).toContain('flex-nowrap');
+      expect(row?.className).not.toMatch(/flex-wrap\b/);
+      expect(row?.className).not.toContain('overflow-hidden');
+      expect(sample.className).not.toContain('truncate');
+      expect(sponsored.className).not.toContain('truncate');
+    });
   });
 
   describe('NAR 7.58 attribution — applies to search results, not only detail pages', () => {
