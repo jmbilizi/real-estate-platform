@@ -86,6 +86,21 @@ spec:
                   key: PROPERTY_SERVICE_DB_USER_PASSWORD
             - name: DATABASE_URL
               value: "postgresql://$(PROPERTY_DB_USER):$(PROPERTY_SERVICE_DB_USER_PASSWORD)@$(PROPERTY_DB_HOST):$(PROPERTY_DB_PORT)/$(PROPERTY_DB_NAME)"
+            # Credential introspection (#86/#131). In-cluster DNS, identical in every environment.
+            - name: ACCOUNT_SERVICE_INTROSPECT_URL
+              value: "http://account-service-svc:8080/internal/account/introspect"
+            - name: ACCOUNT_SERVICE_INTROSPECT_TIMEOUT_MS
+              value: "2000"
+            # Listing-inquiry rate limits (#131), per IP and per listing. Configuration, not
+            # constants, so tuning them needs no code change — see property-service/src/app.ts.
+            - name: INQUIRY_RATE_LIMIT_PER_IP_MAX
+              value: "5"
+            - name: INQUIRY_RATE_LIMIT_PER_IP_WINDOW_MS
+              value: "3600000"
+            - name: INQUIRY_RATE_LIMIT_PER_LISTING_MAX
+              value: "20"
+            - name: INQUIRY_RATE_LIMIT_PER_LISTING_WINDOW_MS
+              value: "3600000"
           livenessProbe:
             httpGet:
               path: /health

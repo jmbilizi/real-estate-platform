@@ -3,6 +3,12 @@ import { INTERNAL_ERROR_BODY, toOpenApiDocument } from '@cribstop/property-contr
 import { getPool } from './db/pool';
 import { createListingsRouter } from './listings/routes';
 import type { ReadPool } from './listings/repository';
+import { createInquiriesRouter } from './inquiries/routes';
+import {
+  createHttpIntrospectionClient,
+  type IntrospectionClient,
+} from './inquiries/account-introspection';
+import { createRateLimiter, type RateLimiter } from './inquiries/rate-limit';
 
 /**
  * The published OpenAPI document, generated ONCE at module load from `@cribstop/property-contracts`.
@@ -15,6 +21,71 @@ import type { ReadPool } from './listings/repository';
  */
 const OPEN_API_DOCUMENT = toOpenApiDocument();
 
+/** account-service's internal introspection endpoint (#86). In-cluster DNS, identical across
+ *  every environment, so it lives here as a default rather than in a per-env overlay. */
+const DEFAULT_ACCOUNT_SERVICE_INTROSPECT_URL =
+  'http://account-service-svc:8080/internal/account/introspect';
+const DEFAULT_ACCOUNT_SERVICE_INTROSPECT_TIMEOUT_MS = 2000;
+
+const DEFAULT_INQUIRY_RATE_LIMIT_PER_IP_MAX = 5;
+const DEFAULT_INQUIRY_RATE_LIMIT_PER_IP_WINDOW_MS = 60 * 60 * 1000;
+const DEFAULT_INQUIRY_RATE_LIMIT_PER_LISTING_MAX = 20;
+const DEFAULT_INQUIRY_RATE_LIMIT_PER_LISTING_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * The 4xx status an http-errors-shaped error (body-parser's included) already carries, or `null`
+ * for anything else. `status`/`statusCode` are the two property names http-errors uses across
+ * versions; body-parser's own errors (`entity.parse.failed`, `entity.too.large`) set `status`.
+ */
+function getClientErrorStatus(error: unknown): number | null {
+  if (typeof error !== 'object' || error === null) {
+    return null;
+  }
+  const candidate = error as { status?: unknown; statusCode?: unknown };
+  const status = candidate.status ?? candidate.statusCode;
+  return typeof status === 'number' && status >= 400 && status < 500 ? status : null;
+}
+
+function envInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') {
+    return fallback;
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+/** Builds the real introspection client from configuration (#131). */
+function defaultIntrospectionClient(): IntrospectionClient {
+  return createHttpIntrospectionClient({
+    url: process.env.ACCOUNT_SERVICE_INTROSPECT_URL ?? DEFAULT_ACCOUNT_SERVICE_INTROSPECT_URL,
+    timeoutMs: envInt(
+      'ACCOUNT_SERVICE_INTROSPECT_TIMEOUT_MS',
+      DEFAULT_ACCOUNT_SERVICE_INTROSPECT_TIMEOUT_MS,
+    ),
+  });
+}
+
+/** Builds the real rate limiter from configuration (#131). Limits are configuration, per the
+ *  ticket's own acceptance criterion, so they are env-driven rather than constants. */
+function defaultRateLimiter(): RateLimiter {
+  return createRateLimiter({
+    perIpMax: envInt('INQUIRY_RATE_LIMIT_PER_IP_MAX', DEFAULT_INQUIRY_RATE_LIMIT_PER_IP_MAX),
+    perIpWindowMs: envInt(
+      'INQUIRY_RATE_LIMIT_PER_IP_WINDOW_MS',
+      DEFAULT_INQUIRY_RATE_LIMIT_PER_IP_WINDOW_MS,
+    ),
+    perListingMax: envInt(
+      'INQUIRY_RATE_LIMIT_PER_LISTING_MAX',
+      DEFAULT_INQUIRY_RATE_LIMIT_PER_LISTING_MAX,
+    ),
+    perListingWindowMs: envInt(
+      'INQUIRY_RATE_LIMIT_PER_LISTING_WINDOW_MS',
+      DEFAULT_INQUIRY_RATE_LIMIT_PER_LISTING_WINDOW_MS,
+    ),
+  });
+}
+
 export interface CreateAppOptions {
   /**
    * Injected so tests can exercise every route against a fake, with no socket and no database.
@@ -22,6 +93,10 @@ export interface CreateAppOptions {
    * load — so importing this module never demands `DATABASE_URL`.
    */
   pool?: ReadPool;
+  /** Injected so tests can exercise the inquiry endpoint without a real account-service (#131). */
+  introspection?: IntrospectionClient;
+  /** Injected so tests can exercise rate limiting deterministically (#131). */
+  rateLimiter?: RateLimiter;
 }
 
 /**
@@ -35,6 +110,13 @@ export interface CreateAppOptions {
 export function createApp(options: CreateAppOptions = {}): Express {
   const app = express();
   const pool = options.pool ?? (getPool() as unknown as ReadPool);
+  const introspection = options.introspection ?? defaultIntrospectionClient();
+  const rateLimiter = options.rateLimiter ?? defaultRateLimiter();
+
+  // Only the inquiry endpoint takes a body; every other route in this service is a GET. A small
+  // cap is a cheap defence against an oversized payload — the schema's own field-length limits
+  // are the real bound, this just stops a very large body from being parsed at all.
+  app.use(express.json({ limit: '32kb' }));
 
   app.get('/health', (_req, res) => {
     res.status(200).json({ status: 'ok' });
@@ -50,6 +132,7 @@ export function createApp(options: CreateAppOptions = {}): Express {
   });
 
   app.use(createListingsRouter(pool));
+  app.use(createInquiriesRouter({ pool, introspection, rateLimiter }));
 
   /**
    * The error boundary. Handlers forward rejections here via the `asyncRoute` wrapper in
@@ -60,10 +143,23 @@ export function createApp(options: CreateAppOptions = {}): Express {
    * The body is deliberately opaque. A `pg` error message can name tables, columns and constraint
    * text, and these are public unauthenticated endpoints; the detail belongs in the log, not the
    * response.
+   *
+   * `express.json()` (added above, for the inquiry endpoint) throws its own error — malformed
+   * JSON, a body over the 32kb cap — BEFORE any route runs, carrying an http-errors `status` in
+   * the 4xx range. That is a caller fault, not a server fault; reporting it as 500 would both
+   * contradict this endpoint's documented 400 response and miscount a client error as a server
+   * one in monitoring.
    */
   app.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
     if (res.headersSent) {
       next(error);
+      return;
+    }
+    const clientErrorStatus = getClientErrorStatus(error);
+    if (clientErrorStatus !== null) {
+      res.status(clientErrorStatus).json({
+        error: { code: 'invalid_request', message: 'Malformed or oversized request body.' },
+      });
       return;
     }
     console.error('Unhandled error while serving the Property API:', error);

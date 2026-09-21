@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { idSchema } from './common';
 import { listingCardSchema, listingsEnvelopeSchema } from './listing-card';
 import { listingDetailSchema } from './listing-detail';
+import { listingInquiryRequestSchema, listingInquiryResponseSchema } from './listing-inquiry';
 import { listingsMetaSchema } from './listings-meta';
 import { errorBodySchema } from './errors';
 import {
@@ -69,6 +70,8 @@ function componentSchemas() {
   registry.add(listingsEnvelopeSchema, { id: 'ListingsEnvelope' });
   registry.add(listingDetailSchema, { id: 'ListingDetail' });
   registry.add(listingsMetaSchema, { id: 'ListingsMeta' });
+  registry.add(listingInquiryRequestSchema, { id: 'ListingInquiryRequest' });
+  registry.add(listingInquiryResponseSchema, { id: 'ListingInquiryResponse' });
   registry.add(errorBodySchema, { id: 'ErrorBody' });
 
   const { schemas } = z.toJSONSchema(registry, {
@@ -229,6 +232,66 @@ export function toOpenApiDocument() {
             },
             '404': {
               description: 'No such listing.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/listings/{id}/inquiries': {
+        post: {
+          operationId: 'createListingInquiry',
+          summary: 'Submit a message or tour request against a listing',
+          description:
+            'Works signed-out and signed-in — an unauthenticated request is never rejected for ' +
+            'being unauthenticated. `name` and `email` are always required, regardless of sign-' +
+            'in state. `consentToContact` records only that the consumer asked to also be ' +
+            'connected with a Real Broker, LLC agent; the listing agent is always notified ' +
+            'regardless of this value. No delivery happens yet — the created record starts in ' +
+            'the `pending` delivery state. Never returned by any read endpoint.\n\n' +
+            'Rate-limited per client and per listing; a request over either limit gets 429 with ' +
+            'a `Retry-After` header.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: schema(idSchema, 'input') },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ListingInquiryRequest' },
+              },
+            },
+          },
+          responses: {
+            '201': {
+              description: 'The inquiry was recorded.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ListingInquiryResponse' },
+                },
+              },
+            },
+            '400': {
+              description:
+                'Unknown field, missing `name`/`email`, or `message` missing/empty when `kind` ' +
+                'is `message`.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '404': {
+              description: 'No such listing, or not publishable through `listing_search_v`.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '429': {
+              description:
+                'Rate limit exceeded for this client or this listing. Documented here — unlike ' +
+                'the read endpoints above — because this limit is enforced by the service ' +
+                'itself (keyed on the path parameter), not by the gateway.',
               content: {
                 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
               },

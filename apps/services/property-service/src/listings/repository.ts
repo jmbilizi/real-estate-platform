@@ -239,6 +239,19 @@ export async function getListingsMeta(pool: ReadClient): Promise<ListingsMeta> {
   return toListingsMeta(row);
 }
 
+/**
+ * Whether a listing exists and is publishable through `listing_search_v` (#131) — the same
+ * visibility rule `findListingById` uses, but without the property/unit/media joins a caller that
+ * only needs a yes/no answer (the inquiry endpoint's listing-existence gate) does not pay for.
+ */
+export async function isListingPublishable(pool: ReadClient, id: string): Promise<boolean> {
+  const result = await pool.query<{ exists: boolean }>(
+    'SELECT EXISTS(SELECT 1 FROM listing_search_v v WHERE v.id = $1) AS exists',
+    [id],
+  );
+  return result.rows[0]?.exists ?? false;
+}
+
 /** One `mls_fields`-joined attribute row, as `ATTRIBUTE_SELECT` projects it. */
 export interface AttributeDbRow {
   id: string;
