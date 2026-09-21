@@ -91,3 +91,9 @@ pnpm exec nx lint cribstop-next        # Also: test, type-check
   never `$0`, never an estimate. A suppressed address (`address`/`latitude`/`longitude` null
   together) renders no address and **never** a city or ZIP centroid; the map legitimately shows
   fewer pins than the result count, and that is explained in copy rather than hidden.
+- `next/scripts/check-legal-content.js` blocks the **prod** deploy while `src/content/legal/*.json`
+  carries `isDraft: true` (#219). It runs only from the prod job in
+  `.github/workflows/deploy-k8s-resources.yml`, keyed on `DEPLOYMENT_ENV=prod` — the canonical
+  deployment-environment variable name across the repo (values: `local`, `dev`, `test`, `prod`).
+  `is-production-build.js` is a separate, unrelated signal: it only toggles Next.js standalone
+  output and must not be reused for environment checks (#157).
