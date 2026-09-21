@@ -77,8 +77,13 @@ export default function NavBar() {
   // Keep the store in step with the route for everything else that reads `activeTab`.
   useEffect(() => {
     setActiveTab(tabFromPath);
+  }, [tabFromPath, setActiveTab]);
+
+  // Collapse expanded search on every navigation, not only a tab change. Keyed on `pathname`,
+  // not `tabFromPath`, so navigating within a tab (for example home to a listing) still closes it.
+  useEffect(() => {
     setHeaderExpanded(false);
-  }, [tabFromPath, setActiveTab, setHeaderExpanded]);
+  }, [pathname, setHeaderExpanded]);
 
   // Collapse expanded search when ScrollSentinel scrolls back into view
   useEffect(() => {
@@ -155,10 +160,10 @@ export default function NavBar() {
         {/* ── Logo | Tabs/Pill | Nav ── */}
         <div className="relative grid grid-cols-[auto_1fr_auto] h-16 items-center gap-2 px-3 md:px-4 lg:px-6">
           {/*
-           * Logo — brand name and wordmark render unconditionally, never behind the `hydrated`
-           * gate. Both are compile-time constants (`BRAND.brokerage`, "CRIB"/"STOP"), so there is
-           * no hydration uncertainty to placeholder over, and PRD §6.1 requires Real Broker, LLC
-           * to read from the server-rendered HTML at its most prominent placement.
+           * Logo. Brand name and wordmark render unconditionally, never behind the `hydrated`
+           * gate. Both are compile-time constants (`BRAND.brokerage`, "CRIB"/"STOP"). There is no
+           * hydration uncertainty to placeholder over. PRD §6.1 requires Real Broker, LLC to read
+           * from the server-rendered HTML at its most prominent placement.
            */}
           <Link href="/" className="flex flex-shrink-0 items-center -ml-1">
             <span className="flex items-center gap-0">
@@ -222,9 +227,9 @@ export default function NavBar() {
                         )}
                       </span>
                       {/*
-                       * Animated underline — pinned to bottom of header.
+                       * Animated underline, pinned to the bottom of the header.
                        *
-                       * Not gated on `hydrated`: `isActive` already resolves from the route
+                       * Not gated on `hydrated`. `isActive` already resolves from the route
                        * before hydration (`displayTab`), so the server ships the underline under
                        * the correct tab from first paint, not only after the bundle runs.
                        */}

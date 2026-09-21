@@ -1,6 +1,7 @@
 'use client';
 
 import { useLayoutEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { useApp } from '@/lib/context';
 import { SkeletonBar } from './Skeleton';
 
@@ -13,11 +14,17 @@ import { SkeletonBar } from './Skeleton';
  */
 export default function MobileSearchPill() {
   const { searchLocation, listingType, activeTab, searchDateRange, setMobileSearchOpen } = useApp();
+  const pathname = usePathname();
 
   const [hydrated, setHydrated] = useState(false);
   useLayoutEffect(() => {
     setHydrated(true);
   }, []);
+
+  // `searchSlice`'s default is always '' and is never persisted (see the slice's own comment).
+  // So on every route except `/search` there is no async seeding: the server and the first
+  // client render already agree, and there is nothing to placeholder over.
+  const onSearchRoute = pathname.startsWith('/search');
 
   const summary = (() => {
     if (activeTab === 'services') return 'Find services';
@@ -83,13 +90,15 @@ export default function MobileSearchPill() {
   })();
 
   /*
-   * Before hydration this component cannot pick between its two layouts: `searchLocation` is
-   * seeded from the URL by an effect in `SearchExperience`, so on `/search?q=...` the server sees
-   * an empty string and would render the one-line "Start your search" button, then swap to the
-   * two-line pill — a height change, not just a text change. The placeholder takes the two-line
-   * shape so the swap lands inside a box that is already the right size.
+   * On `/search` only, this component cannot pick its layout before hydration.
+   * `SearchExperience` seeds `searchLocation` from the URL in an effect, mounted only on that
+   * route. So `/search?q=...` sees an empty string server-side, and without a placeholder would
+   * render the one-line "Start your search" button, then swap to the two-line pill. That is a
+   * height change, not just a text change. The placeholder takes the two-line shape so the swap
+   * lands inside a box that is already the right size. Every other route has no such effect, so
+   * `searchLocation` is already the settled answer server-side.
    */
-  if (!hydrated) {
+  if (!hydrated && onSearchRoute) {
     return (
       <div className="flex-1 flex items-center rounded-full border border-surface-border bg-white shadow-card overflow-hidden">
         <div className="flex-1 min-w-0 flex flex-col items-center justify-center text-center px-4 py-2.5">

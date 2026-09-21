@@ -85,8 +85,8 @@ body {
  *
  * ## Why this is a background and not an ::after overlay
  *
- * An overlay needs `position: relative` on its host to anchor to, and `.skeleton-fill` is declared
- * after `@tailwind utilities` — so at equal specificity it would out-order and silently defeat an
+ * An overlay needs `position: relative` on its host to anchor to. `.skeleton-fill` is declared
+ * after `@tailwind utilities`, so at equal specificity it would out-order and silently defeat an
  * `absolute` utility on the same element, dragging it back into flow. `Bar`'s inner span in
  * `ListingStates.tsx` is exactly such an element. A background-image sweep has no such constraint:
  * it works on any element whatever its positioning, needs no pseudo-element, and clips itself
