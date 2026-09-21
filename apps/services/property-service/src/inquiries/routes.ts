@@ -81,6 +81,13 @@ function extractClientIp(req: Request): string {
   return req.socket.remoteAddress ?? 'unknown';
 }
 
+/** A header Node may deliver as an array (a repeated header name) folds to its first value,
+ *  never a comma-joined string — passing a garbled credential to account-service would silently
+ *  fail introspection and fall back to signed-out instead of surfacing a caller error. */
+function firstHeaderValue(header: string | string[] | undefined): string | undefined {
+  return Array.isArray(header) ? header[0] : header;
+}
+
 export interface InquiriesRouterDeps {
   pool: ReadClient & Queryable;
   introspection: IntrospectionClient;
@@ -96,10 +103,12 @@ export function createInquiriesRouter(deps: InquiriesRouterDeps): Router {
       const rawListingId = req.params.id ?? '';
       const clientIp = extractClientIp(req);
 
-      // Rate-limited before anything else touches the database, keyed on the RAW path segment —
+      // Rate-limited before anything else touches the database, keyed on the path segment —
       // so a probe against a malformed or nonexistent id is still throttled per client, and a
       // real listing's per-listing limit is never consumed by a request that never named it.
-      const decision = deps.rateLimiter.consume(clientIp, rawListingId);
+      // Lower-cased: Postgres's `uuid` type compares case-insensitively, so a caller cycling
+      // through hex-case permutations of the SAME id must not get a fresh counter each time.
+      const decision = deps.rateLimiter.consume(clientIp, rawListingId.toLowerCase());
       if (!decision.allowed) {
         res
           .set('Retry-After', String(decision.retryAfterSeconds))
@@ -132,7 +141,7 @@ export function createInquiriesRouter(deps: InquiriesRouterDeps): Router {
       const accountId = await deps.introspection.resolveAccountId({
         cookie: req.headers.cookie,
         authorization: req.headers.authorization,
-        apiKey: req.headers['x-api-key'] as string | undefined,
+        apiKey: firstHeaderValue(req.headers['x-api-key']),
       });
 
       const createdId = await createListingInquiry(deps.pool, {

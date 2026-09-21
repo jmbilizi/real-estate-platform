@@ -59,6 +59,23 @@ describe('createRateLimiter', () => {
     });
   });
 
+  it('never debits the per-IP budget for a request the per-listing limit rejects', () => {
+    // Three DIFFERENT callers exhaust "popular-listing"'s shared bucket (max 3 here).
+    const limiter = createRateLimiter(CONFIG);
+    limiter.consume('a.a.a.a', 'popular-listing');
+    limiter.consume('b.b.b.b', 'popular-listing');
+    limiter.consume('c.c.c.c', 'popular-listing');
+
+    // A fourth caller is rejected on the LISTING axis, not the IP axis.
+    const rejected = limiter.consume('2.2.2.2', 'popular-listing');
+    expect(rejected.allowed).toBe(false);
+
+    // That caller's own per-IP budget (max 2) must still be full: if the rejected attempt above
+    // had debited it, only ONE of these two would succeed.
+    expect(limiter.consume('2.2.2.2', 'other-listing-1').allowed).toBe(true);
+    expect(limiter.consume('2.2.2.2', 'other-listing-2').allowed).toBe(true);
+  });
+
   it('caps tracked keys so an attacker minting unique ids cannot grow the map without bound', () => {
     const limiter = createRateLimiter(CONFIG);
 

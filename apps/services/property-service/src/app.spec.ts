@@ -732,6 +732,53 @@ describe('POST /listings/:id/inquiries (#131)', () => {
 
     expect(JSON.stringify(response.body)).not.toMatch(/inquir/i);
   });
+
+  it('treats hex-case permutations of the SAME listing id as one rate-limit key', async () => {
+    const pool = createInquiryPool();
+    let calls = 0;
+    const app = createApp({
+      pool,
+      introspection: ALWAYS_SIGNED_OUT,
+      rateLimiter: {
+        consume: (_ip: string, listingId: string) => {
+          calls += 1;
+          // A real limiter keys on the lower-cased id; asserting on what routes.ts HANDS the
+          // limiter is what would have caught the pre-fix bug (passing the raw, mixed-case path
+          // segment straight through).
+          expect(listingId).toBe(listingId.toLowerCase());
+          return { allowed: true, retryAfterSeconds: 0 };
+        },
+      },
+    });
+
+    await request(app).post(`/listings/${KNOWN_ID.toUpperCase()}/inquiries`).send(VALID_BODY);
+
+    expect(calls).toBe(1);
+  });
+
+  it('reports a malformed JSON body as 400, not 500', async () => {
+    const pool = createInquiryPool();
+    const app = createApp({ pool, introspection: ALWAYS_SIGNED_OUT, rateLimiter: ALWAYS_ALLOW });
+
+    const response = await request(app)
+      .post(`/listings/${KNOWN_ID}/inquiries`)
+      .set('Content-Type', 'application/json')
+      .send('{not valid json');
+
+    expect(response.status).toBe(400);
+  });
+
+  it('reports an oversized body as a 4xx, not 500', async () => {
+    const pool = createInquiryPool();
+    const app = createApp({ pool, introspection: ALWAYS_SIGNED_OUT, rateLimiter: ALWAYS_ALLOW });
+
+    const response = await request(app)
+      .post(`/listings/${KNOWN_ID}/inquiries`)
+      .send({ ...VALID_BODY, message: 'x'.repeat(100_000) });
+
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(response.status).toBeLessThan(500);
+  });
 });
 
 describe('GET /openapi.json', () => {

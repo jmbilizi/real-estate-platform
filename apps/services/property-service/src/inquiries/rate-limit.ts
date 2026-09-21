@@ -56,30 +56,56 @@ function evictOldestIfFull(map: Map<string, Counter>): void {
   }
 }
 
-function checkAndConsume(
+interface PeekResult {
+  withinLimit: boolean;
+  retryAfterSeconds: number;
+}
+
+/** Read-only: whether `key` is currently within `max` for the window, without mutating anything.
+ *  Separated from `commit` so a caller can check EVERY limit before consuming ANY of them — see
+ *  `consume()` below for why that ordering matters. */
+function peek(
   map: Map<string, Counter>,
   key: string,
   max: number,
   windowMs: number,
   now: number,
-): RateLimitDecision {
+): PeekResult {
   const existing = map.get(key);
   if (!existing || now - existing.windowStart >= windowMs) {
-    evictOldestIfFull(map);
-    map.set(key, { count: 1, windowStart: now });
-    return { allowed: true, retryAfterSeconds: 0 };
+    return { withinLimit: true, retryAfterSeconds: 0 };
   }
   if (existing.count >= max) {
     const retryAfterSeconds = Math.max(
       1,
       Math.ceil((existing.windowStart + windowMs - now) / 1000),
     );
-    return { allowed: false, retryAfterSeconds };
+    return { withinLimit: false, retryAfterSeconds };
   }
-  existing.count += 1;
-  return { allowed: true, retryAfterSeconds: 0 };
+  return { withinLimit: true, retryAfterSeconds: 0 };
 }
 
+/** Records one use of `key`, starting a fresh window if the previous one lapsed. Eviction runs
+ *  only when the key is genuinely new to the map — an expired window on an EXISTING key is an
+ *  overwrite, not growth, and must not evict an unrelated client's counter for no capacity
+ *  reason. */
+function commit(map: Map<string, Counter>, key: string, windowMs: number, now: number): void {
+  const existing = map.get(key);
+  if (existing && now - existing.windowStart < windowMs) {
+    existing.count += 1;
+    return;
+  }
+  if (!map.has(key)) {
+    evictOldestIfFull(map);
+  }
+  map.set(key, { count: 1, windowStart: now });
+}
+
+/**
+ * Fixed-window, in-memory, per process (#131). Same trade-off `AccountRecoveryRateLimiter`
+ * documents: with more than one replica the effective limit multiplies by the replica count.
+ * That is a weaker bound, not an absent one — Redis is the scale-out path if replica counts rise.
+ */
 export function createRateLimiter(config: RateLimitConfig): RateLimiter {
   const byIp = new Map<string, Counter>();
   const byListing = new Map<string, Counter>();
@@ -88,24 +114,33 @@ export function createRateLimiter(config: RateLimitConfig): RateLimiter {
     consume(clientIp: string, listingId: string): RateLimitDecision {
       const now = Date.now();
 
-      const ipDecision = checkAndConsume(
-        byIp,
-        clientIp,
-        config.perIpMax,
-        config.perIpWindowMs,
-        now,
-      );
-      if (!ipDecision.allowed) {
-        return ipDecision;
+      /**
+       * Both limits are PEEKED before either is COMMITTED. Checking and consuming the IP limit
+       * first, then discovering the listing limit is exhausted, used to debit the caller's own
+       * IP budget for a request that was always going to be rejected — a client could be locked
+       * out of every OTHER listing for up to an hour purely because a different listing's shared
+       * bucket happened to be full. Peeking both first means a rejection on either axis costs the
+       * caller nothing on the other.
+       */
+      const ipCheck = peek(byIp, clientIp, config.perIpMax, config.perIpWindowMs, now);
+      if (!ipCheck.withinLimit) {
+        return { allowed: false, retryAfterSeconds: ipCheck.retryAfterSeconds };
       }
 
-      return checkAndConsume(
+      const listingCheck = peek(
         byListing,
         listingId,
         config.perListingMax,
         config.perListingWindowMs,
         now,
       );
+      if (!listingCheck.withinLimit) {
+        return { allowed: false, retryAfterSeconds: listingCheck.retryAfterSeconds };
+      }
+
+      commit(byIp, clientIp, config.perIpWindowMs, now);
+      commit(byListing, listingId, config.perListingWindowMs, now);
+      return { allowed: true, retryAfterSeconds: 0 };
     },
   };
 }

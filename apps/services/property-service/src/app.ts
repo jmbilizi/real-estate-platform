@@ -32,6 +32,20 @@ const DEFAULT_INQUIRY_RATE_LIMIT_PER_IP_WINDOW_MS = 60 * 60 * 1000;
 const DEFAULT_INQUIRY_RATE_LIMIT_PER_LISTING_MAX = 20;
 const DEFAULT_INQUIRY_RATE_LIMIT_PER_LISTING_WINDOW_MS = 60 * 60 * 1000;
 
+/**
+ * The 4xx status an http-errors-shaped error (body-parser's included) already carries, or `null`
+ * for anything else. `status`/`statusCode` are the two property names http-errors uses across
+ * versions; body-parser's own errors (`entity.parse.failed`, `entity.too.large`) set `status`.
+ */
+function getClientErrorStatus(error: unknown): number | null {
+  if (typeof error !== 'object' || error === null) {
+    return null;
+  }
+  const candidate = error as { status?: unknown; statusCode?: unknown };
+  const status = candidate.status ?? candidate.statusCode;
+  return typeof status === 'number' && status >= 400 && status < 500 ? status : null;
+}
+
 function envInt(name: string, fallback: number): number {
   const raw = process.env[name];
   if (raw === undefined || raw === '') {
@@ -129,10 +143,25 @@ export function createApp(options: CreateAppOptions = {}): Express {
    * The body is deliberately opaque. A `pg` error message can name tables, columns and constraint
    * text, and these are public unauthenticated endpoints; the detail belongs in the log, not the
    * response.
+   *
+   * `express.json()` (added above, for the inquiry endpoint) throws its own error — malformed
+   * JSON, a body over the 32kb cap — BEFORE any route runs, carrying an http-errors `status` in
+   * the 4xx range. That is a caller fault, not a server fault; reporting it as 500 would both
+   * contradict this endpoint's documented 400 response and miscount a client error as a server
+   * one in monitoring.
    */
   app.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
     if (res.headersSent) {
       next(error);
+      return;
+    }
+    const clientErrorStatus = getClientErrorStatus(error);
+    if (clientErrorStatus !== null) {
+      res
+        .status(clientErrorStatus)
+        .json({
+          error: { code: 'invalid_request', message: 'Malformed or oversized request body.' },
+        });
       return;
     }
     console.error('Unhandled error while serving the Property API:', error);
