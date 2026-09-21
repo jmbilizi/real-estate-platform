@@ -93,7 +93,8 @@ pnpm exec nx lint cribstop-next        # Also: test, type-check
   fewer pins than the result count, and that is explained in copy rather than hidden.
 - `next/scripts/check-legal-content.js` blocks the **prod** deploy while `src/content/legal/*.json`
   carries `isDraft: true` (#219). It runs only from the prod job in
-  `.github/workflows/deploy-k8s-resources.yml`, keyed on `DEPLOYMENT_ENV=prod` — the canonical
-  deployment-environment variable name across the repo (values: `local`, `dev`, `test`, `prod`).
+  `.github/workflows/deploy-k8s-resources.yml`, keyed on `DEPLOYMENT_ENV=prod`. `DEPLOYMENT_ENV`
+  is the canonical deployment-environment variable name #219 introduces for cross-ticket reuse
+  (values: `local`, `dev`, `test`, `prod`); #245 wires it into a Kubernetes CronJob the same way.
   `is-production-build.js` is a separate, unrelated signal: it only toggles Next.js standalone
   output and must not be reused for environment checks (#157).

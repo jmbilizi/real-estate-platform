@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 /**
- * Deploy-time gate for #219. Runs as an Nx target invoked only from the prod job of
- * `deploy-k8s-resources.yml`, never at build time. #157 tried gating on `isProductionBuild()`
- * (`CI` / `NEXT_BUILD_STANDALONE`), but both are set the same way in dev, test, and prod, so
- * neither can tell the environments apart. `DEPLOYMENT_ENV` can: the workflow step sets it
- * explicitly to `prod` only in the prod job.
+ * Deploy-time gate for #219. Runs only from the prod job of `deploy-k8s-resources.yml`, never
+ * at build time. #157 tried `isProductionBuild()` (`CI` / `NEXT_BUILD_STANDALONE`). Both are set
+ * the same way in dev, test, and prod, so neither can tell the environments apart.
+ * `DEPLOYMENT_ENV` can. The workflow step sets it to `prod` only in the prod job.
  */
 const path = require('path');
 

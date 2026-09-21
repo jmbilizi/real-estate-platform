@@ -36,11 +36,14 @@ describe('check-legal-content.js', () => {
     });
   });
 
-  describe.each(['local', 'dev', 'test', undefined])('non-prod deploy (DEPLOYMENT_ENV=%s)', (value) => {
-    it('does not fail, even with a draft module present', () => {
-      expect(runGate(value === undefined ? {} : { DEPLOYMENT_ENV: value })).toBe('');
-    });
-  });
+  describe.each(['local', 'dev', 'test', undefined])(
+    'non-prod deploy (DEPLOYMENT_ENV=%s)',
+    (value) => {
+      it('does not fail, even with a draft module present', () => {
+        expect(runGate(value === undefined ? {} : { DEPLOYMENT_ENV: value })).toBe('');
+      });
+    },
+  );
 
   /**
    * Exercises `findDraftFiles` against fixture modules, not the real content, so the pass case

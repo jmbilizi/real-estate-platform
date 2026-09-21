@@ -63,13 +63,6 @@
         "command": "node tools/docker/build-image.js {projectName} --tag={args.tag}",
         "cwd": "."
       }
-    },
-    "check-legal-content": {
-      "executor": "nx:run-commands",
-      "options": {
-        "command": "node scripts/check-legal-content.js",
-        "cwd": "apps/clients/cribstop/next"
-      }
     }
   },
   "tags": [
