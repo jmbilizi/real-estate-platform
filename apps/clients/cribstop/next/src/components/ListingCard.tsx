@@ -305,6 +305,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
         <ListingAttribution
           attribution={listing}
           source={listing.source}
+          compact
           className="mt-1 rounded-sm bg-surface-alt px-1.5 py-1"
         />
       </div>

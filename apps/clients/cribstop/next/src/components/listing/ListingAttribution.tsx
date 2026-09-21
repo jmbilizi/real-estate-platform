@@ -37,11 +37,19 @@ import type { Attribution, ListingSource } from '@cribstop/property-contracts';
  *
  * `listedBy` is derived server-side and rendered as delivered — never reassembled from parts here,
  * or the display string could disagree with the attribution it came from.
+ *
+ * `compact` bounds the full IDX block for a height-constrained surface (the search card, the map
+ * popup). It is independent of `density`: `density` decides *which* block renders, `compact` decides
+ * how the full block's own lines are laid out once chosen. Each fact (`listedBy`, contact, courtesy
+ * of office) becomes its own single truncated line with a `title` attribute carrying the full text,
+ * matching the reduced branch's existing pattern for `officeName`. The redundant standalone
+ * `listingAgentName` line is dropped in this mode, because the name is already inside `listedBy`.
  */
 export default function ListingAttribution({
   attribution,
   source,
   density = 'auto',
+  compact = false,
   className = '',
 }: {
   attribution: Attribution;
@@ -51,6 +59,8 @@ export default function ListingAttribution({
    * the one-sentence disclosure form (firm + who listed it, no contact details).
    */
   density?: 'auto' | 'full' | 'courtesy';
+  /** Bounds the full IDX block to one truncated line per fact. See the doc comment above. */
+  compact?: boolean;
   className?: string;
 }) {
   const { listedBy, officeName, listingAgentName, brokerPhone, brokerEmail } = attribution;
@@ -113,13 +123,21 @@ export default function ListingAttribution({
   // At least one contact method is required. The contract guarantees `brokerPhone` and
   // `brokerEmail` are non-nullable on every row, so this is a floor, not a best effort.
   const contact = brokerPhone || brokerEmail;
+  const contactText = [brokerPhone, brokerEmail].filter(Boolean).join(' · ');
+  const courtesyText = `Listing courtesy of ${officeName}`;
+
+  // `truncate` clips visually only; the full text stays in the DOM for screen readers, and `title`
+  // exposes it on hover for sighted users. Same pattern as the reduced branch's `officeName` line.
+  const lineClassName = compact ? 'truncate' : undefined;
 
   return (
     <div className={`text-sm leading-snug text-ink-body ${className}`}>
-      <p>{listedBy}</p>
-      {listingAgentName && listedBy !== listingAgentName && <p>{listingAgentName}</p>}
+      <p className={lineClassName} title={compact ? listedBy : undefined}>
+        {listedBy}
+      </p>
+      {!compact && listingAgentName && listedBy !== listingAgentName && <p>{listingAgentName}</p>}
       {contact && (
-        <p>
+        <p className={lineClassName} title={compact ? contactText : undefined}>
           {brokerPhone && (
             <a href={`tel:${brokerPhone.replace(/[^\d+]/g, '')}`} className="hover:underline">
               {brokerPhone}
@@ -140,9 +158,12 @@ export default function ListingAttribution({
        * already end with the office name, because 7.58 requires the listing firm to be identified
        * and `listedBy` is not guaranteed to carry it.
        *
-       * Deliberately NOT truncated, unlike the reduced branch above: 7.58 requires the listing firm
-       * to be identified and reasonably prominent, and an ellipsized firm name is arguably neither.
-       * This branch is the one carrying that obligation, so it wraps rather than clips.
+       * Not truncated outside `compact`: 7.58 requires the listing firm to be identified and
+       * reasonably prominent, and an ellipsized firm name is arguably neither, so this line wraps
+       * rather than clips by default. `compact` truncates it anyway, on a `title`-carried full
+       * name, because a height-constrained card cannot afford a wrapped second line at all — the
+       * name stays in the DOM either way, so the disclosure itself is not dropped, only clipped in
+       * presentation, and the surface stays bounded per the ticket's acceptance criteria.
        *
        * "Listing courtesy of" rather than the "Listing by" used in the reduced branch. On our own
        * inventory the wording is a free choice; on an IDX display it is not necessarily ours to
@@ -151,7 +172,11 @@ export default function ListingAttribution({
        * is most likely to expect, and the invented wording stays on the branch where inventing is
        * allowed.
        */}
-      {!listedBy.endsWith(officeName) && <p>Listing courtesy of {officeName}</p>}
+      {!listedBy.endsWith(officeName) && (
+        <p className={lineClassName} title={compact ? officeName : undefined}>
+          {courtesyText}
+        </p>
+      )}
     </div>
   );
 }
