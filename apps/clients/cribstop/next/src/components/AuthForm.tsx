@@ -13,6 +13,7 @@ import {
   SignInFailedError,
 } from '@/lib/api/account';
 import { useConfirmationResend } from '@/lib/useConfirmationResend';
+import { BRAND } from '@/lib/brand';
 import PasswordRequirements from '@/components/PasswordRequirements';
 import { passwordMeetsRules } from '@/lib/password-rules';
 import privacyContent from '@/content/legal/privacy.json';
@@ -81,7 +82,13 @@ export default function AuthForm({
 
   useEffect(() => {
     if (!signupRequested) return;
-    getConfirmationExpiryHours().then(setExpiryHours);
+    let active = true;
+    getConfirmationExpiryHours().then((hours) => {
+      if (active) setExpiryHours(hours);
+    });
+    return () => {
+      active = false;
+    };
   }, [signupRequested]);
 
   // Each mode/sub-state renders a different heading in the same position; a screen reader needs
@@ -128,6 +135,9 @@ export default function AuthForm({
         await signup(email, password);
         setSignupEmail(email);
         setSignupRequested(true);
+        // The waiting state keeps this component mounted, so the password would otherwise stay in
+        // React state and in the hidden input for as long as the consumer reads the screen.
+        setPassword('');
       } else {
         try {
           await requestPasswordReset(email);
@@ -196,10 +206,10 @@ export default function AuthForm({
               {expiryHours !== null && <>It expires in {expiryHours} hours. </>}
               Check your inbox and spam folder. Still nothing? Resend it below, or write to{' '}
               <a
-                href="mailto:contact@cribstop.com"
+                href={`mailto:${BRAND.contactEmail}`}
                 className="font-medium text-brand hover:underline"
               >
-                contact@cribstop.com
+                {BRAND.contactEmail}
               </a>
               .
             </>
