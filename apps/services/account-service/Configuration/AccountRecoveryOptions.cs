@@ -48,6 +48,12 @@ internal sealed class AccountRecoveryOptions
     public string ConfirmationPath { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the web route that receives the password-reset link, carrying <c>email</c> and
+    /// <c>code</c>. The settled value is <c>/reset-password</c> (#137). Required.
+    /// </summary>
+    public string PasswordResetPath { get; set; } = string.Empty;
+
+    /// <summary>
     /// Gets or sets how long a confirmation link stays valid. Enforced by the dedicated
     /// <c>EmailConfirmationTokenProvider</c>, so it does not change any other Identity token.
     /// </summary>
@@ -162,6 +168,11 @@ internal sealed class AccountRecoveryOptions
         if (!this.ConfirmationPath.StartsWith('/'))
         {
             return $"{SectionName}:{nameof(this.ConfirmationPath)} must start with '/'.";
+        }
+
+        if (!this.PasswordResetPath.StartsWith('/'))
+        {
+            return $"{SectionName}:{nameof(this.PasswordResetPath)} must start with '/'.";
         }
 
         if (this.ConfirmationTokenLifetime <= TimeSpan.Zero)

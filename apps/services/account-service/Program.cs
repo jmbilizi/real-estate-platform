@@ -64,6 +64,22 @@ internal static class Program
             .Bind(builder.Configuration.GetSection(TransactionalEmailOptions.SectionName))
             .Validate(options => options.Validate() is null, "Email configuration is invalid. See TransactionalEmailOptions.Validate.")
             .ValidateOnStart();
+        builder.Services
+            .AddOptions<PostmarkOptions>()
+            .Bind(builder.Configuration.GetSection(PostmarkOptions.SectionName))
+
+            // POSTMARK_SERVER_TOKEN is a flat secret env var (infra/k8s/base/secrets/postmark.secret.yaml),
+            // not nested under the Postmark section like the rest of these options.
+            .PostConfigure(options =>
+            {
+                var token = builder.Configuration["POSTMARK_SERVER_TOKEN"];
+                if (!string.IsNullOrWhiteSpace(token))
+                {
+                    options.ServerToken = token;
+                }
+            })
+            .Validate(options => options.Validate() is null, "Postmark configuration is invalid. See PostmarkOptions.Validate.")
+            .ValidateOnStart();
         builder.Services.AddDbContext<AccountDbContext>(options => options.UseNpgsql(connectionString));
         builder.Services.AddScoped<IClaimsTransformation, UserAppClaimsTransformation>();
 
@@ -135,12 +151,22 @@ internal static class Program
 
         builder.Services.AddSingleton<AccountRecoveryRateLimiter>();
         builder.Services.AddSingleton<ConfirmationLinkBuilder>();
+        builder.Services.AddSingleton<PasswordResetLinkBuilder>();
         builder.Services.AddSingleton<IdentityEmailComposer>();
 
-        // The one delivery seam. Without this closed-generic registration Identity's own TryAdd
-        // chain (DefaultMessageEmailSender -> NoOpEmailSender) discards every message silently.
-        // #138 replaces this line with the Postmark transport.
-        builder.Services.AddTransient<IEmailSender<ApplicationUser>, UndeliveredIdentityEmailSender>();
+        // The Postmark transport: one background queue, resolved both as the delivery seam
+        // (IOutboundEmailSender) and as the hosted service that drains it. Enqueuing never blocks
+        // on the network, so no Identity handler's response time depends on the provider.
+        builder.Services.AddHttpClient<PostmarkClient>(
+            (sp, http) => http.BaseAddress = sp.GetRequiredService<IOptions<PostmarkOptions>>().Value.ApiBaseUrl);
+        builder.Services.AddSingleton<PostmarkDeliveryQueue>();
+        builder.Services.AddSingleton<IOutboundEmailSender>(sp => sp.GetRequiredService<PostmarkDeliveryQueue>());
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<PostmarkDeliveryQueue>());
+
+        // The one delivery seam Identity calls into. Without this closed-generic registration
+        // Identity's own TryAdd chain (DefaultMessageEmailSender -> NoOpEmailSender) discards every
+        // message silently.
+        builder.Services.AddTransient<IEmailSender<ApplicationUser>, PostmarkEmailSender>();
 
         // Revoke existing sessions immediately when the security stamp changes
         // (e.g., on account soft-delete or admin suspension).

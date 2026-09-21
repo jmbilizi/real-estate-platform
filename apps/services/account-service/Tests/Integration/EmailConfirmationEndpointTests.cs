@@ -215,7 +215,7 @@ namespace AccountService.Tests.Integration
         }
 
         [Fact]
-        public async Task Register_DuplicateConfirmedAddress_AnswersLikeSuccess_SendsNothing_AndLogsIt()
+        public async Task Register_DuplicateConfirmedAddress_AnswersLikeSuccess_NotifiesTheMailboxInstead_AndLogsIt()
         {
             using var factory = new AccountRecoveryFactory();
             using var client = factory.CreateClient();
@@ -228,7 +228,13 @@ namespace AccountService.Tests.Integration
             duplicate.Status.Should().Be(HttpStatusCode.OK);
             duplicate.Body.Should().BeEmpty();
             (await AccountCountAsync(factory, email)).Should().Be(1);
+
+            // No new confirmation link — the caller's identical response cannot be a confirmation
+            // resend. The mailbox owner is told by a different message instead (#138).
             factory.ConfirmationLinks.Should().HaveCount(linksBefore);
+            var notice = factory.AlreadyRegisteredNotices.Should().ContainSingle().Subject;
+            notice.To.Should().Be(email);
+            notice.TextBody.Should().Contain("already exists");
             factory.Logs.Entries.Should().Contain(e => e.EventId.Id == 1362 && e.Message.Contains(email, StringComparison.Ordinal));
         }
 
@@ -387,20 +393,24 @@ namespace AccountService.Tests.Integration
         }
 
         [Fact]
-        public async Task EmailSender_ResolvesToTheUndeliveredStandIn_WhichLogsWithoutTheLink()
+        public async Task EmailSender_ResolvesToThePostmarkTransport_WhichSuppressesSendingWithoutTheLink_WhenUnconfigured()
         {
-            // The plain factory keeps the service's own sender.
+            // The plain factory keeps the service's own sender and its real Postmark options,
+            // which is the committed placeholder in tests. This exercises the fail-closed path
+            // (#138), not a real send: delivery happens on the background queue, off the request,
+            // so the log entry can land after the response — poll for it rather than assert
+            // immediately.
             using var factory = new AccountServiceFactory();
             using var client = factory.CreateClient();
             using var scope = factory.Services.CreateScope();
             var email = NewEmail("undelivered");
 
             scope.ServiceProvider.GetRequiredService<IEmailSender<ApplicationUser>>()
-                .Should().BeOfType<UndeliveredIdentityEmailSender>();
+                .Should().BeOfType<PostmarkEmailSender>();
 
             await RegisterAsync(client, email);
 
-            var entry = factory.Logs.Entries.Should().ContainSingle(e => e.EventId.Id == 1361).Subject;
+            var entry = await WaitForLogEntryAsync(factory, 1370);
             entry.Level.Should().Be(LogLevel.Warning);
             entry.Message.Should().Contain(email);
             entry.Message.Should().NotContain("code=");
@@ -452,6 +462,31 @@ namespace AccountService.Tests.Integration
 
         private static void WithFloor(AccountRecoveryOptions options) =>
             options.MinimumResponseDuration = TimeSpan.FromMilliseconds(250);
+
+        /// <summary>
+        /// Polls <see cref="AccountServiceFactory.Logs"/> for an entry with the given event id.
+        /// Delivery through <see cref="PostmarkDeliveryQueue"/> happens on a background loop, off
+        /// the request that triggered it, so its log entry is not guaranteed to exist the instant
+        /// the HTTP response returns.
+        /// </summary>
+        private static async Task<CapturingLoggerProvider.LogEntry> WaitForLogEntryAsync(
+            AccountServiceFactory factory,
+            int eventId)
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            while (DateTime.UtcNow < deadline)
+            {
+                var matches = factory.Logs.Entries.Where(e => e.EventId.Id == eventId).ToList();
+                if (matches.Count > 0)
+                {
+                    return matches[0];
+                }
+
+                await Task.Delay(25);
+            }
+
+            throw new TimeoutException($"No log entry with event id {eventId} appeared within 5 seconds.");
+        }
 
         /// <summary>
         /// Asserts both requests were held to the 250ms floor. The tolerance covers the gap between

@@ -319,19 +319,19 @@ namespace AccountService.Tests.Helpers
         [Fact]
         public void Options_RefuseANonPositiveLimit_RatherThanRefusingEveryRequest()
         {
-            new AccountRecoveryOptions { WebBaseUrl = new Uri("https://x.example"), ConfirmationPath = "/c", MaxTrackedKeys = 0 }
+            new AccountRecoveryOptions { WebBaseUrl = new Uri("https://x.example"), ConfirmationPath = "/c", PasswordResetPath = "/r", MaxTrackedKeys = 0 }
                 .Validate().Should().Contain("MaxTrackedKeys");
 
-            new AccountRecoveryOptions { WebBaseUrl = new Uri("https://x.example"), ConfirmationPath = "/c", ResendsPerEmailPerHour = 0 }
+            new AccountRecoveryOptions { WebBaseUrl = new Uri("https://x.example"), ConfirmationPath = "/c", PasswordResetPath = "/r", ResendsPerEmailPerHour = 0 }
                 .Validate().Should().Contain("ResendsPerEmailPerHour");
 
-            new AccountRecoveryOptions { WebBaseUrl = new Uri("https://x.example"), ConfirmationPath = "/c", ConfirmationTokenLifetime = TimeSpan.Zero }
+            new AccountRecoveryOptions { WebBaseUrl = new Uri("https://x.example"), ConfirmationPath = "/c", PasswordResetPath = "/r", ConfirmationTokenLifetime = TimeSpan.Zero }
                 .Validate().Should().Contain("ConfirmationTokenLifetime");
 
-            new AccountRecoveryOptions { WebBaseUrl = new Uri("https://x.example"), ConfirmationPath = "/c", TokenLifetime = TimeSpan.Zero }
+            new AccountRecoveryOptions { WebBaseUrl = new Uri("https://x.example"), ConfirmationPath = "/c", PasswordResetPath = "/r", TokenLifetime = TimeSpan.Zero }
                 .Validate().Should().Contain("TokenLifetime");
 
-            new AccountRecoveryOptions { WebBaseUrl = new Uri("https://x.example"), ConfirmationPath = "/c" }
+            new AccountRecoveryOptions { WebBaseUrl = new Uri("https://x.example"), ConfirmationPath = "/c", PasswordResetPath = "/r" }
                 .Validate().Should().BeNull();
         }
 

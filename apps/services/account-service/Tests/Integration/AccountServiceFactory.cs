@@ -27,6 +27,9 @@ namespace AccountService.Tests.Integration
         /// <summary>The confirmation path every test host is configured with.</summary>
         internal const string ConfirmationPath = "/confirm-email";
 
+        /// <summary>The password-reset path every test host is configured with.</summary>
+        internal const string PasswordResetPath = "/reset-password";
+
         private readonly string dbName = $"AccountServiceTest-{Guid.NewGuid()}";
 
         /// <summary>Gets every log entry the host wrote.</summary>
@@ -60,6 +63,7 @@ namespace AccountService.Tests.Integration
                 {
                     options.WebBaseUrl = new Uri(WebOrigin);
                     options.ConfirmationPath = ConfirmationPath;
+                    options.PasswordResetPath = PasswordResetPath;
                     options.ResendMinimumInterval = TimeSpan.Zero;
                     options.ResendsPerEmailPerHour = int.MaxValue;
                     options.ResendsPerEmailPerDay = int.MaxValue;
