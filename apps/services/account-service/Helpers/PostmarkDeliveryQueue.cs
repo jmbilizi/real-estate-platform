@@ -27,7 +27,12 @@ namespace AccountService.Helpers;
 /// substituted — nothing is sent, and that is logged loudly rather than silently discarded.
 /// </para>
 /// </remarks>
-/// <param name="client">The Postmark HTTP client.</param>
+/// <param name="clientFactory">
+/// Resolves a fresh <see cref="PostmarkClient"/> per delivery attempt. This queue is a singleton
+/// with a lifetime measured in days; capturing the typed client directly would pin its
+/// <c>HttpClient</c> handler for that whole lifetime and defeat <c>IHttpClientFactory</c>'s handler
+/// rotation, so DNS changes on Postmark's end would never be picked up (#138 code review).
+/// </param>
 /// <param name="options">The Postmark options.</param>
 /// <param name="logger">The logger.</param>
 /// <param name="timeProvider">The time provider, for retry delays a test can control.</param>
@@ -36,7 +41,7 @@ namespace AccountService.Helpers;
 /// retry test does not run for a minute of wall-clock time.
 /// </param>
 internal sealed partial class PostmarkDeliveryQueue(
-    PostmarkClient client,
+    Func<PostmarkClient> clientFactory,
     IOptions<PostmarkOptions> options,
     ILogger<PostmarkDeliveryQueue> logger,
     TimeProvider timeProvider,
@@ -69,7 +74,19 @@ internal sealed partial class PostmarkDeliveryQueue(
     {
         await foreach (var message in this.queue.Reader.ReadAllAsync(stoppingToken).ConfigureAwait(false))
         {
-            await this.DeliverAsync(message, stoppingToken).ConfigureAwait(false);
+            try
+            {
+                await this.DeliverAsync(message, stoppingToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // One message's genuinely unexpected failure must not fault this loop: every
+                // message queued after it would then go undelivered, forever, with no further log
+                // (#138 code review). DeliverAsync already handles every failure mode this
+                // transport anticipates; this is the backstop for the one it does not.
+                LogFailed(logger, message.Kind, message.To, ex.Message);
+            }
+
             this.Delivered?.Invoke(message);
         }
     }
@@ -98,17 +115,23 @@ internal sealed partial class PostmarkDeliveryQueue(
         {
             try
             {
-                var result = await client.SendAsync(message, cancellationToken).ConfigureAwait(false);
+                var result = await clientFactory().SendAsync(message, cancellationToken).ConfigureAwait(false);
                 if (result.Success)
                 {
                     LogAccepted(logger, message.Kind, message.To, result.MessageId ?? string.Empty);
                     return;
                 }
 
-                // Postmark rejected the request at the API level (bad token, invalid recipient,
-                // suppressed address). Retrying would not change that outcome.
-                LogRejected(logger, message.Kind, message.To, result.ErrorCode, result.Detail);
-                return;
+                if (!result.IsRetryableFailure || attempt >= this.retryDelays.Count)
+                {
+                    // Either a permanent rejection (bad token, invalid recipient) that a retry
+                    // cannot change, or every retry for a retryable one (rate limit, Postmark 5xx)
+                    // is spent.
+                    LogRejected(logger, message.Kind, message.To, result.ErrorCode, result.Detail);
+                    return;
+                }
+
+                await Task.Delay(this.retryDelays[attempt], timeProvider, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
             {

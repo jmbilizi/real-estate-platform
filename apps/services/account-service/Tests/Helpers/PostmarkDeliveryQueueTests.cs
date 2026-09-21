@@ -76,6 +76,54 @@ namespace AccountService.Tests.Helpers
         }
 
         [Fact]
+        public async Task DeliverAsync_OnARateLimitThatRecovers_RetriesUntilItSucceeds()
+        {
+            var attempt = 0;
+            using var handler = new FakeHttpMessageHandler(_ =>
+            {
+                attempt++;
+                return attempt < 2
+                    ? JsonResponse((HttpStatusCode)429, new { ErrorCode = 406, Message = "Account rate limit exceeded." })
+                    : JsonResponse(HttpStatusCode.OK, new { ErrorCode = 0, Message = "OK", MessageID = "msg-789" });
+            });
+
+            var (logger, _) = await RunOneMessageAsync(handler, retryDelays: new[] { TimeSpan.Zero, TimeSpan.Zero });
+
+            handler.Requests.Should().HaveCount(2);
+            var entry = logger.Entries.Should().ContainSingle().Subject;
+            entry.EventId.Id.Should().Be(1371);
+        }
+
+        [Fact]
+        public async Task DeliverAsync_OnAPersistentRateLimit_GivesUpAfterEveryRetry()
+        {
+            using var handler = new FakeHttpMessageHandler(_ => JsonResponse(
+                (HttpStatusCode)429,
+                new { ErrorCode = 406, Message = "Account rate limit exceeded." }));
+            var retryDelays = new[] { TimeSpan.Zero, TimeSpan.Zero };
+
+            var (logger, _) = await RunOneMessageAsync(handler, retryDelays: retryDelays);
+
+            handler.Requests.Should().HaveCount(retryDelays.Length + 1);
+            var entry = logger.Entries.Should().ContainSingle().Subject;
+            entry.EventId.Id.Should().Be(1372);
+        }
+
+        [Fact]
+        public async Task DeliverAsync_OnAMalformedResponse_LogsRatherThanCrashingTheQueue()
+        {
+            using var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.BadGateway)
+            {
+                Content = new StringContent("<html>502 Bad Gateway</html>"),
+            });
+
+            var (logger, _) = await RunOneMessageAsync(handler, retryDelays: Array.Empty<TimeSpan>());
+
+            var entry = logger.Entries.Should().ContainSingle().Subject;
+            entry.EventId.Id.Should().Be(1372);
+        }
+
+        [Fact]
         public async Task DeliverAsync_OnATransportFailureThatRecovers_RetriesUntilItSucceeds()
         {
             var attempt = 0;
@@ -131,7 +179,7 @@ namespace AccountService.Tests.Helpers
             var client = new PostmarkClient(httpClient, Options.Create(new PostmarkOptions { ServerToken = serverToken }));
             var logger = new RecordingLogger<PostmarkDeliveryQueue>();
             using var queue = new PostmarkDeliveryQueue(
-                client,
+                () => client,
                 Options.Create(new PostmarkOptions { ServerToken = serverToken }),
                 logger,
                 TimeProvider.System,

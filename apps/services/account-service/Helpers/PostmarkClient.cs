@@ -48,13 +48,30 @@ internal sealed class PostmarkClient(HttpClient httpClient, IOptions<PostmarkOpt
             options: JsonOptions);
 
         using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        var payload = await response.Content
-            .ReadFromJsonAsync<PostmarkSendResponse>(JsonOptions, cancellationToken)
-            .ConfigureAwait(false);
-        payload ??= new PostmarkSendResponse();
+
+        // A malformed body (an intermediary's HTML error page, an empty body) is treated as a
+        // failure result rather than an exception: an unhandled JsonException here would fault the
+        // one background loop every future message goes through (#138 code review).
+        PostmarkSendResponse payload;
+        try
+        {
+            payload = await response.Content
+                .ReadFromJsonAsync<PostmarkSendResponse>(JsonOptions, cancellationToken)
+                .ConfigureAwait(false) ?? new PostmarkSendResponse();
+        }
+        catch (JsonException)
+        {
+            return new PostmarkSendResult(
+                false,
+                response.StatusCode,
+                MessageId: null,
+                ErrorCode: -1,
+                Detail: "Postmark returned a response this client could not parse.");
+        }
 
         return new PostmarkSendResult(
             response.IsSuccessStatusCode && payload.ErrorCode == 0,
+            response.StatusCode,
             payload.MessageID,
             payload.ErrorCode,
             payload.Message ?? response.ReasonPhrase ?? "Postmark returned no detail.");

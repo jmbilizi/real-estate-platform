@@ -65,8 +65,10 @@ namespace AccountService.Tests.Helpers
             var result = await SendAsync(handler);
 
             result.Success.Should().BeFalse();
+            result.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
             result.ErrorCode.Should().Be(10);
             result.Detail.Should().Contain("Invalid API key");
+            result.IsRetryableFailure.Should().BeFalse();
         }
 
         [Fact]
@@ -95,6 +97,22 @@ namespace AccountService.Tests.Helpers
 
             result.Success.Should().BeFalse();
             result.ErrorCode.Should().Be(406);
+            result.IsRetryableFailure.Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task SendAsync_OnAMalformedResponseBody_ReturnsFailure_RatherThanThrowing()
+        {
+            // An intermediary error page, or an empty body, in place of Postmark's documented JSON.
+            using var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.BadGateway)
+            {
+                Content = new StringContent("<html>502 Bad Gateway</html>", System.Text.Encoding.UTF8, "text/html"),
+            });
+
+            var result = await SendAsync(handler);
+
+            result.Success.Should().BeFalse();
+            result.StatusCode.Should().Be(HttpStatusCode.BadGateway);
         }
 
         [Fact]

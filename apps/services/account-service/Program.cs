@@ -159,7 +159,17 @@ internal static class Program
         // on the network, so no Identity handler's response time depends on the provider.
         builder.Services.AddHttpClient<PostmarkClient>(
             (sp, http) => http.BaseAddress = sp.GetRequiredService<IOptions<PostmarkOptions>>().Value.ApiBaseUrl);
-        builder.Services.AddSingleton<PostmarkDeliveryQueue>();
+
+        // A Func<PostmarkClient>, not a captured instance: PostmarkDeliveryQueue is a singleton
+        // with a lifetime measured in days, and capturing one PostmarkClient for that whole
+        // lifetime would pin its HttpClient handler and defeat IHttpClientFactory's handler
+        // rotation (#138 code review).
+        builder.Services.AddSingleton(sp =>
+            new PostmarkDeliveryQueue(
+                sp.GetRequiredService<PostmarkClient>,
+                sp.GetRequiredService<IOptions<PostmarkOptions>>(),
+                sp.GetRequiredService<ILogger<PostmarkDeliveryQueue>>(),
+                sp.GetRequiredService<TimeProvider>()));
         builder.Services.AddSingleton<IOutboundEmailSender>(sp => sp.GetRequiredService<PostmarkDeliveryQueue>());
         builder.Services.AddHostedService(sp => sp.GetRequiredService<PostmarkDeliveryQueue>());
 
