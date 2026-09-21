@@ -119,6 +119,15 @@ environments:
         require_approval: false
         rollback_on_failure: false
 
+      ingress:
+        # Shared basic-auth Secret (#255) for jaeger/api-gateway/cribstop-web. No
+        # webhook gates it, so its phase lands alongside ingress-nginx, before every
+        # Ingress that references it.
+        enabled: true
+        auto_deploy: true
+        require_approval: false
+        rollback_on_failure: false
+
   # ────────────────────────────────────────────────────────────────────────────
   # TEST/STAGING ENVIRONMENT
   # Moderate controls - test safety features before production
@@ -202,6 +211,12 @@ environments:
         auto_deploy: false # Manual deployment in test
         require_approval: false
         rollback_on_failure: false
+
+      ingress:
+        enabled: true
+        auto_deploy: false # Manual deployment in test
+        require_approval: false
+        rollback_on_failure: false
   # Strictest controls - all safety features enabled when workflows support them
   # ────────────────────────────────────────────────────────────────────────────
   prod:
@@ -280,6 +295,12 @@ environments:
         rollback_on_failure: false
 
       ingress-nginx:
+        enabled: true
+        auto_deploy: false # Manual deployment only
+        require_approval: true
+        rollback_on_failure: false
+
+      ingress:
         enabled: true
         auto_deploy: false # Manual deployment only
         require_approval: true

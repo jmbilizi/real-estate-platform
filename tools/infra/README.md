@@ -311,8 +311,8 @@ Rules that hold:
   working tree is never modified, so `git status` stays clean after a deploy.
 - The tooling logs key names and a count, never a value.
 - With no `.env`, nothing is generated and the render is byte-identical to a clean checkout.
-- A key whose name is not already SCREAMING_SNAKE is qualified with its Secret name, so the jaeger
-  `auth` key is `JAEGER_AUTH`. A bare `auth` in `process.env` would collide too easily.
+- A key whose name is not already SCREAMING_SNAKE is qualified with its Secret name, so the ingress
+  `auth` key is `INGRESS_AUTH`. A bare `auth` in `process.env` would collide too easily.
 - The generated patches hold plaintext until a later run supplies no key. To clear them now, run
   `pnpm run infra:secrets:clean`.
 - An explicit `--profile` selects the render path yourself, so it turns injection off. The script

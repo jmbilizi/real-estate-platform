@@ -100,6 +100,9 @@ jobs:
           REDIS_RATELIMIT_PASSWORD: ${{ secrets.REDIS_RATELIMIT_PASSWORD }}
           REDIS_MONITOR_PASSWORD: ${{ secrets.REDIS_MONITOR_PASSWORD }}
           JAEGER_DOMAIN: ${{ secrets.JAEGER_DOMAIN }}
-          JAEGER_BASIC_AUTH: ${{ secrets.JAEGER_BASIC_AUTH }}
           API_GATEWAY_DOMAIN: ${{ secrets.API_GATEWAY_DOMAIN }}
           CRIBSTOP_DOMAIN: ${{ secrets.CRIBSTOP_DOMAIN }}
+          # Shared basic-auth gate (#255): one credential per environment, gates jaeger,
+          # api-gateway, and the dev/test cribstop-web Ingress. Same name locally and in
+          # CI by design (tools/infra/secret-keys.js derives INGRESS_AUTH either way).
+          INGRESS_AUTH: ${{ secrets.INGRESS_AUTH }}

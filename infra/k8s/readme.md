@@ -280,13 +280,14 @@ Configure in: Repository Settings → Secrets and variables → Actions
 **Redis ACL Info:** See `redis-acl-guide.md` for user permissions and application connection
 examples.
 
-### Jaeger Basic Auth (per environment)
+### Ingress Basic Auth (per environment)
 
-**All environments (dev, test, prod):** `JAEGER_BASIC_AUTH`
+**All environments (dev, test, prod):** `INGRESS_AUTH`
 
 **Format:** htpasswd string (e.g., `admin:$apr1$xyz...`)  
 **Generate:** `htpasswd -nb username password`  
-**Purpose:** Protects Jaeger UI with HTTP Basic Authentication
+**Purpose:** Shared credential for Jaeger, the api-gateway Ingress (every environment), and the
+dev/test cribstop-web Ingress
 
 ### Ingress Domain Configuration (per environment)
 

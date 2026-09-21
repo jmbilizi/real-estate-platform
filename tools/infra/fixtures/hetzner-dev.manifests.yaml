@@ -129,9 +129,9 @@ metadata:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: jaeger-secret
+  name: ingress-secret
   labels:
-    app: jaeger
+    app: ingress
 ---
 apiVersion: v1
 kind: Secret
