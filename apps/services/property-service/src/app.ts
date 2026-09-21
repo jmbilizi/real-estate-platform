@@ -157,11 +157,9 @@ export function createApp(options: CreateAppOptions = {}): Express {
     }
     const clientErrorStatus = getClientErrorStatus(error);
     if (clientErrorStatus !== null) {
-      res
-        .status(clientErrorStatus)
-        .json({
-          error: { code: 'invalid_request', message: 'Malformed or oversized request body.' },
-        });
+      res.status(clientErrorStatus).json({
+        error: { code: 'invalid_request', message: 'Malformed or oversized request body.' },
+      });
       return;
     }
     console.error('Unhandled error while serving the Property API:', error);
