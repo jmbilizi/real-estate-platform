@@ -73,5 +73,9 @@ spec:
                 # The ONLY place in the repo that declares the production tier. The base default is
                 # `test`, and that default is fail-safe: an environment that forgets to patch this
                 # cannot read the production feed.
+                - name: BRIGHT_MLS_ENV
+                  value: "production"
+                # Pre-#246 name for the same declaration, kept for one release (#246 migration
+                # step 2). config.ts reads BRIGHT_MLS_ENV first.
                 - name: BRIGHT_MLS_FEED
                   value: "production"

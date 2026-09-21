@@ -324,10 +324,11 @@ Two more things worth knowing before changing this code:
 - **The bearer token goes only to the configured service-root host.** An `@odata.nextLink` is a
   server-supplied URL, so a host change there would hand the credential to that host. `fetchPage`
   refuses it.
-- **`BRIGHT_MLS_FEED` declares the feed tier** (`test` or `production`). A `test` declaration
-  refuses a service root or token endpoint that is not a recognised test host, and the base default
-  is `test`, so an environment that patches nothing cannot reach production. This guards the
-  ENDPOINT, never the credential — a production credential in a non-production secret is #164.
+- **`BRIGHT_MLS_ENV` declares the feed tier** (`test` or `production`, #246, replacing
+  `BRIGHT_MLS_FEED`). A `test` declaration refuses a service root or token endpoint that is not a
+  recognised test host, and `production` now also refuses a recognised non-production host. The base
+  default is `test`, so an environment that patches nothing cannot reach production. The same
+  selector also picks the credential pair (`BRIGHT_MLS_TEST_*` / `BRIGHT_MLS_PROD_*`) — see below.
 
 ### Bright MLS ingestion — the vehicle (#91)
 
@@ -369,20 +370,21 @@ Five things here are load-bearing and easy to undo by accident:
   environments and only the values differ, which is what makes GitHub _environment_ secrets — not
   repository secrets — the enforcement mechanism, and the endpoint stays per-environment
   **configuration** on the CronJob so the feed is inspectable without decoding a Secret. Every
-  environment carries an endpoint pair since #176. **Two guards, and they are not the same guard.**
-  `BRIGHT_MLS_FEED` (#92) is a per-environment tier declaration: a `test` declaration refuses a
-  service root or token endpoint that is not a recognised test host, and the base default is `test`,
-  so an environment that patches nothing cannot reach production. That guards the ENDPOINT. #164
-  guards the CREDENTIAL, which nothing in the pod can check, because a client id carries no evidence
-  of which tier issued it.
-- **#164 is parallel hardening, not a blocker on #176** — measured 2026-09-19, not argued. The real
-  **test** credentials return **HTTP 200** at `okta.tst.brightmls.com` and **HTTP 400** at
-  `okta.brightmls.com`. Bright's test and production Okta orgs are separate tenants, so a credential
-  from one cannot authenticate against the other. A production credential in a non-production
-  environment is therefore transmitted to the wrong endpoint and **rejected** — that is credential
-  exposure, not data exposure, and Bright already fails closed across tenants. An earlier version of
-  this guide claimed wiring the endpoint gave a laptop a live authenticated production call. It does
-  not. See the evidence on #164 and #176.
+  environment carries an endpoint pair since #176. **One selector, both guards (#246).**
+  `BRIGHT_MLS_ENV` is a per-environment tier declaration: a `test` declaration refuses a service
+  root or token endpoint that is not a recognised test host, `production` refuses a recognised
+  non-production host, and the base default is `test`, so an environment that patches nothing cannot
+  reach production. That guards the ENDPOINT. The same selector also picks the credential pair
+  (`BRIGHT_MLS_TEST_CLIENT_ID`/`SECRET` or `BRIGHT_MLS_PROD_CLIENT_ID`/`SECRET`) and the resolver
+  never reads the other tier's pair — a value filed under the wrong tier's key is inert, not merely
+  rejected downstream. That guards the CREDENTIAL, and delivers most of #164: naming the key by tier
+  is an assertion a reader can find, where a bare credential value carries none.
+- **Before #246, the credential guard depended on Bright's own tenant separation.** Measured
+  2026-09-19: the real **test** credentials return **HTTP 200** at `okta.tst.brightmls.com` and
+  **HTTP 400** at `okta.brightmls.com`, because the two tiers are separate Okta tenants. A misfiled
+  credential was transmitted to the wrong endpoint and rejected there — credential exposure, not
+  data exposure, but a control this repo did not own. #246's tier-suffixed keys make the same
+  misfile inert one step earlier: the resolver never reads it, so nothing is transmitted.
 - **Only endpoint HOSTS are ever logged**, never full URLs and never credential material. The
   containment is structural: no log record type in `run-log.ts` has a field a credential could be
   assigned to. The exception that had to be argued about is `message`, the one free-text field — so
