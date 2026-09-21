@@ -63,8 +63,12 @@ function volumeExists() {
 // each `ensure` force-recreated the registry, and each recreate orphaned a netavark
 // DNAT rule for port 5001 until the port resolved to a dead container ("no route to
 // host" on push). Plain `podman inspect` returns the whole object as JSON — no braces.
+// `podman inspect` resolves across containers, images, volumes and networks, so an image
+// sharing the registry's name would answer with a real Config.Env that lacks the delete
+// flag — restarting the force-recreate loop this function exists to stop. Ask for a
+// container explicitly; `container inspect` is equally brace-free.
 function inspectContainer() {
-  const res = run('podman', ['inspect', REGISTRY_NAME]);
+  const res = run('podman', ['container', 'inspect', REGISTRY_NAME]);
   if (res.status !== 0 || !res.stdout.trim()) {
     return null;
   }

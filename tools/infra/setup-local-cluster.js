@@ -78,9 +78,16 @@ function run(command, options = {}) {
     });
     return { success: true, output: result };
   } catch (error) {
+    // Report both streams on failure. `error.stdout || error.stderr` dropped stderr
+    // whenever the command had written anything at all to stdout first, which hid the
+    // WSL wedge signature that recoverWedgedWslDistro() matches on. Only the failure
+    // path is joined: callers that parse stdout on success are unaffected.
+    const streams = [error.stdout, error.stderr]
+      .map((stream) => (stream || '').toString())
+      .filter((stream) => stream.trim());
     return {
       success: false,
-      output: error.stdout || error.stderr || error.message,
+      output: streams.length > 0 ? streams.join('\n') : error.message,
     };
   }
 }
@@ -212,8 +219,14 @@ function getPodmanMachines() {
   if (!result.success) {
     return { ok: false, error: output || 'podman machine list failed with no output' };
   }
+  // An empty body on a successful exit is not "no machines". `podman machine list` prints
+  // `[]` when it has none, so silence means the query did not answer, and treating it as
+  // an empty list walks straight into the `init` → "VM already exists" dead end.
+  if (!output) {
+    return { ok: false, error: 'podman machine list exited 0 with no output' };
+  }
   try {
-    const parsed = JSON.parse(output || '[]');
+    const parsed = JSON.parse(output);
     if (!Array.isArray(parsed)) {
       return { ok: false, error: `podman machine list returned non-array JSON: ${output}` };
     }
@@ -223,27 +236,64 @@ function getPodmanMachines() {
   }
 }
 
-// Podman's WSL backend wedges: `wsl -l -v` shows the distro Running, but every
-// `wsl.exe -d podman-machine-default` call fails with E_UNEXPECTED / 0xffffffff, so
-// `podman machine list` cannot answer at all. Terminating that one distro clears it.
-// Only ever terminate podman's own distro — `wsl --shutdown` would kill every other
-// lane's distro on this machine.
+// Podman's WSL backend wedges: `wsl -l -v` shows the distro Running, but every command
+// into it fails with E_UNEXPECTED / 0xffffffff, so `podman machine list` cannot answer.
+// Terminating the distro clears it.
+//
+// Match the wedge signature only. An earlier version also matched the bare string
+// "wsl.exe", which podman quotes in many unrelated errors (a stopped machine, a provider
+// error), so an ordinary failure could trigger a terminate. That matters because the
+// distro is not private to this run: the Kind nodes, the local registry, and any other
+// lane's builds all run inside it, and terminating it stops them. The real wedge text
+// carries the status code, so narrowing costs no coverage.
+const WSL_WEDGE_SIGNATURE = /E_UNEXPECTED|0xffffffff|Catastrophic failure/i;
+
+// Never `wsl --shutdown`: that kills every other lane's distro, the same failure mode as
+// an image-wide taskkill. Terminate podman's own distro by name. The name is read from WSL
+// rather than hardcoded, because a developer may run a machine that is not the default and
+// a failed query cannot tell us its name.
+function podmanWslDistros() {
+  const listed = run('wsl.exe -l -q', { silent: true });
+  if (!listed.success) {
+    return [];
+  }
+  return (listed.output || '')
+    .replace(/\0/g, '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /^podman-machine/i.test(line));
+}
+
 function recoverWedgedWslDistro(error) {
   if (os.platform() !== 'win32') {
     return false;
   }
-  const wedged = /wsl\.exe|E_UNEXPECTED|0xffffffff|Catastrophic failure/i.test(error);
-  if (!wedged) {
+  // wsl.exe writes UTF-16LE, so its text reaches us NUL-interleaved
+  // ("C\0a\0t\0a\0s..."). Strip the NULs or the signature never matches that stream.
+  if (!WSL_WEDGE_SIGNATURE.test(String(error).replace(/\0/g, ''))) {
     return false;
   }
-  logWarning('Podman cannot reach its WSL distro. Terminating podman-machine-default to recover.');
+
+  const distros = podmanWslDistros();
+  if (distros.length === 0) {
+    logWarning('Podman WSL distro is wedged, but no podman-machine distro is listed.');
+    return false;
+  }
+
+  logWarning(`Podman cannot reach its WSL distro. Terminating ${distros.join(', ')} to recover.`);
   logInfo(error);
-  const terminated = run('wsl.exe --terminate podman-machine-default', { silent: true });
-  if (!terminated.success) {
-    logWarning(`wsl --terminate failed: ${(terminated.output || '').trim()}`);
-    return false;
+  logWarning('This stops the Kind nodes and the local registry inside that distro.');
+
+  let terminatedAny = false;
+  for (const distro of distros) {
+    const terminated = run(`wsl.exe --terminate ${distro}`, { silent: true });
+    if (terminated.success) {
+      terminatedAny = true;
+    } else {
+      logWarning(`wsl --terminate ${distro} failed: ${(terminated.output || '').trim()}`);
+    }
   }
-  return true;
+  return terminatedAny;
 }
 
 function queryPodmanMachines() {
@@ -257,7 +307,12 @@ function queryPodmanMachines() {
   if (!result.ok) {
     logError('Unable to query Podman machines. Not assuming none exist.');
     logInfo(result.error);
-    logInfo('Recover with: wsl.exe --terminate podman-machine-default (never wsl --shutdown).');
+    if (os.platform() === 'win32') {
+      logInfo('If the WSL distro is wedged, terminate it by name:');
+      logInfo('  wsl.exe --terminate podman-machine-default   (never wsl --shutdown)');
+    } else {
+      logInfo("Check the podman service with 'podman machine list' and 'podman system info'.");
+    }
     process.exit(1);
   }
   return result.machines;

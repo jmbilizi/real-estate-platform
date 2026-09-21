@@ -15,8 +15,14 @@ const { join } = require('node:path');
 // Read the whole object with plain `podman inspect` instead.
 const SOURCE = readFileSync(join(__dirname, 'local-registry.js'), 'utf8');
 
+// Blank the comments in place rather than deleting them. Collapsing a multi-line block
+// comment to nothing shifts every line number after it, so a failure would point the
+// fixer above the real offender.
 function sourceWithoutComments() {
-  return SOURCE.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  return SOURCE.replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\r\n]/g, ' ')).replace(
+    /^(\s*)\/\/.*$/gm,
+    '$1',
+  );
 }
 
 test('local-registry.js passes no Go template to podman', () => {
@@ -45,10 +51,12 @@ test('local-registry.js reads container state and env from one parsed inspect ob
     /function inspectContainer\(\)/,
     'inspectContainer() must exist as the single shell-safe inspect path',
   );
+  // `container inspect` rather than bare `inspect`: podman otherwise resolves the name
+  // across images, volumes and networks and can answer with the wrong object's Config.Env.
   assert.match(
     code,
-    /\['inspect', REGISTRY_NAME\]/,
-    "inspect must be called as ['inspect', REGISTRY_NAME] with no -f template argument",
+    /\['container', 'inspect', REGISTRY_NAME\]/,
+    "inspect must be called as ['container', 'inspect', REGISTRY_NAME] with no -f template",
   );
   // `-f` is legitimate on `podman rm -f`. What must never recur is `-f` carrying a
   // format template, which is what cmd.exe mangles.
