@@ -1,6 +1,9 @@
 'use client';
 
+import { useLayoutEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { useApp } from '@/lib/context';
+import { SkeletonBar } from './Skeleton';
 
 /**
  * Shared mobile search pill used in both ScrollSentinel (in-page, pre-scroll)
@@ -11,6 +14,17 @@ import { useApp } from '@/lib/context';
  */
 export default function MobileSearchPill() {
   const { searchLocation, listingType, activeTab, searchDateRange, setMobileSearchOpen } = useApp();
+  const pathname = usePathname();
+
+  const [hydrated, setHydrated] = useState(false);
+  useLayoutEffect(() => {
+    setHydrated(true);
+  }, []);
+
+  // `searchSlice`'s default is always '' and is never persisted (see the slice's own comment).
+  // So on every route except `/search` there is no async seeding: the server and the first
+  // client render already agree, and there is nothing to placeholder over.
+  const onSearchRoute = pathname.startsWith('/search');
 
   const summary = (() => {
     if (activeTab === 'services') return 'Find services';
@@ -75,6 +89,30 @@ export default function MobileSearchPill() {
     return parts.join(' · ');
   })();
 
+  /*
+   * On `/search` only, this component cannot pick its layout before hydration.
+   * `SearchExperience` seeds `searchLocation` from the URL in an effect, mounted only on that
+   * route. So `/search?q=...` sees an empty string server-side, and without a placeholder would
+   * render the one-line "Start your search" button, then swap to the two-line pill. That is a
+   * height change, not just a text change. The placeholder takes the two-line shape so the swap
+   * lands inside a box that is already the right size. Every other route has no such effect, so
+   * `searchLocation` is already the settled answer server-side.
+   */
+  if (!hydrated && onSearchRoute) {
+    return (
+      <div className="flex-1 flex items-center rounded-full border border-surface-border bg-white shadow-card overflow-hidden">
+        <div className="flex-1 min-w-0 flex flex-col items-center justify-center text-center px-4 py-2.5">
+          <span className="text-[13px] font-semibold leading-snug w-full">
+            <SkeletonBar className="w-32" />
+          </span>
+          <span className="text-[11px] leading-snug">
+            <SkeletonBar className="w-24" />
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   if (!searchLocation) {
     return (
       <button
@@ -96,7 +134,7 @@ export default function MobileSearchPill() {
             d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
           />
         </svg>
-        <span className="text-[14px] text-ink font-medium">Start your search</span>
+        <span className="text-[14px] text-ink font-medium content-resolved">Start your search</span>
       </button>
     );
   }
@@ -108,10 +146,10 @@ export default function MobileSearchPill() {
         onClick={() => setMobileSearchOpen(true)}
         className="flex-1 min-w-0 flex flex-col items-center justify-center text-center px-4 py-2.5"
       >
-        <span className="text-[13px] font-semibold text-ink leading-snug truncate w-full text-center">
+        <span className="text-[13px] font-semibold text-ink leading-snug truncate w-full text-center content-resolved">
           {searchLocation}
         </span>
-        <span className="text-[11px] text-ink-muted leading-snug">{summary}</span>
+        <span className="text-[11px] text-ink-muted leading-snug content-resolved">{summary}</span>
       </button>
     </div>
   );

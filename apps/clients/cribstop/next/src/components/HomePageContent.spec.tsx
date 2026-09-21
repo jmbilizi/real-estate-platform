@@ -125,7 +125,13 @@ describe('HomePageContent', () => {
     render(<HomePageContent />);
 
     await waitFor(() => expect(screen.getByText('Just listed homes for sale')).toBeInTheDocument());
-    // The failed carousel's own heading never appears — it renders nothing, not an error UI.
-    expect(screen.queryByText('Featured homes for sale')).not.toBeInTheDocument();
+
+    // The failed carousel keeps its heading and says so, with a way back. It used to render
+    // nothing at all, which is indistinguishable to the user from "there are no featured homes"
+    // — a failure the page swallowed. One row being down must not take the page down either,
+    // which is what the assertion above holds.
+    expect(screen.getByText('Featured homes for sale')).toBeInTheDocument();
+    expect(screen.getByText('Failed to load')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tap to retry' })).toBeInTheDocument();
   });
 });

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import ListingCard from './ListingCard';
 import { CARD_WIDTH_CLASS, ListingCardSkeleton } from '@/components/listing/ListingStates';
+import { EmptyStateCard } from '@/components/EmptyState';
 import type { ListingCardRow } from '@/lib/types';
 
 interface Props {
@@ -25,6 +26,10 @@ interface Props {
   titleClassName?: string;
   /** Renders `max` skeleton cards in the carousel shape instead of `listings`. */
   loading?: boolean;
+  /** Shows retry card when the fetch failed. */
+  failed?: boolean;
+  /** Callback for retry action when failed. */
+  onRetry?: () => void;
 }
 
 /** The carousel's per-card width breakpoints, shared by real cards and their loading skeletons. */
@@ -38,6 +43,8 @@ export default function ListingRow({
   sectionClassName,
   titleClassName,
   loading = false,
+  failed = false,
+  onRetry,
 }: Props) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   // Show max+1 cards so See all is always after scroll
@@ -88,7 +95,9 @@ export default function ListingRow({
             >
               {title}
             </h2>
-            {href && (
+            {/* Hidden while failed: "See all" links into a search page backed by the request that
+                just failed, and the scroll arrows would be framing a single retry card. */}
+            {href && !failed && (
               <Link
                 href={href}
                 className="ml-1 flex h-8 w-8 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition hover:bg-surface-alt hover:shadow-card"
@@ -107,7 +116,7 @@ export default function ListingRow({
               </Link>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className={`flex items-center gap-2 ${failed ? 'hidden' : ''}`}>
             <button
               type="button"
               onClick={() => scroll('left')}
@@ -158,6 +167,7 @@ export default function ListingRow({
             </div>
           ))}
         {!loading &&
+          !failed &&
           visible.map((l, i) => {
             // If this is the last card and See all should be shown, render See all tile
             if (showSeeAll && i === max) {
@@ -215,6 +225,11 @@ export default function ListingRow({
               </div>
             );
           })}
+        {failed && (
+          <div className={CARD_WIDTH_CLASS}>
+            <EmptyStateCard variant="failed" onRetry={onRetry} />
+          </div>
+        )}
       </div>
     </section>
   );
