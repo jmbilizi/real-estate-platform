@@ -3,8 +3,8 @@
  * Deploy-time gate for #219. Runs as an Nx target invoked only from the prod job of
  * `deploy-k8s-resources.yml`, never at build time. #157 tried gating on `isProductionBuild()`
  * (`CI` / `NEXT_BUILD_STANDALONE`), but both are set the same way in dev, test, and prod, so
- * neither can tell the environments apart. `DEPLOYMENT_ENV` is the deploy-time signal that can:
- * the workflow step sets it explicitly to `prod` only in the prod job.
+ * neither can tell the environments apart. `DEPLOYMENT_ENV` can: the workflow step sets it
+ * explicitly to `prod` only in the prod job.
  */
 const path = require('path');
 
@@ -31,7 +31,7 @@ function main() {
     for (const file of draftFiles) {
       console.error(`  - src/content/legal/${file}`);
     }
-    console.error('Approve copy in #156 and set isDraft to false before building.');
+    console.error('Approve copy in #156 and set isDraft to false before the prod deploy.');
     process.exit(1);
   }
 }
