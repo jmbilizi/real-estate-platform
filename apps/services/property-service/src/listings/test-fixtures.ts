@@ -1,5 +1,5 @@
 import { listingCardSchema, listingDetailSchema } from '@cribstop/property-contracts';
-import type { ListingCardRow, ListingDetail, Media } from '@cribstop/property-contracts';
+import type { ListingCardRow, ListingDetail, Media, OpenHouse } from '@cribstop/property-contracts';
 
 /**
  * Contract-valid fixtures for this directory's pure unit tests. Every fixture is produced by
@@ -33,7 +33,9 @@ const BASE_CARD_INPUT = {
   lotSqft: 4000,
   yearBuilt: 1990,
   primaryMedia: null as Media | null,
-  openHouse: null,
+  // Widened for the same reason `address` is: a test needs to express the masked case
+  // (`suppression.ts`'s `openHouse.remarks` boundary, #153).
+  openHouse: null as OpenHouse | null,
   amenities: [],
   featured: false,
   sponsored: false,

@@ -178,6 +178,48 @@ describe('applyCardAddressSuppression (#105)', () => {
 
     expect(card.primaryMedia?.altText).toBe(LEAKY_ALT_TEXT);
   });
+
+  describe('open-house remarks (#153)', () => {
+    // Regression guard for the single-layer gap #153 closed: the view's `CASE WHEN
+    // address_display_allowed` (migration 1785801600011) also masks card.openHouse.remarks, so a
+    // test that only calls the HTTP endpoint cannot tell the boundary layer apart from the view.
+    // This test calls the function directly with a NON-null remarks value, so it fails if this
+    // boundary layer is ever removed, independent of what the view does.
+    it("nulls openHouse.remarks when the view masked the card's address", () => {
+      const card = cardFixture({ address: null, openHouse: OPEN_HOUSE });
+
+      expect(applyCardAddressSuppression(card).openHouse?.remarks).toBeNull();
+    });
+
+    it('keeps the occurrence TIMES, because a time does not identify an address', () => {
+      const card = cardFixture({ address: null, openHouse: OPEN_HOUSE });
+
+      const suppressed = applyCardAddressSuppression(card);
+
+      expect(suppressed.openHouse?.startsAt).toBe(OPEN_HOUSE.startsAt);
+      expect(suppressed.openHouse?.endsAt).toBe(OPEN_HOUSE.endsAt);
+    });
+
+    it('leaves the remarks alone when the address was published', () => {
+      const card = cardFixture({ address: '900 King St', openHouse: OPEN_HOUSE });
+
+      expect(applyCardAddressSuppression(card).openHouse?.remarks).toBe(OPEN_HOUSE.remarks);
+    });
+
+    it('is a no-op for a suppressed card with no open house at all', () => {
+      const card = cardFixture({ address: null, openHouse: null });
+
+      expect(applyCardAddressSuppression(card).openHouse).toBeNull();
+    });
+
+    it('does not mutate the card it was handed', () => {
+      const card = cardFixture({ address: null, openHouse: OPEN_HOUSE });
+
+      applyCardAddressSuppression(card);
+
+      expect(card.openHouse?.remarks).toBe(OPEN_HOUSE.remarks);
+    });
+  });
 });
 
 // The MLS attribute path's address-suppression rule (#128) is enforced in SQL, inside
