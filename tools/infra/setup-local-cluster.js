@@ -203,21 +203,68 @@ function parseDiskSizeToGB(value) {
   return Math.max(parseInt(match[1], 10), 40);
 }
 
+// Returns { ok: true, machines } or { ok: false, error }. A failed query must never
+// read as "no machines": `podman machine init` then reports "VM already exists" and the
+// real fault stays hidden, which sent a developer on to deleting a healthy cluster.
 function getPodmanMachines() {
   const result = run('podman machine list --format json', { silent: true });
+  const output = (result.output || '').trim();
   if (!result.success) {
-    return [];
+    return { ok: false, error: output || 'podman machine list failed with no output' };
   }
   try {
-    const parsed = JSON.parse(result.output || '[]');
-    return Array.isArray(parsed) ? parsed : [];
+    const parsed = JSON.parse(output || '[]');
+    if (!Array.isArray(parsed)) {
+      return { ok: false, error: `podman machine list returned non-array JSON: ${output}` };
+    }
+    return { ok: true, machines: parsed };
   } catch {
-    return [];
+    return { ok: false, error: `podman machine list returned unparseable output: ${output}` };
   }
 }
 
+// Podman's WSL backend wedges: `wsl -l -v` shows the distro Running, but every
+// `wsl.exe -d podman-machine-default` call fails with E_UNEXPECTED / 0xffffffff, so
+// `podman machine list` cannot answer at all. Terminating that one distro clears it.
+// Only ever terminate podman's own distro — `wsl --shutdown` would kill every other
+// lane's distro on this machine.
+function recoverWedgedWslDistro(error) {
+  if (os.platform() !== 'win32') {
+    return false;
+  }
+  const wedged = /wsl\.exe|E_UNEXPECTED|0xffffffff|Catastrophic failure/i.test(error);
+  if (!wedged) {
+    return false;
+  }
+  logWarning('Podman cannot reach its WSL distro. Terminating podman-machine-default to recover.');
+  logInfo(error);
+  const terminated = run('wsl.exe --terminate podman-machine-default', { silent: true });
+  if (!terminated.success) {
+    logWarning(`wsl --terminate failed: ${(terminated.output || '').trim()}`);
+    return false;
+  }
+  return true;
+}
+
+function queryPodmanMachines() {
+  let result = getPodmanMachines();
+  if (!result.ok && recoverWedgedWslDistro(result.error)) {
+    result = getPodmanMachines();
+    if (result.ok) {
+      logSuccess('Podman machine query recovered after terminating the WSL distro.');
+    }
+  }
+  if (!result.ok) {
+    logError('Unable to query Podman machines. Not assuming none exist.');
+    logInfo(result.error);
+    logInfo('Recover with: wsl.exe --terminate podman-machine-default (never wsl --shutdown).');
+    process.exit(1);
+  }
+  return result.machines;
+}
+
 function ensurePodmanMachine() {
-  const machines = getPodmanMachines();
+  const machines = queryPodmanMachines();
   const desiredCpus = Math.max(TOTAL_CPUS + 1, 4);
   const desiredMemory = Math.max(TOTAL_MEMORY + 1024, 4096); // MB
   const desiredDisk = parseDiskSizeToGB(CLUSTER_CONFIG.diskSize);
