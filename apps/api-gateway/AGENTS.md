@@ -54,6 +54,7 @@ that for every route and for the global fallback.
 | ---------------- | ---------------------------------------------------- | --------- | ------------------- | ------------------ | --------------- |
 | Fast public read | `/property/listings/meta`, `/property/listings/{id}` | 3000      | 5                   | 30000              | 5000            |
 | Public search    | `/property/listings` (exact `COUNT(*)` per search)   | 5000      | 5                   | 45000              | 5000            |
+| Inquiry write    | `/property/listings/{id}/inquiries` (#131)           | 5000      | 5                   | 45000              | 5000            |
 | Auth write       | `/account/*` (password hashing, outbound email)      | 10000     | 4                   | 60000              | 10000           |
 | Model inference  | `/inference/embeddings`                              | 30000     | 2                   | 90000              | 15000           |
 | Inference read   | `/inference/models`                                  | 5000      | 5                   | 45000              | 10000           |

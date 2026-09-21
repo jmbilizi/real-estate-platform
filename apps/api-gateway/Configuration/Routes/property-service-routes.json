@@ -76,6 +76,31 @@
         "SamplingDuration": 30000,
         "BreakDuration": 5000
       }
+    },
+    {
+      "UpstreamPathTemplate": "/property/listings/{id}/inquiries",
+      "UpstreamHttpMethod": ["POST"],
+      "DownstreamPathTemplate": "/listings/{id}/inquiries",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "property-service-svc",
+          "Port": 3002
+        }
+      ],
+      "Priority": 3,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 20
+      },
+      "QoSOptions": {
+        "Timeout": 5000,
+        "MinimumThroughput": 5,
+        "SamplingDuration": 45000,
+        "BreakDuration": 5000
+      }
     }
   ],
   "SwaggerEndPoints": [
