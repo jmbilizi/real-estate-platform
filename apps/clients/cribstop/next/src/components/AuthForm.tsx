@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Eye, EyeOff } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { useToast } from '@/lib/useToast';
+import { RateLimitError, requestPasswordReset } from '@/lib/api/account';
 import privacyContent from '@/content/legal/privacy.json';
 import termsContent from '@/content/legal/terms.json';
 
@@ -51,6 +52,9 @@ export default function AuthForm({
     }
   }, []);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Set once the forgot-password request has gone through. The confirmation shown for it must
+  // stay neutral: the server never says whether the address has an account (#147).
+  const [resetRequested, setResetRequested] = useState(false);
   const { login, signup } = useApp();
   const { toast } = useToast();
   const router = useRouter();
@@ -80,8 +84,16 @@ export default function AuthForm({
         if (onSuccess) onSuccess();
         else router.push('/');
       } else {
-        alert('Password reset link sent to ' + email);
-        setMode('login');
+        try {
+          await requestPasswordReset(email);
+          setResetRequested(true);
+        } catch (err) {
+          if (err instanceof RateLimitError) {
+            toast(`Too many requests. Try again in ${err.retryAfterSeconds} seconds.`, 'error');
+          } else {
+            toast('We could not send the request. Try again.', 'error');
+          }
+        }
       }
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Authentication request failed', 'error');
@@ -118,7 +130,10 @@ export default function AuthForm({
         <p className="mt-2 text-center text-sm text-ink-muted">
           {mode === 'login' && 'Sign in to save homes and set alerts'}
           {mode === 'signup' && 'Join us to find your dream home'}
-          {mode === 'forgot' && "Enter your email and we'll send a reset link"}
+          {mode === 'forgot' &&
+            (resetRequested
+              ? 'Check your email for a link to reset your password'
+              : "Enter your email and we'll send a reset link")}
         </p>
 
         {mode !== 'forgot' && (
@@ -161,88 +176,104 @@ export default function AuthForm({
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-ink-muted">Email</label>
-            <input
-              type="email"
-              required
-              className="input-field"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
+        {mode === 'forgot' && resetRequested ? (
+          <div className="mt-6 flex flex-col gap-4 text-center">
+            <p className="text-sm text-ink-muted">
+              If an account exists for <span className="font-medium text-ink">{email}</span>, a
+              reset link is on its way. The link expires soon, so use it right away.
+            </p>
+            <button
+              type="button"
+              onClick={() => setResetRequested(false)}
+              className="text-sm font-medium text-brand hover:underline"
+            >
+              Try a different email
+            </button>
           </div>
-
-          {mode !== 'forgot' && (
+        ) : (
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div>
-              <label className="mb-1 block text-sm font-medium text-ink-muted">Password</label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  className="input-field pr-10"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
+              <label className="mb-1 block text-sm font-medium text-ink-muted">Email</label>
+              <input
+                type="email"
+                required
+                className="input-field"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+
+            {mode !== 'forgot' && (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-ink-muted">Password</label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    className="input-field pr-10"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute inset-y-0 right-0 flex items-center px-3 text-ink-subtle hover:text-ink"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {mode === 'login' && (
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={remember}
+                    onChange={(e) => setRemember(e.target.checked)}
+                    className="h-4 w-4 rounded border-surface-border text-brand focus:ring-brand"
+                  />
+                  Remember me
+                </label>
                 <button
                   type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute inset-y-0 right-0 flex items-center px-3 text-ink-subtle hover:text-ink"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  tabIndex={-1}
+                  onClick={() => setMode('forgot')}
+                  className="text-sm font-medium text-brand hover:underline"
                 >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  Forgot password?
                 </button>
               </div>
-            </div>
-          )}
+            )}
 
-          {mode === 'login' && (
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={remember}
-                  onChange={(e) => setRemember(e.target.checked)}
-                  className="h-4 w-4 rounded border-surface-border text-brand focus:ring-brand"
-                />
-                Remember me
-              </label>
-              <button
-                type="button"
-                onClick={() => setMode('forgot')}
-                className="text-sm font-medium text-brand hover:underline"
-              >
-                Forgot password?
-              </button>
-            </div>
-          )}
+            {mode === 'signup' && (
+              <p className="text-center text-xs text-ink-muted">
+                {legalCopyApproved ? 'By creating an account, you agree to our' : 'Review our'}{' '}
+                <Link href="/terms" className="font-medium text-brand hover:underline">
+                  Terms of Service
+                </Link>{' '}
+                and{' '}
+                <Link href="/privacy" className="font-medium text-brand hover:underline">
+                  Privacy Policy
+                </Link>
+                {legalCopyApproved ? '.' : ' (draft, pending approval).'}
+              </p>
+            )}
 
-          {mode === 'signup' && (
-            <p className="text-center text-xs text-ink-muted">
-              {legalCopyApproved ? 'By creating an account, you agree to our' : 'Review our'}{' '}
-              <Link href="/terms" className="font-medium text-brand hover:underline">
-                Terms of Service
-              </Link>{' '}
-              and{' '}
-              <Link href="/privacy" className="font-medium text-brand hover:underline">
-                Privacy Policy
-              </Link>
-              {legalCopyApproved ? '.' : ' (draft, pending approval).'}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            className="btn-primary mt-2 w-full py-3"
-            disabled={isSubmitting}
-            aria-busy={isSubmitting}
-          >
-            {submitLabel}
-          </button>
-        </form>
+            <button
+              type="submit"
+              className="btn-primary mt-2 w-full py-3"
+              disabled={isSubmitting}
+              aria-busy={isSubmitting}
+            >
+              {submitLabel}
+            </button>
+          </form>
+        )}
 
         <p className="mt-6 text-center text-sm text-ink-muted">
           {mode === 'login' && (
@@ -278,6 +309,7 @@ export default function AuthForm({
               onClick={() => {
                 setMode('login');
                 onSwitchMode?.('login');
+                setResetRequested(false);
               }}
               className="font-medium text-brand hover:underline"
             >
