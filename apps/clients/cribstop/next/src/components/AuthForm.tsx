@@ -1,12 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { useToast } from '@/lib/useToast';
-import { RateLimitError, requestPasswordReset } from '@/lib/api/account';
+import {
+  getConfirmationExpiryHours,
+  RateLimitError,
+  requestPasswordReset,
+  SignInFailedError,
+} from '@/lib/api/account';
+import { useConfirmationResend } from '@/lib/useConfirmationResend';
+import PasswordRequirements from '@/components/PasswordRequirements';
+import { passwordMeetsRules } from '@/lib/password-rules';
 import privacyContent from '@/content/legal/privacy.json';
 import termsContent from '@/content/legal/terms.json';
 
@@ -52,20 +60,54 @@ export default function AuthForm({
     }
   }, []);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   // Set once the forgot-password request has gone through. The confirmation shown for it must
   // stay neutral: the server never says whether the address has an account (#147).
   const [resetRequested, setResetRequested] = useState(false);
+  // Set once registration has gone through. The waiting state shown for it is identical for a
+  // brand-new, an unconfirmed, and an already-confirmed address (#147/#148) — the server answers
+  // all three the same way, and the client must not undo that.
+  const [signupRequested, setSignupRequested] = useState(false);
+  const [signupEmail, setSignupEmail] = useState('');
+  const [expiryHours, setExpiryHours] = useState<number | null>(null);
+  // Set on a 401 from /account/login. Identity gives the same status for a wrong password and an
+  // unconfirmed account (#147), so this offers both remedies without asserting either cause.
+  const [loginFailed, setLoginFailed] = useState(false);
   const { login, signup } = useApp();
   const { toast } = useToast();
   const router = useRouter();
+  const signupResend = useConfirmationResend();
+  const loginResend = useConfirmationResend();
+
+  useEffect(() => {
+    if (!signupRequested) return;
+    getConfirmationExpiryHours().then(setExpiryHours);
+  }, [signupRequested]);
+
+  // Each mode/sub-state renders a different heading in the same position; a screen reader needs
+  // focus moved to it every time, not just on first mount.
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, [mode, resetRequested, signupRequested]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
     setIsSubmitting(true);
 
     try {
       if (mode === 'login') {
-        await login(email, password, remember);
+        setLoginFailed(false);
+        try {
+          await login(email, password, remember);
+        } catch (err) {
+          if (err instanceof SignInFailedError) {
+            setLoginFailed(true);
+            return;
+          }
+          throw err;
+        }
         try {
           if (remember) {
             localStorage.setItem(getRememberEmailKey(), email);
@@ -79,10 +121,13 @@ export default function AuthForm({
         if (onSuccess) onSuccess();
         else router.push('/');
       } else if (mode === 'signup') {
+        if (!passwordMeetsRules(password)) {
+          setFormError('Password does not meet the requirements below.');
+          return;
+        }
         await signup(email, password);
-        toast('Account created! Welcome aboard.');
-        if (onSuccess) onSuccess();
-        else router.push('/');
+        setSignupEmail(email);
+        setSignupRequested(true);
       } else {
         try {
           await requestPasswordReset(email);
@@ -100,6 +145,14 @@ export default function AuthForm({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const switchMode = (next: Mode) => {
+    setMode(next);
+    setLoginFailed(false);
+    setResetRequested(false);
+    if (next !== 'signup') setSignupRequested(false);
+    if (next === 'login' || next === 'signup') onSwitchMode?.(next);
   };
 
   const submitLabels: Record<Mode, string> = {
@@ -122,21 +175,40 @@ export default function AuthForm({
         {/* TODO(dark-mode): bg-white, border-surface-border and text colours below are
             hardcoded for light mode — make them conditional (dark:bg-surface-alt etc.)
             when dark mode support is added. */}
-        <h2 className="text-center font-display text-2xl font-bold tracking-tight">
+        <h2
+          ref={headingRef}
+          tabIndex={-1}
+          className="text-center font-display text-2xl font-bold tracking-tight"
+        >
           {mode === 'login' && 'Welcome back'}
-          {mode === 'signup' && 'Create your account'}
+          {mode === 'signup' && signupRequested && 'Confirm your email'}
+          {mode === 'signup' && !signupRequested && 'Create your account'}
           {mode === 'forgot' && 'Reset your password'}
         </h2>
         <p className="mt-2 text-center text-sm text-ink-muted">
           {mode === 'login' && 'Sign in to save homes and set alerts'}
-          {mode === 'signup' && 'Join us to find your dream home'}
+          {mode === 'signup' &&
+            !signupRequested &&
+            'Join us to find your dream home'}
+          {mode === 'signup' && signupRequested && (
+            <>
+              A confirmation link is on its way to{' '}
+              <span className="font-medium text-ink">{signupEmail}</span>.{' '}
+              {expiryHours !== null && <>It expires in {expiryHours} hours. </>}
+              Check your inbox and spam folder. Still nothing? Resend it below, or write to{' '}
+              <a href="mailto:contact@cribstop.com" className="font-medium text-brand hover:underline">
+                contact@cribstop.com
+              </a>
+              .
+            </>
+          )}
           {mode === 'forgot' &&
             (resetRequested
               ? 'Check your email for a link to reset your password'
               : "Enter your email and we'll send a reset link")}
         </p>
 
-        {mode !== 'forgot' && (
+        {mode !== 'forgot' && !signupRequested && (
           <div className="mt-6 flex flex-col gap-3">
             <button className="btn-secondary gap-2">
               <svg className="h-5 w-5" viewBox="0 0 24 24">
@@ -168,7 +240,7 @@ export default function AuthForm({
           </div>
         )}
 
-        {mode !== 'forgot' && (
+        {mode !== 'forgot' && !signupRequested && (
           <div className="my-5 flex items-center gap-3">
             <div className="h-px flex-1 bg-surface-border" />
             <span className="text-xs text-ink-subtle">or</span>
@@ -176,7 +248,50 @@ export default function AuthForm({
           </div>
         )}
 
-        {mode === 'forgot' && resetRequested ? (
+        {mode === 'signup' && signupRequested ? (
+          <div className="mt-2 flex flex-col gap-4">
+            <p aria-live="polite" className="sr-only">
+              {signupResend.cooldownAnnouncement}
+            </p>
+            <button
+              type="button"
+              onClick={() => signupResend.resend(signupEmail)}
+              disabled={signupResend.isSending || signupResend.cooldownSeconds > 0}
+              className="btn-secondary w-full py-3"
+            >
+              {signupResend.cooldownSeconds > 0
+                ? `Resend link (${signupResend.cooldownSeconds}s)`
+                : 'Resend confirmation link'}
+            </button>
+            <div className="flex flex-col items-center gap-2 text-sm">
+              <button
+                type="button"
+                onClick={() => setSignupRequested(false)}
+                className="font-medium text-brand hover:underline"
+              >
+                Use a different email
+              </button>
+              <span className="text-ink-muted">
+                Already confirmed?{' '}
+                <button
+                  type="button"
+                  onClick={() => switchMode('login')}
+                  className="font-medium text-brand hover:underline"
+                >
+                  Sign in
+                </button>{' '}
+                or{' '}
+                <button
+                  type="button"
+                  onClick={() => switchMode('forgot')}
+                  className="font-medium text-brand hover:underline"
+                >
+                  reset your password
+                </button>
+              </span>
+            </div>
+          </div>
+        ) : mode === 'forgot' && resetRequested ? (
           <div className="mt-6 flex flex-col gap-4 text-center">
             <p className="text-sm text-ink-muted">
               If an account exists for <span className="font-medium text-ink">{email}</span>, a
@@ -193,8 +308,11 @@ export default function AuthForm({
         ) : (
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div>
-              <label className="mb-1 block text-sm font-medium text-ink-muted">Email</label>
+              <label htmlFor="auth-email" className="mb-1 block text-sm font-medium text-ink-muted">
+                Email
+              </label>
               <input
+                id="auth-email"
                 type="email"
                 required
                 className="input-field"
@@ -206,15 +324,22 @@ export default function AuthForm({
 
             {mode !== 'forgot' && (
               <div>
-                <label className="mb-1 block text-sm font-medium text-ink-muted">Password</label>
+                <label
+                  htmlFor="auth-password"
+                  className="mb-1 block text-sm font-medium text-ink-muted"
+                >
+                  Password
+                </label>
                 <div className="relative">
                   <input
+                    id="auth-password"
                     type={showPassword ? 'text' : 'password'}
                     required
                     className="input-field pr-10"
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    aria-describedby={mode === 'signup' ? 'signup-password-requirements' : undefined}
                   />
                   <button
                     type="button"
@@ -226,6 +351,11 @@ export default function AuthForm({
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
+                {mode === 'signup' && (
+                  <div id="signup-password-requirements">
+                    <PasswordRequirements password={password} />
+                  </div>
+                )}
               </div>
             )}
 
@@ -242,7 +372,7 @@ export default function AuthForm({
                 </label>
                 <button
                   type="button"
-                  onClick={() => setMode('forgot')}
+                  onClick={() => switchMode('forgot')}
                   className="text-sm font-medium text-brand hover:underline"
                 >
                   Forgot password?
@@ -264,6 +394,12 @@ export default function AuthForm({
               </p>
             )}
 
+            {formError && (
+              <p className="text-center text-sm text-red-600" role="alert">
+                {formError}
+              </p>
+            )}
+
             <button
               type="submit"
               className="btn-primary mt-2 w-full py-3"
@@ -272,6 +408,36 @@ export default function AuthForm({
             >
               {submitLabel}
             </button>
+
+            {mode === 'login' && loginFailed && (
+              <div role="alert" className="text-center text-sm text-ink-muted">
+                <p aria-live="polite" className="sr-only">
+                  {loginResend.cooldownAnnouncement}
+                </p>
+                <p>We could not sign you in with that email and password.</p>
+                <p className="mt-1">
+                  <button
+                    type="button"
+                    onClick={() => switchMode('forgot')}
+                    className="font-medium text-brand hover:underline"
+                  >
+                    Reset your password
+                  </button>
+                  {' or '}
+                  <button
+                    type="button"
+                    onClick={() => loginResend.resend(email)}
+                    disabled={loginResend.isSending || loginResend.cooldownSeconds > 0}
+                    className="font-medium text-brand hover:underline disabled:no-underline disabled:text-ink-subtle"
+                  >
+                    {loginResend.cooldownSeconds > 0
+                      ? `resend your confirmation link (${loginResend.cooldownSeconds}s)`
+                      : 'resend your confirmation link'}
+                  </button>
+                  .
+                </p>
+              </div>
+            )}
           </form>
         )}
 
@@ -280,24 +446,18 @@ export default function AuthForm({
             <>
               Don&apos;t have an account?{' '}
               <button
-                onClick={() => {
-                  setMode('signup');
-                  onSwitchMode?.('signup');
-                }}
+                onClick={() => switchMode('signup')}
                 className="font-medium text-brand hover:underline"
               >
                 Sign up
               </button>
             </>
           )}
-          {mode === 'signup' && (
+          {mode === 'signup' && !signupRequested && (
             <>
               Already have an account?{' '}
               <button
-                onClick={() => {
-                  setMode('login');
-                  onSwitchMode?.('login');
-                }}
+                onClick={() => switchMode('login')}
                 className="font-medium text-brand hover:underline"
               >
                 Sign in
@@ -306,11 +466,7 @@ export default function AuthForm({
           )}
           {mode === 'forgot' && (
             <button
-              onClick={() => {
-                setMode('login');
-                onSwitchMode?.('login');
-                setResetRequested(false);
-              }}
+              onClick={() => switchMode('login')}
               className="font-medium text-brand hover:underline"
             >
               Back to sign in

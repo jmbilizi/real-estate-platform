@@ -34,7 +34,6 @@ import {
   logout,
   setSessionChecked,
   setShowOnboarding,
-  signup,
   updateProfile,
 } from '@/lib/store/slices/authSlice';
 import { clearSaved, toggleSave } from '@/lib/store/slices/favoritesSlice';
@@ -244,28 +243,11 @@ export function useApp(): AppContextValue {
     [dispatch],
   );
 
-  const signupUser = useCallback(
-    async (email: string, password: string) => {
-      await signupAccount({ email, password });
-      dispatch(signup({ email }));
-      // Auto-login after signup to get tokens
-      try {
-        const res = await loginAccount({ email, password, remember: false });
-        dispatch(login({ email: res.email ?? email, accessToken: res.accessToken }));
-      } catch {
-        // Signup succeeded but auto-login failed — user can sign in manually
-        dispatch(
-          addToast({
-            id: `signup-login-${Date.now()}`,
-            message: 'Account created! Please sign in.',
-            type: 'info',
-            duration: 5000,
-          }),
-        );
-      }
-    },
-    [dispatch],
-  );
+  // Registering does not sign the consumer in: the account is unconfirmed until they follow the
+  // email link (#147/#148), so this makes only the HTTP call and leaves auth state untouched.
+  const signupUser = useCallback(async (email: string, password: string) => {
+    await signupAccount({ email, password });
+  }, []);
 
   const logoutUser = useCallback(async () => {
     await logoutAccount().catch(() => {}); // clear server cookies
