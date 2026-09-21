@@ -15,8 +15,8 @@ type Status = 'form' | 'invalid' | 'success';
  * Reads `email`/`code` from the link the reset email sends, redeems them against
  * `/account/resetPassword`, and clears them from the address bar once used.
  *
- * A missing or a rejected code render the same `invalid` panel: an unusable token, an unknown
- * address and an unconfirmed address must not be told apart (#137).
+ * A missing or a rejected code render the same `invalid` panel. An unusable token, an unknown
+ * address, and an unconfirmed address must not be told apart (#137).
  */
 export default function ResetPasswordForm({
   email,
@@ -35,9 +35,9 @@ export default function ResetPasswordForm({
   const { toast } = useToast();
   const router = useRouter();
 
-  // Strips email/code from the visible URL and from this history entry, without asking Next.js to
-  // re-render the page for the new URL (that would drop the props this component was mounted
-  // with). A plain history rewrite, not a router navigation, is what's needed here.
+  // Strips email/code from the visible URL and from this history entry. Uses a plain history
+  // rewrite, not a router navigation, so Next.js does not re-render the page for the new URL and
+  // drop the props this component was mounted with.
   const stripped = useRef(false);
   useEffect(() => {
     if (stripped.current) return;
@@ -47,10 +47,12 @@ export default function ResetPasswordForm({
     }
   }, [email, code]);
 
+  // Re-runs on every status change: `form`, `invalid` and `success` each render a different
+  // heading in the same position, so a screen reader needs focus moved to it every time.
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     headingRef.current?.focus();
-  }, []);
+  }, [status]);
 
   if (status === 'invalid') {
     return (
@@ -116,7 +118,7 @@ export default function ResetPasswordForm({
         toast('Password reset. Welcome back!');
         router.push('/');
       } catch {
-        // The reset succeeded even if auto-login did not — send them to sign in manually.
+        // The reset succeeded even if auto-login did not. Send them to sign in manually.
         toast('Password reset. Please sign in with your new password.', 'info');
         router.push('/?modal=login');
       }

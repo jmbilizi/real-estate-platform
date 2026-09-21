@@ -38,6 +38,6 @@ export async function POST(req: Request) {
   }
 
   // Identity answers 200 for every address, registered or not (#147's non-enumeration guarantee).
-  // Forward that as-is — never translate this into "account found" / "no account found".
+  // Forward that as-is. Never translate this into "account found" or "no account found".
   return NextResponse.json({ success: true });
 }

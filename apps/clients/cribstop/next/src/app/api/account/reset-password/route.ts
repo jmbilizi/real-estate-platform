@@ -49,7 +49,7 @@ export async function POST(req: Request) {
 
 /**
  * Sorts an Identity failure body into `invalid` (unusable code, unknown address, or unconfirmed
- * address — all reported the same way on purpose) or `policy` (the new password itself failed
+ * address, all reported the same way on purpose) or `policy` (the new password itself failed
  * validation). Anything else falls back to a generic failure.
  */
 function classifyFailure(body: unknown): 'invalid' | 'policy' | 'failed' {

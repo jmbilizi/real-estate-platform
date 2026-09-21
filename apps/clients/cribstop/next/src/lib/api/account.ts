@@ -119,7 +119,7 @@ export type PasswordResetErrorKind = 'invalid' | 'policy' | 'failed';
 
 /**
  * A failed `/account/resetPassword` call. `kind: 'invalid'` covers an unusable code, an unknown
- * address, and an unconfirmed address alike — the server reports all three identically on purpose
+ * address, and an unconfirmed address alike. The server reports all three identically on purpose
  * (#137), so this type carries no more detail than the server gives.
  */
 export class PasswordResetError extends Error {
@@ -136,7 +136,7 @@ function retryAfterSeconds(res: Response): number {
 
 /**
  * Requests a password reset link. The response never reveals whether the address has an account
- * (account-service's own non-enumeration guarantee) — callers must show the same neutral
+ * (account-service's own non-enumeration guarantee). Callers must show the same neutral
  * confirmation for every email, and only distinguish an actual failed request.
  */
 export async function requestPasswordReset(email: string): Promise<void> {

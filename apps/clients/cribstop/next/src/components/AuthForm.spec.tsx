@@ -101,7 +101,7 @@ describe('AuthForm', () => {
       await waitFor(() =>
         expect(toast).toHaveBeenCalledWith('We could not send the request. Try again.', 'error'),
       );
-      // Still on the form — no confirmation was shown for a request that never went through.
+      // Still on the form. No confirmation was shown for a request that never went through.
       expect(screen.getByPlaceholderText('you@example.com')).toBeInTheDocument();
     });
 
