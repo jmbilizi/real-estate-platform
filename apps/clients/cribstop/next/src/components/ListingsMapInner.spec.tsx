@@ -15,7 +15,7 @@ jest.mock('react-leaflet', () => ({
 jest.mock('leaflet', () => ({ __esModule: true, default: {} }));
 jest.mock('leaflet.markercluster', () => ({}));
 
-import { selectMappableListings } from './ListingsMapInner';
+import { getSampleBannerCopy, selectMappableListings } from './ListingsMapInner';
 import { aListingCardRow, aSuppressedAddressRow } from '@/test/fixtures';
 
 describe('selectMappableListings', () => {
@@ -61,5 +61,31 @@ describe('selectMappableListings', () => {
     expect(input).toHaveLength(3);
     // Relative order of the survivors is preserved from the input.
     expect(pins.map((l) => l.id)).toEqual(['c', 'a']);
+  });
+});
+
+describe('getSampleBannerCopy', () => {
+  it('returns null when no pin is a sample', () => {
+    const real = aListingCardRow({ isSample: false });
+
+    expect(getSampleBannerCopy([real])).toBeNull();
+  });
+
+  it('claims the whole map is illustrative when every pin is a sample', () => {
+    const sample = aListingCardRow({ isSample: true });
+
+    expect(getSampleBannerCopy([sample])).toBe(
+      'Sample data — prices shown on this map are illustrative.',
+    );
+  });
+
+  it('scopes the claim to the sample subset in a mixed pin set (#120)', () => {
+    const sample = aListingCardRow({ id: 'a', isSample: true });
+    const real = aListingCardRow({ id: 'b', isSample: false });
+
+    const copy = getSampleBannerCopy([sample, real]);
+
+    expect(copy).not.toContain('this map are illustrative');
+    expect(copy).toBe('Some listings on this map are sample data — their prices are illustrative.');
   });
 });

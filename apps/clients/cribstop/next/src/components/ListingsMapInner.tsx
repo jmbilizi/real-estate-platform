@@ -47,6 +47,23 @@ export function selectMappableListings(listings: ListingCardRow[]): ListingCardR
   return listings.filter(hasMapCoordinates);
 }
 
+/**
+ * Sample-data banner copy for the pins currently on the map.
+ *
+ * The claim must scope to what is actually sample. All rows sample and a mixed set need different
+ * copy — "the map" versus "some listings" — or the disclosure becomes false once real Bright MLS
+ * rows share a result set with sample rows (#120). Returns `null` when no pin is a sample, which
+ * keeps the "never render with no sample pin visible" gate at the render site unchanged.
+ */
+export function getSampleBannerCopy(pins: ListingCardRow[]): string | null {
+  const sampleCount = pins.filter((listing) => listing.isSample).length;
+  if (sampleCount === 0) return null;
+  if (sampleCount === pins.length) {
+    return 'Sample data — prices shown on this map are illustrative.';
+  }
+  return 'Some listings on this map are sample data — their prices are illustrative.';
+}
+
 /** Coordinate pairs for the rows that have them — used for map bounds, never for pin placement itself. */
 function toLatLngPairs(listings: ListingCardRow[]): [number, number][] {
   const pairs: [number, number][] = [];
@@ -461,6 +478,7 @@ export default function ListingsMapInner({
   const pins = useMemo(() => selectMappableListings(listings), [listings]);
   const pinCoords = useMemo(() => toLatLngPairs(pins), [pins]);
   const hiddenPinCount = listings.length - pins.length;
+  const sampleBannerCopy = useMemo(() => getSampleBannerCopy(pins), [pins]);
 
   const center = useMemo<[number, number]>(() => {
     if (searchCenter) return searchCenter;
@@ -513,15 +531,15 @@ export default function ListingsMapInner({
        * row is a sample, which makes the default map view a field of illustrative prices. This
        * overlay is persistent and needs no interaction, which is what the popup badge cannot be.
        */}
-      {pins.some((listing) => listing.isSample) && (
+      {sampleBannerCopy && (
         <div className="pointer-events-none absolute left-3 right-3 top-3 z-[400] rounded-2xl bg-ink/85 px-3 py-1.5 text-center text-[11px] font-semibold text-white shadow-card backdrop-blur">
-          Sample data — prices shown on this map are illustrative.
+          {sampleBannerCopy}
         </div>
       )}
       {hiddenPinCount > 0 && (
         <div
           className={`pointer-events-none absolute left-3 right-3 z-[400] rounded-2xl bg-surface/95 px-3 py-1.5 text-center text-[11px] font-medium text-ink-muted shadow-card backdrop-blur ${
-            pins.some((listing) => listing.isSample) ? 'top-12' : 'top-3'
+            sampleBannerCopy ? 'top-12' : 'top-3'
           }`}
         >
           Some sellers have chosen not to display their home’s location, so those homes appear in
