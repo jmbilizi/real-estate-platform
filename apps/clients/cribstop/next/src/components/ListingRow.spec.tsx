@@ -27,7 +27,7 @@ describe('ListingRow', () => {
 
     // No real card content should have rendered while loading.
     expect(screen.queryByText(/Listing by Real Broker, LLC/)).not.toBeInTheDocument();
-    expect(container.querySelectorAll('.animate-pulse')).toHaveLength(4);
+    expect(container.querySelectorAll('[data-skeleton-card]')).toHaveLength(4);
   });
 
   it('does not render a "See all" tile while loading, even past the max threshold', () => {
