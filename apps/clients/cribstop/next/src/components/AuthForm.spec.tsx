@@ -204,7 +204,9 @@ describe('AuthForm', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Resend confirmation link' }));
 
-      await waitFor(() => expect(mockResendConfirmationEmail).toHaveBeenCalledWith('user@example.com'));
+      await waitFor(() =>
+        expect(mockResendConfirmationEmail).toHaveBeenCalledWith('user@example.com'),
+      );
       expect(await screen.findByRole('button', { name: /resend link \(60s\)/i })).toBeDisabled();
     });
 
@@ -266,7 +268,9 @@ describe('AuthForm', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'resend your confirmation link' }));
 
-      await waitFor(() => expect(mockResendConfirmationEmail).toHaveBeenCalledWith('user@example.com'));
+      await waitFor(() =>
+        expect(mockResendConfirmationEmail).toHaveBeenCalledWith('user@example.com'),
+      );
     });
 
     it('a service failure (not a credential failure) still uses the generic toast', async () => {

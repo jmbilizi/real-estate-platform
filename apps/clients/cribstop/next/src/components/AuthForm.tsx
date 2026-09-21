@@ -188,16 +188,17 @@ export default function AuthForm({
         </h2>
         <p className="mt-2 text-center text-sm text-ink-muted">
           {mode === 'login' && 'Sign in to save homes and set alerts'}
-          {mode === 'signup' &&
-            !signupRequested &&
-            'Join us to find your dream home'}
+          {mode === 'signup' && !signupRequested && 'Join us to find your dream home'}
           {mode === 'signup' && signupRequested && (
             <>
               A confirmation link is on its way to{' '}
               <span className="font-medium text-ink">{signupEmail}</span>.{' '}
               {expiryHours !== null && <>It expires in {expiryHours} hours. </>}
               Check your inbox and spam folder. Still nothing? Resend it below, or write to{' '}
-              <a href="mailto:contact@cribstop.com" className="font-medium text-brand hover:underline">
+              <a
+                href="mailto:contact@cribstop.com"
+                className="font-medium text-brand hover:underline"
+              >
                 contact@cribstop.com
               </a>
               .
@@ -340,7 +341,9 @@ export default function AuthForm({
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    aria-describedby={mode === 'signup' ? 'signup-password-requirements' : undefined}
+                    aria-describedby={
+                      mode === 'signup' ? 'signup-password-requirements' : undefined
+                    }
                   />
                   <button
                     type="button"

@@ -100,8 +100,8 @@ export default function ConfirmEmailPanel({
         This link is no longer valid
       </h2>
       <p className="mt-2 text-center text-sm text-ink-muted">
-        The link may have expired, already been used, or the address on it isn&apos;t right.
-        Request a new one below.
+        The link may have expired, already been used, or the address on it isn&apos;t right. Request
+        a new one below.
       </p>
 
       <form
