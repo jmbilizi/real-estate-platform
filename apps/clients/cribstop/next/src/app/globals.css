@@ -33,6 +33,10 @@
 
 :root {
   --brand: #ff385c;
+  /* The skeleton highlight, for every loading surface in the app — see `.skeleton-fill` below.
+     This is the one knob: raise the alpha to strengthen it, lower it to soften it, swap the RGB
+     for another rung of the `brand-purple` ramp to shift the hue. Do not add a second colour. */
+  --skeleton-tint: rgba(167, 139, 250, 0.14);
   /* Sticky navbar height — kept in sync with the h-16 + 1px border in NavBar.tsx */
   --navbar-h: 65px;
 }
@@ -58,6 +62,110 @@ body {
 .scrollbar-none {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/**
+ * The animated fill for every placeholder block in the app — a light violet highlight travelling
+ * across the grey, so a loading surface reads as Cribstop's rather than as a generic grey pulse.
+ *
+ * Pair it with the fill colour: `bg-surface-soft skeleton-fill`. It sets only `background-image`,
+ * so the Tailwind `background-color` class beside it is untouched. In `ListingStates.tsx` that
+ * pairing is the `FILL` constant, which is where every listing placeholder gets it from — card
+ * skeleton, detail skeleton, bars, chips, avatars and buttons alike. Add a new placeholder there
+ * and it shimmers for free; write a bare `bg-surface-soft` instead and you have made a static block
+ * on an animated page, which is the bug this replaced.
+ *
+ * ## One hue, not a gradient between two
+ *
+ * The tint is a single violet at low alpha, deliberately. An earlier version ramped coral (#ff385c)
+ * into deep purple (#460479) across the band, which put two saturated hues a few percent apart on
+ * the same sweep — at that width they don't read as a brand gradient, they read as a rainbow smear
+ * crossing the card. A highlight should look like light falling on a surface: one colour, barely
+ * there. `--skeleton-tint` on `:root` is the one knob, and it must stay a single colour.
+ *
+ * ## Why this is a background and not an ::after overlay
+ *
+ * An overlay needs `position: relative` on its host to anchor to, and `.skeleton-fill` is declared
+ * after `@tailwind utilities` — so at equal specificity it would out-order and silently defeat an
+ * `absolute` utility on the same element, dragging it back into flow. `Bar`'s inner span in
+ * `ListingStates.tsx` is exactly such an element. A background-image sweep has no such constraint:
+ * it works on any element whatever its positioning, needs no pseudo-element, and clips itself
+ * without `overflow: hidden` (which would have broken the detail skeleton's scrolling body).
+ *
+ * The image is three times the element's width, so the highlight sits off-canvas at both ends of
+ * the travel and crosses the visible box in between. Because it is sized per element, a short bar
+ * reads as a soft pulse and a large block as a true sweep — the same light, scaled to the surface.
+ */
+@keyframes skeleton-sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0% 0;
+  }
+}
+.skeleton-fill {
+  /* Angled so the sweep crosses stacked rows on a diagonal rather than as a flat vertical wipe,
+     and wide (30% of the band) so it arrives as a soft wash, not a hard travelling edge. */
+  background-image: linear-gradient(
+    105deg,
+    transparent 35%,
+    var(--skeleton-tint) 50%,
+    transparent 65%
+  );
+  background-size: 300% 100%;
+  background-repeat: no-repeat;
+  animation: skeleton-sweep 1.8s ease-in-out infinite;
+}
+
+/**
+ * The other half of a placeholder: how the real thing arrives.
+ *
+ * A skeleton that snaps straight to content reads as a flicker, and the faster the connection the
+ * worse it looks — on a warm load the placeholder is on screen just long enough to register as a
+ * grey blink before being replaced in a single frame. Fading the resolved content in over a beat
+ * turns that blink into a settle.
+ *
+ * Applied to the element that *contains* the swap rather than to the content itself, so it runs
+ * once when the branch changes and does not need a wrapper around every fragment. Opacity only —
+ * nothing here may move, or the placeholder's whole reason for existing (reserving the loaded
+ * layout so nothing shifts) is undone at the last moment.
+ */
+@keyframes content-resolve {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.content-resolved {
+  animation: content-resolve 180ms ease-out both;
+}
+
+/**
+ * Press-down micro-interaction — subtle scale feedback on active state.
+ * Used by Button component for tactile feel.
+ */
+.btn-press:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+/**
+ * Empty-state illustration drift. The reduced-motion opt-out is at the bottom of this file
+ * with the rest of them — this runs on every empty state, indefinitely.
+ */
+@keyframes float-slow {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+.animate-float-slow {
+  animation: float-slow 4s ease-in-out infinite;
 }
 
 @layer components {
@@ -471,6 +579,24 @@ body {
   }
   /* The fill still appears — it is the focus affordance — it just appears at once. */
   .searchbar-slot-in {
+    animation: none;
+  }
+  /* The empty-state illustration holds still. This one is indefinite rather than a one-shot
+     transition, so leaving it out would mean continuous motion on a surface a reduced-motion
+     user may be sitting on — the icon carries no information by moving, so it simply stops. */
+  .animate-float-slow {
+    animation: none;
+  }
+  /* Skeletons stop sweeping. The grey fill stays — the surface still reads as "not loaded yet"
+     from its shape, which is the part carrying the information; only the highlight goes. */
+  .skeleton-fill {
+    animation: none;
+    background-image: none;
+  }
+  /* The content still replaces its placeholder, it just stops fading to do it. A cut is the
+     honest reduced-motion equivalent of a crossfade — and with the sweep already gone there is
+     no motion left for the fade to be smoothing over. */
+  .content-resolved {
     animation: none;
   }
   /* Tabs: they still leave and return, they just stop travelling to do it. All
