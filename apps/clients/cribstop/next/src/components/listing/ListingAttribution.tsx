@@ -44,6 +44,13 @@ import type { Attribution, ListingSource } from '@cribstop/property-contracts';
  * of office) becomes its own single truncated line with a `title` attribute carrying the full text,
  * matching the reduced branch's existing pattern for `officeName`. The redundant standalone
  * `listingAgentName` line is dropped in this mode, because the name is already inside `listedBy`.
+ *
+ * `compact` also always renders the courtesy-of-office line, even when `listedBy` already ends
+ * with `officeName` (the case the non-compact branch skips as a stutter). `listedBy` is
+ * `"<agent> – <office>"`, so the office name sits at the tail, exactly where a truncated single
+ * line clips first — the firm name could otherwise disappear from view entirely, with only a
+ * hover-only `title` carrying it, which does not satisfy 7.58's "reasonably prominent". The
+ * courtesy line has its own `title` and is never truncated away, so the firm stays visible.
  */
 export default function ListingAttribution({
   attribution,
@@ -126,18 +133,20 @@ export default function ListingAttribution({
   const contactText = [brokerPhone, brokerEmail].filter(Boolean).join(' · ');
   const courtesyText = `Listing courtesy of ${officeName}`;
 
-  // `truncate` clips visually only; the full text stays in the DOM for screen readers, and `title`
-  // exposes it on hover for sighted users. Same pattern as the reduced branch's `officeName` line.
-  const lineClassName = compact ? 'truncate' : undefined;
+  /*
+   * `truncate` clips visually only; the full text stays in the DOM for screen readers. `title`
+   * exposes it on hover for sighted users — always the full displayed line, matching the reduced
+   * branch's `officeName` line, so every compact line behaves the same way on hover.
+   */
+  const compactLineProps = (fullText: string) =>
+    compact ? { className: 'truncate', title: fullText } : {};
 
   return (
     <div className={`text-sm leading-snug text-ink-body ${className}`}>
-      <p className={lineClassName} title={compact ? listedBy : undefined}>
-        {listedBy}
-      </p>
+      <p {...compactLineProps(listedBy)}>{listedBy}</p>
       {!compact && listingAgentName && listedBy !== listingAgentName && <p>{listingAgentName}</p>}
       {contact && (
-        <p className={lineClassName} title={compact ? contactText : undefined}>
+        <p {...compactLineProps(contactText)}>
           {brokerPhone && (
             <a href={`tel:${brokerPhone.replace(/[^\d+]/g, '')}`} className="hover:underline">
               {brokerPhone}
@@ -154,9 +163,15 @@ export default function ListingAttribution({
       {/*
        * `listedBy` is derived server-side as `<agent or broker> – <office>`, so it usually already
        * names the office and repeating it reads as a stutter ("Jane Agent – Real Broker, LLC /
-       * Listing by Real Broker, LLC"). The line is still rendered whenever `listedBy` does NOT
-       * already end with the office name, because 7.58 requires the listing firm to be identified
-       * and `listedBy` is not guaranteed to carry it.
+       * Listing by Real Broker, LLC"). Outside `compact`, the line is skipped whenever `listedBy`
+       * already ends with the office name, because that copy is unbounded and legible there.
+       *
+       * `compact` always renders this line instead, even on that same `endsWith` case. The
+       * `listedBy` line above is truncated in `compact`, and it ends in "<agent> – <office>", so
+       * the office name sits exactly where a single-line ellipsis clips first — the firm name could
+       * disappear from view with nothing but a hover-only `title` carrying it, which is not
+       * "reasonably prominent" per 7.58. This line has its own `title` and is never truncated away,
+       * so the firm identification stays visible regardless of what `listedBy` clips.
        *
        * Not truncated outside `compact`: 7.58 requires the listing firm to be identified and
        * reasonably prominent, and an ellipsized firm name is arguably neither, so this line wraps
@@ -172,10 +187,8 @@ export default function ListingAttribution({
        * is most likely to expect, and the invented wording stays on the branch where inventing is
        * allowed.
        */}
-      {!listedBy.endsWith(officeName) && (
-        <p className={lineClassName} title={compact ? officeName : undefined}>
-          {courtesyText}
-        </p>
+      {(compact || !listedBy.endsWith(officeName)) && (
+        <p {...compactLineProps(courtesyText)}>{courtesyText}</p>
       )}
     </div>
   );

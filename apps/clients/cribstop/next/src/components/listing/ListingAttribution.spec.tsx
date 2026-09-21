@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import type { ListingCardRow } from '@cribstop/property-contracts';
 import { aListingCardRow } from '@/test/fixtures';
 import ListingAttribution from './ListingAttribution';
 
@@ -7,7 +8,7 @@ import ListingAttribution from './ListingAttribution';
  * overflowed the search card (#273). `listedBy` deliberately does not end with `officeName`, so
  * the courtesy line renders too — the worst case, all three lines present.
  */
-function aBrightMlsRow() {
+function aBrightMlsRow(overrides: Partial<ListingCardRow> = {}) {
   return aListingCardRow({
     source: 'brightMLS',
     listedBy: 'Jane Q. Agentworth-Fairweather III – Long & Foster Real Estate, Inc.',
@@ -15,6 +16,7 @@ function aBrightMlsRow() {
     officeName: 'Long & Foster Real Estate, Inc. — Bethesda Gateway Regional Office',
     brokerPhone: '(301) 555-0199',
     brokerEmail: 'jane.q.agentworth-fairweather.iii@longandfosterrealestatebethesda.example.com',
+    ...overrides,
   });
 }
 
@@ -53,6 +55,27 @@ describe('ListingAttribution — brightMLS row, compact', () => {
     expect(screen.getByText(row.listingAgentName!)).toBeInTheDocument();
     const lines = container.querySelectorAll(':scope > p');
     lines.forEach((line) => expect(line.className).not.toContain('truncate'));
+  });
+
+  it('still shows the firm name as its own line when listedBy already ends with officeName', () => {
+    // `listedBy` is "<agent> – <office>", so when it already ends with `officeName` the office
+    // name sits at the tail of the truncated line — exactly where an ellipsis clips first. The
+    // firm must not depend on that clipped tail; the courtesy line carries it instead.
+    const row = aBrightMlsRow({
+      officeName: 'Long & Foster Real Estate, Inc.',
+      listedBy: 'Jane Q. Agentworth-Fairweather III – Long & Foster Real Estate, Inc.',
+    });
+    const { container } = render(
+      <ListingAttribution attribution={row} source={row.source} compact />,
+    );
+
+    const courtesyLine = screen.getByText(`Listing courtesy of ${row.officeName}`);
+    expect(courtesyLine).toBeInTheDocument();
+    expect(courtesyLine.className).toContain('truncate');
+    expect(courtesyLine.getAttribute('title')).toBe(`Listing courtesy of ${row.officeName}`);
+
+    const lines = container.querySelectorAll(':scope > p');
+    expect(lines.length).toBeLessThanOrEqual(3);
   });
 
   it('leaves the detail page\'s density="courtesy" rendering unchanged', () => {
