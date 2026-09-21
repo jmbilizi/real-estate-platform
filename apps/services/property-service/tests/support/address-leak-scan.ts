@@ -10,5 +10,7 @@ export function payloadLeaksAddress(
   streetLine: string,
   streetSlug: string,
 ): boolean {
-  return serialisedPayload.includes(streetLine) || serialisedPayload.toLowerCase().includes(streetSlug);
+  return (
+    serialisedPayload.includes(streetLine) || serialisedPayload.toLowerCase().includes(streetSlug)
+  );
 }
