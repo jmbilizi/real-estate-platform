@@ -25,6 +25,7 @@ namespace AccountService.Tests.Integration
         : AccountServiceFactory
     {
         private readonly List<SentMessage> sent = new();
+        private readonly List<OutboundEmail> alreadyRegistered = new();
 
         /// <summary>The kind of message the service handed to the delivery seam.</summary>
         internal enum MessageKind
@@ -63,6 +64,18 @@ namespace AccountService.Tests.Integration
         internal IReadOnlyList<SentMessage> ResetLinks =>
             this.Sent.Where(m => m.Kind == MessageKind.PasswordResetLink).ToList();
 
+        /// <summary>Gets the already-registered notices issued so far, in order.</summary>
+        internal IReadOnlyList<OutboundEmail> AlreadyRegisteredNotices
+        {
+            get
+            {
+                lock (this.alreadyRegistered)
+                {
+                    return this.alreadyRegistered.ToList();
+                }
+            }
+        }
+
         /// <inheritdoc/>
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -74,6 +87,11 @@ namespace AccountService.Tests.Integration
                     sp.GetRequiredService<IdentityEmailComposer>(),
                     sp.GetRequiredService<ConfirmationLinkBuilder>(),
                     this.Record));
+
+                // The already-registered notice does not go through IEmailSender<TUser>: it is sent
+                // directly on IOutboundEmailSender by IdentityResponseShapingFilter. Fake only the
+                // transport boundary here so the real composer runs.
+                services.AddSingleton<IOutboundEmailSender>(new RecordingOutboundEmailSender(this.RecordAlreadyRegistered));
 
                 if (configure is not null)
                 {
@@ -87,6 +105,14 @@ namespace AccountService.Tests.Integration
             lock (this.sent)
             {
                 this.sent.Add(message);
+            }
+        }
+
+        private void RecordAlreadyRegistered(OutboundEmail message)
+        {
+            lock (this.alreadyRegistered)
+            {
+                this.alreadyRegistered.Add(message);
             }
         }
 
@@ -132,6 +158,15 @@ namespace AccountService.Tests.Integration
                     email,
                     System.Net.WebUtility.HtmlDecode(resetCode),
                     composer.PasswordResetCode(email, resetCode)));
+                return Task.CompletedTask;
+            }
+        }
+
+        private sealed class RecordingOutboundEmailSender(Action<OutboundEmail> record) : IOutboundEmailSender
+        {
+            public Task SendAsync(OutboundEmail message, CancellationToken cancellationToken = default)
+            {
+                record(message);
                 return Task.CompletedTask;
             }
         }

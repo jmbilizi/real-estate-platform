@@ -26,11 +26,12 @@ describe('toOpenApiDocument', () => {
     expect(Object.keys(doc.paths)).toContain('/listings');
   });
 
-  it('declares the three listings paths #22 will serve', () => {
+  it('declares the listings paths', () => {
     expect(Object.keys(doc.paths).sort()).toEqual([
       '/listings',
       '/listings/meta',
       '/listings/{id}',
+      '/listings/{id}/inquiries',
     ]);
   });
 
