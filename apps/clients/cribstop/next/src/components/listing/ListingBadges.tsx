@@ -13,11 +13,16 @@
  * fabricated address can never render unlabelled under a real listing. Until #33 lands **every**
  * row is a sample, so this is what the app shows rather than an edge case, and the label must not
  * be defeatable by a filter, a sort or a viewport: if a sample row is visible, its label is visible.
+ *
+ * Sentence case, not uppercase/tracked: on the narrowest card (~155px, #121) this badge plus
+ * `SponsoredBadge` must share one row without either being clipped. Measured in a real browser,
+ * uppercase + `tracking-wide` pushed the pair past that width; sentence case and tighter padding
+ * fit with margin to spare. `shrink-0` keeps that width in a `flex-nowrap` row.
  */
 export function SampleBadge({ className = '' }: { className?: string }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full bg-ink px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white ${className}`}
+      className={`inline-flex shrink-0 items-center rounded-full bg-ink px-1.5 py-0.5 text-[11px] font-semibold text-white ${className}`}
     >
       Sample data
     </span>
@@ -34,7 +39,7 @@ export function SampleBadge({ className = '' }: { className?: string }) {
 export function SponsoredBadge({ className = '' }: { className?: string }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full bg-surface-alt px-2 py-0.5 text-[11px] font-semibold text-ink-body ring-1 ring-surface-border ${className}`}
+      className={`inline-flex shrink-0 items-center rounded-full bg-surface-alt px-1.5 py-0.5 text-[11px] font-semibold text-ink-body ring-1 ring-surface-border ${className}`}
     >
       Sponsored
     </span>
