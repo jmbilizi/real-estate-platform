@@ -16,6 +16,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                   "result_window_exceeded",
                   "not_found",
                   "internal_error",
+                  "rate_limited",
                 ],
                 "type": "string",
               },
@@ -713,6 +714,64 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
         ],
         "type": "object",
       },
+      "ListingInquiryRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "consentToContact": {
+            "default": false,
+            "description": "Whether the consumer asked to also be connected with a Real Broker, LLC agent. Defaults to false and is never inferred. Routing to the listing agent happens regardless of this value — consent adds a recipient, it never replaces one.",
+            "type": "boolean",
+          },
+          "email": {
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+            "type": "string",
+          },
+          "kind": {
+            "enum": [
+              "message",
+              "tour_request",
+            ],
+            "type": "string",
+          },
+          "message": {
+            "description": "Required (non-empty) when \`kind\` is \`message\`. Optional for \`tour_request\`. Max 2000 characters.",
+            "maxLength": 2000,
+            "type": "string",
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string",
+          },
+          "phone": {
+            "maxLength": 40,
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "required": [
+          "kind",
+          "name",
+          "email",
+          "consentToContact",
+        ],
+        "type": "object",
+      },
+      "ListingInquiryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string",
+          },
+        },
+        "required": [
+          "id",
+        ],
+        "type": "object",
+      },
       "ListingsEnvelope": {
         "additionalProperties": false,
         "properties": {
@@ -1162,6 +1221,89 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
           },
         },
         "summary": "Listing detail",
+      },
+    },
+    "/listings/{id}/inquiries": {
+      "post": {
+        "description": "Works signed-out and signed-in — an unauthenticated request is never rejected for being unauthenticated. \`name\` and \`email\` are always required, regardless of sign-in state. \`consentToContact\` records only that the consumer asked to also be connected with a Real Broker, LLC agent; the listing agent is always notified regardless of this value. No delivery happens yet — the created record starts in the \`pending\` delivery state. Never returned by any read endpoint.
+
+Rate-limited per client and per listing; a request over either limit gets 429 with a \`Retry-After\` header.",
+        "operationId": "createListingInquiry",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListingInquiryRequest",
+              },
+            },
+          },
+          "required": true,
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingInquiryResponse",
+                },
+              },
+            },
+            "description": "The inquiry was recorded.",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unknown field, missing \`name\`/\`email\`, or \`message\` missing/empty when \`kind\` is \`message\`.",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No such listing, or not publishable through \`listing_search_v\`.",
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Rate limit exceeded for this client or this listing. Documented here — unlike the read endpoints above — because this limit is enforced by the service itself (keyed on the path parameter), not by the gateway.",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+        },
+        "summary": "Submit a message or tour request against a listing",
       },
     },
   },
