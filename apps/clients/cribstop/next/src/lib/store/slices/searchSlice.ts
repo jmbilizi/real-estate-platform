@@ -12,6 +12,11 @@ export type SearchListingType = (typeof LISTING_TYPES)[number] | 'all';
  * and nothing may ever be transmitted, logged, persisted, put in analytics or ranked on. Keeping
  * the shape free of it makes that structural rather than a convention to remember. Asserted by
  * `searchSlice.spec.ts`.
+ *
+ * There is also deliberately no free-text description/keyword field (#244). `description` is
+ * third-party MLS remarks carrying a moderation state; making it searchable turns phrases like
+ * "great for families" into a matchable term (PRD §6.3). The `amenities` filter is the safe
+ * equivalent for the "keyword" shopping use case (pool, garage, waterfront).
  */
 interface SearchState {
   searchLocation: string;
@@ -20,12 +25,6 @@ interface SearchState {
   searchDateRange: SearchDateRange;
   searchPriceIdx: number;
   searchListingType: SearchListingType;
-  /**
-   * Retained for #244 to remove. The "What" panel no longer offers this input (Fair Housing:
-   * a keyword filter over agent-authored remarks makes phrases like "great for families" a
-   * matchable term), but the field itself is out of this ticket's scope.
-   */
-  searchDescription: string;
 }
 
 const initialState: SearchState = {
@@ -35,7 +34,6 @@ const initialState: SearchState = {
   searchDateRange: { start: '', end: '', flexibility: 'exact' },
   searchPriceIdx: 0,
   searchListingType: 'all',
-  searchDescription: '',
 };
 
 const searchSlice = createSlice({
@@ -60,9 +58,6 @@ const searchSlice = createSlice({
     setSearchListingType: (state, action: PayloadAction<SearchListingType>) => {
       state.searchListingType = action.payload;
     },
-    setSearchDescription: (state, action: PayloadAction<string>) => {
-      state.searchDescription = action.payload;
-    },
   },
 });
 
@@ -73,6 +68,5 @@ export const {
   setSearchDateRange,
   setSearchPriceIdx,
   setSearchListingType,
-  setSearchDescription,
 } = searchSlice.actions;
 export default searchSlice.reducer;

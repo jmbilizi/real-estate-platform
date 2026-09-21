@@ -29,7 +29,6 @@ describe('search slice carries no occupancy state (#34)', () => {
   it('enumerates exactly the search fields the bar still collects', () => {
     expect(Object.keys(initialSearchState).sort()).toEqual([
       'searchDateRange',
-      'searchDescription',
       'searchListingType',
       'searchLocation',
       'searchMoveInDate',

@@ -20,7 +20,6 @@ import {
   selectMobileSearchOpen,
   selectSavedIds,
   selectSearchDateRange,
-  selectSearchDescription,
   selectSearchListingType,
   selectSearchLocation,
   selectSearchMoveInDate,
@@ -46,7 +45,6 @@ const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffec
 import {
   type SearchListingType,
   setSearchDateRange,
-  setSearchDescription,
   setSearchListingType,
   setSearchLocation,
   setSearchMoveInDate,
@@ -103,8 +101,6 @@ interface AppContextValue {
   setSearchPriceIdx: (v: number) => void;
   searchListingType: SearchListingType;
   setSearchListingType: (v: SearchListingType) => void;
-  searchDescription: string;
-  setSearchDescription: (v: string) => void;
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -212,7 +208,6 @@ export function useApp(): AppContextValue {
   const searchDateRange = useAppSelector(selectSearchDateRange);
   const searchPriceIdx = useAppSelector(selectSearchPriceIdx);
   const searchListingType = useAppSelector(selectSearchListingType);
-  const searchDescription = useAppSelector(selectSearchDescription);
 
   const savedIds = useMemo(() => new Set(savedIdList), [savedIdList]);
 
@@ -379,13 +374,6 @@ export function useApp(): AppContextValue {
     [dispatch],
   );
 
-  const setDescriptionCtx = useCallback(
-    (v: string) => {
-      dispatch(setSearchDescription(v));
-    },
-    [dispatch],
-  );
-
   return {
     user,
     sessionLoading: !sessionChecked,
@@ -419,7 +407,5 @@ export function useApp(): AppContextValue {
     setSearchPriceIdx: setPriceIdx,
     searchListingType,
     setSearchListingType: setSearchListingTypeCtx,
-    searchDescription,
-    setSearchDescription: setDescriptionCtx,
   };
 }
