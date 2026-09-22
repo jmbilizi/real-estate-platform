@@ -6,6 +6,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { ListingType } from '@/lib/types';
 import { formatListingPrice } from '@/lib/listing-format';
+import { useTileFailure, useTileLayerConfig } from '@/components/map-tiles';
 
 function InvalidateOnMount() {
   const map = useMap();
@@ -38,6 +39,8 @@ export default function SingleListingMapInner({
 }: SingleListingMapInnerProps) {
   const PILL_W = 80;
   const PILL_H = 32;
+  const { failed: tilesFailed, onTileError } = useTileFailure();
+  const { tileUrl, attribution } = useTileLayerConfig();
   const priceDisplay = formatListingPrice(price, listingType);
   const pinLabel = priceDisplay.isWithheld ? 'View listing' : priceDisplay.text;
   const icon = L.divIcon({
@@ -50,21 +53,32 @@ export default function SingleListingMapInner({
   });
 
   return (
-    <div className={`isolate ${className ?? ''}`}>
+    <div className={`relative isolate ${className ?? ''}`}>
       <MapContainer
         center={[latitude, longitude]}
         zoom={14}
+        // Set here, not only on `<TileLayer>` — see `ListingsMapInner` for why. This map has no
+        // marker clustering, so it does not hit that crash, but the tile URL still arrives
+        // asynchronously and the map should not be able to zoom past the provider's coverage
+        // before `<TileLayer>` mounts.
+        maxZoom={19}
         scrollWheelZoom={false}
         zoomControl
         className="h-full w-full"
         style={{ background: '#f2ede6' }}
       >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-          subdomains="abcd"
-          maxZoom={20}
-        />
+        {/* Empty until `/api/map-config` answers — see `map-tiles.ts` for why this never
+            defaults to a fallback URL client-side. */}
+        {tileUrl && (
+          <TileLayer
+            attribution={attribution}
+            url={tileUrl}
+            // `L.TileLayer`'s own default `maxZoom` is 18, independent of the map's — see
+            // `ListingsMapInner` for why this must match the map's `maxZoom` above.
+            maxZoom={19}
+            eventHandlers={{ tileerror: onTileError }}
+          />
+        )}
         <InvalidateOnMount />
         <Circle
           center={[latitude, longitude]}
@@ -78,6 +92,13 @@ export default function SingleListingMapInner({
         />
         <Marker position={[latitude, longitude]} icon={icon} />
       </MapContainer>
+      {/* Tiles failed to load — surface it rather than a silent blank map (#291). The pin above
+          still carries the real price, so this only calls out the missing basemap imagery. */}
+      {tilesFailed && (
+        <div className="pointer-events-none absolute left-3 right-3 top-3 z-[400] rounded-2xl bg-ink/85 px-3 py-1.5 text-center text-[11px] font-semibold text-white shadow-card backdrop-blur">
+          Map imagery is temporarily unavailable.
+        </div>
+      )}
     </div>
   );
 }

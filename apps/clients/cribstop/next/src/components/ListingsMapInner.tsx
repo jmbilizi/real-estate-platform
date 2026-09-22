@@ -23,6 +23,7 @@ import {
 import ListingImage from '@/components/listing/ListingImage';
 import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges';
 import ListingAttribution from '@/components/listing/ListingAttribution';
+import { useTileFailure, useTileLayerConfig } from '@/components/map-tiles';
 
 // Module-level callback set by ListingsMapInner so MarkerPopup
 // (rendered in a separate createRoot) can still trigger modal navigation.
@@ -496,6 +497,8 @@ export default function ListingsMapInner({
   }, [searchCenter, pinCoords]);
 
   const [scrollActive, setScrollActive] = useState(false);
+  const { failed: tilesFailed, onTileError } = useTileFailure();
+  const { tileUrl, attribution } = useTileLayerConfig();
 
   // The frame — radius, border, shadow, fill — belongs to the wrapper in `ListingsMap`, so that the
   // loading placeholder wears it too. This fills that frame and positions the overlays below.
@@ -504,17 +507,29 @@ export default function ListingsMapInner({
       <MapContainer
         center={center}
         zoom={11}
+        // Set here, not only on `<TileLayer>`: `leaflet.markercluster` reads the map's own
+        // `maxZoom` to compute spiderfy behavior and throws "Map has no maxZoom specified" if it
+        // mounts before `<TileLayer>` does — which now happens on every load, since the tile URL
+        // arrives asynchronously from `/api/map-config` (#291).
+        maxZoom={19}
         scrollWheelZoom={false}
         zoomControl={false}
         className="h-full w-full"
         style={{ background: '#f2ede6' }}
       >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-          subdomains="abcd"
-          maxZoom={20}
-        />
+        {/* Empty until `/api/map-config` answers — see `map-tiles.ts` for why this never
+            defaults to a fallback URL client-side. */}
+        {tileUrl && (
+          <TileLayer
+            attribution={attribution}
+            url={tileUrl}
+            // `L.TileLayer`'s own default `maxZoom` is 18, independent of the map's — leaving
+            // this off would cap real tile fetches at z18 even though the map (above) allows 19,
+            // silently upscaling the z18 tile past its native resolution.
+            maxZoom={19}
+            eventHandlers={{ tileerror: onTileError }}
+          />
+        )}
         <InvalidateOnMount />
         <CustomMapControls />
         <ClickToActivateScroll onChange={setScrollActive} />
@@ -536,15 +551,30 @@ export default function ListingsMapInner({
        * row is a sample, which makes the default map view a field of illustrative prices. This
        * overlay is persistent and needs no interaction, which is what the popup badge cannot be.
        */}
-      {sampleBannerCopy && (
+      {/* Tiles failed to load — surface it rather than leaving a silent blank map (#291). Ranks
+          first: a broken basemap outranks the illustrative-price and hidden-pin notices below it. */}
+      {tilesFailed && (
         <div className="pointer-events-none absolute left-3 right-3 top-3 z-[400] rounded-2xl bg-ink/85 px-3 py-1.5 text-center text-[11px] font-semibold text-white shadow-card backdrop-blur">
+          Map imagery is temporarily unavailable. Pin locations and prices below are unaffected.
+        </div>
+      )}
+      {sampleBannerCopy && (
+        <div
+          className={`pointer-events-none absolute left-3 right-3 z-[400] rounded-2xl bg-ink/85 px-3 py-1.5 text-center text-[11px] font-semibold text-white shadow-card backdrop-blur ${
+            tilesFailed ? 'top-12' : 'top-3'
+          }`}
+        >
           {sampleBannerCopy}
         </div>
       )}
       {hiddenPinCount > 0 && (
         <div
           className={`pointer-events-none absolute left-3 right-3 z-[400] rounded-2xl bg-surface/95 px-3 py-1.5 text-center text-[11px] font-medium text-ink-muted shadow-card backdrop-blur ${
-            sampleBannerCopy ? 'top-12' : 'top-3'
+            tilesFailed && sampleBannerCopy
+              ? 'top-24'
+              : tilesFailed || sampleBannerCopy
+                ? 'top-12'
+                : 'top-3'
           }`}
         >
           Some sellers have chosen not to display their home’s location, so those homes appear in
