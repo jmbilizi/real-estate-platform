@@ -105,13 +105,24 @@ The job's environment variables are:
 
 - `BRIGHT_MLS_TOKEN_ENDPOINT` — per-environment config on the CronJob
 - `BRIGHT_MLS_SERVICE_ROOT` — per-environment config on the CronJob
-- `BRIGHT_MLS_CLIENT_ID` — from the `bright-mls-secret` Kubernetes Secret
-- `BRIGHT_MLS_CLIENT_SECRET` — from the `bright-mls-secret` Kubernetes Secret
+- `BRIGHT_MLS_ENV` — per-environment config on the CronJob (#246). Picks the credential pair below.
+  `test` reads the TEST pair; `production` reads the PROD pair. Unset resolves to `test`.
+- `BRIGHT_MLS_TEST_CLIENT_ID` / `BRIGHT_MLS_TEST_CLIENT_SECRET` — from the `bright-mls-secret`
+  Kubernetes Secret. **Provision the real test credentials here, not under the deprecated pair
+  below.**
+- `BRIGHT_MLS_PROD_CLIENT_ID` / `BRIGHT_MLS_PROD_CLIENT_SECRET` — from the `bright-mls-secret`
+  Kubernetes Secret. Read only when `BRIGHT_MLS_ENV=production`.
+
+`BRIGHT_MLS_CLIENT_ID` / `BRIGHT_MLS_CLIENT_SECRET` (no tier suffix) is a **deprecated fallback**,
+read only when both tier-suffixed pairs above are absent. `config.ts` keeps it for one release and
+then deletes it. Do not provision new credentials under this pair: a run that only works through the
+fallback stops working the day the fallback is removed, with no warning ahead of time.
 
 A value still equal to the Git placeholder `StrongBase64Password` is treated as **not configured** —
 the job logs a loud, distinguishable "credentials not configured" completion rather than crash
-looping or silently succeeding. See #117 for the human runbook that provisions the real values per
-environment, and #33 for the licence/credential-delivery ticket those values come from.
+looping or silently succeeding. See #246 for the tier-suffixed credential mechanism, #117 for the
+human runbook that provisions the real values per environment, and #33 for the
+licence/credential-delivery ticket those values come from.
 
 **The job already does the first half of section 0 for you.** Once credentials resolve, a run
 authenticates (OAuth2 `client_credentials`) and issues `GET {serviceRoot}/$metadata`, then logs the
