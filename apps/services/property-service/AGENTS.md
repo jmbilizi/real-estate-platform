@@ -338,6 +338,58 @@ Two more things worth knowing before changing this code:
   default is `test`, so an environment that patches nothing cannot reach production. The same
   selector also picks the credential pair (`BRIGHT_MLS_TEST_*` / `BRIGHT_MLS_PROD_*`) — see below.
 
+### Bright MLS photos — the crawl and the media mapper (#191)
+
+Before this, no Bright listing showed a photo anywhere. Two independent causes, either one enough on
+its own. Nothing mapped `BrightMedia` into `listing_media`, so there were no rows. And
+`mapSuppressionFlags` fixed `mediaDisplayAllowed` to false, so `repository.ts`'s
+`(v.media_display_allowed OR m.retained_when_suppressed)` gate hid any row there might have been.
+
+**The media suppression gate is lifted for Bright rows** by a stakeholder ruling of 2026-09-22,
+recorded on #146 and #33. The stated basis is that Bright images arrive already carrying their
+trademark or watermark, and that Cribstop is licensed to display them. **Read the ruling narrowly.**
+It covers media. `priceDisplayAllowed`, `priceHistoryDisplayAllowed` and
+`daysOnMarketDisplayAllowed` stay fail-closed under the #146 hold, and `retained_when_suppressed`
+stays unset by this mapper, because that marker is #146's mechanism and still waits on #33 item
+8(f).
+
+**The crawl is a full unfiltered scan, because the feed allows nothing else.** `BrightMedia` answers
+400 to every `$filter` on this tier, so `crawl.ts` reads the whole resource and matches client-side
+against the `ListingKey`s already staged for `BrightProperties`. Only matching rows are staged, so
+`property_db` stays small. The cost is the traffic: 3,403,084 rows at 1000 per page is roughly 3,400
+requests, about 28 minutes at the placeholder rate. Off by default
+(`BRIGHT_MLS_CRAWL_RESOURCES` is empty); local and dev opt in with different page caps.
+
+**A pass resumes on the `@odata.nextLink`, not on a timestamp.** An unordered scan has no watermark,
+so the next link is persisted in `bright_replication_cursor.cursor_record_key` and a capped run
+continues from it. A completed pass clears it. The link is never logged or returned — a Bright URL
+is a plausible place for a token — so the report carries only a `nextLinkStored` boolean.
+
+**THE PRIMARY-IMAGE RULE is the feed's designation, not ours.** `PreferredPhotoYN === true` wins,
+then the lowest `MediaDisplayOrder` (absent sorts LAST, so unknown never beats a stated order), then
+the lowest `MediaKey` to make the order total and the gallery stable across runs. `sort_order`
+follows the same comparison. The link field is `ResourceRecordKey`.
+
+Two fail-closed rules in `map-media.ts` worth keeping:
+
+- **`MediaURL` only.** The Thumb, Medium, HD, HiRes and Full variants are never a fallback: one
+  would serve a thumbnail into a full-width gallery. No `MediaURL` means no row.
+- **A record must be identifiably a photo.** A stated `MediaType` decides. With none, the URL
+  extension decides. With neither, the record is rejected and counted under `unknown_media_type`.
+  `MediaCategory` and `MediaImageOf` would be the natural filters, but both are `Lookup`-backed and
+  this tier answers 400 to `Lookup` (#162), so their permitted values are unknown. A non-property
+  `ResourceName` is rejected too: `ResourceRecordKey` is a plain Int64 counter, so an office
+  record's key can equal a listing's by coincidence.
+
+`replaceFeedListingMedia()` in `src/db/write.ts` is the writer. It clears `is_primary` before
+upserting, because `idx_listing_media_one_primary` is violated mid-statement otherwise on any
+reordered gallery, and it deletes the feed rows a pass did not send, scoped to
+`source_media_key IS NOT NULL` so seeded photos survive.
+
+**A Bright row still never appears on the map** — the property mapper writes `latitude`/`longitude`
+as null. That is #310, not a media problem. The map popup renders the same `primaryMedia` through
+the same `ListingImage` component the card uses.
+
 ### Bright MLS ingestion — the vehicle (#91)
 
 The scheduled ingestion job is **this image with a different command**, exactly as the section above

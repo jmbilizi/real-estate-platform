@@ -29,6 +29,42 @@ export interface BrightMapRunReport {
   readonly outOfRangeFieldCounts: Readonly<Record<string, number>>;
 }
 
+/**
+ * Per-run report for the media mapping pass (#191).
+ *
+ * Separate from `BrightMapRunReport` because the two passes count different things. A media row is
+ * not a listing: it is rejected for reasons a property record has no equivalent of, and it can map
+ * cleanly and still belong to no listing we hold.
+ *
+ * `unmatchedMedia` is the one to read first. A crawl stages only media whose `ResourceRecordKey`
+ * matches a staged `ListingKey`, so a large count here means the property pass rejected listings
+ * the media pass still holds photos for. That is a real signal, not noise.
+ *
+ * `listingsWithNoMedia` counts Bright listings this pass found no photo for. A run where that is
+ * every listing is the #191 defect returning, and it reads as an anomaly rather than as a success.
+ */
+export interface BrightMediaMapReport {
+  readonly staged: number;
+  readonly mapped: number;
+  readonly rejected: number;
+  readonly rejectedByReason: Readonly<Record<string, number>>;
+  readonly unmatchedMedia: number;
+  readonly listingsWithMedia: number;
+  readonly listingsWithNoMedia: number;
+  readonly mediaWritten: number;
+}
+
+export const ZERO_MEDIA_MAP_REPORT: BrightMediaMapReport = {
+  staged: 0,
+  mapped: 0,
+  rejected: 0,
+  rejectedByReason: {},
+  unmatchedMedia: 0,
+  listingsWithMedia: 0,
+  listingsWithNoMedia: 0,
+  mediaWritten: 0,
+};
+
 export const ZERO_MAP_REPORT: BrightMapRunReport = {
   staged: 0,
   mapped: 0,

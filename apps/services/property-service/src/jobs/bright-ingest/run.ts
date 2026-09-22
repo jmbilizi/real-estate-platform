@@ -47,9 +47,10 @@ import {
   probeMetadata,
 } from './bright-client';
 import { type BrightConfig, resolveBrightConfig } from './config';
+import { crawlResource, type CrawlResourceResult } from './crawl';
 import { RateLimiter } from './rate-limiter';
 import { replicateResource, type ReplicateResourceResult, ReplicationFailure } from './replicate';
-import { BRIGHT_RESOURCES, resolveResource } from './resources';
+import { BRIGHT_RESOURCES, resolveCrawlResource, resolveResource } from './resources';
 import {
   type BrightResourceReport,
   type BrightRunCounts,
@@ -60,7 +61,15 @@ import {
 } from './run-log';
 import { type BrightStagingStore, createStagingStore } from './staging-store';
 
-import { type BrightMapRunReport, ZERO_MAP_REPORT } from '../bright-map/report';
+import {
+  type BrightMapRunReport,
+  type BrightMediaMapReport,
+  ZERO_MAP_REPORT,
+  ZERO_MEDIA_MAP_REPORT,
+} from '../bright-map/report';
+
+/** The resource whose staged keys the crawl matches media against (#191). */
+const PROPERTY_RESOURCE = 'BrightProperties';
 
 export interface BrightIngestRunResult {
   readonly runId: string;
@@ -92,9 +101,16 @@ export interface RunBrightIngestOptions extends BrightClientOptions {
    * `mapStagedBrightProperties(getPool(), ...)` — never here, so this file never imports `db/pool`.
    */
   readonly mapRecords?: (params: { feed: 'test' | 'production' }) => Promise<BrightMapRunReport>;
+  /**
+   * Maps staged `BrightMedia` rows into `listing_media` (#191). Same injection contract as
+   * `mapRecords`: defaults to a no-op so a replication test stays a replication test, and the real
+   * wiring lives in `bright-ingest.main.ts`, which owns the pool.
+   */
+  readonly mapMedia?: () => Promise<BrightMediaMapReport>;
 }
 
 const NO_OP_MAP_RECORDS = async (): Promise<BrightMapRunReport> => ZERO_MAP_REPORT;
+const NO_OP_MAP_MEDIA = async (): Promise<BrightMediaMapReport> => ZERO_MEDIA_MAP_REPORT;
 
 /** ISO-8601 with a `Z` suffix — one wire format per service (see the project guide). */
 function instant(at: Date): string {
@@ -109,6 +125,45 @@ function notConfiguredMessage(config: Extract<BrightConfig, { state: 'not-config
     'carries an endpoint pair (#176), so this means the secret is missing: either #117 has not ' +
     "provisioned this environment's, or the overlay lost its endpoint pair. See " +
     'apps/services/property-service/docs/bright-mls-day-one-checklist.md.'
+  );
+}
+
+/**
+ * Folds a crawl result into the same report shape a replication pass produces (#191).
+ *
+ * A crawl has no timestamp cursor, so the cursor fields are null and `stalled` is false. Reporting
+ * them as null is the honest answer: a crawl cannot be behind by time, only by pages.
+ *
+ * `caughtUp` carries `passComplete`, which is the equivalent claim — the pass reached the end of
+ * the resource. `nextLinkStored` is deliberately not carried: it is an internal resume detail, and
+ * `cappedByPageLimit` already tells an operator the run will continue next time.
+ */
+function toCrawlReport(result: CrawlResourceResult): BrightResourceReport {
+  return {
+    resource: result.resource,
+    pagesFetched: result.pagesFetched,
+    recordsFetched: result.recordsFetched,
+    recordsStaged: result.recordsStaged,
+    retries: result.retries,
+    cursorAt: null,
+    cursorAgeHours: null,
+    caughtUp: result.passComplete,
+    cappedByPageLimit: result.cappedByPageLimit,
+    starved: false,
+    stalled: false,
+  };
+}
+
+/** One sentence on the media pass, appended to the run message. */
+function mediaMessage(media: BrightMediaMapReport): string {
+  if (media.staged === 0) {
+    return 'No media was staged, so no photo was written.';
+  }
+  return (
+    `Media: mapped ${media.mapped}/${media.staged} staged row(s), wrote ${media.mediaWritten} ` +
+    `photo(s) across ${media.listingsWithMedia} listing(s), ${media.unmatchedMedia} row(s) had no ` +
+    'listing.' +
+    (media.rejected === 0 ? '' : ` Rejected by reason: ${formatCounts(media.rejectedByReason)}.`)
   );
 }
 
@@ -311,12 +366,35 @@ export async function runBrightIngest(
         reports.push(toReport(result, replication.cursorMaxAgeHours));
       }
 
+      // The full-crawl pass (#191), after replication and before mapping. Ordered, not incidental:
+      // the crawl matches media against the `ListingKey`s replication just staged, so running it
+      // first would match against the previous run's set and miss every new listing's photos.
+      for (const resource of replication.crawlResources.map(resolveCrawlResource)) {
+        const result = await crawlResource({
+          resource,
+          serviceRoot: config.endpoint.serviceRoot,
+          serviceRootHost: config.endpoint.serviceRootHost,
+          tokenProvider,
+          store,
+          runId,
+          keepRecordKeys: await store.readRecordKeys(PROPERTY_RESOURCE),
+          maxPagesPerRun: replication.crawlMaxPagesPerRun,
+          pageOptions: { ...options, limiter, maxRetries: replication.maxRetries },
+          now,
+        });
+        reports.push(toCrawlReport(result));
+      }
+
       const mapRecords = options.mapRecords ?? NO_OP_MAP_RECORDS;
       const mapping = await mapRecords({ feed: config.feed });
+      // Media mapping runs AFTER property mapping. A photo references a listing row, so the row
+      // has to exist first.
+      const mapMedia = options.mapMedia ?? NO_OP_MAP_MEDIA;
+      const mediaMapping = await mapMedia();
 
       counts = summarise(reports, deletionsDetected, mapping);
       outcome = 'replicated';
-      message = replicatedMessage(config, reports, counts, mapping);
+      message = `${replicatedMessage(config, reports, counts, mapping)} ${mediaMessage(mediaMapping)}`;
       if (mapping.withheld > 0) {
         mappingWithheldByReason = mapping.withheldByReason;
       }

@@ -37,6 +37,14 @@
  * question of which tier or entitlement makes those two filterable belongs to Bright support, and
  * is tracked separately. When the answer arrives, the change here is a flag, not a code path — which
  * is the promise this table exists to keep for #129 and #130.
+ *
+ * ## The full crawl (#191)
+ *
+ * `BrightMedia` accepts no `$filter` at all, so it cannot have a cursor. It can still be read as an
+ * unfiltered, unordered scan — 3,403,084 rows, measured 2026-09-19. `supportsFullCrawl` marks which
+ * resources that scheduled crawl may target. `crawl.ts` reads it through `resolveCrawlResource`.
+ * `BrightProperties` stays `false`: it has a working cursor, and a full crawl of it is strictly
+ * worse. `Deletion` stays `false` too: its 10.5 million rows are out of scope for this crawl.
  */
 
 /** One Bright entity set. */
@@ -54,6 +62,11 @@ export interface BrightResource {
    * is readable, but only as an unbounded scan — so this job will not touch it.
    */
   readonly supportsCursorQuery: boolean;
+  /**
+   * Whether the scheduled full crawl (#191) may target this resource. `true` only for a resource
+   * with no working cursor, where an unfiltered scan is the sole way to read it at all.
+   */
+  readonly supportsFullCrawl: boolean;
 }
 
 export const BRIGHT_RESOURCES: Readonly<Record<string, BrightResource>> = Object.freeze({
@@ -63,6 +76,7 @@ export const BRIGHT_RESOURCES: Readonly<Record<string, BrightResource>> = Object
     cursorField: 'ModificationTimestamp',
     kind: 'records',
     supportsCursorQuery: true,
+    supportsFullCrawl: false,
   }),
   BrightMedia: Object.freeze({
     entitySet: 'BrightMedia',
@@ -70,6 +84,7 @@ export const BRIGHT_RESOURCES: Readonly<Record<string, BrightResource>> = Object
     cursorField: 'MediaModificationTimestamp',
     kind: 'records',
     supportsCursorQuery: false,
+    supportsFullCrawl: true,
   }),
   Deletion: Object.freeze({
     entitySet: 'Deletion',
@@ -77,6 +92,7 @@ export const BRIGHT_RESOURCES: Readonly<Record<string, BrightResource>> = Object
     cursorField: 'DeletionTimestamp',
     kind: 'deletions',
     supportsCursorQuery: false,
+    supportsFullCrawl: false,
   }),
 });
 
@@ -109,6 +125,30 @@ export function resolveResource(name: string): BrightResource {
         `every $filter on it, including one on its own key ${resource.keyField}. Measured ` +
         '2026-09-19. See the table in src/jobs/bright-ingest/resources.ts. Configuring it would ' +
         'produce a nightly failed Job, not data.',
+    );
+  }
+  return resource;
+}
+
+/**
+ * Resolves a resource configured for the full-crawl path (#191).
+ *
+ * Throws on an unknown name, for the same reason as `resolveResource`. Throws on a known resource
+ * whose `supportsFullCrawl` is `false`: `BrightProperties` has a working cursor and a full crawl of
+ * it is the wrong tool, and `Deletion`'s 10.5 million rows are out of scope for this crawl.
+ */
+export function resolveCrawlResource(name: string): BrightResource {
+  const resource = BRIGHT_RESOURCES[name];
+  if (resource === undefined) {
+    throw new Error(
+      `Unknown Bright resource "${name}". Known resources: ${BRIGHT_RESOURCE_NAMES.join(', ')}. ` +
+        'Add it to src/jobs/bright-ingest/resources.ts with its own key field before crawling it.',
+    );
+  }
+  if (!resource.supportsFullCrawl) {
+    throw new Error(
+      `Bright resource "${name}" does not support the full-crawl path. See supportsFullCrawl in ` +
+        'src/jobs/bright-ingest/resources.ts for why.',
     );
   }
   return resource;

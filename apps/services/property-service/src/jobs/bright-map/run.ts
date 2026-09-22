@@ -16,18 +16,26 @@ import {
   getOrCreateProperty,
   getOrCreateUnit,
   Queryable,
+  replaceFeedListingMedia,
   upsertListingBySourceKey,
 } from '../../db/write';
 import { PropertyRow, UnitRow } from '../../seed/types';
 import { randomUUID } from 'node:crypto';
 
+import { buildListingGallery, mapBrightMediaRecord, type MappedBrightMedia } from './map-media';
 import { mapBrightPropertyRecord } from './map-record';
-import { BrightMapRunReport, ZERO_MAP_REPORT } from './report';
+import {
+  BrightMapRunReport,
+  type BrightMediaMapReport,
+  ZERO_MAP_REPORT,
+  ZERO_MEDIA_MAP_REPORT,
+} from './report';
 import { BrightFeedTier } from './sample';
 import { ListingStatusLookup } from './status';
 
 const SOURCE_SYSTEM = 'BrightMLS';
 const RESOURCE = 'BrightProperties';
+const MEDIA_RESOURCE = 'BrightMedia';
 
 export interface MapStagedBrightPropertiesOptions {
   readonly feed: BrightFeedTier;
@@ -198,5 +206,138 @@ export async function mapStagedBrightProperties(
     takenDown,
     sampleMarked,
     outOfRangeFieldCounts,
+  };
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+ * Media mapping (#191)
+ * ════════════════════════════════════════════════════════════════════════════════════════════ */
+
+interface ListingRef {
+  readonly id: string;
+  readonly isSample: boolean;
+}
+
+/**
+ * Resolves staged `ListingKey`s to listing rows this service already holds.
+ *
+ * Keyed on `(source_system, source_listing_key)`, never on `source_listing_key` alone. The key is
+ * an MLS counter, so two originating systems can issue the same one. PRD §1 requires the mapping
+ * table to be keyed by originating system for that reason.
+ *
+ * Chunked, because a crawl can hold media for more listings than one `ANY($1)` should carry.
+ */
+async function loadListingRefs(
+  client: Queryable,
+  listingKeys: readonly string[],
+): Promise<Map<string, ListingRef>> {
+  const refs = new Map<string, ListingRef>();
+  const CHUNK = 500;
+  for (let start = 0; start < listingKeys.length; start += CHUNK) {
+    const chunk = listingKeys.slice(start, start + CHUNK);
+    const { rows } = await client.query(
+      `SELECT id, source_listing_key, is_sample
+         FROM listings
+        WHERE source_system = $1 AND source_listing_key = ANY($2::text[])`,
+      [SOURCE_SYSTEM, chunk],
+    );
+    for (const row of rows) {
+      refs.set(String(row.source_listing_key), {
+        id: String(row.id),
+        isSample: Boolean(row.is_sample),
+      });
+    }
+  }
+  return refs;
+}
+
+/**
+ * Maps staged `BrightMedia` rows into `listing_media` (#191).
+ *
+ * Runs AFTER `mapStagedBrightProperties`, and the order is load-bearing: a photo needs its listing
+ * row to exist before it can reference one. A media row whose listing is absent is counted as
+ * `unmatchedMedia` and dropped. It is never used to create a listing — this pass writes photos,
+ * and a listing conjured from a photo would carry none of the fields the display rules gate on.
+ *
+ * Idempotent. It re-reads the same staged rows every run, and `replaceFeedListingMedia()`
+ * reconciles instead of appending. So a mapping fix is deployed and the next run repairs the
+ * gallery, with no manual cleanup.
+ */
+export async function mapStagedBrightMedia(client: Queryable): Promise<BrightMediaMapReport> {
+  const { rows: staged } = await client.query(
+    'SELECT payload FROM bright_staging_records WHERE resource = $1',
+    [MEDIA_RESOURCE],
+  );
+  if (staged.length === 0) {
+    return ZERO_MEDIA_MAP_REPORT;
+  }
+
+  const byListingKey = new Map<string, MappedBrightMedia[]>();
+  const rejectedByReason: Record<string, number> = {};
+  let mapped = 0;
+  let rejected = 0;
+
+  for (const row of staged) {
+    const payload =
+      typeof row.payload === 'string'
+        ? (JSON.parse(row.payload) as Record<string, unknown>)
+        : (row.payload as Record<string, unknown>);
+
+    const result = mapBrightMediaRecord(payload);
+    if (result.kind === 'rejected') {
+      rejected += 1;
+      rejectedByReason[result.reason] = (rejectedByReason[result.reason] ?? 0) + 1;
+      continue;
+    }
+    mapped += 1;
+    const group = byListingKey.get(result.media.listingKey);
+    if (group === undefined) {
+      byListingKey.set(result.media.listingKey, [result.media]);
+    } else {
+      group.push(result.media);
+    }
+  }
+
+  const refs = await loadListingRefs(client, [...byListingKey.keys()]);
+
+  let unmatchedMedia = 0;
+  let listingsWithMedia = 0;
+  let mediaWritten = 0;
+
+  for (const [listingKey, group] of byListingKey) {
+    const ref = refs.get(listingKey);
+    if (ref === undefined) {
+      unmatchedMedia += group.length;
+      continue;
+    }
+    const gallery = buildListingGallery(group);
+    await replaceFeedListingMedia(
+      client,
+      ref.id,
+      gallery.map((item) => ({
+        source_media_key: item.sourceMediaKey,
+        source_url: item.url,
+        alt_text: item.altText,
+        caption: item.caption,
+        sort_order: item.sortOrder,
+        is_primary: item.isPrimary,
+        // Carried from the listing, never assumed false. A sample-tier Bright listing's photos
+        // must be swept by the same `is_sample` delete that removes the listing (#93).
+        is_sample: ref.isSample,
+      })),
+    );
+    listingsWithMedia += 1;
+    mediaWritten += gallery.length;
+  }
+
+  return {
+    staged: staged.length,
+    mapped,
+    rejected,
+    rejectedByReason,
+    unmatchedMedia,
+    listingsWithMedia,
+    listingsWithNoMedia: refs.size - listingsWithMedia,
+    mediaWritten,
   };
 }

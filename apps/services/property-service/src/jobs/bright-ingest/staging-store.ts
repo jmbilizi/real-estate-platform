@@ -39,6 +39,18 @@ export interface BrightStagingStore {
   resetCursor(resource: string, runId: string): Promise<void>;
   /** Row count in staging for one resource. Used by the run report. */
   countStaged(resource: string): Promise<number>;
+  /**
+   * Every staged record key for one resource (#191).
+   *
+   * The full-crawl pass needs this. `BrightMedia` answers no `$filter`, so a pass reads the whole
+   * resource and keeps only the rows linked to a listing we already staged. The match is therefore
+   * client-side, and this is the set it matches against.
+   *
+   * Only `BrightProperties` keys are ever asked for. That is roughly 100,000 short strings on the
+   * test feed, which fits in memory. Do not call it for `BrightMedia` or `Deletion` — 3.4M and
+   * 10.5M rows would not.
+   */
+  readRecordKeys(resource: string): Promise<Set<string>>;
 }
 
 /**
@@ -83,6 +95,10 @@ const READ_CURSOR_SQL = `SELECT cursor_modified_at, cursor_record_key
   WHERE resource = $1`;
 
 const COUNT_STAGED_SQL = `SELECT count(1) AS staged
+   FROM bright_staging_records
+  WHERE resource = $1`;
+
+const READ_RECORD_KEYS_SQL = `SELECT record_key
    FROM bright_staging_records
   WHERE resource = $1`;
 
@@ -243,6 +259,13 @@ export function createStagingStoreOver(pool: StagingConnectable): BrightStagingS
         const { rows } = await client.query(COUNT_STAGED_SQL, [resource]);
         // `count()` is bigint, which node-postgres returns as a string.
         return Number(rows[0]?.staged ?? 0);
+      });
+    },
+
+    async readRecordKeys(resource) {
+      return withClient(async (client) => {
+        const { rows } = await client.query(READ_RECORD_KEYS_SQL, [resource]);
+        return new Set(rows.map((row) => String(row.record_key)));
       });
     },
   };

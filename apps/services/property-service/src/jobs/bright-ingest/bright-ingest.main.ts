@@ -26,7 +26,7 @@
 
 import { closePool, getPool } from '../../db/pool';
 
-import { mapStagedBrightProperties } from '../bright-map/run';
+import { mapStagedBrightMedia, mapStagedBrightProperties } from '../bright-map/run';
 
 import { runBrightIngest } from './run';
 
@@ -51,6 +51,7 @@ runBrightIngest({
       feed,
       soldDisplayDelayDays: resolveSoldDisplayDelayDays(process.env),
     }),
+  mapMedia: () => mapStagedBrightMedia(getPool()),
 })
   .then((result) => {
     process.exitCode = result.outcome === 'failed' ? 1 : 0;

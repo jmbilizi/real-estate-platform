@@ -33,6 +33,10 @@ spec:
   suspend: false
   jobTemplate:
     spec:
+      # Raised from the base 900s to fit one whole BrightMedia pass (#191). A pass is about 28
+      # minutes at the default rate. The base deadline would kill every run part way, and a
+      # half-finished pass reads as a failed Job rather than as a cap.
+      activeDeadlineSeconds: 3000
       template:
         spec:
           # Mounts the enterprise CA ConfigMap (#180) — same mechanism and same reasoning as the
@@ -83,3 +87,24 @@ spec:
                   value: "2026-09-01T00:00:00Z"
                 - name: BRIGHT_MLS_MAX_PAGES_PER_RUN
                   value: "5"
+                # ── The BrightMedia full crawl (#191) ────────────────────────────────────────
+                # Without this, mapped listings carry no photo and every card renders the "No
+                # photo available" placeholder. `BrightMedia` answers 400 to every `$filter` on
+                # this tier, so the only way to reach a listing's photos is to read the whole
+                # resource and match client-side. The crawl stages only the rows whose
+                # `ResourceRecordKey` matches a `ListingKey` already staged above, so
+                # `property_db` stays small. The traffic is the cost, not the storage.
+                #
+                # COST, and why the cap is a whole pass. 3,403,084 rows at 1000 per page is
+                # roughly 3,400 requests. At the 2 req/s default that is about 28 minutes. The
+                # cap is set above that so one run completes one pass, and `activeDeadlineSeconds`
+                # below is raised to fit. A lower cap still works — the pass resumes from the
+                # stored next link — but then a photo can take days to appear, which reads as the
+                # feature not working.
+                #
+                # The rate numbers this rests on are placeholders, not the agreement's limits.
+                # #33 item 3 records the real ones. Lower this cap if they turn out lower.
+                - name: BRIGHT_MLS_CRAWL_RESOURCES
+                  value: "BrightMedia"
+                - name: BRIGHT_MLS_CRAWL_MAX_PAGES_PER_RUN
+                  value: "3600"
