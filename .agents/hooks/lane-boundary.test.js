@@ -10,11 +10,18 @@ const { evaluate, resolveLaneRoot } = require('./lane-boundary');
 // Primary checkout stands in for the repo's own working tree; the worktree
 // path stands in for a sibling lane created under `.claude/worktrees/`.
 // `path.resolve('/', ...)` anchors these at the current drive root on
-// win32 (and at `/` on POSIX), so the fixtures are genuinely absolute
-// rather than the drive-relative path `path.join('C:', ...)` produced.
+// win32 and at `/` on POSIX, so the fixtures are absolute on both. A
+// `C:`-rooted literal is not: `path.join('C:', 'Src')` is absolute under
+// win32 rules but is the relative path `C:/Src` under POSIX rules, and the
+// POSIX `path` module is what this file loads on a Linux CI runner.
 const PRIMARY_ROOT = path.resolve('/', 'Src', 'real-estate-platform');
 const WORKTREE_ROOT = path.join(PRIMARY_ROOT, '.claude', 'worktrees', 'mine');
 const OTHER_WORKTREE_ROOT = path.join(PRIMARY_ROOT, '.claude', 'worktrees', 'other');
+// A tree beyond the primary checkout, derived from its parent so it stays absolute on every
+// platform. A literal such as `path.join('C:', 'Src', 'other-repo')` is absolute only on win32.
+// On POSIX it is the relative path `C:/Src/other-repo`, which resolves back inside the lane root,
+// so the guard correctly allows it and the assertion fails on Linux only.
+const OUTSIDE_ROOT = path.join(path.dirname(PRIMARY_ROOT), 'other-repo');
 
 function editCall(filePath, laneRoot) {
   return evaluate({
@@ -34,6 +41,21 @@ function bashCall(command, laneRoot, env, cwd) {
     cwd,
   });
 }
+
+// Guards AGENTS.md rule 2. A fixture that is absolute on win32 and relative on POSIX resolves
+// back inside the lane root on Linux, so an outside-the-lane assertion passes for the wrong
+// reason on one platform and fails on the other. CI caught exactly that on #309.
+test('every path fixture is absolute on the host platform', () => {
+  for (const [name, value] of Object.entries({
+    PRIMARY_ROOT,
+    WORKTREE_ROOT,
+    OTHER_WORKTREE_ROOT,
+    OUTSIDE_ROOT,
+  })) {
+    assert.ok(path.isAbsolute(value), `${name} must be absolute, got "${value}"`);
+  }
+  assert.ok(!OUTSIDE_ROOT.startsWith(PRIMARY_ROOT), 'OUTSIDE_ROOT must be outside PRIMARY_ROOT');
+});
 
 test('write inside the lane root is allowed', () => {
   const target = path.join(PRIMARY_ROOT, 'src', 'file.js');
@@ -63,8 +85,7 @@ test('write into the OS temp dir is allowed', () => {
 });
 
 test('git -C <outside path> checkout dev is blocked', () => {
-  const outside = path.join('C:', 'Src', 'other-repo');
-  const reason = bashCall(`git -C ${outside} checkout dev`, PRIMARY_ROOT);
+  const reason = bashCall(`git -C ${OUTSIDE_ROOT} checkout dev`, PRIMARY_ROOT);
   assert.match(reason, /targets a tree outside this lane's root/);
 });
 
@@ -157,8 +178,7 @@ test('a quoted git -C path into a foreign worktree is blocked (finding 1)', () =
 });
 
 test('a quoted --git-dir path outside the lane root is blocked (finding 1)', () => {
-  const outside = path.join('C:', 'Src', 'other-repo');
-  const reason = bashCall(`git --git-dir="${outside}/.git" checkout dev`, PRIMARY_ROOT);
+  const reason = bashCall(`git --git-dir="${OUTSIDE_ROOT}/.git" checkout dev`, PRIMARY_ROOT);
   assert.match(reason, /targets a tree outside this lane's root/);
 });
 
@@ -228,10 +248,10 @@ test('git worktree remove is allowed only when the override env var is explicitl
 });
 
 // --- Regression: finding 5 --------------------------------------------------
-// The old fixtures were built with `path.join('C:', ...)`, which yields the
-// drive-relative `C:Src\real-estate-platform` — never a genuine absolute
-// Windows path — so the win32 case-insensitive compare and backslash
-// handling went untested. These use `path.win32` explicitly and are gated to
+// The shared fixtures resolve with whichever `path` module the host loads, so
+// on a POSIX runner they carry forward slashes and never exercise the win32
+// case-insensitive compare or backslash handling. These build win32 paths
+// explicitly with `path.win32` instead, and are gated to
 // win32 hosts, since feeding backslash paths through the POSIX `path` module
 // (what this file loads as `path` when run on a POSIX CI runner) would not
 // parse them as separators at all.
