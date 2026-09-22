@@ -22,18 +22,17 @@ export const BRAND = {
   /** Full site domain shown in copy. */
   siteDomain: 'Cribstop.com',
 
-  /** Support email address. */
-  supportEmail: 'support@cribstop.com',
-
   /**
-   * General contact address shown to a consumer who must reply to us.
-   * It matches the reply-to on outbound account mail, so a consumer who replies
-   * and a consumer who copies the address from a page reach the same inbox.
+   * The only contact address the site publishes. It matches the reply-to on
+   * outbound account mail, so a consumer who replies and a consumer who copies
+   * the address from a page reach the same inbox.
+   *
+   * There is no second address and no published phone number. A `support@`
+   * mailbox and an `(800) 555-CRIB` number were mock values that reached
+   * production copy; both are removed (#284). Add a contact method here only
+   * when it is real and monitored.
    */
   contactEmail: 'contact@cribstop.com',
-
-  /** Support phone number. */
-  supportPhone: '(800) 555-CRIB',
 
   /** States where the brokerage is licensed. */
   licensedStates: 'MD, DC, and VA',
