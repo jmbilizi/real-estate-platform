@@ -174,7 +174,10 @@ describe('ListingCard', () => {
       expect(screen.getByText('Jane Q. Agent – Bright Partner Realty')).toBeInTheDocument();
       expect(screen.getByText('(301) 555-0199')).toBeInTheDocument();
       expect(screen.getByText('jane.agent@example.com')).toBeInTheDocument();
-      expect(screen.getByText(/Bright Partner Realty/)).toBeInTheDocument();
+      // The card renders `compact`, which always gives the office its own line (#273) rather
+      // than relying on it showing up inside a truncated `listedBy`, so "Bright Partner Realty"
+      // appears twice: once in `listedBy`, once in the dedicated courtesy line.
+      expect(screen.getByText('Listing courtesy of Bright Partner Realty')).toBeInTheDocument();
     });
 
     it('names the listing firm separately for an IDX row whose listedBy omits it', () => {

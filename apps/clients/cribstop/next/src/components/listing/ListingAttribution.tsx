@@ -37,11 +37,26 @@ import type { Attribution, ListingSource } from '@cribstop/property-contracts';
  *
  * `listedBy` is derived server-side and rendered as delivered — never reassembled from parts here,
  * or the display string could disagree with the attribution it came from.
+ *
+ * `compact` bounds the full IDX block for a height-constrained surface (the search card, the map
+ * popup). It is independent of `density`: `density` decides *which* block renders, `compact` decides
+ * how the full block's own lines are laid out once chosen. Each fact (`listedBy`, contact, courtesy
+ * of office) becomes its own single truncated line with a `title` attribute carrying the full text,
+ * matching the reduced branch's existing pattern for `officeName`. The redundant standalone
+ * `listingAgentName` line is dropped in this mode, because the name is already inside `listedBy`.
+ *
+ * `compact` also always renders the courtesy-of-office line, even when `listedBy` already ends
+ * with `officeName` (the case the non-compact branch skips as a stutter). `listedBy` is
+ * `"<agent> – <office>"`, so the office name sits at the tail, exactly where a truncated single
+ * line clips first — the firm name could otherwise disappear from view entirely, with only a
+ * hover-only `title` carrying it, which does not satisfy 7.58's "reasonably prominent". The
+ * courtesy line has its own `title` and is never truncated away, so the firm stays visible.
  */
 export default function ListingAttribution({
   attribution,
   source,
   density = 'auto',
+  compact = false,
   className = '',
 }: {
   attribution: Attribution;
@@ -51,6 +66,8 @@ export default function ListingAttribution({
    * the one-sentence disclosure form (firm + who listed it, no contact details).
    */
   density?: 'auto' | 'full' | 'courtesy';
+  /** Bounds the full IDX block to one truncated line per fact. See the doc comment above. */
+  compact?: boolean;
   className?: string;
 }) {
   const { listedBy, officeName, listingAgentName, brokerPhone, brokerEmail } = attribution;
@@ -113,13 +130,23 @@ export default function ListingAttribution({
   // At least one contact method is required. The contract guarantees `brokerPhone` and
   // `brokerEmail` are non-nullable on every row, so this is a floor, not a best effort.
   const contact = brokerPhone || brokerEmail;
+  const contactText = [brokerPhone, brokerEmail].filter(Boolean).join(' · ');
+  const courtesyText = `Listing courtesy of ${officeName}`;
+
+  /*
+   * `truncate` clips visually only; the full text stays in the DOM for screen readers. `title`
+   * exposes it on hover for sighted users — always the full displayed line, matching the reduced
+   * branch's `officeName` line, so every compact line behaves the same way on hover.
+   */
+  const compactLineProps = (fullText: string) =>
+    compact ? { className: 'truncate', title: fullText } : {};
 
   return (
     <div className={`text-sm leading-snug text-ink-body ${className}`}>
-      <p>{listedBy}</p>
-      {listingAgentName && listedBy !== listingAgentName && <p>{listingAgentName}</p>}
+      <p {...compactLineProps(listedBy)}>{listedBy}</p>
+      {!compact && listingAgentName && listedBy !== listingAgentName && <p>{listingAgentName}</p>}
       {contact && (
-        <p>
+        <p {...compactLineProps(contactText)}>
           {brokerPhone && (
             <a href={`tel:${brokerPhone.replace(/[^\d+]/g, '')}`} className="hover:underline">
               {brokerPhone}
@@ -136,13 +163,22 @@ export default function ListingAttribution({
       {/*
        * `listedBy` is derived server-side as `<agent or broker> – <office>`, so it usually already
        * names the office and repeating it reads as a stutter ("Jane Agent – Real Broker, LLC /
-       * Listing by Real Broker, LLC"). The line is still rendered whenever `listedBy` does NOT
-       * already end with the office name, because 7.58 requires the listing firm to be identified
-       * and `listedBy` is not guaranteed to carry it.
+       * Listing by Real Broker, LLC"). Outside `compact`, the line is skipped whenever `listedBy`
+       * already ends with the office name, because that copy is unbounded and legible there.
        *
-       * Deliberately NOT truncated, unlike the reduced branch above: 7.58 requires the listing firm
-       * to be identified and reasonably prominent, and an ellipsized firm name is arguably neither.
-       * This branch is the one carrying that obligation, so it wraps rather than clips.
+       * `compact` always renders this line instead, even on that same `endsWith` case. The
+       * `listedBy` line above is truncated in `compact`, and it ends in "<agent> – <office>", so
+       * the office name sits exactly where a single-line ellipsis clips first — the firm name could
+       * disappear from view with nothing but a hover-only `title` carrying it, which is not
+       * "reasonably prominent" per 7.58. This line has its own `title` and is never truncated away,
+       * so the firm identification stays visible regardless of what `listedBy` clips.
+       *
+       * Not truncated outside `compact`: 7.58 requires the listing firm to be identified and
+       * reasonably prominent, and an ellipsized firm name is arguably neither, so this line wraps
+       * rather than clips by default. `compact` truncates it anyway, on a `title`-carried full
+       * name, because a height-constrained card cannot afford a wrapped second line at all — the
+       * name stays in the DOM either way, so the disclosure itself is not dropped, only clipped in
+       * presentation, and the surface stays bounded per the ticket's acceptance criteria.
        *
        * "Listing courtesy of" rather than the "Listing by" used in the reduced branch. On our own
        * inventory the wording is a free choice; on an IDX display it is not necessarily ours to
@@ -151,7 +187,9 @@ export default function ListingAttribution({
        * is most likely to expect, and the invented wording stays on the branch where inventing is
        * allowed.
        */}
-      {!listedBy.endsWith(officeName) && <p>Listing courtesy of {officeName}</p>}
+      {(compact || !listedBy.endsWith(officeName)) && (
+        <p {...compactLineProps(courtesyText)}>{courtesyText}</p>
+      )}
     </div>
   );
 }
