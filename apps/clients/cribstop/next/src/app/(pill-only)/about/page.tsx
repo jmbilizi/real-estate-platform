@@ -81,8 +81,11 @@ export default function AboutPage() {
         <h2 className="font-display text-xl font-bold">Get in Touch</h2>
         <div className="mt-4 space-y-1 text-sm text-ink-muted">
           <p>{BRAND.brokerageShort}</p>
-          <p>{BRAND.supportEmail}</p>
-          <p>{BRAND.supportPhone}</p>
+          <p>
+            <a className="underline hover:text-ink" href={`mailto:${BRAND.contactEmail}`}>
+              {BRAND.contactEmail}
+            </a>
+          </p>
         </div>
       </div>
     </div>
