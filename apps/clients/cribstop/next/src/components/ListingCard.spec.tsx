@@ -219,7 +219,6 @@ describe('ListingCard', () => {
       expect(screen.getByText(/Listing courtesy of Real Broker, LLC/)).toBeInTheDocument();
       expect(screen.queryByText('(301) 555-0101')).not.toBeInTheDocument();
     });
-
   });
 
   describe('open house', () => {
