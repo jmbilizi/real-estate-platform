@@ -6,6 +6,12 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { ListingType } from '@/lib/types';
 import { formatListingPrice } from '@/lib/listing-format';
+import {
+  TILE_LAYER_ATTRIBUTION,
+  TILE_LAYER_SUBDOMAINS,
+  TILE_LAYER_URL,
+  useTileFailure,
+} from '@/components/map-tiles';
 
 function InvalidateOnMount() {
   const map = useMap();
@@ -38,6 +44,7 @@ export default function SingleListingMapInner({
 }: SingleListingMapInnerProps) {
   const PILL_W = 80;
   const PILL_H = 32;
+  const { failed: tilesFailed, onTileError } = useTileFailure();
   const priceDisplay = formatListingPrice(price, listingType);
   const pinLabel = priceDisplay.isWithheld ? 'View listing' : priceDisplay.text;
   const icon = L.divIcon({
@@ -50,7 +57,7 @@ export default function SingleListingMapInner({
   });
 
   return (
-    <div className={`isolate ${className ?? ''}`}>
+    <div className={`relative isolate ${className ?? ''}`}>
       <MapContainer
         center={[latitude, longitude]}
         zoom={14}
@@ -60,10 +67,11 @@ export default function SingleListingMapInner({
         style={{ background: '#f2ede6' }}
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-          subdomains="abcd"
-          maxZoom={20}
+          attribution={TILE_LAYER_ATTRIBUTION}
+          url={TILE_LAYER_URL}
+          subdomains={TILE_LAYER_SUBDOMAINS}
+          maxZoom={19}
+          eventHandlers={{ tileerror: onTileError }}
         />
         <InvalidateOnMount />
         <Circle
@@ -78,6 +86,13 @@ export default function SingleListingMapInner({
         />
         <Marker position={[latitude, longitude]} icon={icon} />
       </MapContainer>
+      {/* Tiles failed to load — surface it rather than a silent blank map (#291). The pin above
+          still carries the real price, so this only calls out the missing basemap imagery. */}
+      {tilesFailed && (
+        <div className="pointer-events-none absolute left-3 right-3 top-3 z-[400] rounded-2xl bg-ink/85 px-3 py-1.5 text-center text-[11px] font-semibold text-white shadow-card backdrop-blur">
+          Map imagery is temporarily unavailable.
+        </div>
+      )}
     </div>
   );
 }
