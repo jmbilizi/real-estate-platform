@@ -7,9 +7,11 @@ import { Queryable, requireId } from './write';
  * across four governed tables, and stays atomic only inside a caller-managed transaction — see the
  * module header. Nothing before this made that a type error: a bare pool connection type-checked
  * identically to a transaction-scoped client and produced no error, only a silently non-atomic
- * batch. This brand cannot be produced by a cast — only `asTransactionScoped()` mints one — so
- * passing a bare `Queryable` here is now a compile error, and `requireTransactionScoped()` is the
- * runtime backstop for a caller that manufactures the brand without actually holding a transaction.
+ * batch. `putListingAttributes()`/`putPropertyAttributes()` now take this type, not a bare
+ * `Queryable`, so passing an un-wrapped pool connection is a compile error for any caller that
+ * goes through the public entry points. `requireTransactionScoped()` is the runtime backstop for
+ * a caller that reaches `putAttributes` through `any`, a cast, or a hand-built object literal that
+ * spoofs the brand without actually holding a transaction.
  */
 export interface TransactionScopedClient extends Queryable {
   readonly __transactionScoped: true;
@@ -350,8 +352,10 @@ const MAX_INTEGER_DIGITS = 14;
  * Counts the digits before the decimal point, ignoring sign. Counted from the LITERAL when one is
  * available and it carries no exponent, so a huge decimal string is judged on its own text rather
  * than on a float that may already have rounded it. A plain `number` input, or a literal using
- * exponent notation, has no unrounded text to fall back to — MAX_INTEGER_DIGITS stays well inside
- * float64's exact-integer range (2^53), so counting from the parsed value there is still exact.
+ * exponent notation, falls back to `BigInt`, never `Number.prototype.toString()`: past 1e21 that
+ * method itself switches to exponential notation ("1e+21"), which would make a value with FEWER
+ * digits than 21 in that string look like it passed the count — the exact overflow this function
+ * exists to catch. `BigInt` never renders exponentially, at any magnitude.
  */
 function countIntegerDigits(literal: string | null, numeric: number): number {
   if (literal !== null && !/[eE]/.test(literal)) {
@@ -360,7 +364,11 @@ function countIntegerDigits(literal: string | null, numeric: number): number {
     const significant = integerPart.replace(/^0+(?=\d)/, '');
     return significant.length;
   }
-  return Math.trunc(Math.abs(numeric)).toString().length;
+  const truncated = Math.trunc(Math.abs(numeric));
+  if (!Number.isFinite(truncated)) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+  return BigInt(truncated).toString().length;
 }
 
 /**
@@ -490,10 +498,11 @@ export const PROPERTY_TARGET: AttributeTarget = {
  * Writes the offer-scoped attributes of one listing, replacing the stored set per field.
  *
  * `ownerId` is trusted to exist: the owner foreign key rejects an unknown id, and this module is
- * called from inside the ingest transaction that created the row.
+ * called from inside the ingest transaction that created the row. `client` must be
+ * `asTransactionScoped()`-wrapped — see that function's doc comment for why.
  */
 export function putListingAttributes(
-  client: Queryable,
+  client: TransactionScopedClient,
   listingId: string,
   attributes: MlsAttributeInput[],
 ): Promise<MlsAttributeWriteResult> {
@@ -507,9 +516,10 @@ export function putListingAttributes(
  * of the building across every offer it ever carries, while a seller concession belongs to one offer.
  * Which table a field may land in is not this caller's choice — it is declared on the field and
  * enforced by a composite foreign key, so passing a listing-scoped field here is rejected.
+ * `client` must be `asTransactionScoped()`-wrapped — see that function's doc comment for why.
  */
 export function putPropertyAttributes(
-  client: Queryable,
+  client: TransactionScopedClient,
   propertyId: string,
   attributes: MlsAttributeInput[],
 ): Promise<MlsAttributeWriteResult> {
@@ -538,11 +548,14 @@ function pendingInsertKeyOf(fieldId: string, valueLookupId: string | null): stri
 }
 
 async function putAttributes(
-  client: Queryable,
+  client: TransactionScopedClient,
   target: AttributeTarget,
   ownerId: string,
   attributes: MlsAttributeInput[],
 ): Promise<MlsAttributeWriteResult> {
+  // The type already requires this brand, but types are erased at runtime — this is the backstop
+  // for a caller that reaches here through `any`, a cast, or a hand-built object literal that
+  // spoofs the brand without actually holding a transaction.
   requireTransactionScoped(client);
 
   const rejected: MlsAttributeRejection[] = [];

@@ -5,6 +5,7 @@ import {
   putPropertyAttributes,
   registerMlsField,
   registerMlsLookupValue,
+  TransactionScopedClient,
 } from './mls-attributes';
 import { Queryable } from './write';
 
@@ -33,9 +34,12 @@ interface FakeRows {
   deleted?: Record<string, unknown>[];
 }
 
-function createFakeClient(data: FakeRows): { client: Queryable; queries: RecordedQuery[] } {
+function createFakeClient(data: FakeRows): {
+  client: TransactionScopedClient;
+  queries: RecordedQuery[];
+} {
   const queries: RecordedQuery[] = [];
-  const client: Queryable = asTransactionScoped({
+  const client = asTransactionScoped({
     query: (text: string, values?: unknown[]) => {
       queries.push({ text, values });
       if (text.includes('FROM mls_fields')) {
@@ -405,6 +409,11 @@ describe('putListingAttributes — typed storage', () => {
     it.each([
       [1e20, 'beyond numeric(20,6) — an Edm.Int64-shaped value overflows the column'],
       [-1e20, 'the same overflow, negative'],
+      [
+        1e21,
+        'the exact magnitude where Number.prototype.toString() itself switches to exponential ' +
+          "notation ('1e+21'), which would under-count the digits if the check used it directly",
+      ],
     ])('rejects %p as out of range — %s', async (value) => {
       const { client } = createFakeClient({ fields: { LotSizeAcres: numericField } });
 
@@ -744,14 +753,18 @@ describe('the writer is fully parameterised', () => {
 
 describe('putAttributes requires a transaction-scoped client', () => {
   it('rejects a bare Queryable that was never wrapped with asTransactionScoped()', async () => {
-    // A bare pool connection type-checked identically to a transaction-scoped client before this
-    // fix, and produced no error — only a silently non-atomic batch across the lookups, the
-    // INSERT and the DELETE. This is the runtime backstop for a caller that never called
-    // asTransactionScoped() after BEGIN.
+    // putListingAttributes now REQUIRES a TransactionScopedClient at the type level, so a bare pool
+    // connection is a compile error for any caller going through the public entry points. This
+    // proves the runtime backstop still catches a caller that reaches past the type system — `any`,
+    // a cast, or a hand-built object literal — the one path the compile-time guard cannot cover.
     const bareClient: Queryable = { query: () => Promise.resolve({ rows: [] }) };
 
     await expect(
-      putListingAttributes(bareClient, 'listing-1', [{ ...BRIGHT_KEY, value: 0.34 }]),
+      putListingAttributes(
+        bareClient as unknown as TransactionScopedClient,
+        'listing-1',
+        [{ ...BRIGHT_KEY, value: 0.34 }],
+      ),
     ).rejects.toThrow(/transaction-scoped client/);
   });
 
