@@ -7,6 +7,19 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.agents/hooks/enforce-pnpm-wrappers.js\""
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.agents/hooks/lane-boundary.js\""
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|NotebookEdit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.agents/hooks/lane-boundary.js\""
           }
         ]
       }
