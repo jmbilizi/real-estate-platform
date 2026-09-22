@@ -79,10 +79,17 @@ guide.
    and Linux. It calls `taskkill` directly from Node, so it needs none of the doubled-slash `//PID`
    workaround that Git Bash's MSYS path conversion otherwise forces.
 
-9. **Write in ASD-STE100 Simplified Technical English, and write only what the reader needs.** This
-   applies to everything an agent writes: ticket bodies, ticket comments, code comments, PR
-   descriptions, commit messages, and replies to the user. See
-   [Writing Standard](#writing-standard).
+9. **A lane writes only inside its own worktree.** `.agents/hooks/lane-boundary.js` refuses an edit
+   outside the lane root, an edit into another lane's worktree, and a `git -C` that points at
+   another tree. It also refuses a direct `git worktree remove|move|prune`. Remove a stale worktree
+   with `pnpm run dev:worktree:reclaim`. That script is a dry run by default. It never removes a
+   worktree that has uncommitted changes or unpushed commits. The hook fails open, so it is a
+   guardrail and not a security boundary.
+
+10. **Write in ASD-STE100 Simplified Technical English, and write only what the reader needs.** This
+    applies to everything an agent writes: ticket bodies, ticket comments, code comments, PR
+    descriptions, commit messages, and replies to the user. See
+    [Writing Standard](#writing-standard).
 
 ## Writing Standard (ASD-STE100)
 
@@ -126,6 +133,7 @@ pnpm run nx:node-lint                  # Bulk by language: nx:{node|dotnet|pytho
 pnpm run nx:workspace-format           # Fix formatting repo-wide
 pnpm run pre-commit                    # Fast validation (format+lint+type-check)
 pnpm run pre-push                      # Full validation (+ test + build)
+pnpm run dev:worktree:reclaim          # Classify and remove stale worktrees (dry run by default)
 pnpm install && pnpm run hooks:setup   # First-time setup
 pnpm run infra:local:cluster:setup     # Local cluster: also :delete | :reset:disk | :images:list
 pnpm run infra:local:registry:ensure   # Local registry: also :status | :delete

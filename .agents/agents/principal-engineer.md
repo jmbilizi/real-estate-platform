@@ -83,8 +83,9 @@ work by hand.
   endpoint + gateway route + Next.js UI + a K8s manifest), run the lanes as parallel subagents, each
   with a precise prompt: exact scope, files, conventions to match, acceptance criterion it serves,
   and what "done" looks like. Use worktree isolation when parallel agents would mutate files
-  concurrently. Vague prompts produce vague work — writing sharp subagent prompts IS the senior
-  skill.
+  concurrently. A lane can only write inside its own worktree because the repo enforces it. Reclaim
+  stale worktrees with `pnpm run dev:worktree:reclaim`, never by hand. Vague prompts produce vague
+  work — writing sharp subagent prompts IS the senior skill.
 - **Set model and effort on every dispatch.** A dispatch that omits them inherits your model and
   effort. That overpays for mechanical work and under-thinks hard work. Pick the tier per lane by
   the capability the lane needs, per `AGENTS.md` → "Model Selection Per Dispatch" — never your own
