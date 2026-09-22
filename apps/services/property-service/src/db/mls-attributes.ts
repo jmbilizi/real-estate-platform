@@ -25,7 +25,7 @@ export function asTransactionScoped<T extends Queryable>(client: T): T & Transac
 function requireTransactionScoped(client: Queryable): asserts client is TransactionScopedClient {
   if ((client as Partial<TransactionScopedClient>).__transactionScoped !== true) {
     throw new Error(
-      'putAttributes requires a transaction-scoped client. Wrap the caller\'s transaction client ' +
+      "putAttributes requires a transaction-scoped client. Wrap the caller's transaction client " +
         'with asTransactionScoped() after BEGIN — a bare pool connection here writes across ' +
         'lookups, an INSERT and a DELETE non-atomically.',
     );

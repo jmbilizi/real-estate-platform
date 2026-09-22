@@ -310,9 +310,7 @@ describe('putListingAttributes — typed storage', () => {
     ]);
 
     expect(result.stored).toBe(1);
-    expect(inserts(queries, 'listing_attributes')[0]?.values?.[4]).toEqual([
-      '9999999999.123456',
-    ]);
+    expect(inserts(queries, 'listing_attributes')[0]?.values?.[4]).toEqual(['9999999999.123456']);
   });
 
   it('accepts a 14-digit integer part, the exact numeric(20,6) boundary', async () => {
@@ -740,7 +738,9 @@ describe('the writer is fully parameterised', () => {
     const columnList = statement.slice(statement.indexOf('(') + 1, statement.indexOf('UNNEST('));
     const columnCount = columnList.split(',').filter((entry) => entry.trim().length > 0).length;
     const placeholders = new Set(
-      statement.slice(statement.indexOf('UNNEST('), statement.indexOf('ON CONFLICT')).match(/\$\d+/g),
+      statement
+        .slice(statement.indexOf('UNNEST('), statement.indexOf('ON CONFLICT'))
+        .match(/\$\d+/g),
     ).size;
 
     // A literal inside UNNEST consumes no placeholder and shifts every later column onto the wrong
@@ -760,11 +760,9 @@ describe('putAttributes requires a transaction-scoped client', () => {
     const bareClient: Queryable = { query: () => Promise.resolve({ rows: [] }) };
 
     await expect(
-      putListingAttributes(
-        bareClient as unknown as TransactionScopedClient,
-        'listing-1',
-        [{ ...BRIGHT_KEY, value: 0.34 }],
-      ),
+      putListingAttributes(bareClient as unknown as TransactionScopedClient, 'listing-1', [
+        { ...BRIGHT_KEY, value: 0.34 },
+      ]),
     ).rejects.toThrow(/transaction-scoped client/);
   });
 
