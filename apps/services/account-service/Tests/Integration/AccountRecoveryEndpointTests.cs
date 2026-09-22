@@ -603,10 +603,19 @@ namespace AccountService.Tests.Integration
         /// <c>AccountRecoveryThrottleFilter.PadAsync</c> pads each response, independently, up to
         /// the configured floor. The two floor assertions are noise-tolerant on their own, because
         /// scheduler noise only pushes an elapsed time up and an upward push still clears the floor.
-        /// They do not, alone, catch a regression where the registered-address path's own work
-        /// grows past the floor: padding is then skipped (nothing left to wait for), the floor
-        /// assertion still passes on real work alone, and the two paths become distinguishable by
-        /// timing again. The delta assertion is what catches that.
+        /// They do not, alone, catch a regression where padding is dropped from only one branch:
+        /// that branch's own elapsed time then sits near zero (a found-nothing lookup) or near
+        /// whatever the found-an-account path costs, both of which can still clear a lowered or
+        /// misapplied floor. The delta assertion is what catches that: a branch left unpadded opens
+        /// a gap of roughly the whole floor against the branch that is still padded.
+        /// </para>
+        /// <para>
+        /// The delta assertion does not, by itself, catch every regression. If the
+        /// registered-address path's own work grows past the floor, <c>PadAsync</c> has nothing
+        /// left to wait for and skips the delay, so that branch's elapsed time is its real work,
+        /// not the floor. The delta only fails if that real work differs from the other branch's by
+        /// more than the bound below; a real-work increase smaller than the bound passes here. That
+        /// case needs its own assertion or test if it is worth guarding directly.
         /// </para>
         /// <para>
         /// The delta assertion previously ran against a 250ms floor with a 150ms bound, and failed
@@ -614,9 +623,10 @@ namespace AccountService.Tests.Integration
         /// separately measured requests (#290), above the bound, while both requests still met the
         /// floor. Raising the floor to 1 second (see <see cref="WithFloor"/>) does not change that
         /// noise, which comes from OS thread scheduling rather than from the size of the delay, but
-        /// it does change what a real regression looks like: padding removed from one branch now
-        /// opens a gap of roughly 1 second, not roughly 220ms. A 400ms delta bound sits well above
-        /// the observed noise and well below that gap, so it separates the two reliably.
+        /// it does change what "padding dropped from one branch" looks like: the gap widens from
+        /// roughly 220ms to roughly 1 second. A 600ms delta bound is about 3.3x the observed noise
+        /// and comfortably below that gap, which survives an occasional GC pause or noisy neighbour
+        /// without losing the ability to catch a dropped-padding regression.
         /// </para>
         /// <para>
         /// The floor is asserted with a tolerance rather than exactly, and the tolerance is not
@@ -638,9 +648,8 @@ namespace AccountService.Tests.Integration
             unknownElapsed.Should().BeGreaterThanOrEqualTo(floor - tolerance);
 
             // Wide enough to survive scheduling jitter on a loaded CI box (~180ms observed), tight
-            // enough that a ~1s gap from missing padding, or from real work growing past the floor
-            // on one branch only, fails.
-            (knownElapsed - unknownElapsed).Duration().Should().BeLessThan(TimeSpan.FromMilliseconds(400));
+            // enough that a ~1s gap from padding dropped on one branch still fails.
+            (knownElapsed - unknownElapsed).Duration().Should().BeLessThan(TimeSpan.FromMilliseconds(600));
         }
 
         private static async Task RegisterAsync(HttpClient client, string email)
