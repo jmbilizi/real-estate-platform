@@ -25,6 +25,13 @@ export const BRAND = {
   /** Support email address. */
   supportEmail: 'support@cribstop.com',
 
+  /**
+   * General contact address shown to a consumer who must reply to us.
+   * It matches the reply-to on outbound account mail, so a consumer who replies
+   * and a consumer who copies the address from a page reach the same inbox.
+   */
+  contactEmail: 'contact@cribstop.com',
+
   /** Support phone number. */
   supportPhone: '(800) 555-CRIB',
 

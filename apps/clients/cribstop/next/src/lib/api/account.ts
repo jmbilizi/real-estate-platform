@@ -65,8 +65,37 @@ async function post<T = unknown>(path: string, payload: unknown): Promise<T> {
   return body as T;
 }
 
+/**
+ * A `401` from `/account/login`. Identity answers wrong password and an unconfirmed account with
+ * the same status and body (#147), so this carries no more detail than that: a caller must offer
+ * both remedies (reset password, resend confirmation) without asserting which applies.
+ */
+export class SignInFailedError extends Error {
+  constructor() {
+    super('Sign-in failed');
+    this.name = 'SignInFailedError';
+  }
+}
+
 export async function loginAccount(payload: LoginRequest): Promise<LoginResponse> {
-  return post<LoginResponse>('/api/account/login', payload);
+  const res = await fetch('/api/account/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (res.status === 401) throw new SignInFailedError();
+
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    const message =
+      typeof body?.error === 'string' && body.error.length > 0
+        ? body.error
+        : `Request failed (${res.status})`;
+    throw new Error(message);
+  }
+
+  return body as LoginResponse;
 }
 
 export async function signupAccount(payload: SignupRequest): Promise<void> {
@@ -173,4 +202,64 @@ export async function confirmPasswordReset(payload: {
       body?.error === 'invalid' || body?.error === 'policy' ? body.error : 'failed';
     throw new PasswordResetError(kind);
   }
+}
+
+/**
+ * Requests a fresh confirmation link. Identity answers unknown, unconfirmed and confirmed
+ * addresses identically (#147); callers must show one neutral confirmation for every case.
+ */
+export async function resendConfirmationEmail(email: string): Promise<void> {
+  const res = await fetch('/api/account/resend-confirmation-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+
+  if (res.status === 429) throw new RateLimitError(retryAfterSeconds(res));
+  if (!res.ok) throw new Error('Unable to send the request');
+}
+
+export type ConfirmEmailOutcome = 'confirmed' | 'invalid';
+
+/**
+ * Redeems a confirmation link's `userId`/`code`. Expired, used, tampered and unknown links all
+ * answer `invalid` (#147's non-enumeration guarantee); an already-confirmed link answers
+ * `confirmed`, same as a first-time success.
+ */
+export async function confirmEmail(payload: {
+  userId: string;
+  code: string;
+}): Promise<ConfirmEmailOutcome> {
+  const params = new URLSearchParams({ userId: payload.userId, code: payload.code });
+  const res = await fetch(`/api/account/confirm-email?${params.toString()}`);
+  return res.ok ? 'confirmed' : 'invalid';
+}
+
+let cachedConfirmationExpiryHours: number | null = null;
+
+/**
+ * Hours a confirmation link stays valid, read from account-service's configured lifetime (#147)
+ * via `/api/account/confirmation-info` so this copy cannot drift from the server's value. Cached
+ * for the tab's lifetime since it does not change between requests.
+ */
+export async function getConfirmationExpiryHours(): Promise<number> {
+  if (cachedConfirmationExpiryHours !== null) return cachedConfirmationExpiryHours;
+
+  try {
+    const res = await fetch('/api/account/confirmation-info');
+    if (res.ok) {
+      const body = await res.json().catch(() => null);
+      const hours: number | null =
+        typeof body?.expiryHours === 'number' && body.expiryHours > 0 ? body.expiryHours : null;
+      if (hours !== null) {
+        cachedConfirmationExpiryHours = hours;
+        return hours;
+      }
+    }
+  } catch {
+    // Network failure — fall through to the default below.
+  }
+
+  cachedConfirmationExpiryHours = 24;
+  return cachedConfirmationExpiryHours;
 }
