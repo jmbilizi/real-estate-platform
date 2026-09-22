@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+from multi_model_inference.config import settings
 from multi_model_inference.core.model_registry import registry
 from multi_model_inference.main import app
 
@@ -94,8 +95,13 @@ def test_ready_when_no_models():
 
 
 def test_ready_returns_503_when_model_not_loaded():
-    """Ready endpoint returns 503 when a registered model failed to load."""
+    """Ready endpoint returns 503 when a registered model failed to load.
+
+    This is the default contract: an image that says nothing about whether its
+    weights are baked must fail closed (#37).
+    """
     with (
+        patch.object(settings, "model_load_required", True),
         patch(
             "multi_model_inference.main._register_models",
             side_effect=_register_not_loaded,
@@ -107,6 +113,50 @@ def test_ready_returns_503_when_model_not_loaded():
     data = response.json()
     assert data["status"] == "loading"
     assert data["models"] == {"fake": "not_loaded"}
+
+
+def test_model_load_required_defaults_to_true():
+    """An image that sets no MODEL_LOAD_REQUIRED fails closed, never degraded."""
+    assert settings.model_load_required is True
+
+
+def test_ready_returns_200_degraded_when_model_optional_and_not_loaded():
+    """A build with no baked weights comes up degraded rather than blocking.
+
+    Local images are built with PRE_DOWNLOAD_MODEL=false, so the weights are
+    absent by design and the runtime download can fail on a network that blocks
+    HuggingFace. That must not hold up a local deploy (#287).
+    """
+    with (
+        patch.object(settings, "model_load_required", False),
+        patch(
+            "multi_model_inference.main._register_models",
+            side_effect=_register_not_loaded,
+        ),
+        TestClient(app) as c,
+    ):
+        response = c.get("/ready")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "degraded"
+    assert data["models"] == {"fake": "not_loaded"}
+
+
+def test_ready_reports_ready_not_degraded_when_optional_model_loads():
+    """`degraded` reflects actual model state, not merely that it was optional."""
+    with (
+        patch.object(settings, "model_load_required", False),
+        patch(
+            "multi_model_inference.main._register_models",
+            side_effect=_register_loaded,
+        ),
+        TestClient(app) as c,
+    ):
+        response = c.get("/ready")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ready"
+    assert data["models"] == {"fake": "loaded"}
 
 
 def test_ready_returns_200_when_all_models_loaded():

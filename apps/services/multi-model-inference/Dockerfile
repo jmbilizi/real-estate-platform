@@ -94,6 +94,16 @@ COPY --from=build /opt/venv /opt/venv
 COPY --from=build /opt/models /opt/models
 ENV PATH="/opt/venv/bin:$PATH"
 
+# Carry the build's own decision into the runtime rather than configuring it twice.
+# PRE_DOWNLOAD_MODEL answers "are the weights baked into this image?", which is exactly
+# what /ready needs to know: baked weights that fail to load are a defect and must fail
+# closed (#37), while an image that downloads at first startup can legitimately fail on a
+# network that blocks HuggingFace and must come up degraded instead of blocking a local
+# deploy (#287). An overlay-level switch would be a second source of truth for one fact.
+# ARG is re-declared here because the earlier one belongs to the build stage.
+ARG PRE_DOWNLOAD_MODEL=true
+ENV MODEL_LOAD_REQUIRED=${PRE_DOWNLOAD_MODEL}
+
 # Security: Create non-root user
 RUN groupadd -r app && useradd -r -g app app && \
     chown -R app:app /app /opt/models

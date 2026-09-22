@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+from multi_model_inference.config import settings
 from multi_model_inference.core.model_registry import registry
 
 router = APIRouter(tags=["health"])
@@ -20,18 +21,39 @@ async def health():
 
 @router.get(
     "/ready",
-    responses={503: {"description": "One or more enabled models are not loaded."}},
+    responses={503: {"description": "One or more required models are not loaded."}},
 )
 async def ready() -> JSONResponse:
-    """Readiness probe -- 200 only when every enabled model is loaded, else 503.
+    """Readiness probe -- 200 when every enabled model is loaded.
 
-    K8s readiness probes key on the status code, not the body. A 200 here
-    would route traffic to a pod with no working model (#37).
+    K8s readiness probes key on the status code, not the body. A 200 with no
+    working model would route traffic to a pod that cannot serve (#37), so a
+    failed load fails closed whenever the weights were baked into the image.
+
+    An image built without baked weights (`MODEL_LOAD_REQUIRED=false`, set from
+    the Dockerfile's `PRE_DOWNLOAD_MODEL` arg) downloads at first startup, which
+    cannot succeed on a network that blocks HuggingFace. Such a build reports
+    `degraded` with a 200 rather than blocking a whole local deploy on a service
+    that is not a priority (#287). The body still names the failed model, so the
+    state is legible instead of a false claim of health.
+
+    Reporting 200 here cannot mask a slow start: `registry.load_all()` runs to
+    completion before the lifespan handler yields, so once this endpoint can be
+    reached at all, "not ready" means failed rather than still loading.
     """
     models_info = {info["name"]: info["status"] for info in registry.list_models()}
     is_ready = registry.all_ready()
-    body = {
-        "status": "ready" if is_ready else "loading",
-        "models": models_info,
-    }
-    return JSONResponse(status_code=200 if is_ready else 503, content=body)
+
+    if is_ready:
+        return JSONResponse(
+            status_code=200, content={"status": "ready", "models": models_info}
+        )
+
+    if settings.model_load_required:
+        return JSONResponse(
+            status_code=503, content={"status": "loading", "models": models_info}
+        )
+
+    return JSONResponse(
+        status_code=200, content={"status": "degraded", "models": models_info}
+    )

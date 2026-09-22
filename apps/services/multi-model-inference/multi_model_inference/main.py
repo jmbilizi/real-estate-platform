@@ -50,9 +50,18 @@ async def lifespan(app: FastAPI):
         for model_name in registry.model_names
         if not registry.get(model_name).is_ready
     ]
-    if failed:
+    if failed and settings.model_load_required:
         logger.error(
             "Model load failed for: %s. Service is running but NOT ready.",
+            ", ".join(failed),
+        )
+    elif failed:
+        # The weights were not baked into this image, so a failed download is an
+        # expected outcome on a network that blocks HuggingFace. Serve degraded
+        # rather than reporting a defect (#287).
+        logger.warning(
+            "Model load failed for: %s. MODEL_LOAD_REQUIRED is false, so the service "
+            "is ready in a degraded state and embedding requests will fail.",
             ", ".join(failed),
         )
     else:
