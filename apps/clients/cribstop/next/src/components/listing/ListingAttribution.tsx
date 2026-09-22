@@ -1,39 +1,34 @@
 import type { Attribution, ListingSource } from '@cribstop/property-contracts';
 
 /**
- * Listing attribution, at the density the row's provenance actually requires.
+ * Listing attribution, at the density the surface calls for.
  *
  * **NAR Policy Statement 7.58 governs IDX displays** — displays of *other participants'* listings
  * obtained through an MLS IDX feed. It requires the listing firm plus a listing-participant-supplied
  * email or phone, reasonably prominent, in a typeface not smaller than the median used for the
- * listing data, and it applies to search results rather than only detail pages.
+ * listing data, and it applies to search results rather than only detail pages. That reasoning is
+ * still correct and still governs the `density="full"` block kept below.
  *
- * A brokerage displaying **its own** listings is not making an IDX display, so 7.58 does not attach.
- * Every row today is `source: 'internal'` and there is no Bright content licence yet (#33), which is
- * why the full block is not currently required — and why this is driven off the row's `source`, the
- * same way `ListingProvenance` is. When Bright content starts flowing, the full block turns on as
- * **data**, not as a card rewrite. That is the whole point of the split: the obligation is switched
- * on by the thing that creates it.
+ * **Stakeholder ruling, 2026-09-22 (#305): every card shows one line, whatever the row's
+ * `source`.** Card surfaces (search card, map popup) no longer branch on `source`. Every card
+ * renders `Listing courtesy of {officeName}` — no listing agent name, no phone, no email, no
+ * `listedBy` line, `brightMLS` rows included. This is a business decision to accept the risk of a
+ * firm-only IDX card, not a finding that 7.58 no longer applies to an IDX row. #306 (human-action)
+ * asks Real Broker LLC and Bright MLS to confirm firm-only attribution is acceptable on a card
+ * before a live Bright row ships; #33 and #146 (Bright content and display rules) are blocked on
+ * that answer. Until #306 closes, treat the 7.58 contact-method obligation as unresolved for cards,
+ * not satisfied by this file.
  *
- * - `source === 'brightMLS'` → the full block: listing agent name, at least one contact method, and
+ * - Card surfaces, any `source`, `density="auto"` (the default) → `Listing courtesy of
+ *   {officeName}`, always, per the ruling above.
+ * - `density="courtesy"` (the detail page, out of scope for #305) → unchanged: a `brightMLS` row
+ *   still gets the full block below instead of the one-sentence disclosure, exactly as before
+ *   #305. A non-`brightMLS` row gets the one-sentence disclosure, also unchanged.
+ * - `density="full"` → the full IDX block: listing agent name, at least one contact method, and
  *   the office name, at the 14px median floor (the card's listing data is 14px location / 12px
- *   stats / 14px price, so the median is 14px). This branch is non-negotiable and must be what
- *   ships the moment #33 lands.
- * - `source === 'internal' | 'other'` → `Listing by {officeName}`. Still attributed on every card
- *   and detail view per PRD §6.2, just without the IDX-specific contact requirements that do not
- *   apply to our own inventory.
- *
- * **The two branches word the firm line differently, on purpose.** The reduced branch says "Listing
- * by {officeName}"; the full block says "Listing courtesy of {officeName}". Wording our own
- * inventory is a free choice, so the reduced branch uses plain English. Wording an IDX display is
- * not necessarily ours to make — Bright's display rules may prescribe it — so the full block keeps
- * the conventional IDX phrasing, which is what an MLS rulebook is most likely to expect, and the
- * invented wording stays on the branch where inventing is allowed. Settling the IDX string for good
- * is #33's job, along with the rest of the display rules and broker sign-off. No Bright row exists
- * yet, so nothing is misattributed today — but do not treat the full block's string as settled.
- *
- * `density="full"` overrides the reduction for surfaces that are not height-constrained (the detail
- * page), where more attribution is never the risk.
+ *   stats / 14px price, so the median is 14px). No surface passes this prop directly; it stays in
+ *   the code, reachable and tested, so widening it back onto cards if #306 comes back "contact
+ *   method required" is a prop change on the card call sites, not a rewrite.
  *
  * `listedBy` is derived server-side and rendered as delivered — never reassembled from parts here,
  * or the display string could disagree with the attribution it came from.
@@ -62,8 +57,10 @@ export default function ListingAttribution({
   attribution: Attribution;
   source: ListingSource;
   /**
-   * `auto` follows the row's source; `full` always renders the complete block; `courtesy` renders
-   * the one-sentence disclosure form (firm + who listed it, no contact details).
+   * `auto` (the default) renders the one-line courtesy form for every `source`. `full` renders the
+   * complete IDX block regardless of `source` — see the header comment. `courtesy` renders the
+   * one-sentence disclosure form (firm + who listed it, no contact details), used by the detail
+   * page.
    */
   density?: 'auto' | 'full' | 'courtesy';
   /** Bounds the full IDX block to one truncated line per fact. See the doc comment above. */
@@ -73,15 +70,12 @@ export default function ListingAttribution({
   const { listedBy, officeName, listingAgentName, brokerPhone, brokerEmail } = attribution;
 
   /*
-   * An IDX row always gets the full block, whatever density the surface asked for.
-   *
-   * This check comes **before** `courtesy` on purpose. When `courtesy` was evaluated first it was
-   * the one path in the app where a `brightMLS` row rendered without a contact method — the exact
-   * branch this file's header calls non-negotiable — and because every row is `internal` today the
-   * omission would not have shown up until #33 shipped it to production. A density is a request
-   * about layout; it cannot waive an obligation the row's own `source` creates.
+   * #305: a card (`density="auto"`, the default) never shows the full block, whatever `source`
+   * is — that is the whole point of the ruling. The detail page (`density="courtesy"`) is out of
+   * scope for #305, so a `brightMLS` row there still gets the full block instead of the courtesy
+   * sentence, exactly as before. `density="full"` is the explicit, source-independent override.
    */
-  const showFullBlock = density === 'full' || source === 'brightMLS';
+  const showFullBlock = density === 'full' || (density === 'courtesy' && source === 'brightMLS');
 
   /*
    * The disclosure form, for a surface that already identifies the agent elsewhere.
@@ -113,16 +107,16 @@ export default function ListingAttribution({
     return (
       <p
         /*
-         * Office names run long ("Long & Foster Real Estate, Inc. — Bethesda Gateway"), and a
-         * wrapped second line makes this card taller than every other tile in the grid, which is
-         * the uniform-height problem all over again. One line, ellipsized. `truncate` is CSS only,
-         * so the full name stays in the DOM and screen readers still read it whole; `title` exposes
-         * it on hover for sighted users.
+         * #305: every card, every `source`, one line. Office names run long ("Long & Foster Real
+         * Estate, Inc. — Bethesda Gateway"), and a wrapped second line makes this card taller than
+         * every other tile in the grid, which is the uniform-height problem all over again. One
+         * line, ellipsized. `truncate` is CSS only, so the full name stays in the DOM and screen
+         * readers still read it whole; `title` exposes it on hover for sighted users.
          */
         className={`truncate text-[13px] leading-snug text-ink-muted ${className}`}
         title={officeName}
       >
-        Listing by {officeName}
+        Listing courtesy of {officeName}
       </p>
     );
   }
@@ -163,8 +157,9 @@ export default function ListingAttribution({
       {/*
        * `listedBy` is derived server-side as `<agent or broker> – <office>`, so it usually already
        * names the office and repeating it reads as a stutter ("Jane Agent – Real Broker, LLC /
-       * Listing by Real Broker, LLC"). Outside `compact`, the line is skipped whenever `listedBy`
-       * already ends with the office name, because that copy is unbounded and legible there.
+       * Listing courtesy of Real Broker, LLC"). Outside `compact`, the line is skipped whenever
+       * `listedBy` already ends with the office name, because that copy is unbounded and legible
+       * there.
        *
        * `compact` always renders this line instead, even on that same `endsWith` case. The
        * `listedBy` line above is truncated in `compact`, and it ends in "<agent> – <office>", so
@@ -179,13 +174,6 @@ export default function ListingAttribution({
        * name, because a height-constrained card cannot afford a wrapped second line at all — the
        * name stays in the DOM either way, so the disclosure itself is not dropped, only clipped in
        * presentation, and the surface stays bounded per the ticket's acceptance criteria.
-       *
-       * "Listing courtesy of" rather than the "Listing by" used in the reduced branch. On our own
-       * inventory the wording is a free choice; on an IDX display it is not necessarily ours to
-       * make — Bright's display rules may prescribe it, and settling that is #33's job with broker
-       * sign-off. So this branch keeps the conventional IDX phrasing, which is what an MLS rulebook
-       * is most likely to expect, and the invented wording stays on the branch where inventing is
-       * allowed.
        */}
       {(compact || !listedBy.endsWith(officeName)) && (
         <p {...compactLineProps(courtesyText)}>{courtesyText}</p>

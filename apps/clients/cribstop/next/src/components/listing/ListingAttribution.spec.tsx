@@ -20,11 +20,47 @@ function aBrightMlsRow(overrides: Partial<ListingCardRow> = {}) {
   });
 }
 
-describe('ListingAttribution — brightMLS row, compact', () => {
+describe('ListingAttribution — card default (density="auto"), every source', () => {
+  it('renders one courtesy line for a brightMLS row, same as internal (#305)', () => {
+    const row = aBrightMlsRow();
+    render(<ListingAttribution attribution={row} source={row.source} compact />);
+
+    expect(screen.getByText(`Listing courtesy of ${row.officeName}`)).toBeInTheDocument();
+    expect(screen.queryByText(row.listedBy)).not.toBeInTheDocument();
+    expect(screen.queryByText(row.listingAgentName!)).not.toBeInTheDocument();
+    expect(screen.queryByText(row.brokerPhone!)).not.toBeInTheDocument();
+    expect(screen.queryByText(row.brokerEmail!)).not.toBeInTheDocument();
+  });
+
+  it('renders one courtesy line for an internal row', () => {
+    const row = aListingCardRow({ source: 'internal' });
+    render(<ListingAttribution attribution={row} source={row.source} compact />);
+
+    expect(screen.getByText(`Listing courtesy of ${row.officeName}`)).toBeInTheDocument();
+  });
+
+  it('renders one courtesy line for an other row', () => {
+    const row = aListingCardRow({ source: 'other' });
+    render(<ListingAttribution attribution={row} source={row.source} compact />);
+
+    expect(screen.getByText(`Listing courtesy of ${row.officeName}`)).toBeInTheDocument();
+  });
+
+  it('truncates a long office name to one line, keeping the full text in the DOM via title', () => {
+    const row = aBrightMlsRow();
+    render(<ListingAttribution attribution={row} source={row.source} />);
+
+    const line = screen.getByText(`Listing courtesy of ${row.officeName}`);
+    expect(line.className).toContain('truncate');
+    expect(line).toHaveAttribute('title', row.officeName);
+  });
+});
+
+describe('ListingAttribution — density="full", the kept IDX block', () => {
   it('renders each fact as one truncated line with a title, and drops the redundant agent line', () => {
     const row = aBrightMlsRow();
     const { container } = render(
-      <ListingAttribution attribution={row} source={row.source} compact />,
+      <ListingAttribution attribution={row} source={row.source} density="full" compact />,
     );
 
     // The redundant standalone `listingAgentName` line is gone in compact mode. The name is
@@ -49,12 +85,22 @@ describe('ListingAttribution — brightMLS row, compact', () => {
 
   it('renders the same full, non-truncated block when compact is omitted', () => {
     const row = aBrightMlsRow();
-    const { container } = render(<ListingAttribution attribution={row} source={row.source} />);
+    const { container } = render(
+      <ListingAttribution attribution={row} source={row.source} density="full" />,
+    );
 
     // The redundant standalone line is back, and nothing is truncated.
     expect(screen.getByText(row.listingAgentName!)).toBeInTheDocument();
     const lines = container.querySelectorAll(':scope > p');
     lines.forEach((line) => expect(line.className).not.toContain('truncate'));
+  });
+
+  it('renders the full block for an internal row too — density="full" is not source-gated', () => {
+    const row = aListingCardRow({ source: 'internal' });
+    render(<ListingAttribution attribution={row} source={row.source} density="full" compact />);
+
+    expect(screen.getByText(row.listedBy)).toBeInTheDocument();
+    expect(screen.getByText(`Listing courtesy of ${row.officeName}`)).toBeInTheDocument();
   });
 
   it('still shows the firm name as its own line when listedBy already ends with officeName', () => {
@@ -66,7 +112,7 @@ describe('ListingAttribution — brightMLS row, compact', () => {
       listedBy: 'Jane Q. Agentworth-Fairweather III – Long & Foster Real Estate, Inc.',
     });
     const { container } = render(
-      <ListingAttribution attribution={row} source={row.source} compact />,
+      <ListingAttribution attribution={row} source={row.source} density="full" compact />,
     );
 
     const courtesyLine = screen.getByText(`Listing courtesy of ${row.officeName}`);
@@ -77,10 +123,12 @@ describe('ListingAttribution — brightMLS row, compact', () => {
     const lines = container.querySelectorAll(':scope > p');
     expect(lines.length).toBeLessThanOrEqual(3);
   });
+});
 
+describe('ListingAttribution — detail page', () => {
   it('leaves the detail page\'s density="courtesy" rendering unchanged', () => {
     // The detail page passes `density="courtesy"` on an `internal` row and never passes
-    // `compact`. This pins that the one-sentence disclosure form is untouched by this change.
+    // `compact`. This pins that the one-sentence disclosure form is untouched by #305.
     const row = aListingCardRow({ source: 'internal' });
     render(<ListingAttribution attribution={row} source={row.source} density="courtesy" />);
 

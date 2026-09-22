@@ -151,13 +151,14 @@ describe('ListingCard', () => {
     });
   });
 
-  describe('NAR 7.58 attribution — applies to search results, not only detail pages', () => {
+  describe('card attribution — one courtesy line, every source (#305)', () => {
     /**
-     * 7.58 governs **IDX displays** — other participants' listings from an MLS feed. A brokerage
-     * displaying its own inventory is not making an IDX display, so density follows the row's
-     * `source`. This is the regression that would otherwise ship silently the moment #33 lands.
+     * Stakeholder ruling 2026-09-22 (#305): every card shows one line, "Listing courtesy of
+     * {officeName}", whatever the row's `source`. No listing agent name, phone, email, or
+     * `listedBy` line on a card, `brightMLS` included. #306 tracks confirming this with Real
+     * Broker LLC and Bright MLS before a live Bright row ships.
      */
-    it('renders the full block for a brightMLS row: agent name, a contact method and the office', () => {
+    it('renders one courtesy line for a brightMLS row, with no agent name or contact method', () => {
       render(
         <ListingCard
           listing={aListingCardRow({
@@ -171,16 +172,14 @@ describe('ListingCard', () => {
         />,
       );
 
-      expect(screen.getByText('Jane Q. Agent – Bright Partner Realty')).toBeInTheDocument();
-      expect(screen.getByText('(301) 555-0199')).toBeInTheDocument();
-      expect(screen.getByText('jane.agent@example.com')).toBeInTheDocument();
-      // The card renders `compact`, which always gives the office its own line (#273) rather
-      // than relying on it showing up inside a truncated `listedBy`, so "Bright Partner Realty"
-      // appears twice: once in `listedBy`, once in the dedicated courtesy line.
       expect(screen.getByText('Listing courtesy of Bright Partner Realty')).toBeInTheDocument();
+      expect(screen.queryByText('Jane Q. Agent – Bright Partner Realty')).not.toBeInTheDocument();
+      expect(screen.queryByText('Jane Q. Agent')).not.toBeInTheDocument();
+      expect(screen.queryByText('(301) 555-0199')).not.toBeInTheDocument();
+      expect(screen.queryByText('jane.agent@example.com')).not.toBeInTheDocument();
     });
 
-    it('names the listing firm separately for an IDX row whose listedBy omits it', () => {
+    it('names the listing firm for an IDX row whose listedBy omits it', () => {
       render(
         <ListingCard
           listing={aListingCardRow({
@@ -191,18 +190,14 @@ describe('ListingCard', () => {
         />,
       );
 
-      expect(screen.getByText('Jane Agent')).toBeInTheDocument();
-      // "Listing courtesy of", not the reduced branch's "Listing by": the full block is the IDX
-      // display, where the conventional phrasing is what Bright's display rules are most likely to
-      // prescribe, so it is not ours to reword ahead of #33. See `ListingAttribution`'s header.
-      expect(screen.getByText(/Listing courtesy of Bright Partner Realty/)).toBeInTheDocument();
+      expect(screen.getByText('Listing courtesy of Bright Partner Realty')).toBeInTheDocument();
+      expect(screen.queryByText('Jane Agent')).not.toBeInTheDocument();
     });
 
-    it('reduces to the office attribution for our own inventory, where 7.58 does not attach', () => {
+    it('renders the same one line for our own inventory', () => {
       render(<ListingCard listing={aListingCardRow({ source: 'internal' })} />);
 
-      expect(screen.getByText(/Listing by Real Broker, LLC/)).toBeInTheDocument();
-      // No contact block — the IDX contact requirement does not apply to a non-IDX display.
+      expect(screen.getByText(/Listing courtesy of Real Broker, LLC/)).toBeInTheDocument();
       expect(screen.queryByText('(301) 555-0101')).not.toBeInTheDocument();
       expect(screen.queryByText('sample.agent1@example.com')).not.toBeInTheDocument();
     });
@@ -211,42 +206,20 @@ describe('ListingCard', () => {
       const officeName = 'Long & Foster Real Estate, Inc. — Bethesda Gateway';
       render(<ListingCard listing={aListingCardRow({ source: 'internal', officeName })} />);
 
-      const line = screen.getByText(/Listing by Long & Foster/);
+      const line = screen.getByText(/Listing courtesy of Long & Foster/);
       expect(line).toHaveClass('truncate');
       // Clipped visually, never lost: `truncate` is CSS only, so the full name stays in the DOM
       // for screen readers, and `title` surfaces it on hover.
       expect(line).toHaveAttribute('title', officeName);
     });
 
-    it('reduces an `other` row the same way', () => {
+    it('renders an `other` row the same way', () => {
       render(<ListingCard listing={aListingCardRow({ source: 'other' })} />);
 
-      expect(screen.getByText(/Listing by Real Broker, LLC/)).toBeInTheDocument();
+      expect(screen.getByText(/Listing courtesy of Real Broker, LLC/)).toBeInTheDocument();
       expect(screen.queryByText('(301) 555-0101')).not.toBeInTheDocument();
     });
 
-    it('renders listedBy as delivered rather than reassembling it from parts', () => {
-      render(
-        <ListingCard
-          listing={aListingCardRow({
-            source: 'brightMLS',
-            listedBy: 'Jane Q. Agent – Real Broker, LLC',
-          })}
-        />,
-      );
-      expect(screen.getByText('Jane Q. Agent – Real Broker, LLC')).toBeInTheDocument();
-    });
-
-    it('keeps an IDX row at or above the median type size used for the listing data', () => {
-      // Listing data on the card renders at 14px (location), 12px (stats) and 14px (price), so the
-      // median is 14px — `text-sm`. Anything smaller fails 7.58's typeface floor, which is why the
-      // floor is asserted on the branch 7.58 actually governs.
-      render(<ListingCard listing={aListingCardRow({ source: 'brightMLS' })} />);
-      const attribution = screen.getByText('Sample Agent 1 – Real Broker, LLC').parentElement;
-
-      expect(attribution?.className).toContain('text-sm');
-      expect(attribution?.className).not.toMatch(/text-\[1[0-3]px\]|text-xs/);
-    });
   });
 
   describe('open house', () => {

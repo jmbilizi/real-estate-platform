@@ -245,11 +245,10 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
        * - the stats line (absent for a parcel with unknown lot size, or an all-null dwelling) —
        *   `h-[18px]`, which is `caption-sm`'s line box; a slot sized for the old 12px text would
        *   clip the 13px it now holds
-       * - attribution, which is one line for `internal`/`other` rows (see `ListingAttribution`)
+       * - attribution, one line for every row regardless of `source` (see `ListingAttribution`)
        *
        * The open-house date row is gone entirely — it moved onto the image badge, and it was the
-       * row that only some cards had. Attribution height still varies between an IDX row and one of
-       * ours, which is uniform within any single-source result set; today every row is `internal`.
+       * row that only some cards had.
        */}
       <div className="pt-2">
         {/*
@@ -296,11 +295,9 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
         </p>
 
         {/*
-         * Density follows the row's `source`. NAR 7.58 governs IDX displays — other participants'
-         * listings from an MLS feed — so a `brightMLS` row gets the full block (agent name, a contact
-         * method, the office name, at the 14px median floor) on search results as well as detail,
-         * while our own inventory carries the office attribution PRD §6.2 requires. #33 turns the
-         * full block on as data rather than as a card rewrite.
+         * #305: one line, "Listing courtesy of {officeName}", for every `source`. See
+         * `ListingAttribution`'s header for the stakeholder ruling and the open compliance
+         * question tracked in #306.
          */}
         <ListingAttribution
           attribution={listing}
