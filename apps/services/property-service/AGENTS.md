@@ -67,6 +67,7 @@ pnpm exec nx serve property-service        # Run locally (port 3002)
 pnpm exec nx test property-service         # Unit tests — no database required
 pnpm exec nx e2e property-service          # Boots the service, then hits it over HTTP
 pnpm exec nx lint property-service         # Also: type-check, build
+pnpm run infra:local:property-db:url            # Derive DATABASE_URL from the local cluster
 pnpm exec nx run property-service:migrate       # Apply migrations (needs DATABASE_URL)
 pnpm exec nx run property-service:migrate-down  # Roll back the last migration
 pnpm exec nx run property-service:seed          # Load the sample dataset into $DATABASE_URL
@@ -133,14 +134,21 @@ it only owns the schema inside it.
 Postgres is **18** (`infra/docker/postgres/Dockerfile` — PostGIS + pgvector), so `uuidv7()` is
 native and every primary key uses it rather than random `uuid_generate_v4()`.
 
-- **Local**: copy `.env.example` to `.env` and set `DATABASE_URL`. Migrations run via the `migrate`
-  target, which uses `--envPath .env`. This is the workstation path for `migrate`/`migrate-down` and
-  for the e2e compliance fixtures — it is **not** how you get sample data into a cluster (see
-  below).
+- **Local**: run `pnpm run infra:local:property-db:url` (#58). It derives `DATABASE_URL` from the
+  running local cluster and writes it into the gitignored root `.env`, which Nx loads for every
+  task. Nothing is transcribed by hand and no `kubectl` call is yours to make. It reads the user,
+  the database name and the URL shape from the live `property-service` Deployment, the password from
+  `postgres-secret`, and the host port from the `postgres-svc` `portForward` entry in
+  `skaffold.yaml`. A wrong kube context, an absent Deployment or a closed port each refuse by name.
+  This is the workstation path for `migrate`, `migrate-down`, `seed` and the e2e compliance fixtures
+  — it is **not** how you get sample data into a cluster (see below).
+  - The password it reads is the committed placeholder on the local cluster, so it is **not
+    sensitive** there: local-only, gitignored, never shared. Dev, test and prod are unchanged, and
+    CI substitutes real values in memory. The script still refuses any context but the local
+    cluster, so it cannot lift a real credential onto a workstation.
 - **In-cluster**: `DATABASE_URL` is assembled in the Deployment from `postgres-svc` plus the
   `PROPERTY_SERVICE_DB_USER_PASSWORD` key of `postgres-secret`. Migrations run in a **`migrate`
-  initContainer** using the same image, invoking `node-pg-migrate` directly — deliberately with no
-  `--envPath`, because containers get env vars, not a `.env` file.
+  initContainer** using the same image, invoking `node-pg-migrate` directly.
 - Migrations are plain CommonJS in `migrations/` and are **not** part of the webpack bundle, so the
   Dockerfile copies that directory into the runtime image explicitly. If you move it, the
   initContainer silently has nothing to apply.
@@ -609,7 +617,8 @@ skips reproduces the vacuous-assertion problem with extra steps. CI does not run
 cannot break CI:
 
 ```bash
-DATABASE_URL=... PROPERTY_SERVICE_E2E_FIXTURES=1 pnpm exec nx e2e property-service
+pnpm run infra:local:property-db:url                       # once, while the stack is up
+PROPERTY_SERVICE_E2E_FIXTURES=1 pnpm exec nx e2e property-service
 ```
 
 Note the e2e harness and the in-cluster port-forward both use **3002**; pass `PORT=3003` (honoured

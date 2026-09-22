@@ -22,8 +22,7 @@
 
 const { spawnSync } = require('child_process');
 const path = require('path');
-const fs = require('fs');
-const yaml = require('js-yaml');
+const { assertLocalKubeContext } = require('./local-kube-context');
 
 const workspaceRoot = path.resolve(__dirname, '../..');
 
@@ -42,33 +41,6 @@ function capture(command, commandArgs) {
 
 function run(command, commandArgs) {
   return spawnSync(command, commandArgs, { cwd: workspaceRoot, stdio: 'inherit', shell: false });
-}
-
-/** Mirrors run-skaffold.js: the local cluster config is the source of truth for the context. */
-function localKubeContextCandidates() {
-  const configPath = path.resolve(
-    workspaceRoot,
-    'infra/k8s/podman/local/cluster/cluster-config.yaml',
-  );
-  if (!fs.existsSync(configPath)) return null;
-
-  let config;
-  try {
-    config = yaml.load(fs.readFileSync(configPath, 'utf8'));
-  } catch {
-    return null;
-  }
-  if (!config || typeof config !== 'object') return null;
-
-  const clusterName = typeof config.cluster_name === 'string' ? config.cluster_name.trim() : '';
-  if (!clusterName) return null;
-
-  const candidates = [];
-  if (typeof config.kubectl_context === 'string' && config.kubectl_context.trim()) {
-    candidates.push(config.kubectl_context.trim());
-  }
-  candidates.push(`kind-${clusterName}`, clusterName);
-  return candidates;
 }
 
 function parseArgs(argv) {
@@ -116,20 +88,10 @@ function parseArgs(argv) {
 
 const options = parseArgs(process.argv.slice(2));
 
-const candidates = localKubeContextCandidates();
-if (!candidates) {
-  console.error('ERROR: no local cluster config found — refusing to guess a target cluster.');
-  process.exit(1);
-}
-
-const current = capture('kubectl', ['config', 'current-context']);
-if (!current.ok || !candidates.includes(current.stdout)) {
-  console.error(
-    'ERROR: refusing to trigger a job outside the local cluster.\n' +
-      `  Current context: ${current.ok ? current.stdout : '<none>'}\n` +
-      `  Expected one of: ${candidates.join(', ')}\n` +
-      '  Bring the local cluster up with: pnpm run infra:local:cluster:setup',
-  );
+try {
+  assertLocalKubeContext({ action: 'trigger a job' });
+} catch (error) {
+  console.error(`ERROR: ${error.message}`);
   process.exit(1);
 }
 
