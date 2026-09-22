@@ -1,4 +1,5 @@
 import {
+  asTransactionScoped,
   MlsAttributeInput,
   putListingAttributes,
   putPropertyAttributes,
@@ -34,13 +35,26 @@ interface FakeRows {
 
 function createFakeClient(data: FakeRows): { client: Queryable; queries: RecordedQuery[] } {
   const queries: RecordedQuery[] = [];
-  const client: Queryable = {
+  const client: Queryable = asTransactionScoped({
     query: (text: string, values?: unknown[]) => {
       queries.push({ text, values });
       if (text.includes('FROM mls_fields')) {
-        const fieldName = String(values?.[2]);
-        const row = data.fields?.[fieldName];
-        return Promise.resolve({ rows: row ? [row] : [] });
+        // The writer resolves EVERY distinct field of the call in one query, keyed by three
+        // parallel arrays — the fake answers in that shape rather than the single-field shape.
+        const [, , fieldNames] = (values ?? []) as [unknown, unknown, string[]];
+        const rows: Record<string, unknown>[] = [];
+        for (const fieldName of fieldNames ?? []) {
+          const row = data.fields?.[fieldName];
+          if (row) {
+            rows.push({
+              ...row,
+              originating_system: 'testMLS',
+              reso_resource: 'Property',
+              field_name: fieldName,
+            });
+          }
+        }
+        return Promise.resolve({ rows });
       }
       if (text.includes('FROM mls_lookup_values')) {
         // The writer resolves a whole field's vocabulary in one `= ANY($2)` query, so the fake
@@ -63,7 +77,7 @@ function createFakeClient(data: FakeRows): { client: Queryable; queries: Recorde
       }
       return Promise.resolve({ rows: [] });
     },
-  };
+  });
   return { client, queries };
 }
 
@@ -162,6 +176,26 @@ describe('putListingAttributes — fail closed without aborting the batch', () =
     expect(result.stored).toBe(0);
   });
 
+  it('resolves EVERY distinct field of one call in ONE round trip, not one per field', async () => {
+    // A field-per-query loop was ~200 extra round trips on a listing whose payload is mostly
+    // attributes — the same throughput argument resolveLookupValues already won for values.
+    const { client, queries } = createFakeClient({
+      fields: {
+        LotSizeAcres: numericField,
+        ArchitecturalStyle: lookupField,
+      },
+      lookupValues: { Colonial: { id: 'value-1', retired_at: null } },
+    });
+
+    await putListingAttributes(client, 'listing-1', [
+      { ...BRIGHT_KEY, value: 0.34 },
+      { ...BRIGHT_KEY, fieldName: 'ArchitecturalStyle', value: 'Colonial' },
+    ]);
+
+    const fieldLookups = queries.filter((q) => q.text.includes('FROM mls_fields'));
+    expect(fieldLookups).toHaveLength(1);
+  });
+
   it('resolves a whole enumerated field in ONE round trip, not one per value', async () => {
     // The ingest workload is throughput-bound; a query per value is ~200 extra round trips on a
     // vocabulary-heavy listing.
@@ -236,19 +270,20 @@ describe('putListingAttributes — typed storage', () => {
 
     expect(result.stored).toBe(1);
     const insert = inserts(queries, 'listing_attributes')[0];
-    // Column order in the INSERT: owner, field_id, field_scope, value_kind, numeric, boolean, date,
-    // timestamp, lookup, source_modification_timestamp.
+    // ONE batched statement: every column is a parallel array, one entry per written row. Column
+    // order: owner, field_id, field_scope, value_kind, numeric, boolean, date, timestamp, lookup,
+    // source_modification_timestamp.
     expect(insert?.values).toEqual([
-      'listing-1',
-      'field-1',
-      'listing',
-      'decimal',
-      0.34,
-      null,
-      null,
-      null,
-      null,
-      null,
+      ['listing-1'],
+      ['field-1'],
+      ['listing'],
+      ['decimal'],
+      [0.34],
+      [null],
+      [null],
+      [null],
+      [null],
+      [null],
     ]);
   });
 
@@ -257,7 +292,49 @@ describe('putListingAttributes — typed storage', () => {
 
     await putListingAttributes(client, 'listing-1', [{ ...BRIGHT_KEY, value: '0.34' }]);
 
-    expect(inserts(queries, 'listing_attributes')[0]?.values?.[4]).toBe(0.34);
+    // Bound as the trimmed STRING, not `Number('0.34')` — see the precision test below for why.
+    expect(inserts(queries, 'listing_attributes')[0]?.values?.[4]).toEqual(['0.34']);
+  });
+
+  it('binds the trimmed literal string for value_numeric, never the parsed Number, so a value beyond float64 precision does not round', async () => {
+    // Number('9999999999.123456') rounds to ...123455 before it ever reaches the column, while
+    // numeric(20,6) holds the literal exactly. This is the AC's own verified example.
+    const { client, queries } = createFakeClient({ fields: { LotSizeAcres: numericField } });
+
+    const result = await putListingAttributes(client, 'listing-1', [
+      { ...BRIGHT_KEY, value: '9999999999.123456' },
+    ]);
+
+    expect(result.stored).toBe(1);
+    expect(inserts(queries, 'listing_attributes')[0]?.values?.[4]).toEqual([
+      '9999999999.123456',
+    ]);
+  });
+
+  it('accepts a 14-digit integer part, the exact numeric(20,6) boundary', async () => {
+    const { client, queries } = createFakeClient({ fields: { LotSizeAcres: numericField } });
+
+    const result = await putListingAttributes(client, 'listing-1', [
+      { ...BRIGHT_KEY, value: '99999999999999.123456' },
+    ]);
+
+    expect(result.stored).toBe(1);
+    expect(inserts(queries, 'listing_attributes')[0]?.values?.[4]).toEqual([
+      '99999999999999.123456',
+    ]);
+  });
+
+  it('rejects a 15-digit integer part by DIGIT COUNT, not by a float64 magnitude comparison', async () => {
+    // A float comparison against 1e14 can land on either side of the boundary once the literal is
+    // parsed; counting digits on the literal itself cannot.
+    const { client } = createFakeClient({ fields: { LotSizeAcres: numericField } });
+
+    const result = await putListingAttributes(client, 'listing-1', [
+      { ...BRIGHT_KEY, value: '999999999999999.123456' },
+    ]);
+
+    expect(result.rejected[0]?.reason).toBe('type_mismatch');
+    expect(result.stored).toBe(0);
   });
 
   it.each<[unknown, string]>([
@@ -322,7 +399,7 @@ describe('putListingAttributes — typed storage', () => {
 
       await putListingAttributes(client, 'listing-1', [{ ...BRIGHT_KEY, value: '2026-02-28' }]);
 
-      expect(inserts(queries, 'listing_attributes')[0]?.values?.[6]).toBe('2026-02-28');
+      expect(inserts(queries, 'listing_attributes')[0]?.values?.[6]).toEqual(['2026-02-28']);
     });
 
     it.each([
@@ -394,10 +471,62 @@ describe('putListingAttributes — typed storage', () => {
     ]);
 
     expect(result.stored).toBe(2);
+    // ONE batched statement carries both rows, never one INSERT per value.
     const written = inserts(queries, 'listing_attributes');
-    expect(written.map((q) => q.values?.[8])).toEqual(['value-1', 'value-2']);
+    expect(written).toHaveLength(1);
+    expect(written[0]?.values?.[8]).toEqual(['value-1', 'value-2']);
     // The lookup rows carry no scalar value at all — this is the Fair Housing guarantee in practice.
-    expect(written.every((q) => q.values?.[4] === null)).toBe(true);
+    expect(written[0]?.values?.[4]).toEqual([null, null]);
+  });
+
+  it('de-duplicates a lookup field that lists the SAME value twice, so one batched statement never targets one ON CONFLICT row twice', async () => {
+    // Two entries resolving to the same (field_id, value_lookup_id) would make the single unnest()
+    // INSERT hit that row twice in one statement — Postgres error 21000, aborting the whole ingest
+    // transaction. This is the exact failure the batching in putAttributes must not reintroduce.
+    const { client, queries } = createFakeClient({
+      fields: { ArchitecturalStyle: lookupField },
+      lookupValues: { Colonial: { id: 'value-1', retired_at: null } },
+    });
+
+    const result = await putListingAttributes(client, 'listing-1', [
+      { ...BRIGHT_KEY, fieldName: 'ArchitecturalStyle', value: ['Colonial', 'Colonial'] },
+    ]);
+
+    expect(result.stored).toBe(1);
+    const written = inserts(queries, 'listing_attributes');
+    expect(written).toHaveLength(1);
+    expect(written[0]?.values?.[8]).toEqual(['value-1']);
+  });
+
+  it('batches writes across TWO DIFFERENT fields into one statement, preserving the column pairing', async () => {
+    const { client, queries } = createFakeClient({
+      fields: {
+        LotSizeAcres: numericField,
+        ArchitecturalStyle: lookupField,
+      },
+      lookupValues: { Colonial: { id: 'value-1', retired_at: null } },
+    });
+
+    const result = await putListingAttributes(client, 'listing-1', [
+      { ...BRIGHT_KEY, value: 0.5 },
+      { ...BRIGHT_KEY, fieldName: 'ArchitecturalStyle', value: 'Colonial' },
+    ]);
+
+    expect(result.stored).toBe(2);
+    const written = inserts(queries, 'listing_attributes');
+    expect(written).toHaveLength(1);
+    const values = written[0]?.values as unknown[][];
+    // Each column array's index i belongs to the SAME source row across every column — the
+    // numeric row's field_id pairs with its own value_numeric, never the lookup row's.
+    const fieldIds = values[1];
+    const numerics = values[4];
+    const lookupIds = values[8];
+    const numericIndex = fieldIds?.indexOf('field-1') ?? -1;
+    const lookupIndex = fieldIds?.indexOf('field-2') ?? -1;
+    expect(numerics?.[numericIndex]).toBe(0.5);
+    expect(lookupIds?.[numericIndex]).toBeNull();
+    expect(lookupIds?.[lookupIndex]).toBe('value-1');
+    expect(numerics?.[lookupIndex]).toBeNull();
   });
 });
 
@@ -471,8 +600,8 @@ describe('putPropertyAttributes', () => {
 
     expect(result.stored).toBe(1);
     const insert = inserts(queries, 'property_attributes')[0];
-    expect(insert?.values?.[0]).toBe('property-1');
-    expect(insert?.values?.[2]).toBe('property');
+    expect(insert?.values?.[0]).toEqual(['property-1']);
+    expect(insert?.values?.[2]).toEqual(['property']);
   });
 
   it('rejects a listing-scoped field, so an offer fact cannot be recorded as durable', async () => {
@@ -599,17 +728,38 @@ describe('the writer is fully parameterised', () => {
 
     const insert = inserts(queries, 'listing_attributes')[0];
     const statement = insert?.text ?? '';
-    const columnList = statement.slice(statement.indexOf('(') + 1, statement.indexOf('VALUES'));
+    const columnList = statement.slice(statement.indexOf('(') + 1, statement.indexOf('UNNEST('));
     const columnCount = columnList.split(',').filter((entry) => entry.trim().length > 0).length;
     const placeholders = new Set(
-      statement
-        .slice(statement.indexOf('VALUES'), statement.indexOf('ON CONFLICT'))
-        .match(/\$\d+/g),
+      statement.slice(statement.indexOf('UNNEST('), statement.indexOf('ON CONFLICT')).match(/\$\d+/g),
     ).size;
 
-    // A literal in the VALUES list consumes no placeholder and shifts every later column onto the
-    // wrong value — the trap this project's AGENTS.md warns about, asserted rather than reviewed.
+    // A literal inside UNNEST consumes no placeholder and shifts every later column onto the wrong
+    // array — the trap this project's AGENTS.md warns about, asserted rather than reviewed.
     expect(placeholders).toBe(columnCount);
+    // One array parameter per column, whatever the row count.
     expect(insert?.values).toHaveLength(columnCount);
+  });
+});
+
+describe('putAttributes requires a transaction-scoped client', () => {
+  it('rejects a bare Queryable that was never wrapped with asTransactionScoped()', async () => {
+    // A bare pool connection type-checked identically to a transaction-scoped client before this
+    // fix, and produced no error — only a silently non-atomic batch across the lookups, the
+    // INSERT and the DELETE. This is the runtime backstop for a caller that never called
+    // asTransactionScoped() after BEGIN.
+    const bareClient: Queryable = { query: () => Promise.resolve({ rows: [] }) };
+
+    await expect(
+      putListingAttributes(bareClient, 'listing-1', [{ ...BRIGHT_KEY, value: 0.34 }]),
+    ).rejects.toThrow(/transaction-scoped client/);
+  });
+
+  it('accepts a client tagged by asTransactionScoped()', async () => {
+    const { client } = createFakeClient({ fields: {} });
+
+    await expect(
+      putListingAttributes(client, 'listing-1', [{ ...BRIGHT_KEY, value: 0.34 }]),
+    ).resolves.toBeDefined();
   });
 });
