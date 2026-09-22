@@ -357,8 +357,8 @@ stays unset by this mapper, because that marker is #146's mechanism and still wa
 400 to every `$filter` on this tier, so `crawl.ts` reads the whole resource and matches client-side
 against the `ListingKey`s already staged for `BrightProperties`. Only matching rows are staged, so
 `property_db` stays small. The cost is the traffic: 3,403,084 rows at 1000 per page is roughly 3,400
-requests, about 28 minutes at the placeholder rate. Off by default
-(`BRIGHT_MLS_CRAWL_RESOURCES` is empty); local and dev opt in with different page caps.
+requests, about 28 minutes at the placeholder rate. Off by default (`BRIGHT_MLS_CRAWL_RESOURCES` is
+empty); local and dev opt in with different page caps.
 
 **A pass resumes on the `@odata.nextLink`, not on a timestamp.** An unordered scan has no watermark,
 so the next link is persisted in `bright_replication_cursor.cursor_record_key` and a capped run

@@ -47,7 +47,7 @@ import {
   probeMetadata,
 } from './bright-client';
 import { type BrightConfig, resolveBrightConfig } from './config';
-import { crawlResource, type CrawlResourceResult } from './crawl';
+import { CrawlFailure, crawlResource, type CrawlResourceResult } from './crawl';
 import { RateLimiter } from './rate-limiter';
 import { replicateResource, type ReplicateResourceResult, ReplicationFailure } from './replicate';
 import { BRIGHT_RESOURCES, resolveCrawlResource, resolveResource } from './resources';
@@ -144,6 +144,7 @@ function toCrawlReport(result: CrawlResourceResult): BrightResourceReport {
     pagesFetched: result.pagesFetched,
     recordsFetched: result.recordsFetched,
     recordsStaged: result.recordsStaged,
+    recordsSkipped: result.recordsSkipped,
     retries: result.retries,
     cursorAt: null,
     cursorAgeHours: null,
@@ -211,7 +212,11 @@ function replicatedMessage(
   const behind = reports.filter((r) => r.cappedByPageLimit).map((r) => r.resource);
   const stalled = reports.filter((r) => r.stalled).map((r) => r.resource);
   const starved = reports.filter((r) => r.starved).map((r) => r.resource);
+  const skipped = reports
+    .filter((r) => (r.recordsSkipped ?? 0) > 0)
+    .map((r) => `${r.resource}=${r.recordsSkipped}`);
   return (
+    (skipped.length === 0 ? '' : `Records skipped for an unreadable key: ${skipped.join(', ')}. `) +
     `Replicated ${counts.recordsStaged} record(s) into staging from ` +
     `${config.endpoint.serviceRootHost} over ${counts.pagesFetched} page(s), feed tier ` +
     `${config.feed}, ${counts.retries} retry/retries. ` +
@@ -336,8 +341,14 @@ export async function runBrightIngest(
       const store = options.store ?? createStagingStore();
       const resources = replication.resources.map(resolveResource);
 
+      const crawlResources = replication.crawlResources.map(resolveCrawlResource);
+
       if (replication.fullResync) {
-        for (const resource of resources) {
+        // Both sets, not just the incremental one. `BrightMedia` is only ever in `crawlResources`,
+        // so resetting `resources` alone left the stored `@odata.nextLink` in place and a
+        // requested resync silently resumed mid-pass. `resetCursor` nulls both cursor columns, so
+        // the same call clears a timestamp cursor and a stored next link.
+        for (const resource of [...resources, ...crawlResources]) {
           await store.resetCursor(resource.entitySet, runId);
         }
       }
@@ -369,7 +380,7 @@ export async function runBrightIngest(
       // The full-crawl pass (#191), after replication and before mapping. Ordered, not incidental:
       // the crawl matches media against the `ListingKey`s replication just staged, so running it
       // first would match against the previous run's set and miss every new listing's photos.
-      for (const resource of replication.crawlResources.map(resolveCrawlResource)) {
+      for (const resource of crawlResources) {
         const result = await crawlResource({
           resource,
           serviceRoot: config.endpoint.serviceRoot,
@@ -409,6 +420,12 @@ export async function runBrightIngest(
       // like it skipped work.
       if (error instanceof ReplicationFailure) {
         reports.push(toReport(error.partial, config.replication.cursorMaxAgeHours));
+      }
+      // Same reason for the crawl. A pass that staged 389 pages and then met a 500 has really
+      // moved its stored next link, and a report with no BrightMedia entry at all reads as "the
+      // crawl did nothing".
+      if (error instanceof CrawlFailure) {
+        reports.push(toCrawlReport(error.partial));
       }
       counts = summarise(
         reports,

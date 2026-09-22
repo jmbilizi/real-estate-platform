@@ -27,7 +27,7 @@ function createFakeDb(options: {
   stagedPayloads: unknown[];
   listings: { key: string; id: string; isSample?: boolean }[];
   seededMedia?: MediaRowState[];
-}): { client: Queryable; media: () => MediaRowState[] } {
+}): { client: Queryable; media: () => MediaRowState[]; statements: () => string[] } {
   const media: MediaRowState[] = [...(options.seededMedia ?? [])];
 
   function assertOnePrimary(listingId: string): void {
@@ -39,10 +39,26 @@ function createFakeDb(options: {
     }
   }
 
+  const statements: string[] = [];
+
   const client: Queryable = {
     query: async (text: string, values: unknown[] = []) => {
+      statements.push(text.trim().split(/\s+/).slice(0, 3).join(' '));
+
+      if (text === 'BEGIN' || text === 'COMMIT' || text === 'ROLLBACK') {
+        return { rows: [] };
+      }
+
       if (text.includes('FROM bright_staging_records')) {
         return { rows: options.stagedPayloads.map((payload) => ({ payload })) };
+      }
+
+      if (text.includes('NOT EXISTS')) {
+        // The listingsWithNoMedia count. Answered from the fake's own state.
+        const withMedia = new Set(media.map((row) => row.listing_id));
+        return {
+          rows: [{ n: options.listings.filter((l) => !withMedia.has(l.id)).length }],
+        };
       }
 
       if (text.includes('FROM listings')) {
@@ -69,52 +85,46 @@ function createFakeDb(options: {
       }
 
       if (text.includes('INSERT INTO listing_media')) {
-        const [
-          ,
-          listingId,
-          sourceMediaKey,
-          sourceUrl,
-          altText,
-          caption,
-          sortOrder,
-          isPrimary,
-          isSample,
-        ] = values as [
-          string,
-          string,
-          string,
-          string,
-          string | null,
-          string | null,
-          number,
-          boolean,
-          boolean,
-        ];
-        const existing = media.find(
-          (row) => row.listing_id === listingId && row.source_media_key === sourceMediaKey,
-        );
-        if (existing) {
-          Object.assign(existing, {
-            source_url: sourceUrl,
-            alt_text: altText,
-            caption,
-            sort_order: sortOrder,
-            is_primary: isPrimary,
-            is_sample: isSample,
-            // Deliberately NOT updated, matching the DO UPDATE list in write.ts.
-          });
-        } else {
-          media.push({
-            listing_id: listingId,
-            source_media_key: sourceMediaKey,
-            source_url: sourceUrl,
-            alt_text: altText,
-            caption,
-            sort_order: sortOrder,
-            is_primary: isPrimary,
-            retained_when_suppressed: false,
-            is_sample: isSample,
-          });
+        // One multi-row statement: $1 is the listing id, then 8 bound values per photo.
+        const listingId = values[0] as string;
+        for (let at = 1; at < values.length; at += 8) {
+          const [, sourceMediaKey, sourceUrl, altText, caption, sortOrder, isPrimary, isSample] =
+            values.slice(at, at + 8) as [
+              string,
+              string,
+              string,
+              string | null,
+              string | null,
+              number,
+              boolean,
+              boolean,
+            ];
+          const existing = media.find(
+            (row) => row.listing_id === listingId && row.source_media_key === sourceMediaKey,
+          );
+          if (existing) {
+            Object.assign(existing, {
+              source_url: sourceUrl,
+              alt_text: altText,
+              caption,
+              sort_order: sortOrder,
+              is_primary: isPrimary,
+              is_sample: isSample,
+              // `retained_when_suppressed` deliberately absent, matching the DO UPDATE list.
+            });
+          } else {
+            media.push({
+              listing_id: listingId,
+              source_media_key: sourceMediaKey,
+              source_url: sourceUrl,
+              alt_text: altText,
+              caption,
+              sort_order: sortOrder,
+              is_primary: isPrimary,
+              retained_when_suppressed: false,
+              is_sample: isSample,
+            });
+          }
         }
         assertOnePrimary(listingId);
         return { rows: [] };
@@ -141,7 +151,7 @@ function createFakeDb(options: {
     },
   };
 
-  return { client, media: () => media };
+  return { client, media: () => media, statements: () => statements };
 }
 
 function photo(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -336,6 +346,83 @@ describe('mapStagedBrightMedia', () => {
     await mapStagedBrightMedia(client);
 
     expect(media()).toContainEqual(seeded);
+  });
+
+  it('wraps each listing write in its own transaction', async () => {
+    const { client, statements } = createFakeDb({
+      stagedPayloads: [photo({ MediaKey: 1 }), photo({ MediaKey: 2, ResourceRecordKey: 900200 })],
+      listings: [
+        { key: '900100', id: 'listing-a' },
+        { key: '900200', id: 'listing-b' },
+      ],
+    });
+
+    await mapStagedBrightMedia(client);
+
+    const seen = statements();
+    expect(seen.filter((s) => s === 'BEGIN')).toHaveLength(2);
+    expect(seen.filter((s) => s === 'COMMIT')).toHaveLength(2);
+    expect(seen).not.toContain('ROLLBACK');
+    // The three writes must sit between one BEGIN and its COMMIT.
+    const begin = seen.indexOf('BEGIN');
+    const commit = seen.indexOf('COMMIT');
+    expect(seen.slice(begin, commit)).toEqual(
+      expect.arrayContaining([
+        'UPDATE listing_media SET',
+        'INSERT INTO listing_media',
+        'DELETE FROM listing_media',
+      ]),
+    );
+  });
+
+  it('rolls back and rethrows when a write fails, rather than leaving a torn gallery', async () => {
+    const { client } = createFakeDb({
+      stagedPayloads: [photo()],
+      listings: [{ key: '900100', id: 'listing-a' }],
+    });
+    const seen: string[] = [];
+    const failing: Queryable = {
+      query: async (text: string, values?: unknown[]) => {
+        seen.push(text.trim().split(/\s+/).slice(0, 3).join(' '));
+        if (text.includes('DELETE FROM listing_media')) {
+          throw new Error('connection lost');
+        }
+        return client.query(text, values);
+      },
+    };
+
+    await expect(mapStagedBrightMedia(failing)).rejects.toThrow('connection lost');
+    expect(seen).toContain('ROLLBACK');
+    expect(seen).not.toContain('COMMIT');
+  });
+
+  it('issues ONE insert statement per listing, not one per photo', async () => {
+    const { client, statements } = createFakeDb({
+      stagedPayloads: [1, 2, 3, 4, 5].map((key) =>
+        photo({ MediaKey: key, MediaDisplayOrder: key }),
+      ),
+      listings: [{ key: '900100', id: 'listing-a' }],
+    });
+
+    await mapStagedBrightMedia(client);
+
+    expect(statements().filter((s) => s === 'INSERT INTO listing_media')).toHaveLength(1);
+  });
+
+  it('counts Bright listings left with no photo, measured against the table', async () => {
+    // listing-b matches no staged media, so it must be reported as still having none.
+    const { client } = createFakeDb({
+      stagedPayloads: [photo()],
+      listings: [
+        { key: '900100', id: 'listing-a' },
+        { key: '900200', id: 'listing-b' },
+      ],
+    });
+
+    const report = await mapStagedBrightMedia(client);
+
+    expect(report.listingsWithMedia).toBe(1);
+    expect(report.listingsWithNoMedia).toBe(1);
   });
 
   it('carries the feed caption onto alt_text, which the address boundary can then withhold', async () => {

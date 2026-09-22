@@ -252,6 +252,30 @@ async function loadListingRefs(
 }
 
 /**
+ * Counts Bright listings this service holds that carry no feed photo (#191).
+ *
+ * Measured against `listings`, never against the media this pass happened to see. An earlier
+ * version derived it from the pass's own lookup map, where it was always zero by construction — a
+ * counter that could not report the condition it existed to report.
+ *
+ * This is the headline anomaly signal. A run where it equals the Bright listing count is the #191
+ * defect returning, whatever the other counters say.
+ */
+async function countBrightListingsWithNoMedia(client: Queryable): Promise<number> {
+  const { rows } = await client.query(
+    `SELECT count(*)::int AS n
+       FROM listings l
+      WHERE l.source_system = $1
+        AND NOT EXISTS (
+          SELECT 1 FROM listing_media m
+           WHERE m.listing_id = l.id AND m.source_media_key IS NOT NULL
+        )`,
+    [SOURCE_SYSTEM],
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
+/**
  * Maps staged `BrightMedia` rows into `listing_media` (#191).
  *
  * Runs AFTER `mapStagedBrightProperties`, and the order is load-bearing: a photo needs its listing
@@ -311,21 +335,33 @@ export async function mapStagedBrightMedia(client: Queryable): Promise<BrightMed
       continue;
     }
     const gallery = buildListingGallery(group);
-    await replaceFeedListingMedia(
-      client,
-      ref.id,
-      gallery.map((item) => ({
-        source_media_key: item.sourceMediaKey,
-        source_url: item.url,
-        alt_text: item.altText,
-        caption: item.caption,
-        sort_order: item.sortOrder,
-        is_primary: item.isPrimary,
-        // Carried from the listing, never assumed false. A sample-tier Bright listing's photos
-        // must be swept by the same `is_sample` delete that removes the listing (#93).
-        is_sample: ref.isSample,
-      })),
-    );
+    // ONE transaction per listing. `replaceFeedListingMedia` issues three statements that must
+    // commit together: a pod killed between them leaves the gallery with no primary image, or with
+    // withdrawn photos still visible. Per listing rather than per pass, because a pass can hold
+    // media for thousands of listings and one transaction over all of them holds locks for the
+    // whole run.
+    await client.query('BEGIN');
+    try {
+      await replaceFeedListingMedia(
+        client,
+        ref.id,
+        gallery.map((item) => ({
+          source_media_key: item.sourceMediaKey,
+          source_url: item.url,
+          alt_text: item.altText,
+          caption: item.caption,
+          sort_order: item.sortOrder,
+          is_primary: item.isPrimary,
+          // Carried from the listing, never assumed false. A sample-tier Bright listing's photos
+          // must be swept by the same `is_sample` delete that removes the listing (#93).
+          is_sample: ref.isSample,
+        })),
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
     listingsWithMedia += 1;
     mediaWritten += gallery.length;
   }
@@ -337,7 +373,7 @@ export async function mapStagedBrightMedia(client: Queryable): Promise<BrightMed
     rejectedByReason,
     unmatchedMedia,
     listingsWithMedia,
-    listingsWithNoMedia: refs.size - listingsWithMedia,
+    listingsWithNoMedia: await countBrightListingsWithNoMedia(client),
     mediaWritten,
   };
 }

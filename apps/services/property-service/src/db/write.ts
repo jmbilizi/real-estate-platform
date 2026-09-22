@@ -570,18 +570,27 @@ export interface FeedMediaRow {
  *
  * Three statements, in an order the indexes dictate rather than one chosen for readability.
  *
- *  1. **Clear `is_primary` first.** `idx_listing_media_one_primary` is a partial unique index on
- *     `listing_id WHERE is_primary`. Promoting a new primary before demoting the old one violates
- *     it mid-statement, so the run fails on a reordered gallery — the ordinary case, not a rare one.
- *  2. **Upsert on `(listing_id, source_media_key)`.** That index is partial too
- *     (`WHERE source_media_key IS NOT NULL`), so the conflict target repeats the predicate. Without
- *     it Postgres cannot infer the index and answers "no unique or exclusion constraint matching".
+ *  1. **Clear `is_primary` first, on EVERY row of the listing.** `idx_listing_media_one_primary` is
+ *     a partial unique index on `listing_id WHERE is_primary`, so a listing may hold exactly one
+ *     primary row of any origin. Promoting the feed's primary before demoting the incumbent
+ *     violates it, and that is the ordinary case: any reordered gallery hits it. The clear is
+ *     deliberately NOT scoped to `source_media_key IS NOT NULL`, unlike statement 3. A seeded photo
+ *     holding `is_primary` would otherwise block the feed's primary with an index violation, and
+ *     failing the run over a photo ordering is worse than demoting a seeded row. Statement 3's
+ *     "never touched" claim is about DELETION, which is a different guarantee.
+ *  2. **Upsert on `(listing_id, source_media_key)`, one multi-row statement.** That index is
+ *     partial too (`WHERE source_media_key IS NOT NULL`), so the conflict target repeats the
+ *     predicate. Without it Postgres cannot infer the index and answers "no unique or exclusion
+ *     constraint matching". One statement rather than one per photo: a pass rewrites every matched
+ *     listing's whole gallery on every run, so a round trip per photo is O(total staged media) per
+ *     run and does not fit the CronJob's deadline at real volume.
  *  3. **Delete the feed rows this pass did not send.** Scoped to `source_media_key IS NOT NULL`, so
- *     a seeded or hand-inserted photo on the same listing is never touched. This is the
+ *     a seeded or hand-inserted photo on the same listing is never deleted. This is the
  *     purge-on-withdrawal path the `listing_media` migration was designed for.
  *
- * Caller supplies the transaction. The three statements must commit together, or a listing can be
- * left with no primary image.
+ * **Caller supplies the transaction.** The three statements must commit together, or a pod killed
+ * mid-sequence leaves a listing with no primary image, duplicate sort orders, or withdrawn photos
+ * still visible. `mapStagedBrightMedia` opens one per listing.
  */
 export async function replaceFeedListingMedia(
   client: Queryable,
@@ -593,12 +602,32 @@ export async function replaceFeedListingMedia(
     [listingId],
   );
 
-  for (const row of rows) {
+  if (rows.length > 0) {
+    const values: unknown[] = [listingId];
+    const tuples = rows.map((row) => {
+      // $1 is the listing id, shared by every tuple. Each row then binds 8 of its own.
+      const base = values.length;
+      values.push(
+        randomUUID(),
+        row.source_media_key,
+        row.source_url,
+        row.alt_text,
+        row.caption,
+        row.sort_order,
+        row.is_primary,
+        row.is_sample,
+      );
+      return (
+        `($${base + 1}, $1, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, ` +
+        `$${base + 6}, $${base + 7}, false, $${base + 8})`
+      );
+    });
+
     await client.query(
       `INSERT INTO listing_media
          (id, listing_id, source_media_key, source_url, alt_text, caption, sort_order,
           is_primary, retained_when_suppressed, is_sample)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, $9)
+       VALUES ${tuples.join(', ')}
        ON CONFLICT (listing_id, source_media_key) WHERE source_media_key IS NOT NULL
        DO UPDATE SET
          source_url = EXCLUDED.source_url,
@@ -607,17 +636,7 @@ export async function replaceFeedListingMedia(
          sort_order = EXCLUDED.sort_order,
          is_primary = EXCLUDED.is_primary,
          is_sample = EXCLUDED.is_sample`,
-      [
-        randomUUID(),
-        listingId,
-        row.source_media_key,
-        row.source_url,
-        row.alt_text,
-        row.caption,
-        row.sort_order,
-        row.is_primary,
-        row.is_sample,
-      ],
+      values,
     );
   }
 

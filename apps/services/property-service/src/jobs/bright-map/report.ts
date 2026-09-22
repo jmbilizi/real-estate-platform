@@ -40,8 +40,10 @@ export interface BrightMapRunReport {
  * matches a staged `ListingKey`, so a large count here means the property pass rejected listings
  * the media pass still holds photos for. That is a real signal, not noise.
  *
- * `listingsWithNoMedia` counts Bright listings this pass found no photo for. A run where that is
- * every listing is the #191 defect returning, and it reads as an anomaly rather than as a success.
+ * `listingsWithNoMedia` counts Bright listings in `listings` that carry no feed photo AFTER this
+ * pass. It is measured against the table, not against the media the pass happened to see, so it
+ * can actually report the condition it exists for. A run where it equals the Bright listing count
+ * is the #191 defect returning, and it reads as an anomaly rather than as a success.
  */
 export interface BrightMediaMapReport {
   readonly staged: number;

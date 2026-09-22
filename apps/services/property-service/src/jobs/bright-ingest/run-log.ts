@@ -78,6 +78,15 @@ export interface BrightResourceReport {
   readonly pagesFetched: number;
   readonly recordsFetched: number;
   readonly recordsStaged: number;
+  /**
+   * Records a full crawl read but could not use, because the record's own key was absent or
+   * unreadable (#191). Absent for an incremental pass, which has no such case.
+   *
+   * Reported rather than dropped: the crawl skips these so one bad record cannot wedge a pass that
+   * has no way to step past its page, and a silent skip would make that indistinguishable from a
+   * feed with fewer photos.
+   */
+  readonly recordsSkipped?: number;
   readonly retries: number;
   /** The cursor instant this pass reached. `null` before the resource has ever staged a record. */
   readonly cursorAt: string | null;

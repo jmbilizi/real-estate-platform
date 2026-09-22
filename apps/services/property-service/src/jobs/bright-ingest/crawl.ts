@@ -61,6 +61,12 @@ export interface CrawlResourceResult {
   /** Records whose `ResourceRecordKey` was in `keepRecordKeys`. A subset of `recordsFetched`. */
   readonly recordsMatched: number;
   readonly recordsStaged: number;
+  /**
+   * Matched records dropped for a bad own key (missing, or a non-safe-integer number). A subset of
+   * `recordsMatched`, disjoint from `recordsStaged`. An unordered scan has no way to step past a
+   * page it cannot finish, so a bad key is skipped and counted rather than aborting the pass.
+   */
+  readonly recordsSkipped: number;
   readonly retries: number;
   /** True when the page cap stopped the pass with more of the feed left to read. */
   readonly cappedByPageLimit: boolean;
@@ -95,26 +101,24 @@ function readResourceRecordKey(record: Record<string, unknown>): string | null {
 }
 
 /**
- * Reads the resource's own key as text, for use as the staging `recordKey`.
+ * Reads the resource's own key as text, for use as the staging `recordKey`. `null` when unusable.
  *
- * Mirrors `readKey` in `replicate.ts`. Every Bright key is `Edm.Int64`; above 2^53 a JSON number is
- * not the integer Bright sent, and this value becomes the staging primary key.
+ * `replicate.ts`'s `readKey` throws on the same condition, which is correct there: the cursor has a
+ * timestamp to resume from, so a caller can skip the bad record and move on. This crawl has no
+ * timestamp — the resume position IS the page — so throwing here would wedge the pass permanently:
+ * the next run resumes at the same stored link, refetches the same page, and throws again forever.
+ * Matches `map-media.ts`'s `keyText`, which rejects the same condition (`missing_media_key`) rather
+ * than throwing.
  */
-function readOwnKey(record: Record<string, unknown>, resource: BrightResource): string {
+function readOwnKey(record: Record<string, unknown>, resource: BrightResource): string | null {
   const raw = record[resource.keyField];
   if (typeof raw === 'number') {
-    if (!Number.isSafeInteger(raw)) {
-      throw new Error(
-        `${resource.entitySet}.${resource.keyField} arrived as ${raw}, which is outside the exact ` +
-          'integer range of a JSON number. The key would be rounded, and it is the staging primary key.',
-      );
-    }
-    return String(raw);
+    return Number.isSafeInteger(raw) ? String(raw) : null;
   }
   if (typeof raw === 'string' && raw.length > 0) {
     return raw;
   }
-  throw new Error(`${resource.entitySet} record has no usable ${resource.keyField}.`);
+  return null;
 }
 
 /** `MediaModificationTimestamp`, else `MediaCreationTimestamp`, else the run's own clock. */
@@ -162,6 +166,7 @@ export async function crawlResource(params: CrawlResourceParams): Promise<CrawlR
   let recordsFetched = 0;
   let recordsMatched = 0;
   let recordsStaged = 0;
+  let recordsSkipped = 0;
   let cappedByPageLimit = false;
   let passComplete = false;
 
@@ -171,6 +176,7 @@ export async function crawlResource(params: CrawlResourceParams): Promise<CrawlR
     recordsFetched,
     recordsMatched,
     recordsStaged,
+    recordsSkipped,
     retries,
     cappedByPageLimit,
     passComplete,
@@ -189,11 +195,22 @@ export async function crawlResource(params: CrawlResourceParams): Promise<CrawlR
       });
       recordsMatched += matched.length;
 
-      const staged: StagedRecord[] = matched.map((record) => ({
-        recordKey: readOwnKey(record, resource),
-        modifiedAt: readModifiedAt(record, now),
-        payload: record,
-      }));
+      // A matched record with no usable own key is skipped and counted, never thrown. This scan has
+      // no timestamp to resume past a bad page — throwing here would wedge the pass permanently on
+      // the stored next link. See readOwnKey.
+      const staged: StagedRecord[] = [];
+      for (const record of matched) {
+        const ownKey = readOwnKey(record, resource);
+        if (ownKey === null) {
+          recordsSkipped += 1;
+          continue;
+        }
+        staged.push({
+          recordKey: ownKey,
+          modifiedAt: readModifiedAt(record, now),
+          payload: record,
+        });
+      }
 
       const nextLink = page.nextLink;
       // No timestamp to advance, so the cursor this pass persists IS the resume position: the raw

@@ -218,6 +218,47 @@ describe('crawlResource — client-side match', () => {
     expect(result.recordsStaged).toBe(2);
     expect(memory.rows.size).toBe(2);
   });
+
+  /**
+   * A matched record with an unusable MediaKey (missing, or a non-safe-integer number) must be
+   * skipped and counted, never thrown. This scan has no timestamp to resume past a bad page — a
+   * throw here would wedge the pass on the stored @odata.nextLink forever, since the next run
+   * resumes at the same page and hits the same record again.
+   */
+  it('skips a record with an unusable own key, stages the rest, and completes', async () => {
+    const records = [
+      {
+        MediaKey: 8000,
+        ResourceRecordKey: 9000,
+        MediaModificationTimestamp: '2026-09-02T00:00:00Z',
+      },
+      // A non-safe-integer MediaKey is unusable as a staging primary key.
+      {
+        MediaKey: 8001.5,
+        ResourceRecordKey: 9001,
+        MediaModificationTimestamp: '2026-09-02T00:01:00Z',
+      },
+      {
+        MediaKey: 8002,
+        ResourceRecordKey: 9002,
+        MediaModificationTimestamp: '2026-09-02T00:02:00Z',
+      },
+    ];
+    const { memory, invoke } = run({
+      records,
+      pageSize: 3,
+      keepRecordKeys: new Set(['9000', '9001', '9002']),
+    });
+
+    const result = await invoke();
+
+    expect(result.recordsFetched).toBe(3);
+    expect(result.recordsMatched).toBe(3);
+    expect(result.recordsSkipped).toBe(1);
+    expect(result.recordsStaged).toBe(2);
+    expect(result.passComplete).toBe(true);
+    expect(memory.rows.size).toBe(2);
+  });
 });
 
 describe('crawlResource — failures', () => {
