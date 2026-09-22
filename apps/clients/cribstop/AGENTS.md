@@ -83,6 +83,10 @@ pnpm exec nx lint cribstop-next        # Also: test, type-check
   `source` (`brightMLS` → Bright's line, `internal` → ours, `other` → neither) — never a build flag,
   env var or default. `isSample` must be labelled on every surface a sample row appears on (card,
   map popup, detail, modal, carousels), and `sponsored` must be labelled wherever it renders.
+  **Exception (#305, stakeholder ruling 2026-09-22):** card surfaces (search card, map popup) render
+  one line, "Listing courtesy of {officeName}", for every `source`, including `brightMLS`. The
+  detail page still branches on `source`. Human-action ticket #306 tracks confirming this exception
+  with Real Broker LLC and Bright MLS before a live Bright row ships.
 - **Site-level** Bright/MLS wording in `Footer.tsx` and `app/(pill-only)/about/page.tsx` is a
   separate matter from per-listing provenance: removing MLS attribution can itself violate IDX
   display rules. That wording is #33's to deliver with broker sign-off — flag it, do not invent

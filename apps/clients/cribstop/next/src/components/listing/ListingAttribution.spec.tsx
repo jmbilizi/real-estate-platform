@@ -103,6 +103,18 @@ describe('ListingAttribution — density="full", the kept IDX block', () => {
     expect(screen.getByText(`Listing courtesy of ${row.officeName}`)).toBeInTheDocument();
   });
 
+  it('keeps the full block at or above the median type size used for the listing data', () => {
+    // Listing data on the card renders at 14px (location), 12px (stats) and 14px (price), so the
+    // median is 14px — `text-sm`. This is the block 7.58's typeface floor still governs (the
+    // detail page reaches it for a brightMLS row), so the floor stays pinned here.
+    const row = aBrightMlsRow();
+    render(<ListingAttribution attribution={row} source={row.source} density="full" />);
+    const block = screen.getByText(row.listedBy).parentElement;
+
+    expect(block?.className).toContain('text-sm');
+    expect(block?.className).not.toMatch(/text-\[1[0-3]px\]|text-xs/);
+  });
+
   it('still shows the firm name as its own line when listedBy already ends with officeName', () => {
     // `listedBy` is "<agent> – <office>", so when it already ends with `officeName` the office
     // name sits at the tail of the truncated line — exactly where an ellipsis clips first. The

@@ -297,7 +297,9 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
         {/*
          * #305: one line, "Listing courtesy of {officeName}", for every `source`. See
          * `ListingAttribution`'s header for the stakeholder ruling and the open compliance
-         * question tracked in #306.
+         * question tracked in #306. `compact` has no effect at this density — it only bounds the
+         * full IDX block — and is left wired so switching to `density="full"` later, if #306
+         * requires it, needs no prop change here.
          */}
         <ListingAttribution
           attribution={listing}

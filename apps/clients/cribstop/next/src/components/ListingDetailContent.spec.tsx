@@ -186,12 +186,11 @@ describe('ListingDetailContent — NAR 7.58 attribution', () => {
   /**
    * The disclosure panel always asks `ListingAttribution` for the reduced `courtesy` density — the
    * Listing Agent card in the sidebar already carries the name, office, phone and email, so the
-   * courtesy line exists to avoid repeating all of it. But `showFullBlock` in `ListingAttribution`
-   * is computed off the row's own `source` before the `courtesy` density is honoured, so a
-   * `brightMLS` row still gets the full block regardless of the density this surface asks for. Before
-   * that ordering was fixed, this was the one path in the app where an IDX row could render with no
-   * contact method at all. Scoped to the disclosure panel because the sidebar's Listing Agent card
-   * independently renders the same agent name, phone and email as plain text.
+   * courtesy line exists to avoid repeating all of it. `ListingAttribution`'s `showFullBlock` still
+   * treats `density === 'courtesy' && source === 'brightMLS'` as the full block, unchanged by #305
+   * (which only removed the card default's, `density === 'auto'`, dependence on `source`). Scoped
+   * to the disclosure panel because the sidebar's Listing Agent card independently renders the same
+   * agent name, phone and email as plain text.
    */
   it('renders the full block for a brightMLS row even though the detail page requests courtesy density', async () => {
     const view = toListingDetailView(

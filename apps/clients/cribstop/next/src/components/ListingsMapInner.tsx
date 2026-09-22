@@ -309,7 +309,10 @@ function MarkerPopup({ listing }: { listing: ListingCardRow }) {
         >
           {soldLine ?? price.text}
         </p>
-        {/* Same one-line courtesy form as the search card (#305): see ListingAttribution's header. */}
+        {/*
+         * Same one-line courtesy form as the search card (#305): see ListingAttribution's header.
+         * `compact` has no effect at this density — see the same note on ListingCard.
+         */}
         <ListingAttribution
           attribution={listing}
           source={listing.source}
