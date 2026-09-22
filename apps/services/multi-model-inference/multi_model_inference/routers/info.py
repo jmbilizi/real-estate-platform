@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from multi_model_inference.config import settings
 from multi_model_inference.core.model_registry import registry
+from multi_model_inference.core.readiness import readiness_state
 
 router = APIRouter(tags=["info"])
 
@@ -15,7 +16,7 @@ async def service_info():
     return {
         "service": settings.app_name,
         "version": settings.app_version,
-        "status": "ready" if registry.all_ready() else "loading",
+        "status": readiness_state(),
         "models_loaded": len(loaded),
         "models": loaded,
         "docs": "/docs",
