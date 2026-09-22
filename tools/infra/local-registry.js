@@ -56,29 +56,42 @@ function volumeExists() {
   return res.status === 0;
 }
 
-function getContainerState() {
-  const res = run('podman', ['inspect', '-f', '{{.State.Status}}', REGISTRY_NAME]);
-  if (res.status !== 0) {
+// Never pass a Go template ({{...}}) to podman from here. run() uses shell:true on
+// Windows, so cmd.exe re-parses the braces and podman fails with
+// "template: inspect:1: bad character U+007B '{'". Every template read then returned
+// its failure default, which made containerHasDeleteEnabled() always false on Windows:
+// each `ensure` force-recreated the registry, and each recreate orphaned a netavark
+// DNAT rule for port 5001 until the port resolved to a dead container ("no route to
+// host" on push). Plain `podman inspect` returns the whole object as JSON — no braces.
+// `podman inspect` resolves across containers, images, volumes and networks, so an image
+// sharing the registry's name would answer with a real Config.Env that lacks the delete
+// flag — restarting the force-recreate loop this function exists to stop. Ask for a
+// container explicitly; `container inspect` is equally brace-free.
+function inspectContainer() {
+  const res = run('podman', ['container', 'inspect', REGISTRY_NAME]);
+  if (res.status !== 0 || !res.stdout.trim()) {
     return null;
   }
-  return res.stdout.trim();
+  try {
+    const parsed = JSON.parse(res.stdout);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed[0] : null;
+  } catch {
+    return null;
+  }
+}
+
+function getContainerState() {
+  const details = inspectContainer();
+  const status = details?.State?.Status;
+  return typeof status === 'string' && status.trim() ? status.trim() : null;
 }
 
 function containerHasDeleteEnabled() {
-  const res = run('podman', ['inspect', '-f', '{{json .Config.Env}}', REGISTRY_NAME]);
-  if (res.status !== 0 || !res.stdout.trim()) {
+  const envList = inspectContainer()?.Config?.Env;
+  if (!Array.isArray(envList)) {
     return false;
   }
-
-  try {
-    const envList = JSON.parse(res.stdout.trim());
-    return (
-      Array.isArray(envList) &&
-      envList.some((e) => String(e).toUpperCase() === 'REGISTRY_STORAGE_DELETE_ENABLED=TRUE')
-    );
-  } catch {
-    return false;
-  }
+  return envList.some((e) => String(e).toUpperCase() === 'REGISTRY_STORAGE_DELETE_ENABLED=TRUE');
 }
 
 function ensureVolume() {
