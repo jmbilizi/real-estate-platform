@@ -586,45 +586,61 @@ namespace AccountService.Tests.Integration
         private static void NoDelay(AccountRecoveryOptions options) =>
             options.MinimumResponseDuration = TimeSpan.Zero;
 
+        /// <summary>
+        /// A floor of 1 second, not the 250ms configured in production, so the gap between "held to
+        /// the floor" and "not padded at all" is far wider than the scheduling noise observed on CI
+        /// runners (up to ~180ms, #290). See <see cref="AssertHeldToTheFloor"/>.
+        /// </summary>
         private static void WithFloor(AccountRecoveryOptions options) =>
-            options.MinimumResponseDuration = TimeSpan.FromMilliseconds(250);
+            options.MinimumResponseDuration = TimeSpan.FromSeconds(1);
 
         /// <summary>
         /// Asserts that a found-an-account request and a found-nothing request were both held to the
-        /// configured response floor, and to the same one.
+        /// configured response floor, and stayed close to each other.
         /// </summary>
         /// <remarks>
+        /// <para>
+        /// <c>AccountRecoveryThrottleFilter.PadAsync</c> pads each response, independently, up to
+        /// the configured floor. The two floor assertions are noise-tolerant on their own, because
+        /// scheduler noise only pushes an elapsed time up and an upward push still clears the floor.
+        /// They do not, alone, catch a regression where the registered-address path's own work
+        /// grows past the floor: padding is then skipped (nothing left to wait for), the floor
+        /// assertion still passes on real work alone, and the two paths become distinguishable by
+        /// timing again. The delta assertion is what catches that.
+        /// </para>
+        /// <para>
+        /// The delta assertion previously ran against a 250ms floor with a 150ms bound, and failed
+        /// intermittently: CI scheduler noise alone produced deltas up to ~180ms between two
+        /// separately measured requests (#290), above the bound, while both requests still met the
+        /// floor. Raising the floor to 1 second (see <see cref="WithFloor"/>) does not change that
+        /// noise, which comes from OS thread scheduling rather than from the size of the delay, but
+        /// it does change what a real regression looks like: padding removed from one branch now
+        /// opens a gap of roughly 1 second, not roughly 220ms. A 400ms delta bound sits well above
+        /// the observed noise and well below that gap, so it separates the two reliably.
+        /// </para>
         /// <para>
         /// The floor is asserted with a tolerance rather than exactly, and the tolerance is not
         /// slop. <c>Task.Delay</c> schedules on the runtime's timer wheel, whose resolution is about
         /// 15ms on Windows, while the filter measures its elapsed time with <c>Stopwatch</c> (the
         /// high-resolution performance counter). The two clocks do not agree to the millisecond, so
-        /// a pad asked for 250ms can land a few milliseconds short when measured by the other one.
-        /// Asserting <c>&gt;= 250ms</c> literally makes this test fail a few runs in a hundred while
-        /// the guarantee it is testing is perfectly intact — and a floor missed by 3ms leaks
-        /// nothing.
-        /// </para>
-        /// <para>
-        /// <b>The two floor assertions are what catch a regression</b>, and the delta assertion is
-        /// not — an earlier version of this comment claimed the opposite and was wrong. With
-        /// padding removed the unpadded times are roughly 30ms and 3ms, a delta of ~27ms, which
-        /// would sail under any delta bound loose enough not to be flaky. The delta assertion
-        /// states the property in the form it is meant to hold (the two outcomes are close to each
-        /// other) and guards against one branch being padded while the other is not; only the floor
-        /// assertions notice if the padding disappears entirely.
+        /// a pad asked for 1 second can land a few milliseconds short when measured by the other
+        /// one. Asserting the exact floor literally makes this test fail a few runs in a hundred
+        /// while the guarantee it is testing is perfectly intact — and a floor missed by a few
+        /// milliseconds leaks nothing.
         /// </para>
         /// </remarks>
         private static void AssertHeldToTheFloor(TimeSpan knownElapsed, TimeSpan unknownElapsed)
         {
-            var floor = TimeSpan.FromMilliseconds(250);
+            var floor = TimeSpan.FromSeconds(1);
             var tolerance = TimeSpan.FromMilliseconds(25);
 
             knownElapsed.Should().BeGreaterThanOrEqualTo(floor - tolerance);
             unknownElapsed.Should().BeGreaterThanOrEqualTo(floor - tolerance);
 
-            // Loose enough to survive scheduling jitter on a loaded CI box, tight enough that one
-            // padded branch and one unpadded branch (a ~220ms gap) fails.
-            (knownElapsed - unknownElapsed).Duration().Should().BeLessThan(TimeSpan.FromMilliseconds(150));
+            // Wide enough to survive scheduling jitter on a loaded CI box (~180ms observed), tight
+            // enough that a ~1s gap from missing padding, or from real work growing past the floor
+            // on one branch only, fails.
+            (knownElapsed - unknownElapsed).Duration().Should().BeLessThan(TimeSpan.FromMilliseconds(400));
         }
 
         private static async Task RegisterAsync(HttpClient client, string email)
