@@ -25,13 +25,27 @@ const DEV_FALLBACK: TileLayerConfig = {
 // Cached across every map on the page — one fetch per tab, not one per `<TileLayer>`.
 let cached: Promise<TileLayerConfig> | null = null;
 
+// Logged at most once per tab — every map on the page calls this hook, and each one re-renders
+// independently (hover, pan, search results), so an unguarded `console.error` here would repeat
+// on every one of those instead of flagging the misconfiguration once.
+let loggedProdFallback = false;
+
 function fetchTileConfig(): Promise<TileLayerConfig> {
-  if (!cached) {
-    cached = fetch('/api/map-config')
-      .then((res) => (res.ok ? res.json() : DEV_FALLBACK))
-      .catch(() => DEV_FALLBACK);
-  }
-  return cached;
+  if (cached) return cached;
+  // A transient failure (a cold start, a dropped connection mid-deploy) must not pin the whole
+  // tab to the dev fallback for its remaining life: `cached` is reset to `null` on failure, so
+  // the next map mounted on this tab gets a fresh attempt instead of inheriting a stale one.
+  const attempt = fetch('/api/map-config')
+    .then((res) => {
+      if (!res.ok) throw new Error(`map-config responded ${res.status}`);
+      return res.json() as Promise<TileLayerConfig>;
+    })
+    .catch(() => {
+      cached = null;
+      return DEV_FALLBACK;
+    });
+  cached = attempt;
+  return attempt;
 }
 
 /** Fetches the tile provider config from `/api/map-config` (see that route for why). */
@@ -52,7 +66,8 @@ export function useTileLayerConfig(): TileLayerConfig {
   // this fallback is reached in a deployed environment, which is exactly the OSMF-policy
   // violation #291 fixed — loud on purpose so it cannot go unnoticed the way the CARTO placeholder
   // watermark did.
-  if (config.devOnly && process.env.NODE_ENV === 'production') {
+  if (config.devOnly && process.env.NODE_ENV === 'production' && !loggedProdFallback) {
+    loggedProdFallback = true;
     console.error(
       'Map tile key missing in a deployed build — using OpenStreetMap dev-only tiles, which ' +
         'its usage policy forbids for this traffic. Provision MAPTILER_API_KEY, tracked in #296.',

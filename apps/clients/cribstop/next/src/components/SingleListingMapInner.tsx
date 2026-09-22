@@ -73,6 +73,9 @@ export default function SingleListingMapInner({
           <TileLayer
             attribution={attribution}
             url={tileUrl}
+            // `L.TileLayer`'s own default `maxZoom` is 18, independent of the map's — see
+            // `ListingsMapInner` for why this must match the map's `maxZoom` above.
+            maxZoom={19}
             eventHandlers={{ tileerror: onTileError }}
           />
         )}

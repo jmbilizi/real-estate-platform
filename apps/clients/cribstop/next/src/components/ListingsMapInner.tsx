@@ -523,6 +523,10 @@ export default function ListingsMapInner({
           <TileLayer
             attribution={attribution}
             url={tileUrl}
+            // `L.TileLayer`'s own default `maxZoom` is 18, independent of the map's — leaving
+            // this off would cap real tile fetches at z18 even though the map (above) allows 19,
+            // silently upscaling the z18 tile past its native resolution.
+            maxZoom={19}
             eventHandlers={{ tileerror: onTileError }}
           />
         )}

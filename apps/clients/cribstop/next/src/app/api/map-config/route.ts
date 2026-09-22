@@ -12,6 +12,10 @@
  * `map-tiles.ts`, which logs an error if it ever sees that combination in production.
  */
 
+// Reads `process.env.MAPTILER_API_KEY` per request, not once at build time — matches
+// `api/health/route.ts`'s defensive use of the same flag for the same reason.
+export const dynamic = 'force-dynamic';
+
 const MAPTILER_TILE_URL_TEMPLATE = 'https://api.maptiler.com/maps/streets-v4/256/{z}/{x}/{y}.png';
 const MAPTILER_ATTRIBUTION =
   '&copy; <a href="https://www.maptiler.com/copyright/" target="_blank">MapTiler</a> ' +
