@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from starlette.concurrency import run_in_threadpool
 
 from multi_model_inference.core.model_registry import registry
+from multi_model_inference.core.readiness import DEGRADED, readiness_state
 from multi_model_inference.models.sentence_embedder import MODEL_NAME
 from multi_model_inference.schemas.embeddings import EmbeddingRequest, EmbeddingResponse
 
@@ -27,10 +28,15 @@ async def create_embeddings(request: EmbeddingRequest) -> EmbeddingResponse:
         ) from None
 
     if not model.is_ready:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Model '{MODEL_NAME}' is still loading.",
+        # Say which it is. In a degraded build the load already failed and nothing
+        # retries it, so "still loading" would send the caller off to wait for an
+        # event that never comes (#287).
+        detail = (
+            f"Model '{MODEL_NAME}' failed to load and is not available in this build."
+            if readiness_state() == DEGRADED
+            else f"Model '{MODEL_NAME}' is still loading."
         )
+        raise HTTPException(status_code=503, detail=detail)
 
     embeddings = await run_in_threadpool(model.predict, request.input)
 

@@ -10,7 +10,7 @@ model registry.
 POST /api/v1/embeddings ──► Router ──► ModelRegistry ──► SentenceEmbedder (ONNX)
 GET  /api/v1/models     ──► Router ──► ModelRegistry ──► model_info()
 GET  /health            ──► Liveness probe (always ok)
-GET  /ready             ──► Readiness probe (checks all models loaded)
+GET  /ready             ──► Readiness probe (ready | loading | degraded)
 GET  /                  ──► Service metadata
 ```
 
@@ -57,7 +57,8 @@ pnpm run nx:python-test
 uv run pytest apps/services/multi-model-inference/tests -v
 ```
 
-21 tests covering model registry, embeddings, health probes, input validation, and service info.
+27 tests covering model registry, embeddings, health and readiness probes (including the degraded
+state), input validation, and service info.
 
 ## API Reference
 
@@ -102,8 +103,18 @@ Liveness probe — returns `{"status": "ok"}` if the process is running.
 
 ### `GET /ready`
 
-Readiness probe. Returns 200 with `{"status": "ready"}` when all models are loaded. Returns 503 with
-`{"status": "loading"}` otherwise.
+Readiness probe. Returns 200 with `{"status": "ready"}` when every enabled model is loaded.
+
+When a model failed to load, the response depends on whether this image was built with the weights
+baked in, which `MODEL_LOAD_REQUIRED` records (see [Configuration](#configuration)):
+
+| `MODEL_LOAD_REQUIRED` | Response                     | Why                                                                             |
+| --------------------- | ---------------------------- | ------------------------------------------------------------------------------- |
+| `true` (default, CI)  | 503 `{"status": "loading"}`  | The weights are in the image, so a load failure is a defect. Fail closed (#37). |
+| `false` (local build) | 200 `{"status": "degraded"}` | The weights download at first startup, which a blocked network prevents (#287). |
+
+Either way the body names each model's state, so a degraded pod is never mistaken for a healthy one.
+Embedding requests still return 503 while the model is absent.
 
 ### `GET /`
 
@@ -113,15 +124,16 @@ Service metadata: name, version, status, loaded model count, docs URL.
 
 All settings are configurable via environment variables (no prefix):
 
-| Variable          | Default                         | Description                                 |
-| ----------------- | ------------------------------- | ------------------------------------------- |
-| `ENABLED_MODELS`  | `["sentence-embedder"]`         | JSON list of model names to load at startup |
-| `MODEL_CACHE_DIR` | `/opt/models`                   | Directory for downloaded model weights      |
-| `DEVICE`          | `cpu`                           | Inference device (`cpu`)                    |
-| `APP_NAME`        | `Multi-Model Inference Service` | Service name in metadata                    |
-| `APP_VERSION`     | `1.0.0`                         | Service version in metadata                 |
-| `HOST`            | `0.0.0.0`                       | Uvicorn bind host                           |
-| `PORT`            | `8000`                          | Uvicorn bind port                           |
+| Variable              | Default                         | Description                                                                                                                                                                                                                                                                            |
+| --------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ENABLED_MODELS`      | `["sentence-embedder"]`         | JSON list of model names to load at startup                                                                                                                                                                                                                                            |
+| `MODEL_CACHE_DIR`     | `/opt/models`                   | Directory for downloaded model weights                                                                                                                                                                                                                                                 |
+| `DEVICE`              | `cpu`                           | Inference device (`cpu`)                                                                                                                                                                                                                                                               |
+| `MODEL_LOAD_REQUIRED` | `true`                          | Whether a failed model load makes the service unready. The Dockerfile sets it from its `PRE_DOWNLOAD_MODEL` build arg, so it records one fact: were the weights baked into this image. Do not set it by hand in an overlay — that would be a second source of truth for the same fact. |
+| `APP_NAME`            | `Multi-Model Inference Service` | Service name in metadata                                                                                                                                                                                                                                                               |
+| `APP_VERSION`         | `1.0.0`                         | Service version in metadata                                                                                                                                                                                                                                                            |
+| `HOST`                | `0.0.0.0`                       | Uvicorn bind host                                                                                                                                                                                                                                                                      |
+| `PORT`                | `8000`                          | Uvicorn bind port                                                                                                                                                                                                                                                                      |
 
 ## Adding a New Model
 
@@ -174,7 +186,8 @@ multi-model-inference/
 │   ├── config.py            # Pydantic Settings (env vars)
 │   ├── core/
 │   │   ├── base_model.py    # InferenceModel ABC
-│   │   └── model_registry.py # Singleton model registry
+│   │   ├── model_registry.py # Singleton model registry
+│   │   └── readiness.py      # One definition of ready | loading | degraded
 │   ├── models/
 │   │   └── sentence_embedder.py  # fastembed ONNX wrapper
 │   ├── routers/
@@ -184,7 +197,7 @@ multi-model-inference/
 │   │   └── embeddings.py    # POST /api/v1/embeddings
 │   └── schemas/
 │       └── embeddings.py    # Request/response Pydantic models
-├── tests/                   # 21 unit tests
+├── tests/                   # 27 unit tests
 ├── Dockerfile               # Multi-stage production build
 ├── pyproject.toml           # Dependencies + tool config
 └── project.json             # Nx project configuration

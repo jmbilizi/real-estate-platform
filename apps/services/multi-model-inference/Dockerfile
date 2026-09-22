@@ -60,7 +60,19 @@ ARG MODEL_ID=BAAI/bge-small-en-v1.5
 #
 # The failure stays FATAL on purpose. Swallowing it would produce an image that builds green,
 # ships with no weights, and then reports itself ready while every embedding request 503s.
+# Accept only the two exact spellings. This value is read twice by parsers that disagree:
+# the shell below treats anything but `true` as false, while pydantic also reads True, TRUE,
+# 1, yes and on as true. `PRE_DOWNLOAD_MODEL=True` would therefore skip the bake here and
+# still mark the model REQUIRED at runtime, giving a pod with no weights that can never be
+# Ready — the #287 symptom, reintroduced by a casing typo. An empty or misspelled value is
+# worse still: pydantic refuses to parse it and the container crashes at import, naming
+# MODEL_LOAD_REQUIRED rather than the arg the developer actually set. Fail the build instead.
 RUN set -eu; \
+    case "$PRE_DOWNLOAD_MODEL" in \
+      true|false) ;; \
+      *) echo "ERROR: PRE_DOWNLOAD_MODEL must be exactly 'true' or 'false', got '${PRE_DOWNLOAD_MODEL}'." >&2; \
+         exit 1;; \
+    esac; \
     if [ "$PRE_DOWNLOAD_MODEL" != "true" ]; then \
       echo "Skipping model pre-download (PRE_DOWNLOAD_MODEL=false) - model will download at first startup"; \
       mkdir -p /opt/models; \

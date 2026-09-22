@@ -4,9 +4,10 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from multi_model_inference.config import settings
+from multi_model_inference.config import Settings, settings
 from multi_model_inference.core.model_registry import registry
 from multi_model_inference.main import app
+from multi_model_inference.models.sentence_embedder import MODEL_NAME
 
 
 class _FakeModel:
@@ -48,6 +49,16 @@ def _register_loaded():
     """Register one model that loads successfully, isolating the registry."""
     _clear_registry()
     registry.register("fake", _FakeModel(loaded=True))
+
+
+def _register_real_name_not_loaded():
+    """Register a failing stub under the real model name.
+
+    The embeddings endpoint looks the model up by `MODEL_NAME`, so a stub named
+    anything else hits the "not available" branch instead of the state under test.
+    """
+    _clear_registry()
+    registry.register(MODEL_NAME, _FakeModel(loaded=False))
 
 
 def test_health_returns_ok():
@@ -116,8 +127,14 @@ def test_ready_returns_503_when_model_not_loaded():
 
 
 def test_model_load_required_defaults_to_true():
-    """An image that sets no MODEL_LOAD_REQUIRED fails closed, never degraded."""
-    assert settings.model_load_required is True
+    """An image that sets no MODEL_LOAD_REQUIRED fails closed, never degraded.
+
+    Assert the declared default, not the singleton. `settings` is built from the
+    process environment at import, so reading it here would pass only because the
+    host happens not to export the variable -- and would fail when the suite runs
+    inside the locally built image, which sets it to false.
+    """
+    assert Settings.model_fields["model_load_required"].default is True
 
 
 def test_ready_returns_200_degraded_when_model_optional_and_not_loaded():
@@ -173,3 +190,52 @@ def test_ready_returns_200_when_all_models_loaded():
     data = response.json()
     assert data["status"] == "ready"
     assert data["models"] == {"fake": "loaded"}
+
+
+def test_service_info_reports_degraded_not_loading():
+    """`/` must not claim a load is in progress once it has permanently failed.
+
+    A pod that passes its readiness probe while `/` says "loading" misdirects
+    whoever is triaging it (#287).
+    """
+    with (
+        patch.object(settings, "model_load_required", False),
+        patch(
+            "multi_model_inference.main._register_models",
+            side_effect=_register_not_loaded,
+        ),
+        TestClient(app) as c,
+    ):
+        response = c.get("/")
+    assert response.status_code == 200
+    assert response.json()["status"] == "degraded"
+
+
+def test_embeddings_say_failed_not_loading_when_degraded():
+    """The 503 body distinguishes a permanent failure from a load in progress."""
+    with (
+        patch.object(settings, "model_load_required", False),
+        patch(
+            "multi_model_inference.main._register_models",
+            side_effect=_register_real_name_not_loaded,
+        ),
+        TestClient(app) as c,
+    ):
+        response = c.post("/api/v1/embeddings", json={"input": ["hello"]})
+    assert response.status_code == 503
+    assert "failed to load" in response.json()["detail"]
+
+
+def test_embeddings_say_loading_when_load_is_required():
+    """A required build keeps the loading wording, so #37's contract is unchanged."""
+    with (
+        patch.object(settings, "model_load_required", True),
+        patch(
+            "multi_model_inference.main._register_models",
+            side_effect=_register_real_name_not_loaded,
+        ),
+        TestClient(app) as c,
+    ):
+        response = c.post("/api/v1/embeddings", json={"input": ["hello"]})
+    assert response.status_code == 503
+    assert "still loading" in response.json()["detail"]

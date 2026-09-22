@@ -3,8 +3,8 @@
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from multi_model_inference.config import settings
 from multi_model_inference.core.model_registry import registry
+from multi_model_inference.core.readiness import LOADING, readiness_state
 
 router = APIRouter(tags=["health"])
 
@@ -42,18 +42,8 @@ async def ready() -> JSONResponse:
     reached at all, "not ready" means failed rather than still loading.
     """
     models_info = {info["name"]: info["status"] for info in registry.list_models()}
-    is_ready = registry.all_ready()
-
-    if is_ready:
-        return JSONResponse(
-            status_code=200, content={"status": "ready", "models": models_info}
-        )
-
-    if settings.model_load_required:
-        return JSONResponse(
-            status_code=503, content={"status": "loading", "models": models_info}
-        )
-
+    state = readiness_state()
     return JSONResponse(
-        status_code=200, content={"status": "degraded", "models": models_info}
+        status_code=503 if state == LOADING else 200,
+        content={"status": state, "models": models_info},
     )
