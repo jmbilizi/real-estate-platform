@@ -8,25 +8,25 @@ const SCRIPT_PATH = path.join(__dirname, 'check-legal-content.js');
 
 /**
  * Runs as a child process, not a `require`, because the script's failure path is
- * `process.exit(1)` — asserting on a real exit code is what proves the build actually stops.
- * `env` lets each test control the production-build signal without touching the real process.
+ * `process.exit(1)` — asserting on a real exit code is what proves the deploy actually stops.
+ * `env` lets each test control `DEPLOYMENT_ENV` without touching the real process.
  */
 function runGate(env) {
   return execFileSync(process.execPath, [SCRIPT_PATH], {
     encoding: 'utf8',
-    env: { ...process.env, CI: '', NEXT_BUILD_STANDALONE: '', ...env },
+    env: { ...process.env, DEPLOYMENT_ENV: '', ...env },
   });
 }
 
 describe('check-legal-content.js', () => {
-  describe('production build (CI=true)', () => {
+  describe('prod deploy (DEPLOYMENT_ENV=prod)', () => {
     it('fails while a legal content module is a draft placeholder (current state, pending #156)', () => {
-      expect(() => runGate({ CI: 'true' })).toThrow(/Command failed/);
+      expect(() => runGate({ DEPLOYMENT_ENV: 'prod' })).toThrow(/Command failed/);
     });
 
     it('reports both content modules by name when both are drafts', () => {
       try {
-        runGate({ CI: 'true' });
+        runGate({ DEPLOYMENT_ENV: 'prod' });
         throw new Error('expected the gate script to exit non-zero');
       } catch (error) {
         const output = error.stderr ?? '';
@@ -36,17 +36,14 @@ describe('check-legal-content.js', () => {
     });
   });
 
-  describe('production build (NEXT_BUILD_STANDALONE=1, the Docker build signal)', () => {
-    it('fails the same way as the CI signal', () => {
-      expect(() => runGate({ NEXT_BUILD_STANDALONE: '1' })).toThrow(/Command failed/);
-    });
-  });
-
-  describe('non-production build (neither signal set, e.g. a local `nx build`)', () => {
-    it('does not fail, even with a draft module present', () => {
-      expect(runGate({})).toBe('');
-    });
-  });
+  describe.each(['local', 'dev', 'test', undefined])(
+    'non-prod deploy (DEPLOYMENT_ENV=%s)',
+    (value) => {
+      it('does not fail, even with a draft module present', () => {
+        expect(runGate(value === undefined ? {} : { DEPLOYMENT_ENV: value })).toBe('');
+      });
+    },
+  );
 
   /**
    * Exercises `findDraftFiles` against fixture modules, not the real content, so the pass case

@@ -64,6 +64,18 @@ jobs:
           deploy_strategy: ${{ github.event.inputs.deploy_strategy || inputs.deploy_strategy || 'all' }}
           services: ${{ github.event.inputs.services || inputs.services || 'all' }}
 
+      # #219: blocks the prod deploy while draft legal copy (`isDraft: true`) is still live.
+      # Reuses check-legal-content.js from #157, gated here at deploy time rather than build
+      # time, because CI=true and NEXT_BUILD_STANDALONE=1 are set the same way in every
+      # environment and cannot tell a prod build apart from dev or test. Runs via bare `node`,
+      # the same pattern as `tools/infra/deploy-scope.js` below: the script has no npm
+      # dependencies, so it needs no `pnpm install` step in this job.
+      - name: Block deploy on draft legal content
+        if: matrix.environment == 'prod' && steps.deploy-control.outputs.deploy_allowed == 'true'
+        run: node apps/clients/cribstop/next/scripts/check-legal-content.js
+        env:
+          DEPLOYMENT_ENV: prod
+
       - name: Deploy K8s Resources (DRY composite)
         if: steps.deploy-control.outputs.deploy_allowed == 'true'
         uses: ./.github/actions/deploy-k8s-resources
