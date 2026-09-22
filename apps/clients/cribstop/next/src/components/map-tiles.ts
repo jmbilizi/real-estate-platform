@@ -18,7 +18,8 @@ const LOADING_CONFIG: TileLayerConfig = { tileUrl: '', attribution: '' };
 
 const DEV_FALLBACK: TileLayerConfig = {
   tileUrl: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  attribution:
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   devOnly: true,
 };
 
