@@ -45,4 +45,47 @@ describe('ListingRow', () => {
 
     expect(screen.getByText('See all')).toBeInTheDocument();
   });
+
+  describe('scroll bounds', () => {
+    // jsdom never measures layout, so `scrollWidth`/`clientWidth` stay whatever these getters
+    // return. Backing them with a per-element field lets a test set "what the browser would
+    // measure" independently of when React's effects happen to run.
+    let widths: WeakMap<Element, { scrollWidth: number; clientWidth: number }>;
+
+    beforeAll(() => {
+      widths = new WeakMap();
+      Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
+        configurable: true,
+        get() {
+          return widths.get(this)?.scrollWidth ?? 0;
+        },
+      });
+      Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+        configurable: true,
+        get() {
+          return widths.get(this)?.clientWidth ?? 0;
+        },
+      });
+    });
+
+    it('re-enables "Scroll right" once real, overflowing content replaces a skeleton that fit (#292)', () => {
+      const rows = Array.from({ length: 10 }, (_, i) => aListingCardRow({ id: String(i) }));
+
+      const { container, rerender } = render(
+        <ListingRow title="Featured" href="/search" listings={[]} max={4} loading />,
+      );
+      const scroller = container.querySelector('.overflow-x-auto') as HTMLDivElement;
+
+      // The loading skeleton happens to fit the viewport exactly — nothing to scroll to yet.
+      widths.set(scroller, { scrollWidth: 400, clientWidth: 400 });
+      scroller.dispatchEvent(new Event('scroll'));
+      expect(screen.getByLabelText('Scroll right')).toBeDisabled();
+
+      // Real content is wider than the viewport once it replaces the skeleton.
+      widths.set(scroller, { scrollWidth: 900, clientWidth: 400 });
+      rerender(<ListingRow title="Featured" href="/search" listings={rows} max={4} />);
+
+      expect(screen.getByLabelText('Scroll right')).not.toBeDisabled();
+    });
+  });
 });

@@ -62,6 +62,11 @@ export default function ListingRow({
     setAtEnd(el.scrollLeft + el.clientWidth >= el.scrollWidth - 2);
   };
 
+  // Re-checks on `loading`/`visible.length`, not just on mount: `checkScroll` first runs while
+  // the loading skeleton (a fixed `max` cards) is still in the DOM. If that skeleton happens to
+  // fit the viewport, `atEnd` latches `true`, and once the real, often-wider content replaces it,
+  // nothing re-measures — a row that now overflows can be left with "Scroll right" disabled and
+  // no way for the user to un-stick it (#292).
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
@@ -72,7 +77,7 @@ export default function ListingRow({
       el.removeEventListener('scroll', checkScroll);
       window.removeEventListener('resize', checkScroll);
     };
-  }, []);
+  }, [loading, visible.length]);
 
   const scroll = (dir: 'left' | 'right') => {
     const el = scrollerRef.current;
