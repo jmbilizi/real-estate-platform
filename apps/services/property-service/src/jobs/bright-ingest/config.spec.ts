@@ -1,7 +1,9 @@
 import {
   BRIGHT_ENV_VARS,
   BrightConfigError,
+  DEFAULT_REPLICATION,
   resolveBrightConfig,
+  resolveReplicationConfig,
   SECRET_PLACEHOLDER,
 } from './config';
 
@@ -288,5 +290,51 @@ describe('resolveBrightConfig', () => {
       expect(config.feed).toBe('production');
       expect(config.credentials.clientId).toBe('fixture-prod-id');
     });
+  });
+});
+
+/** Ticket #191: the full-crawl path is off by default, and only an environment names it in. */
+describe('resolveReplicationConfig — full crawl (#191)', () => {
+  it('defaults to no crawl resources and 50 pages per crawl run', () => {
+    const config = resolveReplicationConfig({});
+
+    expect(config.crawlResources).toEqual([]);
+    expect(config.crawlResources).toEqual(DEFAULT_REPLICATION.crawlResources);
+    expect(config.crawlMaxPagesPerRun).toBe(50);
+  });
+
+  it('reads a configured crawl resource', () => {
+    const config = resolveReplicationConfig({
+      [BRIGHT_ENV_VARS.crawlResources]: 'BrightMedia',
+    });
+
+    expect(config.crawlResources).toEqual(['BrightMedia']);
+  });
+
+  it('refuses an unknown crawl resource name', () => {
+    expect(() =>
+      resolveReplicationConfig({ [BRIGHT_ENV_VARS.crawlResources]: 'Property' }),
+    ).toThrow(BrightConfigError);
+  });
+
+  /** BrightProperties has a working cursor; a full crawl of it is the wrong tool, not an option. */
+  it('refuses a resource that does not support the full-crawl path', () => {
+    expect(() =>
+      resolveReplicationConfig({ [BRIGHT_ENV_VARS.crawlResources]: 'BrightProperties' }),
+    ).toThrow(BrightConfigError);
+  });
+
+  it('reads a configured crawl page cap', () => {
+    const config = resolveReplicationConfig({
+      [BRIGHT_ENV_VARS.crawlMaxPagesPerRun]: '10',
+    });
+
+    expect(config.crawlMaxPagesPerRun).toBe(10);
+  });
+
+  it('refuses a malformed crawl page cap', () => {
+    expect(() =>
+      resolveReplicationConfig({ [BRIGHT_ENV_VARS.crawlMaxPagesPerRun]: 'lots' }),
+    ).toThrow(BrightConfigError);
   });
 });

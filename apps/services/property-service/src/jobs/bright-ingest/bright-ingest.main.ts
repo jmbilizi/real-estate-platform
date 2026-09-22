@@ -26,7 +26,7 @@
 
 import { closePool, getPool } from '../../db/pool';
 
-import { mapStagedBrightProperties } from '../bright-map/run';
+import { mapStagedBrightMedia, mapStagedBrightProperties } from '../bright-map/run';
 
 import { runBrightIngest } from './run';
 
@@ -51,6 +51,17 @@ runBrightIngest({
       feed,
       soldDisplayDelayDays: resolveSoldDisplayDelayDays(process.env),
     }),
+  // ONE pooled connection for the whole media pass, not the pool itself. The pass opens a
+  // transaction per listing, and `BEGIN` on a pool is meaningless: the next statement can land on
+  // a different connection, so the writes would autocommit one by one.
+  mapMedia: async () => {
+    const client = await getPool().connect();
+    try {
+      return await mapStagedBrightMedia(client);
+    } finally {
+      client.release();
+    }
+  },
 })
   .then((result) => {
     process.exitCode = result.outcome === 'failed' ? 1 : 0;

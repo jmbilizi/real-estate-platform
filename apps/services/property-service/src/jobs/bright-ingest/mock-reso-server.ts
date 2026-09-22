@@ -287,6 +287,14 @@ export function createMemoryStore() {
         Promise.resolve(
           [...rows.keys()].filter((key) => key.startsWith(`${resource}\u0000`)).length,
         ),
+      readRecordKeys: (resource: string) =>
+        Promise.resolve(
+          new Set(
+            [...rows.keys()]
+              .filter((key) => key.startsWith(`${resource}\u0000`))
+              .map((key) => key.slice(resource.length + 1)),
+          ),
+        ),
     },
   };
 }

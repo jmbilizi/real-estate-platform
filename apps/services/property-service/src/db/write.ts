@@ -549,6 +549,109 @@ export async function insertMedia(client: Queryable, rows: MediaRow[]): Promise<
   }
 }
 
+/** One feed-sourced photo, already ordered by `buildListingGallery()` (#191). */
+export interface FeedMediaRow {
+  /** `MediaKey`. The idempotency key, and what tells a feed row from a seeded one. */
+  readonly source_media_key: string;
+  readonly source_url: string;
+  readonly alt_text: string | null;
+  readonly caption: string | null;
+  readonly sort_order: number;
+  readonly is_primary: boolean;
+  readonly is_sample: boolean;
+}
+
+/**
+ * Replaces one listing's FEED-SOURCED media with the gallery a mapping pass produced (#191).
+ *
+ * `insertMedia()` above is the seed path: it inserts and never reconciles, because a re-seed
+ * deletes first. A feed pass cannot work that way. It re-reads the same listings every run, so it
+ * needs an idempotent write, and a photo withdrawn at the MLS has to leave.
+ *
+ * Three statements, in an order the indexes dictate rather than one chosen for readability.
+ *
+ *  1. **Clear `is_primary` first, on EVERY row of the listing.** `idx_listing_media_one_primary` is
+ *     a partial unique index on `listing_id WHERE is_primary`, so a listing may hold exactly one
+ *     primary row of any origin. Promoting the feed's primary before demoting the incumbent
+ *     violates it, and that is the ordinary case: any reordered gallery hits it. The clear is
+ *     deliberately NOT scoped to `source_media_key IS NOT NULL`, unlike statement 3. A seeded photo
+ *     holding `is_primary` would otherwise block the feed's primary with an index violation, and
+ *     failing the run over a photo ordering is worse than demoting a seeded row. Statement 3's
+ *     "never touched" claim is about DELETION, which is a different guarantee.
+ *  2. **Upsert on `(listing_id, source_media_key)`, one multi-row statement.** That index is
+ *     partial too (`WHERE source_media_key IS NOT NULL`), so the conflict target repeats the
+ *     predicate. Without it Postgres cannot infer the index and answers "no unique or exclusion
+ *     constraint matching". One statement rather than one per photo: a pass rewrites every matched
+ *     listing's whole gallery on every run, so a round trip per photo is O(total staged media) per
+ *     run and does not fit the CronJob's deadline at real volume.
+ *  3. **Delete the feed rows this pass did not send.** Scoped to `source_media_key IS NOT NULL`, so
+ *     a seeded or hand-inserted photo on the same listing is never deleted. This is the
+ *     purge-on-withdrawal path the `listing_media` migration was designed for.
+ *
+ * **Caller supplies the transaction.** The three statements must commit together, or a pod killed
+ * mid-sequence leaves a listing with no primary image, duplicate sort orders, or withdrawn photos
+ * still visible. `mapStagedBrightMedia` opens one per listing.
+ */
+export async function replaceFeedListingMedia(
+  client: Queryable,
+  listingId: string,
+  rows: readonly FeedMediaRow[],
+): Promise<void> {
+  await client.query(
+    'UPDATE listing_media SET is_primary = false WHERE listing_id = $1 AND is_primary',
+    [listingId],
+  );
+
+  if (rows.length > 0) {
+    const values: unknown[] = [listingId];
+    const tuples = rows.map((row) => {
+      // $1 is the listing id, shared by every tuple. Each row then binds 8 of its own.
+      const base = values.length;
+      values.push(
+        randomUUID(),
+        row.source_media_key,
+        row.source_url,
+        row.alt_text,
+        row.caption,
+        row.sort_order,
+        row.is_primary,
+        row.is_sample,
+      );
+      return (
+        `($${base + 1}, $1, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, ` +
+        `$${base + 6}, $${base + 7}, false, $${base + 8})`
+      );
+    });
+
+    await client.query(
+      `INSERT INTO listing_media
+         (id, listing_id, source_media_key, source_url, alt_text, caption, sort_order,
+          is_primary, retained_when_suppressed, is_sample)
+       VALUES ${tuples.join(', ')}
+       ON CONFLICT (listing_id, source_media_key) WHERE source_media_key IS NOT NULL
+       DO UPDATE SET
+         source_url = EXCLUDED.source_url,
+         alt_text = EXCLUDED.alt_text,
+         caption = EXCLUDED.caption,
+         sort_order = EXCLUDED.sort_order,
+         is_primary = EXCLUDED.is_primary,
+         is_sample = EXCLUDED.is_sample`,
+      values,
+    );
+  }
+
+  // `retained_when_suppressed` is bound false above and is deliberately NOT in the DO UPDATE list.
+  // It is #146's marker for the one photo a media-suppressed listing keeps, set by a rule that
+  // still waits on #33 item 8(f). A feed pass must neither set it nor clear one already set.
+  await client.query(
+    `DELETE FROM listing_media
+      WHERE listing_id = $1
+        AND source_media_key IS NOT NULL
+        AND NOT (source_media_key = ANY($2::text[]))`,
+    [listingId, rows.map((row) => row.source_media_key)],
+  );
+}
+
 /**
  * The ordered `DELETE`s that a sample re-seed performs. Exported so a test can assert the invariant
  * that matters most about them — every single one is scoped on `is_sample = true` — rather than

@@ -54,6 +54,8 @@
  * same either way, which is the point of keying it on the value rather than on the environment.
  */
 
+import { resolveCrawlResource } from './resources';
+
 /**
  * The placeholder committed to Git in every secret template in this repo. A value still equal to it
  * has not been provisioned, and is never sent anywhere.
@@ -81,6 +83,9 @@ export const BRIGHT_ENV_VARS = {
   resources: 'BRIGHT_MLS_RESOURCES',
   initialCursor: 'BRIGHT_MLS_INITIAL_CURSOR',
   maxPagesPerRun: 'BRIGHT_MLS_MAX_PAGES_PER_RUN',
+  // The full crawl (#191). Off by default — an environment opts in by naming a resource.
+  crawlResources: 'BRIGHT_MLS_CRAWL_RESOURCES',
+  crawlMaxPagesPerRun: 'BRIGHT_MLS_CRAWL_MAX_PAGES_PER_RUN',
   requestsPerSecond: 'BRIGHT_MLS_REQUESTS_PER_SECOND',
   requestsPerMinute: 'BRIGHT_MLS_REQUESTS_PER_MINUTE',
   maxConcurrency: 'BRIGHT_MLS_MAX_CONCURRENCY',
@@ -414,6 +419,10 @@ export interface BrightReplicationConfig {
   /** Pages per resource per run. A capped run resumes on the next run, because the cursor advances
    * with each page rather than at the end. */
   readonly maxPagesPerRun: number;
+  /** Entity set names the full crawl (#191) targets. Empty means the crawl does not run. */
+  readonly crawlResources: readonly string[];
+  /** Pages per resource per crawl run. A capped run stores its @odata.nextLink and resumes next run. */
+  readonly crawlMaxPagesPerRun: number;
   readonly requestsPerSecond: number;
   readonly requestsPerMinute: number;
   readonly maxConcurrency: number;
@@ -436,6 +445,8 @@ export const DEFAULT_REPLICATION: BrightReplicationConfig = {
   resources: ['BrightProperties'],
   initialCursor: '1970-01-01T00:00:00.000Z',
   maxPagesPerRun: 50,
+  crawlResources: [],
+  crawlMaxPagesPerRun: 50,
   requestsPerSecond: 2,
   requestsPerMinute: 60,
   maxConcurrency: 1,
@@ -479,6 +490,36 @@ function positiveInt(env: NodeJS.ProcessEnv, name: string, fallback: number): nu
   return value;
 }
 
+/**
+ * Reads `BRIGHT_MLS_CRAWL_RESOURCES`.
+ *
+ * Unset means the crawl does not run — `DEFAULT_REPLICATION.crawlResources` is empty, unlike the
+ * incremental `resources`, which always names at least `BrightProperties`. An unknown name, or a
+ * known resource `resolveCrawlResource` refuses, throws immediately rather than failing the CronJob
+ * on its first scheduled run.
+ */
+function resolveCrawlResources(env: NodeJS.ProcessEnv): readonly string[] {
+  const raw = present(env[BRIGHT_ENV_VARS.crawlResources]);
+  if (raw === null) {
+    return DEFAULT_REPLICATION.crawlResources;
+  }
+  const names = raw
+    .split(',')
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0);
+  for (const name of names) {
+    try {
+      resolveCrawlResource(name);
+    } catch (error) {
+      throw new BrightConfigError(
+        `${BRIGHT_ENV_VARS.crawlResources} names "${name}", which the full-crawl path refuses: ` +
+          `${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+  return names;
+}
+
 export function resolveReplicationConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): BrightReplicationConfig {
@@ -517,6 +558,12 @@ export function resolveReplicationConfig(
       env,
       BRIGHT_ENV_VARS.maxPagesPerRun,
       DEFAULT_REPLICATION.maxPagesPerRun,
+    ),
+    crawlResources: resolveCrawlResources(env),
+    crawlMaxPagesPerRun: positiveInt(
+      env,
+      BRIGHT_ENV_VARS.crawlMaxPagesPerRun,
+      DEFAULT_REPLICATION.crawlMaxPagesPerRun,
     ),
     requestsPerSecond: positiveInt(
       env,
