@@ -27,8 +27,9 @@
  * Usage:
  *   node tools/infra/property-db-url.js [--print] [--env-file <path>]
  *
- * `--print` writes the URL to stdout and leaves `.env` alone. It exists for a caller that wants the
- * value in a pipeline. It prints a credential, so it is not the default.
+ * `--print` writes the URL to stdout and leaves the dotenv file alone. It exists for a caller that
+ * wants the value in a pipeline. It prints the password in clear text, so it is not the default.
+ * Read it into a variable. Never pass it as a command argument, which the process list exposes.
  */
 
 const fs = require('fs');
@@ -153,7 +154,7 @@ function readForwardedPostgresPort(skaffoldPath = SKAFFOLD_PATH) {
 
   throw new PropertyDbUrlError(
     `skaffold.yaml declares no portForward for '${POSTGRES_SERVICE}', so the database has no host ` +
-      `port. Add the entry, or the host cannot reach it at all.`,
+      'port. Add the entry, or the host cannot reach it at all.',
   );
 }
 
@@ -173,24 +174,47 @@ function probeLocalPort(port, timeoutMs = 2000) {
 }
 
 /**
- * Replace the host and the port in a `postgresql://` URL, keeping everything else byte for byte.
+ * Split the Deployment's URL TEMPLATE into its credential part and the rest.
  *
- * The password is not re-encoded, because it arrives already embedded in the Deployment's URL shape
- * and re-encoding a value twice corrupts it.
+ * The split runs on the template, before any value is substituted, and that ordering is the whole
+ * point. A template holds only `$(VAR)` tokens, so `:`, `@` and `/` in it are structure. A password
+ * may contain all three, and once it is substituted no parser can tell a password's `@` from the
+ * one that ends the credential. So the structure is read first and the values are attached after.
  *
- * @param {string} url
+ * @param {string} template
+ * @returns {{ user: string, password: string, rest: string, scheme: string }}
+ */
+function splitUrlTemplate(template) {
+  const match =
+    /^(?<scheme>[a-z+]+:\/\/)(?<user>[^:@/]*):(?<password>[^:@/]*)@(?<rest>[^@]*)$/s.exec(template);
+  if (!match) {
+    throw new PropertyDbUrlError(
+      `The '${DEPLOYMENT}' Deployment's ${ENV_KEY} is not a 'scheme://user:password@host/name' ` +
+        'template this script can read. Fix the Deployment, or teach this script the new shape.',
+    );
+  }
+  return match.groups;
+}
+
+/**
+ * Build the host-side URL from the template's parts.
+ *
+ * `URL` percent-encodes whatever goes into `username` and `password`, so a credential containing
+ * `@`, `/`, `:` or `+` survives intact. Building the string by hand does not.
+ *
+ * @param {{ user: string, password: string, rest: string, scheme: string }} parts
+ * @param {Record<string, string>} values
  * @param {string} host
  * @param {number} port
  * @returns {string}
  */
-function rewriteHostAndPort(url, host, port) {
-  const match = /^(?<prefix>[a-z+]+:\/\/(?:[^@/]*@)?)(?<authority>[^/?#]*)(?<rest>.*)$/s.exec(url);
-  if (!match) {
-    throw new PropertyDbUrlError(
-      `The Deployment's ${ENV_KEY} is not a URL this script can rewrite.`,
-    );
-  }
-  return `${match.groups.prefix}${host}:${port}${match.groups.rest}`;
+function buildLocalUrl(parts, values, host, port) {
+  const url = new URL(`${parts.scheme}${expandKubeRefs(parts.rest, values)}`);
+  url.hostname = host;
+  url.port = String(port);
+  url.username = encodeURIComponent(expandKubeRefs(parts.user, values));
+  url.password = encodeURIComponent(expandKubeRefs(parts.password, values));
+  return url.toString();
 }
 
 /**
@@ -215,7 +239,10 @@ function setEnvFileKey(filePath, key, value) {
   const original = fs.readFileSync(filePath, 'utf8');
   const newline = original.includes('\r\n') ? '\r\n' : '\n';
   const lines = original.split(/\r?\n/);
-  const keyPattern = new RegExp(`^\\s*(?:export\\s+)?${key}\\s*=`);
+  // Escape the key: this helper is exported, and a future key holding a regex metacharacter would
+  // otherwise match the wrong line or none at all.
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const keyPattern = new RegExp(`^\\s*(?:export\\s+)?${escapedKey}\\s*=`);
 
   let replaced = false;
   const updated = lines.map((existing) => {
@@ -234,9 +261,22 @@ function setEnvFileKey(filePath, key, value) {
   return replaced ? 'replaced' : 'appended';
 }
 
-/** Hide the password in a connection string, so a log line can name the target without leaking it. */
+/**
+ * Hide the password in a connection string, so a log line can name the target.
+ *
+ * `URL` is the parser, not a regex. A regex that stops at the first `@` prints the tail of a
+ * password that contains one. A value this function cannot parse is replaced whole, because a
+ * partial redaction is worse than none.
+ */
 function redactUrl(url) {
-  return url.replace(/^([a-z+]+:\/\/[^:/@]*:)[^@]*@/, '$1***@');
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return '<unprintable connection string>';
+  }
+  if (parsed.password) parsed.password = '***';
+  return parsed.toString();
 }
 
 /**
@@ -285,7 +325,7 @@ async function deriveDatabaseUrl(deps = {}) {
     }
     if (!secret) {
       throw new PropertyDbUrlError(
-        `The 'postgres-secret' Secret is not in the local cluster, so the password cannot be ` +
+        "The 'postgres-secret' Secret is not in the local cluster, so the password cannot be " +
           `read.\n  ${FIX}`,
       );
     }
@@ -294,7 +334,7 @@ async function deriveDatabaseUrl(deps = {}) {
     }
   }
 
-  const inClusterUrl = expandKubeRefs(template, values);
+  const parts = splitUrlTemplate(template);
   const port = readForwardedPostgresPort(deps.skaffoldPath);
 
   if (!(await probe(port))) {
@@ -303,7 +343,7 @@ async function deriveDatabaseUrl(deps = {}) {
     );
   }
 
-  return { url: rewriteHostAndPort(inClusterUrl, 'localhost', port), port };
+  return { url: buildLocalUrl(parts, values, 'localhost', port), port };
 }
 
 function parseArgs(argv) {
@@ -321,7 +361,8 @@ function parseArgs(argv) {
     } else {
       throw new PropertyDbUrlError(
         `Unrecognised argument '${args[i]}'.\n` +
-          '  Usage: node tools/infra/property-db-url.js [--print] [--env-file <path>]',
+          '  Usage: node tools/infra/property-db-url.js [--print] [--env-file <path>]\n' +
+          '  --print writes the password to stdout. Read it into a variable, never onto a command line.',
       );
     }
   }
@@ -354,12 +395,13 @@ if (require.main === module) {
 module.exports = {
   PropertyDbUrlError,
   deriveDatabaseUrl,
+  buildLocalUrl,
   expandKubeRefs,
   parseArgs,
   probeLocalPort,
   readDeploymentEnv,
   readForwardedPostgresPort,
   redactUrl,
-  rewriteHostAndPort,
   setEnvFileKey,
+  splitUrlTemplate,
 };

@@ -121,6 +121,9 @@
       }
     },
     "migrate-down": {
+      "metadata": {
+        "description": "No --envPath, for the same reason as `migrate` above. Nx loads the workspace-root .env into the task environment. Run `pnpm run infra:local:property-db:url` first."
+      },
       "executor": "nx:run-commands",
       "options": {
         "command": "node-pg-migrate down",

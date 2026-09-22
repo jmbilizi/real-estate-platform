@@ -6,14 +6,15 @@ const path = require('path');
 
 const {
   PropertyDbUrlError,
+  buildLocalUrl,
   deriveDatabaseUrl,
   expandKubeRefs,
   parseArgs,
   readDeploymentEnv,
   readForwardedPostgresPort,
   redactUrl,
-  rewriteHostAndPort,
   setEnvFileKey,
+  splitUrlTemplate,
 } = require('./property-db-url');
 
 const LOCAL_CONTEXT = 'kind-myapp-podman-local';
@@ -230,18 +231,63 @@ portForward:
   assert.throws(() => readForwardedPostgresPort(file), PropertyDbUrlError);
 });
 
-test('rewriteHostAndPort keeps the credential and the database path byte for byte', () => {
+const TEMPLATE =
+  'postgresql://$(PROPERTY_DB_USER):$(PROPERTY_SERVICE_DB_USER_PASSWORD)' +
+  '@$(PROPERTY_DB_HOST):$(PROPERTY_DB_PORT)/$(PROPERTY_DB_NAME)';
+
+function partsWith(password) {
+  return {
+    parts: splitUrlTemplate(TEMPLATE),
+    values: {
+      PROPERTY_DB_USER: 'property_service_db_user',
+      PROPERTY_SERVICE_DB_USER_PASSWORD: password,
+      PROPERTY_DB_HOST: 'postgres-svc',
+      PROPERTY_DB_PORT: '5432',
+      PROPERTY_DB_NAME: 'property_db',
+    },
+  };
+}
+
+test('splitUrlTemplate reads the template structure before any value is substituted', () => {
+  const parts = splitUrlTemplate(TEMPLATE);
+  assert.equal(parts.scheme, 'postgresql://');
+  assert.equal(parts.user, '$(PROPERTY_DB_USER)');
+  assert.equal(parts.password, '$(PROPERTY_SERVICE_DB_USER_PASSWORD)');
+  assert.equal(parts.rest, '$(PROPERTY_DB_HOST):$(PROPERTY_DB_PORT)/$(PROPERTY_DB_NAME)');
+});
+
+test('splitUrlTemplate refuses a shape it cannot read', () => {
+  assert.throws(() => splitUrlTemplate('postgresql://host/db'), PropertyDbUrlError);
+});
+
+test('buildLocalUrl points at localhost and the forwarded port', () => {
+  const { parts, values } = partsWith('s3cret');
   assert.equal(
-    rewriteHostAndPort('postgresql://u:p%40ss@postgres-svc:5432/property_db', 'localhost', 5433),
-    'postgresql://u:p%40ss@localhost:5433/property_db',
+    buildLocalUrl(parts, values, 'localhost', 5433),
+    'postgresql://property_service_db_user:s3cret@localhost:5433/property_db',
   );
 });
 
-test('rewriteHostAndPort keeps a query string', () => {
-  assert.equal(
-    rewriteHostAndPort('postgresql://u:p@postgres-svc:5432/db?sslmode=disable', 'localhost', 1),
-    'postgresql://u:p@localhost:1/db?sslmode=disable',
-  );
+test('buildLocalUrl percent-encodes a password containing @, so the authority stays unambiguous', () => {
+  const { parts, values } = partsWith('p@ss');
+  const url = buildLocalUrl(parts, values, 'localhost', 5432);
+  assert.equal(url, 'postgresql://property_service_db_user:p%40ss@localhost:5432/property_db');
+  assert.equal(new URL(url).password, 'p%40ss');
+  assert.equal(decodeURIComponent(new URL(url).password), 'p@ss');
+  assert.equal(new URL(url).hostname, 'localhost');
+});
+
+test('buildLocalUrl percent-encodes a base64 password containing / and +', () => {
+  const { parts, values } = partsWith('a/b+c=');
+  const url = buildLocalUrl(parts, values, 'localhost', 5432);
+  assert.equal(new URL(url).hostname, 'localhost');
+  assert.equal(new URL(url).pathname, '/property_db');
+  assert.equal(decodeURIComponent(new URL(url).password), 'a/b+c=');
+});
+
+test('buildLocalUrl refuses an empty password rather than building a blank credential', () => {
+  const { parts, values } = partsWith('');
+  assert.throws(() => buildLocalUrl(parts, values, 'localhost', 5432), PropertyDbUrlError);
 });
 
 test('redactUrl hides the password and keeps the rest readable', () => {
@@ -249,6 +295,16 @@ test('redactUrl hides the password and keeps the rest readable', () => {
     redactUrl('postgresql://user:s3cret@localhost:5432/property_db'),
     'postgresql://user:***@localhost:5432/property_db',
   );
+});
+
+test('redactUrl leaks no part of a password containing @', () => {
+  const redacted = redactUrl('postgresql://user:p%40ss@localhost:5432/property_db');
+  assert.equal(redacted, 'postgresql://user:***@localhost:5432/property_db');
+  assert.ok(!redacted.includes('ss'), 'no fragment of the password may survive redaction');
+});
+
+test('redactUrl replaces a value it cannot parse, rather than redacting it partly', () => {
+  assert.equal(redactUrl('not a url'), '<unprintable connection string>');
 });
 
 function tempEnvFile(body) {

@@ -187,7 +187,10 @@ down. `apps/services/property-service/AGENTS.md` documents it. To inspect every 
 superuser, connect with psql:
 
 ```bash
-psql "$(pnpm run --silent infra:local:property-db:url -- --print)"
+# --print writes the password to stdout. Read it into the environment, never onto a command line:
+# an argument is visible to every user on the host through the process list.
+export DATABASE_URL="$(pnpm run --silent infra:local:property-db:url -- --print)"
+psql "$DATABASE_URL"
 
 # Inside psql:
 \l                           # List databases
