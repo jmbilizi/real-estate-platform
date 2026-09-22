@@ -6,12 +6,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { ListingType } from '@/lib/types';
 import { formatListingPrice } from '@/lib/listing-format';
-import {
-  TILE_LAYER_ATTRIBUTION,
-  TILE_LAYER_SUBDOMAINS,
-  TILE_LAYER_URL,
-  useTileFailure,
-} from '@/components/map-tiles';
+import { useTileFailure, useTileLayerConfig } from '@/components/map-tiles';
 
 function InvalidateOnMount() {
   const map = useMap();
@@ -45,6 +40,7 @@ export default function SingleListingMapInner({
   const PILL_W = 80;
   const PILL_H = 32;
   const { failed: tilesFailed, onTileError } = useTileFailure();
+  const { tileUrl, attribution } = useTileLayerConfig();
   const priceDisplay = formatListingPrice(price, listingType);
   const pinLabel = priceDisplay.isWithheld ? 'View listing' : priceDisplay.text;
   const icon = L.divIcon({
@@ -61,18 +57,25 @@ export default function SingleListingMapInner({
       <MapContainer
         center={[latitude, longitude]}
         zoom={14}
+        // Set here, not only on `<TileLayer>` — see `ListingsMapInner` for why. This map has no
+        // marker clustering, so it does not hit that crash, but the tile URL still arrives
+        // asynchronously and the map should not be able to zoom past the provider's coverage
+        // before `<TileLayer>` mounts.
+        maxZoom={19}
         scrollWheelZoom={false}
         zoomControl
         className="h-full w-full"
         style={{ background: '#f2ede6' }}
       >
-        <TileLayer
-          attribution={TILE_LAYER_ATTRIBUTION}
-          url={TILE_LAYER_URL}
-          subdomains={TILE_LAYER_SUBDOMAINS}
-          maxZoom={19}
-          eventHandlers={{ tileerror: onTileError }}
-        />
+        {/* Empty until `/api/map-config` answers — see `map-tiles.ts` for why this never
+            defaults to a fallback URL client-side. */}
+        {tileUrl && (
+          <TileLayer
+            attribution={attribution}
+            url={tileUrl}
+            eventHandlers={{ tileerror: onTileError }}
+          />
+        )}
         <InvalidateOnMount />
         <Circle
           center={[latitude, longitude]}

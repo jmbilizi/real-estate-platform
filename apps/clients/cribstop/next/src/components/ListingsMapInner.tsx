@@ -23,12 +23,7 @@ import {
 import ListingImage from '@/components/listing/ListingImage';
 import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges';
 import ListingAttribution from '@/components/listing/ListingAttribution';
-import {
-  TILE_LAYER_ATTRIBUTION,
-  TILE_LAYER_SUBDOMAINS,
-  TILE_LAYER_URL,
-  useTileFailure,
-} from '@/components/map-tiles';
+import { useTileFailure, useTileLayerConfig } from '@/components/map-tiles';
 
 // Module-level callback set by ListingsMapInner so MarkerPopup
 // (rendered in a separate createRoot) can still trigger modal navigation.
@@ -503,6 +498,7 @@ export default function ListingsMapInner({
 
   const [scrollActive, setScrollActive] = useState(false);
   const { failed: tilesFailed, onTileError } = useTileFailure();
+  const { tileUrl, attribution } = useTileLayerConfig();
 
   // The frame — radius, border, shadow, fill — belongs to the wrapper in `ListingsMap`, so that the
   // loading placeholder wears it too. This fills that frame and positions the overlays below.
@@ -511,18 +507,25 @@ export default function ListingsMapInner({
       <MapContainer
         center={center}
         zoom={11}
+        // Set here, not only on `<TileLayer>`: `leaflet.markercluster` reads the map's own
+        // `maxZoom` to compute spiderfy behavior and throws "Map has no maxZoom specified" if it
+        // mounts before `<TileLayer>` does — which now happens on every load, since the tile URL
+        // arrives asynchronously from `/api/map-config` (#291).
+        maxZoom={19}
         scrollWheelZoom={false}
         zoomControl={false}
         className="h-full w-full"
         style={{ background: '#f2ede6' }}
       >
-        <TileLayer
-          attribution={TILE_LAYER_ATTRIBUTION}
-          url={TILE_LAYER_URL}
-          subdomains={TILE_LAYER_SUBDOMAINS}
-          maxZoom={19}
-          eventHandlers={{ tileerror: onTileError }}
-        />
+        {/* Empty until `/api/map-config` answers — see `map-tiles.ts` for why this never
+            defaults to a fallback URL client-side. */}
+        {tileUrl && (
+          <TileLayer
+            attribution={attribution}
+            url={tileUrl}
+            eventHandlers={{ tileerror: onTileError }}
+          />
+        )}
         <InvalidateOnMount />
         <CustomMapControls />
         <ClickToActivateScroll onChange={setScrollActive} />
