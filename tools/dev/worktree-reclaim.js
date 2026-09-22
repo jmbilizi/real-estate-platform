@@ -4,13 +4,19 @@
  * Reclaim stale agent git worktrees safely.
  *
  * Parses `git worktree list --porcelain`, classifies every worktree but the primary one, and
- * removes only the ones proven safe. A dirty worktree or a worktree with unpushed commits is
- * never removed, under any flag. See ticket #235 AC3.
+ * removes only the ones proven safe and stale. A dirty worktree or a worktree with unpushed
+ * commits is never removed, under any flag. See ticket #235 AC3.
  *
- * CRITICAL SAFETY RULE: a probe that fails (git exits non-zero, or the runner throws) must never
- * read as "clean" or "absent". It classifies as `unknown` and the worktree is skipped. This repo
- * has a recorded regression of exactly that shape (AGENTS.md: "A failed probe must never read as
- * absent").
+ * CRITICAL SAFETY RULE: a probe that fails (git exits non-zero, the runner throws, or a stat call
+ * throws for a reason other than ENOENT) must never read as "clean" or "absent". It classifies as
+ * `unknown` and the worktree is skipped. This repo has a recorded regression of exactly that shape
+ * (AGENTS.md: "A failed probe must never read as absent"). An inaccessible path (permission denied,
+ * a detached volume, EBUSY) is exactly this case: it is not proof the worktree is gone, so it
+ * classifies `unknown`, never `orphaned`.
+ *
+ * A worktree only becomes a removal candidate once it is proven clean, pushed, AND idle longer
+ * than the reclaim window. A running lane that is clean and pushed but still active is classified
+ * `active` and left alone.
  *
  * `.agents/hooks/lane-boundary.js` blocks a direct `git worktree remove|move|prune` and names this
  * script instead. The hook inspects agent tool calls only, so it never sees the git processes this
@@ -18,7 +24,10 @@
  */
 
 const fs = require('fs');
+const path = require('path');
 const { spawnSync } = require('child_process');
+
+const DEFAULT_OLDER_THAN_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Parse `git worktree list --porcelain` output into one record per worktree.
@@ -100,9 +109,31 @@ function defaultRun(args, opts = {}) {
   return spawnSync('git', args, { encoding: 'utf-8', ...opts });
 }
 
-/** Check a path exists for real. Replaced by an injected check in tests. */
+/**
+ * Check whether a path exists for real, using `fs.statSync`.
+ *
+ * Returns `false` only for `ENOENT` (the path is genuinely absent). Any other error (permission
+ * denied, a detached volume, EBUSY) is rethrown so the caller classifies the worktree `unknown`
+ * instead of `orphaned` — see the CRITICAL SAFETY RULE above.
+ */
 function defaultPathExists(targetPath) {
-  return fs.existsSync(targetPath);
+  try {
+    fs.statSync(targetPath);
+    return true;
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
+/** Stat a file for real. Replaced by an injected stub in tests. */
+function defaultStatFile(targetPath) {
+  return fs.statSync(targetPath);
+}
+
+/** The current time, in milliseconds. Replaced by an injected clock in tests. */
+function defaultNow() {
+  return Date.now();
 }
 
 /**
@@ -123,19 +154,89 @@ function describeFailure(result) {
 }
 
 /**
+ * Measure how long ago a worktree's own git index last changed, as a proxy for "last touched by
+ * an agent". The index lives under the worktree's private git directory (not `.git` in the
+ * worktree itself), so it is fetched with `rev-parse --absolute-git-dir` first.
+ *
+ * Returns `{ idleMs }` on success, or `{ error }` when any step cannot be trusted. The caller must
+ * treat `error` as "unknown", never as "stale" or "active".
+ */
+function measureIdleMs(record, { run, statFile, now }) {
+  const gitDirResult = run(['-C', record.path, 'rev-parse', '--absolute-git-dir'], {
+    encoding: 'utf-8',
+  });
+  if (probeFailed(gitDirResult)) {
+    return {
+      error: `the git-dir probe failed, so this worktree is skipped: ${describeFailure(gitDirResult)}`,
+    };
+  }
+
+  const adminDir = (gitDirResult.stdout || '').trim();
+  if (!adminDir) {
+    return { error: 'the git-dir probe returned no path, so this worktree is skipped' };
+  }
+
+  let stat;
+  try {
+    stat = statFile(path.join(adminDir, 'index'));
+  } catch (error) {
+    return {
+      error: `the index stat failed, so this worktree is skipped: ${error && error.message}`,
+    };
+  }
+
+  return { idleMs: now() - stat.mtimeMs };
+}
+
+/** Read the process id out of a git lock reason, for example "... (pid 37512)". Null when absent. */
+function readLockOwnerPid(lockedReason) {
+  const match = /\bpid\s+(\d+)\b/i.exec(lockedReason || '');
+  if (!match) return null;
+  const pid = Number(match[1]);
+  return Number.isInteger(pid) && pid > 0 ? pid : null;
+}
+
+/**
+ * Report whether a process id is still running.
+ *
+ * `process.kill(pid, 0)` sends no signal and only tests reachability. An `EPERM` means the process
+ * exists but belongs to another user, which still counts as alive. Any other failure counts as
+ * alive too, because a probe that cannot answer must never read as "safe to delete".
+ */
+function defaultIsProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code !== 'ESRCH';
+  }
+}
+
+/**
  * Classify one non-primary worktree.
  *
- * Order matters for safety. Dirty and unpushed are checked before locked, so a worktree that is
- * both locked and dirty (or locked and unpushed) is reported as `dirty` or `unpushed` — never as
- * `locked` — and so never qualifies for `--force` removal.
+ * Order matters for safety:
+ * 1. Orphaned (prunable, or the path is genuinely absent) is checked first — nothing else can be
+ *    probed once the worktree is gone.
+ * 2. Dirty and unpushed are checked next, so a worktree that is both locked and dirty (or locked
+ *    and unpushed) is reported as `dirty` or `unpushed` — never as `locked`.
+ * 3. Staleness is checked before locked, so a clean, pushed worktree still inside the reclaim
+ *    window classifies `active` regardless of lock state, and is never a removal candidate.
+ * 4. Only a clean, pushed, and stale worktree reaches the locked/reclaimable distinction.
+ * 5. A lock whose reason names a live process classifies `running`, which no flag can remove.
  *
  * @param {ReturnType<typeof parsePorcelain>[number]} record
- * @param {{ run: Function, pathExists?: Function }} options
+ * @param {{ run: Function, pathExists?: Function, statFile?: Function, now?: Function, olderThanMs?: number, isProcessAlive?: Function }} options
  * @returns {{ classification: string, reason: string|null }}
  */
 function classifyWorktree(record, options) {
   const run = options.run;
   const pathExists = options.pathExists || defaultPathExists;
+  const statFile = options.statFile || defaultStatFile;
+  const now = options.now || defaultNow;
+  const isProcessAlive = options.isProcessAlive || defaultIsProcessAlive;
+  const olderThanMs =
+    typeof options.olderThanMs === 'number' ? options.olderThanMs : DEFAULT_OLDER_THAN_MS;
 
   if (record.prunable) {
     return {
@@ -143,7 +244,17 @@ function classifyWorktree(record, options) {
       reason: record.prunableReason || 'git reports this worktree as prunable',
     };
   }
-  if (!pathExists(record.path)) {
+
+  let exists;
+  try {
+    exists = pathExists(record.path);
+  } catch (error) {
+    return {
+      classification: 'unknown',
+      reason: `the path probe failed, so this worktree is skipped: ${error && error.message}`,
+    };
+  }
+  if (!exists) {
     return { classification: 'orphaned', reason: 'the worktree path no longer exists on disk' };
   }
 
@@ -179,7 +290,31 @@ function classifyWorktree(record, options) {
     return { classification: 'unpushed', reason: 'the branch has commits that exist nowhere else' };
   }
 
+  const idle = measureIdleMs(record, { run, statFile, now });
+  if (idle.error) {
+    return { classification: 'unknown', reason: idle.error };
+  }
+  if (idle.idleMs < olderThanMs) {
+    const hoursAgo = Math.max(0, idle.idleMs / 3_600_000).toFixed(1);
+    const windowHours = (olderThanMs / 3_600_000).toFixed(1);
+    return {
+      classification: 'active',
+      reason: `the git index changed ${hoursAgo}h ago, inside the ${windowHours}h reclaim window`,
+    };
+  }
+
   if (record.locked) {
+    // The agent harness locks a worktree it is using and writes the owning process id into the
+    // lock reason, for example "claude agent agent-1234 (pid 37512)". A live process there means
+    // a lane is running right now, so `--force` must not reach it. A lock naming a dead process
+    // is the leftover this script exists to clear.
+    const owner = readLockOwnerPid(record.lockedReason);
+    if (owner !== null && isProcessAlive(owner)) {
+      return {
+        classification: 'running',
+        reason: `a live agent holds this worktree (pid ${owner}): ${record.lockedReason}`,
+      };
+    }
     return {
       classification: 'locked',
       reason: record.lockedReason || 'git reports this worktree as locked',
@@ -189,22 +324,55 @@ function classifyWorktree(record, options) {
   return { classification: 'reclaimable', reason: null };
 }
 
+function parseArgs(argv) {
+  const result = { apply: argv.includes('--apply'), force: argv.includes('--force') };
+
+  const flagIndex = argv.indexOf('--older-than');
+  if (flagIndex !== -1) {
+    const raw = argv[flagIndex + 1];
+    const hours = Number(raw);
+    if (raw === undefined || raw === '' || !Number.isFinite(hours) || hours < 0) {
+      throw new Error(`--older-than needs a non-negative number of hours. Got: ${raw}`);
+    }
+    result.olderThanHours = hours;
+  }
+
+  return result;
+}
+
 /**
  * Discover, classify, and optionally remove stale worktrees.
  *
- * @param {{ run?: Function, pathExists?: Function, apply?: boolean, force?: boolean }} [options]
+ * @param {{
+ *   run?: Function,
+ *   pathExists?: Function,
+ *   statFile?: Function,
+ *   now?: Function,
+ *   cwd?: string,
+ *   apply?: boolean,
+ *   force?: boolean,
+ *   olderThanMs?: number,
+ *   isProcessAlive?: Function,
+ * }} [options]
  * @returns {{
  *   entries: Array<{ path: string, branch: string|null, classification: string, reason: string|null, action: string, error?: string }>,
  *   apply: boolean,
  *   force: boolean,
+ *   olderThanMs: number,
  *   failed: boolean,
  * }}
  */
 function reclaim(options = {}) {
   const run = options.run || defaultRun;
   const pathExists = options.pathExists || defaultPathExists;
+  const statFile = options.statFile || defaultStatFile;
+  const now = options.now || defaultNow;
+  const cwd = options.cwd || process.cwd();
+  const isProcessAlive = options.isProcessAlive || defaultIsProcessAlive;
   const apply = Boolean(options.apply);
   const force = Boolean(options.force);
+  const olderThanMs =
+    typeof options.olderThanMs === 'number' ? options.olderThanMs : DEFAULT_OLDER_THAN_MS;
 
   const listResult = run(['worktree', 'list', '--porcelain'], { encoding: 'utf-8' });
   if (probeFailed(listResult)) {
@@ -214,6 +382,7 @@ function reclaim(options = {}) {
   }
 
   const records = parsePorcelain(listResult.stdout || '');
+  const resolvedCwd = path.resolve(cwd);
   const entries = [];
   let hasOrphaned = false;
   let failed = false;
@@ -231,7 +400,27 @@ function reclaim(options = {}) {
       return;
     }
 
-    const { classification, reason } = classifyWorktree(record, { run, pathExists });
+    // Never treat the worktree the script is running inside as a candidate, no matter what its
+    // own probes would say. Skip it before running any of them.
+    if (path.resolve(record.path) === resolvedCwd) {
+      entries.push({
+        path: record.path,
+        branch: record.branch,
+        classification: 'self',
+        reason: 'the script is running inside this worktree',
+        action: 'skipped',
+      });
+      return;
+    }
+
+    const { classification, reason } = classifyWorktree(record, {
+      run,
+      pathExists,
+      statFile,
+      now,
+      olderThanMs,
+      isProcessAlive,
+    });
     const entry = {
       path: record.path,
       branch: record.branch,
@@ -245,7 +434,13 @@ function reclaim(options = {}) {
       entry.action = apply ? 'pruned' : 'skipped';
     } else if (classification === 'reclaimable') {
       if (apply) {
-        const result = run(['worktree', 'remove', record.path], { encoding: 'utf-8' });
+        // The tracked-file probes already proved this worktree clean, pushed, and stale. The
+        // only thing `--force` overrides at this point is git's objection to ignored build
+        // output (node_modules/, .next/, dist/) still sitting in the tree — there is nothing
+        // left to lose.
+        const result = run(['worktree', 'remove', '--force', record.path], {
+          encoding: 'utf-8',
+        });
         if (probeFailed(result)) {
           entry.action = 'remove-failed';
           entry.error = describeFailure(result);
@@ -256,7 +451,11 @@ function reclaim(options = {}) {
       }
     } else if (classification === 'locked') {
       if (apply && force) {
-        const result = run(['worktree', 'remove', '--force', record.path], { encoding: 'utf-8' });
+        // Git requires force level 2 to remove a locked worktree ("use 'remove -f -f' to
+        // override or unlock first"). A single --force is not enough and always fails here.
+        const result = run(['worktree', 'remove', '--force', '--force', record.path], {
+          encoding: 'utf-8',
+        });
         if (probeFailed(result)) {
           entry.action = 'remove-failed';
           entry.error = describeFailure(result);
@@ -266,7 +465,8 @@ function reclaim(options = {}) {
         }
       }
     }
-    // dirty, unpushed, and unknown keep action 'skipped' and are never removed, under any flag.
+    // dirty, unpushed, active, self, and unknown keep action 'skipped' and are never removed,
+    // under any flag.
 
     entries.push(entry);
   });
@@ -285,14 +485,7 @@ function reclaim(options = {}) {
     }
   }
 
-  return { entries, apply, force, failed };
-}
-
-function parseArgs(argv) {
-  return {
-    apply: argv.includes('--apply'),
-    force: argv.includes('--force'),
-  };
+  return { entries, apply, force, olderThanMs, failed };
 }
 
 /** Build the readable report: one line per worktree, then a summary line. */
@@ -316,22 +509,38 @@ function formatReport(result) {
     .map(([classification, count]) => `${count} ${classification}`)
     .join(', ');
 
+  const windowHours = (result.olderThanMs / 3_600_000).toFixed(1);
+
   lines.push('');
   lines.push(`Summary: ${summary}.`);
+  lines.push(`Worktrees touched within the last ${windowHours}h classify active and are skipped.`);
 
   if (!result.apply) {
     lines.push('This is a dry run. Nothing changed.');
     lines.push('Run with --apply to remove reclaimable worktrees and prune orphaned ones.');
   }
+  lines.push('Override the reclaim window with --older-than <hours>.');
 
   return lines.join('\n');
 }
 
 function main() {
-  const args = parseArgs(process.argv.slice(2));
+  let args;
+  try {
+    args = parseArgs(process.argv.slice(2));
+  } catch (error) {
+    console.error(error.message);
+    process.exitCode = 1;
+    return;
+  }
+
   let result;
   try {
-    result = reclaim({ apply: args.apply, force: args.force });
+    result = reclaim({
+      apply: args.apply,
+      force: args.force,
+      olderThanMs: args.olderThanHours !== undefined ? args.olderThanHours * 3_600_000 : undefined,
+    });
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;
@@ -354,4 +563,6 @@ module.exports = {
   reclaim,
   probeFailed,
   formatReport,
+  parseArgs,
+  DEFAULT_OLDER_THAN_MS,
 };

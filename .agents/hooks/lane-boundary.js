@@ -82,24 +82,62 @@ function checkWriteTarget(targetPath, laneRoot) {
   return null;
 }
 
-// Splits a Bash command into segments the same way enforce-pnpm-wrappers.js
-// does: strip quoted literals first, then split on shell separators, so a
-// quoted commit message or echoed path never false-positives as a real flag.
-function splitSegments(command) {
-  const stripped = command.replace(/"[^"]*"|'[^']*'/g, '""');
-  return stripped.split(/&&|\|\||;|\|/);
+// Blanks quoted literals to a fixed placeholder. Used only where matching
+// must ignore quoted prose (e.g. a commit message that mentions "git
+// worktree remove"); never used where a flag's real path value is needed.
+function blankQuotes(text) {
+  return text.replace(/"[^"]*"|'[^']*'/g, '""');
 }
 
+// Splits a Bash command into segments on shell separators, but never on a
+// separator that sits inside a quoted literal (a quoted commit message or
+// echoed path). Segments keep their original text, quotes included, so a
+// later flag lookup can recover the real path a quoted `-C`/`--git-dir`
+// argument names. Boundaries are found on a length-preserving quote mask so
+// segment offsets line up exactly with the original command.
+function splitSegments(command) {
+  const masked = command.replace(/"[^"]*"|'[^']*'/g, (m) => '"'.repeat(m.length));
+  const segments = [];
+  const separators = /&&|\|\||;|\|/g;
+  let lastIndex = 0;
+  let match = separators.exec(masked);
+  while (match) {
+    segments.push(command.slice(lastIndex, match.index));
+    lastIndex = match.index + match[0].length;
+    match = separators.exec(masked);
+  }
+  segments.push(command.slice(lastIndex));
+  return segments;
+}
+
+// Strips one layer of matching surrounding quotes from a recovered flag value.
+function stripQuotes(value) {
+  if (value.length >= 2) {
+    const first = value[0];
+    const last = value[value.length - 1];
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+      return value.slice(1, -1);
+    }
+  }
+  return value;
+}
+
+// Recovers the flag's value from the segment's own (unblanked) tokens, so a
+// quoted path is read intact rather than through the quote-blanked copy
+// `splitSegments` uses only to find segment boundaries.
 function resolveFlagPath(tokens, index) {
   const token = tokens[index];
   const eq = token.indexOf('=');
-  if (eq !== -1) return token.slice(eq + 1);
-  return tokens[index + 1];
+  if (eq !== -1) return stripQuotes(token.slice(eq + 1));
+  const next = tokens[index + 1];
+  return next === undefined ? undefined : stripQuotes(next);
 }
 
 // Rule C: `git -C/--git-dir/--work-tree <path>` must not target a tree
-// outside this lane or inside a foreign worktree.
-function checkGitTargetFlags(segment, laneRoot) {
+// outside this lane or inside a foreign worktree. `cwd` is the lane's own
+// working directory (not this hook process's cwd), needed to resolve a
+// relative flag path such as `-C .`.
+function checkGitTargetFlags(segment, laneRoot, cwd) {
   const tokens = segment.trim().split(/\s+/).filter(Boolean);
   if (tokens[0] !== 'git') return null;
 
@@ -111,16 +149,20 @@ function checkGitTargetFlags(segment, laneRoot) {
     if (!isDashC && !isGitDir && !isWorkTree) continue;
 
     const flagPath = resolveFlagPath(tokens, i);
-    if (!flagPath || flagPath === '""') continue;
+    if (!flagPath) continue;
 
-    const worktreeRoot = findWorktreeRoot(flagPath);
+    const resolvedFlagPath = path.isAbsolute(flagPath)
+      ? flagPath
+      : path.resolve(cwd || laneRoot, flagPath);
+
+    const worktreeRoot = findWorktreeRoot(resolvedFlagPath);
     if (worktreeRoot && normalize(worktreeRoot) !== normalize(laneRoot)) {
       return (
         `Blocked: "git ${token} ${flagPath}" targets another lane's worktree.\n` +
         `Run git commands only against your own lane root (${laneRoot}).`
       );
     }
-    if (!isInside(flagPath, laneRoot)) {
+    if (!isInside(resolvedFlagPath, laneRoot)) {
       return (
         `Blocked: "git ${token} ${flagPath}" targets a tree outside this lane's root (${laneRoot}).\n` +
         `Run git commands only against your own lane root.`
@@ -131,10 +173,14 @@ function checkGitTargetFlags(segment, laneRoot) {
   return null;
 }
 
-// Rule D: worktree administration must go through the reclaim script, which
-// sets LANE_BOUNDARY_ALLOW_WORKTREE_ADMIN=1 for its own calls.
+// Rule D: worktree administration must go through the reclaim script, not
+// git directly. LANE_BOUNDARY_ALLOW_WORKTREE_ADMIN=1 is a deliberate
+// session-level override for a human or agent that must run the command
+// directly. The reclaim script itself never needs it: this hook only sees
+// agent tool calls, never the git child processes the script spawns.
 function checkWorktreeAdmin(segment, env) {
-  if (!/^\s*git\s+worktree\s+(remove|move|prune)\b/.test(segment)) return null;
+  const blanked = blankQuotes(segment);
+  if (!/\bgit\s+worktree\s+(remove|move|prune)\b/.test(blanked)) return null;
   if (env.LANE_BOUNDARY_ALLOW_WORKTREE_ADMIN === '1') return null;
   return (
     `Blocked: "${segment.trim()}" administers a worktree directly.\n` +
@@ -158,7 +204,7 @@ const WRITE_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit', 'MultiEdit']);
  * Decides whether one tool call is allowed. Returns null to allow, or a
  * block reason string.
  */
-function evaluate({ toolName, toolInput, laneRoot, env }) {
+function evaluate({ toolName, toolInput, laneRoot, env, cwd }) {
   if (!laneRoot || !toolName) return null;
   const safeEnv = env || {};
   const input = toolInput || {};
@@ -175,7 +221,7 @@ function evaluate({ toolName, toolInput, laneRoot, env }) {
     for (const segment of splitSegments(command)) {
       const adminReason = checkWorktreeAdmin(segment, safeEnv);
       if (adminReason) return adminReason;
-      const flagReason = checkGitTargetFlags(segment, laneRoot);
+      const flagReason = checkGitTargetFlags(segment, laneRoot, cwd);
       if (flagReason) return flagReason;
     }
     return null;
@@ -196,6 +242,7 @@ if (require.main === module) {
         toolInput: payload?.tool_input,
         laneRoot,
         env: process.env,
+        cwd: payload?.cwd,
       });
       if (reason) {
         process.stderr.write(`${reason}\n`);

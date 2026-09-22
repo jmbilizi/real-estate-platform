@@ -9,7 +9,10 @@ const { evaluate, resolveLaneRoot } = require('./lane-boundary');
 
 // Primary checkout stands in for the repo's own working tree; the worktree
 // path stands in for a sibling lane created under `.claude/worktrees/`.
-const PRIMARY_ROOT = path.join('C:', 'Src', 'real-estate-platform');
+// `path.resolve('/', ...)` anchors these at the current drive root on
+// win32 (and at `/` on POSIX), so the fixtures are genuinely absolute
+// rather than the drive-relative path `path.join('C:', ...)` produced.
+const PRIMARY_ROOT = path.resolve('/', 'Src', 'real-estate-platform');
 const WORKTREE_ROOT = path.join(PRIMARY_ROOT, '.claude', 'worktrees', 'mine');
 const OTHER_WORKTREE_ROOT = path.join(PRIMARY_ROOT, '.claude', 'worktrees', 'other');
 
@@ -22,12 +25,13 @@ function editCall(filePath, laneRoot) {
   });
 }
 
-function bashCall(command, laneRoot, env) {
+function bashCall(command, laneRoot, env, cwd) {
   return evaluate({
     toolName: 'Bash',
     toolInput: { command },
     laneRoot,
     env: env || {},
+    cwd,
   });
 }
 
@@ -142,3 +146,153 @@ test('the narrowed lane root blocks a write to the primary checkout', () => {
   const reason = editCall(path.join(PRIMARY_ROOT, 'tools', 'x.js'), laneRoot);
   assert.match(String(reason), /outside this lane's root/);
 });
+
+// --- Regression: finding 1 --------------------------------------------------
+// A quoted `-C`/`--git-dir` value used to be blanked to "" before the flag
+// lookup ran, so the check silently no-opped and the command was allowed.
+
+test('a quoted git -C path into a foreign worktree is blocked (finding 1)', () => {
+  const reason = bashCall(`git -C "${OTHER_WORKTREE_ROOT}" checkout dev`, PRIMARY_ROOT);
+  assert.match(reason, /another lane's worktree/);
+});
+
+test('a quoted --git-dir path outside the lane root is blocked (finding 1)', () => {
+  const outside = path.join('C:', 'Src', 'other-repo');
+  const reason = bashCall(`git --git-dir="${outside}/.git" checkout dev`, PRIMARY_ROOT);
+  assert.match(reason, /targets a tree outside this lane's root/);
+});
+
+test('a single-quoted git -C path into a foreign worktree is blocked (finding 1)', () => {
+  const reason = bashCall(`git -C '${OTHER_WORKTREE_ROOT}' checkout dev`, PRIMARY_ROOT);
+  assert.match(reason, /another lane's worktree/);
+});
+
+// --- Regression: finding 2 --------------------------------------------------
+// `isInside` used to resolve a relative `-C` path against this hook process's
+// own cwd instead of the lane's cwd, so an ordinary `git -C .` from inside the
+// lane's worktree could false-positive as outside the lane root.
+
+test('a relative git -C path resolves against the payload cwd, not the hook cwd (finding 2)', () => {
+  const reason = bashCall('git -C . status', WORKTREE_ROOT, {}, WORKTREE_ROOT);
+  assert.equal(reason, null);
+});
+
+test('a relative git -C path that escapes the lane via the payload cwd is blocked (finding 2)', () => {
+  const reason = bashCall('git -C .. status', WORKTREE_ROOT, {}, WORKTREE_ROOT);
+  assert.match(reason, /outside this lane's root/);
+});
+
+test('a relative git -C path with no payload cwd falls back to the lane root (finding 2)', () => {
+  const reason = bashCall('git -C sub status', PRIMARY_ROOT, {}, undefined);
+  assert.equal(reason, null);
+});
+
+// --- Regression: finding 3 --------------------------------------------------
+// Rule D used to anchor `^\s*git\s+worktree\s+...`, so any prefix (an env
+// assignment, `sudo`, a leading `&&`-joined command) bypassed the block.
+
+test('env-prefixed git worktree remove is blocked (finding 3)', () => {
+  const reason = bashCall('env FOO=1 git worktree remove x', PRIMARY_ROOT);
+  assert.match(reason, /pnpm run dev:worktree:reclaim/);
+});
+
+test('sudo-prefixed git worktree move is blocked (finding 3)', () => {
+  const reason = bashCall('sudo git worktree move x y', PRIMARY_ROOT);
+  assert.match(reason, /pnpm run dev:worktree:reclaim/);
+});
+
+test('git worktree list is still allowed with a prefix (finding 3)', () => {
+  assert.equal(bashCall('env FOO=1 git worktree list', PRIMARY_ROOT), null);
+});
+
+// --- Regression: finding 4 --------------------------------------------------
+// The old comment claimed the reclaim script sets the env override for its
+// own git calls. That was never true: the hook only sees agent tool calls,
+// never the git child processes a script spawns, so there is no implicit
+// exemption tied to the reclaim script's identity. Only the env var itself
+// can allow worktree admin, and it must be set explicitly on the call.
+
+test('git worktree remove has no implicit reclaim-script exemption (finding 4)', () => {
+  const reason = bashCall('git worktree remove x', PRIMARY_ROOT, {});
+  assert.match(reason, /pnpm run dev:worktree:reclaim/);
+});
+
+test('git worktree remove is allowed only when the override env var is explicitly set (finding 4)', () => {
+  const blocked = bashCall('git worktree remove x', PRIMARY_ROOT, { SOME_OTHER_VAR: '1' });
+  assert.match(blocked, /pnpm run dev:worktree:reclaim/);
+
+  const allowed = bashCall('git worktree remove x', PRIMARY_ROOT, {
+    LANE_BOUNDARY_ALLOW_WORKTREE_ADMIN: '1',
+  });
+  assert.equal(allowed, null);
+});
+
+// --- Regression: finding 5 --------------------------------------------------
+// The old fixtures were built with `path.join('C:', ...)`, which yields the
+// drive-relative `C:Src\real-estate-platform` — never a genuine absolute
+// Windows path — so the win32 case-insensitive compare and backslash
+// handling went untested. These use `path.win32` explicitly and are gated to
+// win32 hosts, since feeding backslash paths through the POSIX `path` module
+// (what this file loads as `path` when run on a POSIX CI runner) would not
+// parse them as separators at all.
+
+test(
+  'a genuine absolute Windows path is matched case-insensitively',
+  { skip: process.platform !== 'win32' },
+  () => {
+    const laneRoot = path.win32.join(
+      'C:',
+      'Src',
+      'real-estate-platform',
+      '.claude',
+      'worktrees',
+      'mine',
+    );
+    const target = path.win32.join(
+      'C:',
+      'SRC',
+      'REAL-ESTATE-PLATFORM',
+      '.CLAUDE',
+      'WORKTREES',
+      'MINE',
+      'src',
+      'file.js',
+    );
+    assert.equal(editCall(target, laneRoot), null);
+  },
+);
+
+test(
+  'a mixed forward/backslash Windows path is treated as inside the lane root',
+  { skip: process.platform !== 'win32' },
+  () => {
+    const laneRoot = path.win32.join(
+      'C:',
+      'Src',
+      'real-estate-platform',
+      '.claude',
+      'worktrees',
+      'mine',
+    );
+    const target = 'C:/Src/real-estate-platform/.claude/worktrees/mine\\src\\file.js';
+    assert.equal(editCall(target, laneRoot), null);
+  },
+);
+
+test(
+  'a mixed-separator path outside the lane root is still blocked',
+  { skip: process.platform !== 'win32' },
+  () => {
+    const laneRoot = path.win32.join(
+      'C:',
+      'Src',
+      'real-estate-platform',
+      '.claude',
+      'worktrees',
+      'mine',
+    );
+    const target = 'C:/Src/real-estate-platform/tools\\x.js';
+    const reason = editCall(target, laneRoot);
+    assert.match(reason, /outside this lane's root/);
+  },
+);

@@ -83,8 +83,10 @@ guide.
    outside the lane root, an edit into another lane's worktree, and a `git -C` that points at
    another tree. It also refuses a direct `git worktree remove|move|prune`. Remove a stale worktree
    with `pnpm run dev:worktree:reclaim`. That script is a dry run by default. It never removes a
-   worktree that has uncommitted changes or unpushed commits. The hook fails open, so it is a
-   guardrail and not a security boundary.
+   worktree that has uncommitted changes, holds unpushed commits, was touched in the last 24 hours,
+   or carries a git lock that names a live agent process. Use `--apply` to act and
+   `--older-than <hours>` to change the window. The hook fails open, so it is a guardrail and not a
+   security boundary.
 
 10. **Write in ASD-STE100 Simplified Technical English, and write only what the reader needs.** This
     applies to everything an agent writes: ticket bodies, ticket comments, code comments, PR
