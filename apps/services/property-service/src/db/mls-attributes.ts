@@ -1,6 +1,38 @@
 import { Queryable, requireId } from './write';
 
 /**
+ * A `Queryable` proven, at runtime, to be scoped to one already-open transaction.
+ *
+ * `putAttributes` issues several dependent statements (lookups, then an INSERT, then a DELETE)
+ * across four governed tables, and stays atomic only inside a caller-managed transaction — see the
+ * module header. Nothing before this made that a type error: a bare pool connection type-checked
+ * identically to a transaction-scoped client and produced no error, only a silently non-atomic
+ * batch. `putListingAttributes()`/`putPropertyAttributes()` now take this type, not a bare
+ * `Queryable`, so passing an un-wrapped pool connection is a compile error for any caller that
+ * goes through the public entry points. `requireTransactionScoped()` is the runtime backstop for
+ * a caller that reaches `putAttributes` through `any`, a cast, or a hand-built object literal that
+ * spoofs the brand without actually holding a transaction.
+ */
+export interface TransactionScopedClient extends Queryable {
+  readonly __transactionScoped: true;
+}
+
+/** Tags a client the caller has confirmed is running inside an open transaction (after `BEGIN`). */
+export function asTransactionScoped<T extends Queryable>(client: T): T & TransactionScopedClient {
+  return Object.assign(client, { __transactionScoped: true as const });
+}
+
+function requireTransactionScoped(client: Queryable): asserts client is TransactionScopedClient {
+  if ((client as Partial<TransactionScopedClient>).__transactionScoped !== true) {
+    throw new Error(
+      "putAttributes requires a transaction-scoped client. Wrap the caller's transaction client " +
+        'with asTransactionScoped() after BEGIN — a bare pool connection here writes across ' +
+        'lookups, an INSERT and a DELETE non-atomically.',
+    );
+  }
+}
+
+/**
  * THE ONLY MODULE THAT WRITES THE MLS ATTRIBUTE MODEL — `mls_fields`, `mls_lookup_values`,
  * `listing_attributes` and `property_attributes` (#127).
  *
@@ -228,22 +260,54 @@ interface RegisteredField {
   retired_at: string | null;
 }
 
-async function lookupField(
+/**
+ * Resolves EVERY distinct field key of one `putAttributes` call in a single round trip, mirroring
+ * `resolveLookupValues()`'s existing batching below. A field-per-query loop was ~200 extra round
+ * trips on a listing whose payload is mostly attributes, the same throughput argument that batching
+ * already won for lookup values.
+ */
+async function lookupFields(
   client: Queryable,
-  key: MlsFieldKey,
-): Promise<RegisteredField | undefined> {
+  keys: MlsFieldKey[],
+): Promise<Map<string, RegisteredField>> {
+  const map = new Map<string, RegisteredField>();
+  if (keys.length === 0) {
+    return map;
+  }
   const { rows } = await client.query(
-    `SELECT id, data_type, scope, retired_at
+    `SELECT id, data_type, scope, retired_at, originating_system, reso_resource, field_name
        FROM mls_fields
-      WHERE originating_system = $1 AND reso_resource = $2 AND field_name = $3`,
-    [key.originatingSystem, key.resoResource, key.fieldName],
+      WHERE (originating_system, reso_resource, field_name) IN (
+        SELECT * FROM UNNEST($1::text[], $2::text[], $3::text[])
+      )`,
+    [
+      keys.map((key) => key.originatingSystem),
+      keys.map((key) => key.resoResource),
+      keys.map((key) => key.fieldName),
+    ],
   );
-  return rows[0] as RegisteredField | undefined;
+  for (const row of rows) {
+    map.set(
+      fieldKeyOf({
+        originatingSystem: String(row.originating_system),
+        resoResource: String(row.reso_resource),
+        fieldName: String(row.field_name),
+      }),
+      row as unknown as RegisteredField,
+    );
+  }
+  return map;
 }
 
-/** The five typed columns, in the order the INSERT below binds them. */
+/**
+ * The five typed columns, in the order the INSERT below binds them.
+ *
+ * `value_numeric` also accepts a STRING: `coerceScalar()` binds the trimmed feed literal directly
+ * for a string input, rather than round-tripping it through a JS `number`, so a value with more
+ * significant digits than float64 carries survives to the `numeric(20,6)` column unrounded.
+ */
 interface TypedValue {
-  value_numeric: number | null;
+  value_numeric: number | string | null;
   value_boolean: boolean | null;
   value_date: string | null;
   value_timestamp: string | null;
@@ -276,8 +340,36 @@ const DECIMAL_LITERAL = /^[+-]?(\d+(\.\d+)?|\.\d+)([eE][+-]?\d+)?$/;
  * ingest transaction, the precise failure this module exists to prevent. So the bound is enforced
  * here, where it can still be reported as an ordinary rejection. An `Edm.Int64`-shaped feed value
  * (a large numeric key) is the realistic way to hit it.
+ *
+ * Counted as DIGITS, never as a float64 magnitude comparison: a value within rounding distance of
+ * `1e14` can sit on either side of that boundary once represented as a float, so a threshold on the
+ * float itself can pass a value the column then overflows on. Counting digits on the literal has no
+ * such rounding step.
  */
-const MAX_NUMERIC_MAGNITUDE = 1e14;
+const MAX_INTEGER_DIGITS = 14;
+
+/**
+ * Counts the digits before the decimal point, ignoring sign. Counted from the LITERAL when one is
+ * available and it carries no exponent, so a huge decimal string is judged on its own text rather
+ * than on a float that may already have rounded it. A plain `number` input, or a literal using
+ * exponent notation, falls back to `BigInt`, never `Number.prototype.toString()`: past 1e21 that
+ * method itself switches to exponential notation ("1e+21"), which would make a value with FEWER
+ * digits than 21 in that string look like it passed the count — the exact overflow this function
+ * exists to catch. `BigInt` never renders exponentially, at any magnitude.
+ */
+function countIntegerDigits(literal: string | null, numeric: number): number {
+  if (literal !== null && !/[eE]/.test(literal)) {
+    const unsigned = literal.replace(/^[+-]/, '');
+    const integerPart = unsigned.split('.')[0] ?? '0';
+    const significant = integerPart.replace(/^0+(?=\d)/, '');
+    return significant.length;
+  }
+  const truncated = Math.trunc(Math.abs(numeric));
+  if (!Number.isFinite(truncated)) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+  return BigInt(truncated).toString().length;
+}
 
 /**
  * Coerces one raw feed value against the field's registered type, or returns undefined to reject it.
@@ -294,13 +386,17 @@ function coerceScalar(dataType: MlsDataType, raw: unknown): TypedValue | undefin
   switch (dataType) {
     case 'integer':
     case 'decimal': {
-      const numeric =
-        typeof raw === 'number'
-          ? raw
-          : typeof raw === 'string' && DECIMAL_LITERAL.test(raw.trim())
-            ? Number(raw.trim())
-            : NaN;
-      if (!Number.isFinite(numeric) || Math.abs(numeric) >= MAX_NUMERIC_MAGNITUDE) {
+      let literal: string | null = null;
+      let numeric: number;
+      if (typeof raw === 'number') {
+        numeric = raw;
+      } else if (typeof raw === 'string' && DECIMAL_LITERAL.test(raw.trim())) {
+        literal = raw.trim();
+        numeric = Number(literal);
+      } else {
+        return undefined;
+      }
+      if (!Number.isFinite(numeric) || countIntegerDigits(literal, numeric) > MAX_INTEGER_DIGITS) {
         return undefined;
       }
       if (dataType === 'integer' && !Number.isInteger(numeric)) {
@@ -309,7 +405,13 @@ function coerceScalar(dataType: MlsDataType, raw: unknown): TypedValue | undefin
       // Scale is deliberately NOT rejected: the column rounds anything past 6 decimal places, and
       // dropping a lot size because the feed sent 0.3333333333 would lose a real value over a
       // difference that cannot matter. Magnitude is different — that one is an error, not a rounding.
-      return { ...EMPTY_TYPED_VALUE, value_numeric: numeric };
+      //
+      // A string input binds its own trimmed literal, never the parsed `Number`: float64 carries
+      // only ~15-17 significant digits, so '9999999999.123456' round-trips through Number() as
+      // ...123455 before it ever reaches the column, while numeric(20,6) holds it exactly. A
+      // `number` input has already taken whatever precision loss JS is going to give it, so binding
+      // it as-is changes nothing.
+      return { ...EMPTY_TYPED_VALUE, value_numeric: literal ?? numeric };
     }
     case 'boolean':
       return typeof raw === 'boolean' ? { ...EMPTY_TYPED_VALUE, value_boolean: raw } : undefined;
@@ -396,10 +498,11 @@ export const PROPERTY_TARGET: AttributeTarget = {
  * Writes the offer-scoped attributes of one listing, replacing the stored set per field.
  *
  * `ownerId` is trusted to exist: the owner foreign key rejects an unknown id, and this module is
- * called from inside the ingest transaction that created the row.
+ * called from inside the ingest transaction that created the row. `client` must be
+ * `asTransactionScoped()`-wrapped — see that function's doc comment for why.
  */
 export function putListingAttributes(
-  client: Queryable,
+  client: TransactionScopedClient,
   listingId: string,
   attributes: MlsAttributeInput[],
 ): Promise<MlsAttributeWriteResult> {
@@ -413,9 +516,10 @@ export function putListingAttributes(
  * of the building across every offer it ever carries, while a seller concession belongs to one offer.
  * Which table a field may land in is not this caller's choice — it is declared on the field and
  * enforced by a composite foreign key, so passing a listing-scoped field here is rejected.
+ * `client` must be `asTransactionScoped()`-wrapped — see that function's doc comment for why.
  */
 export function putPropertyAttributes(
-  client: Queryable,
+  client: TransactionScopedClient,
   propertyId: string,
   attributes: MlsAttributeInput[],
 ): Promise<MlsAttributeWriteResult> {
@@ -429,19 +533,39 @@ interface ResolvedValue {
   sourceModificationTimestamp: string | null;
 }
 
+/** One row still waiting to go into the single batched INSERT at the end of the call. */
+interface PendingInsert extends ResolvedValue {
+  fieldId: string;
+}
+
 function fieldKeyOf(input: MlsFieldKey): string {
   return JSON.stringify([input.originatingSystem, input.resoResource, input.fieldName]);
 }
 
+/** The `(field_id, value_lookup_id)` pair the row's own `ON CONFLICT` target is keyed on. */
+function pendingInsertKeyOf(fieldId: string, valueLookupId: string | null): string {
+  return `${fieldId}::${valueLookupId ?? ''}`;
+}
+
 async function putAttributes(
-  client: Queryable,
+  client: TransactionScopedClient,
   target: AttributeTarget,
   ownerId: string,
   attributes: MlsAttributeInput[],
 ): Promise<MlsAttributeWriteResult> {
+  // The type already requires this brand, but types are erased at runtime — this is the backstop
+  // for a caller that reaches here through `any`, a cast, or a hand-built object literal that
+  // spoofs the brand without actually holding a transaction.
+  requireTransactionScoped(client);
+
   const rejected: MlsAttributeRejection[] = [];
-  let stored = 0;
   let removed = 0;
+  // Accumulated across every field, not per field: the whole call's writes land in ONE batched
+  // INSERT below. Keyed by the row's own `ON CONFLICT` target, keeping the LAST occurrence — a
+  // duplicate feed value inside one field's array would otherwise target the same row twice in a
+  // single `unnest()` statement, which Postgres refuses with `ON CONFLICT DO UPDATE command cannot
+  // affect row a second time` (error 21000), aborting the whole ingest transaction.
+  const pendingInserts = new Map<string, PendingInsert>();
 
   // Group by field first: replacement is per field, and a field is applied all-or-nothing.
   const byField = new Map<string, MlsAttributeInput[]>();
@@ -454,6 +578,16 @@ async function putAttributes(
       byField.set(key, [attribute]);
     }
   }
+
+  // Every distinct field's identity resolved in one round trip, rather than one query per field.
+  const distinctKeys: MlsFieldKey[] = [];
+  for (const group of byField.values()) {
+    const first = group[0];
+    if (first) {
+      distinctKeys.push(first);
+    }
+  }
+  const fieldsByKey = await lookupFields(client, distinctKeys);
 
   for (const group of byField.values()) {
     const first = group[0];
@@ -471,7 +605,7 @@ async function putAttributes(
       });
     };
 
-    const field = await lookupField(client, key);
+    const field = fieldsByKey.get(fieldKeyOf(key));
     if (!field) {
       reject('unregistered_field', first.value);
       continue;
@@ -588,33 +722,10 @@ async function putAttributes(
     }
 
     for (const value of resolved) {
-      await client.query(
-        `INSERT INTO ${target.table}
-           (${target.ownerColumn}, field_id, field_scope, value_kind,
-            value_numeric, value_boolean, value_date, value_timestamp, value_lookup_id,
-            source_modification_timestamp)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         ON CONFLICT (${target.ownerColumn}, field_id, value_lookup_id)
-           DO UPDATE SET value_kind                    = EXCLUDED.value_kind,
-                         value_numeric                 = EXCLUDED.value_numeric,
-                         value_boolean                 = EXCLUDED.value_boolean,
-                         value_date                    = EXCLUDED.value_date,
-                         value_timestamp               = EXCLUDED.value_timestamp,
-                         source_modification_timestamp = EXCLUDED.source_modification_timestamp`,
-        [
-          ownerId,
-          field.id,
-          target.scope,
-          value.valueKind,
-          value.typed.value_numeric,
-          value.typed.value_boolean,
-          value.typed.value_date,
-          value.typed.value_timestamp,
-          value.typed.value_lookup_id,
-          value.sourceModificationTimestamp,
-        ],
-      );
-      stored += 1;
+      const insertKey = pendingInsertKeyOf(field.id, value.typed.value_lookup_id);
+      // `.set()` on a key already present overwrites in place, which is exactly "keep the LAST
+      // occurrence" — no separate lookup-then-replace needed.
+      pendingInserts.set(insertKey, { ...value, fieldId: field.id });
     }
 
     // The half an upsert cannot express: a value the feed has STOPPED sending has to disappear. Scoped
@@ -640,6 +751,47 @@ async function putAttributes(
       [ownerId, field.id, keptLookupIds, keptScalar],
     );
     removed += deleted.length;
+  }
+
+  // ONE batched INSERT for the whole call, via `unnest()` over parallel column arrays — never a
+  // `Promise.all` of per-row queries on this shared client, which would run concurrently on one
+  // connection inside a transaction and corrupt results. Every array is built from the SAME
+  // `rows` list in the SAME order, so index i of every column belongs to the same source row and
+  // the pairing between columns cannot come apart.
+  const rows = [...pendingInserts.values()];
+  let stored = 0;
+  if (rows.length > 0) {
+    await client.query(
+      `INSERT INTO ${target.table}
+         (${target.ownerColumn}, field_id, field_scope, value_kind,
+          value_numeric, value_boolean, value_date, value_timestamp, value_lookup_id,
+          source_modification_timestamp)
+       SELECT * FROM UNNEST(
+         $1::uuid[], $2::uuid[], $3::text[], $4::text[],
+         $5::numeric[], $6::boolean[], $7::date[], $8::timestamptz[], $9::uuid[],
+         $10::timestamptz[]
+       )
+       ON CONFLICT (${target.ownerColumn}, field_id, value_lookup_id)
+         DO UPDATE SET value_kind                    = EXCLUDED.value_kind,
+                       value_numeric                 = EXCLUDED.value_numeric,
+                       value_boolean                 = EXCLUDED.value_boolean,
+                       value_date                    = EXCLUDED.value_date,
+                       value_timestamp               = EXCLUDED.value_timestamp,
+                       source_modification_timestamp = EXCLUDED.source_modification_timestamp`,
+      [
+        rows.map(() => ownerId),
+        rows.map((row) => row.fieldId),
+        rows.map(() => target.scope),
+        rows.map((row) => row.valueKind),
+        rows.map((row) => row.typed.value_numeric),
+        rows.map((row) => row.typed.value_boolean),
+        rows.map((row) => row.typed.value_date),
+        rows.map((row) => row.typed.value_timestamp),
+        rows.map((row) => row.typed.value_lookup_id),
+        rows.map((row) => row.sourceModificationTimestamp),
+      ],
+    );
+    stored = rows.length;
   }
 
   return { stored, removed, rejected };
