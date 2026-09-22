@@ -104,7 +104,9 @@ no PII and must not start to. `/listings/meta` is
 | `INQUIRY_RATE_LIMIT_PER_IP_MAX` / `_WINDOW_MS`      | Per-IP limit for `POST /listings/{id}/inquiries`. Default 5 / 1 hour.              |
 | `INQUIRY_RATE_LIMIT_PER_LISTING_MAX` / `_WINDOW_MS` | Per-listing limit for the same endpoint. Default 20 / 1 hour.                      |
 
-Copy `.env.example` to `.env` for local work. Credentials never belong in source.
+For local work, run `pnpm run infra:local:property-db:url` while the local stack is up. It derives
+`DATABASE_URL` from the running cluster and writes it into the gitignored root `.env`. Do not
+transcribe a credential by hand.
 
 ## Commands
 
@@ -115,6 +117,7 @@ pnpm exec nx lint property-service
 pnpm exec nx type-check property-service
 pnpm exec nx build property-service
 
+pnpm run infra:local:property-db:url            # Derive DATABASE_URL from the local cluster
 pnpm exec nx run property-service:migrate       # Apply migrations (needs DATABASE_URL)
 pnpm exec nx run property-service:migrate-down  # Roll back the last migration
 pnpm exec nx run property-service:seed          # Load the sample dataset into $DATABASE_URL

@@ -173,15 +173,21 @@ kubectl get secret postgres-secret
 
 ### 5. Test Database Initialization
 
-Connect to PostgreSQL and verify databases:
+`pnpm run skaffold:services` port-forwards `postgres-svc` to `localhost:5432`, so a host client
+needs no `kubectl port-forward` of its own.
+
+For `property_db`, derive the connection string instead of transcribing a credential:
 
 ```bash
-# Port-forward to local machine
-kubectl port-forward postgres-0 5432:5432 &
+pnpm run infra:local:property-db:url   # writes DATABASE_URL into the gitignored root .env
+```
 
-# Connect using psql (requires PostgreSQL client)
-PGPASSWORD=$(kubectl get secret postgres-secret -o jsonpath='{.data.POSTGRES_SA_PASSWORD}' | base64 -d) \
-psql -h localhost -U postgres_sa -d postgres
+That command refuses any kube context but the local cluster, and it names the fix when the stack is
+down. `apps/services/property-service/AGENTS.md` documents it. To inspect every database as the
+superuser, connect with psql:
+
+```bash
+psql "$(pnpm run --silent infra:local:property-db:url -- --print)"
 
 # Inside psql:
 \l                           # List databases

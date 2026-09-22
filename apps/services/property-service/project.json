@@ -111,16 +111,19 @@
       }
     },
     "migrate": {
+      "metadata": {
+        "description": "No --envPath on purpose. That flag resolved against cwd, so it read apps/services/property-service/.env — a file nothing writes. Nx loads the workspace-root .env into the task environment, which is where `pnpm run infra:local:property-db:url` puts DATABASE_URL."
+      },
       "executor": "nx:run-commands",
       "options": {
-        "command": "node-pg-migrate up --envPath .env",
+        "command": "node-pg-migrate up",
         "cwd": "apps/services/property-service"
       }
     },
     "migrate-down": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "node-pg-migrate down --envPath .env",
+        "command": "node-pg-migrate down",
         "cwd": "apps/services/property-service"
       }
     },

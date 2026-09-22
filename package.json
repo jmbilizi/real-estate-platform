@@ -201,6 +201,7 @@
     "// → Run a deployed CronJob now (local cluster only) and print its logs:": "",
     "// →   pnpm run infra:local:cronjob:trigger -- bright-mls-ingest": "",
     "infra:local:cronjob:trigger": "node tools/infra/trigger-cronjob.js",
+    "infra:local:property-db:url": "node tools/infra/property-db-url.js",
     "// Server Apps (Gateway & Services)": "",
     "gateway:serve": "nx serve api-gateway",
     "account:serve": "nx serve account-service",
