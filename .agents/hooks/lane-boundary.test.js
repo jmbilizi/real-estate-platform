@@ -296,3 +296,124 @@ test(
     assert.match(reason, /outside this lane's root/);
   },
 );
+
+// --- Round 2 regression: finding 1 (tokenizer foundation) ------------------
+// `splitSegments` used a length-preserving quote mask over `&&`/`||`/`;`/`|`
+// only, so a multi-line script never split on the newline between commands
+// and `checkGitTargetFlags` never ran on the second line.
+
+test('a multi-line command is split on the newline (finding 1)', () => {
+  const command = `echo hi\ngit -C ${OTHER_WORKTREE_ROOT} status`;
+  const reason = bashCall(command, PRIMARY_ROOT);
+  assert.match(reason, /another lane's worktree/);
+});
+
+test('the one-line equivalent is also blocked (finding 1)', () => {
+  const command = `echo hi; git -C ${OTHER_WORKTREE_ROOT} status`;
+  const reason = bashCall(command, PRIMARY_ROOT);
+  assert.match(reason, /another lane's worktree/);
+});
+
+// --- Round 2 regression: finding 2 (Rule D bypass and false positive) ------
+// Rule D used to match against a quote-blanked copy of the segment, so the
+// real command sitting inside `bash -c "..."` was invisible to the regex.
+// Greedy quote pairing also broke on nested/multiple quotes, false-blocking
+// an ordinary command whose text only happened to mention the phrase.
+
+test('git worktree remove nested inside bash -c is blocked (finding 2)', () => {
+  const reason = bashCall('bash -c "git worktree remove ../other"', PRIMARY_ROOT);
+  assert.match(reason, /pnpm run dev:worktree:reclaim/);
+});
+
+test('a non-shell command that only mentions the phrase in prose is allowed', () => {
+  // `node -e` treats its argument as data, not as a shell command, so the
+  // quoted mention is prose. Only a shell invocation runs its quoted
+  // argument, which is why the case above blocks and this one does not.
+  const reason = bashCall(
+    'node -e "console.log(\'run git worktree remove to clean up\')"',
+    PRIMARY_ROOT,
+  );
+  assert.equal(reason, null);
+});
+
+// --- Round 2 regression: finding 3 (Rule C first-token-only) ---------------
+// `checkGitTargetFlags` only inspected a segment whose FIRST token was
+// `git`, so a command that reaches git through a wrapper or an env
+// assignment skipped the check entirely.
+
+test('pnpm exec git -C <foreign worktree> is blocked (finding 3)', () => {
+  const reason = bashCall(`pnpm exec git -C ${OTHER_WORKTREE_ROOT} status`, PRIMARY_ROOT);
+  assert.match(reason, /another lane's worktree/);
+});
+
+test('env-prefixed git -C <foreign worktree> is blocked (finding 3)', () => {
+  const reason = bashCall(`env X=1 git -C ${OTHER_WORKTREE_ROOT} status`, PRIMARY_ROOT);
+  assert.match(reason, /another lane's worktree/);
+});
+
+// --- Round 2 regression: finding 4 (quoted argument containing -C) --------
+// Naive whitespace splitting broke a quoted commit message into several
+// tokens, so a bare `-C` inside the quoted text was read as the real flag
+// and its "value" (the next word) was resolved as a path.
+
+test('a commit message mentioning -C is allowed (finding 4)', () => {
+  const reason = bashCall('git commit -m "note about -C /etc/passwd"', PRIMARY_ROOT);
+  assert.equal(reason, null);
+});
+
+test('a commit message mentioning --git-dir is allowed (finding 4)', () => {
+  const reason = bashCall('git commit -m "fix --git-dir handling"', PRIMARY_ROOT);
+  assert.equal(reason, null);
+});
+
+// --- Round 2 regression: finding 5 (relative file_path resolves wrong) ----
+// `checkWriteTarget` never received `cwd`, so a relative `file_path` was
+// resolved against this hook process's own cwd instead of the lane's.
+
+test('a relative file_path inside the lane is allowed (finding 5)', () => {
+  const result = evaluate({
+    toolName: 'Edit',
+    toolInput: { file_path: 'relative.txt' },
+    laneRoot: WORKTREE_ROOT,
+    env: {},
+    cwd: WORKTREE_ROOT,
+  });
+  assert.equal(result, null);
+});
+
+test('a relative file_path that escapes the lane via cwd is blocked (finding 5)', () => {
+  const result = evaluate({
+    toolName: 'Edit',
+    // Three levels up from WORKTREE_ROOT (.claude/worktrees/mine) lands at
+    // PRIMARY_ROOT, outside any worktree, so this exercises Rule A rather
+    // than the foreign-worktree message of Rule B.
+    toolInput: { file_path: path.join('..', '..', '..', 'escaped.js') },
+    laneRoot: WORKTREE_ROOT,
+    env: {},
+    cwd: WORKTREE_ROOT,
+  });
+  assert.match(result, /outside this lane's root/);
+});
+
+// --- Rule D: a shell runs its quoted argument, other programs do not -------
+// Matching every quoted mention would block an ordinary commit message. A
+// rule that blocks ordinary commands gets switched off, and then nothing is
+// enforced. So quoted text counts only when the segment invokes a shell.
+
+const SHELL_REMOVAL = ['bash', '-c', '"git', 'worktree', 'remove', '../other"'].join(' ');
+const PROSE_REMOVAL = ['git', 'commit', '-m', '"drop the git', 'worktree', 'remove call"'].join(
+  ' ',
+);
+
+test('a shell invocation carrying a quoted worktree removal is blocked', () => {
+  assert.match(String(bashCall(SHELL_REMOVAL, PRIMARY_ROOT)), /dev:worktree:reclaim/);
+});
+
+test('a commit message that only names the phrase is allowed', () => {
+  assert.equal(bashCall(PROSE_REMOVAL, PRIMARY_ROOT), null);
+});
+
+test('an unquoted worktree removal is still blocked', () => {
+  const command = ['git', 'worktree', 'remove', '../other'].join(' ');
+  assert.match(String(bashCall(command, PRIMARY_ROOT)), /dev:worktree:reclaim/);
+});

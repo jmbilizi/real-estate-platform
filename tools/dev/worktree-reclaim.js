@@ -110,6 +110,25 @@ function defaultRun(args, opts = {}) {
 }
 
 /**
+ * Report whether `child` is `parent` itself or a path nested inside it.
+ *
+ * Both paths are resolved first. On win32, both are lowercased too, because
+ * `git worktree list --porcelain` reports the path as git stored it (for example `C:/Src/...`)
+ * while `process.cwd()` can return a different case (for example `c:\src\...`) even though both
+ * name the same directory. Plain equality misses a cwd that is a subdirectory of the worktree, for
+ * example `<worktree>\apps\web` — that case must still count as "inside".
+ */
+function isInside(child, parent) {
+  let resolvedChild = path.resolve(child);
+  let resolvedParent = path.resolve(parent);
+  if (process.platform === 'win32') {
+    resolvedChild = resolvedChild.toLowerCase();
+    resolvedParent = resolvedParent.toLowerCase();
+  }
+  return resolvedChild === resolvedParent || resolvedChild.startsWith(resolvedParent + path.sep);
+}
+
+/**
  * Check whether a path exists for real, using `fs.statSync`.
  *
  * Returns `false` only for `ENOENT` (the path is genuinely absent). Any other error (permission
@@ -213,11 +232,27 @@ function defaultIsProcessAlive(pid) {
 }
 
 /**
+ * Build the classification for an orphaned worktree whose lock git still holds.
+ *
+ * `git worktree prune` skips a locked worktree even when its path is gone, so reporting plain
+ * `orphaned` here would claim a prune that never happens. `orphaned-locked` keeps that claim
+ * honest and tells the reader to unlock the worktree before it can ever be reclaimed.
+ */
+function orphanedLocked(record, orphanReason) {
+  return {
+    classification: 'orphaned-locked',
+    reason: `${orphanReason}; locked (${record.lockedReason || 'no reason given'}). Unlock it first, then rerun.`,
+  };
+}
+
+/**
  * Classify one non-primary worktree.
  *
  * Order matters for safety:
  * 1. Orphaned (prunable, or the path is genuinely absent) is checked first — nothing else can be
- *    probed once the worktree is gone.
+ *    probed once the worktree is gone. A lock git still holds on an orphaned worktree classifies
+ *    `orphaned-locked` instead, because `git worktree prune` skips a locked worktree, so nothing
+ *    would actually be removed.
  * 2. Dirty and unpushed are checked next, so a worktree that is both locked and dirty (or locked
  *    and unpushed) is reported as `dirty` or `unpushed` — never as `locked`.
  * 3. Staleness is checked before locked, so a clean, pushed worktree still inside the reclaim
@@ -239,6 +274,12 @@ function classifyWorktree(record, options) {
     typeof options.olderThanMs === 'number' ? options.olderThanMs : DEFAULT_OLDER_THAN_MS;
 
   if (record.prunable) {
+    if (record.locked) {
+      return orphanedLocked(
+        record,
+        record.prunableReason || 'git reports this worktree as prunable',
+      );
+    }
     return {
       classification: 'orphaned',
       reason: record.prunableReason || 'git reports this worktree as prunable',
@@ -255,6 +296,9 @@ function classifyWorktree(record, options) {
     };
   }
   if (!exists) {
+    if (record.locked) {
+      return orphanedLocked(record, 'the worktree path no longer exists on disk');
+    }
     return { classification: 'orphaned', reason: 'the worktree path no longer exists on disk' };
   }
 
@@ -382,7 +426,6 @@ function reclaim(options = {}) {
   }
 
   const records = parsePorcelain(listResult.stdout || '');
-  const resolvedCwd = path.resolve(cwd);
   const entries = [];
   let hasOrphaned = false;
   let failed = false;
@@ -401,8 +444,10 @@ function reclaim(options = {}) {
     }
 
     // Never treat the worktree the script is running inside as a candidate, no matter what its
-    // own probes would say. Skip it before running any of them.
-    if (path.resolve(record.path) === resolvedCwd) {
+    // own probes would say. Skip it before running any of them. `isInside` catches a cwd that is
+    // a subdirectory of the worktree, and normalizes case on win32, so `--apply` can never delete
+    // the worktree it runs in (see AGENTS.md CRITICAL SAFETY RULE).
+    if (isInside(cwd, record.path)) {
       entries.push({
         path: record.path,
         branch: record.branch,
@@ -465,8 +510,9 @@ function reclaim(options = {}) {
         }
       }
     }
-    // dirty, unpushed, active, self, and unknown keep action 'skipped' and are never removed,
-    // under any flag.
+    // dirty, unpushed, active, self, unknown, and orphaned-locked keep action 'skipped' and are
+    // never removed, under any flag. An orphaned-locked worktree needs the lock cleared by hand
+    // first: `git worktree prune` skips a locked worktree, so this script must never claim it.
 
     entries.push(entry);
   });
@@ -514,6 +560,13 @@ function formatReport(result) {
   lines.push('');
   lines.push(`Summary: ${summary}.`);
   lines.push(`Worktrees touched within the last ${windowHours}h classify active and are skipped.`);
+
+  if (result.entries.some((entry) => entry.classification === 'orphaned-locked')) {
+    lines.push(
+      'An orphaned-locked worktree has a gone path but git still holds its lock, so prune skips ' +
+        'it. Unlock it first (git worktree unlock <path>), then rerun.',
+    );
+  }
 
   if (!result.apply) {
     lines.push('This is a dry run. Nothing changed.');
@@ -564,5 +617,6 @@ module.exports = {
   probeFailed,
   formatReport,
   parseArgs,
+  isInside,
   DEFAULT_OLDER_THAN_MS,
 };

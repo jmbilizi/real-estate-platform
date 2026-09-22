@@ -8,6 +8,7 @@ const {
   classifyWorktree,
   reclaim,
   parseArgs,
+  isInside,
   DEFAULT_OLDER_THAN_MS,
 } = require('./worktree-reclaim');
 
@@ -785,4 +786,148 @@ test('the worktree matching the injected cwd classifies self and is never remove
     calls.some((call) => call.args[1] === 'remove'),
     false,
   );
+});
+
+// --- isInside -----------------------------------------------------------------------------
+// Round-2 finding #1: self-detection must use containment, not exact equality, and must ignore
+// case on win32. Both gaps let `--apply` delete the worktree it runs in.
+
+test('isInside is true when child equals parent', () => {
+  assert.equal(isInside('/repo/worktrees/target', '/repo/worktrees/target'), true);
+});
+
+test('isInside is true when child is a subdirectory of parent', () => {
+  assert.equal(isInside('/repo/worktrees/target/apps/web', '/repo/worktrees/target'), true);
+});
+
+test('isInside is false for a sibling path with a shared prefix', () => {
+  assert.equal(isInside('/repo/worktrees/target-2', '/repo/worktrees/target'), false);
+});
+
+test('isInside is false for an unrelated path', () => {
+  assert.equal(isInside('/repo/worktrees/other', '/repo/worktrees/target'), false);
+});
+
+// --- self detection: subdirectory and case (round-2 finding #1) ---------------------------
+
+test('a cwd inside a subdirectory of a worktree classifies self, not reclaimable', () => {
+  const { run, calls } = buildRun({
+    listOutput: listFixture('/repo/worktrees/target', 'target-branch'),
+    status: () => {
+      throw new Error('must not probe the worktree the script runs inside');
+    },
+    log: () => {
+      throw new Error('must not probe the worktree the script runs inside');
+    },
+    remove: () => ok(),
+  });
+  const result = reclaim({
+    run,
+    pathExists: () => true,
+    apply: true,
+    force: true,
+    now,
+    statFile: staleStatFile,
+    cwd: '/repo/worktrees/target/apps/web',
+  });
+  const target = result.entries.find((entry) => entry.path === '/repo/worktrees/target');
+  assert.equal(target.classification, 'self');
+  assert.equal(target.action, 'skipped');
+  assert.equal(
+    calls.some((call) => call.args[1] === 'remove'),
+    false,
+  );
+});
+
+test(
+  'a cwd differing only in case from the worktree path classifies self on win32',
+  {
+    skip: process.platform !== 'win32' && 'case-insensitive self-detection is win32-only',
+  },
+  () => {
+    const { run, calls } = buildRun({
+      listOutput: listFixture('C:/Src/worktrees/Target', 'target-branch'),
+      status: () => {
+        throw new Error('must not probe the worktree the script runs inside');
+      },
+      log: () => {
+        throw new Error('must not probe the worktree the script runs inside');
+      },
+      remove: () => ok(),
+    });
+    const result = reclaim({
+      run,
+      pathExists: () => true,
+      apply: true,
+      force: true,
+      now,
+      statFile: staleStatFile,
+      cwd: 'c:\\src\\worktrees\\target',
+    });
+    const target = result.entries.find((entry) => entry.path === 'C:/Src/worktrees/Target');
+    assert.equal(target.classification, 'self');
+    assert.equal(target.action, 'skipped');
+    assert.equal(
+      calls.some((call) => call.args[1] === 'remove'),
+      false,
+    );
+  },
+);
+
+// --- orphaned-locked (round-2 finding #2) --------------------------------------------------
+// `git worktree prune` skips a locked worktree even when its path is gone, so a locked+orphaned
+// worktree must never report action 'pruned' — nothing was actually removed.
+
+test('an orphaned worktree whose lock names a dead process classifies orphaned-locked', () => {
+  const result = classifyWorktree(
+    baseRecord({ locked: true, lockedReason: 'stale agent (pid 1)', prunable: false }),
+    {
+      run: () => {
+        throw new Error('must not probe once the path is proven gone');
+      },
+      pathExists: () => false,
+    },
+  );
+  assert.equal(result.classification, 'orphaned-locked');
+  assert.match(result.reason, /Unlock it first/);
+});
+
+test('a prunable, locked worktree classifies orphaned-locked, not orphaned', () => {
+  const result = classifyWorktree(
+    baseRecord({ prunable: true, prunableReason: 'gone', locked: true, lockedReason: 'in review' }),
+    {
+      run: () => {
+        throw new Error('must not probe a prunable worktree');
+      },
+      pathExists: () => true,
+    },
+  );
+  assert.equal(result.classification, 'orphaned-locked');
+  assert.match(result.reason, /gone/);
+  assert.match(result.reason, /in review/);
+});
+
+test('an orphaned-locked worktree never reports action pruned, and never triggers a prune call', () => {
+  const { run, calls } = buildRun({
+    listOutput: listFixture('/repo/worktrees/gone', 'gone-branch', ['locked stale agent (pid 1)']),
+    status: () => {
+      throw new Error('must not probe a path that does not exist');
+    },
+    log: () => {
+      throw new Error('must not probe a path that does not exist');
+    },
+    prune: () => {
+      throw new Error('must never prune an orphaned-locked worktree');
+    },
+  });
+  const result = reclaim({ run, pathExists: () => false, apply: true, ...staleOptions });
+  const target = result.entries.find((entry) => entry.path === '/repo/worktrees/gone');
+  assert.equal(target.classification, 'orphaned-locked');
+  assert.equal(target.action, 'skipped');
+  assert.notEqual(target.action, 'pruned');
+  assert.equal(
+    calls.some((call) => call.args[1] === 'prune'),
+    false,
+  );
+  assert.equal(result.failed, false);
 });
