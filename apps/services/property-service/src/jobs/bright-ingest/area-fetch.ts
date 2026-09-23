@@ -1,4 +1,5 @@
 import { type BrightPageOptions, fetchPage, type TokenProvider } from './bright-client';
+import type { BrightFeedTier } from './config';
 import { buildAreaQuery } from './odata-query';
 import type { BrightStagingStore, StagedRecord } from './staging-store';
 
@@ -19,6 +20,8 @@ export interface AreaFetchParams {
   readonly tokenProvider: TokenProvider;
   readonly store: BrightStagingStore;
   readonly runId: string;
+  /** Scopes the staged rows to this run's tier (#314). */
+  readonly feedTier: BrightFeedTier;
   readonly city?: string;
   readonly state?: string;
   readonly zip?: string;
@@ -79,6 +82,7 @@ export async function fetchAreaListings(params: AreaFetchParams): Promise<AreaFe
     if (staged.length > 0) {
       await params.store.stageRecords({
         resource: 'BrightProperties',
+        feedTier: params.feedTier,
         runId: params.runId,
         records: staged,
       });

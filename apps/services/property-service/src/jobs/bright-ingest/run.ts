@@ -46,7 +46,7 @@ import {
   createTokenProvider,
   probeMetadata,
 } from './bright-client';
-import { type BrightConfig, resolveBrightConfig } from './config';
+import { type BrightConfig, type BrightFeedTier, resolveBrightConfig } from './config';
 import { CrawlFailure, crawlResource, type CrawlResourceResult } from './crawl';
 import { RateLimiter } from './rate-limiter';
 import { replicateResource, type ReplicateResourceResult, ReplicationFailure } from './replicate';
@@ -67,6 +67,7 @@ import {
   ZERO_MAP_REPORT,
   ZERO_MEDIA_MAP_REPORT,
 } from '../bright-map/report';
+import { type SweepReport, ZERO_SWEEP_REPORT } from '../bright-map/sweep';
 
 /** The resource whose staged keys the crawl matches media against (#191). */
 const PROPERTY_RESOURCE = 'BrightProperties';
@@ -81,6 +82,8 @@ export interface BrightIngestRunResult {
   readonly serviceRootHost: string | null;
   readonly resources: readonly BrightResourceReport[];
   readonly stalled: boolean;
+  /** The other tier's leftovers swept before this run replicated (#314). */
+  readonly sweep: SweepReport;
 }
 
 export interface RunBrightIngestOptions extends BrightClientOptions {
@@ -106,11 +109,17 @@ export interface RunBrightIngestOptions extends BrightClientOptions {
    * `mapRecords`: defaults to a no-op so a replication test stays a replication test, and the real
    * wiring lives in `bright-ingest.main.ts`, which owns the pool.
    */
-  readonly mapMedia?: () => Promise<BrightMediaMapReport>;
+  readonly mapMedia?: (params: { feed: 'test' | 'production' }) => Promise<BrightMediaMapReport>;
+  /**
+   * Sweeps the OTHER feed tier's leftovers before this run replicates (#314). Same injection
+   * contract as `mapRecords`: defaults to a no-op, real wiring lives in `bright-ingest.main.ts`.
+   */
+  readonly sweepOtherTier?: (params: { feed: BrightFeedTier }) => Promise<SweepReport>;
 }
 
 const NO_OP_MAP_RECORDS = async (): Promise<BrightMapRunReport> => ZERO_MAP_REPORT;
 const NO_OP_MAP_MEDIA = async (): Promise<BrightMediaMapReport> => ZERO_MEDIA_MAP_REPORT;
+const NO_OP_SWEEP = async (): Promise<SweepReport> => ZERO_SWEEP_REPORT;
 
 /** ISO-8601 with a `Z` suffix — one wire format per service (see the project guide). */
 function instant(at: Date): string {
@@ -152,6 +161,18 @@ function toCrawlReport(result: CrawlResourceResult): BrightResourceReport {
     starved: false,
     stalled: false,
   };
+}
+
+/** One sentence naming the tier sweep and its counts (#314), or empty when nothing was swept. */
+function sweepMessage(sweep: SweepReport): string {
+  if (!sweep.swept) {
+    return '';
+  }
+  return (
+    `Swept leftover ${sweep.otherTiers.join(', ')} tier data before replicating: ` +
+    `${sweep.stagingRowsDeleted} staging row(s), ${sweep.cursorRowsDeleted} cursor row(s), ` +
+    `${sweep.sampleListingsDeleted} sample listing(s) removed. `
+  );
 }
 
 /** One sentence on the media pass, appended to the run message. */
@@ -297,6 +318,7 @@ export async function runBrightIngest(
   const reports: BrightResourceReport[] = [];
   let counts: BrightRunCounts = ZERO_COUNTS;
   let feed: 'test' | 'production' | undefined;
+  let sweep: SweepReport = ZERO_SWEEP_REPORT;
   let mappingWithheldByReason: Readonly<Record<string, number>> | undefined;
   let mappingOutOfRangeFieldCounts: Readonly<Record<string, number>> | undefined;
   let mappingAttempted = false;
@@ -339,6 +361,12 @@ export async function runBrightIngest(
       );
 
       const store = options.store ?? createStagingStore();
+
+      // Before anything replicates: sweep the OTHER tier's leftovers, if a previous run staged
+      // under a different `BRIGHT_MLS_ENV`. See sweepOtherTier's doc comment above.
+      const sweepOtherTier = options.sweepOtherTier ?? NO_OP_SWEEP;
+      sweep = await sweepOtherTier({ feed: config.feed });
+
       const resources = replication.resources.map(resolveResource);
 
       const crawlResources = replication.crawlResources.map(resolveCrawlResource);
@@ -349,7 +377,7 @@ export async function runBrightIngest(
         // requested resync silently resumed mid-pass. `resetCursor` nulls both cursor columns, so
         // the same call clears a timestamp cursor and a stored next link.
         for (const resource of [...resources, ...crawlResources]) {
-          await store.resetCursor(resource.entitySet, runId);
+          await store.resetCursor(resource.entitySet, runId, config.feed);
         }
       }
 
@@ -362,6 +390,7 @@ export async function runBrightIngest(
           tokenProvider,
           store,
           runId,
+          feedTier: config.feed,
           initialCursor: replication.initialCursor,
           maxPagesPerRun: replication.maxPagesPerRun,
           ...(replication.pageSize === null ? {} : { pageSize: replication.pageSize }),
@@ -398,7 +427,8 @@ export async function runBrightIngest(
           tokenProvider,
           store,
           runId,
-          keepRecordKeys: await store.readRecordKeys(PROPERTY_RESOURCE),
+          feedTier: config.feed,
+          keepRecordKeys: await store.readRecordKeys(PROPERTY_RESOURCE, config.feed),
           maxPagesPerRun: replication.crawlMaxPagesPerRun,
           pageOptions: {
             ...options,
@@ -414,11 +444,13 @@ export async function runBrightIngest(
       // Media mapping runs AFTER property mapping. A photo references a listing row, so the row
       // has to exist first.
       const mapMedia = options.mapMedia ?? NO_OP_MAP_MEDIA;
-      const mediaMapping = await mapMedia();
+      const mediaMapping = await mapMedia({ feed: config.feed });
 
       counts = summarise(reports, deletionsDetected, mapping);
       outcome = 'replicated';
-      message = `${replicatedMessage(config, reports, counts, mapping)} ${mediaMessage(mediaMapping)}`;
+      message =
+        `${sweepMessage(sweep)}${replicatedMessage(config, reports, counts, mapping)} ` +
+        mediaMessage(mediaMapping);
       if (mapping.withheld > 0) {
         mappingWithheldByReason = mapping.withheldByReason;
       }
@@ -485,6 +517,16 @@ export async function runBrightIngest(
     ...(reports.length === 0 ? {} : { resources: reports, stalled }),
     ...(mappingWithheldByReason === undefined ? {} : { mappingWithheldByReason }),
     ...(mappingOutOfRangeFieldCounts === undefined ? {} : { mappingOutOfRangeFieldCounts }),
+    ...(sweep.swept
+      ? {
+          sweep: {
+            otherTiers: sweep.otherTiers,
+            stagingRowsDeleted: sweep.stagingRowsDeleted,
+            cursorRowsDeleted: sweep.cursorRowsDeleted,
+            sampleListingsDeleted: sweep.sampleListingsDeleted,
+          },
+        }
+      : {}),
     ...(metadata === undefined
       ? {}
       : {
@@ -506,5 +548,6 @@ export async function runBrightIngest(
     serviceRootHost,
     resources: reports,
     stalled,
+    sweep,
   };
 }

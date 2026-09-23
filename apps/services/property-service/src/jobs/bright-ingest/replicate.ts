@@ -42,6 +42,7 @@
  */
 
 import { type BrightPageOptions, fetchPage, type TokenProvider } from './bright-client';
+import type { BrightFeedTier } from './config';
 import { buildCursorQuery } from './odata-query';
 import type { BrightResource } from './resources';
 import type { BrightStagingStore, ReplicationCursor, StagedRecord } from './staging-store';
@@ -53,6 +54,8 @@ export interface ReplicateResourceParams {
   readonly tokenProvider: TokenProvider;
   readonly store: BrightStagingStore;
   readonly runId: string;
+  /** Scopes the cursor read/write and the staged rows to this run's tier (#314). */
+  readonly feedTier: BrightFeedTier;
   /** Where a pass starts when the stored cursor is empty. */
   readonly initialCursor: string;
   readonly maxPagesPerRun: number;
@@ -175,10 +178,10 @@ function readCursorInstant(record: Record<string, unknown>, resource: BrightReso
 export async function replicateResource(
   params: ReplicateResourceParams,
 ): Promise<ReplicateResourceResult> {
-  const { resource, store, runId } = params;
+  const { resource, store, runId, feedTier } = params;
   const now = params.now ?? (() => new Date());
 
-  const cursorBefore = await store.readCursor(resource.entitySet);
+  const cursorBefore = await store.readCursor(resource.entitySet, feedTier);
   let cursor: ReplicationCursor = cursorBefore;
 
   let retries = 0;
@@ -264,6 +267,7 @@ export async function replicateResource(
 
       recordsStaged += await store.commitBatch({
         resource: resource.entitySet,
+        feedTier,
         runId,
         records: staged,
         cursor,

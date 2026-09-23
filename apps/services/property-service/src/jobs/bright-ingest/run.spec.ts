@@ -5,6 +5,7 @@ import { isOrderedWithoutFilter } from './odata-query';
 import { runBrightIngest } from './run';
 import type { BrightRunFinishedRecord, BrightRunRecord } from './run-log';
 import { ZERO_MAP_REPORT } from '../bright-map/report';
+import { type SweepReport, ZERO_SWEEP_REPORT } from '../bright-map/sweep';
 
 const CLIENT_ID = 'fixture-client-id-3f9a';
 const CLIENT_SECRET = 'fixture-client-secret-91b2c7';
@@ -400,6 +401,74 @@ describe('runBrightIngest — feed tier', () => {
 
     expect(result.outcome).toBe('failed');
     expect(result.message).toContain('must be "test" or "production"');
+  });
+});
+
+describe('runBrightIngest — tier sweep (#314)', () => {
+  const SWEPT: SweepReport = {
+    swept: true,
+    otherTiers: ['production'],
+    stagingRowsDeleted: 40,
+    cursorRowsDeleted: 2,
+    sampleListingsDeleted: 5,
+  };
+
+  it('sweeps before replicating, with the configured feed, and names it in the message and sink', async () => {
+    const server = createMockResoServer({
+      tokenEndpoint: TOKEN_ENDPOINT,
+      serviceRoot: SERVICE_ROOT,
+      records: { BrightProperties: listings(2) },
+      pageSize: 4,
+    });
+    const memory = createMemoryStore();
+    const { sink, records } = collectRecords();
+    const sweepOtherTier = jest.fn().mockResolvedValue(SWEPT);
+
+    const result = await runBrightIngest({
+      env: configuredEnv(),
+      sink,
+      fetchImpl: server.fetchImpl,
+      store: memory.store,
+      sleep: () => Promise.resolve(),
+      random: () => 0,
+      sweepOtherTier,
+    });
+
+    expect(sweepOtherTier).toHaveBeenCalledWith({ feed: 'test' });
+    expect(result.sweep).toEqual(SWEPT);
+    expect(result.message).toContain('Swept leftover production tier data');
+    expect(result.message).toContain('40 staging row(s)');
+    expect(result.message).toContain('5 sample listing(s)');
+    expect((records[1] as BrightRunFinishedRecord).sweep).toEqual({
+      otherTiers: ['production'],
+      stagingRowsDeleted: 40,
+      cursorRowsDeleted: 2,
+      sampleListingsDeleted: 5,
+    });
+  });
+
+  it('reports nothing swept when sweepOtherTier is not injected, the default for every existing test', async () => {
+    const server = createMockResoServer({
+      tokenEndpoint: TOKEN_ENDPOINT,
+      serviceRoot: SERVICE_ROOT,
+      records: { BrightProperties: listings(2) },
+      pageSize: 4,
+    });
+    const memory = createMemoryStore();
+    const { sink, records } = collectRecords();
+
+    const result = await runBrightIngest({
+      env: configuredEnv(),
+      sink,
+      fetchImpl: server.fetchImpl,
+      store: memory.store,
+      sleep: () => Promise.resolve(),
+      random: () => 0,
+    });
+
+    expect(result.sweep).toEqual(ZERO_SWEEP_REPORT);
+    expect(result.message).not.toContain('Swept');
+    expect((records[1] as BrightRunFinishedRecord).sweep).toBeUndefined();
   });
 });
 

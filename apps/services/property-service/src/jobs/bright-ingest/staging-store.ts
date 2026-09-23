@@ -1,12 +1,22 @@
 import { getPool } from '../../db/pool';
+import type { BrightFeedTier } from './config';
 
 /**
- * THE ONLY MODULE THAT WRITES THE BRIGHT REPLICATION STAGING TABLES (#92).
+ * THE ONLY MODULE THAT WRITES THE BRIGHT REPLICATION STAGING TABLES (#92), with one exception.
  *
  * `bright_staging_records` and `bright_replication_cursor` hold the feed as Bright returned it.
  * They are staging, not inventory: #93 maps out of them, and `src/db/write.ts` stays the only
  * module that writes a consumer table. Nothing here names a consumer table or the consumer read
  * view, and a sibling spec asserts that structurally.
+ *
+ * The exception is `bright-map/sweep.ts` (#314), which deletes the OTHER tier's rows from both
+ * staging tables in the same transaction as the sample-listing sweep, because that transaction also
+ * calls `src/db/write.ts` and this directory's structural guard forbids importing it (see
+ * `no-consumer-writes.spec.ts`). Every ordinary staging write still goes through this module.
+ *
+ * Every row now carries `feed_tier` (`test` or `production`), so a switch between tiers stages under
+ * a disjoint key instead of colliding with — or silently overwriting — the other tier's row: Bright
+ * `ListingKey`/`MediaKey` values are plain counters, not tenant-scoped.
  */
 
 /** One Bright record on its way into staging. `payload` is the record verbatim. */
@@ -24,23 +34,24 @@ export interface ReplicationCursor {
 }
 
 export interface BrightStagingStore {
-  readCursor(resource: string): Promise<ReplicationCursor>;
+  readCursor(resource: string, feedTier: BrightFeedTier): Promise<ReplicationCursor>;
   /**
    * Upserts the batch and advances the cursor in ONE transaction, so a crash between the two is
    * impossible. Returns the number of rows written.
    */
   commitBatch(params: {
     resource: string;
+    feedTier: BrightFeedTier;
     runId: string;
     records: readonly StagedRecord[];
     cursor: ReplicationCursor;
   }): Promise<number>;
   /** Clears the cursor so the next pass starts from the configured epoch. Staged rows stay. */
-  resetCursor(resource: string, runId: string): Promise<void>;
-  /** Row count in staging for one resource. Used by the run report. */
-  countStaged(resource: string): Promise<number>;
+  resetCursor(resource: string, runId: string, feedTier: BrightFeedTier): Promise<void>;
+  /** Row count in staging for one resource and tier. Used by the run report. */
+  countStaged(resource: string, feedTier: BrightFeedTier): Promise<number>;
   /**
-   * Every staged record key for one resource (#191).
+   * Every staged record key for one resource and tier (#191).
    *
    * The full-crawl pass needs this. `BrightMedia` answers no `$filter`, so a pass reads the whole
    * resource and keeps only the rows linked to a listing we already staged. The match is therefore
@@ -50,13 +61,14 @@ export interface BrightStagingStore {
    * test feed, which fits in memory. Do not call it for `BrightMedia` or `Deletion` — 3.4M and
    * 10.5M rows would not.
    */
-  readRecordKeys(resource: string): Promise<Set<string>>;
+  readRecordKeys(resource: string, feedTier: BrightFeedTier): Promise<Set<string>>;
   /**
    * Upserts records WITHOUT touching the replication cursor. For the on-demand area load
    * (`area-fetch.ts`), which reads outside the cursor's order and must not move it.
    */
   stageRecords(params: {
     resource: string;
+    feedTier: BrightFeedTier;
     runId: string;
     records: readonly StagedRecord[];
   }): Promise<number>;
@@ -67,6 +79,7 @@ export interface BrightStagingStore {
    */
   replaceStagedListingMedia(params: {
     listingKey: string;
+    feedTier: BrightFeedTier;
     runId: string;
     records: readonly StagedRecord[];
   }): Promise<number>;
@@ -93,7 +106,7 @@ export interface StagingConnectable {
 
 /**
  * Postgres caps a statement at 65535 bound parameters, and a Bright page is up to 1000 records
- * wide. Five parameters per record puts the record cap first, so it is the one that binds. Chunks
+ * wide. Six parameters per record puts the record cap first, so it is the one that binds. Chunks
  * stay inside the same transaction, so a split batch is still all-or-nothing.
  *
  * The record cap is 200 rather than 1000 because of payload SIZE, not parameter count.
@@ -103,7 +116,7 @@ export interface StagingConnectable {
  */
 const MAX_RECORDS_PER_STATEMENT = 200;
 const MAX_PARAMETERS_PER_STATEMENT = 30000;
-const PARAMETERS_PER_RECORD = 5;
+const PARAMETERS_PER_RECORD = 6;
 export const CHUNK_SIZE = Math.min(
   MAX_RECORDS_PER_STATEMENT,
   Math.floor(MAX_PARAMETERS_PER_STATEMENT / PARAMETERS_PER_RECORD),
@@ -111,22 +124,22 @@ export const CHUNK_SIZE = Math.min(
 
 const READ_CURSOR_SQL = `SELECT cursor_modified_at, cursor_record_key
    FROM bright_replication_cursor
-  WHERE resource = $1`;
+  WHERE resource = $1 AND feed_tier = $2`;
 
 const COUNT_STAGED_SQL = `SELECT count(1) AS staged
    FROM bright_staging_records
-  WHERE resource = $1`;
+  WHERE resource = $1 AND feed_tier = $2`;
 
 const READ_RECORD_KEYS_SQL = `SELECT record_key
    FROM bright_staging_records
-  WHERE resource = $1`;
+  WHERE resource = $1 AND feed_tier = $2`;
 
 /**
  * `fetched_at` is advanced by this statement rather than by a trigger, because the writer owns it.
  * `first_seen_at` is deliberately absent from the update: it records the first time this run set
  * ever saw the record, and a re-read at a tie boundary must not move it.
  */
-const UPSERT_CONFLICT_SQL = `ON CONFLICT (resource, record_key) DO UPDATE
+const UPSERT_CONFLICT_SQL = `ON CONFLICT (feed_tier, resource, record_key) DO UPDATE
      SET modified_at = EXCLUDED.modified_at,
          payload = EXCLUDED.payload,
          run_id = EXCLUDED.run_id,
@@ -138,19 +151,19 @@ const UPSERT_CONFLICT_SQL = `ON CONFLICT (resource, record_key) DO UPDATE
  * later column out of step with its bound value.
  */
 const UPSERT_CURSOR_SQL = `INSERT INTO bright_replication_cursor
-         (resource, cursor_modified_at, cursor_record_key, last_run_id, records_staged)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (resource) DO UPDATE
+         (resource, feed_tier, cursor_modified_at, cursor_record_key, last_run_id, records_staged)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (feed_tier, resource) DO UPDATE
          SET cursor_modified_at = EXCLUDED.cursor_modified_at,
              cursor_record_key = EXCLUDED.cursor_record_key,
              last_run_id = EXCLUDED.last_run_id,
              last_run_at = now(),
-             records_staged = bright_replication_cursor.records_staged + $5`;
+             records_staged = bright_replication_cursor.records_staged + $6`;
 
 const RESET_CURSOR_SQL = `INSERT INTO bright_replication_cursor
-         (resource, cursor_modified_at, cursor_record_key, last_run_id)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (resource) DO UPDATE
+         (resource, feed_tier, cursor_modified_at, cursor_record_key, last_run_id)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (feed_tier, resource) DO UPDATE
          SET cursor_modified_at = NULL,
              cursor_record_key = NULL,
              last_run_id = EXCLUDED.last_run_id,
@@ -170,6 +183,7 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
  */
 function buildUpsert(
   resource: string,
+  feedTier: BrightFeedTier,
   runId: string,
   records: readonly StagedRecord[],
 ): { sql: string; params: unknown[] } {
@@ -178,16 +192,20 @@ function buildUpsert(
     const first = params.length;
     params.push(
       resource,
+      feedTier,
       record.recordKey,
       record.modifiedAt,
       JSON.stringify(record.payload),
       runId,
     );
-    return `($${first + 1}, $${first + 2}, $${first + 3}, $${first + 4}, $${first + 5})`;
+    return (
+      `($${first + 1}, $${first + 2}, $${first + 3}, $${first + 4}, $${first + 5}, ` +
+      `$${first + 6})`
+    );
   });
 
   const sql =
-    'INSERT INTO bright_staging_records (resource, record_key, modified_at, payload, run_id)\n' +
+    'INSERT INTO bright_staging_records (resource, feed_tier, record_key, modified_at, payload, run_id)\n' +
     `     VALUES ${tuples.join(', ')}\n     ${UPSERT_CONFLICT_SQL}`;
   return { sql, params };
 }
@@ -222,9 +240,9 @@ export function createStagingStoreOver(pool: StagingConnectable): BrightStagingS
   }
 
   return {
-    async readCursor(resource) {
+    async readCursor(resource, feedTier) {
       return withClient(async (client) => {
-        const { rows } = await client.query(READ_CURSOR_SQL, [resource]);
+        const { rows } = await client.query(READ_CURSOR_SQL, [resource, feedTier]);
         const row = rows[0];
         if (!row) {
           return { modifiedAt: null, recordKey: null };
@@ -237,13 +255,13 @@ export function createStagingStoreOver(pool: StagingConnectable): BrightStagingS
       });
     },
 
-    async commitBatch({ resource, runId, records, cursor }) {
+    async commitBatch({ resource, feedTier, runId, records, cursor }) {
       return withClient(async (client) => {
         await client.query('BEGIN');
         try {
           let written = 0;
           for (const batch of chunk(records, CHUNK_SIZE)) {
-            const { sql, params } = buildUpsert(resource, runId, batch);
+            const { sql, params } = buildUpsert(resource, feedTier, runId, batch);
             const result = await client.query(sql, params);
             written += result.rowCount ?? batch.length;
           }
@@ -252,6 +270,7 @@ export function createStagingStoreOver(pool: StagingConnectable): BrightStagingS
           // not make the next pass re-read the same window forever.
           await client.query(UPSERT_CURSOR_SQL, [
             resource,
+            feedTier,
             cursor.modifiedAt,
             cursor.recordKey,
             runId,
@@ -267,41 +286,42 @@ export function createStagingStoreOver(pool: StagingConnectable): BrightStagingS
       });
     },
 
-    async resetCursor(resource, runId) {
+    async resetCursor(resource, runId, feedTier) {
       await withClient(async (client) => {
-        await client.query(RESET_CURSOR_SQL, [resource, null, null, runId]);
+        await client.query(RESET_CURSOR_SQL, [resource, feedTier, null, null, runId]);
       });
     },
 
-    async countStaged(resource) {
+    async countStaged(resource, feedTier) {
       return withClient(async (client) => {
-        const { rows } = await client.query(COUNT_STAGED_SQL, [resource]);
+        const { rows } = await client.query(COUNT_STAGED_SQL, [resource, feedTier]);
         // `count()` is bigint, which node-postgres returns as a string.
         return Number(rows[0]?.staged ?? 0);
       });
     },
 
-    async readRecordKeys(resource) {
+    async readRecordKeys(resource, feedTier) {
       return withClient(async (client) => {
-        const { rows } = await client.query(READ_RECORD_KEYS_SQL, [resource]);
+        const { rows } = await client.query(READ_RECORD_KEYS_SQL, [resource, feedTier]);
         return new Set(rows.map((row) => String(row.record_key)));
       });
     },
 
-    async replaceStagedListingMedia({ listingKey, runId, records }) {
+    async replaceStagedListingMedia({ listingKey, feedTier, runId, records }) {
       return withClient(async (client) => {
         await client.query('BEGIN');
         try {
           await client.query(
             `DELETE FROM bright_staging_records
               WHERE resource = 'BrightMedia'
-                AND payload->>'ResourceRecordKey' = $1
-                AND NOT (record_key = ANY($2::text[]))`,
-            [listingKey, records.map((record) => record.recordKey)],
+                AND feed_tier = $1
+                AND payload->>'ResourceRecordKey' = $2
+                AND NOT (record_key = ANY($3::text[]))`,
+            [feedTier, listingKey, records.map((record) => record.recordKey)],
           );
           let written = 0;
           for (const batch of chunk(records, CHUNK_SIZE)) {
-            const { sql, params } = buildUpsert('BrightMedia', runId, batch);
+            const { sql, params } = buildUpsert('BrightMedia', feedTier, runId, batch);
             const result = await client.query(sql, params);
             written += result.rowCount ?? batch.length;
           }
@@ -314,13 +334,13 @@ export function createStagingStoreOver(pool: StagingConnectable): BrightStagingS
       });
     },
 
-    async stageRecords({ resource, runId, records }) {
+    async stageRecords({ resource, feedTier, runId, records }) {
       return withClient(async (client) => {
         await client.query('BEGIN');
         try {
           let written = 0;
           for (const batch of chunk(records, CHUNK_SIZE)) {
-            const { sql, params } = buildUpsert(resource, runId, batch);
+            const { sql, params } = buildUpsert(resource, feedTier, runId, batch);
             const result = await client.query(sql, params);
             written += result.rowCount ?? batch.length;
           }

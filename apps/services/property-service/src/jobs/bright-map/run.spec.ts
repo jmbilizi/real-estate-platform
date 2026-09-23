@@ -257,3 +257,40 @@ describe('mapStagedBrightProperties', () => {
     expect(listings()).toHaveLength(2);
   });
 });
+
+describe('mapStagedBrightProperties — feed tier isolation (#314)', () => {
+  it('scopes the staged-record read to the run tier, with no listing keys given', async () => {
+    const calls: { text: string; values: unknown[] }[] = [];
+    const client: Queryable = {
+      query: async (text, values = []) => {
+        calls.push({ text, values });
+        return { rows: [] };
+      },
+    };
+
+    await mapStagedBrightProperties(client, { feed: 'production', soldDisplayDelayDays: null });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.text).toContain('feed_tier = $2');
+    expect(calls[0]?.values).toEqual(['BrightProperties', 'production']);
+  });
+
+  it('scopes the staged-record read to the run tier, with listing keys given', async () => {
+    const calls: { text: string; values: unknown[] }[] = [];
+    const client: Queryable = {
+      query: async (text, values = []) => {
+        calls.push({ text, values });
+        return { rows: [] };
+      },
+    };
+
+    await mapStagedBrightProperties(client, {
+      feed: 'test',
+      soldDisplayDelayDays: null,
+      listingKeys: ['100', '200'],
+    });
+
+    expect(calls[0]?.text).toContain('feed_tier = $2');
+    expect(calls[0]?.values).toEqual(['BrightProperties', 'test', ['100', '200']]);
+  });
+});

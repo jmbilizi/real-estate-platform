@@ -68,20 +68,22 @@ interface StagedRow {
   readonly payload: unknown;
 }
 
+/** Scoped to `feed`, so a leftover row from the other tier is never mapped (#314). */
 async function loadStagedRecords(
   client: Queryable,
+  feed: BrightFeedTier,
   listingKeys: readonly string[] | undefined,
 ): Promise<StagedRow[]> {
   const { rows } =
     listingKeys === undefined
       ? await client.query(
-          'SELECT record_key, payload FROM bright_staging_records WHERE resource = $1',
-          [RESOURCE],
+          'SELECT record_key, payload FROM bright_staging_records WHERE resource = $1 AND feed_tier = $2',
+          [RESOURCE, feed],
         )
       : await client.query(
           `SELECT record_key, payload FROM bright_staging_records
-            WHERE resource = $1 AND record_key = ANY($2::text[])`,
-          [RESOURCE, listingKeys],
+            WHERE resource = $1 AND feed_tier = $2 AND record_key = ANY($3::text[])`,
+          [RESOURCE, feed, listingKeys],
         );
   return rows as unknown as StagedRow[];
 }
@@ -103,7 +105,7 @@ export async function mapStagedBrightProperties(
   client: Queryable,
   options: MapStagedBrightPropertiesOptions,
 ): Promise<BrightMapRunReport> {
-  const staged = await loadStagedRecords(client, options.listingKeys);
+  const staged = await loadStagedRecords(client, options.feed, options.listingKeys);
   if (staged.length === 0) {
     return ZERO_MAP_REPORT;
   }
@@ -325,18 +327,21 @@ async function countBrightListingsWithNoMedia(client: Queryable): Promise<number
  */
 export async function mapStagedBrightMedia(
   client: Queryable,
+  /** Scopes the staged rows read to this run's tier (#314). */
+  feed: BrightFeedTier,
   /** Map only these listings' staged media (the per-listing gallery fetch). Absent maps all. */
   listingKeys?: readonly string[],
 ): Promise<BrightMediaMapReport> {
   const { rows: staged } =
     listingKeys === undefined
-      ? await client.query('SELECT payload FROM bright_staging_records WHERE resource = $1', [
-          MEDIA_RESOURCE,
-        ])
+      ? await client.query(
+          'SELECT payload FROM bright_staging_records WHERE resource = $1 AND feed_tier = $2',
+          [MEDIA_RESOURCE, feed],
+        )
       : await client.query(
           `SELECT payload FROM bright_staging_records
-            WHERE resource = $1 AND payload->>'ResourceRecordKey' = ANY($2::text[])`,
-          [MEDIA_RESOURCE, listingKeys],
+            WHERE resource = $1 AND feed_tier = $2 AND payload->>'ResourceRecordKey' = ANY($3::text[])`,
+          [MEDIA_RESOURCE, feed, listingKeys],
         );
   if (staged.length === 0) {
     return ZERO_MEDIA_MAP_REPORT;
