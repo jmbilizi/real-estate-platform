@@ -18,6 +18,7 @@
  */
 
 import { type BrightPageOptions, fetchPage, type TokenProvider } from './bright-client';
+import type { BrightFeedTier } from './config';
 import type { BrightResource } from './resources';
 import type { BrightStagingStore, ReplicationCursor, StagedRecord } from './staging-store';
 
@@ -28,6 +29,8 @@ export interface CrawlResourceParams {
   readonly tokenProvider: TokenProvider;
   readonly store: BrightStagingStore;
   readonly runId: string;
+  /** Scopes the cursor read/write and the staged rows to this run's tier (#314). */
+  readonly feedTier: BrightFeedTier;
   /** A row is staged only when its `ResourceRecordKey`, stringified, is in this set. */
   readonly keepRecordKeys: ReadonlySet<string>;
   readonly maxPagesPerRun: number;
@@ -137,7 +140,7 @@ function readModifiedAt(record: Record<string, unknown>, now: () => Date): strin
 
 /** Runs one resource's full crawl to the page cap or to the end of the feed. */
 export async function crawlResource(params: CrawlResourceParams): Promise<CrawlResourceResult> {
-  const { resource, store, runId, keepRecordKeys } = params;
+  const { resource, store, runId, feedTier, keepRecordKeys } = params;
   const now = params.now ?? (() => new Date());
 
   if (!resource.supportsFullCrawl) {
@@ -147,7 +150,7 @@ export async function crawlResource(params: CrawlResourceParams): Promise<CrawlR
     );
   }
 
-  const cursorBefore: ReplicationCursor = await store.readCursor(resource.entitySet);
+  const cursorBefore: ReplicationCursor = await store.readCursor(resource.entitySet, feedTier);
   // `recordKey` carries the stored @odata.nextLink for this resource. `null` starts a fresh pass.
   let storedNextLink: string | null = cursorBefore.recordKey;
 
@@ -219,6 +222,7 @@ export async function crawlResource(params: CrawlResourceParams): Promise<CrawlR
 
       recordsStaged += await store.commitBatch({
         resource: resource.entitySet,
+        feedTier,
         runId,
         records: staged,
         cursor: cursorAfter,

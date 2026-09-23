@@ -27,6 +27,7 @@ function run(memory: ReturnType<typeof createMemoryStore>, fetchImpl: FetchLike)
     serviceRootHost: HOST,
     tokenProvider,
     store: memory.store,
+    feedTier: 'production',
     runId: 'run-1',
     listing: { listingKey: '100', listingId: "MD'100" },
     pageOptions: { fetchImpl, maxRetries: 0 },

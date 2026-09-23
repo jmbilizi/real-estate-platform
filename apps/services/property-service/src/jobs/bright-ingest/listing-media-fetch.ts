@@ -4,6 +4,7 @@ import {
   fetchPage,
   type TokenProvider,
 } from './bright-client';
+import type { BrightFeedTier } from './config';
 import type { BrightStagingStore, StagedRecord } from './staging-store';
 
 /**
@@ -56,6 +57,8 @@ export interface ListingMediaFetchParams {
   readonly tokenProvider: TokenProvider;
   readonly store: BrightStagingStore;
   readonly runId: string;
+  /** Scopes the staged media rows to this run's tier (#314). */
+  readonly feedTier: BrightFeedTier;
   readonly listing: ListingMediaTarget;
   readonly pageOptions?: BrightPageOptions;
 }
@@ -155,6 +158,7 @@ export async function fetchListingMedia(
       .filter((record): record is StagedRecord => record !== null);
     await params.store.replaceStagedListingMedia({
       listingKey: params.listing.listingKey,
+      feedTier: params.feedTier,
       runId: params.runId,
       records: staged,
     });

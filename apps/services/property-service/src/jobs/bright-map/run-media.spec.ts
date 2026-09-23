@@ -169,7 +169,7 @@ function photo(overrides: Record<string, unknown> = {}): Record<string, unknown>
 describe('mapStagedBrightMedia', () => {
   it('reports zero work and writes nothing when no media is staged', async () => {
     const { client, media } = createFakeDb({ stagedPayloads: [], listings: [] });
-    const report = await mapStagedBrightMedia(client);
+    const report = await mapStagedBrightMedia(client, 'production');
     expect(report.staged).toBe(0);
     expect(report.mediaWritten).toBe(0);
     expect(media()).toEqual([]);
@@ -185,7 +185,7 @@ describe('mapStagedBrightMedia', () => {
       listings: [{ key: '900100', id: 'listing-a' }],
     });
 
-    const report = await mapStagedBrightMedia(client);
+    const report = await mapStagedBrightMedia(client, 'production');
 
     expect(report).toMatchObject({
       staged: 3,
@@ -209,7 +209,7 @@ describe('mapStagedBrightMedia', () => {
       stagedPayloads: [photo()],
       listings: [{ key: '900100', id: 'listing-a' }],
     });
-    await mapStagedBrightMedia(client);
+    await mapStagedBrightMedia(client, 'production');
     expect(media().every((row) => row.retained_when_suppressed === false)).toBe(true);
   });
 
@@ -218,7 +218,7 @@ describe('mapStagedBrightMedia', () => {
       stagedPayloads: [photo()],
       listings: [{ key: '900100', id: 'listing-a', isSample: true }],
     });
-    await mapStagedBrightMedia(client);
+    await mapStagedBrightMedia(client, 'production');
     expect(media()[0]?.is_sample).toBe(true);
   });
 
@@ -228,7 +228,7 @@ describe('mapStagedBrightMedia', () => {
       listings: [{ key: '900100', id: 'listing-a' }],
     });
 
-    const report = await mapStagedBrightMedia(client);
+    const report = await mapStagedBrightMedia(client, 'production');
 
     expect(report.unmatchedMedia).toBe(1);
     expect(report.mediaWritten).toBe(1);
@@ -246,7 +246,7 @@ describe('mapStagedBrightMedia', () => {
       listings: [{ key: '900100', id: 'listing-a' }],
     });
 
-    const report = await mapStagedBrightMedia(client);
+    const report = await mapStagedBrightMedia(client, 'production');
 
     expect(report.rejected).toBe(3);
     expect(report.rejectedByReason).toEqual({
@@ -264,9 +264,9 @@ describe('mapStagedBrightMedia', () => {
       listings: [{ key: '900100', id: 'listing-a' }],
     });
 
-    await mapStagedBrightMedia(client);
+    await mapStagedBrightMedia(client, 'production');
     const first = JSON.stringify(media());
-    await mapStagedBrightMedia(client);
+    await mapStagedBrightMedia(client, 'production');
 
     expect(JSON.stringify(media())).toBe(first);
     expect(media()).toHaveLength(2);
@@ -292,7 +292,7 @@ describe('mapStagedBrightMedia', () => {
       ],
     });
 
-    await mapStagedBrightMedia(client);
+    await mapStagedBrightMedia(client, 'production');
 
     expect(
       media()
@@ -320,7 +320,7 @@ describe('mapStagedBrightMedia', () => {
       ],
     });
 
-    await mapStagedBrightMedia(client);
+    await mapStagedBrightMedia(client, 'production');
 
     expect(media().map((row) => row.source_media_key)).toEqual(['1']);
   });
@@ -343,7 +343,7 @@ describe('mapStagedBrightMedia', () => {
       seededMedia: [seeded],
     });
 
-    await mapStagedBrightMedia(client);
+    await mapStagedBrightMedia(client, 'production');
 
     expect(media()).toContainEqual(seeded);
   });
@@ -357,7 +357,7 @@ describe('mapStagedBrightMedia', () => {
       ],
     });
 
-    await mapStagedBrightMedia(client);
+    await mapStagedBrightMedia(client, 'production');
 
     const seen = statements();
     expect(seen.filter((s) => s === 'BEGIN')).toHaveLength(2);
@@ -391,7 +391,7 @@ describe('mapStagedBrightMedia', () => {
       },
     };
 
-    await expect(mapStagedBrightMedia(failing)).rejects.toThrow('connection lost');
+    await expect(mapStagedBrightMedia(failing, 'production')).rejects.toThrow('connection lost');
     expect(seen).toContain('ROLLBACK');
     expect(seen).not.toContain('COMMIT');
   });
@@ -404,7 +404,7 @@ describe('mapStagedBrightMedia', () => {
       listings: [{ key: '900100', id: 'listing-a' }],
     });
 
-    await mapStagedBrightMedia(client);
+    await mapStagedBrightMedia(client, 'production');
 
     expect(statements().filter((s) => s === 'INSERT INTO listing_media')).toHaveLength(1);
   });
@@ -419,7 +419,7 @@ describe('mapStagedBrightMedia', () => {
       ],
     });
 
-    const report = await mapStagedBrightMedia(client);
+    const report = await mapStagedBrightMedia(client, 'production');
 
     expect(report.listingsWithMedia).toBe(1);
     expect(report.listingsWithNoMedia).toBe(1);
@@ -430,7 +430,40 @@ describe('mapStagedBrightMedia', () => {
       stagedPayloads: [photo({ MediaShortDescription: 'Front elevation, 123 Maple St' })],
       listings: [{ key: '900100', id: 'listing-a' }],
     });
-    await mapStagedBrightMedia(client);
+    await mapStagedBrightMedia(client, 'production');
     expect(media()[0]?.alt_text).toBe('Front elevation, 123 Maple St');
+  });
+});
+
+describe('mapStagedBrightMedia — feed tier isolation (#314)', () => {
+  it('scopes the staged-media read to the run tier, with no listing keys given', async () => {
+    const calls: { text: string; values: unknown[] }[] = [];
+    const client: Queryable = {
+      query: async (text, values = []) => {
+        calls.push({ text, values });
+        return { rows: [] };
+      },
+    };
+
+    await mapStagedBrightMedia(client, 'production');
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.text).toContain('feed_tier = $2');
+    expect(calls[0]?.values).toEqual(['BrightMedia', 'production']);
+  });
+
+  it('scopes the staged-media read to the run tier, with listing keys given', async () => {
+    const calls: { text: string; values: unknown[] }[] = [];
+    const client: Queryable = {
+      query: async (text, values = []) => {
+        calls.push({ text, values });
+        return { rows: [] };
+      },
+    };
+
+    await mapStagedBrightMedia(client, 'test', ['100']);
+
+    expect(calls[0]?.text).toContain('feed_tier = $2');
+    expect(calls[0]?.values).toEqual(['BrightMedia', 'test', ['100']]);
   });
 });

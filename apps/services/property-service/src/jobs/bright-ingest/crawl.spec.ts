@@ -116,6 +116,7 @@ function run(
       serviceRootHost: SERVICE_ROOT_HOST,
       tokenProvider,
       store: memory.store,
+      feedTier: 'production',
       runId: '00000000-0000-4000-8000-000000000001',
       keepRecordKeys,
       maxPagesPerRun: overrides.maxPagesPerRun ?? 50,

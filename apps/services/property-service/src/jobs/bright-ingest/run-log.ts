@@ -168,6 +168,17 @@ export interface BrightRunFinishedRecord extends BrightRunRecordBase {
   readonly mappingOutOfRangeFieldCounts?: Readonly<Record<string, number>>;
   /** True when any resource reported a stalled cursor. Hoisted so one field answers "is it fresh?". */
   readonly stalled?: boolean;
+  /**
+   * Present when a tier switch left the other tier's rows behind and this run swept them (#314).
+   * Counts only: staging rows, cursor rows, and sample listings removed. Absent when the run found
+   * nothing to sweep, which is the common case once a switch has been swept once.
+   */
+  readonly sweep?: {
+    readonly otherTiers: readonly string[];
+    readonly stagingRowsDeleted: number;
+    readonly cursorRowsDeleted: number;
+    readonly sampleListingsDeleted: number;
+  };
 }
 
 export type BrightRunRecord = BrightRunStartedRecord | BrightRunFinishedRecord;

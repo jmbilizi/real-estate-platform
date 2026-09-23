@@ -63,6 +63,7 @@ describe('fetchAreaListings', () => {
       serviceRootHost: HOST,
       tokenProvider,
       store: memory.store,
+      feedTier: 'production',
       runId: 'run-1',
       city: 'Rockville',
       pageSize: 2,

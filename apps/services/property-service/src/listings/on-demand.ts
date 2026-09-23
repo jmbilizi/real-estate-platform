@@ -296,6 +296,7 @@ export function createAreaLoader(options: AreaLoaderOptions = {}): AreaLoader {
         tokenProvider: tokens(active),
         store: createStagingStore(),
         runId: randomUUID(),
+        feedTier: active.feed,
         listing,
         pageOptions: pageOptions(active),
       },
@@ -310,7 +311,7 @@ export function createAreaLoader(options: AreaLoaderOptions = {}): AreaLoader {
     }
     const client = await getPool().connect();
     try {
-      const mapping = await mapStagedBrightMedia(client, [listing.listingKey]);
+      const mapping = await mapStagedBrightMedia(client, active.feed, [listing.listingKey]);
       log(
         `On-demand Bright gallery for ${listing.listingKey}: ${result.photos} staged by ` +
           `${result.filter}, ${mapping.mediaWritten} written, ${now() - started} ms.`,
@@ -339,6 +340,7 @@ export function createAreaLoader(options: AreaLoaderOptions = {}): AreaLoader {
       tokenProvider: tokens(active),
       store: createStagingStore(),
       runId: randomUUID(),
+      feedTier: active.feed,
       ...area,
       pageSize: active.replication.pageSize ?? 200,
       maxRecords,
