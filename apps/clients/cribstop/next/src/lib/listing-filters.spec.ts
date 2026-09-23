@@ -85,9 +85,7 @@ describe('parseFiltersFromSearchParams', () => {
 
   describe('city and state, added to route structured place filters (#220)', () => {
     it('parses both', () => {
-      const filters = parseFiltersFromSearchParams(
-        new URLSearchParams('city=Rockville&state=MD'),
-      );
+      const filters = parseFiltersFromSearchParams(new URLSearchParams('city=Rockville&state=MD'));
       expect(filters.city).toBe('Rockville');
       expect(filters.state).toBe('MD');
     });

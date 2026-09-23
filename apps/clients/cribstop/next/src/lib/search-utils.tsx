@@ -128,9 +128,12 @@ const CITY_LIKE_TYPES = ['city', 'town', 'village', 'suburb', 'neighbourhood', '
  * never has to AND two location filters that could disagree (a city holds many zips; a zip can
  * straddle two cities).
  */
-export function extractSearchTerms(
-  loc: any,
-): { zip?: string; street?: string; city?: string; state?: string } {
+export function extractSearchTerms(loc: any): {
+  zip?: string;
+  street?: string;
+  city?: string;
+  state?: string;
+} {
   const address = loc.address || {};
   if (loc.type === 'postcode' && address.postcode) return { zip: address.postcode };
   if ((loc.type === 'road' || loc.type === 'house' || loc.type === 'residential') && address.road) {
