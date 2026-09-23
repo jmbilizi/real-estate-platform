@@ -390,6 +390,23 @@ runs:
           echo "✅ No pods with persistent failures - new config working!"
         fi
 
+    - name: Snapshot StatefulSet pod templates (pre-apply baseline)
+      shell: bash
+      run: |
+        # #315: "Restart only on template change" below needs a pre-apply live snapshot to diff
+        # against, taken from the same server so defaulted fields land on both sides equally.
+        # Absent here means either the StatefulSet is new (fine - no restart needed after this
+        # run's own apply creates it) or it is out of scope (fine - the restart step never reads
+        # it either).
+        mkdir -p /tmp/sts-before
+        EXPECTED_STS=$(awk -F'|' '$1 == "StatefulSet" { print $2 "/" $3 }' scope.txt)
+        for sts_ref in $EXPECTED_STS; do
+          STS_NS="${sts_ref%%/*}"
+          STS_NAME="${sts_ref##*/}"
+          kubectl get statefulset "$STS_NAME" -n "$STS_NS" -o json 2>/dev/null \
+            | jq -cS '.spec.template' > "/tmp/sts-before/${STS_NS}_${STS_NAME}.json" 2>/dev/null || true
+        done
+
     - name: Apply manifests (phased, label-scoped, immutable-safe)
       shell: bash
       run: |
@@ -702,6 +719,13 @@ runs:
       shell: bash
       run: |
         echo "🔄 Checking if StatefulSet pod templates changed before restarting..."
+        # #315: this used to compare the raw kustomize-built YAML against the live object, which
+        # reported a change on every deploy even with no manifest edit. The API server adds
+        # defaulted fields to the live template (dnsPolicy, terminationMessagePolicy,
+        # schedulerName, an empty securityContext, ...) that the desired YAML never carries, so
+        # the two hashes could never match, changed or not. Comparing two live snapshots - one
+        # taken before this run's apply (sts-before.pre-apply.json), one taken now - cancels the
+        # defaulted fields out on both sides, so only a real template change survives.
         NEED_RESTART_STS=""
         # Scope, not manifests — see "Resolve deploy scope".
         EXPECTED_STS=$(awk -F'|' '$1 == "StatefulSet" { print $2 "/" $3 }' scope.txt)
@@ -709,15 +733,16 @@ runs:
           STS_NS="${sts_ref%%/*}"
           STS_NAME="${sts_ref##*/}"
 
-          DESIRED_TEMPLATE=$(yq -o=json -I=0 e "select(.kind==\"StatefulSet\" and (.metadata.namespace // \"default\") == \"$STS_NS\" and .metadata.name==\"$STS_NAME\") | .spec.template" manifests.yaml 2>/dev/null | jq -cS '.' 2>/dev/null || echo "")
-          LIVE_TEMPLATE=$(kubectl get statefulset "$STS_NAME" -n "$STS_NS" -o json 2>/dev/null | jq -cS '.spec.template' 2>/dev/null || echo "")
-          if [ -z "$DESIRED_TEMPLATE" ] || [ -z "$LIVE_TEMPLATE" ]; then
-            echo "ℹ️  Skipping $STS_NAME: unable to parse desired/live pod template (ns: $STS_NS)"
+          BEFORE_FILE="/tmp/sts-before/${STS_NS}_${STS_NAME}.json"
+          BEFORE_TEMPLATE=$(cat "$BEFORE_FILE" 2>/dev/null || echo "")
+          AFTER_TEMPLATE=$(kubectl get statefulset "$STS_NAME" -n "$STS_NS" -o json 2>/dev/null | jq -cS '.spec.template' 2>/dev/null || echo "")
+          if [ -z "$BEFORE_TEMPLATE" ] || [ -z "$AFTER_TEMPLATE" ]; then
+            echo "ℹ️  Skipping $STS_NAME: no pre-apply snapshot or unreadable live template (ns: $STS_NS) - treating as new, no restart needed"
             continue
           fi
-          LIVE_HASH=$(printf "%s" "$LIVE_TEMPLATE" | sha1sum | awk '{print $1}')
-          DESIRED_HASH=$(printf "%s" "$DESIRED_TEMPLATE" | sha1sum | awk '{print $1}')
-          if [ "$LIVE_HASH" != "$DESIRED_HASH" ]; then
+          BEFORE_HASH=$(printf "%s" "$BEFORE_TEMPLATE" | sha1sum | awk '{print $1}')
+          AFTER_HASH=$(printf "%s" "$AFTER_TEMPLATE" | sha1sum | awk '{print $1}')
+          if [ "$BEFORE_HASH" != "$AFTER_HASH" ]; then
             NEED_RESTART_STS="$NEED_RESTART_STS $STS_NS/$STS_NAME"
           fi
         done
@@ -728,8 +753,12 @@ runs:
             STS_NAME="${sts##*/}"
             kubectl rollout restart statefulset/$STS_NAME -n "$STS_NS" || true
           done
-          echo "⏳ Waiting 60 seconds for pods to terminate and restart..."
-          sleep 60
+          echo "⏳ Waiting for restarted StatefulSets to finish rolling out..."
+          for sts in $NEED_RESTART_STS; do
+            STS_NS="${sts%%/*}"
+            STS_NAME="${sts##*/}"
+            kubectl rollout status statefulset/$STS_NAME -n "$STS_NS" --timeout=${{ inputs.statefulset_timeout }} || true
+          done
         else
           echo "✅ No StatefulSet pod template changes detected - skipping restart"
         fi
@@ -963,12 +992,13 @@ runs:
           exit 0
         fi
 
-        # #232: wait for the Job, then report its outcome. Bound is derived from the Job's own
-        # limits (infra/k8s/base/cronjobs/bright-mls-ingest.cronjob.yaml): activeDeadlineSeconds
-        # 900s caps how long Kubernetes lets it run at all, backoffLimit 2 caps retries within
-        # that same window. 960s gives a 60s margin so a hung run is reported as "still running"
-        # by OUR timeout, never confused with the Job's own deadline firing.
-        WAIT_SECONDS=960
+        # #315: the deploy must not wait for a full ingest run, which can take minutes. Wait only
+        # long enough to catch a fast startup failure (bad credentials, a crash before the first
+        # page) - the Job's own activeDeadlineSeconds (900s, see
+        # infra/k8s/base/cronjobs/bright-mls-ingest.cronjob.yaml) still bounds how long an
+        # unattended run can go. Still running after WAIT_SECONDS is the expected outcome, not a
+        # failure: the case statement below reports how to follow it and returns 0.
+        WAIT_SECONDS=60
         POLL_SECONDS=10
         ELAPSED=0
         JOB_RESULT="timeout"
@@ -1038,7 +1068,9 @@ runs:
             echo "::warning::bright-mls-ingest-on-deploy failed on $ENVIRONMENT: ${MESSAGE:-see pod logs above}"
             ;;
           timeout)
-            echo "::warning::bright-mls-ingest-on-deploy did not reach a terminal state within ${WAIT_SECONDS}s on $ENVIRONMENT - check the Job manually."
+            echo "ℹ️  $JOB_NAME is still running after ${WAIT_SECONDS}s on $ENVIRONMENT - the deploy does not wait for it. Follow it with:"
+            echo "     kubectl logs -f job/$JOB_NAME --all-containers"
+            echo "     kubectl get job $JOB_NAME -w"
             ;;
         esac
 
