@@ -280,7 +280,9 @@ describe('BrightStagingStore — readCursor', () => {
   it('returns nulls when the resource has never replicated', async () => {
     const { pool } = createFakePool({ selectRows: [] });
 
-    await expect(createStagingStoreOver(pool).readCursor('BrightProperties', TIER)).resolves.toEqual({
+    await expect(
+      createStagingStoreOver(pool).readCursor('BrightProperties', TIER),
+    ).resolves.toEqual({
       modifiedAt: null,
       recordKey: null,
     });
@@ -296,7 +298,9 @@ describe('BrightStagingStore — readCursor', () => {
       selectRows: [{ cursor_modified_at: 'not a date', cursor_record_key: '42' }],
     });
 
-    await expect(createStagingStoreOver(pool).readCursor('BrightProperties', TIER)).resolves.toEqual({
+    await expect(
+      createStagingStoreOver(pool).readCursor('BrightProperties', TIER),
+    ).resolves.toEqual({
       modifiedAt: null,
       recordKey: '42',
     });
@@ -312,7 +316,9 @@ describe('BrightStagingStore — readCursor', () => {
       ],
     });
 
-    await expect(createStagingStoreOver(pool).readCursor('BrightProperties', TIER)).resolves.toEqual({
+    await expect(
+      createStagingStoreOver(pool).readCursor('BrightProperties', TIER),
+    ).resolves.toEqual({
       modifiedAt: '2026-09-18T12:00:00.000Z',
       recordKey: 'key-9',
     });
@@ -353,7 +359,9 @@ describe('BrightStagingStore — countStaged', () => {
   it('reads the row count for one resource', async () => {
     const { pool, calls } = createFakePool({ selectRows: [{ staged: '42' }] });
 
-    await expect(createStagingStoreOver(pool).countStaged('BrightProperties', TIER)).resolves.toBe(42);
+    await expect(createStagingStoreOver(pool).countStaged('BrightProperties', TIER)).resolves.toBe(
+      42,
+    );
     expect(calls[0]?.sql).not.toContain('*');
     expect(calls[0]?.params).toEqual(['BrightProperties', TIER]);
   });

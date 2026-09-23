@@ -50,7 +50,9 @@ async function otherTiersPresent(
 
 /** Rows currently marked `is_sample = true`, counted before `deleteSampleData()` removes them. */
 async function countSampleListings(client: CountingQueryable): Promise<number> {
-  const { rows } = await client.query('SELECT count(*)::int AS n FROM listings WHERE is_sample = true');
+  const { rows } = await client.query(
+    'SELECT count(*)::int AS n FROM listings WHERE is_sample = true',
+  );
   return Number(rows[0]?.n ?? 0);
 }
 
