@@ -82,6 +82,15 @@ spec:
                   memory: "768Mi"
                   cpu: "500m"
               env:
+                # #315: Node sizes its default heap from the host's memory, not the container's
+                # cgroup limit above, so a full page (up to 1000 records of 931 fields) reached
+                # V8's default old-space limit and crashed with "Reached heap limit" inside
+                # JSON.parse. Sized as limits.memory / 1.5 (768 / 1.5 = 512): Node's own guidance
+                # for how much larger RSS runs than max-old-space-size, to leave room for the
+                # non-heap memory the old-space limit does not cover (semi-space, code space,
+                # buffers, native modules). Raise this if the memory limit above changes.
+                - name: NODE_OPTIONS
+                  value: "--max-old-space-size=512"
                 # ── The staging database ─────────────────────────────────────────────────────
                 # Replication writes bright_staging_records and bright_replication_cursor, so the
                 # job needs a connection. Assembled exactly as the property-service Deployment

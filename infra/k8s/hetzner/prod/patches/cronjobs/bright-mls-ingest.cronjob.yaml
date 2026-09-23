@@ -45,3 +45,10 @@ spec:
               env:
                 - name: NODE_ENV
                   value: "production"
+                # #315: this patch lowers the memory limit to 512Mi (the resources block above),
+                # unlike dev/test/local which keep the base 768Mi. The base NODE_OPTIONS
+                # (limit / 1.5 = 512) is sized for that larger limit and would leave prod no
+                # headroom, so it is overridden here with the same rule against prod's own
+                # limit: 512 / 1.5 = 341.
+                - name: NODE_OPTIONS
+                  value: "--max-old-space-size=341"
