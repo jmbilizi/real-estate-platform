@@ -1,4 +1,4 @@
-import { buildListingsQuery, FORWARDABLE_LISTING_PARAMS, toMatchableQuery } from './listings-query';
+import { buildListingsQuery, FORWARDABLE_LISTING_PARAMS } from './listings-query';
 
 /**
  * The occupancy identifiers the removed "Who" panel used to collect (#34). They are asserted by
@@ -72,41 +72,75 @@ describe('listings gateway query allowlist', () => {
   });
 
   /**
-   * #80. The API matches `query` against title, address, city, neighborhood and zip individually,
-   * so `"Alexandria, VA"` matched none of them and every city suggestion returned zero listings.
+   * #220. `query`, `zip`, `street` and `city` each pin a place. ANDing `query`'s degraded label
+   * on top of a structured filter either narrows the result below what the user picked, or (a
+   * label like `"Rockville, MD"` matching no single field) returns nothing at all.
    */
-  describe('a place search carrying a state code', () => {
-    it.each([
-      ['Alexandria, VA', 'Alexandria'],
-      ['Bethesda,MD', 'Bethesda'],
-      ['Washington, D.C.', 'Washington'],
-      ['Silver Spring, md', 'Silver Spring'],
-      ['501 Slaters Ln, VA', '501 Slaters Ln'],
-    ])('reduces %j to %j so it can match a single field', (input, expected) => {
-      expect(toMatchableQuery(input)).toBe(expected);
+  describe('a place search never ANDs two location filters', () => {
+    it('drops `query` when `zip` is present', () => {
+      const forwarded = new URLSearchParams(
+        buildListingsQuery(new URLSearchParams({ query: 'Rockville, MD 20850', zip: '20850' })),
+      );
+
+      expect(forwarded.get('zip')).toBe('20850');
+      expect(forwarded.has('query')).toBe(false);
     });
 
-    it.each([
-      ['Alexandria'],
-      ['22314'],
-      // Not a state code: two letters have to be the *whole* trailing segment.
-      ['Kansas City, Missouri'],
-      // A lone state is all the user gave us — reducing it to nothing would search everything.
-      ['VA'],
-    ])('leaves %j alone', (input) => {
-      expect(toMatchableQuery(input)).toBe(input);
-    });
-
-    it('applies the reduction on the way to the API, and only to `query`', () => {
+    it('drops `query` when `city` is present', () => {
       const forwarded = new URLSearchParams(
         buildListingsQuery(
-          new URLSearchParams({ query: 'Alexandria, VA', neighborhood: 'Old Town, VA' }),
+          new URLSearchParams({ query: 'Rockville, MD', city: 'Rockville', state: 'MD' }),
         ),
       );
 
-      expect(forwarded.get('query')).toBe('Alexandria');
-      // `neighborhood` is matched against its own column, so it is not this rule's business.
-      expect(forwarded.get('neighborhood')).toBe('Old Town, VA');
+      expect(forwarded.get('city')).toBe('Rockville');
+      expect(forwarded.get('state')).toBe('MD');
+      expect(forwarded.has('query')).toBe(false);
+    });
+
+    it('drops `query` when `street` is present', () => {
+      const forwarded = new URLSearchParams(
+        buildListingsQuery(
+          new URLSearchParams({ query: '501 Slaters Ln, VA', street: '501 Slaters Ln' }),
+        ),
+      );
+
+      expect(forwarded.get('street')).toBe('501 Slaters Ln');
+      expect(forwarded.has('query')).toBe(false);
+    });
+
+    it('drops `state` when `zip` is present, even if both are supplied', () => {
+      const forwarded = new URLSearchParams(
+        buildListingsQuery(new URLSearchParams({ zip: '20850', state: 'MD' })),
+      );
+
+      expect(forwarded.get('zip')).toBe('20850');
+      expect(forwarded.has('state')).toBe(false);
+    });
+
+    it('keeps `state` when there is no `zip`', () => {
+      const forwarded = new URLSearchParams(
+        buildListingsQuery(new URLSearchParams({ city: 'Rockville', state: 'MD' })),
+      );
+
+      expect(forwarded.get('state')).toBe('MD');
+    });
+
+    it('leaves free text alone when no structured place filter is present', () => {
+      const forwarded = new URLSearchParams(
+        buildListingsQuery(new URLSearchParams({ query: 'condo with a pool' })),
+      );
+
+      expect(forwarded.get('query')).toBe('condo with a pool');
+    });
+
+    it('does not let `query` suppress itself: neighborhood is unaffected', () => {
+      const forwarded = new URLSearchParams(
+        buildListingsQuery(new URLSearchParams({ query: 'Bethesda', neighborhood: 'Old Town' })),
+      );
+
+      expect(forwarded.get('query')).toBe('Bethesda');
+      expect(forwarded.get('neighborhood')).toBe('Old Town');
     });
   });
 

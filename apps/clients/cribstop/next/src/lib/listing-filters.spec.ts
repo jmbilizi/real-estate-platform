@@ -83,6 +83,26 @@ describe('parseFiltersFromSearchParams', () => {
     });
   });
 
+  describe('city and state, added to route structured place filters (#220)', () => {
+    it('parses both', () => {
+      const filters = parseFiltersFromSearchParams(
+        new URLSearchParams('city=Rockville&state=MD'),
+      );
+      expect(filters.city).toBe('Rockville');
+      expect(filters.state).toBe('MD');
+    });
+
+    it('upper-cases a lowercase state code', () => {
+      expect(parseFiltersFromSearchParams(new URLSearchParams('state=md')).state).toBe('MD');
+    });
+
+    it('drops a state value that is not a two-letter code', () => {
+      expect(
+        parseFiltersFromSearchParams(new URLSearchParams('state=Maryland')).state,
+      ).toBeUndefined();
+    });
+  });
+
   describe('the two amenity-alias booleans are folded onto the amenities they compile to', () => {
     it('folds waterfront and petFriendly, so an older link still shows as applied', () => {
       const filters = parseFiltersFromSearchParams(
@@ -242,6 +262,8 @@ describe('filtersToSearchParams', () => {
       query: 'Bethesda, MD',
       zip: '20814',
       street: 'Main',
+      city: 'Rockville',
+      state: 'MD',
       neighborhood: 'Downtown',
       listingType: 'rent',
       propertyType: 'Condo',

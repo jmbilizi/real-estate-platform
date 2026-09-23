@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
 import { useApp } from '@/lib/context';
 import {
+  bareZip,
   extractSearchTerms,
   fetchNearbyLocationsByType,
   formatLocationLabel,
@@ -1421,13 +1422,20 @@ export default function CompactSearchBar({
     addRecentSearch(finalSuggestion);
     const label = formatLocationLabel(finalSuggestion);
     if (typeof setLocation === 'function') setLocation(label);
-    const { zip, street } = extractSearchTerms(finalSuggestion);
+    // A typed bare zip is unambiguous on its own — checked ahead of the suggestion's own type
+    // so an autocomplete mismatch can never send it as free text (#220).
+    const typedZip = bareZip(location || '');
+    const { zip, street, city, state } = typedZip
+      ? { zip: typedZip, street: undefined, city: undefined, state: undefined }
+      : extractSearchTerms(finalSuggestion);
     const params = new URLSearchParams();
     params.set('q', label);
     params.set('lat', finalSuggestion.lat);
     params.set('lon', finalSuggestion.lon);
     if (zip) params.set('zip', zip);
     if (street) params.set('street', street);
+    if (city) params.set('city', city);
+    if (state) params.set('state', state);
     withListingTypeParam(params);
     setIsSearching(true);
     router.push(`/search?${params.toString()}`);
@@ -1634,12 +1642,21 @@ export default function CompactSearchBar({
 
     const handleSheetSearch = () => {
       const params = new URLSearchParams();
+      const typedZip = bareZip(location || '');
       if (selectedSuggestion) {
         params.set('q', formatLocationLabel(selectedSuggestion));
         params.set('lat', String(selectedSuggestion.lat));
         params.set('lon', String(selectedSuggestion.lon));
+        const { zip, street, city, state } = typedZip
+          ? { zip: typedZip, street: undefined, city: undefined, state: undefined }
+          : extractSearchTerms(selectedSuggestion);
+        if (zip) params.set('zip', zip);
+        if (street) params.set('street', street);
+        if (city) params.set('city', city);
+        if (state) params.set('state', state);
       } else if ((location || '').trim()) {
         params.set('q', (location || '').trim());
+        if (typedZip) params.set('zip', typedZip);
       }
       withListingTypeParam(params);
       if (dateRange.start) params.set('moveIn', dateRange.start);

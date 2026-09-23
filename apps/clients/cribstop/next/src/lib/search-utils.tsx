@@ -110,15 +110,37 @@ export function formatLocationLabel(loc: any): string {
   return `${primary}, ${secondary}`;
 }
 
-// Extract precise search identifiers
-export function extractSearchTerms(loc: any): { zip?: string; street?: string } {
+/** A value unambiguous enough to be a zip on its own, checked before any suggestion type. */
+export function bareZip(value: string): string | undefined {
+  const trimmed = (value || '').trim();
+  return /^\d{5}$/.test(trimmed) ? trimmed : undefined;
+}
+
+/**
+ * Extract the one structured filter a suggestion implies — never more than one shape.
+ *
+ * A place search has three shapes: a picked postcode, a picked road/house, and a picked
+ * city/town/village. Each maps to its own filter set, so the API never has to AND two location
+ * filters that could disagree (a city holds many zips; a zip can straddle two cities).
+ */
+export function extractSearchTerms(
+  loc: any,
+): { zip?: string; street?: string; city?: string; state?: string } {
   const address = loc.address || {};
-  const result: { zip?: string; street?: string } = {};
-  if (loc.type === 'postcode' && address.postcode) result.zip = address.postcode;
+  if (loc.type === 'postcode' && address.postcode) return { zip: address.postcode };
   if ((loc.type === 'road' || loc.type === 'house' || loc.type === 'residential') && address.road) {
-    result.street = address.house_number ? `${address.house_number} ${address.road}` : address.road;
+    const street = address.house_number ? `${address.house_number} ${address.road}` : address.road;
+    return { street };
   }
-  return result;
+  if (loc.type === 'city' || loc.type === 'town' || loc.type === 'village') {
+    const city = address.city || address.town || address.village;
+    const state = address.state_code || stateAbbr(address.state || '');
+    const result: { city?: string; state?: string } = {};
+    if (city) result.city = city;
+    if (state) result.state = state;
+    return result;
+  }
+  return {};
 }
 
 // Highlight the portion of `text` that matches `query` (case-insensitive).
