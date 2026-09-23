@@ -49,46 +49,26 @@ So never read a name in `$metadata` or the service document as a capability. Iss
 
 ## Which feed am I talking to?
 
-Stakeholder ruling 2026-09-19, superseding the 2026-09-12 two-credential ruling.
+Any environment may read either Bright tier. The lower environments are gated and not public, so the
+tier is whatever credential the environment holds.
 
-- `local`, `dev` and `test` authenticate against Bright's **test/staging** feed, with the real test
-  credentials. They hold real Bright data.
-- `prod` authenticates against the **licensed production** feed.
+The job reads three keys, all from the `bright-mls-secret` Kubernetes Secret:
 
-This is the same separation as before with a different default. The old rule protected the
-production credential by starving three environments; this one protects it by binding three
-environments to the test feed. **The invariant is unchanged: the production credential never leaves
-production.**
+- `BRIGHT_MLS_ENV` — `test` or `production`. States which tier the credential below belongs to. The
+  job trusts it exactly; nothing is inferred.
+- `BRIGHT_MLS_CLIENT_ID` / `BRIGHT_MLS_CLIENT_SECRET` — the OAuth2 client credential for that tier.
 
-A row from the test feed is not production inventory. It is sample data, **must** be marked
-`is_sample=true` on ingest, and **must** carry the sample disclosure on every consumer surface (#93,
-#115).
+Locally, set the three keys in `.env`. In CI they are GitHub environment secrets.
 
-**That marking does not exist yet, and the ruling above does not create it.** Nothing ingests today
-— #93 is the mapper, and `no-consumer-writes.spec.ts` structurally forbids this directory from
-writing a consumer table. `is_sample` is currently set only by the seed path
-(`src/seed/transform.ts`), and nothing derives it from `source`. So this paragraph is a requirement
-on #93, not a control anyone can rely on now. Read it as the condition that must hold **before** a
-Bright row reaches a consumer surface, and never as a reason one already may.
+The endpoints follow the tier (`config.ts` → `BRIGHT_FEED_ENDPOINTS`):
 
-The endpoint identity (token endpoint, service root) is **per-environment configuration on the
-CronJob**, not a constant in code. Both pairs were verified on 2026-09-18 and are set in the `dev`
-and `prod` overlays:
+| Tier         | Token endpoint                                           | Service root                                              |
+| ------------ | -------------------------------------------------------- | --------------------------------------------------------- |
+| `test`       | `https://okta.tst.brightmls.com/oauth2/default/v1/token` | `https://bright-reso.tst.brightmls.com/RESO/OData/bright` |
+| `production` | `https://okta.brightmls.com/oauth2/default/v1/token`     | `https://bright-reso.brightmls.com/RESO/OData/bright`     |
 
-| Environment | `BRIGHT_MLS_TOKEN_ENDPOINT`                              | `BRIGHT_MLS_SERVICE_ROOT`                                 |
-| ----------- | -------------------------------------------------------- | --------------------------------------------------------- |
-| `dev`       | `https://okta.tst.brightmls.com/oauth2/default/v1/token` | `https://bright-reso.tst.brightmls.com/RESO/OData/bright` |
-| `prod`      | `https://okta.brightmls.com/oauth2/default/v1/token`     | `https://bright-reso.brightmls.com/RESO/OData/bright`     |
-| `test`      | not wired yet — #176                                     | not wired yet — #176                                      |
-| `local`     | not wired yet — #176                                     | not wired yet — #176                                      |
-
-The `dev` pair is credential-verified. **The `prod` pair is not.** Its service root was
-reachability-checked with no credentials and answers `401 WWW-Authenticate: Bearer`, but its token
-path is inferred by symmetry with test: Bright's production Okta org publishes both an org-level
-discovery document reporting `/oauth2/v1/token` and a `default` authorization server reporting
-`/oauth2/default/v1/token`. We took `default`, because that is what test uses. If the first
-production token call returns 404 or `invalid_client`, drop `/default` before suspecting the
-credential.
+Both pairs authenticate: test on 2026-09-18, production on 2026-09-22 (token call and `$metadata`
+probe). A test-feed row is not production inventory, so the mapper marks it `is_sample=true`.
 
 **Do not use `brightmls.test.okta.com`.** It resolves, but Okta serves the wildcard `*.okta.com`,
 which matches exactly one label and therefore cannot be valid for a three-label host. A
@@ -97,26 +77,8 @@ TLS-inspecting proxy rejects the origin certificate and the connection fails per
 and presents a clean chain. **Never disable TLS verification to get past this** — the token request
 carries the OAuth2 client secret, which is why `config.ts` rejects a non-HTTPS endpoint outright.
 
-**Every run logs the endpoint HOST it authenticated against** (never the credential), specifically
-so that a test-data credential accidentally running in production — or the reverse — is visible in
-the first log line of the run rather than inferred later from wrong-looking data.
-
-The job's environment variables are:
-
-- `BRIGHT_MLS_TOKEN_ENDPOINT` — per-environment config on the CronJob
-- `BRIGHT_MLS_SERVICE_ROOT` — per-environment config on the CronJob
-- `BRIGHT_MLS_ENV` — per-environment config on the CronJob (#246). Picks the credential pair below.
-  `test` reads the TEST pair; `production` reads the PROD pair. Unset resolves to `test`.
-- `BRIGHT_MLS_TEST_CLIENT_ID` / `BRIGHT_MLS_TEST_CLIENT_SECRET` — from the `bright-mls-secret`
-  Kubernetes Secret. **Provision the real test credentials here, not under the deprecated pair
-  below.**
-- `BRIGHT_MLS_PROD_CLIENT_ID` / `BRIGHT_MLS_PROD_CLIENT_SECRET` — from the `bright-mls-secret`
-  Kubernetes Secret. Read only when `BRIGHT_MLS_ENV=production`.
-
-`BRIGHT_MLS_CLIENT_ID` / `BRIGHT_MLS_CLIENT_SECRET` (no tier suffix) is a **deprecated fallback**,
-read only when both tier-suffixed pairs above are absent. `config.ts` keeps it for one release and
-then deletes it. Do not provision new credentials under this pair: a run that only works through the
-fallback stops working the day the fallback is removed, with no warning ahead of time.
+**Every run logs the endpoint HOST it authenticated against** (never the credential), so the first
+log line of a run names the feed.
 
 A value still equal to the Git placeholder `StrongBase64Password` is treated as **not configured** —
 the job logs a loud, distinguishable "credentials not configured" completion rather than crash

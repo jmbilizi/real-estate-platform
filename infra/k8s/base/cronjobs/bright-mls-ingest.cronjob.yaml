@@ -9,17 +9,12 @@
 # does matter is by workload, not language").
 #
 # It nevertheless carries its OWN identity label, `app: bright-mls-ingest`, and therefore its own
-# `infra/deploy-control.yaml` key in every environment. That is deliberate: the environment ruling
-# of 2026-09-19 means local, dev and test read Bright's TEST/STAGING feed, and prod alone reads the
-# licensed production feed. It supersedes the part of the 2026-09-12 two-credential ruling (#117)
-# that gave local and test no feed at all. So whether this ships to an environment has to be
+# `infra/deploy-control.yaml` key in every environment, so whether this ships to an environment is
 # decidable without also deciding whether the Property API ships there.
 #
-# IT REPLICATES INTO STAGING ONLY (#92). A run resolves its configuration and either reports
-# "credentials not configured" and exits 0, or authenticates, probes `$metadata`, and replicates
-# BrightProperties into bright_staging_records. Mapping into properties/units/listings is #93, and
-# no consumer table is written — asserted by src/jobs/bright-ingest/no-consumer-writes.spec.ts,
-# which allowlists the staging tables by name, not by this comment.
+# A run resolves its configuration and either reports "credentials not configured" and exits 0, or
+# authenticates, probes `$metadata`, replicates BrightProperties into bright_staging_records, and
+# maps staging into properties/units/listings/listing_media (src/jobs/bright-map/).
 
 apiVersion: batch/v1
 kind: CronJob
@@ -110,45 +105,26 @@ spec:
                       key: PROPERTY_SERVICE_DB_USER_PASSWORD
                 - name: DATABASE_URL
                   value: "postgresql://$(PROPERTY_DB_USER):$(PROPERTY_SERVICE_DB_USER_PASSWORD)@$(PROPERTY_DB_HOST):$(PROPERTY_DB_PORT)/$(PROPERTY_DB_NAME)"
-                # ── Which feed this environment talks to ──────────────────────────────────────
-                # Configuration, NOT a constant in code, so `kubectl get cronjob bright-mls-ingest
-                # -o yaml` answers "which Bright feed is this environment reading?" without decoding
-                # a Secret. Empty here and overridden per environment; an empty value is treated as
-                # "not configured" and nothing is sent anywhere.
-                #
-                # The real URLs are verified and live in the local, dev, test and prod overlays
-                # (#163). They stay OUT of this base on purpose. A default here would be inherited by
-                # any environment added later — turning "which feed is this?" from a per-environment
-                # decision into an inherited accident.
-                - name: BRIGHT_MLS_TOKEN_ENDPOINT
-                  value: ""
-                - name: BRIGHT_MLS_SERVICE_ROOT
-                  value: ""
-                # Which TIER the feed belongs to. `BRIGHT_MLS_ENV` is the selector (#246); the job
-                # refuses to run if a `test` declaration meets a non-test host, and now also refuses
-                # a `production` declaration meeting a recognised non-production host.
-                #
-                # The base default is the safe tier, and ONLY the prod overlay overrides it. An
-                # environment that forgets to patch this cannot read the production feed.
-                - name: BRIGHT_MLS_ENV
-                  value: "test"
-                # `BRIGHT_MLS_FEED` is the pre-#246 name for the same declaration, kept for one
-                # release as a migration fallback (config.ts reads BRIGHT_MLS_ENV first). Delete
-                # once every overlay is confirmed on BRIGHT_MLS_ENV.
-                - name: BRIGHT_MLS_FEED
-                  value: "test"
-                # ── The credential itself ────────────────────────────────────────────────────
-                # Tier-suffixed pairs (#246): BRIGHT_MLS_ENV picks which pair a run reads, and the
-                # resolver never reads the other pair, so a credential filed under the wrong tier
-                # key is inert rather than transmitted. The unsuffixed pair below is the pre-#246
-                # fallback, kept for one release. Same field names in every environment, different
-                # values, sourced from GitHub ENVIRONMENT secrets (#117 item 4). The committed
-                # template holds `StrongBase64Password` placeholders, which the job treats as "not
-                # configured" and never transmits.
+                # Records per request. A full 1000-record production page did not return within
+                # 120 s (2026-09-22); smaller pages keep every request short. See replicate.ts.
+                - name: BRIGHT_MLS_PAGE_SIZE
+                  value: "200"
+                # ── Which feed, and the credential for it ────────────────────────────────────
+                # Three keys, all in bright-mls-secret. BRIGHT_MLS_ENV (`test` or `production`)
+                # states which Bright tier the client credential belongs to. The job trusts it
+                # exactly and derives the endpoints from it (config.ts → BRIGHT_FEED_ENDPOINTS).
+                # Any environment may hold either tier. Values come from GitHub ENVIRONMENT secrets
+                # in CI and from `.env` locally. The committed template holds `StrongBase64Password`
+                # placeholders, which the job treats as "not configured" and never transmits.
                 #
                 # None of these references is `optional: true`: if bright-mls-secret is missing from
                 # a cluster the pod must fail to start with an obvious reason, rather than run and
                 # quietly report "no credentials" for a wiring mistake.
+                - name: BRIGHT_MLS_ENV
+                  valueFrom:
+                    secretKeyRef:
+                      name: bright-mls-secret
+                      key: BRIGHT_MLS_ENV
                 - name: BRIGHT_MLS_CLIENT_ID
                   valueFrom:
                     secretKeyRef:
@@ -159,23 +135,3 @@ spec:
                     secretKeyRef:
                       name: bright-mls-secret
                       key: BRIGHT_MLS_CLIENT_SECRET
-                - name: BRIGHT_MLS_TEST_CLIENT_ID
-                  valueFrom:
-                    secretKeyRef:
-                      name: bright-mls-secret
-                      key: BRIGHT_MLS_TEST_CLIENT_ID
-                - name: BRIGHT_MLS_TEST_CLIENT_SECRET
-                  valueFrom:
-                    secretKeyRef:
-                      name: bright-mls-secret
-                      key: BRIGHT_MLS_TEST_CLIENT_SECRET
-                - name: BRIGHT_MLS_PROD_CLIENT_ID
-                  valueFrom:
-                    secretKeyRef:
-                      name: bright-mls-secret
-                      key: BRIGHT_MLS_PROD_CLIENT_ID
-                - name: BRIGHT_MLS_PROD_CLIENT_SECRET
-                  valueFrom:
-                    secretKeyRef:
-                      name: bright-mls-secret
-                      key: BRIGHT_MLS_PROD_CLIENT_SECRET
