@@ -30,6 +30,15 @@
  * cursor instant is unchanged the pass keeps reading, bounded by `HARD_PAGE_CAP_MULTIPLIER` so a run
  * still cannot run forever. A pass that hits the hard cap without advancing reports `starved`, which
  * is a real fault and says so rather than looking like a quiet success.
+ *
+ * ## Explicit page size
+ *
+ * On the production feed a 1000-record page of 931 fields did not return within 120 seconds
+ * (2026-09-22). With `pageSize` set, each request carries `$top=pageSize`. `$top` suppresses
+ * `@odata.nextLink`, so the next request is built from the cursor instead, and a page shorter than
+ * `$top` means the feed is caught up. A full page whose records all share the cursor instant would
+ * re-read itself forever, so the next request doubles `$top` (up to `MAX_PAGE_SIZE`) until the
+ * cursor moves; a full `MAX_PAGE_SIZE` page that still does not move it reports `starved`.
  */
 
 import { type BrightPageOptions, fetchPage, type TokenProvider } from './bright-client';
@@ -47,9 +56,22 @@ export interface ReplicateResourceParams {
   /** Where a pass starts when the stored cursor is empty. */
   readonly initialCursor: string;
   readonly maxPagesPerRun: number;
+  /**
+   * Records per request, sent as `$top`. Absent means Bright's own 1000-record pages followed by
+   * `@odata.nextLink`. See "Explicit page size" in the header.
+   */
+  readonly pageSize?: number;
+  /**
+   * Epoch ms after which no further page is requested. The pass stops as if page-capped, so the
+   * run reaches mapping inside the CronJob deadline even when every page takes minutes.
+   */
+  readonly deadlineAt?: number;
   readonly pageOptions?: BrightPageOptions;
   readonly now?: () => Date;
 }
+
+/** The largest `$top` a tie block can grow a request to. Bright's own page size. */
+export const MAX_PAGE_SIZE = 1000;
 
 /**
  * How far past the page cap a pass may go while the cursor instant has not advanced.
@@ -171,11 +193,16 @@ export async function replicateResource(
   // The instant this pass starts from. The page cap is not applied until the cursor moves past it.
   const startInstant = cursor.modifiedAt ?? params.initialCursor;
 
-  let url: string | null = buildCursorQuery({
-    serviceRoot: params.serviceRoot,
-    resource,
-    cursor: { modifiedAt: startInstant, recordKey: cursor.recordKey },
-  });
+  let top = params.pageSize;
+  const queryFrom = (modifiedAt: string, recordKey: string | null): string =>
+    buildCursorQuery({
+      serviceRoot: params.serviceRoot,
+      resource,
+      cursor: { modifiedAt, recordKey },
+      ...(top === undefined ? {} : { top }),
+    });
+
+  let url: string | null = queryFrom(startInstant, cursor.recordKey);
 
   const hardCap = params.maxPagesPerRun * HARD_PAGE_CAP_MULTIPLIER;
   let pagesFetched = 0;
@@ -208,9 +235,18 @@ export async function replicateResource(
 
   try {
     while (url !== null) {
+      if (
+        pagesFetched > 0 &&
+        params.deadlineAt !== undefined &&
+        now().getTime() >= params.deadlineAt
+      ) {
+        cappedByPageLimit = true;
+        break;
+      }
       const page = await fetchPage(url, params.tokenProvider, params.serviceRootHost, pageOptions);
       pagesFetched += 1;
       recordsFetched += page.records.length;
+      const instantBeforePage = cursor.modifiedAt ?? startInstant;
 
       const staged: StagedRecord[] = page.records.map((record) => ({
         recordKey: readKey(record, resource),
@@ -235,7 +271,29 @@ export async function replicateResource(
 
       const advanced = cursor.modifiedAt !== null && cursor.modifiedAt !== startInstant;
 
-      if (page.nextLink === null) {
+      if (top !== undefined) {
+        // Explicit page size: `$top` suppresses nextLink, so page by re-querying from the cursor.
+        const movedThisPage = cursor.modifiedAt !== instantBeforePage;
+        if (page.records.length < top) {
+          caughtUp = true;
+          url = null;
+        } else if (!movedThisPage && top >= MAX_PAGE_SIZE) {
+          starved = true;
+          cappedByPageLimit = true;
+          url = null;
+        } else if (pagesFetched >= params.maxPagesPerRun && advanced) {
+          cappedByPageLimit = true;
+          url = null;
+        } else if (pagesFetched >= hardCap) {
+          starved = !advanced;
+          cappedByPageLimit = true;
+          url = null;
+        } else {
+          // A full page that did not move the cursor is one tie block: widen the next request.
+          top = movedThisPage ? (params.pageSize as number) : Math.min(top * 2, MAX_PAGE_SIZE);
+          url = queryFrom(cursor.modifiedAt ?? startInstant, cursor.recordKey);
+        }
+      } else if (page.nextLink === null) {
         caughtUp = true;
         url = null;
       } else if (pagesFetched >= params.maxPagesPerRun && advanced) {

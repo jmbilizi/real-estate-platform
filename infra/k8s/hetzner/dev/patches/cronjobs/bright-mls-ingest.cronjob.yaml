@@ -1,25 +1,9 @@
 # yaml-language-server: disable
 # Bright MLS Ingestion CronJob Patch for Hetzner Dev Environment
 #
-# DEV AUTHENTICATES AGAINST BRIGHT'S TEST/STAGING FEED — never real licensed production inventory
-# (stakeholder ruling 2026-09-19, superseding part of the 2026-09-12 ruling on #117). Local, dev and
-# test all read the test feed. The credential in this environment's bright-mls-secret is the STAGING
-# set. The production set lives only in the prod environment's secrets, and the two are never
-# promoted across environments.
-#
-# The endpoint pair below is the inspectable half of that ruling. Both values were verified against
-# the live test feed on 2026-09-18 (#163): the token endpoint is the `token_endpoint` of
-# `okta.tst.brightmls.com`'s OIDC discovery document, and the service root answers `$metadata` with
-# `OData-Version: 4.0`. Never copy either value into the prod patch — identical field names with
-# different values per environment is the whole mechanism.
-#
-# Do NOT substitute `brightmls.test.okta.com` for the token host. It resolves, but Okta serves the
-# wildcard `*.okta.com`, which matches one label and cannot be valid for a three-label name, so TLS
-# fails permanently. `okta.tst.brightmls.com` is Bright's custom Okta domain for test.
-#
-# #117's definition of done is observing this job leave its `not_configured` state here first,
-# before prod is attempted at all. That still needs #117 to provision this environment's secret:
-# the endpoint pair alone resolves to `not_configured` while the credential is the placeholder.
+# WHICH FEED: the one this environment's GitHub environment secrets declare in BRIGHT_MLS_ENV
+# (`test` or `production`), with BRIGHT_MLS_CLIENT_ID / BRIGHT_MLS_CLIENT_SECRET for that tier.
+# Endpoints follow the tier (config.ts → BRIGHT_FEED_ENDPOINTS), so nothing here names a host.
 #
 # SCHEDULE (#224): dev iterates on mapping code (see #216, #93). A once-a-day cadence stranded a
 # whole day of mapping fixes behind the last run's snapshot. Prod is licensed production inventory
@@ -46,22 +30,13 @@ spec:
               env:
                 - name: NODE_ENV
                   value: "development"
-                # Bright TEST/STAGING feed. Verified live 2026-09-18 (#163).
-                - name: BRIGHT_MLS_TOKEN_ENDPOINT
-                  value: "https://okta.tst.brightmls.com/oauth2/default/v1/token"
-                - name: BRIGHT_MLS_SERVICE_ROOT
-                  value: "https://bright-reso.tst.brightmls.com/RESO/OData/bright"
-                - name: BRIGHT_MLS_FEED
-                  value: "test"
-                # dev is not production and does not need full feed history. Without this, a run
-                # starts from the epoch default with no page cap, and repeats that full backfill on
-                # every scheduled tick under `activeDeadlineSeconds: 900` and `concurrencyPolicy:
-                # Forbid` (#231). Same cutoff as the local overlay: the test feed reports 1,461
-                # `BrightProperties` modified since this instant (#92), a bounded, known-good window.
+                # dev does not need full feed history. Without this, a run starts from the epoch
+                # default with no page cap, and repeats that full backfill on every scheduled tick
+                # under `activeDeadlineSeconds: 900` and `concurrencyPolicy: Forbid` (#231).
                 - name: BRIGHT_MLS_INITIAL_CURSOR
                   value: "2026-09-01T00:00:00Z"
                 - name: BRIGHT_MLS_MAX_PAGES_PER_RUN
-                  value: "5"
+                  value: "25"
                 # ── The BrightMedia full crawl (#191) ────────────────────────────────────────
                 # Without this, mapped listings carry no photo. `BrightMedia` answers 400 to every
                 # `$filter` on this tier, so a pass reads the whole resource and matches

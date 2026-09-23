@@ -95,6 +95,14 @@ describe('mapBrightMediaRecord', () => {
       expect(rejection(overrides)).toBe(reason);
     });
 
+    it("accepts the production feed's bare subtype and its Photo category", () => {
+      // Measured 2026-09-23: `MediaType: "jpeg"`, `MediaCategory: "Photo"`, no `image/` prefix.
+      expect(rejection({ MediaType: 'jpeg' })).toBe('MAPPED');
+      expect(rejection({ MediaType: 'PNG' })).toBe('MAPPED');
+      expect(rejection({ MediaType: 'unknown', MediaCategory: 'Photo' })).toBe('MAPPED');
+      expect(rejection({ MediaType: 'pdf', MediaCategory: 'Document' })).toBe('not_a_photo');
+    });
+
     it('falls back to the URL extension when the feed sends no mime type', () => {
       expect(rejection({ MediaType: null })).toBe('MAPPED');
       expect(rejection({ MediaType: null, MediaURL: 'https://cdn.example.com/a.png?v=2' })).toBe(

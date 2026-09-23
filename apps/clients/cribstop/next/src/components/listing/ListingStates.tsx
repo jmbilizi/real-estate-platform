@@ -81,11 +81,11 @@ export function ListingCardSkeleton() {
     // by their animation class instead, which broke the moment the animation changed; a marker that
     // says what the element IS survives changes to how it looks.
     <div aria-hidden="true" data-skeleton-card>
-      <div className={`aspect-square overflow-hidden rounded-md ${FILL}`} />
-      <div className="pt-2">
-        {/* The required-label slot, reserved and empty — the same box a row with no labels gets. */}
-        <div className="mb-1 h-5" />
-        <h3 className="truncate text-sm font-medium">
+      <div className={`aspect-[4/3] overflow-hidden rounded-md ${FILL}`} />
+      {/* Mirrors ListingCard: pt-1.5, no label row (it renders only when a label applies, and a
+          loading card has none), and the address line in the 13px/18px system face. */}
+      <div className="pt-1.5">
+        <h3 className="truncate font-system text-[13px] font-medium leading-[18px]">
           <Bar className="w-3/5" />
         </h3>
         <p className="h-[18px] text-[13px] leading-[18px]">
@@ -239,7 +239,8 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
          *
          * `PropertyGallery` has two layouts and this mirrors both:
          *
-         * - **Below `md`** it is a single `aspect-video` image, whatever the photo count.
+         * - **Below `md`** it is a single `aspect-[4/3]` image (the MLS photo shape), whatever the
+         *   photo count.
          * - **From `md` up** it is the 4x2 mosaic — one `col-span-2 row-span-2` cell and four
          *   tiles. Five is not a guess about how many photos exist: the gallery pads to five by
          *   repeating (`i % media.length`), so a one-photo listing still renders five.
@@ -254,8 +255,8 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
             <div className={`aspect-video ${FILL} md:aspect-auto md:h-[480px]`} />
           ) : (
             <>
-              {/* Below `md` the loaded gallery is one `aspect-video` image, whatever the count. */}
-              <div className={`aspect-video w-full ${FILL} md:hidden`} />
+              {/* Below `md` the loaded gallery is one `aspect-[4/3]` image, whatever the count. */}
+              <div className={`aspect-[4/3] w-full ${FILL} md:hidden`} />
               {/* From `md` up, the 4x2 mosaic: a `col-span-2 row-span-2` cell and four tiles. */}
               <div className="hidden md:grid md:h-[480px] md:grid-cols-4 md:grid-rows-2 md:gap-2 md:overflow-hidden">
                 <div

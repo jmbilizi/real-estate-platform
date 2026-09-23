@@ -40,7 +40,7 @@ describe('FavoritesPage', () => {
 
   it('renders the remaining saved homes when one saved id 404s (listing withdrawn)', async () => {
     const survivor = toListingDetailView(
-      aListingDetail({ listing: { neighborhood: 'Still Listed Heights' } }),
+      aListingDetail({ listing: { address: '9 Still Listed Ln' } }),
     );
 
     mockedGetListing.mockImplementation((id: string) => {
@@ -54,10 +54,8 @@ describe('FavoritesPage', () => {
 
     render(<FavoritesPage />);
 
-    // `title` isn't rendered on the card at all — the location line is, so that's the marker.
-    await waitFor(() =>
-      expect(screen.getByText('Still Listed Heights, Bethesda')).toBeInTheDocument(),
-    );
+    // `title` isn't rendered on the card at all — the address line is, so that's the marker.
+    await waitFor(() => expect(screen.getByText(/^9 Still Listed Ln,/)).toBeInTheDocument());
     // Withdrawn id is skipped quietly — no error surface for a partial failure.
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });

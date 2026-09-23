@@ -51,6 +51,25 @@ export interface BrightStagingStore {
    * 10.5M rows would not.
    */
   readRecordKeys(resource: string): Promise<Set<string>>;
+  /**
+   * Upserts records WITHOUT touching the replication cursor. For the on-demand area load
+   * (`area-fetch.ts`), which reads outside the cursor's order and must not move it.
+   */
+  stageRecords(params: {
+    resource: string;
+    runId: string;
+    records: readonly StagedRecord[];
+  }): Promise<number>;
+  /**
+   * Replaces ONE listing's staged `BrightMedia` rows with `records`, in one transaction, for the
+   * per-listing gallery fetch (`listing-media-fetch.ts`). A photo the feed no longer returns for
+   * that listing is deleted from staging, so the mapper stops publishing it.
+   */
+  replaceStagedListingMedia(params: {
+    listingKey: string;
+    runId: string;
+    records: readonly StagedRecord[];
+  }): Promise<number>;
 }
 
 /**
@@ -266,6 +285,51 @@ export function createStagingStoreOver(pool: StagingConnectable): BrightStagingS
       return withClient(async (client) => {
         const { rows } = await client.query(READ_RECORD_KEYS_SQL, [resource]);
         return new Set(rows.map((row) => String(row.record_key)));
+      });
+    },
+
+    async replaceStagedListingMedia({ listingKey, runId, records }) {
+      return withClient(async (client) => {
+        await client.query('BEGIN');
+        try {
+          await client.query(
+            `DELETE FROM bright_staging_records
+              WHERE resource = 'BrightMedia'
+                AND payload->>'ResourceRecordKey' = $1
+                AND NOT (record_key = ANY($2::text[]))`,
+            [listingKey, records.map((record) => record.recordKey)],
+          );
+          let written = 0;
+          for (const batch of chunk(records, CHUNK_SIZE)) {
+            const { sql, params } = buildUpsert('BrightMedia', runId, batch);
+            const result = await client.query(sql, params);
+            written += result.rowCount ?? batch.length;
+          }
+          await client.query('COMMIT');
+          return written;
+        } catch (error) {
+          await client.query('ROLLBACK');
+          throw error;
+        }
+      });
+    },
+
+    async stageRecords({ resource, runId, records }) {
+      return withClient(async (client) => {
+        await client.query('BEGIN');
+        try {
+          let written = 0;
+          for (const batch of chunk(records, CHUNK_SIZE)) {
+            const { sql, params } = buildUpsert(resource, runId, batch);
+            const result = await client.query(sql, params);
+            written += result.rowCount ?? batch.length;
+          }
+          await client.query('COMMIT');
+          return written;
+        } catch (error) {
+          await client.query('ROLLBACK');
+          throw error;
+        }
       });
     },
   };

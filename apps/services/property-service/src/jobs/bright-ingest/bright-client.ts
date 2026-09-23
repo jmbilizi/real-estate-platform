@@ -99,6 +99,12 @@ const OAUTH_ERROR_CODES = new Set([
 export class BrightRequestError extends Error {
   readonly status: number;
   readonly host: string;
+  /**
+   * The OData `error.message` of a failed PAGE request, trimmed to 300 characters, or null. Set
+   * only by `fetchPage`, never by the token call, whose body can echo a client id. A query error
+   * ("Query Too Complex", a type mismatch) is what tells us which filter shape Bright accepts.
+   */
+  readonly odataMessage: string | null;
 
   constructor(params: {
     what: string;
@@ -106,6 +112,7 @@ export class BrightRequestError extends Error {
     status: number;
     statusText: string;
     oauthError?: string | null;
+    odataMessage?: string | null;
   }) {
     const code =
       params.oauthError == null
@@ -120,6 +127,7 @@ export class BrightRequestError extends Error {
     this.name = 'BrightRequestError';
     this.status = params.status;
     this.host = params.host;
+    this.odataMessage = params.odataMessage ?? null;
   }
 }
 
@@ -149,6 +157,17 @@ function readOAuthError(body: string): string | null {
     // Not JSON. Status and statusText are all we can honestly report.
   }
   return null;
+}
+
+/** The OData v4 `error.message` of a failure body, trimmed, or null. Page requests only. */
+function readODataMessage(body: string): string | null {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    const error = (parsed as { error?: { message?: unknown } } | null)?.error;
+    return typeof error?.message === 'string' ? error.message.slice(0, 300) : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -461,6 +480,7 @@ export async function fetchPage(
         status: response.status,
         statusText: response.statusText,
         oauthError: readOAuthError(body),
+        odataMessage: readODataMessage(body),
       });
     }
 

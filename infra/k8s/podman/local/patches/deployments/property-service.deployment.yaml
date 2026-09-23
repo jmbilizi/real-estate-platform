@@ -16,18 +16,13 @@ spec:
       initContainers:
         - name: migrate
           image: property-service
-          # Sample inventory is loaded here, right after migrations, so a local cluster comes up with
-          # a populated property_db and no workstation credential step (#111). Only this overlay and
-          # hetzner/dev set the flag; hetzner/test and hetzner/prod never do.
-          #
-          # NODE_ENV is repeated here because the runtime image bakes NODE_ENV=production
-          # (see the property-service Dockerfile) and the api container's override does not reach an
-          # initContainer — without it the seed's production refusal fires and nothing is loaded.
+          # No sample inventory is seeded any more: search runs on Bright MLS data, and migration
+          # 1785801600027 removed the seeded mock listings (2026-09-23). NODE_ENV stays development
+          # because the runtime image bakes NODE_ENV=production and this override is the only one
+          # that reaches the initContainer.
           env:
             - name: NODE_ENV
               value: "development"
-            - name: PROPERTY_SERVICE_SEED_ON_START
-              value: "1"
             # Local-only recovery from a renumbered migration file (#223): a `pgmigrations` row
             # with no matching file is stale local state here, never real deploy history. Only
             # this overlay sets it — not hetzner/dev, which is a persistent environment where the

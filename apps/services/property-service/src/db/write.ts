@@ -454,6 +454,49 @@ export async function getOrCreateProperty(client: Queryable, row: PropertyRow): 
 }
 
 /**
+ * Corrects the address of the property an EXISTING feed listing already points at, and returns
+ * that property's id — or `null` when the feed has no listing under this key yet.
+ *
+ * `getOrCreateProperty()` keys on `address_key`, so a mapper fix that changes how a street line is
+ * composed yields a new key and would create a second property, while `upsertListing()` never moves
+ * a listing's `property_id`: the listing would keep rendering its old address forever. Refreshing
+ * in place fixes it on the next pass in every environment, with nothing deleted.
+ *
+ * Skipped (returns `null`) when another property already holds the new key: that is two feed
+ * records resolving to one building, and merging them is a dedup decision, not an address fix.
+ */
+export async function refreshFeedPropertyAddress(
+  client: Queryable,
+  sourceSystem: string,
+  sourceListingKey: string,
+  row: Pick<PropertyRow, 'address_raw' | 'street_line' | 'city' | 'state' | 'zip5' | 'address_key'>,
+): Promise<string | null> {
+  const { rows } = await client.query(
+    `UPDATE properties p
+        SET street_line = $3, address_raw = $4, city = $5, address_key = $6,
+            state = $7, zip5 = $8
+       FROM listings l
+      WHERE l.property_id = p.id
+        AND l.source_system = $1
+        AND l.source_listing_key = $2
+        AND NOT EXISTS (SELECT 1 FROM properties q WHERE q.address_key = $6 AND q.id <> p.id)
+      RETURNING p.id`,
+    [
+      sourceSystem,
+      sourceListingKey,
+      row.street_line,
+      row.address_raw,
+      row.city,
+      row.address_key,
+      row.state,
+      row.zip5,
+    ],
+  );
+  const id = rows[0]?.id;
+  return typeof id === 'string' ? id : null;
+}
+
+/**
  * Resolves a unit within a property, creating it only if absent.
  *
  * The unique index is NULLS NOT DISTINCT on (property_id, unit_number), so two feeds cannot create
@@ -649,6 +692,40 @@ export async function replaceFeedListingMedia(
         AND source_media_key IS NOT NULL
         AND NOT (source_media_key = ANY($2::text[]))`,
     [listingId, rows.map((row) => row.source_media_key)],
+  );
+}
+
+/** `source_media_key` of the `ListPictureURL` fallback photo. A real `MediaKey` is numeric. */
+export const LIST_PICTURE_MEDIA_KEY = 'list-picture';
+
+/**
+ * Gives a feed listing its `ListPictureURL` as the primary photo until the `BrightMedia` crawl
+ * (#191) delivers its gallery.
+ *
+ * The crawl is a full pass over `BrightMedia` and takes hours on the production feed, while every
+ * property record already carries its main photo. So the mapper writes that one photo, under
+ * `LIST_PICTURE_MEDIA_KEY`, only while the listing holds no other feed photo. When the crawl writes
+ * the gallery, `replaceFeedListingMedia()` deletes every feed row not in its set, and this one goes
+ * with them. Not a second gallery source: it never runs once a crawled photo exists.
+ */
+export async function ensureListPicturePhoto(
+  client: Queryable,
+  listingId: string,
+  url: string,
+  isSample: boolean,
+): Promise<void> {
+  await client.query(
+    `INSERT INTO listing_media
+       (id, listing_id, source_media_key, source_url, alt_text, caption, sort_order,
+        is_primary, retained_when_suppressed, is_sample)
+     SELECT $1, $2, $3, $4, NULL, NULL, 0, true, false, $5
+      WHERE NOT EXISTS (
+        SELECT 1 FROM listing_media
+         WHERE listing_id = $2 AND (is_primary OR source_media_key IS NOT NULL)
+           AND source_media_key IS DISTINCT FROM $3)
+     ON CONFLICT (listing_id, source_media_key) WHERE source_media_key IS NOT NULL
+     DO UPDATE SET source_url = EXCLUDED.source_url, is_sample = EXCLUDED.is_sample`,
+    [randomUUID(), listingId, LIST_PICTURE_MEDIA_KEY, url, isSample],
   );
 }
 

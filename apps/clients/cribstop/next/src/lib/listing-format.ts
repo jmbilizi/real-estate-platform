@@ -140,6 +140,34 @@ export function formatStreetAddress(
   return `${address}, ${city}, ${state} ${zip}`;
 }
 
+/** `"FREDERICK"` → `"Frederick"`. Feeds write place names upper case; display never does. */
+function titleCasePlace(value: string): string {
+  if (value !== value.toUpperCase()) return value;
+  return value
+    .toLowerCase()
+    .replace(
+      /(^|[\s\-'/])([a-z])/g,
+      (_, lead: string, letter: string) => lead + letter.toUpperCase(),
+    );
+}
+
+/**
+ * The card's address line: `"420 Herringbone Way, Frederick, MD 21701"`.
+ *
+ * A seller-suppressed address (`address` null) shows `"Frederick, MD"` only — the city and state the
+ * row already publishes — never a street, and never the ZIP, which narrows the withheld address.
+ */
+export function formatCardAddress(listing: {
+  address: string | null;
+  city: string;
+  state: string;
+  zip: string;
+}): string {
+  const city = titleCasePlace(listing.city);
+  if (!listing.address) return `${city}, ${listing.state}`;
+  return `${listing.address}, ${city}, ${listing.state} ${listing.zip}`;
+}
+
 /** True only when a row has both coordinates, which is the only case that may produce a map pin. */
 export function hasMapCoordinates(listing: {
   latitude: number | null;

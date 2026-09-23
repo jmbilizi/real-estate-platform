@@ -332,11 +332,7 @@ Two more things worth knowing before changing this code:
 - **The bearer token goes only to the configured service-root host.** An `@odata.nextLink` is a
   server-supplied URL, so a host change there would hand the credential to that host. `fetchPage`
   refuses it.
-- **`BRIGHT_MLS_ENV` declares the feed tier** (`test` or `production`, #246, replacing
-  `BRIGHT_MLS_FEED`). A `test` declaration refuses a service root or token endpoint that is not a
-  recognised test host, and `production` now also refuses a recognised non-production host. The base
-  default is `test`, so an environment that patches nothing cannot reach production. The same
-  selector also picks the credential pair (`BRIGHT_MLS_TEST_*` / `BRIGHT_MLS_PROD_*`) — see below.
+- **`BRIGHT_MLS_ENV` declares the feed tier** (`test` or `production`) — see "Which feed" below.
 
 ### Bright MLS photos — the crawl and the media mapper (#191)
 
@@ -410,41 +406,23 @@ Five things here are load-bearing and easy to undo by accident:
   committed `StrongBase64Password` placeholder, completes cleanly — `config.ts` treats the
   placeholder as absent and never transmits it. Making that a failure would give a CronJob a nightly
   backoff loop over an entirely expected condition and bury real faults in the noise. A value that
-  is present but **unusable** is the opposite case and does fail the run. **The behaviour is right;
-  do not re-derive it from which environments hold credentials.** It used to be justified by `local`
-  and `test` holding none, and the 2026-09-19 ruling below ended that — the justification changed,
-  the rule did not. An unwired environment is a normal state during rollout, and it is still not a
-  fault.
-- **Which feed am I talking to?** Stakeholder ruling 2026-09-19, superseding the 2026-09-12
-  two-credential ruling. `local`, `dev` and `test` authenticate against Bright's **test/staging**
-  feed, with the real test credentials; they hold real Bright data. `prod` authenticates against the
-  **licensed production** feed. This is the same separation as before with a different default: the
-  old rule protected the production credential by starving three environments, this one protects it
-  by binding three environments to the test feed. **The invariant is unchanged: the production
-  credential never leaves production.** A row from the test feed is not production inventory — it is
-  sample data, **must** be marked `is_sample=true` on ingest, and **must** carry the sample
-  disclosure on every consumer surface (#93, #115). **That marking does not exist yet**: nothing
-  ingests, `is_sample` is set only by the seed path, and nothing derives it from `source`. It is a
-  requirement on #93, not a control to rely on — the condition that must hold before a Bright row
-  reaches a consumer surface, never a reason one already may. The field names stay identical across
-  environments and only the values differ, which is what makes GitHub _environment_ secrets — not
-  repository secrets — the enforcement mechanism, and the endpoint stays per-environment
-  **configuration** on the CronJob so the feed is inspectable without decoding a Secret. Every
-  environment carries an endpoint pair since #176. **One selector, both guards (#246).**
-  `BRIGHT_MLS_ENV` is a per-environment tier declaration: a `test` declaration refuses a service
-  root or token endpoint that is not a recognised test host, `production` refuses a recognised
-  non-production host, and the base default is `test`, so an environment that patches nothing cannot
-  reach production. That guards the ENDPOINT. The same selector also picks the credential pair
-  (`BRIGHT_MLS_TEST_CLIENT_ID`/`SECRET` or `BRIGHT_MLS_PROD_CLIENT_ID`/`SECRET`) and the resolver
-  never reads the other tier's pair — a value filed under the wrong tier's key is inert, not merely
-  rejected downstream. That guards the CREDENTIAL, and delivers most of #164: naming the key by tier
-  is an assertion a reader can find, where a bare credential value carries none.
-- **Before #246, the credential guard depended on Bright's own tenant separation.** Measured
-  2026-09-19: the real **test** credentials return **HTTP 200** at `okta.tst.brightmls.com` and
-  **HTTP 400** at `okta.brightmls.com`, because the two tiers are separate Okta tenants. A misfiled
-  credential was transmitted to the wrong endpoint and rejected there — credential exposure, not
-  data exposure, but a control this repo did not own. #246's tier-suffixed keys make the same
-  misfile inert one step earlier: the resolver never reads it, so nothing is transmitted.
+  is present but **unusable** is the opposite case and does fail the run. An unwired environment is
+  a normal state during rollout, not a fault.
+- **Which feed am I talking to?** Any environment may read either tier. The lower environments are
+  gated and not public, so the tier is whatever credential the environment holds. Three keys, all in
+  `bright-mls-secret`: `BRIGHT_MLS_ENV` (`test` or `production`) states which tier
+  `BRIGHT_MLS_CLIENT_ID` / `BRIGHT_MLS_CLIENT_SECRET` belong to. `config.ts` trusts it exactly —
+  nothing is inferred — and derives the endpoints from it (`BRIGHT_FEED_ENDPOINTS`). Locally, set
+  the three keys in `.env`; in CI they are GitHub environment secrets. An endpoint override
+  (`BRIGHT_MLS_TOKEN_ENDPOINT` / `BRIGHT_MLS_SERVICE_ROOT`, used by the tests) must match the tier:
+  the tiers are separate Okta tenants (measured 2026-09-19: a test credential gets HTTP 400 at
+  `okta.brightmls.com`). A test-feed row is not production inventory, so the mapper marks it
+  `is_sample=true` (`bright-map/sample.ts`).
+- **Photos (`media.ts`, `bright-map/media.ts`).** `BrightMedia` cannot replicate incrementally, so
+  after the property pass the job fetches each changed listing's gallery by `ResourceRecordKey`
+  (falling back to `ListingId` if Bright refuses the Int64 filter), stages it, and the mapper
+  replaces that listing's `listing_media`. `BRIGHT_MLS_MEDIA_LISTINGS_PER_RUN` (default 200) bounds
+  the cost; a listing with no staged gallery still gets `ListPictureURL` as its primary photo.
 - **Only endpoint HOSTS are ever logged**, never full URLs and never credential material. The
   containment is structural: no log record type in `run-log.ts` has a field a credential could be
   assigned to. The exception that had to be argued about is `message`, the one free-text field — so
@@ -453,19 +431,20 @@ Five things here are load-bearing and easy to undo by accident:
   otherwise log the client id through it. The redaction assertions live in `run.spec.ts`
   ("runBrightIngest — redaction"). If one fails, take the field off the record type — do not add a
   scrubbing pass, which is only ever a list of things somebody remembered.
-- **The test feed is verified; the production feed is not.** A 2026-09-18 run against Bright's
-  staging feed (#163) confirmed the endpoints, the OAuth2 shape and the resource inventory, and
-  `docs/bright-mls/bright-metadata.xml` is the committed `$metadata` document. Work
-  `docs/bright-mls-day-one-checklist.md` for what is answered and what is still assumed; an item
-  that comes back different is a product-owner ping, not a quiet local fix. Three answers overturn
-  what the repo previously assumed, and each one is a day if rediscovered: the property entity set
-  is **`BrightProperties`**, keyed on `ListingKey` — a plain `Property` set does not exist and 404s;
-  `$metadata` declares **no `EnumType`s** and the `Lookup` resource returns 400 for our IDX tier, so
-  enumerations are undiscoverable; and `BrightProperty.Location` is typed `Edm.GeographyPoint` while
-  Bright answers `"GeographyPolygon literals not implemented"`, so area search is PostGIS-side (#66)
-  over a numeric `Latitude`/`Longitude` bounding box, which does work on the wire. **Visibility is
-  not access** — the service document advertises 50 entity sets and `$metadata` describes 25. Never
-  read a name as a capability.
+- **Both feeds authenticate.** A production credential passed the token call and the `$metadata`
+  probe on 2026-09-22. A 2026-09-18 run against Bright's staging feed (#163) confirmed the
+  endpoints, the OAuth2 shape and the resource inventory, and `docs/bright-mls/bright-metadata.xml`
+  is the committed `$metadata` document. Work `docs/bright-mls-day-one-checklist.md` for what is
+  answered and what is still assumed; an item that comes back different is a product-owner ping, not
+  a quiet local fix. Three answers overturn what the repo previously assumed, and each one is a day
+  if rediscovered: the property entity set is **`BrightProperties`**, keyed on `ListingKey` — a
+  plain `Property` set does not exist and 404s; `$metadata` declares **no `EnumType`s** and the
+  `Lookup` resource returns 400 for our IDX tier, so enumerations are undiscoverable; and
+  `BrightProperty.Location` is typed `Edm.GeographyPoint` while Bright answers
+  `"GeographyPolygon literals not implemented"`, so area search is PostGIS-side (#66) over a numeric
+  `Latitude`/`Longitude` bounding box, which does work on the wire. **Visibility is not access** —
+  the service document advertises 50 entity sets and `$metadata` describes 25. Never read a name as
+  a capability.
 
 ### Migration rules (each of these fails silently or confusingly if ignored)
 

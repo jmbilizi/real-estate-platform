@@ -4,9 +4,9 @@ import type { ListingCardRow } from '@/lib/types';
 import { useApp } from '@/lib/context';
 import { openListingPanel } from '@/lib/listing-panel';
 import {
+  formatCardAddress,
   formatClosePrice,
   formatDwellingStats,
-  formatListingLocation,
   formatListingPrice,
   formatLotSize,
   formatOpenHouseBadge,
@@ -100,7 +100,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
     <div
       role="link"
       tabIndex={0}
-      aria-label={`View listing in ${formatListingLocation(listing.neighborhood, listing.city, listing.state)}`}
+      aria-label={`View listing at ${formatCardAddress(listing)}`}
       className="group block cursor-pointer rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2"
       onClick={openPanel}
       onKeyDown={(e) => {
@@ -112,12 +112,10 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
       }}
     >
       {/* Image. `listing-card-media` makes this the container the open-house badge measures. */}
-      <div className="listing-card-media relative aspect-square overflow-hidden rounded-md bg-surface-soft">
+      <div className="listing-card-media relative aspect-[4/3] overflow-hidden rounded-md bg-surface-soft">
         <ListingImage
           media={listing.primaryMedia}
-          className={`h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04] ${
-            isSold ? 'opacity-75 saturate-50' : ''
-          }`}
+          className={`h-full w-full object-contain ${isSold ? 'opacity-75 saturate-50' : ''}`}
         />
 
         {/* Sold inventory reads differently from live inventory at a glance. */}
@@ -241,7 +239,9 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
        * which optional rows a row happens to have. Each variable row keeps its box whether or not it
        * has content:
        *
-       * - the label row (sample / sponsored) — `h-5`, always present
+       * - the label row (sample / sponsored) — `h-5`, rendered only when a label applies. Always
+       *   reserving it left a blank 20px band under every Bright photo, which carries neither label.
+       *   A grid mixing labelled and unlabelled rows is therefore uneven by that one row.
        * - the stats line (absent for a parcel with unknown lot size, or an all-null dwelling) —
        *   `h-[18px]`, which is `caption-sm`'s line box; a slot sized for the old 12px text would
        *   clip the 13px it now holds
@@ -250,7 +250,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
        * The open-house date row is gone entirely — it moved onto the image badge, and it was the
        * row that only some cards had.
        */}
-      <div className="pt-2">
+      <div className="pt-1.5">
         {/*
          * Required labels get a guaranteed slot that is reserved even when empty. They are never
          * what gets truncated or crowded out to make heights match — that is why they sit outside
@@ -262,14 +262,16 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
          * supported card (~155px); this row must never gain `overflow-hidden` or `truncate`, or a
          * disclosure can go invisible again the same way.
          */}
-        <div className="mb-1 flex h-5 flex-nowrap items-center gap-1">
-          {listing.isSample && <SampleBadge />}
-          {listing.sponsored && <SponsoredBadge />}
-        </div>
+        {(listing.isSample || listing.sponsored) && (
+          <div className="mb-1 flex h-5 flex-nowrap items-center gap-1">
+            {listing.isSample && <SampleBadge />}
+            {listing.sponsored && <SponsoredBadge />}
+          </div>
+        )}
 
-        {/* `caption` (14px/500). Was 14/600, a pairing the scale does not define. */}
-        <h3 className="truncate text-sm font-medium text-ink">
-          {formatListingLocation(listing.neighborhood, listing.city, listing.state)}
+        {/* The property address in the platform UI face: small, medium weight, tight tracking. */}
+        <h3 className="truncate font-system text-[13px] font-medium leading-[18px] tracking-[-0.01em] text-ink">
+          {formatCardAddress(listing)}
         </h3>
 
         {/* Reserved whether or not there are stats to show, so the price never shifts up a row. */}

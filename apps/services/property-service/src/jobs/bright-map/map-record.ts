@@ -12,6 +12,7 @@
  */
 
 import { buildAddressKey, splitUnitDesignator } from '../../seed/address';
+import { composeStreetLine, titleCase } from './address-format';
 import { PropertyType } from '../../seed/constants';
 import { ListingStatus } from '../../seed/constants';
 import { OfferKind } from '../../seed/types';
@@ -193,12 +194,15 @@ export function mapBrightPropertyRecord(
   }
 
   const unparsedAddress = nonBlank(payload.UnparsedAddress);
-  const city = nonBlank(payload.City);
+  const composedStreetLine = composeStreetLine(payload);
+  const rawCity = nonBlank(payload.City);
   const state = nonBlank(payload.StateOrProvince);
   const zip = nonBlank(payload.PostalCode);
-  if (!unparsedAddress || !city || !state || !zip) {
+  if ((!composedStreetLine && !unparsedAddress) || !rawCity || !state || !zip) {
     return reject(listingKey, 'missing_address');
   }
+  // Bright writes city names upper case ("FREDERICK"); every surface shows "Frederick".
+  const city = titleCase(rawCity);
 
   const listPrice = toNumber(payload.ListPrice);
   if (listPrice === null) {
@@ -243,7 +247,10 @@ export function mapBrightPropertyRecord(
     return reject(listingKey, attribution.reason);
   }
 
-  const { streetLine, unitNumber } = splitUnitDesignator(unparsedAddress);
+  // The structured parts first (see address-format.ts); the unparsed string only as a fallback.
+  const parsed = splitUnitDesignator(unparsedAddress ?? composedStreetLine ?? '');
+  const streetLine = composedStreetLine ?? parsed.streetLine;
+  const unitNumber = nonBlank(payload.UnitNumber) ?? parsed.unitNumber;
   const addressKey = buildAddressKey({ streetLine, state, zip5: zip });
   const isSample = isSampleFeed(ctx.feed);
   const baseTitle = `${propertyType} in ${city}, ${state}`;
@@ -269,7 +276,7 @@ export function mapBrightPropertyRecord(
     unitNumber,
     outOfRangeFields,
     property: {
-      address_raw: unparsedAddress,
+      address_raw: unparsedAddress ?? streetLine,
       street_line: streetLine,
       city,
       state,

@@ -90,24 +90,24 @@ runs:
         > /tmp/ingress.secret.processed.yaml
         mv /tmp/ingress.secret.processed.yaml infra/k8s/base/secrets/ingress.secret.yaml
 
-        # Bright MLS (#91). Guarded, unlike the blocks above, because these two are the only secrets
-        # here that are legitimately ABSENT in some environments: `test` never receives Bright
-        # credentials at all (#117), and no environment has them until #117 is done. An unguarded
-        # `env(VAR)` on an unset variable writes a null into stringData, which kubectl rejects — so
-        # an expected absence would break the whole deploy rather than the one job.
+        # Bright MLS (#91). Guarded, unlike the blocks above, because these secrets are legitimately
+        # ABSENT in an environment that is not provisioned yet. An unguarded `env(VAR)` on an unset
+        # variable writes a null into stringData, which kubectl rejects — so an expected absence
+        # would break the whole deploy rather than the one job.
         #
-        # Leaving the committed `StrongBase64Password` placeholder in place is the correct outcome
-        # for that case: the job treats it as "not configured", completes cleanly and transmits
-        # nothing. These MUST be GitHub *environment* secrets, never repository secrets — that is the
-        # mechanism keeping the staging set (dev) and the production set (prod) from becoming
-        # interchangeable, and the field names are identical across environments by design.
-        if [ -n "$BRIGHT_MLS_CLIENT_ID" ] && [ -n "$BRIGHT_MLS_CLIENT_SECRET" ]; then
+        # Leaving the committed `StrongBase64Password` placeholders in place is the correct outcome
+        # for that case: the job treats them as "not configured", completes cleanly and transmits
+        # nothing. BRIGHT_MLS_ENV (`test` or `production`) states which tier the credential
+        # belongs to, so all three are applied together or not at all. They are GitHub
+        # *environment* secrets, so each environment holds its own values.
+        if [ -n "$BRIGHT_MLS_ENV" ] && [ -n "$BRIGHT_MLS_CLIENT_ID" ] && [ -n "$BRIGHT_MLS_CLIENT_SECRET" ]; then
           echo "🔐 Bright MLS credentials present for this environment — substituting."
-          yq eval '.stringData.BRIGHT_MLS_CLIENT_ID = env(BRIGHT_MLS_CLIENT_ID)' infra/k8s/base/secrets/bright-mls.secret.yaml | \
+          yq eval '.stringData.BRIGHT_MLS_ENV = env(BRIGHT_MLS_ENV)' infra/k8s/base/secrets/bright-mls.secret.yaml | \
+          yq eval '.stringData.BRIGHT_MLS_CLIENT_ID = env(BRIGHT_MLS_CLIENT_ID)' - | \
           yq eval '.stringData.BRIGHT_MLS_CLIENT_SECRET = env(BRIGHT_MLS_CLIENT_SECRET)' - \
           > /tmp/bright-mls.secret.processed.yaml
           mv /tmp/bright-mls.secret.processed.yaml infra/k8s/base/secrets/bright-mls.secret.yaml
-        elif [ -n "$BRIGHT_MLS_CLIENT_ID" ] || [ -n "$BRIGHT_MLS_CLIENT_SECRET" ]; then
+        elif [ -n "$BRIGHT_MLS_ENV" ] || [ -n "$BRIGHT_MLS_CLIENT_ID" ] || [ -n "$BRIGHT_MLS_CLIENT_SECRET" ]; then
           # Half a pair is a provisioning mistake, not an expected absence — but it is NOT grounds to
           # abort the environment. This step runs before any deploy-control gating, so failing here
           # would take postgres, redis, jaeger, the gateway and the web client down over a credential
@@ -117,37 +117,10 @@ runs:
           # So: substitute NEITHER, keeping both placeholders. No half-credential reaches the cluster,
           # the ingestion job reports "credentials not configured" naming both variables, and the
           # warning below says why — all visible, none of it fatal to anything else.
-          echo "::warning::Only one of BRIGHT_MLS_CLIENT_ID / BRIGHT_MLS_CLIENT_SECRET is set for this environment. Neither was applied; the ingestion job will report 'credentials not configured'. Both are provisioned together as environment secrets — see #117."
+          echo "::warning::Only some of BRIGHT_MLS_ENV / BRIGHT_MLS_CLIENT_ID / BRIGHT_MLS_CLIENT_SECRET are set for this environment. None was applied; the ingestion job will report 'credentials not configured'. Provision all three together as environment secrets."
         else
           echo "ℹ️  No Bright MLS credentials for this environment — keeping the committed placeholder."
           echo "   The ingestion job will complete with a 'credentials not configured' outcome (#91)."
-        fi
-
-        # Bright MLS tier-suffixed pairs (#246). Same guard shape as the unsuffixed pair above, one
-        # per feed tier. `BRIGHT_MLS_ENV` picks which pair a run reads; a value provisioned under the
-        # wrong tier's key is simply never read, never a security control this step enforces.
-        if [ -n "$BRIGHT_MLS_TEST_CLIENT_ID" ] && [ -n "$BRIGHT_MLS_TEST_CLIENT_SECRET" ]; then
-          echo "🔐 Bright MLS TEST credentials present for this environment — substituting."
-          yq eval '.stringData.BRIGHT_MLS_TEST_CLIENT_ID = env(BRIGHT_MLS_TEST_CLIENT_ID)' infra/k8s/base/secrets/bright-mls.secret.yaml | \
-          yq eval '.stringData.BRIGHT_MLS_TEST_CLIENT_SECRET = env(BRIGHT_MLS_TEST_CLIENT_SECRET)' - \
-          > /tmp/bright-mls-test.secret.processed.yaml
-          mv /tmp/bright-mls-test.secret.processed.yaml infra/k8s/base/secrets/bright-mls.secret.yaml
-        elif [ -n "$BRIGHT_MLS_TEST_CLIENT_ID" ] || [ -n "$BRIGHT_MLS_TEST_CLIENT_SECRET" ]; then
-          echo "::warning::Only one of BRIGHT_MLS_TEST_CLIENT_ID / BRIGHT_MLS_TEST_CLIENT_SECRET is set for this environment. Neither was applied; the ingestion job will report 'credentials not configured' for the test tier."
-        else
-          echo "ℹ️  No Bright MLS TEST credentials for this environment — keeping the committed placeholder."
-        fi
-
-        if [ -n "$BRIGHT_MLS_PROD_CLIENT_ID" ] && [ -n "$BRIGHT_MLS_PROD_CLIENT_SECRET" ]; then
-          echo "🔐 Bright MLS PROD credentials present for this environment — substituting."
-          yq eval '.stringData.BRIGHT_MLS_PROD_CLIENT_ID = env(BRIGHT_MLS_PROD_CLIENT_ID)' infra/k8s/base/secrets/bright-mls.secret.yaml | \
-          yq eval '.stringData.BRIGHT_MLS_PROD_CLIENT_SECRET = env(BRIGHT_MLS_PROD_CLIENT_SECRET)' - \
-          > /tmp/bright-mls-prod.secret.processed.yaml
-          mv /tmp/bright-mls-prod.secret.processed.yaml infra/k8s/base/secrets/bright-mls.secret.yaml
-        elif [ -n "$BRIGHT_MLS_PROD_CLIENT_ID" ] || [ -n "$BRIGHT_MLS_PROD_CLIENT_SECRET" ]; then
-          echo "::warning::Only one of BRIGHT_MLS_PROD_CLIENT_ID / BRIGHT_MLS_PROD_CLIENT_SECRET is set for this environment. Neither was applied; the ingestion job will report 'credentials not configured' for the production tier."
-        else
-          echo "ℹ️  No Bright MLS PROD credentials for this environment — keeping the committed placeholder."
         fi
 
         # Postmark (#175). Guarded for the same reason as Bright MLS above: the token is absent

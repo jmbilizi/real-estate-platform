@@ -55,9 +55,22 @@ describe('buildCursorQuery — every ordered request is bounded', () => {
    * query without `$top` returns 1000 WITH one. `$top` is "give me this many and stop". Sending it
    * would cap every run at one page and look like a feed that is always caught up.
    */
-  it('never sends $top, because $top suppresses @odata.nextLink', () => {
+  it('sends $top only when the caller asks for an explicit page size', () => {
     const url = query('BrightProperties', { modifiedAt: '2026-09-01T00:00:00Z', recordKey: null });
     expect(url.searchParams.has('$top')).toBe(false);
+
+    const sized = new URL(
+      buildCursorQuery({
+        serviceRoot: SERVICE_ROOT,
+        resource: resolveResource('BrightProperties'),
+        cursor: { modifiedAt: '2026-09-01T00:00:00Z', recordKey: null },
+        top: 200,
+      }),
+    );
+    expect(sized.searchParams.get('$top')).toBe('200');
+    expect(sized.searchParams.get('$filter')).toBe(
+      'ModificationTimestamp ge 2026-09-01T00:00:00.000Z',
+    );
   });
 
   it('targets the BrightProperties entity set, never the RESO-standard Property', () => {

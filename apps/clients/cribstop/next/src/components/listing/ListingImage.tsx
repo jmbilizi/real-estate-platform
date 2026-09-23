@@ -13,11 +13,17 @@ export default function ListingImage({
   media,
   className = '',
   sizeHint,
+  backdrop = true,
 }: {
   media: Media | null;
   className?: string;
   /** Rendered inside the placeholder only; the real image needs no caption. */
   sizeHint?: 'card' | 'detail';
+  /**
+   * The blurred fill behind the uncropped photo. On by default, for fixed-shape frames. Off where
+   * the photo sizes itself inside a centring container (the lightbox), which the wrapper would break.
+   */
+  backdrop?: boolean;
 }) {
   if (!media) {
     return (
@@ -48,6 +54,31 @@ export default function ListingImage({
 
   // A plain <img> rather than next/image: listing photos come from arbitrary remote hosts supplied
   // by the data source, which next/image would require to be enumerated in next.config.js ahead of
-  // time. Matches what the cards rendered before.
-  return <img src={media.url} alt={media.altText ?? ''} loading="lazy" className={className} />;
+  // time.
+  if (!backdrop) {
+    return <img src={media.url} alt={media.altText ?? ''} loading="lazy" className={className} />;
+  }
+
+  // The photo is never cropped: MLS photos carry the MLS trademark in a corner, and cropping can
+  // hide it. So the visible photo is `object-contain` (callers pass it), and any space the frame
+  // leaves around it is filled by the SAME photo, cropped to cover and heavily blurred, behind it.
+  // The fill is decorative (`aria-hidden`, empty alt) and reuses the same URL, so it costs no
+  // second download.
+  return (
+    <span className="relative block h-full w-full overflow-hidden">
+      <img
+        src={media.url}
+        alt=""
+        aria-hidden="true"
+        loading="lazy"
+        className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-xl"
+      />
+      <img
+        src={media.url}
+        alt={media.altText ?? ''}
+        loading="lazy"
+        className={`relative ${className}`}
+      />
+    </span>
+  );
 }

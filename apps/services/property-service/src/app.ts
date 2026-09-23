@@ -1,6 +1,7 @@
 import express, { type Express, type NextFunction, type Request, type Response } from 'express';
 import { INTERNAL_ERROR_BODY, toOpenApiDocument } from '@cribstop/property-contracts';
 import { getPool } from './db/pool';
+import { type AreaLoader, createAreaLoader } from './listings/on-demand';
 import { createListingsRouter } from './listings/routes';
 import type { ReadPool } from './listings/repository';
 import { createInquiriesRouter } from './inquiries/routes';
@@ -97,6 +98,11 @@ export interface CreateAppOptions {
   introspection?: IntrospectionClient;
   /** Injected so tests can exercise rate limiting deterministically (#131). */
   rateLimiter?: RateLimiter;
+  /**
+   * On-demand Bright area load (`listings/on-demand.ts`). Defaults to a real loader only when the
+   * pool is real too, so a test with a fake pool never reaches Bright.
+   */
+  areaLoader?: AreaLoader;
 }
 
 /**
@@ -131,7 +137,9 @@ export function createApp(options: CreateAppOptions = {}): Express {
     res.set('Cache-Control', 'public, max-age=300').status(200).json(OPEN_API_DOCUMENT);
   });
 
-  app.use(createListingsRouter(pool));
+  const areaLoader =
+    options.areaLoader ?? (options.pool === undefined ? createAreaLoader() : undefined);
+  app.use(createListingsRouter(pool, areaLoader));
   app.use(createInquiriesRouter({ pool, introspection, rateLimiter }));
 
   /**

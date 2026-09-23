@@ -53,6 +53,11 @@ export interface CursorQueryParams {
   readonly cursor: QueryCursor;
   /** `$select`. Omitted when empty, which asks for every field. */
   readonly select?: readonly string[];
+  /**
+   * `$top`. Omitted when absent. `$top` suppresses `@odata.nextLink` (see the header), so a caller
+   * that sends it pages by re-querying from its own cursor, never by following a link.
+   */
+  readonly top?: number;
 }
 
 /**
@@ -100,9 +105,60 @@ export function buildCursorQuery(params: CursorQueryParams): string {
   if (params.select !== undefined && params.select.length > 0) {
     search.set('$select', params.select.join(','));
   }
+  if (params.top !== undefined) {
+    search.set('$top', String(params.top));
+  }
 
   const base = params.serviceRoot.replace(/\/+$/, '');
   return `${base}/${resource.entitySet}?${search.toString()}`;
+}
+
+/** One place to load on demand (`area-fetch.ts`). At least one of `city` / `zip` is set. */
+export interface AreaQueryParams {
+  readonly serviceRoot: string;
+  readonly city?: string;
+  readonly state?: string;
+  readonly zip?: string;
+  /** Keyset page: the last `ListingKey` already read, as decimal text. `null` on the first page. */
+  readonly afterKey: string | null;
+  readonly top: number;
+}
+
+/** OData string literal: single quotes doubled. */
+function stringLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+/**
+ * Builds one page of an on-demand area load: the ACTIVE `BrightProperties` in one city or ZIP.
+ *
+ * The area and status filters keep the match set small, so this avoids the whole-feed scan that
+ * makes a `ModificationTimestamp` page slow on production. Pages are keyset pages on `ListingKey`
+ * (`ListingKey gt k`, ordered by `ListingKey`): no OR, no `$skip`, and the ordered field is always
+ * in the filter. `$top` suppresses nextLink, so the caller pages by `afterKey`.
+ */
+export function buildAreaQuery(params: AreaQueryParams): string {
+  if (params.city === undefined && params.zip === undefined) {
+    throw new Error('An area query needs a city or a ZIP.');
+  }
+  if (params.afterKey !== null && !/^\d+$/.test(params.afterKey)) {
+    throw new Error(`ListingKey "${params.afterKey}" is not a decimal integer.`);
+  }
+  const clauses = [
+    ...(params.city === undefined ? [] : [`City eq ${stringLiteral(params.city)}`]),
+    ...(params.state === undefined ? [] : [`StateOrProvince eq ${stringLiteral(params.state)}`]),
+    ...(params.zip === undefined ? [] : [`PostalCode eq ${stringLiteral(params.zip)}`]),
+    "StandardStatus eq 'Active'",
+    `ListingKey gt ${params.afterKey ?? '0'}`,
+  ];
+
+  const search = new URLSearchParams();
+  search.set('$filter', clauses.join(' and '));
+  search.set('$orderby', 'ListingKey asc');
+  search.set('$top', String(params.top));
+
+  const base = params.serviceRoot.replace(/\/+$/, '');
+  return `${base}/BrightProperties?${search.toString()}`;
 }
 
 /**

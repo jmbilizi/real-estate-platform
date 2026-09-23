@@ -5,11 +5,16 @@
  * `InternetAddressDisplayYN`. Anything other than the literal `true` — missing, `false`, a string,
  * a stray `"Y"` this feed has never actually sent — is treated as withholding, never as permitting.
  *
- * Three of the four `#53` field-level flags — price, price history and days-on-market — are NOT
- * mapped from any Bright field. #146 blocks mapping any Bright field to them until Bright supplies
- * the semantics in writing (#33 item 8(f)). So every Bright row carries those three fixed to
- * suppressed. This is a deliberate fail-closed mapping, not an omission. Lifting any of the three
- * is a #146 decision, not a change here.
+ * Two of the four `#53` field-level flags — price history and days-on-market — are NOT mapped from
+ * any Bright field. #146 blocks mapping any Bright field to them until Bright supplies the semantics
+ * in writing (#33 item 8(f)). So every Bright row carries those two fixed to suppressed. This is a
+ * deliberate fail-closed mapping, not an omission. Lifting either is a #146 decision.
+ *
+ * ## The list price displays (stakeholder ruling 2026-09-23)
+ *
+ * `priceDisplayAllowed` was held suppressed by #146 too, which withheld the price of every Bright
+ * listing. The stakeholder ruled that the list price displays. It is fixed true, like media below,
+ * because no Bright price-display field is confirmed.
  *
  * ## Media is the one exception (stakeholder ruling 2026-09-22, #191)
  *
@@ -51,8 +56,8 @@ export function mapSuppressionFlags(payload: Readonly<Record<string, unknown>>):
   return {
     internetDisplayAllowed: isExplicitlyTrue(payload.InternetEntireListingDisplayYN),
     addressDisplayAllowed: isExplicitlyTrue(payload.InternetAddressDisplayYN),
-    // #146: fixed suppressed until Bright's semantics are in writing (#33 item 8(f)).
-    priceDisplayAllowed: false,
+    // Stakeholder ruling 2026-09-23: the list price displays. Price history stays held (#146).
+    priceDisplayAllowed: true,
     priceHistoryDisplayAllowed: false,
     // Stakeholder ruling 2026-09-22 (#191). Media only — see the header. Fixed true, not read from
     // a feed field: no Bright field for this is confirmed, so a field-derived value would be a

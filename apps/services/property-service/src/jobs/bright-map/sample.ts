@@ -1,9 +1,7 @@
 /**
  * Sample-marking for Bright rows (#93).
  *
- * Stakeholder ruling 2026-09-19: `local`, `dev` and `test` authenticate against Bright's test feed;
- * only `prod` reaches the licensed production feed. A row from the test feed is not production
- * inventory, so it must be marked `is_sample=true` and carry the shipped (#115) `(Sample)` title
+ * A row from Bright's test feed is not production inventory, so it must be marked `is_sample=true` and carry the shipped (#115) `(Sample)` title
  * disclosure. Derived from the configured feed tier, never from an environment name or a run flag —
  * an unconfigured or unrecognised feed value fails closed to sample-marked.
  */

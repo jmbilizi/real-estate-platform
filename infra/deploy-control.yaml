@@ -88,9 +88,8 @@ environments:
       bright-mls-ingest:
         # The scheduled Bright MLS ingestion CronJob (#91). It runs the property-service image with
         # a different entry point but carries its own identity label and therefore its own key here,
-        # because local, dev and test read Bright's TEST/STAGING feed while prod reads the licensed
-        # production feed (ruling 2026-09-19) — whether the job ships to an environment has to be
-        # decidable separately from whether the Property API does.
+        # so whether the job ships to an environment is decidable separately from whether the
+        # Property API does. Which Bright tier it reads is BRIGHT_MLS_ENV in bright-mls-secret.
         #
         # Shipping it to dev now, before credentials exist, is the point of #91: the run completes
         # with a "credentials not configured" outcome and transmits nothing, so the moment #117
