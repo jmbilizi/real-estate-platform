@@ -1,4 +1,4 @@
-import { bareZip, extractSearchTerms } from './search-utils';
+import { bareZip, extractSearchTerms, resolveSearchTerms } from './search-utils';
 
 describe('bareZip', () => {
   it('accepts an exact 5-digit value', () => {
@@ -60,5 +60,25 @@ describe('extractSearchTerms', () => {
       address: { postcode: '20850', road: 'Slaters Ln', city: 'Rockville', state_code: 'MD' },
     };
     expect(extractSearchTerms(suggestion)).toEqual({ zip: '20850' });
+  });
+
+  it.each(['suburb', 'neighbourhood', 'hamlet', 'quarter'])(
+    'routes a %s suggestion the same way as a city, using the address city it carries',
+    (type) => {
+      const suggestion = { type, address: { city: 'Rockville', state_code: 'MD' } };
+      expect(extractSearchTerms(suggestion)).toEqual({ city: 'Rockville', state: 'MD' });
+    },
+  );
+});
+
+describe('resolveSearchTerms', () => {
+  it('sends the bare zip even when a different suggestion is selected', () => {
+    const suggestion = { type: 'city', address: { city: 'Rockville', state_code: 'MD' } };
+    expect(resolveSearchTerms('20850', suggestion)).toEqual({ zip: '20850' });
+  });
+
+  it('falls through to the suggestion when the typed text is not a bare zip', () => {
+    const suggestion = { type: 'postcode', address: { postcode: '20850' } };
+    expect(resolveSearchTerms('Rockville, MD 20850', suggestion)).toEqual({ zip: '20850' });
   });
 });

@@ -116,12 +116,17 @@ export function bareZip(value: string): string | undefined {
   return /^\d{5}$/.test(trimmed) ? trimmed : undefined;
 }
 
+/** Suggestion types that name a place smaller than a city but resolved the same way — the
+ *  address block still carries a `city`, and this is what puts it on screen (`getLocationParts`). */
+const CITY_LIKE_TYPES = ['city', 'town', 'village', 'suburb', 'neighbourhood', 'hamlet', 'quarter'];
+
 /**
  * Extract the one structured filter a suggestion implies — never more than one shape.
  *
  * A place search has three shapes: a picked postcode, a picked road/house, and a picked
- * city/town/village. Each maps to its own filter set, so the API never has to AND two location
- * filters that could disagree (a city holds many zips; a zip can straddle two cities).
+ * city/town/village (or a smaller place inside one). Each maps to its own filter set, so the API
+ * never has to AND two location filters that could disagree (a city holds many zips; a zip can
+ * straddle two cities).
  */
 export function extractSearchTerms(
   loc: any,
@@ -132,7 +137,7 @@ export function extractSearchTerms(
     const street = address.house_number ? `${address.house_number} ${address.road}` : address.road;
     return { street };
   }
-  if (loc.type === 'city' || loc.type === 'town' || loc.type === 'village') {
+  if (CITY_LIKE_TYPES.includes(loc.type)) {
     const city = address.city || address.town || address.village;
     const state = address.state_code || stateAbbr(address.state || '');
     const result: { city?: string; state?: string } = {};
@@ -141,6 +146,16 @@ export function extractSearchTerms(
     return result;
   }
   return {};
+}
+
+/** The one structured filter this search implies — a typed bare zip wins over whatever the
+ *  suggestion resolved to, so an autocomplete mismatch can never send it as free text (#220). */
+export function resolveSearchTerms(
+  typedValue: string,
+  loc: any,
+): { zip?: string; street?: string; city?: string; state?: string } {
+  const zip = bareZip(typedValue);
+  return zip ? { zip } : extractSearchTerms(loc);
 }
 
 // Highlight the portion of `text` that matches `query` (case-insensitive).

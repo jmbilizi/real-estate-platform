@@ -71,21 +71,20 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
   /**
    * The search that would have produced this listing.
    *
-   * `q` is the same parameter the search bar builds, so this is the city's real result set rather
-   * than a decorative approximation — and the same string becomes the URL when the panel closes,
-   * which is what makes closing continuous with what was already on screen. A listing that failed
-   * to load has no city to search, so there is nothing to put behind it and close falls back.
-   *
-   * `"City, ST"` — the same label the search bar writes for a location suggestion, so the bar reads
-   * the way it would if the search had been typed, and the close destination is a URL a person
-   * would recognise as theirs. Matching it is `buildListingsQuery`'s job: the API has no state
-   * field to match against yet (#81), so the proxy drops the state before forwarding (#80). Do not
-   * shorten this to the city to compensate — the display and the match are two different concerns,
-   * and collapsing them here is what made the search bar's own URLs return nothing.
+   * `q` carries the display label the search bar would write for this place, so the bar reads the
+   * way it would if the search had been typed, and the close destination is a URL a person would
+   * recognise as theirs. `city`/`state` are the exact match the search bar itself now sends for a
+   * city/town/village pick (#220) — sent alongside `q` here for the same reason: an exact city
+   * match, never a substring guess that could land on a same-named city elsewhere. A listing that
+   * failed to load has no city to search, so there is nothing to put behind it and close falls back.
    */
   const cityQuery =
     initialState.status === 'ready'
-      ? `q=${encodeURIComponent(`${initialState.listing.city}, ${initialState.listing.state}`)}`
+      ? new URLSearchParams({
+          q: `${initialState.listing.city}, ${initialState.listing.state}`,
+          city: initialState.listing.city,
+          state: initialState.listing.state,
+        }).toString()
       : null;
 
   return <StandaloneListingView id={id} initialState={initialState} cityQuery={cityQuery} />;
