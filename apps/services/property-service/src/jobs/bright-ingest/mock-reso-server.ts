@@ -223,13 +223,12 @@ export function createMockResoServer(options: MockResoOptions): MockResoServer {
 
     // `$top` is "give me this many and stop", NOT a page size. Measured 2026-09-19: `$top=1000`
     // returns 1000 records with NO `@odata.nextLink`, where the same query without it returns 1000
-    // WITH one. Reproduced here so a job that sends `$top` fails the paging tests instead of
-    // silently replicating one page and reporting itself caught up.
+    // WITH one. Reproduced here so a job that sends `$top` and still waits for a nextLink fails the
+    // paging tests instead of silently replicating one page and reporting itself caught up.
     const topRaw = parsed.searchParams.get('$top');
     const top = topRaw === null ? null : Number(topRaw);
     const skip = Number(parsed.searchParams.get('$skiptoken') ?? '0');
-    const size =
-      top !== null && Number.isFinite(top) && top > 0 ? Math.min(top, pageSize) : pageSize;
+    const size = top !== null && Number.isFinite(top) && top > 0 ? top : pageSize;
     const page = selected.slice(skip, skip + size);
 
     const body: Record<string, unknown> = { value: page };
@@ -295,6 +294,45 @@ export function createMemoryStore() {
               .map((key) => key.slice(resource.length + 1)),
           ),
         ),
+      replaceStagedListingMedia: (params: {
+        listingKey: string;
+        runId: string;
+        records: readonly { recordKey: string; modifiedAt: string; payload: unknown }[];
+      }) => {
+        const keep = new Set(params.records.map((record) => record.recordKey));
+        for (const [key, row] of [...rows.entries()]) {
+          const payload = (row.payload ?? {}) as Record<string, unknown>;
+          if (
+            key.startsWith('BrightMedia\u0000') &&
+            String(payload.ResourceRecordKey) === params.listingKey &&
+            !keep.has(key.slice('BrightMedia\u0000'.length))
+          ) {
+            rows.delete(key);
+          }
+        }
+        for (const record of params.records) {
+          rows.set(`BrightMedia\u0000${record.recordKey}`, {
+            modifiedAt: record.modifiedAt,
+            payload: record.payload,
+            runId: params.runId,
+          });
+        }
+        return Promise.resolve(params.records.length);
+      },
+      stageRecords: (params: {
+        resource: string;
+        runId: string;
+        records: readonly { recordKey: string; modifiedAt: string; payload: unknown }[];
+      }) => {
+        for (const record of params.records) {
+          rows.set(`${params.resource}\u0000${record.recordKey}`, {
+            modifiedAt: record.modifiedAt,
+            payload: record.payload,
+            runId: params.runId,
+          });
+        }
+        return Promise.resolve(params.records.length);
+      },
     },
   };
 }

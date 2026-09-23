@@ -84,6 +84,8 @@ export interface GalleryEntry extends MappedBrightMedia {
 }
 
 const IMAGE_MIME = /^image\//i;
+/** A bare image subtype, as the production feed writes `MediaType`. */
+const IMAGE_SUBTYPE = /^(?:jpe?g|png|webp|gif|avif|bmp|tiff?)$/i;
 
 /**
  * Image extensions, matched on the URL path only.
@@ -187,8 +189,15 @@ export function mapBrightMediaRecord(
   }
 
   const mimeType = text(payload.MediaType);
+  // The production feed sends a bare subtype (`"jpeg"`, measured 2026-09-23), not `image/jpeg`,
+  // with `MediaCategory: "Photo"`. Either form, or that category, marks a photo.
+  const isPhoto =
+    mimeType !== null &&
+    (IMAGE_MIME.test(mimeType) ||
+      IMAGE_SUBTYPE.test(mimeType) ||
+      text(payload.MediaCategory)?.toLowerCase() === 'photo');
   if (mimeType !== null) {
-    if (!IMAGE_MIME.test(mimeType)) {
+    if (!isPhoto) {
       return { kind: 'rejected', reason: 'not_a_photo' };
     }
   } else if (!hasImageExtension(url)) {

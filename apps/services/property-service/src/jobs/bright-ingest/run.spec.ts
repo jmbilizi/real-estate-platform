@@ -4,6 +4,7 @@ import { createMemoryStore, createMockResoServer } from './mock-reso-server';
 import { isOrderedWithoutFilter } from './odata-query';
 import { runBrightIngest } from './run';
 import type { BrightRunFinishedRecord, BrightRunRecord } from './run-log';
+import { ZERO_MAP_REPORT } from '../bright-map/report';
 
 const CLIENT_ID = 'fixture-client-id-3f9a';
 const CLIENT_SECRET = 'fixture-client-secret-91b2c7';
@@ -12,6 +13,7 @@ const SERVICE_ROOT = 'https://api-staging.example.test/reso/odata/';
 
 function configuredEnv(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   return {
+    [BRIGHT_ENV_VARS.env]: 'test',
     [BRIGHT_ENV_VARS.tokenEndpoint]: TOKEN_ENDPOINT,
     [BRIGHT_ENV_VARS.serviceRoot]: SERVICE_ROOT,
     [BRIGHT_ENV_VARS.clientId]: CLIENT_ID,
@@ -90,6 +92,11 @@ function mockRun(
     failures?: readonly number[];
     memory?: ReturnType<typeof createMemoryStore>;
     now?: () => Date;
+    mapRecords?: Parameters<typeof runBrightIngest>[0] extends infer O
+      ? O extends { mapRecords?: infer M }
+        ? M
+        : never
+      : never;
   } = {},
 ) {
   const server = createMockResoServer({
@@ -111,6 +118,7 @@ function mockRun(
       sleep: () => Promise.resolve(),
       random: () => 0,
       now: options.now,
+      ...(options.mapRecords === undefined ? {} : { mapRecords: options.mapRecords }),
     });
 
   return { server, memory, records, invoke };
@@ -286,11 +294,7 @@ describe('runBrightIngest — replication', () => {
 });
 
 describe('runBrightIngest — feed tier', () => {
-  /**
-   * Stakeholder ruling 2026-09-19: `local`, `dev` and `test` read Bright's test feed; `prod` alone
-   * reads the licensed production feed. The base default is `test`, so an environment that patches
-   * nothing cannot inherit production.
-   */
+  /** A test credential sent to the production Okta tenant can only fail, so the run refuses it. */
   it('refuses a production host when the environment declares the test tier', async () => {
     const { sink } = collectRecords();
     const result = await runBrightIngest({
@@ -335,9 +339,8 @@ describe('runBrightIngest — feed tier', () => {
   });
 
   /**
-   * #246: any environment may declare `production`, subject only to the host and credential
-   * checks — `config.ts` carries no overlay-name restriction. Verified against a second mock
-   * server whose hosts carry no non-production label, using the PROD credential pair.
+   * Any environment may declare `production`, subject only to the host check. Verified against a
+   * second mock server whose hosts carry no non-production label.
    */
   it('allows a production host under the production declaration, with no overlay restriction', async () => {
     const prodTokenEndpoint = 'https://okta.brightmls.invalid-tld/oauth2/default/v1/token';
@@ -356,8 +359,8 @@ describe('runBrightIngest — feed tier', () => {
         [BRIGHT_ENV_VARS.tokenEndpoint]: prodTokenEndpoint,
         [BRIGHT_ENV_VARS.serviceRoot]: prodServiceRoot,
         [BRIGHT_ENV_VARS.env]: 'production',
-        [BRIGHT_ENV_VARS.prodClientId]: 'fixture-prod-client-id',
-        [BRIGHT_ENV_VARS.prodClientSecret]: 'fixture-prod-client-secret',
+        [BRIGHT_ENV_VARS.clientId]: 'fixture-prod-client-id',
+        [BRIGHT_ENV_VARS.clientSecret]: 'fixture-prod-client-secret',
       },
       sink,
       fetchImpl: server.fetchImpl,
@@ -390,7 +393,7 @@ describe('runBrightIngest — feed tier', () => {
   it('rejects a feed value that is neither tier', async () => {
     const { sink } = collectRecords();
     const result = await runBrightIngest({
-      env: configuredEnv({ [BRIGHT_ENV_VARS.feed]: 'prod' }),
+      env: configuredEnv({ [BRIGHT_ENV_VARS.env]: 'prod' }),
       sink,
       fetchImpl: stubFetch([]).fetchImpl,
     });
@@ -542,6 +545,25 @@ describe('runBrightIngest — failure', () => {
     expect(result.outcome).toBe('failed');
     expect(result.counts.recordsStaged).toBe(3);
     expect(memory.rows.size).toBe(3);
+  });
+
+  /** A later page timing out must not stop the pages that did arrive from reaching search. */
+  it('still maps the staged records when a later page fails', async () => {
+    const mapRecords = jest.fn().mockResolvedValue({ ...ZERO_MAP_REPORT, staged: 3, published: 3 });
+    const { invoke } = mockRun({
+      env: configuredEnv({ [BRIGHT_ENV_VARS.maxRetries]: '0' }),
+      records: { BrightProperties: listings(9) },
+      pageSize: 3,
+      failures: [0, 400],
+      mapRecords,
+    });
+
+    const result = await invoke();
+
+    expect(result.outcome).toBe('failed');
+    expect(mapRecords).toHaveBeenCalledTimes(1);
+    expect(result.counts.recordsUpserted).toBe(3);
+    expect(result.message).toContain('Mapped the staged records anyway: published 3.');
   });
 });
 

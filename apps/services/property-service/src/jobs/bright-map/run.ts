@@ -13,9 +13,11 @@
  */
 
 import {
+  ensureListPicturePhoto,
   getOrCreateProperty,
   getOrCreateUnit,
   Queryable,
+  refreshFeedPropertyAddress,
   replaceFeedListingMedia,
   upsertListingBySourceKey,
 } from '../../db/write';
@@ -41,6 +43,8 @@ export interface MapStagedBrightPropertiesOptions {
   readonly feed: BrightFeedTier;
   /** Configured licensed display-delay window for solds, in days. `null` = unconfigured, fail closed. */
   readonly soldDisplayDelayDays: number | null;
+  /** Map only these staged `ListingKey`s (the on-demand area load). Absent maps every staged row. */
+  readonly listingKeys?: readonly string[];
 }
 
 /** Reads the current vocabulary, so an added `listing_statuses` row needs no code change here. */
@@ -64,19 +68,42 @@ interface StagedRow {
   readonly payload: unknown;
 }
 
-async function loadStagedRecords(client: Queryable): Promise<StagedRow[]> {
-  const { rows } = await client.query(
-    'SELECT record_key, payload FROM bright_staging_records WHERE resource = $1',
-    [RESOURCE],
-  );
+async function loadStagedRecords(
+  client: Queryable,
+  listingKeys: readonly string[] | undefined,
+): Promise<StagedRow[]> {
+  const { rows } =
+    listingKeys === undefined
+      ? await client.query(
+          'SELECT record_key, payload FROM bright_staging_records WHERE resource = $1',
+          [RESOURCE],
+        )
+      : await client.query(
+          `SELECT record_key, payload FROM bright_staging_records
+            WHERE resource = $1 AND record_key = ANY($2::text[])`,
+          [RESOURCE, listingKeys],
+        );
   return rows as unknown as StagedRow[];
+}
+
+/** An absolute http(s) `ListPictureURL`, or `null`. Bright serves these over plain http. */
+function listPictureUrl(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return null;
+  }
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function mapStagedBrightProperties(
   client: Queryable,
   options: MapStagedBrightPropertiesOptions,
 ): Promise<BrightMapRunReport> {
-  const staged = await loadStagedRecords(client);
+  const staged = await loadStagedRecords(client, options.listingKeys);
   if (staged.length === 0) {
     return ZERO_MAP_REPORT;
   }
@@ -113,7 +140,10 @@ export async function mapStagedBrightProperties(
     }
 
     const propertyRow: PropertyRow = { id: randomUUID(), community_id: null, ...result.property };
-    const propertyId = await getOrCreateProperty(client, propertyRow);
+    // An already-mapped listing keeps its property, with the address corrected in place.
+    const propertyId =
+      (await refreshFeedPropertyAddress(client, SOURCE_SYSTEM, result.listingKey, propertyRow)) ??
+      (await getOrCreateProperty(client, propertyRow));
 
     let unitId: string | null = null;
     if (result.unitNumber) {
@@ -132,7 +162,7 @@ export async function mapStagedBrightProperties(
     }
 
     const { listing } = result;
-    await upsertListingBySourceKey(client, {
+    const listingId = await upsertListingBySourceKey(client, {
       property_id: propertyId,
       unit_id: unitId,
       title: listing.title,
@@ -184,6 +214,12 @@ export async function mapStagedBrightProperties(
       is_sample: listing.isSample,
       last_updated: listing.lastUpdated,
     });
+
+    // The main photo until the BrightMedia crawl (#191) delivers the gallery. See write.ts.
+    const listPicture = listPictureUrl(payload.ListPictureURL);
+    if (listPicture !== null) {
+      await ensureListPicturePhoto(client, listingId, listPicture, listing.isSample);
+    }
 
     if (listing.isSample) {
       sampleMarked += 1;
@@ -287,11 +323,21 @@ async function countBrightListingsWithNoMedia(client: Queryable): Promise<number
  * reconciles instead of appending. So a mapping fix is deployed and the next run repairs the
  * gallery, with no manual cleanup.
  */
-export async function mapStagedBrightMedia(client: Queryable): Promise<BrightMediaMapReport> {
-  const { rows: staged } = await client.query(
-    'SELECT payload FROM bright_staging_records WHERE resource = $1',
-    [MEDIA_RESOURCE],
-  );
+export async function mapStagedBrightMedia(
+  client: Queryable,
+  /** Map only these listings' staged media (the per-listing gallery fetch). Absent maps all. */
+  listingKeys?: readonly string[],
+): Promise<BrightMediaMapReport> {
+  const { rows: staged } =
+    listingKeys === undefined
+      ? await client.query('SELECT payload FROM bright_staging_records WHERE resource = $1', [
+          MEDIA_RESOURCE,
+        ])
+      : await client.query(
+          `SELECT payload FROM bright_staging_records
+            WHERE resource = $1 AND payload->>'ResourceRecordKey' = ANY($2::text[])`,
+          [MEDIA_RESOURCE, listingKeys],
+        );
   if (staged.length === 0) {
     return ZERO_MEDIA_MAP_REPORT;
   }

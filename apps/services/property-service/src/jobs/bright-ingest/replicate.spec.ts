@@ -29,6 +29,8 @@ function run(
     pageSize?: number;
     maxPagesPerRun?: number;
     store?: ReturnType<typeof createMemoryStore>;
+    /** Explicit `$top` page size, as the CronJob sets with BRIGHT_MLS_PAGE_SIZE. */
+    top?: number;
   } = {},
 ) {
   const server = createMockResoServer({
@@ -50,11 +52,89 @@ function run(
       runId: '00000000-0000-4000-8000-000000000001',
       initialCursor: EPOCH,
       maxPagesPerRun: overrides.maxPagesPerRun ?? 50,
+      ...(overrides.top === undefined ? {} : { pageSize: overrides.top }),
       pageOptions: { fetchImpl: server.fetchImpl, sleep: () => Promise.resolve(), random: () => 0 },
     });
 
   return { server, memory, invoke };
 }
+
+describe('replicateResource — time budget', () => {
+  it('stops requesting pages once the deadline has passed, keeping what it staged', async () => {
+    const server = createMockResoServer({
+      tokenEndpoint: TOKEN_ENDPOINT,
+      serviceRoot: SERVICE_ROOT,
+      records: { BrightProperties: listings(10) },
+      pageSize: 4,
+    });
+    const memory = createMemoryStore();
+
+    const result = await replicateResource({
+      resource: resolveResource('BrightProperties'),
+      serviceRoot: SERVICE_ROOT,
+      serviceRootHost: SERVICE_ROOT_HOST,
+      tokenProvider,
+      store: memory.store,
+      runId: '00000000-0000-4000-8000-000000000009',
+      initialCursor: EPOCH,
+      maxPagesPerRun: 50,
+      deadlineAt: 0,
+      pageOptions: { fetchImpl: server.fetchImpl, sleep: () => Promise.resolve(), random: () => 0 },
+    });
+
+    expect(result.pagesFetched).toBe(1);
+    expect(result.cappedByPageLimit).toBe(true);
+    expect(memory.rows.size).toBe(4);
+  });
+});
+
+describe('replicateResource — explicit page size ($top)', () => {
+  it('pages by re-querying from the cursor, since $top suppresses nextLink', async () => {
+    const { server, memory, invoke } = run({ records: { BrightProperties: listings(10) }, top: 4 });
+
+    const result = await invoke();
+
+    expect(memory.rows.size).toBe(10);
+    expect(result.caughtUp).toBe(true);
+    expect(result.starved).toBe(false);
+    for (const url of server.pageRequests) {
+      expect(url).toContain('%24top=');
+      expect(url).not.toContain('skiptoken');
+    }
+  });
+
+  it('widens $top to cross a tie block wider than one page', async () => {
+    const tied = Array.from({ length: 9 }, (_, i) => ({
+      ListingKey: 2000 + i,
+      ModificationTimestamp: '2026-09-02T00:00:00.000Z',
+    }));
+    const { server, memory, invoke } = run({
+      records: { BrightProperties: [...tied, ...listings(3, '2026-09-03T00:00:00.000Z')] },
+      top: 4,
+    });
+
+    const result = await invoke();
+
+    expect(memory.rows.size).toBe(12);
+    expect(result.caughtUp).toBe(true);
+    expect(result.starved).toBe(false);
+    expect(server.pageRequests.some((url) => url.includes('%24top=8'))).toBe(true);
+  });
+
+  it('respects the page cap once the cursor has advanced', async () => {
+    const { invoke } = run({
+      records: { BrightProperties: listings(20) },
+      top: 4,
+      maxPagesPerRun: 2,
+    });
+
+    const result = await invoke();
+
+    expect(result.pagesFetched).toBe(2);
+    expect(result.cappedByPageLimit).toBe(true);
+    expect(result.caughtUp).toBe(false);
+  });
+});
 
 describe('replicateResource — paging', () => {
   it('follows @odata.nextLink to exhaustion and stages every record', async () => {

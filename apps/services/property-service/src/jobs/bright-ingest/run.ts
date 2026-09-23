@@ -121,10 +121,9 @@ function notConfiguredMessage(config: Extract<BrightConfig, { state: 'not-config
   return (
     'Bright MLS credentials are not configured: ' +
     `${config.missing.join(', ')} ${config.missing.length === 1 ? 'is' : 'are'} unset or still ` +
-    'the committed placeholder. Nothing was ingested and nothing was written. Every overlay now ' +
-    'carries an endpoint pair (#176), so this means the secret is missing: either #117 has not ' +
-    "provisioned this environment's, or the overlay lost its endpoint pair. See " +
-    'apps/services/property-service/docs/bright-mls-day-one-checklist.md.'
+    'the committed placeholder. Nothing was ingested and nothing was written. Set BRIGHT_MLS_ENV ' +
+    '(test or production), BRIGHT_MLS_CLIENT_ID and BRIGHT_MLS_CLIENT_SECRET in bright-mls-secret ' +
+    '(locally: in .env). See apps/services/property-service/docs/bright-mls-day-one-checklist.md.'
   );
 }
 
@@ -322,7 +321,7 @@ export async function runBrightIngest(
       // Derived rather than passed straight through, so one injected clock still drives both.
       const tokenProvider = createTokenProvider(config.endpoint, config.credentials, {
         fetchImpl: options.fetchImpl,
-        timeoutMs: options.timeoutMs,
+        timeoutMs: options.timeoutMs ?? replication.requestTimeoutMs,
         now: () => now().getTime(),
       });
       metadata = await probeMetadata(config.endpoint, await tokenProvider(), options);
@@ -364,10 +363,13 @@ export async function runBrightIngest(
           runId,
           initialCursor: replication.initialCursor,
           maxPagesPerRun: replication.maxPagesPerRun,
+          ...(replication.pageSize === null ? {} : { pageSize: replication.pageSize }),
+          deadlineAt: startedAt.getTime() + replication.replicationBudgetMs,
           pageOptions: {
             ...options,
             limiter,
             maxRetries: replication.maxRetries,
+            timeoutMs: options.timeoutMs ?? replication.requestTimeoutMs,
           },
           now,
         });
@@ -377,9 +379,15 @@ export async function runBrightIngest(
         reports.push(toReport(result, replication.cursorMaxAgeHours));
       }
 
-      // The full-crawl pass (#191), after replication and before mapping. Ordered, not incidental:
-      // the crawl matches media against the `ListingKey`s replication just staged, so running it
-      // first would match against the previous run's set and miss every new listing's photos.
+      // Properties map BEFORE the crawl. On the production feed the BrightMedia crawl can use the
+      // whole run deadline, and a killed pod runs no catch, so mapping after it would leave every
+      // newly staged listing out of search. Listings carry their ListPictureURL photo meanwhile.
+      const mapRecords = options.mapRecords ?? NO_OP_MAP_RECORDS;
+      const mapping = await mapRecords({ feed: config.feed });
+
+      // The full-crawl pass (#191), after replication. Ordered, not incidental: the crawl matches
+      // media against the `ListingKey`s replication just staged, so running it first would match
+      // against the previous run's set and miss every new listing's photos.
       for (const resource of crawlResources) {
         const result = await crawlResource({
           resource,
@@ -390,14 +398,17 @@ export async function runBrightIngest(
           runId,
           keepRecordKeys: await store.readRecordKeys(PROPERTY_RESOURCE),
           maxPagesPerRun: replication.crawlMaxPagesPerRun,
-          pageOptions: { ...options, limiter, maxRetries: replication.maxRetries },
+          pageOptions: {
+            ...options,
+            limiter,
+            maxRetries: replication.maxRetries,
+            timeoutMs: options.timeoutMs ?? replication.requestTimeoutMs,
+          },
           now,
         });
         reports.push(toCrawlReport(result));
       }
 
-      const mapRecords = options.mapRecords ?? NO_OP_MAP_RECORDS;
-      const mapping = await mapRecords({ feed: config.feed });
       // Media mapping runs AFTER property mapping. A photo references a listing row, so the row
       // has to exist first.
       const mapMedia = options.mapMedia ?? NO_OP_MAP_MEDIA;
@@ -427,11 +438,26 @@ export async function runBrightIngest(
       if (error instanceof CrawlFailure) {
         reports.push(toCrawlReport(error.partial));
       }
+      // Map what IS staged even though the pass failed. Staging commits per page, so rows from the
+      // pages that did arrive are valid, and mapping is idempotent. Without this, a feed that times
+      // out on a later page publishes nothing, however much it staged. The outcome stays `failed`.
+      let mapping: BrightMapRunReport = ZERO_MAP_REPORT;
+      if (options.mapRecords !== undefined) {
+        try {
+          mapping = await options.mapRecords({ feed: config.feed });
+          message += ` Mapped the staged records anyway: published ${mapping.published}.`;
+        } catch (mapError) {
+          message += ` Mapping the staged records also failed: ${
+            mapError instanceof Error ? mapError.message : String(mapError)
+          }`;
+        }
+      }
       counts = summarise(
         reports,
         reports
           .filter((report) => BRIGHT_RESOURCES[report.resource]?.kind === 'deletions')
           .reduce((total, report) => total + report.recordsStaged, 0),
+        mapping,
       );
     }
   }
