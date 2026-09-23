@@ -286,7 +286,7 @@ function MarkerPopup({ listing }: { listing: ListingCardRow }) {
       style={{ textDecoration: 'none', color: 'inherit' }}
     >
       <div className="relative h-[130px] w-full bg-surface-soft">
-        <ListingImage media={listing.primaryMedia} className="h-full w-full object-cover" />
+        <ListingImage media={listing.primaryMedia} className="h-full w-full object-contain" />
         {/* Required disclosure labels — never crowded out, shown whenever the row is. */}
         {(listing.isSample || listing.sponsored) && (
           <div className="absolute left-2 top-2 flex flex-wrap items-center gap-1">

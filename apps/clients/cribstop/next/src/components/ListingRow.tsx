@@ -210,7 +210,13 @@ export default function ListingRow({
                           }}
                         >
                           {}
-                          {img && <img src={img} alt="" className="h-full w-full object-cover" />}
+                          {img && (
+                            <img
+                              src={img}
+                              alt=""
+                              className="h-full w-full bg-surface-soft object-contain"
+                            />
+                          )}
                         </span>
                       );
                     })}

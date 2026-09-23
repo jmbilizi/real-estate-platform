@@ -121,6 +121,18 @@ const config: Config = {
           '"Helvetica Neue"',
           'sans-serif',
         ],
+        // The platform UI face (SF Pro on Apple, Segoe UI on Windows). For small, dense reference
+        // text such as the listing card's address line, where it reads clearer than Manrope.
+        system: [
+          '-apple-system',
+          'BlinkMacSystemFont',
+          '"SF Pro Text"',
+          '"Segoe UI"',
+          'system-ui',
+          'Roboto',
+          '"Helvetica Neue"',
+          'sans-serif',
+        ],
       },
       boxShadow: {
         // The system's single shadow tier (DESIGN.md Elevation) — hover-floated cards & dropdowns

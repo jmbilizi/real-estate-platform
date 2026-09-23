@@ -26,11 +26,17 @@ describe('ListingCard', () => {
       expect(screen.queryByText(/NaN|undefined|null/)).not.toBeInTheDocument();
     });
 
-    it('falls back to city, state when the neighbourhood is unknown — never a bare comma', () => {
-      render(<ListingCard listing={aListingCardRow({ neighborhood: null })} />);
+    it('shows the full address in normal format', () => {
+      render(<ListingCard listing={aListingCardRow()} />);
+
+      expect(screen.getByText('100 Test St, Bethesda, MD 20814')).toBeInTheDocument();
+    });
+
+    it('shows only city and state for a seller-suppressed address — no street, no ZIP', () => {
+      render(<ListingCard listing={aListingCardRow({ address: null, city: 'BETHESDA' })} />);
 
       expect(screen.getByText('Bethesda, MD')).toBeInTheDocument();
-      expect(screen.queryByText(/^,|,\s*$/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/20814/)).not.toBeInTheDocument();
     });
 
     it('renders a branded placeholder instead of a broken img when there is no photo', () => {
@@ -360,10 +366,11 @@ describe('ListingCard', () => {
     it('keeps the whole affordance inside the image, where it costs no card height', () => {
       const { container } = render(<ListingCard listing={aListingCardRow({ openHouse })} />);
 
-      const image = container.querySelector('.aspect-square');
+      const image = container.querySelector('.listing-card-media');
       expect(image).toContainElement(screen.getByText('Open:'));
       // Nothing about it leaked into the info block below the image.
-      expect(container.querySelector('.pt-2')?.textContent).not.toMatch(/Open:/);
+      const infoBlock = container.querySelector('.listing-card-media')?.nextElementSibling;
+      expect(infoBlock?.textContent).not.toMatch(/Open:/);
     });
 
     it('never lets either image affordance displace a required disclosure label', () => {
@@ -392,22 +399,31 @@ describe('ListingCard', () => {
      * a large part of why the labels stayed gone. A guard that cannot fail is worse than no guard,
      * because it is read as coverage.
      */
-    it('reserves the disclosure-label slot even when a row has no labels', () => {
-      const { container } = render(
-        <ListingCard listing={aListingCardRow({ isSample: false, sponsored: false })} />,
-      );
-      expect(container.querySelector('.pt-2 > .h-5')).toBeTruthy();
+    const labelRow = (container: HTMLElement) =>
+      container
+        .querySelector('.listing-card-media')
+        ?.nextElementSibling?.querySelector(':scope > .h-5');
+
+    it('renders the disclosure-label row whenever a label applies', () => {
+      for (const flags of [
+        { isSample: true, sponsored: false },
+        { isSample: false, sponsored: true },
+      ]) {
+        const { container, unmount } = render(<ListingCard listing={aListingCardRow(flags)} />);
+        expect(labelRow(container)).toBeTruthy();
+        unmount();
+      }
     });
 
     /**
-     * The guard above, guarded.
-     *
-     * Asserts the selector is actually discriminating — that it goes red when the row is absent —
-     * so the next person to widen it back to a bare `.h-5` has to defeat this too.
+     * The row collapses when no label applies, so an unlabelled Bright photo has no blank band
+     * under it. The guard above is what keeps a label from going missing when one applies.
      */
-    it('the reserved-slot assertion fails when the label row is not rendered', () => {
-      const { container } = render(<div className="pt-2" />);
-      expect(container.querySelector('.pt-2 > .h-5')).toBeNull();
+    it('renders no label row when no label applies', () => {
+      const { container } = render(
+        <ListingCard listing={aListingCardRow({ isSample: false, sponsored: false })} />,
+      );
+      expect(labelRow(container)).toBeFalsy();
     });
 
     it('reserves the stats row even when there are no stats to show', () => {
@@ -538,11 +554,11 @@ describe('ListingCard', () => {
     });
 
     it('is reachable by keyboard at all — focusable, named, and announced as a link', () => {
-      render(<ListingCard listing={aListingCardRow({ neighborhood: 'Downtown' })} />);
+      render(<ListingCard listing={aListingCardRow()} />);
 
       const card = screen.getByRole('link');
       expect(card).toHaveAttribute('tabIndex', '0');
-      expect(card).toHaveAccessibleName(/Downtown/);
+      expect(card).toHaveAccessibleName(/100 Test St/);
     });
 
     it('does not open the panel when the save control inside it is pressed', () => {

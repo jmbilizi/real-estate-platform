@@ -64,9 +64,9 @@ export default function PropertyGallery({ media }: { media: Media[] }) {
             setOpen(true);
           }}
           aria-label={`View all ${media.length} photos`}
-          className="relative block aspect-video w-full overflow-hidden rounded-2xl bg-surface-soft md:hidden"
+          className="relative block aspect-[4/3] w-full overflow-hidden rounded-2xl bg-surface-soft md:hidden"
         >
-          <ListingImage media={media[0]} className="h-full w-full object-cover" />
+          <ListingImage media={media[0]} className="h-full w-full object-contain" />
           <span className="absolute bottom-3 right-3 rounded-full bg-white/95 px-3 py-1.5 text-[11px] font-semibold text-ink shadow-card">
             See all {media.length} {media.length === 1 ? 'photo' : 'photos'}
           </span>
@@ -83,7 +83,7 @@ export default function PropertyGallery({ media }: { media: Media[] }) {
             aria-label="View primary photo"
             className="relative col-span-2 row-span-2 overflow-hidden bg-surface-soft transition hover:brightness-95"
           >
-            <ListingImage media={media[0]} className="h-full w-full object-cover" />
+            <ListingImage media={media[0]} className="h-full w-full object-contain" />
           </button>
           {tileIndices.slice(1).map((mediaIdx, tileIdx) => (
             <button
@@ -96,7 +96,7 @@ export default function PropertyGallery({ media }: { media: Media[] }) {
               aria-label={`View photo ${mediaIdx + 1} of ${media.length}`}
               className="relative overflow-hidden bg-surface-soft transition hover:brightness-95"
             >
-              <ListingImage media={media[mediaIdx]} className="h-full w-full object-cover" />
+              <ListingImage media={media[mediaIdx]} className="h-full w-full object-contain" />
             </button>
           ))}
           <button
