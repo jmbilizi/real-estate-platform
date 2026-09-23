@@ -153,6 +153,7 @@ export default function PropertyGallery({ media }: { media: Media[] }) {
             <ListingImage
               media={media[activeIdx]}
               className="max-h-full max-w-full rounded-xl object-contain"
+              backdrop={false}
             />
           </div>
           {/* Bottom bar — mirrors top bar height, houses prev/next arrows */}

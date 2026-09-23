@@ -299,6 +299,7 @@ export async function runBrightIngest(
   let feed: 'test' | 'production' | undefined;
   let mappingWithheldByReason: Readonly<Record<string, number>> | undefined;
   let mappingOutOfRangeFieldCounts: Readonly<Record<string, number>> | undefined;
+  let mappingAttempted = false;
 
   // `config === null` and `configError !== null` are the same condition — resolveBrightConfig either
   // returned or threw. Testing the null rather than the error is what lets the compiler narrow
@@ -383,6 +384,7 @@ export async function runBrightIngest(
       // whole run deadline, and a killed pod runs no catch, so mapping after it would leave every
       // newly staged listing out of search. Listings carry their ListPictureURL photo meanwhile.
       const mapRecords = options.mapRecords ?? NO_OP_MAP_RECORDS;
+      mappingAttempted = true;
       const mapping = await mapRecords({ feed: config.feed });
 
       // The full-crawl pass (#191), after replication. Ordered, not incidental: the crawl matches
@@ -442,7 +444,9 @@ export async function runBrightIngest(
       // pages that did arrive are valid, and mapping is idempotent. Without this, a feed that times
       // out on a later page publishes nothing, however much it staged. The outcome stays `failed`.
       let mapping: BrightMapRunReport = ZERO_MAP_REPORT;
-      if (options.mapRecords !== undefined) {
+      // Only when the main path never reached mapping: a crawl or media failure after it, or the
+      // mapper itself failing, must not run the mapper a second time in the same run.
+      if (options.mapRecords !== undefined && !mappingAttempted) {
         try {
           mapping = await options.mapRecords({ feed: config.feed });
           message += ` Mapped the staged records anyway: published ${mapping.published}.`;

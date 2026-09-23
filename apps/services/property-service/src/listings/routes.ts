@@ -132,6 +132,20 @@ const asyncRoute =
     handler(req, res).catch(next);
   };
 
+/**
+ * True when the searched PLACE alone has no local listings. The on-demand load is for a place we do
+ * not hold; a price or bed filter that empties a place we do hold must not trigger a Bright load.
+ */
+async function placeHasNoListings(pool: ReadPool, request: SearchRequest): Promise<boolean> {
+  const place = searchRequestSchema.parse({
+    ...(request.query === undefined ? {} : { query: request.query }),
+    ...(request.city === undefined ? {} : { city: request.city }),
+    ...(request.state === undefined ? {} : { state: request.state }),
+    ...(request.zip === undefined ? {} : { zip: request.zip }),
+  });
+  return (await searchListings(pool, place)).total === 0;
+}
+
 export function createListingsRouter(pool: ReadPool, areaLoader?: AreaLoader): Router {
   const router = Router();
 
@@ -172,7 +186,12 @@ export function createListingsRouter(pool: ReadPool, areaLoader?: AreaLoader): R
       let cacheControl = LISTINGS_CACHE_CONTROL;
       // A first-page search for a place we hold nothing for loads that place from Bright
       // (`on-demand.ts`). A load still running when the wait ends must not be cached as "empty".
-      if (envelope.total === 0 && envelope.page === 1 && areaLoader !== undefined) {
+      if (
+        envelope.total === 0 &&
+        envelope.page === 1 &&
+        areaLoader !== undefined &&
+        (await placeHasNoListings(pool, parsed.value))
+      ) {
         const outcome = await areaLoader.load(parsed.value);
         if (outcome === 'loaded') {
           envelope = await searchListings(pool, parsed.value);

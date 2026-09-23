@@ -112,6 +112,9 @@ function resolveConfigOrNull(
   }
 }
 
+/** Most keys the cooldown map holds. Past it the oldest are dropped, so memory stays bounded. */
+const MAX_TRACKED_KEYS = 2000;
+
 /** Galleries fetched in the background after one area load. Bounded so one search stays cheap. */
 const GALLERY_PREFETCH_LIMIT = 50;
 
@@ -155,6 +158,24 @@ export function createAreaLoader(options: AreaLoaderOptions = {}): AreaLoader {
   }
 
   /**
+   * Records an attempt. Expired entries are pruned first; if the map is still full, the oldest
+   * (Map keeps insertion order) are dropped. Arbitrary search text cannot grow it without limit.
+   */
+  function remember(key: string): void {
+    if (attemptedAt.size >= MAX_TRACKED_KEYS) {
+      for (const [tracked, at] of attemptedAt) {
+        if (now() - at >= cooldownMs) attemptedAt.delete(tracked);
+      }
+      for (const tracked of attemptedAt.keys()) {
+        if (attemptedAt.size < MAX_TRACKED_KEYS) break;
+        attemptedAt.delete(tracked);
+      }
+    }
+    attemptedAt.delete(key);
+    attemptedAt.set(key, now());
+  }
+
+  /**
    * Starts `work` once per key per cooldown, shares an in-flight run between callers, and waits
    * at most `wait` for it. `'skipped'` means it ran recently, so nothing new will arrive.
    */
@@ -169,7 +190,7 @@ export function createAreaLoader(options: AreaLoaderOptions = {}): AreaLoader {
       if (last !== undefined && now() - last < cooldownMs) {
         return 'skipped';
       }
-      attemptedAt.set(key, now());
+      remember(key);
       pending = work()
         .catch((error: unknown) => {
           log(

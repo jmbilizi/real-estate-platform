@@ -469,18 +469,28 @@ export async function refreshFeedPropertyAddress(
   client: Queryable,
   sourceSystem: string,
   sourceListingKey: string,
-  row: Pick<PropertyRow, 'address_raw' | 'street_line' | 'city' | 'address_key'>,
+  row: Pick<PropertyRow, 'address_raw' | 'street_line' | 'city' | 'state' | 'zip5' | 'address_key'>,
 ): Promise<string | null> {
   const { rows } = await client.query(
     `UPDATE properties p
-        SET street_line = $3, address_raw = $4, city = $5, address_key = $6
+        SET street_line = $3, address_raw = $4, city = $5, address_key = $6,
+            state = $7, zip5 = $8
        FROM listings l
       WHERE l.property_id = p.id
         AND l.source_system = $1
         AND l.source_listing_key = $2
         AND NOT EXISTS (SELECT 1 FROM properties q WHERE q.address_key = $6 AND q.id <> p.id)
       RETURNING p.id`,
-    [sourceSystem, sourceListingKey, row.street_line, row.address_raw, row.city, row.address_key],
+    [
+      sourceSystem,
+      sourceListingKey,
+      row.street_line,
+      row.address_raw,
+      row.city,
+      row.address_key,
+      row.state,
+      row.zip5,
+    ],
   );
   const id = rows[0]?.id;
   return typeof id === 'string' ? id : null;

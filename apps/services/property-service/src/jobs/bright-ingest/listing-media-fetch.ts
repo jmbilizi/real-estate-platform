@@ -15,9 +15,10 @@ import type { BrightStagingStore, StagedRecord } from './staging-store';
  * to, and stages the result for `mapStagedBrightMedia` (`../bright-map/run.ts`).
  *
  * Filters are tried in order: `ResourceRecordKey` as Int64, the same key as a string literal,
- * `ListingSourceRecordKey` (string) and `ListingId` (string). A filter Bright answers 400 is dropped for the life of the
- * process, so a refused shape costs one request, not one per listing. If both are refused the
- * result says so and the caller keeps the listing's `ListPictureURL` photo.
+ * `ListingSourceRecordKey` (string) and `ListingId` (string). A filter Bright answers 400 three
+ * times in a row is skipped for the rest of the process, so a refused shape stops costing a request
+ * per listing. If every filter is refused the result says so, and the caller keeps the listing's
+ * `ListPictureURL` photo.
  */
 
 export type MediaFilter =
@@ -36,8 +37,13 @@ const FILTERS: readonly MediaFilter[] = [
 /** A gallery is at most a few hundred photos. A nextLink loop past this is a feed fault. */
 const MAX_PAGES_PER_LISTING = 10;
 
-/** Filters Bright refused in this process. Module state on purpose: see the header. */
-const refused = new Set<MediaFilter>();
+/**
+ * Consecutive refusals per filter in this process. A filter is skipped only after
+ * `REFUSALS_BEFORE_SKIP` in a row, so one malformed value or a transient 400 cannot disable it for
+ * the life of the pod. A success resets the count.
+ */
+const refusals = new Map<MediaFilter, number>();
+const REFUSALS_BEFORE_SKIP = 3;
 
 export interface ListingMediaTarget {
   readonly listingKey: string;
@@ -114,7 +120,7 @@ export async function fetchListingMedia(
   onRefused?: (filter: MediaFilter, odataMessage: string | null) => void,
 ): Promise<ListingMediaFetchResult> {
   for (const filter of FILTERS) {
-    if (refused.has(filter)) {
+    if ((refusals.get(filter) ?? 0) >= REFUSALS_BEFORE_SKIP) {
       continue;
     }
     const expression = buildListingMediaFilter(filter, params.listing);
@@ -137,7 +143,7 @@ export async function fetchListingMedia(
       }
     } catch (error) {
       if (error instanceof BrightRequestError && error.status === 400) {
-        refused.add(filter);
+        refusals.set(filter, (refusals.get(filter) ?? 0) + 1);
         onRefused?.(filter, error.odataMessage);
         continue;
       }
@@ -152,6 +158,7 @@ export async function fetchListingMedia(
       runId: params.runId,
       records: staged,
     });
+    refusals.delete(filter);
     return { kind: 'staged', filter, photos: staged.length };
   }
   return { kind: 'unsupported' };
@@ -159,5 +166,5 @@ export async function fetchListingMedia(
 
 /** Test seam: forget refused filters between cases. */
 export function resetRefusedMediaFilters(): void {
-  refused.clear();
+  refusals.clear();
 }

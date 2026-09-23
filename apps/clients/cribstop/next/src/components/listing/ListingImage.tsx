@@ -13,11 +13,17 @@ export default function ListingImage({
   media,
   className = '',
   sizeHint,
+  backdrop = true,
 }: {
   media: Media | null;
   className?: string;
   /** Rendered inside the placeholder only; the real image needs no caption. */
   sizeHint?: 'card' | 'detail';
+  /**
+   * The blurred fill behind the uncropped photo. On by default, for fixed-shape frames. Off where
+   * the photo sizes itself inside a centring container (the lightbox), which the wrapper would break.
+   */
+  backdrop?: boolean;
 }) {
   if (!media) {
     return (
@@ -49,7 +55,10 @@ export default function ListingImage({
   // A plain <img> rather than next/image: listing photos come from arbitrary remote hosts supplied
   // by the data source, which next/image would require to be enumerated in next.config.js ahead of
   // time.
-  //
+  if (!backdrop) {
+    return <img src={media.url} alt={media.altText ?? ''} loading="lazy" className={className} />;
+  }
+
   // The photo is never cropped: MLS photos carry the MLS trademark in a corner, and cropping can
   // hide it. So the visible photo is `object-contain` (callers pass it), and any space the frame
   // leaves around it is filled by the SAME photo, cropped to cover and heavily blurred, behind it.

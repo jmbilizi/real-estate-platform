@@ -82,10 +82,12 @@ describe('fetchListingMedia', () => {
     };
 
     await expect(run(memory, fetchImpl)).resolves.toMatchObject({ filter: 'ListingId' });
-    await run(memory, fetchImpl);
+    for (let i = 0; i < 4; i += 1) {
+      await run(memory, fetchImpl);
+    }
 
-    // The Int64 and the string form of the key filter, each tried once across both runs.
-    expect(urls.filter((url) => url.includes('ResourceRecordKey'))).toHaveLength(2);
+    // Each key form is retried until its third refusal in a row, then skipped: 2 forms x 3.
+    expect(urls.filter((url) => url.includes('ResourceRecordKey'))).toHaveLength(6);
   });
 
   it('reports unsupported when every filter is refused', async () => {
