@@ -8,7 +8,7 @@ import {
   type SearchRequest,
   searchRequestSchema,
 } from '@cribstop/property-contracts';
-import type { AreaLoader } from './on-demand';
+import { type AreaLoader, areaOf, placeSearchRequest, resolvedSearchRequest } from './on-demand';
 import {
   findBrightListingKeys,
   findListingById,
@@ -135,14 +135,17 @@ const asyncRoute =
 /**
  * True when the searched PLACE alone has no local listings. The on-demand load is for a place we do
  * not hold; a price or bed filter that empties a place we do hold must not trigger a Bright load.
+ *
+ * Built from `areaOf()`'s parsed `Area`, never from the raw request fields: a free-text search
+ * (`query=Frederick, MD`) and a structured one (`city=Frederick&state=MD`) must run the identical
+ * DB check, or they would also earn separate Bright-load cooldown keys for the same place.
  */
 async function placeHasNoListings(pool: ReadPool, request: SearchRequest): Promise<boolean> {
-  const place = searchRequestSchema.parse({
-    ...(request.query === undefined ? {} : { query: request.query }),
-    ...(request.city === undefined ? {} : { city: request.city }),
-    ...(request.state === undefined ? {} : { state: request.state }),
-    ...(request.zip === undefined ? {} : { zip: request.zip }),
-  });
+  const area = areaOf(request);
+  if (area === null) {
+    return false;
+  }
+  const place = searchRequestSchema.parse(placeSearchRequest(area));
   return (await searchListings(pool, place)).total === 0;
 }
 
@@ -182,7 +185,11 @@ export function createListingsRouter(pool: ReadPool, areaLoader?: AreaLoader): R
         res.status(400).json(RESULT_WINDOW_EXCEEDED_BODY);
         return;
       }
-      let envelope = await searchListings(pool, parsed.value);
+      // No column stores `query=Frederick, MD` as one string. The search runs against the place
+      // `resolvedSearchRequest()` parsed out of it instead (`on-demand.ts`). `appliedFilters` below
+      // echoes that resolved request, city/state in place of query, because it is what actually ran.
+      const effectiveRequest = resolvedSearchRequest(parsed.value);
+      let envelope = await searchListings(pool, effectiveRequest);
       let cacheControl = LISTINGS_CACHE_CONTROL;
       // A first-page search for a place we hold nothing for loads that place from Bright
       // (`on-demand.ts`). A load still running when the wait ends must not be cached as "empty".
@@ -194,7 +201,7 @@ export function createListingsRouter(pool: ReadPool, areaLoader?: AreaLoader): R
       ) {
         const outcome = await areaLoader.load(parsed.value);
         if (outcome === 'loaded') {
-          envelope = await searchListings(pool, parsed.value);
+          envelope = await searchListings(pool, effectiveRequest);
         } else if (outcome === 'pending') {
           cacheControl = 'no-store';
         }

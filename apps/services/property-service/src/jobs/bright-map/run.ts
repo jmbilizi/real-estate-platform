@@ -111,6 +111,7 @@ export async function mapStagedBrightProperties(
   const statuses = await loadListingStatuses(client);
   const withheldByReason: Record<string, number> = {};
   const outOfRangeFieldCounts: Record<string, number> = {};
+  const publishedListingKeys: string[] = [];
   let mapped = 0;
   let published = 0;
   let takenDown = 0;
@@ -228,6 +229,7 @@ export async function mapStagedBrightProperties(
       takenDown += 1;
     } else if (listing.suppression.internetDisplayAllowed) {
       published += 1;
+      publishedListingKeys.push(result.listingKey);
     }
   }
 
@@ -237,6 +239,7 @@ export async function mapStagedBrightProperties(
     staged: staged.length,
     mapped,
     published,
+    publishedListingKeys,
     withheld,
     withheldByReason,
     takenDown,

@@ -82,6 +82,10 @@ export function buildSearchQuery(request: SearchRequest): {
   // which is third-party MLS remarks carrying a moderation state; making it searchable would be
   // keyword-based steering (PRD §6.3).
   //
+  // A `query` shaped like "City, ST" never reaches this substring match: on-demand.ts's
+  // `resolvedSearchRequest()` swaps it for an exact `city`/`state` match before the request gets
+  // here, because no column stores "City, ST" as one string.
+  //
   // Deliberately NOT wrapped in COALESCE(x, ''): `strpos(lower(NULL), q)` evaluates to NULL, and
   // SQL's three-valued OR treats `NULL OR TRUE` as TRUE while `NULL OR FALSE` is NULL — which
   // WHERE treats as not-matching. That is exactly the behaviour a NULL column should have here
