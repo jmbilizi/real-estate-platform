@@ -8,7 +8,14 @@ import {
   type SearchRequest,
   searchRequestSchema,
 } from '@cribstop/property-contracts';
-import { findListingById, getListingsMeta, type ReadPool, searchListings } from './repository';
+import type { AreaLoader } from './on-demand';
+import {
+  findBrightListingKeys,
+  findListingById,
+  getListingsMeta,
+  type ReadPool,
+  searchListings,
+} from './repository';
 
 /**
  * The Property API's HTTP surface. `property-service` owns Communities → Properties → Units →
@@ -125,7 +132,7 @@ const asyncRoute =
     handler(req, res).catch(next);
   };
 
-export function createListingsRouter(pool: ReadPool): Router {
+export function createListingsRouter(pool: ReadPool, areaLoader?: AreaLoader): Router {
   const router = Router();
 
   router.get(
@@ -161,8 +168,19 @@ export function createListingsRouter(pool: ReadPool): Router {
         res.status(400).json(RESULT_WINDOW_EXCEEDED_BODY);
         return;
       }
-      const envelope = await searchListings(pool, parsed.value);
-      res.set('Cache-Control', LISTINGS_CACHE_CONTROL).status(200).json(envelope);
+      let envelope = await searchListings(pool, parsed.value);
+      let cacheControl = LISTINGS_CACHE_CONTROL;
+      // A first-page search for a place we hold nothing for loads that place from Bright
+      // (`on-demand.ts`). A load still running when the wait ends must not be cached as "empty".
+      if (envelope.total === 0 && envelope.page === 1 && areaLoader !== undefined) {
+        const outcome = await areaLoader.load(parsed.value);
+        if (outcome === 'loaded') {
+          envelope = await searchListings(pool, parsed.value);
+        } else if (outcome === 'pending') {
+          cacheControl = 'no-store';
+        }
+      }
+      res.set('Cache-Control', cacheControl).status(200).json(envelope);
     }),
   );
 
@@ -192,12 +210,30 @@ export function createListingsRouter(pool: ReadPool): Router {
         notFound(res);
         return;
       }
-      const detail = await findListingById(pool, id.data);
+      let detail = await findListingById(pool, id.data);
       if (detail === null) {
         notFound(res);
         return;
       }
-      res.set('Cache-Control', LISTINGS_CACHE_CONTROL).status(200).json(detail);
+      let cacheControl = LISTINGS_CACHE_CONTROL;
+      // A Bright listing opened with at most its ListPictureURL photo fetches its full gallery
+      // (`on-demand.ts`). A fetch still running when the wait ends must not be cached.
+      if (
+        areaLoader !== undefined &&
+        detail.listing.source === 'brightMLS' &&
+        detail.listing.media.length <= 1
+      ) {
+        const keys = await findBrightListingKeys(pool, id.data);
+        if (keys !== null) {
+          const outcome = await areaLoader.loadGallery(keys);
+          if (outcome === 'loaded') {
+            detail = (await findListingById(pool, id.data)) ?? detail;
+          } else if (outcome === 'pending') {
+            cacheControl = 'no-store';
+          }
+        }
+      }
+      res.set('Cache-Control', cacheControl).status(200).json(detail);
     }),
   );
 

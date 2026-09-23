@@ -86,6 +86,27 @@ spec:
                   key: PROPERTY_SERVICE_DB_USER_PASSWORD
             - name: DATABASE_URL
               value: "postgresql://$(PROPERTY_DB_USER):$(PROPERTY_SERVICE_DB_USER_PASSWORD)@$(PROPERTY_DB_HOST):$(PROPERTY_DB_PORT)/$(PROPERTY_DB_NAME)"
+            # On-demand Bright area load (src/listings/on-demand.ts): a search for a place with no
+            # local listings loads it from Bright. Same three keys as the ingest CronJob. The
+            # committed placeholders turn the load off, so an unprovisioned environment just
+            # searches its own database.
+            - name: BRIGHT_MLS_ENV
+              valueFrom:
+                secretKeyRef:
+                  name: bright-mls-secret
+                  key: BRIGHT_MLS_ENV
+            - name: BRIGHT_MLS_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: bright-mls-secret
+                  key: BRIGHT_MLS_CLIENT_ID
+            - name: BRIGHT_MLS_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: bright-mls-secret
+                  key: BRIGHT_MLS_CLIENT_SECRET
+            - name: BRIGHT_MLS_PAGE_SIZE
+              value: "200"
             # Credential introspection (#86/#131). In-cluster DNS, identical in every environment.
             - name: ACCOUNT_SERVICE_INTROSPECT_URL
               value: "http://account-service-svc:8080/internal/account/introspect"

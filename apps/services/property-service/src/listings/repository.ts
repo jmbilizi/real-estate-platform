@@ -335,4 +335,26 @@ export async function getPropertyAttributes(
   return result.rows;
 }
 
+/**
+ * The Bright keys of one listing, for the per-listing gallery fetch (`on-demand.ts`). `null` for a
+ * listing that is not from Bright or is not visible. Visibility goes through `listing_search_v`
+ * like every other read, so a withheld listing never triggers a Bright request.
+ */
+export async function findBrightListingKeys(
+  pool: ReadClient,
+  id: string,
+): Promise<{ listingKey: string; listingId: string | null } | null> {
+  const result = await pool.query<{ listing_key: string; listing_id: string | null }>(
+    `SELECT l.source_listing_key AS listing_key, s.payload->>'ListingId' AS listing_id
+       FROM listing_search_v v
+       JOIN listings l ON l.id = v.id
+       LEFT JOIN bright_staging_records s
+         ON s.resource = 'BrightProperties' AND s.record_key = l.source_listing_key
+      WHERE v.id = $1 AND l.source = 'brightMLS' AND l.source_listing_key IS NOT NULL`,
+    [id],
+  );
+  const row = result.rows[0];
+  return row === undefined ? null : { listingKey: row.listing_key, listingId: row.listing_id };
+}
+
 export { NOT_FOUND_BODY };
