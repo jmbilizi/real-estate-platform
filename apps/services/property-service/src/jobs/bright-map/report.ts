@@ -16,6 +16,12 @@ export interface BrightMapRunReport {
   readonly staged: number;
   readonly mapped: number;
   readonly published: number;
+  /**
+   * The `ListingKey` of every published row, in mapping order. The on-demand loader
+   * (`src/listings/on-demand.ts`) prefetches photo galleries over this list, never over every
+   * staged key, so a rejected record never costs a gallery fetch.
+   */
+  readonly publishedListingKeys: readonly string[];
   readonly withheld: number;
   readonly withheldByReason: Readonly<Record<string, number>>;
   readonly takenDown: number;
@@ -71,6 +77,7 @@ export const ZERO_MAP_REPORT: BrightMapRunReport = {
   staged: 0,
   mapped: 0,
   published: 0,
+  publishedListingKeys: [],
   withheld: 0,
   withheldByReason: {},
   takenDown: 0,

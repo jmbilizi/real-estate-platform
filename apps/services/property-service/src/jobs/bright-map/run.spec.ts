@@ -235,6 +235,28 @@ describe('mapStagedBrightProperties', () => {
     expect(report.mapped).toBe(1);
     expect(report.published).toBe(0);
     expect(report.takenDown).toBe(1);
+    expect(report.publishedListingKeys).toEqual([]);
+  });
+
+  it('reports only the published ListingKeys, so a gallery prefetch never runs over a rejected or withdrawn one', async () => {
+    const { client } = createFakeDb({
+      stagedPayloads: [
+        // Needs InternetEntireListingDisplayYN itself: ACTIVE_PAYLOAD alone maps but never
+        // publishes, same as the "publishable record" test above.
+        { ...ACTIVE_PAYLOAD, ListingKey: 'BR-1', InternetEntireListingDisplayYN: true },
+        { ...ACTIVE_PAYLOAD, ListingKey: 'BR-2', StandardStatus: 'Registered' }, // rejected
+        { ...ACTIVE_PAYLOAD, ListingKey: 'BR-3', StandardStatus: 'Withdrawn' }, // mapped, not published
+      ],
+    });
+
+    const report = await mapStagedBrightProperties(client, {
+      feed: 'test',
+      soldDisplayDelayDays: null,
+    });
+
+    expect(report.staged).toBe(3);
+    expect(report.published).toBe(1);
+    expect(report.publishedListingKeys).toEqual(['BR-1']);
   });
 
   it('publishes a record with an out-of-range field and processes the rest of the batch (#237)', async () => {
