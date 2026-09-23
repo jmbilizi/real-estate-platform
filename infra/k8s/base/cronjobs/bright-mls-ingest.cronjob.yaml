@@ -82,6 +82,11 @@ spec:
                   memory: "768Mi"
                   cpu: "500m"
               env:
+                # #315: Node sizes its heap from the host, not this cgroup limit. A full page
+                # then OOMs inside JSON.parse. Set NODE_OPTIONS to limits.memory / 1.5 (#315).
+                # tools/infra/node-heap-ratio.test.js checks this ratio against the limit above.
+                - name: NODE_OPTIONS
+                  value: "--max-old-space-size=512"
                 # ── The staging database ─────────────────────────────────────────────────────
                 # Replication writes bright_staging_records and bright_replication_cursor, so the
                 # job needs a connection. Assembled exactly as the property-service Deployment

@@ -45,3 +45,8 @@ spec:
               env:
                 - name: NODE_ENV
                   value: "production"
+                # #315: this patch lowers the memory limit to 512Mi. NODE_OPTIONS follows the
+                # same rule as base: limits.memory / 1.5. tools/infra/node-heap-ratio.test.js
+                # checks both files against their own limit.
+                - name: NODE_OPTIONS
+                  value: "--max-old-space-size=341"

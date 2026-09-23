@@ -1,0 +1,17 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bright-mls-ingest
+spec:
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: ingest
+              resources:
+                limits:
+                  memory: "768Mi"
+              env:
+                - name: NODE_ENV
+                  value: "production"

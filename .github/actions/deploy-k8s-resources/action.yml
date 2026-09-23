@@ -390,6 +390,26 @@ runs:
           echo "✅ No pods with persistent failures - new config working!"
         fi
 
+    - name: Snapshot StatefulSet pod templates (pre-apply baseline)
+      shell: bash
+      run: |
+        # #315: snapshot each StatefulSet template before this run applies manifests.
+        # The restart step below compares this snapshot to the live template after apply.
+        # A missing entry means the StatefulSet is new or out of scope. Skip the restart
+        # in both cases.
+        echo '{}' > /tmp/sts-before.json
+        EXPECTED_STS=$(awk -F'|' '$1 == "StatefulSet" { print $2 "/" $3 }' scope.txt)
+        for sts_ref in $EXPECTED_STS; do
+          STS_NS="${sts_ref%%/*}"
+          STS_NAME="${sts_ref##*/}"
+          TEMPLATE=$(kubectl get statefulset "$STS_NAME" -n "$STS_NS" -o json 2>/dev/null \
+            | jq -cS '.spec.template' 2>/dev/null || echo "")
+          [ -z "$TEMPLATE" ] && TEMPLATE="null"
+          jq --arg key "$sts_ref" --argjson tmpl "$TEMPLATE" '.[$key] = $tmpl' \
+            /tmp/sts-before.json > /tmp/sts-before.json.tmp
+          mv /tmp/sts-before.json.tmp /tmp/sts-before.json
+        done
+
     - name: Apply manifests (phased, label-scoped, immutable-safe)
       shell: bash
       run: |
@@ -702,6 +722,11 @@ runs:
       shell: bash
       run: |
         echo "🔄 Checking if StatefulSet pod templates changed before restarting..."
+        # #315: comparing two live snapshots cancels out API-server-defaulted fields, so only
+        # a real template change triggers a restart. failed-workloads.txt starts here, since
+        # "Ensure Postgres databases" below execs into the restarted pod and needs this step's
+        # own wait to finish first.
+        : > failed-workloads.txt
         NEED_RESTART_STS=""
         # Scope, not manifests — see "Resolve deploy scope".
         EXPECTED_STS=$(awk -F'|' '$1 == "StatefulSet" { print $2 "/" $3 }' scope.txt)
@@ -709,15 +734,15 @@ runs:
           STS_NS="${sts_ref%%/*}"
           STS_NAME="${sts_ref##*/}"
 
-          DESIRED_TEMPLATE=$(yq -o=json -I=0 e "select(.kind==\"StatefulSet\" and (.metadata.namespace // \"default\") == \"$STS_NS\" and .metadata.name==\"$STS_NAME\") | .spec.template" manifests.yaml 2>/dev/null | jq -cS '.' 2>/dev/null || echo "")
-          LIVE_TEMPLATE=$(kubectl get statefulset "$STS_NAME" -n "$STS_NS" -o json 2>/dev/null | jq -cS '.spec.template' 2>/dev/null || echo "")
-          if [ -z "$DESIRED_TEMPLATE" ] || [ -z "$LIVE_TEMPLATE" ]; then
-            echo "ℹ️  Skipping $STS_NAME: unable to parse desired/live pod template (ns: $STS_NS)"
+          BEFORE_TEMPLATE=$(jq -cS --arg key "$sts_ref" '.[$key] // empty' /tmp/sts-before.json 2>/dev/null)
+          AFTER_TEMPLATE=$(kubectl get statefulset "$STS_NAME" -n "$STS_NS" -o json 2>/dev/null | jq -cS '.spec.template' 2>/dev/null || echo "")
+          if [ -z "$BEFORE_TEMPLATE" ] || [ -z "$AFTER_TEMPLATE" ]; then
+            echo "ℹ️  Skipping $STS_NAME: no pre-apply snapshot or unreadable live template (ns: $STS_NS) - treating as new, no restart needed"
             continue
           fi
-          LIVE_HASH=$(printf "%s" "$LIVE_TEMPLATE" | sha1sum | awk '{print $1}')
-          DESIRED_HASH=$(printf "%s" "$DESIRED_TEMPLATE" | sha1sum | awk '{print $1}')
-          if [ "$LIVE_HASH" != "$DESIRED_HASH" ]; then
+          BEFORE_HASH=$(printf "%s" "$BEFORE_TEMPLATE" | sha1sum | awk '{print $1}')
+          AFTER_HASH=$(printf "%s" "$AFTER_TEMPLATE" | sha1sum | awk '{print $1}')
+          if [ "$BEFORE_HASH" != "$AFTER_HASH" ]; then
             NEED_RESTART_STS="$NEED_RESTART_STS $STS_NS/$STS_NAME"
           fi
         done
@@ -728,8 +753,16 @@ runs:
             STS_NAME="${sts##*/}"
             kubectl rollout restart statefulset/$STS_NAME -n "$STS_NS" || true
           done
-          echo "⏳ Waiting 60 seconds for pods to terminate and restart..."
-          sleep 60
+          # #315: one wait, here, for the restart just triggered. A later, second wait on the
+          # same StatefulSets used `|| true`, hiding a real failure from the rollback step.
+          for sts in $NEED_RESTART_STS; do
+            STS_NS="${sts%%/*}"
+            STS_NAME="${sts##*/}"
+            if ! kubectl rollout status statefulset/$STS_NAME -n "$STS_NS" --timeout=${{ inputs.statefulset_timeout }}; then
+              echo "❌ StatefulSet $STS_NAME rollout failed after restart"
+              echo "StatefulSet|$STS_NS|$STS_NAME" >> failed-workloads.txt
+            fi
+          done
         else
           echo "✅ No StatefulSet pod template changes detected - skipping restart"
         fi
@@ -801,7 +834,12 @@ runs:
       shell: bash
       run: |
         echo "⏳ Waiting for workloads to be ready..."
+        # #315: "Restart only on template change" above already waited on a restarted
+        # StatefulSet and recorded any failure to failed-workloads.txt, ahead of this step,
+        # so "Ensure Postgres databases" never runs against the pre-restart pod. Carry that
+        # failure forward instead of checking StatefulSets a second time here.
         ROLLOUT_FAILED=false
+        [ -s failed-workloads.txt ] && ROLLOUT_FAILED=true
 
         deployment_is_ready() {
           local ns="$1"
@@ -846,30 +884,10 @@ runs:
 
         # Everything below iterates the deploy scope, never the raw manifests. Each failure
         # is recorded so the rollback step can target exactly what broke instead of undoing
-        # every workload in the cluster.
-        : > failed-workloads.txt
+        # every workload in the cluster. failed-workloads.txt already exists (created above),
+        # so appending here keeps any StatefulSet failure it already recorded.
 
-        # StatefulSets
-        STATEFULSETS=$(awk -F'|' '$1 == "StatefulSet" { print $2 "/" $3 }' scope.txt)
-        if [ -n "$STATEFULSETS" ]; then
-          echo "📋 StatefulSets in scope: $(echo $STATEFULSETS | tr '\n' ' ')"
-          for sts_ref in $STATEFULSETS; do
-            STS_NS="${sts_ref%%/*}"
-            sts="${sts_ref##*/}"
-            echo "\n🔄 Checking rollout status for StatefulSet/$sts (namespace: $STS_NS)..."
-            if ! kubectl rollout status statefulset/$sts -n "$STS_NS" --timeout=${{ inputs.statefulset_timeout }}; then
-              echo "❌ StatefulSet $sts rollout failed"
-              echo "StatefulSet|$STS_NS|$sts" >> failed-workloads.txt
-              ROLLOUT_FAILED=true
-            else
-              echo "✅ StatefulSet $sts deployment completed"
-            fi
-          done
-        else
-          echo "ℹ️  No StatefulSets in scope"
-        fi
-
-        # Deployments (always check, even if StatefulSets failed)
+        # Deployments (always check, even if a StatefulSet restart failed)
         DEPLOYMENTS=$(awk -F'|' '$1 == "Deployment" { print $2 "/" $3 }' scope.txt)
         if [ -n "$DEPLOYMENTS" ]; then
           echo "\n📋 Deployments in scope: $(echo $DEPLOYMENTS | tr '\n' ' ')"
@@ -929,14 +947,10 @@ runs:
         fi
 
     - name: Re-run Bright MLS ingest on deploy (dev/test only)
-      # #224: a mapping fix in property-service must take effect without waiting for the
-      # CronJob's next tick. Jobs are immutable, so a fixed-name Job committed to the
-      # manifests could never re-run on redeploy — delete-then-create belongs here instead.
-      # Prod keeps its own schedule and `suspend: true`; this step never touches prod.
-      #
-      # #232: the rollout already succeeded by the time this step runs. Ingest is a separate
-      # concern. Every exit path below returns 0. A bad, slow, or unrunnable ingest run
-      # prints a `::warning::` instead. It never fails this step or trips the rollback path.
+      # #224/#232/#315: re-run the ingest Job so today's mapping fix reaches dev/test without
+      # waiting for the CronJob's next tick. Jobs are immutable, so this step deletes and
+      # recreates the Job. Prod keeps its own schedule. Every exit path below returns 0, so
+      # a bad or slow ingest run never fails the deploy.
       if: ${{ steps.rollout.outputs.rollout_success == 'true' || steps.pvc_cleanup.outputs.rollout_success == 'true' }}
       shell: bash
       run: |
@@ -953,6 +967,20 @@ runs:
         fi
 
         JOB_NAME="bright-mls-ingest-on-deploy"
+
+        # #315: a still-running Job means an earlier deploy's ingest has not finished.
+        # Deleting it here would kill that run with no record of why. Skip this re-run
+        # instead and say so.
+        PREVIOUS_JOB=$(kubectl get job "$JOB_NAME" -o json 2>/dev/null || echo "")
+        if [ -n "$PREVIOUS_JOB" ]; then
+          PREV_COMPLETE=$(echo "$PREVIOUS_JOB" | jq -r '([.status.conditions[]? | select(.type=="Complete") | .status] | first) // empty' 2>/dev/null || true)
+          PREV_FAILED=$(echo "$PREVIOUS_JOB" | jq -r '([.status.conditions[]? | select(.type=="Failed") | .status] | first) // empty' 2>/dev/null || true)
+          if [ "$PREV_COMPLETE" != "True" ] && [ "$PREV_FAILED" != "True" ]; then
+            echo "::notice::$JOB_NAME is still running on $ENVIRONMENT from an earlier deploy. Skipping this run so it is not killed."
+            exit 0
+          fi
+        fi
+
         echo "🔄 Re-running bright-mls-ingest so today's mapping fix reaches $ENVIRONMENT now."
         if ! kubectl delete job "$JOB_NAME" --ignore-not-found; then
           echo "::warning::bright-mls-ingest-on-deploy: could not delete the previous Job on $ENVIRONMENT - skipping this ingest run."
@@ -963,12 +991,11 @@ runs:
           exit 0
         fi
 
-        # #232: wait for the Job, then report its outcome. Bound is derived from the Job's own
-        # limits (infra/k8s/base/cronjobs/bright-mls-ingest.cronjob.yaml): activeDeadlineSeconds
-        # 900s caps how long Kubernetes lets it run at all, backoffLimit 2 caps retries within
-        # that same window. 960s gives a 60s margin so a hung run is reported as "still running"
-        # by OUR timeout, never confused with the Job's own deadline firing.
-        WAIT_SECONDS=960
+        # #315: wait only long enough to catch a fast startup failure. A full ingest run can
+        # take minutes, so the deploy does not wait for it. The Job's own activeDeadlineSeconds
+        # (900s) still bounds an unattended run. Still running after this wait is normal, not
+        # a failure.
+        WAIT_SECONDS=60
         POLL_SECONDS=10
         ELAPSED=0
         JOB_RESULT="timeout"
@@ -1038,7 +1065,8 @@ runs:
             echo "::warning::bright-mls-ingest-on-deploy failed on $ENVIRONMENT: ${MESSAGE:-see pod logs above}"
             ;;
           timeout)
-            echo "::warning::bright-mls-ingest-on-deploy did not reach a terminal state within ${WAIT_SECONDS}s on $ENVIRONMENT - check the Job manually."
+            echo "::notice::$JOB_NAME is still running after ${WAIT_SECONDS}s on $ENVIRONMENT. The deploy does not wait for it."
+            echo "   Follow it with: kubectl logs -f job/$JOB_NAME --all-containers"
             ;;
         esac
 
