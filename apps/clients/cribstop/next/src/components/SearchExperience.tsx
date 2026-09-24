@@ -440,8 +440,8 @@ export default function SearchExperience({
    * nothing at all.
    */
   const clearFilters = () => {
-    const { query, zip, street, neighborhood, sort } = filters;
-    applyFilters({ query, zip, street, neighborhood, sort });
+    const { query, zip, street, city, state, neighborhood, sort } = filters;
+    applyFilters({ query, zip, street, city, state, neighborhood, sort });
   };
 
   return (

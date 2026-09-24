@@ -5,10 +5,11 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
 import { useApp } from '@/lib/context';
 import {
-  extractSearchTerms,
+  bareZip,
   fetchNearbyLocationsByType,
   formatLocationLabel,
   highlightMatch,
+  resolveSearchTerms,
 } from '@/lib/search-utils';
 import { SearchPanel } from '@/lib/store/types';
 import type { SearchListingType } from '@/lib/store/slices/searchSlice';
@@ -1421,13 +1422,15 @@ export default function CompactSearchBar({
     addRecentSearch(finalSuggestion);
     const label = formatLocationLabel(finalSuggestion);
     if (typeof setLocation === 'function') setLocation(label);
-    const { zip, street } = extractSearchTerms(finalSuggestion);
+    const { zip, street, city, state } = resolveSearchTerms(location || '', finalSuggestion);
     const params = new URLSearchParams();
     params.set('q', label);
     params.set('lat', finalSuggestion.lat);
     params.set('lon', finalSuggestion.lon);
     if (zip) params.set('zip', zip);
     if (street) params.set('street', street);
+    if (city) params.set('city', city);
+    if (state) params.set('state', state);
     withListingTypeParam(params);
     setIsSearching(true);
     router.push(`/search?${params.toString()}`);
@@ -1638,8 +1641,15 @@ export default function CompactSearchBar({
         params.set('q', formatLocationLabel(selectedSuggestion));
         params.set('lat', String(selectedSuggestion.lat));
         params.set('lon', String(selectedSuggestion.lon));
+        const { zip, street, city, state } = resolveSearchTerms(location || '', selectedSuggestion);
+        if (zip) params.set('zip', zip);
+        if (street) params.set('street', street);
+        if (city) params.set('city', city);
+        if (state) params.set('state', state);
       } else if ((location || '').trim()) {
         params.set('q', (location || '').trim());
+        const typedZip = bareZip(location || '');
+        if (typedZip) params.set('zip', typedZip);
       }
       withListingTypeParam(params);
       if (dateRange.start) params.set('moveIn', dateRange.start);

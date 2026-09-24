@@ -89,7 +89,13 @@ export function parseFiltersFromSearchParams(params: URLSearchParams): SearchFil
   filters.query = str('q');
   filters.zip = str('zip');
   filters.street = str('street');
+  filters.city = str('city');
   filters.neighborhood = str('neighborhood');
+
+  // Exact two-letter code only — anything else is not a value the search bar or the contract's
+  // own `state` filter would ever produce, so it is dropped rather than forwarded to a 400.
+  const stateRaw = str('state');
+  filters.state = stateRaw && /^[A-Za-z]{2}$/.test(stateRaw) ? stateRaw.toUpperCase() : undefined;
 
   /**
    * Enum parameters are validated against the contract's own value sets before being forwarded.
@@ -201,6 +207,8 @@ const FILTER_PARAM_KEYS = [
   'q',
   'zip',
   'street',
+  'city',
+  'state',
   'neighborhood',
   'type',
   'listingType',
@@ -254,6 +262,8 @@ export function filtersToSearchParams(
   set('q', filters.query);
   set('zip', filters.zip);
   set('street', filters.street);
+  set('city', filters.city);
+  set('state', filters.state);
   set('neighborhood', filters.neighborhood);
   if (filters.listingType && filters.listingType !== 'all') set('type', filters.listingType);
   if (filters.propertyType && filters.propertyType !== 'all')
