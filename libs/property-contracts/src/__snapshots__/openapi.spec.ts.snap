@@ -932,19 +932,18 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
             "name": "propertyType",
             "required": false,
             "schema": {
-              "default": "all",
-              "enum": [
-                "Single Family",
-                "Condo",
-                "Townhome",
-                "Multi-Family",
-                "Loft",
-                "Land",
-                "New Construction",
-                "Manufactured/Mobile",
-                "all",
+              "anyOf": [
+                {
+                  "type": "string",
+                },
+                {
+                  "items": {
+                    "type": "string",
+                  },
+                  "type": "array",
+                },
               ],
-              "type": "string",
+              "description": "Comma-separated or repeated values: Single Family, Condo, Townhome, Multi-Family, Loft, Land, New Construction, Manufactured/Mobile. 'all' means every type.",
             },
           },
           {

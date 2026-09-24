@@ -48,6 +48,20 @@ describe('searchRequestSchema', () => {
     expect(searchRequestSchema.safeParse({ amenities: 'Helipad' }).success).toBe(false);
   });
 
+  it('accepts propertyType as one value, a comma list, or a repeated parameter', () => {
+    const parse = (propertyType: unknown) =>
+      searchRequestSchema.parse({ propertyType }).propertyType;
+    expect(searchRequestSchema.parse({}).propertyType).toEqual([]);
+    expect(parse('all')).toEqual([]);
+    expect(parse('Condo')).toEqual(['Condo']);
+    expect(parse('Townhome,Single Family')).toEqual(['Townhome', 'Single Family']);
+    expect(parse(['Townhome', 'Condo'])).toEqual(['Townhome', 'Condo']);
+  });
+
+  it('rejects a propertyType outside the closed set', () => {
+    expect(searchRequestSchema.safeParse({ propertyType: 'Condo,Castle' }).success).toBe(false);
+  });
+
   it('caps pageSize at the documented server-side maximum', () => {
     expect(searchRequestSchema.safeParse({ pageSize: '500' }).success).toBe(false);
     expect(searchRequestSchema.parse({ pageSize: String(PAGE_SIZE_MAX) }).pageSize).toBe(

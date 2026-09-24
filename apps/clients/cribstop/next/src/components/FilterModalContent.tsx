@@ -216,22 +216,22 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
 
   return (
     <div className="grid grid-cols-1 gap-y-6">
-      {/* ── Home type ────────────────────────────────────────────────────
-          Single-select, because the contract's `propertyType` is one enum value. The old grid was
-          multi-select and produced `propertyType=Condo,Townhome`, which the API rejects. */}
+      {/* ── Home type ── Multi-select. A listing matches any selected type. */}
       <fieldset>
         <legend className="mb-2 font-semibold uppercase text-xs tracking-wider text-ink">
           Home Type
         </legend>
         <div className="grid grid-cols-4 gap-2">
           {PROPERTY_TYPES.map((type) => {
-            const active = value.propertyType === type;
+            const selected = value.propertyType ?? [];
+            const active = selected.includes(type);
+            const next = active ? selected.filter((t) => t !== type) : [...selected, type];
             return (
               <button
                 key={type}
                 type="button"
                 aria-pressed={active}
-                onClick={() => set({ propertyType: active ? undefined : type })}
+                onClick={() => set({ propertyType: next.length > 0 ? next : undefined })}
                 className={`flex flex-col items-center rounded-xl border px-1 py-3 text-[11px] font-normal transition ${
                   active
                     ? 'bg-ink text-white border-ink'

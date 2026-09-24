@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { AMENITIES, amenitySchema, LISTING_TYPES, PROPERTY_TYPES } from './common';
+import {
+  AMENITIES,
+  amenitySchema,
+  LISTING_TYPES,
+  PROPERTY_TYPES,
+  propertyTypeSchema,
+} from './common';
 
 /** Preserves the client's existing paging arithmetic in
  *  `apps/clients/cribstop/next/src/app/(with-search)/search/page.tsx`. */
@@ -117,6 +123,19 @@ const amenityList = z
   .pipe(z.array(amenitySchema))
   .describe(`Comma-separated or repeated values from the closed set: ${AMENITIES.join(', ')}.`);
 
+/** Any of the listed types matches. `all`, or no value, means every type. */
+const propertyTypeList = z
+  .union([z.string(), z.array(z.string())])
+  .transform((value) =>
+    (Array.isArray(value) ? value : value.split(','))
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0 && entry !== 'all'),
+  )
+  .pipe(z.array(propertyTypeSchema))
+  .describe(
+    `Comma-separated or repeated values: ${PROPERTY_TYPES.join(', ')}. 'all' means every type.`,
+  );
+
 /**
  * The sort options, as a value array so a consumer can validate a URL parameter against them.
  *
@@ -158,7 +177,7 @@ export const searchRequestSchema = z.strictObject({
   // renders in the published contract as a two-branch `anyOf` that loses the dropdown-friendly
   // single-enum shape codegen and Swagger UI expect (#47 review, I3).
   listingType: z.enum([...LISTING_TYPES, 'all'] as const).default('all'),
-  propertyType: z.enum([...PROPERTY_TYPES, 'all'] as const).default('all'),
+  propertyType: propertyTypeList.default([]),
   // A seller may suppress `price` (#53); a suppressed row's price is null. `NULL >= x` and
   // `NULL <= x` are never true, so these two filters exclude a suppressed-price row from every
   // range they express — never a false match, and never a special case in search-query.ts.

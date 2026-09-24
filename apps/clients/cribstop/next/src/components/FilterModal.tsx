@@ -39,7 +39,7 @@ const PRESERVED_ON_CLEAR = ['query', 'zip', 'street', 'neighborhood', 'sort'] as
 export function countActiveFilters(filters: SearchFilters): number {
   let n = 0;
   if (filters.listingType && filters.listingType !== 'all') n++;
-  if (filters.propertyType && filters.propertyType !== 'all') n++;
+  if (filters.propertyType?.length) n++;
   if (filters.minPrice !== undefined || filters.maxPrice !== undefined) n++;
   if (filters.beds !== undefined) n++;
   if (filters.baths !== undefined) n++;
