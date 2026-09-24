@@ -10,7 +10,7 @@ import type { SearchFilters } from './types';
 describe('applyLandInterlock', () => {
   it('clears beds, baths and minimum square footage when Lot/Land is the only property type', () => {
     const cleared = applyLandInterlock({
-      propertyType: 'Land',
+      propertyType: ['Land'],
       beds: 2,
       baths: 1,
       minSqft: 1200,
@@ -22,11 +22,11 @@ describe('applyLandInterlock', () => {
     expect(cleared.minSqft).toBeUndefined();
     // Filters that still mean something for a parcel are untouched.
     expect(cleared.minPrice).toBe(100000);
-    expect(cleared.propertyType).toBe('Land');
+    expect(cleared.propertyType).toEqual(['Land']);
   });
 
   it('leaves dwelling filters alone for any other property type', () => {
-    const filters = { propertyType: 'Condo' as const, beds: 2, baths: 1, minSqft: 1200 };
+    const filters = { propertyType: ['Condo' as const], beds: 2, baths: 1, minSqft: 1200 };
     expect(applyLandInterlock(filters)).toEqual(filters);
   });
 
@@ -36,21 +36,21 @@ describe('applyLandInterlock', () => {
   });
 
   it('does not mutate the input', () => {
-    const filters = { propertyType: 'Land' as const, beds: 2 };
+    const filters = { propertyType: ['Land' as const], beds: 2 };
     applyLandInterlock(filters);
     expect(filters.beds).toBe(2);
   });
 
   it('returns the same object when there is nothing to clear', () => {
-    const filters = { propertyType: 'Land' as const, minPrice: 50000 };
+    const filters = { propertyType: ['Land' as const], minPrice: 50000 };
     expect(applyLandInterlock(filters)).toBe(filters);
   });
 });
 
 describe('isLandOnly', () => {
   it('is true only for the Land property type', () => {
-    expect(isLandOnly({ propertyType: 'Land' })).toBe(true);
-    expect(isLandOnly({ propertyType: 'Condo' })).toBe(false);
+    expect(isLandOnly({ propertyType: ['Land'] })).toBe(true);
+    expect(isLandOnly({ propertyType: ['Condo'] })).toBe(false);
     expect(isLandOnly({})).toBe(false);
   });
 });
@@ -66,7 +66,7 @@ describe('parseFiltersFromSearchParams', () => {
     expect(filters).toEqual({
       query: 'Bethesda',
       listingType: 'rent',
-      propertyType: 'Condo',
+      propertyType: ['Condo'],
       minPrice: 1500,
       maxPrice: 3000,
       beds: 2,
@@ -165,7 +165,7 @@ describe('parseFiltersFromSearchParams', () => {
       new URLSearchParams('propertyType=Land&beds=3&minSqft=2000'),
     );
 
-    expect(filters.propertyType).toBe('Land');
+    expect(filters.propertyType).toEqual(['Land']);
     expect(filters.beds).toBeUndefined();
     expect(filters.minSqft).toBeUndefined();
   });
@@ -197,21 +197,29 @@ describe('parsePageFromSearchParams', () => {
 });
 
 describe('enum parameters are validated against the contract before being forwarded', () => {
-  it('drops a comma-joined propertyType rather than sending a value the API rejects', () => {
-    // The search bar used to emit this from multi-select checkboxes, and the old search page never
-    // read the parameter at all — so it filtered nothing. Reading it makes a 400 reachable.
-    const filters = parseFiltersFromSearchParams(
+  it('reads comma-joined and repeated propertyType values as one list', () => {
+    const joined = parseFiltersFromSearchParams(
       new URLSearchParams('q=Bethesda&propertyType=Condo,Townhome'),
     );
+    const repeated = parseFiltersFromSearchParams(
+      new URLSearchParams('propertyType=Condo&propertyType=Townhome&propertyType=Condo'),
+    );
 
-    expect(filters.propertyType).toBeUndefined();
-    expect(filters.query).toBe('Bethesda');
+    expect(joined.propertyType).toEqual(['Condo', 'Townhome']);
+    expect(joined.query).toBe('Bethesda');
+    expect(repeated.propertyType).toEqual(['Condo', 'Townhome']);
   });
 
   it('keeps a single valid propertyType', () => {
     expect(
       parseFiltersFromSearchParams(new URLSearchParams('propertyType=Townhome')).propertyType,
-    ).toBe('Townhome');
+    ).toEqual(['Townhome']);
+  });
+
+  it('repeats propertyType values when writing the URL', () => {
+    expect(
+      filtersToSearchParams({ propertyType: ['Condo', 'Townhome'] }).getAll('propertyType'),
+    ).toEqual(['Condo', 'Townhome']);
   });
 
   it('drops a propertyType the contract does not define', () => {
@@ -264,7 +272,7 @@ describe('filtersToSearchParams', () => {
       state: 'MD',
       neighborhood: 'Downtown',
       listingType: 'rent',
-      propertyType: 'Condo',
+      propertyType: ['Condo'],
       minPrice: 1500,
       maxPrice: 3000,
       beds: 2,
@@ -324,7 +332,7 @@ describe('filtersToSearchParams', () => {
     const params = filtersToSearchParams({
       query: 'Bethesda',
       listingType: 'all',
-      propertyType: 'all',
+      propertyType: [],
       sort: 'recommended',
       openHouse: false,
     });

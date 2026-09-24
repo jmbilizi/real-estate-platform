@@ -5,6 +5,13 @@ const build = (query: Record<string, unknown> = {}): ReturnType<typeof buildSear
   buildSearchQuery(searchRequestSchema.parse(query));
 
 describe('buildSearchQuery', () => {
+  it('matches any of the requested property types', () => {
+    const { where, params } = build({ propertyType: 'Townhome,Single Family' });
+    expect(where).toContain('v.property_type = ANY(');
+    expect(params).toContainEqual(['Townhome', 'Single Family']);
+    expect(build().where).not.toContain('v.property_type');
+  });
+
   it('defaults to the shopping surface: sale + rent, no sold', () => {
     const { where, params } = build();
     expect(where).toContain('v.listing_type = ANY(');

@@ -47,8 +47,8 @@ export function buildSearchQuery(request: SearchRequest): {
     `v.listing_type = ANY(${bind([...visibleListingTypesFor(request.listingType)])})`,
   );
 
-  if (request.propertyType !== 'all') {
-    conditions.push(`v.property_type = ${bind(request.propertyType)}`);
+  if (request.propertyType.length > 0) {
+    conditions.push(`v.property_type = ANY(${bind([...request.propertyType])})`);
   }
 
   // `zip` is exact-or-prefix (today's `l.zip === zip || l.zip.startsWith(zip)`). `starts_with`

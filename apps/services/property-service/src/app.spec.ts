@@ -128,7 +128,7 @@ describe('GET /listings', () => {
     expect(response.body.appliedFilters).toMatchObject({
       beds: 3,
       listingType: 'all',
-      propertyType: 'all',
+      propertyType: [],
       sort: 'recommended',
       page: 1,
       pageSize: 20,
@@ -422,7 +422,7 @@ describe('GET /listings', () => {
         'listingType=rent&beds=2',
         'query=Fixture',
         'openHouse=true',
-        'amenities=Pool,Garage&propertyType=Condo',
+        'amenities=Pool,Garage&propertyType=Condo,Townhome',
       ];
 
       for (const filter of filters) {

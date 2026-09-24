@@ -16,7 +16,7 @@ import type { SearchFilters } from '@/lib/types';
 
 /** True when the user has narrowed to parcels and nothing else. */
 export function isLandOnly(filters: SearchFilters): boolean {
-  return filters.propertyType === 'Land';
+  return filters.propertyType?.length === 1 && filters.propertyType[0] === 'Land';
 }
 
 /**
@@ -125,17 +125,19 @@ export function parseFiltersFromSearchParams(params: URLSearchParams): SearchFil
       : undefined;
   }
 
-  /**
-   * A single value, never a list. The search bar used to emit `propertyType=Condo,Townhome` from
-   * multi-select checkboxes; the contract's `propertyType` is one enum value, so a comma-joined
-   * value fails this check and is dropped rather than 400ing the page. The control itself is now
-   * single-select (see `CompactSearchBar`), so the UI cannot produce one — this is the guard for a
-   * hand-edited or bookmarked URL that still carries the old shape.
-   */
-  const propertyType = str('propertyType');
-  if (propertyType && propertyType !== 'all') {
-    filters.propertyType = oneOf('propertyType', PROPERTY_TYPES);
-  }
+  // Repeated or comma-joined. Unknown values are dropped, and `all` means no narrowing.
+  const propertyTypes = [
+    ...new Set(
+      params
+        .getAll('propertyType')
+        .flatMap((value) => value.split(','))
+        .map((value) => value.trim())
+        .filter((value): value is (typeof PROPERTY_TYPES)[number] =>
+          (PROPERTY_TYPES as readonly string[]).includes(value),
+        ),
+    ),
+  ];
+  if (propertyTypes.length > 0) filters.propertyType = propertyTypes;
 
   filters.minPrice = int('minPrice');
   filters.maxPrice = int('maxPrice');
@@ -266,8 +268,7 @@ export function filtersToSearchParams(
   set('state', filters.state);
   set('neighborhood', filters.neighborhood);
   if (filters.listingType && filters.listingType !== 'all') set('type', filters.listingType);
-  if (filters.propertyType && filters.propertyType !== 'all')
-    set('propertyType', filters.propertyType);
+  for (const type of filters.propertyType ?? []) params.append('propertyType', type);
   set('minPrice', filters.minPrice);
   set('maxPrice', filters.maxPrice);
   set('beds', filters.beds);

@@ -116,7 +116,7 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
      */
     searchListings(
       {
-        propertyType: listing.propertyType,
+        propertyType: [listing.propertyType],
         listingType: listing.listingType,
         pageSize: 8,
       },
