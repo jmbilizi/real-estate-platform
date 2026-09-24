@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
 import { useApp } from '@/lib/context';
@@ -794,6 +794,11 @@ export default function CompactSearchBar({
     mobileSheetMode ? 'where' : null,
   );
   const [isSearching, setIsSearching] = useState(false);
+  // The bar stays mounted across navigation, so only a transition knows when the new route rendered.
+  const [isNavigating, startNavigation] = useTransition();
+  const busy = isSearching || isNavigating;
+  const pushSearch = (params: URLSearchParams) =>
+    startNavigation(() => router.push(`/search?${params.toString()}`));
   const [whereShake, setWhereShake] = useState(false);
   const [isGeolocating, setIsGeolocating] = useState(false);
 
@@ -1432,8 +1437,7 @@ export default function CompactSearchBar({
     if (city) params.set('city', city);
     if (state) params.set('state', state);
     withListingTypeParam(params);
-    setIsSearching(true);
-    router.push(`/search?${params.toString()}`);
+    pushSearch(params);
     setIsDropdownOpen(false);
     setActivePanel(null);
     if (mode === 'expanded') setHeaderExpanded(false);
@@ -1495,7 +1499,7 @@ export default function CompactSearchBar({
               const params = new URLSearchParams();
               params.set('q', displayName);
               withListingTypeParam(params);
-              router.push(`/search?${params.toString()}`);
+              pushSearch(params);
               resolve();
             })();
           },
@@ -1512,7 +1516,7 @@ export default function CompactSearchBar({
             const params = new URLSearchParams();
             params.set('q', '');
             withListingTypeParam(params);
-            router.push(`/search?${params.toString()}`);
+            pushSearch(params);
             resolve();
           },
         );
@@ -1522,7 +1526,7 @@ export default function CompactSearchBar({
         const params = new URLSearchParams();
         params.set('q', '');
         withListingTypeParam(params);
-        router.push(`/search?${params.toString()}`);
+        pushSearch(params);
         resolve();
       }
     });
@@ -1655,7 +1659,7 @@ export default function CompactSearchBar({
       if (dateRange.start) params.set('moveIn', dateRange.start);
       if (dateRange.end && dateRange.end !== dateRange.start)
         params.set('moveInEnd', dateRange.end);
-      router.push(`/search?${params.toString()}`);
+      pushSearch(params);
       onClose?.();
     };
 
@@ -2360,7 +2364,7 @@ export default function CompactSearchBar({
           <div ref={searchBtnRef} className="flex items-center pr-1.5 pl-1 flex-shrink-0">
             <button
               type="button"
-              disabled={isSearching}
+              disabled={busy}
               onClick={() => {
                 setActivePanel(null);
                 handleSearch({ preventDefault: () => {} } as any);
@@ -2368,7 +2372,7 @@ export default function CompactSearchBar({
               className="flex items-center justify-center rounded-full bg-brand text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-80 h-12 w-12 flex-shrink-0"
               aria-label="Search"
             >
-              {isSearching ? (
+              {busy ? (
                 <svg className="h-4 w-4 sm:h-5 sm:w-5 animate-spin" fill="none" viewBox="0 0 24 24">
                   <circle
                     className="opacity-25"
@@ -2592,7 +2596,7 @@ export default function CompactSearchBar({
                 {!hydrated && <SkeletonBlock className="h-12 w-12 rounded-full" />}
                 <button
                   type="button"
-                  disabled={isSearching}
+                  disabled={busy}
                   onClick={() => {
                     setActivePanel(null);
                     handleSearch({ preventDefault: () => {} } as any);
@@ -2602,7 +2606,7 @@ export default function CompactSearchBar({
                   }`}
                   aria-label="Search"
                 >
-                  {isSearching ? (
+                  {busy ? (
                     <svg
                       className="h-4 w-4 sm:h-5 sm:w-5 animate-spin"
                       fill="none"
