@@ -289,8 +289,8 @@ export async function fetchBoundaryFor(
  * populated filter — rather than an unfiltered one. `county` stays a contract parameter for a
  * caller that already has the FIPS code; this client is not one.
  *
- * `neighborhood` has real data today (Bright `SubdivisionName`), so it keeps ANDing with
- * `boundary` when both resolve — the only pairing that AND's on purpose (search-query.ts).
+ * A resolved boundary replaces `neighborhood` and `city`. `neighborhood` and `city` are the
+ * fallback when the boundary fetch fails.
  */
 /**
  * Returns whether at least one filter was actually written to `params`.
@@ -334,6 +334,10 @@ export async function appendLocationParams(
   if (terms.neighborhood || terms.county) {
     const boundary = await fetchBoundaryFor(loc, signal);
     if (boundary) {
+      // The boundary replaces the text filters. Bright's SubdivisionName is often a plat or condo
+      // name, and its City is the postal city, so ANDing either one drops listings inside the area.
+      params.delete('neighborhood');
+      params.delete('city');
       params.set('boundary', boundary);
       applied = true;
     }

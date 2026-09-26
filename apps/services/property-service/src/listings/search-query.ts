@@ -165,9 +165,8 @@ export function buildSearchQuery(request: SearchRequest): {
   // #339. Client-supplied GeoJSON boundary (Nominatim-derived, simplified and size-bounded by the
   // contract's `boundary` schema). `v.geog` is masked on address_display_allowed (migration 030),
   // same as latitude/longitude, so a suppressed-address listing never matches or fails to match in
-  // a way that would re-disclose its location. ANDs with `neighborhood`'s text match when both are
-  // sent (both carry real data today); the web never sends it alongside `county` (see
-  // search-utils.tsx's `appendLocationParams`).
+  // a way that would re-disclose its location. ANDs with any other filter sent. The web sends a
+  // boundary in place of `neighborhood` and `city` (search-utils.tsx's `appendLocationParams`).
   if (request.boundary) {
     conditions.push(
       `ST_Intersects(v.geog, ST_GeomFromGeoJSON(${bind(request.boundary)})::geography)`,

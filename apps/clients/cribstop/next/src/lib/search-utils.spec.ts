@@ -222,22 +222,39 @@ describe('appendLocationParams (#339)', () => {
     jest.restoreAllMocks();
   });
 
-  it('sets neighborhood AND boundary together — both carry real data today', async () => {
+  const capitolHill = {
+    type: 'neighbourhood',
+    display_name: 'Capitol Hill, Washington, DC',
+    address: { neighbourhood: 'Capitol Hill', city: 'Washington', state_code: 'DC' },
+  };
+
+  it('sends boundary + state in place of neighborhood and city when the boundary resolves', async () => {
     const geo = { type: 'Polygon', coordinates: [[[0, 0]]] };
     global.fetch = jest
       .fn()
       .mockResolvedValue({ ok: true, json: async () => [{ geojson: geo }] }) as any;
 
     const params = new URLSearchParams();
-    const applied = await appendLocationParams(params, 'Capitol Hill', {
-      type: 'neighbourhood',
-      display_name: 'Capitol Hill, Washington, DC',
-      address: { neighbourhood: 'Capitol Hill', city: 'Washington', state_code: 'DC' },
-    });
+    const applied = await appendLocationParams(params, 'Capitol Hill', capitolHill);
+
+    expect(applied).toBe(true);
+    expect(params.get('boundary')).toBe(JSON.stringify(geo));
+    expect(params.get('state')).toBe('DC');
+    expect(params.has('neighborhood')).toBe(false);
+    expect(params.has('city')).toBe(false);
+  });
+
+  it('falls back to neighborhood + city + state when no boundary resolves', async () => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: false }) as any;
+
+    const params = new URLSearchParams();
+    const applied = await appendLocationParams(params, 'Capitol Hill', capitolHill);
 
     expect(applied).toBe(true);
     expect(params.get('neighborhood')).toBe('Capitol Hill');
-    expect(params.get('boundary')).toBe(JSON.stringify(geo));
+    expect(params.get('city')).toBe('Washington');
+    expect(params.get('state')).toBe('DC');
+    expect(params.has('boundary')).toBe(false);
   });
 
   // county_fips is the DB column `county` actually matches (a code, e.g. "51059"), and
