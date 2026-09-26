@@ -124,4 +124,56 @@ describe('buildSearchQuery', () => {
     const placeholders = new Set(where.match(/\$\d+/g) ?? []);
     expect(placeholders.size).toBe(params.length);
   });
+
+  it('filters by neighborhood alone, case-insensitively and by exact match', () => {
+    const { where, params } = build({ neighborhood: 'capitol hill' });
+    expect(where).toContain('lower(v.neighborhood) = lower(');
+    expect(params).toContainEqual('capitol hill');
+  });
+
+  it('does not fall back to city when neighborhood is unset', () => {
+    expect(build({ city: 'Rockville' }).where).not.toContain('v.neighborhood');
+  });
+
+  it('filters by county alone, case-insensitively, against county_fips', () => {
+    const { where, params } = build({ county: '11001' });
+    expect(where).toContain('lower(v.county_fips) = lower(');
+    expect(params).toContainEqual('11001');
+  });
+
+  it('ANDs a boundary polygon as ST_Intersects against v.geog', () => {
+    const boundary = JSON.stringify({
+      type: 'Polygon',
+      coordinates: [
+        [
+          [-77.05, 38.89],
+          [-77.04, 38.89],
+          [-77.04, 38.9],
+          [-77.05, 38.9],
+          [-77.05, 38.89],
+        ],
+      ],
+    });
+    const { where, params } = build({ boundary });
+    expect(where).toContain('ST_Intersects(v.geog, ST_GeomFromGeoJSON(');
+    expect(params).toContainEqual(boundary);
+  });
+
+  it('ANDs neighborhood and boundary together — a neighborhood search can use both', () => {
+    const boundary = JSON.stringify({
+      type: 'Polygon',
+      coordinates: [
+        [
+          [-77.05, 38.89],
+          [-77.04, 38.89],
+          [-77.04, 38.9],
+          [-77.05, 38.9],
+          [-77.05, 38.89],
+        ],
+      ],
+    });
+    const { where } = build({ neighborhood: 'Petworth', boundary });
+    expect(where).toContain('lower(v.neighborhood) = lower(');
+    expect(where).toContain('ST_Intersects(v.geog,');
+  });
 });

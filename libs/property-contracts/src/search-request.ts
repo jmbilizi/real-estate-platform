@@ -96,6 +96,73 @@ const queryPageSize = z
 
 const queryBoolean = z.enum(['true', 'false']).transform((value) => value === 'true');
 
+/**
+ * Vertex cap for a client-sent boundary polygon, checked BEFORE the character cap below so the
+ * error names the actual problem (a huge polygon) rather than a generic length overflow.
+ *
+ * 500 is far more detail than a neighborhood/county outline needs at map zoom — the same
+ * reasoning `nominatim.ts`'s `POLYGON_THRESHOLD` uses to simplify Nominatim's own boundaries
+ * before this ever reaches the wire. This is a second, independent bound: the proxy's
+ * simplification is the web app's own defense, and this one is the service's, so a boundary
+ * cannot reach `ST_Intersects` unsimplified even from a caller that skips the proxy.
+ */
+const MAX_BOUNDARY_POINTS = 500;
+
+/** Bytes, not points: a polygon can pack many points into few characters or few points into a
+ *  verbose one, so both bounds are checked independently. */
+const MAX_BOUNDARY_CHARS = 20_000;
+
+function countBoundaryPoints(geometry: { type: string; coordinates: unknown }): number {
+  const rings: unknown =
+    geometry.type === 'Polygon'
+      ? geometry.coordinates
+      : geometry.type === 'MultiPolygon'
+        ? (geometry.coordinates as unknown[]).flat(1)
+        : [];
+  return (rings as unknown[][]).reduce(
+    (total, ring) => total + (Array.isArray(ring) ? ring.length : 0),
+    0,
+  );
+}
+
+/**
+ * A GeoJSON `Polygon`/`MultiPolygon`, sent as a JSON string (query parameters carry text, not
+ * objects). Validated, never parsed into the output shape: `search-query.ts` binds the string
+ * as-is to `ST_GeomFromGeoJSON`, so Postgres is the one place that actually interprets the
+ * geometry — this schema only bounds its size and confirms its shape.
+ */
+const boundaryPolygon = z
+  .string()
+  .max(MAX_BOUNDARY_CHARS, `must not exceed ${MAX_BOUNDARY_CHARS} characters`)
+  .superRefine((value, ctx) => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      ctx.addIssue({ code: 'custom', message: 'must be valid JSON' });
+      return;
+    }
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      !('type' in parsed) ||
+      (parsed.type !== 'Polygon' && parsed.type !== 'MultiPolygon') ||
+      !('coordinates' in parsed)
+    ) {
+      ctx.addIssue({ code: 'custom', message: 'must be a GeoJSON Polygon or MultiPolygon' });
+      return;
+    }
+    const points = countBoundaryPoints(parsed as { type: string; coordinates: unknown });
+    if (points > MAX_BOUNDARY_POINTS) {
+      ctx.addIssue({ code: 'custom', message: `must not exceed ${MAX_BOUNDARY_POINTS} points` });
+    }
+  })
+  .describe(
+    'GeoJSON Polygon or MultiPolygon, as a JSON string, simplified client-side. ANDs with ' +
+      `\`neighborhood\` when both are sent. Capped at ${MAX_BOUNDARY_POINTS} points and ` +
+      `${MAX_BOUNDARY_CHARS} characters.`,
+  );
+
 /** Exactly two letters, case-insensitive. Anything else is the contract's normal 400. */
 const stateCode = z
   .string()
@@ -197,6 +264,19 @@ export const searchRequestSchema = z.strictObject({
   baths: queryBathCount.optional(),
   minSqft: queryInt.optional(),
   neighborhood: z.string().optional(),
+  // #339. Matched against `county_fips` (case-insensitive exact), which the Bright ingest does not
+  // populate yet (tracked separately) — a plain `county` search returns zero rows rather than an
+  // unfiltered one until that ships. This is a FIPS CODE column, not a name, so the web client
+  // never sends this parameter (it has no FIPS lookup) — `boundary` is its county mechanism.
+  county: z
+    .string()
+    .optional()
+    .describe(
+      'A 5-digit county FIPS code, matched exactly (case-insensitive) against county_fips. ' +
+        'ANDed with every other filter. A caller without a FIPS code should send `boundary` ' +
+        'instead — this and `boundary` should not both be sent for the same conceptual place.',
+    ),
+  boundary: boundaryPolygon.optional(),
   openHouse: queryBoolean.optional(),
   newConstruction: queryBoolean.optional(),
   waterfront: queryBoolean.optional(),

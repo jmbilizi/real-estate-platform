@@ -5,9 +5,11 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
 import { useApp } from '@/lib/context';
 import {
+  appendLocationParams,
   bareZip,
   fetchNearbyLocationsByType,
   formatLocationLabel,
+  hasLocationFilter,
   highlightMatch,
   resolveSearchTerms,
 } from '@/lib/search-utils';
@@ -1389,6 +1391,16 @@ export default function CompactSearchBar({
     return params;
   }
 
+  // Opens the where panel and shakes it — the refusal UX for "no valid location to search with",
+  // shared by every reason that can produce it (#339: unselected suggestion, unresolved place
+  // type, or a resolved place whose only filter depended on a boundary fetch that failed).
+  function shakeWhere() {
+    setActivePanel('where');
+    setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 50);
+    setWhereShake(true);
+    setTimeout(() => setWhereShake(false), 600);
+  }
+
   // Enhanced search: if location is empty, use geolocation; else require valid suggestion
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1417,25 +1429,34 @@ export default function CompactSearchBar({
     }
     if (!finalSuggestion) {
       // No valid location — open the where panel and shake it to prompt the user
-      setActivePanel('where');
-      setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 50);
-      setWhereShake(true);
-      setTimeout(() => setWhereShake(false), 600);
+      shakeWhere();
       return;
     }
-    // Use the selected/closest suggestion
-    addRecentSearch(finalSuggestion);
+    // #339. Never search unfiltered: a suggestion that resolves to no structured filter at all
+    // (in practice unreachable synchronously — see extractSearchTerms — but not provably so from
+    // here) is refused the same way an unselected suggestion is, rather than searched on `q`
+    // alone. This is a fast, synchronous pre-check; the async one below (after
+    // `appendLocationParams`) is the one that actually enforces it, because a county resolution's
+    // only filter can depend on a boundary fetch that has not run yet at this point.
+    if (!hasLocationFilter(resolveSearchTerms(location || '', finalSuggestion))) {
+      shakeWhere();
+      return;
+    }
     const label = formatLocationLabel(finalSuggestion);
-    if (typeof setLocation === 'function') setLocation(label);
-    const { zip, street, city, state } = resolveSearchTerms(location || '', finalSuggestion);
     const params = new URLSearchParams();
     params.set('q', label);
     params.set('lat', finalSuggestion.lat);
     params.set('lon', finalSuggestion.lon);
-    if (zip) params.set('zip', zip);
-    if (street) params.set('street', street);
-    if (city) params.set('city', city);
-    if (state) params.set('state', state);
+    const applied = await appendLocationParams(params, location || '', finalSuggestion);
+    if (!applied) {
+      // #339. The boundary fetch a county resolution depended on failed, and it had no `state`
+      // fallback either — refuse rather than search on `q` alone.
+      shakeWhere();
+      return;
+    }
+    // Use the selected/closest suggestion
+    addRecentSearch(finalSuggestion);
+    if (typeof setLocation === 'function') setLocation(label);
     withListingTypeParam(params);
     pushSearch(params);
     setIsDropdownOpen(false);
@@ -1639,17 +1660,19 @@ export default function CompactSearchBar({
       setActivePanel('where');
     };
 
-    const handleSheetSearch = () => {
+    const handleSheetSearch = async () => {
       const params = new URLSearchParams();
       if (selectedSuggestion) {
         params.set('q', formatLocationLabel(selectedSuggestion));
         params.set('lat', String(selectedSuggestion.lat));
         params.set('lon', String(selectedSuggestion.lon));
-        const { zip, street, city, state } = resolveSearchTerms(location || '', selectedSuggestion);
-        if (zip) params.set('zip', zip);
-        if (street) params.set('street', street);
-        if (city) params.set('city', city);
-        if (state) params.set('state', state);
+        // #339. Same refusal as the desktop path (handleSearch): a selected suggestion must
+        // never search unfiltered, including the county-with-no-state-and-a-failed-boundary-fetch
+        // case `appendLocationParams`'s return value exists to catch.
+        if (!(await appendLocationParams(params, location || '', selectedSuggestion))) {
+          setActivePanel('where');
+          return;
+        }
       } else if ((location || '').trim()) {
         params.set('q', (location || '').trim());
         const typedZip = bareZip(location || '');

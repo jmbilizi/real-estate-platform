@@ -114,6 +114,69 @@ describe('searchRequestSchema', () => {
   it('accepts a free-text city', () => {
     expect(searchRequestSchema.parse({ city: 'Rockville' }).city).toBe('Rockville');
   });
+
+  it('accepts a free-text county', () => {
+    expect(searchRequestSchema.parse({ county: '11001' }).county).toBe('11001');
+  });
+});
+
+describe('boundary polygon (#339)', () => {
+  const polygon = (coordinates: number[][][]): string =>
+    JSON.stringify({ type: 'Polygon', coordinates });
+  const square = polygon([
+    [
+      [-77.05, 38.89],
+      [-77.04, 38.89],
+      [-77.04, 38.9],
+      [-77.05, 38.9],
+      [-77.05, 38.89],
+    ],
+  ]);
+
+  it('accepts a valid GeoJSON Polygon', () => {
+    expect(searchRequestSchema.parse({ boundary: square }).boundary).toBe(square);
+  });
+
+  it('accepts a valid GeoJSON MultiPolygon', () => {
+    const multi = JSON.stringify({
+      type: 'MultiPolygon',
+      coordinates: [
+        [
+          [
+            [-77.05, 38.89],
+            [-77.04, 38.89],
+            [-77.04, 38.9],
+            [-77.05, 38.89],
+          ],
+        ],
+      ],
+    });
+    expect(searchRequestSchema.safeParse({ boundary: multi }).success).toBe(true);
+  });
+
+  it('rejects invalid JSON', () => {
+    expect(searchRequestSchema.safeParse({ boundary: '{not json' }).success).toBe(false);
+  });
+
+  it('rejects a shape that is not a Polygon or MultiPolygon', () => {
+    const point = JSON.stringify({ type: 'Point', coordinates: [-77.05, 38.89] });
+    expect(searchRequestSchema.safeParse({ boundary: point }).success).toBe(false);
+  });
+
+  it('rejects a polygon over the point cap', () => {
+    const manyPoints: number[][] = Array.from({ length: 600 }, (_, i) => [-77 + i * 0.0001, 38.9]);
+    manyPoints.push([-77, 38.9]);
+    const huge = polygon([manyPoints]);
+    expect(searchRequestSchema.safeParse({ boundary: huge }).success).toBe(false);
+  });
+
+  it('rejects a boundary string over the character cap', () => {
+    const huge = JSON.stringify({
+      type: 'Polygon',
+      coordinates: [[[0, 0, 'x'.repeat(25_000)]]],
+    });
+    expect(searchRequestSchema.safeParse({ boundary: huge }).success).toBe(false);
+  });
 });
 
 describe('the result window (#65)', () => {

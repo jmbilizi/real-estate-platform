@@ -1003,6 +1003,25 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
           },
           {
             "in": "query",
+            "name": "county",
+            "required": false,
+            "schema": {
+              "description": "A 5-digit county FIPS code, matched exactly (case-insensitive) against county_fips. ANDed with every other filter. A caller without a FIPS code should send \`boundary\` instead — this and \`boundary\` should not both be sent for the same conceptual place.",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "boundary",
+            "required": false,
+            "schema": {
+              "description": "GeoJSON Polygon or MultiPolygon, as a JSON string, simplified client-side. ANDs with \`neighborhood\` when both are sent. Capped at 500 points and 20000 characters.",
+              "maxLength": 20000,
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
             "name": "openHouse",
             "required": false,
             "schema": {

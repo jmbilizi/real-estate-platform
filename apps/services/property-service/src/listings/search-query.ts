@@ -150,6 +150,30 @@ export function buildSearchQuery(request: SearchRequest): {
     conditions.push(`lower(v.neighborhood) = lower(${bind(request.neighborhood)})`);
   }
 
+  // #339. Exact match against the FIPS county code. `county_fips` is not yet populated by the
+  // Bright mapper (tracked separately), so this condition ANDs in a filter that matches nothing
+  // until that ships — a zero-row result, not an unfiltered one, which is what the AC requires
+  // either way. The web client never sends this parameter (search-utils.tsx): it resolves a
+  // county suggestion to a NAME, not a FIPS code, and a name sent here would be a permanently
+  // inert filter rather than one that self-corrects once ingestion starts writing the column.
+  // `boundary` below is this client's actual county mechanism; `county` is for a caller that
+  // already holds a FIPS code.
+  if (request.county) {
+    conditions.push(`lower(v.county_fips) = lower(${bind(request.county)})`);
+  }
+
+  // #339. Client-supplied GeoJSON boundary (Nominatim-derived, simplified and size-bounded by the
+  // contract's `boundary` schema). `v.geog` is masked on address_display_allowed (migration 030),
+  // same as latitude/longitude, so a suppressed-address listing never matches or fails to match in
+  // a way that would re-disclose its location. ANDs with `neighborhood`'s text match when both are
+  // sent (both carry real data today); the web never sends it alongside `county` (see
+  // search-utils.tsx's `appendLocationParams`).
+  if (request.boundary) {
+    conditions.push(
+      `ST_Intersects(v.geog, ST_GeomFromGeoJSON(${bind(request.boundary)})::geography)`,
+    );
+  }
+
   // Booleans restrict only when true, matching filters.ts's `if (filters.openHouse)` guard.
   // `false` is a documented no-op; the route layer still echoes it back via `appliedFilters`.
   if (request.openHouse === true) {
