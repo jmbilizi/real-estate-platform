@@ -34,12 +34,18 @@ describe('runAreaRefresh', () => {
     ];
     const recordSuccess = jest.fn(() => Promise.resolve());
     const fetchWindow = jest.fn(
-      (): Promise<RefreshFetchResult> => Promise.resolve({ listingKeys: ['1', '2'], complete: true }),
+      (): Promise<RefreshFetchResult> =>
+        Promise.resolve({ listingKeys: ['1', '2'], complete: true }),
     );
     const mapRecords = jest.fn(() => Promise.resolve({ published: 2 }));
 
     const report = await runAreaRefresh(
-      baseDeps({ listTracked: () => Promise.resolve(tracked), fetchWindow, mapRecords, recordSuccess }),
+      baseDeps({
+        listTracked: () => Promise.resolve(tracked),
+        fetchWindow,
+        mapRecords,
+        recordSuccess,
+      }),
       OPTIONS,
     );
 

@@ -1,455 +1,2655 @@
-# GENERATED FIXTURE — do not hand-edit.
-#
-# A faithful reduction of `kustomize build infra/k8s/hetzner/dev --enable-alpha-plugins`
-# down to exactly the fields tools/infra/deploy-scope.js reads: apiVersion, kind,
-# metadata.name/namespace, the two identity labels, admission webhook rules, and container
-# images. Every other field is dropped so the fixture stays reviewable.
-#
-# deploy-scope.test.js re-renders the live overlay and fails if this drifts, whenever
-# kustomize is on PATH (always true in CI's validate-infra job and in pre-push).
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: ingress-nginx
   labels:
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: ingress-nginx
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: ingress-nginx
 ---
 apiVersion: v1
+automountServiceAccountToken: true
 kind: ServiceAccount
 metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.11.1
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
   name: ingress-nginx
   namespace: ingress-nginx
-  labels:
-    app.kubernetes.io/name: ingress-nginx
 ---
 apiVersion: v1
+automountServiceAccountToken: true
 kind: ServiceAccount
 metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.11.1
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
   name: ingress-nginx-admission
   namespace: ingress-nginx
-  labels:
-    app.kubernetes.io/name: ingress-nginx
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.11.1
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
   name: ingress-nginx
   namespace: ingress-nginx
-  labels:
-    app.kubernetes.io/name: ingress-nginx
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - pods
+      - secrets
+      - endpoints
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingresses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingresses/status
+    verbs:
+      - update
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingressclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - coordination.k8s.io
+    resourceNames:
+      - ingress-nginx-leader
+    resources:
+      - leases
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - create
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+  - apiGroups:
+      - discovery.k8s.io
+    resources:
+      - endpointslices
+    verbs:
+      - list
+      - watch
+      - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.11.1
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
   name: ingress-nginx-admission
   namespace: ingress-nginx
-  labels:
-    app.kubernetes.io/name: ingress-nginx
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - create
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: ingress-nginx
   labels:
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.11.1
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: ingress-nginx
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - endpoints
+      - nodes
+      - pods
+      - secrets
+      - namespaces
+    verbs:
+      - list
+      - watch
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingresses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingresses/status
+    verbs:
+      - update
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingressclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - discovery.k8s.io
+    resources:
+      - endpointslices
+    verbs:
+      - list
+      - watch
+      - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: ingress-nginx-admission
   labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.11.1
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: ingress-nginx-admission
+rules:
+  - apiGroups:
+      - admissionregistration.k8s.io
+    resources:
+      - validatingwebhookconfigurations
+    verbs:
+      - get
+      - update
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.11.1
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
   name: ingress-nginx
   namespace: ingress-nginx
-  labels:
-    app.kubernetes.io/name: ingress-nginx
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ingress-nginx
+subjects:
+  - kind: ServiceAccount
+    name: ingress-nginx
+    namespace: ingress-nginx
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.11.1
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
   name: ingress-nginx-admission
   namespace: ingress-nginx
-  labels:
-    app.kubernetes.io/name: ingress-nginx
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: ingress-nginx
-  labels:
-    app.kubernetes.io/name: ingress-nginx
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
   name: ingress-nginx-admission
+subjects:
+  - kind: ServiceAccount
+    name: ingress-nginx-admission
+    namespace: ingress-nginx
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
   labels:
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.11.1
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: ingress-nginx
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ingress-nginx
+subjects:
+  - kind: ServiceAccount
+    name: ingress-nginx
+    namespace: ingress-nginx
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.11.1
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: ingress-nginx-admission
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ingress-nginx-admission
+subjects:
+  - kind: ServiceAccount
+    name: ingress-nginx-admission
+    namespace: ingress-nginx
 ---
 apiVersion: v1
+data:
+  allow-snippet-annotations: "false"
 kind: ConfigMap
 metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.11.1
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
   name: ingress-nginx-controller
   namespace: ingress-nginx
-  labels:
-    app.kubernetes.io/name: ingress-nginx
 ---
 apiVersion: v1
+data:
+  sampling.json: |
+    {
+      "service_strategies": [],
+      "default_strategy": {
+        "type": "probabilistic",
+        "param": 0.5
+      }
+    }
 kind: ConfigMap
 metadata:
-  name: jaeger-config
   labels:
     app: jaeger
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: jaeger-config
 ---
 apiVersion: v1
+data:
+  init-databases.sh: "#!/bin/bash\nset -e\n\n# This script runs as the postgres user
+    during container initialization\n# It creates additional databases beyond the
+    default POSTGRES_DB\n\necho \"Starting database initialization...\"\n\n# Validate
+    required passwords are set\nif [ -z \"${ACCOUNT_SERVICE_DB_USER_PASSWORD}\" ];
+    then\n    echo \"WARNING: ACCOUNT_SERVICE_DB_USER_PASSWORD not set, using placeholder\"\n
+    \   ACCOUNT_SERVICE_DB_USER_PASSWORD=\"changeme_account\"\nfi\nif [ -z \"${MESSAGING_SERVICE_DB_USER_PASSWORD}\"
+    ]; then\n    echo \"WARNING: MESSAGING_SERVICE_DB_USER_PASSWORD not set, using
+    placeholder\"\n    MESSAGING_SERVICE_DB_USER_PASSWORD=\"changeme_messaging\"\nfi\nif
+    [ -z \"${PROPERTY_SERVICE_DB_USER_PASSWORD}\" ]; then\n    echo \"WARNING: PROPERTY_SERVICE_DB_USER_PASSWORD
+    not set, using placeholder\"\n    PROPERTY_SERVICE_DB_USER_PASSWORD=\"changeme_property\"\nfi\n\n#
+    Step 1: Create users first — they must exist before databases can reference them
+    as owners.\npsql -v ON_ERROR_STOP=1 --username \"$POSTGRES_USER\" --dbname \"$POSTGRES_DB\"
+    <<-EOSQL\n    -- Create dedicated users for each database\n    -- Using $BODY$
+    delimiter instead of $$ to avoid Skaffold kustomize YAML parsing bug\n    DO \\$BODY\\$\n
+    \   BEGIN\n        IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'account_service_db_user')
+    THEN\n            CREATE USER account_service_db_user WITH PASSWORD '${ACCOUNT_SERVICE_DB_USER_PASSWORD}';\n
+    \       END IF;\n        IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'messaging_service_db_user')
+    THEN\n            CREATE USER messaging_service_db_user WITH PASSWORD '${MESSAGING_SERVICE_DB_USER_PASSWORD}';\n
+    \       END IF;\n        IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'property_service_db_user')
+    THEN\n            CREATE USER property_service_db_user WITH PASSWORD '${PROPERTY_SERVICE_DB_USER_PASSWORD}';\n
+    \       END IF;\n    END\n    \\$BODY\\$;\nEOSQL\n\n# Step 2: Create databases
+    owned by the corresponding service user.\n# Ownership grants the user full access
+    including CREATE on the public schema\n# in PostgreSQL 15+ (via pg_database_owner
+    membership) — no GRANT needed.\npsql -v ON_ERROR_STOP=1 --username \"$POSTGRES_USER\"
+    --dbname \"$POSTGRES_DB\" <<-EOSQL\n    SELECT 'CREATE DATABASE account_db OWNER
+    account_service_db_user'\n    WHERE NOT EXISTS (SELECT FROM pg_database WHERE
+    datname = 'account_db')\\gexec\n    \n    SELECT 'CREATE DATABASE messaging_db
+    OWNER messaging_service_db_user'\n    WHERE NOT EXISTS (SELECT FROM pg_database
+    WHERE datname = 'messaging_db')\\gexec\n    \n    SELECT 'CREATE DATABASE property_db
+    OWNER property_service_db_user'\n    WHERE NOT EXISTS (SELECT FROM pg_database
+    WHERE datname = 'property_db')\\gexec\n\n    -- Transfer ownership for any pre-existing
+    databases not owned by the service user\n    ALTER DATABASE account_db OWNER TO
+    account_service_db_user;\n    ALTER DATABASE messaging_db OWNER TO messaging_service_db_user;\n
+    \   ALTER DATABASE property_db OWNER TO property_service_db_user;\nEOSQL\n\n#
+    Enable extensions on account_db\npsql -v ON_ERROR_STOP=1 --username \"$POSTGRES_USER\"
+    --dbname \"account_db\" <<-EOSQL\n    CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";\n
+    \   CREATE EXTENSION IF NOT EXISTS \"pgcrypto\";\n    \n    -- Grant schema permissions
+    to account_service_db_user\n    GRANT ALL ON SCHEMA public TO account_service_db_user;\n
+    \   GRANT ALL ON ALL TABLES IN SCHEMA public TO account_service_db_user;\n    GRANT
+    ALL ON ALL SEQUENCES IN SCHEMA public TO account_service_db_user;\n    GRANT ALL
+    ON ALL FUNCTIONS IN SCHEMA public TO account_service_db_user;\n    ALTER DEFAULT
+    PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO account_service_db_user;\n
+    \   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO account_service_db_user;\n
+    \   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO account_service_db_user;\nEOSQL\n\n#
+    Enable extensions on messaging_db\npsql -v ON_ERROR_STOP=1 --username \"$POSTGRES_USER\"
+    --dbname \"messaging_db\" <<-EOSQL\n    CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";\n
+    \   \n    -- Grant schema permissions to messaging_service_db_user\n    GRANT
+    ALL ON SCHEMA public TO messaging_service_db_user;\n    GRANT ALL ON ALL TABLES
+    IN SCHEMA public TO messaging_service_db_user;\n    GRANT ALL ON ALL SEQUENCES
+    IN SCHEMA public TO messaging_service_db_user;\n    GRANT ALL ON ALL FUNCTIONS
+    IN SCHEMA public TO messaging_service_db_user;\n    ALTER DEFAULT PRIVILEGES IN
+    SCHEMA public GRANT ALL ON TABLES TO messaging_service_db_user;\n    ALTER DEFAULT
+    PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO messaging_service_db_user;\n
+    \   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO messaging_service_db_user;\nEOSQL\n\n#
+    Setup property_db with extensions\npsql -v ON_ERROR_STOP=1 --username \"$POSTGRES_USER\"
+    --dbname \"property_db\" <<-EOSQL\n    -- Enable essential extensions\n    CREATE
+    EXTENSION IF NOT EXISTS \"uuid-ossp\";\n    CREATE EXTENSION IF NOT EXISTS \"postgis\";\n
+    \   CREATE EXTENSION IF NOT EXISTS \"pg_trgm\";        -- Text search & similarity\n
+    \   CREATE EXTENSION IF NOT EXISTS \"btree_gist\";     -- Advanced indexing\n
+    \   CREATE EXTENSION IF NOT EXISTS \"vector\";         -- Embeddings (pgvector;
+    superuser-only)\n\n    -- Grant all permissions to property_service_db_user\n
+    \   GRANT ALL ON SCHEMA public TO property_service_db_user;\n    GRANT ALL ON
+    ALL TABLES IN SCHEMA public TO property_service_db_user;\n    GRANT ALL ON ALL
+    SEQUENCES IN SCHEMA public TO property_service_db_user;\n    GRANT ALL ON ALL
+    FUNCTIONS IN SCHEMA public TO property_service_db_user;\n    ALTER DEFAULT PRIVILEGES
+    IN SCHEMA public GRANT ALL ON TABLES TO property_service_db_user;\n    ALTER DEFAULT
+    PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO property_service_db_user;\n
+    \   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO property_service_db_user;\nEOSQL\n\n#
+    Setup appdb as shared/reference database\npsql -v ON_ERROR_STOP=1 --username \"$POSTGRES_USER\"
+    --dbname \"appdb\" <<-EOSQL\n    -- Enable extensions for shared data\n    CREATE
+    EXTENSION IF NOT EXISTS \"uuid-ossp\";      -- UUID generation\n    CREATE EXTENSION
+    IF NOT EXISTS \"pg_trgm\";        -- Text search for lookups\n    CREATE EXTENSION
+    IF NOT EXISTS \"hstore\";         -- Key-value storage for flexible configs\n
+    \   CREATE EXTENSION IF NOT EXISTS \"tablefunc\";      -- Crosstab/pivot tables\n
+    \   \n    -- Create schema for organization\n    CREATE SCHEMA IF NOT EXISTS reference;
+    \          -- Lookup tables (countries, currencies, etc.)\n    CREATE SCHEMA IF
+    NOT EXISTS config;              -- System-wide configuration\n    CREATE SCHEMA
+    IF NOT EXISTS audit;               -- Cross-service audit logs\n    \n    -- Grant
+    read-only access to all service users (they can read shared data)\n    GRANT USAGE
+    ON SCHEMA reference TO account_service_db_user, messaging_service_db_user, property_service_db_user;\n
+    \   GRANT SELECT ON ALL TABLES IN SCHEMA reference TO account_service_db_user,
+    messaging_service_db_user, property_service_db_user;\n    ALTER DEFAULT PRIVILEGES
+    IN SCHEMA reference GRANT SELECT ON TABLES TO account_service_db_user, messaging_service_db_user,
+    property_service_db_user;\n    \n    GRANT USAGE ON SCHEMA config TO account_service_db_user,
+    messaging_service_db_user, property_service_db_user;\n    GRANT SELECT ON ALL
+    TABLES IN SCHEMA config TO account_service_db_user, messaging_service_db_user,
+    property_service_db_user;\n    ALTER DEFAULT PRIVILEGES IN SCHEMA config GRANT
+    SELECT ON TABLES TO account_service_db_user, messaging_service_db_user, property_service_db_user;\n
+    \   \n    -- Grant write access to audit schema (all services can log)\n    GRANT
+    USAGE ON SCHEMA audit TO account_service_db_user, messaging_service_db_user, property_service_db_user;\n
+    \   GRANT INSERT ON ALL TABLES IN SCHEMA audit TO account_service_db_user, messaging_service_db_user,
+    property_service_db_user;\n    ALTER DEFAULT PRIVILEGES IN SCHEMA audit GRANT
+    INSERT ON TABLES TO account_service_db_user, messaging_service_db_user, property_service_db_user;\n
+    \   \n    -- Grant admin full access to all schemas\n    GRANT ALL ON SCHEMA reference
+    TO ${POSTGRES_USER};\n    GRANT ALL ON SCHEMA config TO ${POSTGRES_USER};\n    GRANT
+    ALL ON SCHEMA audit TO ${POSTGRES_USER};\n    GRANT ALL ON ALL TABLES IN SCHEMA
+    reference TO ${POSTGRES_USER};\n    GRANT ALL ON ALL TABLES IN SCHEMA config TO
+    ${POSTGRES_USER};\n    GRANT ALL ON ALL TABLES IN SCHEMA audit TO ${POSTGRES_USER};\nEOSQL\n\necho
+    \"✅ All databases, users, and extensions created successfully!\"\n"
+  sync-passwords.sh: |
+    #!/bin/bash
+    # Runs on every Postgres startup via lifecycle.postStart.
+    #
+    # Responsibilities:
+    #   1. Ensure databases exist.
+    #   2. Ensure users exist and passwords are current.
+    #   3. Make each service user OWN their database.
+    #
+    # Why ownership instead of GRANT:
+    #   In PostgreSQL 15+, GRANT ALL ON DATABASE does not grant CREATE on the
+    #   public schema. Ownership is stored in the pg_database catalog and
+    #   survives PVC reuse across restarts — no re-granting ever needed.
+    #   The database owner is a member of pg_database_owner, which holds
+    #   CREATE on the public schema by default.
+    #
+    # Safety notes:
+    #   - No set -e: must exit 0 so postStart never kills the postgres container.
+    #   - All operations are idempotent (IF NOT EXISTS / ALTER is safe to repeat).
+    TIMEOUT=60
+    ELAPSED=0
+    until pg_isready -U "$POSTGRES_USER" -q; do
+      sleep 1
+      ELAPSED=$((ELAPSED + 1))
+      if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
+        echo "sync-passwords: timed out waiting for Postgres — skipping (non-fatal)"
+        exit 0
+      fi
+    done
+
+    # --- Step 1: Ensure databases exist ---
+    psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+        SELECT 'CREATE DATABASE account_db'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'account_db')\gexec
+
+        SELECT 'CREATE DATABASE messaging_db'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'messaging_db')\gexec
+
+        SELECT 'CREATE DATABASE property_db'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'property_db')\gexec
+    EOSQL
+
+    # --- Step 2: Ensure users exist and passwords are current ---
+    psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+        DO \$BODY\$
+        BEGIN
+            IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'account_service_db_user') THEN
+                CREATE USER account_service_db_user WITH PASSWORD '${ACCOUNT_SERVICE_DB_USER_PASSWORD}';
+                RAISE NOTICE 'sync-passwords: CREATED account_service_db_user';
+            ELSE
+                ALTER USER account_service_db_user WITH PASSWORD '${ACCOUNT_SERVICE_DB_USER_PASSWORD}';
+                RAISE NOTICE 'sync-passwords: updated account_service_db_user';
+            END IF;
+            IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'messaging_service_db_user') THEN
+                CREATE USER messaging_service_db_user WITH PASSWORD '${MESSAGING_SERVICE_DB_USER_PASSWORD}';
+                RAISE NOTICE 'sync-passwords: CREATED messaging_service_db_user';
+            ELSE
+                ALTER USER messaging_service_db_user WITH PASSWORD '${MESSAGING_SERVICE_DB_USER_PASSWORD}';
+                RAISE NOTICE 'sync-passwords: updated messaging_service_db_user';
+            END IF;
+            IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'property_service_db_user') THEN
+                CREATE USER property_service_db_user WITH PASSWORD '${PROPERTY_SERVICE_DB_USER_PASSWORD}';
+                RAISE NOTICE 'sync-passwords: CREATED property_service_db_user';
+            ELSE
+                ALTER USER property_service_db_user WITH PASSWORD '${PROPERTY_SERVICE_DB_USER_PASSWORD}';
+                RAISE NOTICE 'sync-passwords: updated property_service_db_user';
+            END IF;
+        END
+        \$BODY\$;
+    EOSQL
+
+    # --- Step 3: Transfer database ownership to each service user ---
+    # ALTER DATABASE ... OWNER TO writes to pg_database.datdba — persisted in the
+    # PVC catalog. Running this on every startup is idempotent and harmless.
+    # The postgres superuser retains full access via its superuser privilege.
+    psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+        ALTER DATABASE account_db OWNER TO account_service_db_user;
+        ALTER DATABASE messaging_db OWNER TO messaging_service_db_user;
+        ALTER DATABASE property_db OWNER TO property_service_db_user;
+    EOSQL
+
+    # --- Step 4: Reconcile extensions that require SUPERUSER ---
+    # This must live here, NOT only in init-databases.sh: that script is mounted into
+    # /docker-entrypoint-initdb.d and therefore runs only when PGDATA is empty, so anything added
+    # there silently never executes on an environment that already has a volume. This script runs on
+    # every boot (lifecycle.postStart) as the superuser, and CREATE EXTENSION IF NOT EXISTS is
+    # idempotent.
+    #
+    # The FULL set is reconciled here, not just newly-added ones. Dropping and recreating a single
+    # database on a running cluster is a real operation (a schema reset), and it does not re-run initdb
+    # — so a database recreated that way would come back with none of these, and property-service's
+    # migrations would fail on the geography column with a permission error rather than a clear
+    # "extension missing".
+    #
+    # Why the services cannot do this themselves: an extension is installable by a database owner only
+    # if it is marked TRUSTED. Verified on this image: pg_trgm and uuid-ossp are trusted; postgis and
+    # vector are NOT, so they require SUPERUSER and belong here. The pgvector .so ships in our own
+    # image — see infra/docker/postgres/Dockerfile.
+    psql --username "$POSTGRES_USER" --dbname property_db <<-EOSQL
+        CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+        CREATE EXTENSION IF NOT EXISTS "postgis";
+        CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+        CREATE EXTENSION IF NOT EXISTS "btree_gist";
+        CREATE EXTENSION IF NOT EXISTS "vector";
+    EOSQL
+    psql --username "$POSTGRES_USER" --dbname account_db <<-EOSQL
+        CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+        CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+    EOSQL
+
+    echo "sync-passwords: done."
 kind: ConfigMap
 metadata:
-  name: postgres-config
   labels:
     app: postgres
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: postgres-config
 ---
 apiVersion: v1
+data:
+  redis.conf: |
+    # Redis Configuration for Valkey
+    # Based on production best practices
+
+    # Network
+    bind 0.0.0.0
+    port 6379
+    tcp-backlog 511
+    timeout 0
+    tcp-keepalive 300
+
+    # General
+    daemonize no
+    supervised no
+    pidfile /var/run/redis.pid
+    loglevel notice
+    logfile ""
+    databases 16
+
+    # Snapshotting (RDB)
+    save 900 1
+    save 300 10
+    save 60 10000
+    stop-writes-on-bgsave-error yes
+    rdbcompression yes
+    rdbchecksum yes
+    dbfilename dump.rdb
+    dir /data
+
+    # Replication
+    repl-diskless-sync no
+    repl-diskless-sync-delay 5
+    repl-disable-tcp-nodelay no
+
+    # Security (ACL-based authentication)
+    aclfile /etc/redis/users.acl
+
+    # Persistence (AOF)
+    appendonly yes
+    appendfilename "appendonly.aof"
+    appendfsync everysec
+    no-appendfsync-on-rewrite no
+    auto-aof-rewrite-percentage 100
+    auto-aof-rewrite-min-size 64mb
+
+    # LUA scripting
+    lua-time-limit 5000
+
+    # Slow log
+    slowlog-log-slower-than 10000
+    slowlog-max-len 128
+
+    # Latency monitoring
+    latency-monitor-threshold 100
+
+    # Event notification (disabled by default, enable as needed)
+    notify-keyspace-events ""
+
+    # Advanced config
+    hash-max-ziplist-entries 512
+    hash-max-ziplist-value 64
+    list-max-ziplist-size -2
+    set-max-intset-entries 512
+    zset-max-ziplist-entries 128
+    zset-max-ziplist-value 64
+    hll-sparse-max-bytes 3000
+    stream-node-max-bytes 4096
+    stream-node-max-entries 100
+    activerehashing yes
+
+    # Client output buffer limits
+    client-output-buffer-limit normal 0 0 0
+    client-output-buffer-limit replica 256mb 64mb 60
+    client-output-buffer-limit pubsub 32mb 8mb 60
+
+    # Frequency
+    hz 10
+    dynamic-hz yes
+
+    # AOF and RDB config
+    aof-rewrite-incremental-fsync yes
+    rdb-save-incremental-fsync yes
+
+    # Memory management (will be overridden by environment variable)
+    maxmemory 256mb
+    maxmemory-policy allkeys-lru
+    maxmemory-samples 5
+  users.acl: |
+    user admin on >${REDIS_ADMIN_PASSWORD} ~* +@all
+    user pubsub_user on >${REDIS_PUBSUB_PASSWORD} ~messaging:* ~pubsub:* +@pubsub +@string +@hash +@list +@set +@sortedset +expire +ttl +del
+    user cache_user on >${REDIS_CACHE_PASSWORD} ~cache:* ~session:* +@string +@hash +get +set +del +expire +ttl +exists
+    user ratelimit_user on >${REDIS_RATELIMIT_PASSWORD} ~ratelimit:* +incr +decr +expire +ttl +get +set +del
+    user monitor on >${REDIS_MONITOR_PASSWORD} ~* +@read +ping +info +client +slowlog
+    user default off nopass ~* -@all
 kind: ConfigMap
 metadata:
-  name: redis-config
   labels:
     app: redis
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: redis-config
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: bright-mls-secret
   labels:
     app: bright-mls-ingest
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: bright-mls-secret
+stringData:
+  BRIGHT_MLS_CLIENT_ID: StrongBase64Password
+  BRIGHT_MLS_CLIENT_SECRET: StrongBase64Password
+  BRIGHT_MLS_ENV: StrongBase64Password
+type: Opaque
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: ingress-secret
   labels:
     app: ingress
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: ingress-secret
+stringData:
+  auth: admin:$2y$10$mkgiQ4wjXGcTyixW0q8hi.okPnjjVEruTNEZMs8I6z9yfeLjv1C42
+type: Opaque
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: postgres-secret
   labels:
     app: postgres
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: postgres-secret
+stringData:
+  ACCOUNT_SERVICE_DB_USER_PASSWORD: StrongBase64Password
+  MESSAGING_SERVICE_DB_USER_PASSWORD: StrongBase64Password
+  POSTGRES_SA_PASSWORD: StrongBase64Password
+  PROPERTY_SERVICE_DB_USER_PASSWORD: StrongBase64Password
+type: Opaque
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: postmark-secret
   labels:
     app: account-service
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: postmark-secret
+stringData:
+  POSTMARK_SERVER_TOKEN: StrongBase64Password
+type: Opaque
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: redis-secret
   labels:
     app: redis
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: redis-secret
+stringData:
+  REDIS_ADMIN_PASSWORD: StrongBase64Password
+  REDIS_CACHE_PASSWORD: StrongBase64Password
+  REDIS_MONITOR_PASSWORD: StrongBase64Password
+  REDIS_PUBSUB_PASSWORD: StrongBase64Password
+  REDIS_RATELIMIT_PASSWORD: StrongBase64Password
+type: Opaque
 ---
 apiVersion: v1
 kind: Service
 metadata:
+  annotations:
+    load-balancer.hetzner.cloud/location: ash
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.11.1
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
   name: ingress-nginx-controller
   namespace: ingress-nginx
-  labels:
+spec:
+  externalTrafficPolicy: Local
+  ipFamilies:
+    - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+    - appProtocol: http
+      name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+    - appProtocol: https
+      name: https
+      port: 443
+      protocol: TCP
+      targetPort: https
+  selector:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
     app.kubernetes.io/name: ingress-nginx
+  type: LoadBalancer
 ---
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.11.1
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
   name: ingress-nginx-controller-admission
   namespace: ingress-nginx
-  labels:
+spec:
+  ports:
+    - appProtocol: https
+      name: https-webhook
+      port: 443
+      targetPort: webhook
+  selector:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
     app.kubernetes.io/name: ingress-nginx
+  type: ClusterIP
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: account-service-svc
   labels:
     app: account-service
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: account-service-svc
+spec:
+  ports:
+    - name: http
+      port: 8080
+      protocol: TCP
+      targetPort: 8080
+  selector:
+    app: account-service
+  sessionAffinity: None
+  type: ClusterIP
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: api-gateway-svc
   labels:
     app: api-gateway
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: api-gateway-svc
+spec:
+  ports:
+    - name: http
+      port: 8080
+      protocol: TCP
+      targetPort: 8080
+  selector:
+    app: api-gateway
+  sessionAffinity: None
+  type: ClusterIP
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: cribstop-web-svc
   labels:
     app: cribstop-web
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: cribstop-web-svc
+spec:
+  ports:
+    - name: http
+      port: 3000
+      protocol: TCP
+      targetPort: 3000
+  selector:
+    app: cribstop-web
+  sessionAffinity: None
+  type: ClusterIP
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: inference-svc
   labels:
     app: inference
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: inference-svc
+spec:
+  ports:
+    - name: http
+      port: 8000
+      protocol: TCP
+      targetPort: 8000
+  selector:
+    app: inference
+  sessionAffinity: None
+  type: ClusterIP
 ---
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    app: jaeger
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
   name: jaeger-hl
-  labels:
+spec:
+  clusterIP: None
+  ports:
+    - name: jaeger-ui
+      port: 16686
+      protocol: TCP
+      targetPort: jaeger-ui
+    - name: otlp-grpc
+      port: 4317
+      protocol: TCP
+      targetPort: otlp-grpc
+    - name: otlp-http
+      port: 4318
+      protocol: TCP
+      targetPort: otlp-http
+    - name: jaeger-grpc
+      port: 14250
+      protocol: TCP
+      targetPort: jaeger-grpc
+    - name: zipkin
+      port: 9411
+      protocol: TCP
+      targetPort: zipkin
+  selector:
     app: jaeger
 ---
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    app: jaeger
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
   name: jaeger-svc
-  labels:
+spec:
+  ports:
+    - name: jaeger-ui
+      port: 16686
+      protocol: TCP
+      targetPort: jaeger-ui
+    - name: otlp-grpc
+      port: 4317
+      protocol: TCP
+      targetPort: otlp-grpc
+    - name: otlp-http
+      port: 4318
+      protocol: TCP
+      targetPort: otlp-http
+    - name: jaeger-grpc
+      port: 14250
+      protocol: TCP
+      targetPort: jaeger-grpc
+    - name: zipkin
+      port: 9411
+      protocol: TCP
+      targetPort: zipkin
+  selector:
     app: jaeger
+  type: ClusterIP
 ---
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    app: postgres
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
   name: postgres-hl
-  labels:
+spec:
+  clusterIP: None
+  ports:
+    - port: 5432
+      protocol: TCP
+      targetPort: 5432
+  selector:
     app: postgres
 ---
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    app: postgres
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
   name: postgres-svc
-  labels:
+spec:
+  ports:
+    - port: 5432
+      protocol: TCP
+      targetPort: 5432
+  selector:
     app: postgres
+  type: ClusterIP
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: property-service-svc
   labels:
     app: property-service
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: property-service-svc
+spec:
+  ports:
+    - name: http
+      port: 3002
+      protocol: TCP
+      targetPort: 3002
+  selector:
+    app: property-service
+  sessionAffinity: None
+  type: ClusterIP
 ---
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    app: redis
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
   name: redis-hl
-  labels:
+spec:
+  clusterIP: None
+  ports:
+    - name: redis
+      port: 6379
+      protocol: TCP
+      targetPort: 6379
+  selector:
     app: redis
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: redis-svc
   labels:
     app: redis
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: redis-svc
+spec:
+  ports:
+    - name: redis
+      port: 6379
+      protocol: TCP
+      targetPort: 6379
+  selector:
+    app: redis
+  type: ClusterIP
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: account-service
-  namespace: default
   labels:
     app: account-service
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: account-service
+  namespace: default
 spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: account-service
   template:
+    metadata:
+      labels:
+        app: account-service
     spec:
-      initContainers:
-        - image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/account-service:dev
       containers:
-        - image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/account-service:dev
+        - env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: Development
+            - name: AccountRecovery__RequireConfirmedEmail
+              value: "false"
+            - name: AccountRecovery__WebBaseUrl
+              value: https://CRIBSTOP_DOMAIN_PLACEHOLDER
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+            - name: ACCOUNT_DB_HOST
+              value: postgres-svc
+            - name: ACCOUNT_DB_PORT
+              value: "5432"
+            - name: ACCOUNT_DB_NAME
+              value: account_db
+            - name: ACCOUNT_DB_USER
+              value: account_service_db_user
+            - name: ACCOUNT_SERVICE_DB_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: ACCOUNT_SERVICE_DB_USER_PASSWORD
+                  name: postgres-secret
+          image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/account-service:dev
+          imagePullPolicy: Always
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /account/health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          name: api
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /account/health/ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            limits:
+              cpu: 200m
+              memory: 256Mi
+            requests:
+              cpu: 50m
+              memory: 128Mi
+          startupProbe:
+            failureThreshold: 12
+            httpGet:
+              path: /account/health
+              port: 8080
+            periodSeconds: 5
+            timeoutSeconds: 3
+      initContainers:
+        - command:
+            - dotnet
+            - account-service.dll
+            - --migrate-only
+          env:
+            - name: ACCOUNT_DB_HOST
+              value: postgres-svc
+            - name: ACCOUNT_DB_PORT
+              value: "5432"
+            - name: ACCOUNT_DB_NAME
+              value: account_db
+            - name: ACCOUNT_DB_USER
+              value: account_service_db_user
+            - name: ACCOUNT_SERVICE_DB_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: ACCOUNT_SERVICE_DB_USER_PASSWORD
+                  name: postgres-secret
+          image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/account-service:dev
+          imagePullPolicy: Always
+          name: migrate
+          resources:
+            limits:
+              cpu: 200m
+              memory: 128Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: api-gateway
-  namespace: default
   labels:
     app: api-gateway
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: api-gateway
+  namespace: default
 spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-gateway
   template:
+    metadata:
+      labels:
+        app: api-gateway
     spec:
       containers:
-        - image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/api-gateway:dev
+        - env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: Development
+            - name: OTEL_ENABLED
+              value: "true"
+            - name: OTEL_TRACES_SAMPLER_ARG
+              value: "1.0"
+            - name: GEOIP_ENABLED
+              value: "true"
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+            - name: K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: K8S_NAMESPACE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://jaeger-svc:4317
+            - name: OTEL_SERVICE_NAME
+              value: api-gateway
+            - name: OTEL_TRACES_SAMPLER
+              value: traceidratio
+          image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/api-gateway:dev
+          imagePullPolicy: Always
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          name: ocelot
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            limits:
+              cpu: 250m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 256Mi
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: cribstop-web
-  namespace: default
   labels:
     app: cribstop-web
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: cribstop-web
+  namespace: default
 spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cribstop-web
   template:
+    metadata:
+      labels:
+        app: cribstop-web
     spec:
       containers:
-        - image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/cribstop-web:dev
+        - env:
+            - name: NODE_ENV
+              value: development
+            - name: PORT
+              value: "3000"
+            - name: API_GATEWAY_URL
+              value: http://api-gateway-svc.default.svc.cluster.local.:8080
+            - name: K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: K8S_NAMESPACE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/cribstop-web:dev
+          imagePullPolicy: Always
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          name: nextjs
+          ports:
+            - containerPort: 3000
+              name: http
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: 250m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 256Mi
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: inference
-  namespace: default
   labels:
     app: inference
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: inference
+  namespace: default
 spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inference
   template:
+    metadata:
+      labels:
+        app: inference
     spec:
       containers:
         - image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/inference-service:dev
+          imagePullPolicy: Always
+          name: api
+          ports:
+            - containerPort: 8000
+              name: http
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /ready
+              port: 8000
+            periodSeconds: 30
+            timeoutSeconds: 3
+          resources:
+            limits:
+              cpu: 250m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          startupProbe:
+            failureThreshold: 30
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: property-service
-  namespace: default
   labels:
     app: property-service
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: property-service
+  namespace: default
 spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: property-service
   template:
+    metadata:
+      labels:
+        app: property-service
     spec:
-      initContainers:
-        - image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:dev
       containers:
-        - image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:dev
+        - env:
+            - name: NODE_ENV
+              value: development
+            - name: PORT
+              value: "3002"
+            - name: HOST
+              value: 0.0.0.0
+            - name: PROPERTY_DB_HOST
+              value: postgres-svc
+            - name: PROPERTY_DB_PORT
+              value: "5432"
+            - name: PROPERTY_DB_NAME
+              value: property_db
+            - name: PROPERTY_DB_USER
+              value: property_service_db_user
+            - name: PROPERTY_SERVICE_DB_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: PROPERTY_SERVICE_DB_USER_PASSWORD
+                  name: postgres-secret
+            - name: DATABASE_URL
+              value: postgresql://$(PROPERTY_DB_USER):$(PROPERTY_SERVICE_DB_USER_PASSWORD)@$(PROPERTY_DB_HOST):$(PROPERTY_DB_PORT)/$(PROPERTY_DB_NAME)
+            - name: BRIGHT_MLS_ENV
+              valueFrom:
+                secretKeyRef:
+                  key: BRIGHT_MLS_ENV
+                  name: bright-mls-secret
+            - name: BRIGHT_MLS_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  key: BRIGHT_MLS_CLIENT_ID
+                  name: bright-mls-secret
+            - name: BRIGHT_MLS_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  key: BRIGHT_MLS_CLIENT_SECRET
+                  name: bright-mls-secret
+            - name: BRIGHT_MLS_PAGE_SIZE
+              value: "200"
+            - name: ACCOUNT_SERVICE_INTROSPECT_URL
+              value: http://account-service-svc:8080/internal/account/introspect
+            - name: ACCOUNT_SERVICE_INTROSPECT_TIMEOUT_MS
+              value: "2000"
+            - name: INQUIRY_RATE_LIMIT_PER_IP_MAX
+              value: "5"
+            - name: INQUIRY_RATE_LIMIT_PER_IP_WINDOW_MS
+              value: "3600000"
+            - name: INQUIRY_RATE_LIMIT_PER_LISTING_MAX
+              value: "20"
+            - name: INQUIRY_RATE_LIMIT_PER_LISTING_WINDOW_MS
+              value: "3600000"
+          image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:dev
+          imagePullPolicy: Always
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /health
+              port: 3002
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          name: api
+          ports:
+            - containerPort: 3002
+              name: http
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /health
+              port: 3002
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            limits:
+              cpu: 200m
+              memory: 256Mi
+            requests:
+              cpu: 50m
+              memory: 128Mi
+          startupProbe:
+            failureThreshold: 12
+            httpGet:
+              path: /health
+              port: 3002
+            periodSeconds: 5
+            timeoutSeconds: 3
+      initContainers:
+        - command:
+            - node
+            - migrate.js
+          env:
+            - name: NODE_ENV
+              value: development
+            - name: PROPERTY_DB_HOST
+              value: postgres-svc
+            - name: PROPERTY_DB_PORT
+              value: "5432"
+            - name: PROPERTY_DB_NAME
+              value: property_db
+            - name: PROPERTY_DB_USER
+              value: property_service_db_user
+            - name: PROPERTY_SERVICE_DB_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: PROPERTY_SERVICE_DB_USER_PASSWORD
+                  name: postgres-secret
+            - name: DATABASE_URL
+              value: postgresql://$(PROPERTY_DB_USER):$(PROPERTY_SERVICE_DB_USER_PASSWORD)@$(PROPERTY_DB_HOST):$(PROPERTY_DB_PORT)/$(PROPERTY_DB_NAME)
+          image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:dev
+          imagePullPolicy: Always
+          name: migrate
+          resources:
+            limits:
+              cpu: 300m
+              memory: 256Mi
+            requests:
+              cpu: 50m
+              memory: 96Mi
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.11.1
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
   name: ingress-nginx-controller
   namespace: ingress-nginx
-  labels:
-    app.kubernetes.io/name: ingress-nginx
 spec:
+  minReadySeconds: 0
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: controller
+      app.kubernetes.io/instance: ingress-nginx
+      app.kubernetes.io/name: ingress-nginx
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
   template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: controller
+        app.kubernetes.io/instance: ingress-nginx
+        app.kubernetes.io/name: ingress-nginx
+        app.kubernetes.io/part-of: ingress-nginx
+        app.kubernetes.io/version: 1.11.1
     spec:
       containers:
-        - image: >-
-            registry.k8s.io/ingress-nginx/controller:v1.11.1@sha256:e6439a12b52076965928e83b7b56aae6731231677b01e81818bce7fa5c60161a
+        - args:
+            - /nginx-ingress-controller
+            - --publish-service=$(POD_NAMESPACE)/ingress-nginx-controller
+            - --election-id=ingress-nginx-leader
+            - --controller-class=k8s.io/ingress-nginx
+            - --ingress-class=nginx
+            - --configmap=$(POD_NAMESPACE)/ingress-nginx-controller
+            - --validating-webhook=:8443
+            - --validating-webhook-certificate=/usr/local/certificates/cert
+            - --validating-webhook-key=/usr/local/certificates/key
+            - --enable-metrics=false
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: LD_PRELOAD
+              value: /usr/local/lib/libmimalloc.so
+          image: registry.k8s.io/ingress-nginx/controller:v1.11.1@sha256:e6439a12b52076965928e83b7b56aae6731231677b01e81818bce7fa5c60161a
+          imagePullPolicy: IfNotPresent
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /wait-shutdown
+          livenessProbe:
+            failureThreshold: 5
+            httpGet:
+              path: /healthz
+              port: 10254
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          name: controller
+          ports:
+            - containerPort: 80
+              name: http
+              protocol: TCP
+            - containerPort: 443
+              name: https
+              protocol: TCP
+            - containerPort: 8443
+              name: webhook
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthz
+              port: 10254
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources:
+            requests:
+              cpu: 100m
+              memory: 90Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              add:
+                - NET_BIND_SERVICE
+              drop:
+                - ALL
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 101
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - mountPath: /usr/local/certificates/
+              name: webhook-cert
+              readOnly: true
+      dnsPolicy: ClusterFirst
+      nodeSelector:
+        kubernetes.io/os: linux
+      serviceAccountName: ingress-nginx
+      terminationGracePeriodSeconds: 300
+      volumes:
+        - name: webhook-cert
+          secret:
+            secretName: ingress-nginx-admission
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: jaeger
   labels:
     app: jaeger
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: jaeger
 spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jaeger
+  serviceName: jaeger-hl
   template:
+    metadata:
+      labels:
+        app: jaeger
     spec:
-      initContainers:
-        - image: jaegertracing/all-in-one:1.76.0
       containers:
-        - image: jaegertracing/all-in-one:1.76.0
+        - env:
+            - name: BADGER_SPAN_STORE_TTL
+              value: 48h
+            - name: COLLECTOR_OTLP_ENABLED
+              value: "true"
+            - name: SAMPLING_STRATEGIES_FILE
+              value: /etc/jaeger/sampling.json
+            - name: SPAN_STORAGE_TYPE
+              value: badger
+            - name: BADGER_EPHEMERAL
+              value: "false"
+            - name: BADGER_DIRECTORY_VALUE
+              value: /badger/data
+            - name: BADGER_DIRECTORY_KEY
+              value: /badger/key
+          image: jaegertracing/all-in-one:1.76.0
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: 16686
+            periodSeconds: 15
+            timeoutSeconds: 5
+          name: jaeger
+          ports:
+            - containerPort: 16686
+              name: jaeger-ui
+              protocol: TCP
+            - containerPort: 4317
+              name: otlp-grpc
+              protocol: TCP
+            - containerPort: 4318
+              name: otlp-http
+              protocol: TCP
+            - containerPort: 14250
+              name: jaeger-grpc
+              protocol: TCP
+            - containerPort: 9411
+              name: zipkin
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: 16686
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          startupProbe:
+            failureThreshold: 30
+            httpGet:
+              path: /
+              port: 16686
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          volumeMounts:
+            - mountPath: /badger
+              name: jaeger-data
+              subPath: badger
+            - mountPath: /etc/jaeger
+              name: jaeger-config
+              readOnly: true
+      initContainers:
+        - command:
+            - sh
+            - -c
+            - chown -R 10001:10001 /badger && chmod -R 755 /badger
+          image: jaegertracing/all-in-one:1.76.0
+          imagePullPolicy: IfNotPresent
+          name: fix-permissions
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - mountPath: /badger
+              name: jaeger-data
+              subPath: badger
+      securityContext:
+        fsGroup: 10001
+      terminationGracePeriodSeconds: 10
+      volumes:
+        - configMap:
+            name: jaeger-config
+          name: jaeger-config
+  volumeClaimTemplates:
+    - metadata:
+        name: jaeger-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 2Gi
+        storageClassName: hcloud-volumes
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: postgres
   labels:
     app: postgres
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: postgres
 spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  serviceName: postgres-hl
   template:
+    metadata:
+      labels:
+        app: postgres
     spec:
       containers:
-        - image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/postgres-postgis-pgvector:dev
+        - env:
+            - name: POSTGRES_USER
+              value: postgres_sa
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: POSTGRES_SA_PASSWORD
+                  name: postgres-secret
+            - name: POSTGRES_DB
+              value: appdb
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: ACCOUNT_SERVICE_DB_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: ACCOUNT_SERVICE_DB_USER_PASSWORD
+                  name: postgres-secret
+            - name: MESSAGING_SERVICE_DB_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: MESSAGING_SERVICE_DB_USER_PASSWORD
+                  name: postgres-secret
+            - name: PROPERTY_SERVICE_DB_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: PROPERTY_SERVICE_DB_USER_PASSWORD
+                  name: postgres-secret
+          image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/postgres-postgis-pgvector:dev
+          imagePullPolicy: IfNotPresent
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - /bin/bash
+                  - /docker-entrypoint-initdb.d/sync-passwords.sh
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres_sa
+                - -d
+                - postgres
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          name: postgres
+          ports:
+            - containerPort: 5432
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres_sa
+                - -d
+                - postgres
+            failureThreshold: 3
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            limits:
+              cpu: 250m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          volumeMounts:
+            - mountPath: /var/lib/postgresql
+              name: postgres-data
+              subPath: pgdata
+            - mountPath: /docker-entrypoint-initdb.d
+              name: init-scripts
+      securityContext:
+        fsGroup: 999
+      terminationGracePeriodSeconds: 10
+      volumes:
+        - configMap:
+            defaultMode: 493
+            name: postgres-config
+          name: init-scripts
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 14Gi
+        storageClassName: hcloud-volumes
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: redis
   labels:
     app: redis
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: redis
 spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  serviceName: redis-hl
   template:
+    metadata:
+      labels:
+        app: redis
     spec:
-      initContainers:
-        - image: alpine:3.19
       containers:
-        - image: valkey/valkey:9.0-alpine
+        - command:
+            - redis-server
+            - /etc/redis/redis.conf
+          env:
+            - name: MAXMEMORY
+              value: 128mb
+            - name: REDIS_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: REDIS_ADMIN_PASSWORD
+                  name: redis-secret
+            - name: REDIS_PUBSUB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: REDIS_PUBSUB_PASSWORD
+                  name: redis-secret
+            - name: REDIS_CACHE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: REDIS_CACHE_PASSWORD
+                  name: redis-secret
+            - name: REDIS_RATELIMIT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: REDIS_RATELIMIT_PASSWORD
+                  name: redis-secret
+            - name: REDIS_MONITOR_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: REDIS_MONITOR_PASSWORD
+                  name: redis-secret
+          image: valkey/valkey:9.0-alpine
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - redis-cli --user admin --pass "$REDIS_ADMIN_PASSWORD" ping | grep PONG
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          name: redis
+          ports:
+            - containerPort: 6379
+              name: redis
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - redis-cli --user admin --pass "$REDIS_ADMIN_PASSWORD" ping | grep PONG
+            failureThreshold: 3
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            limits:
+              cpu: 100m
+              memory: 256Mi
+            requests:
+              cpu: 50m
+              memory: 128Mi
+          volumeMounts:
+            - mountPath: /data
+              name: redis-data
+            - mountPath: /tmp/redis-config
+              name: redis-config
+              readOnly: true
+            - mountPath: /etc/redis
+              name: redis-acl
+      initContainers:
+        - command:
+            - sh
+            - -c
+            - |
+              # Copy redis.conf to /etc/redis
+              cp /tmp/redis-config/redis.conf /etc/redis/redis.conf
+
+              # Manual substitution using sed (no envsubst needed)
+              sed -e "s|\${REDIS_ADMIN_PASSWORD}|${REDIS_ADMIN_PASSWORD}|g" \
+                  -e "s|\${REDIS_PUBSUB_PASSWORD}|${REDIS_PUBSUB_PASSWORD}|g" \
+                  -e "s|\${REDIS_CACHE_PASSWORD}|${REDIS_CACHE_PASSWORD}|g" \
+                  -e "s|\${REDIS_RATELIMIT_PASSWORD}|${REDIS_RATELIMIT_PASSWORD}|g" \
+                  -e "s|\${REDIS_MONITOR_PASSWORD}|${REDIS_MONITOR_PASSWORD}|g" \
+                  /tmp/redis-config/users.acl > /etc/redis/users.acl
+
+              # Set correct ownership and permissions for redis user (999)
+              chown 999:999 /etc/redis/redis.conf /etc/redis/users.acl
+              chmod 644 /etc/redis/redis.conf /etc/redis/users.acl
+              echo "Redis config and ACL file generated successfully"
+          env:
+            - name: REDIS_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: REDIS_ADMIN_PASSWORD
+                  name: redis-secret
+            - name: REDIS_PUBSUB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: REDIS_PUBSUB_PASSWORD
+                  name: redis-secret
+            - name: REDIS_CACHE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: REDIS_CACHE_PASSWORD
+                  name: redis-secret
+            - name: REDIS_RATELIMIT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: REDIS_RATELIMIT_PASSWORD
+                  name: redis-secret
+            - name: REDIS_MONITOR_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: REDIS_MONITOR_PASSWORD
+                  name: redis-secret
+          image: alpine:3.19
+          imagePullPolicy: IfNotPresent
+          name: acl-config
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+          volumeMounts:
+            - mountPath: /tmp/redis-config
+              name: redis-config
+              readOnly: true
+            - mountPath: /etc/redis
+              name: redis-acl
+      securityContext:
+        fsGroup: 999
+        runAsNonRoot: true
+        runAsUser: 999
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - configMap:
+            name: redis-config
+          name: redis-config
+        - emptyDir: {}
+          name: redis-acl
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 2Gi
+        storageClassName: hcloud-volumes
 ---
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: bright-mls-ingest
-  namespace: default
   labels:
-    app: bright-mls-ingest
+    app: bright-area-reconcile
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: bright-area-reconcile
+  namespace: default
 spec:
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 3
   jobTemplate:
+    metadata:
+      labels:
+        app: bright-area-reconcile
     spec:
+      activeDeadlineSeconds: 1800
+      backoffLimit: 2
       template:
+        metadata:
+          labels:
+            app: bright-area-reconcile
         spec:
           containers:
-            - image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:dev
+            - command:
+                - node
+                - bright-area-sync.js
+                - reconcile
+              env:
+                - name: NODE_ENV
+                  value: development
+                - name: NODE_OPTIONS
+                  value: --max-old-space-size=341
+                - name: PROPERTY_DB_HOST
+                  value: postgres-svc
+                - name: PROPERTY_DB_PORT
+                  value: "5432"
+                - name: PROPERTY_DB_NAME
+                  value: property_db
+                - name: PROPERTY_DB_USER
+                  value: property_service_db_user
+                - name: PROPERTY_SERVICE_DB_USER_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      key: PROPERTY_SERVICE_DB_USER_PASSWORD
+                      name: postgres-secret
+                - name: DATABASE_URL
+                  value: postgresql://$(PROPERTY_DB_USER):$(PROPERTY_SERVICE_DB_USER_PASSWORD)@$(PROPERTY_DB_HOST):$(PROPERTY_DB_PORT)/$(PROPERTY_DB_NAME)
+                - name: BRIGHT_MLS_ENV
+                  valueFrom:
+                    secretKeyRef:
+                      key: BRIGHT_MLS_ENV
+                      name: bright-mls-secret
+                - name: BRIGHT_MLS_CLIENT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      key: BRIGHT_MLS_CLIENT_ID
+                      name: bright-mls-secret
+                - name: BRIGHT_MLS_CLIENT_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      key: BRIGHT_MLS_CLIENT_SECRET
+                      name: bright-mls-secret
+              image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:dev
+              imagePullPolicy: Always
+              name: reconcile
+              resources:
+                limits:
+                  cpu: 300m
+                  memory: 512Mi
+                requests:
+                  cpu: 50m
+                  memory: 192Mi
+          restartPolicy: Never
+  schedule: 15 5 * * *
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  suspend: false
+  timeZone: Etc/UTC
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  labels:
+    app: bright-area-refresh
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: bright-area-refresh
+  namespace: default
+spec:
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    metadata:
+      labels:
+        app: bright-area-refresh
+    spec:
+      activeDeadlineSeconds: 900
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: bright-area-refresh
+        spec:
+          containers:
+            - command:
+                - node
+                - bright-area-sync.js
+                - refresh
+              env:
+                - name: NODE_ENV
+                  value: development
+                - name: BRIGHT_AREA_REFRESH_INTERVAL_MS
+                  value: "1800000"
+                - name: BRIGHT_AREA_REFRESH_MAX_AREAS_PER_RUN
+                  value: "10"
+                - name: NODE_OPTIONS
+                  value: --max-old-space-size=341
+                - name: PROPERTY_DB_HOST
+                  value: postgres-svc
+                - name: PROPERTY_DB_PORT
+                  value: "5432"
+                - name: PROPERTY_DB_NAME
+                  value: property_db
+                - name: PROPERTY_DB_USER
+                  value: property_service_db_user
+                - name: PROPERTY_SERVICE_DB_USER_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      key: PROPERTY_SERVICE_DB_USER_PASSWORD
+                      name: postgres-secret
+                - name: DATABASE_URL
+                  value: postgresql://$(PROPERTY_DB_USER):$(PROPERTY_SERVICE_DB_USER_PASSWORD)@$(PROPERTY_DB_HOST):$(PROPERTY_DB_PORT)/$(PROPERTY_DB_NAME)
+                - name: BRIGHT_MLS_ENV
+                  valueFrom:
+                    secretKeyRef:
+                      key: BRIGHT_MLS_ENV
+                      name: bright-mls-secret
+                - name: BRIGHT_MLS_CLIENT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      key: BRIGHT_MLS_CLIENT_ID
+                      name: bright-mls-secret
+                - name: BRIGHT_MLS_CLIENT_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      key: BRIGHT_MLS_CLIENT_SECRET
+                      name: bright-mls-secret
+              image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:dev
+              imagePullPolicy: Always
+              name: refresh
+              resources:
+                limits:
+                  cpu: 300m
+                  memory: 512Mi
+                requests:
+                  cpu: 50m
+                  memory: 192Mi
+          restartPolicy: Never
+  schedule: "*/30 * * * *"
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  suspend: false
+  timeZone: Etc/UTC
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  labels:
+    app: bright-mls-ingest
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: bright-mls-ingest
+  namespace: default
+spec:
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    metadata:
+      labels:
+        app: bright-mls-ingest
+    spec:
+      activeDeadlineSeconds: 900
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: bright-mls-ingest
+        spec:
+          containers:
+            - command:
+                - node
+                - bright-ingest.js
+              env:
+                - name: NODE_ENV
+                  value: development
+                - name: BRIGHT_MLS_INITIAL_CURSOR
+                  value: "2026-09-01T00:00:00Z"
+                - name: BRIGHT_MLS_MAX_PAGES_PER_RUN
+                  value: "25"
+                - name: BRIGHT_MLS_CRAWL_RESOURCES
+                  value: BrightMedia
+                - name: BRIGHT_MLS_CRAWL_MAX_PAGES_PER_RUN
+                  value: "400"
+                - name: NODE_OPTIONS
+                  value: --max-old-space-size=512
+                - name: PROPERTY_DB_HOST
+                  value: postgres-svc
+                - name: PROPERTY_DB_PORT
+                  value: "5432"
+                - name: PROPERTY_DB_NAME
+                  value: property_db
+                - name: PROPERTY_DB_USER
+                  value: property_service_db_user
+                - name: PROPERTY_SERVICE_DB_USER_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      key: PROPERTY_SERVICE_DB_USER_PASSWORD
+                      name: postgres-secret
+                - name: DATABASE_URL
+                  value: postgresql://$(PROPERTY_DB_USER):$(PROPERTY_SERVICE_DB_USER_PASSWORD)@$(PROPERTY_DB_HOST):$(PROPERTY_DB_PORT)/$(PROPERTY_DB_NAME)
+                - name: BRIGHT_MLS_PAGE_SIZE
+                  value: "200"
+                - name: BRIGHT_MLS_ENV
+                  valueFrom:
+                    secretKeyRef:
+                      key: BRIGHT_MLS_ENV
+                      name: bright-mls-secret
+                - name: BRIGHT_MLS_CLIENT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      key: BRIGHT_MLS_CLIENT_ID
+                      name: bright-mls-secret
+                - name: BRIGHT_MLS_CLIENT_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      key: BRIGHT_MLS_CLIENT_SECRET
+                      name: bright-mls-secret
+              image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:dev
+              imagePullPolicy: Always
+              name: ingest
+              resources:
+                limits:
+                  cpu: 500m
+                  memory: 768Mi
+                requests:
+                  cpu: 50m
+                  memory: 256Mi
+          restartPolicy: Never
+  schedule: "*/15 * * * *"
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  suspend: false
+  timeZone: Etc/UTC
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.11.1
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
   name: ingress-nginx-admission-create
   namespace: ingress-nginx
-  labels:
-    app.kubernetes.io/name: ingress-nginx
 spec:
   template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: admission-webhook
+        app.kubernetes.io/instance: ingress-nginx
+        app.kubernetes.io/name: ingress-nginx
+        app.kubernetes.io/part-of: ingress-nginx
+        app.kubernetes.io/version: 1.11.1
+      name: ingress-nginx-admission-create
     spec:
       containers:
-        - image: >-
-            registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.4.1@sha256:36d05b4077fb8e3d13663702fa337f124675ba8667cbd949c03a8e8ea6fa4366
+        - args:
+            - create
+            - --host=ingress-nginx-controller-admission,ingress-nginx-controller-admission.$(POD_NAMESPACE).svc
+            - --namespace=$(POD_NAMESPACE)
+            - --secret-name=ingress-nginx-admission
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          image: registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.4.1@sha256:36d05b4077fb8e3d13663702fa337f124675ba8667cbd949c03a8e8ea6fa4366
+          imagePullPolicy: IfNotPresent
+          name: create
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            seccompProfile:
+              type: RuntimeDefault
+      nodeSelector:
+        kubernetes.io/os: linux
+      restartPolicy: OnFailure
+      serviceAccountName: ingress-nginx-admission
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.11.1
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
   name: ingress-nginx-admission-patch
   namespace: ingress-nginx
-  labels:
-    app.kubernetes.io/name: ingress-nginx
 spec:
   template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: admission-webhook
+        app.kubernetes.io/instance: ingress-nginx
+        app.kubernetes.io/name: ingress-nginx
+        app.kubernetes.io/part-of: ingress-nginx
+        app.kubernetes.io/version: 1.11.1
+      name: ingress-nginx-admission-patch
     spec:
       containers:
-        - image: >-
-            registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.4.1@sha256:36d05b4077fb8e3d13663702fa337f124675ba8667cbd949c03a8e8ea6fa4366
+        - args:
+            - patch
+            - --webhook-name=ingress-nginx-admission
+            - --namespace=$(POD_NAMESPACE)
+            - --patch-mutating=false
+            - --secret-name=ingress-nginx-admission
+            - --patch-failure-policy=Fail
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          image: registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.4.1@sha256:36d05b4077fb8e3d13663702fa337f124675ba8667cbd949c03a8e8ea6fa4366
+          imagePullPolicy: IfNotPresent
+          name: patch
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            seccompProfile:
+              type: RuntimeDefault
+      nodeSelector:
+        kubernetes.io/os: linux
+      restartPolicy: OnFailure
+      serviceAccountName: ingress-nginx-admission
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: api-gateway
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/auth-realm: Authentication Required - API Gateway
+    nginx.ingress.kubernetes.io/auth-secret: ingress-secret
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/rewrite-target: /
   labels:
     app: api-gateway
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: api-gateway
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: API_GATEWAY_DOMAIN_PLACEHOLDER
+      http:
+        paths:
+          - backend:
+              service:
+                name: api-gateway-svc
+                port:
+                  number: 8080
+            path: /
+            pathType: Prefix
+  tls:
+    - hosts:
+        - API_GATEWAY_DOMAIN_PLACEHOLDER
+      secretName: api-gateway-dev-tls
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: cribstop-web
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/auth-realm: Authentication Required - Cribstop Web
+      (dev)
+    nginx.ingress.kubernetes.io/auth-secret: ingress-secret
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
   labels:
     app: cribstop-web
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: cribstop-web
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: CRIBSTOP_DOMAIN_PLACEHOLDER
+      http:
+        paths:
+          - backend:
+              service:
+                name: cribstop-web-svc
+                port:
+                  number: 3000
+            path: /
+            pathType: Prefix
+  tls:
+    - hosts:
+        - CRIBSTOP_DOMAIN_PLACEHOLDER
+      secretName: cribstop-web-dev-tls
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: jaeger
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/affinity: cookie
+    nginx.ingress.kubernetes.io/auth-realm: Authentication Required - Jaeger Monitoring
+    nginx.ingress.kubernetes.io/auth-secret: ingress-secret
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
+    nginx.ingress.kubernetes.io/session-cookie-name: jaeger-route
   labels:
     app: jaeger
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: jaeger
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: JAEGER_DOMAIN_PLACEHOLDER
+      http:
+        paths:
+          - backend:
+              service:
+                name: jaeger-svc
+                port:
+                  number: 16686
+            path: /
+            pathType: Prefix
+  tls:
+    - hosts:
+        - JAEGER_DOMAIN_PLACEHOLDER
+      secretName: jaeger-dev-tls
 ---
 apiVersion: networking.k8s.io/v1
 kind: IngressClass
 metadata:
-  name: nginx
   labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.11.1
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: nginx
+spec:
+  controller: k8s.io/ingress-nginx
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
-  name: ingress-nginx-admission
   labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.11.1
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: ingress-nginx-admission
 webhooks:
-  - name: validate.nginx.ingress.kubernetes.io
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: ingress-nginx-controller-admission
+        namespace: ingress-nginx
+        path: /networking/v1/ingresses
     failurePolicy: Fail
+    matchPolicy: Equivalent
+    name: validate.nginx.ingress.kubernetes.io
     rules:
       - apiGroups:
           - networking.k8s.io
@@ -460,3 +2660,4 @@ webhooks:
           - UPDATE
         resources:
           - ingresses
+    sideEffects: None

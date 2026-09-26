@@ -183,9 +183,16 @@ async function runReconcileMode(): Promise<void> {
 
 const mode = process.argv[2];
 
-(mode === 'refresh' ? runRefreshMode() : mode === 'reconcile' ? runReconcileMode() : Promise.reject(
-  new Error(`bright-area-sync.js requires a mode argument: "refresh" or "reconcile", got "${mode}".`),
-))
+(mode === 'refresh'
+  ? runRefreshMode()
+  : mode === 'reconcile'
+    ? runReconcileMode()
+    : Promise.reject(
+        new Error(
+          `bright-area-sync.js requires a mode argument: "refresh" or "reconcile", got "${mode}".`,
+        ),
+      )
+)
   .then(() => {
     process.exitCode = 0;
   })

@@ -72,14 +72,15 @@ build:
             - apps/services/account-service/Tests/**
             - apps/services/account-service/TestResults/**
 
-    # Builds ONE image serving two workloads: the `property-service` Deployment and the
-    # `bright-mls-ingest` CronJob (#91), which runs the same image with `node bright-ingest.js`
-    # (webpack.config.js → additionalEntryPoints). The CronJob therefore needs no artifact of its
-    # own — Skaffold rewrites the image reference wherever it appears in the rendered manifests —
-    # but it DOES have its own `infra/deploy-control.yaml` key, because whether it ships to an
-    # environment is a separate decision from whether the Property API does (#117: dev reads
-    # Bright's staging feed, prod the licensed one, test neither). If this artifact is ever split,
-    # the CronJob's image reference has to move with it.
+    # Builds ONE image serving four workloads: the `property-service` Deployment, the
+    # `bright-mls-ingest` CronJob (#91, `node bright-ingest.js`), and the `bright-area-refresh` /
+    # `bright-area-reconcile` CronJobs (#331, both `node bright-area-sync.js <mode>` —
+    # webpack.config.js → additionalEntryPoints). None of the three CronJobs needs an artifact of
+    # its own — Skaffold rewrites the image reference wherever it appears in the rendered
+    # manifests — but each DOES have its own `infra/deploy-control.yaml` key, because whether it
+    # ships to an environment is a separate decision from whether the Property API does (#117: dev
+    # reads Bright's staging feed, prod the licensed one, test neither). If this artifact is ever
+    # split, every CronJob's image reference has to move with it.
     - image: property-service
       context: .
       custom:

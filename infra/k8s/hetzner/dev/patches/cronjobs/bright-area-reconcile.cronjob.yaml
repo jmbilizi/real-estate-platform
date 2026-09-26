@@ -1,0 +1,26 @@
+# yaml-language-server: disable
+# Bright Area Reconciliation CronJob Patch for Hetzner Dev Environment (#331)
+#
+# WHICH FEED: the one this environment's BRIGHT_MLS_ENV secret declares, same as bright-mls-ingest.
+#
+# SCHEDULE: daily, offset from the base default so it does not collide with the nightly
+# bright-mls-ingest run in the base schedule.
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bright-area-reconcile
+spec:
+  schedule: "15 5 * * *"
+  suspend: false
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: reconcile
+              image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:dev
+              imagePullPolicy: Always
+              env:
+                - name: NODE_ENV
+                  value: "development"

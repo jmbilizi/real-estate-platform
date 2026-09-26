@@ -121,7 +121,13 @@ describe('buildAreaQuery', () => {
     );
 
     const ordinary = new URL(
-      buildAreaQuery({ serviceRoot: SERVICE_ROOT, city: 'Rockville', status: 'Active', afterKey: null, top: 200 }),
+      buildAreaQuery({
+        serviceRoot: SERVICE_ROOT,
+        city: 'Rockville',
+        status: 'Active',
+        afterKey: null,
+        top: 200,
+      }),
     );
     expect(ordinary.searchParams.get('$filter')).not.toContain('ModificationTimestamp');
   });

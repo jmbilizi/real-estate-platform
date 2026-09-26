@@ -1,0 +1,98 @@
+# Scheduled Bright per-area freshness refresh (#331).
+#
+# Runs the `bright-area-sync` entry of the property-service image (webpack.config.js →
+# additionalEntryPoints) with the "refresh" mode argument. Same image, different command, for the
+# same reason `bright-mls-ingest` is: `property_db` is property-service's database and
+# `src/db/write.ts` must stay the only module that writes `listings`.
+#
+# For every area/status `bright_area_sync` (#329) has already loaded to completion, re-pulls the
+# bounded `ModificationTimestamp` window since that row's `synced_at`, so a listing that changed
+# status or price at Bright is picked up without a whole-area re-scan. Keeps every tracked area
+# inside the NAR IDX 12-hour minimum refresh interval — see the per-environment schedule.
+#
+# Its own identity label (`app: bright-area-refresh`) gives it its own `infra/deploy-control.yaml`
+# key, decidable independently of the Property API and the whole-feed ingest CronJob.
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bright-area-refresh
+  namespace: default
+  labels:
+    app: bright-area-refresh
+spec:
+  # Fail-safe base default: suspended, well under the 12h NAR IDX rule. Every environment overrides
+  # both fields (infra/k8s/{podman/local,hetzner/*}).
+  schedule: "0 */6 * * *"
+  suspend: true
+  timeZone: Etc/UTC
+  # A run reads bright_area_sync fresh every time, so an overrun run must not be joined by the next.
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    metadata:
+      labels:
+        app: bright-area-refresh
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 900
+      template:
+        metadata:
+          labels:
+            app: bright-area-refresh
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: refresh
+              image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:latest
+              imagePullPolicy: IfNotPresent
+              command: ["node", "bright-area-sync.js", "refresh"]
+              resources:
+                requests:
+                  memory: "192Mi"
+                  cpu: "50m"
+                limits:
+                  memory: "512Mi"
+                  cpu: "300m"
+              env:
+                # #315: size Node's heap from the cgroup limit, not the host. Ratio checked by
+                # tools/infra/node-heap-ratio.test.js against the limit above.
+                - name: NODE_OPTIONS
+                  value: "--max-old-space-size=341"
+                # ── The property database ────────────────────────────────────────────────────
+                - name: PROPERTY_DB_HOST
+                  value: "postgres-svc"
+                - name: PROPERTY_DB_PORT
+                  value: "5432"
+                - name: PROPERTY_DB_NAME
+                  value: "property_db"
+                - name: PROPERTY_DB_USER
+                  value: "property_service_db_user"
+                - name: PROPERTY_SERVICE_DB_USER_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-secret
+                      key: PROPERTY_SERVICE_DB_USER_PASSWORD
+                - name: DATABASE_URL
+                  value: "postgresql://$(PROPERTY_DB_USER):$(PROPERTY_SERVICE_DB_USER_PASSWORD)@$(PROPERTY_DB_HOST):$(PROPERTY_DB_PORT)/$(PROPERTY_DB_NAME)"
+                # ── Which feed, and the credential for it ────────────────────────────────────
+                # Same three keys as bright-mls-ingest, same bright-mls-secret. None is
+                # `optional: true`: a missing secret must fail the pod at start, not read as
+                # "not configured".
+                - name: BRIGHT_MLS_ENV
+                  valueFrom:
+                    secretKeyRef:
+                      name: bright-mls-secret
+                      key: BRIGHT_MLS_ENV
+                - name: BRIGHT_MLS_CLIENT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: bright-mls-secret
+                      key: BRIGHT_MLS_CLIENT_ID
+                - name: BRIGHT_MLS_CLIENT_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: bright-mls-secret
+                      key: BRIGHT_MLS_CLIENT_SECRET

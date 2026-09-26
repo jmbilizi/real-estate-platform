@@ -84,7 +84,11 @@ export async function runAreaRefresh(
       }
 
       if (result.complete) {
-        await deps.recordSuccess(window.areaKey, window.sourceStatus, new Date(window.modifiedUntil));
+        await deps.recordSuccess(
+          window.areaKey,
+          window.sourceStatus,
+          new Date(window.modifiedUntil),
+        );
         refreshed += 1;
         deps.log(
           `Bright area refresh for ${window.areaKey} [${window.sourceStatus}]: ` +

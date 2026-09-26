@@ -159,7 +159,8 @@ export function parseAreaKey(key: string): Area {
   const [cityPart, zipPart, statePart] = key.split('|');
   const city = cityPart !== undefined && cityPart.length > 0 ? titleCase(cityPart) : undefined;
   const zip = zipPart !== undefined && zipPart.length > 0 ? zipPart : undefined;
-  const state = statePart !== undefined && statePart.length > 0 ? statePart.toUpperCase() : undefined;
+  const state =
+    statePart !== undefined && statePart.length > 0 ? statePart.toUpperCase() : undefined;
   return {
     ...(city === undefined ? {} : { city }),
     ...(state === undefined ? {} : { state }),

@@ -35,7 +35,13 @@ describe('dueForRefresh', () => {
   });
 
   it('closes the window at the instant the run started', () => {
-    const windows = dueForRefresh([area({ syncedAt: new Date(NOW - 7 * HOUR) })], NOW, 6 * HOUR, 0, 25);
+    const windows = dueForRefresh(
+      [area({ syncedAt: new Date(NOW - 7 * HOUR) })],
+      NOW,
+      6 * HOUR,
+      0,
+      25,
+    );
     expect(windows[0]?.modifiedUntil).toBe(new Date(NOW).toISOString());
   });
 

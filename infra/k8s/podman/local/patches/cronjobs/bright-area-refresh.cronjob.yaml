@@ -1,0 +1,42 @@
+# yaml-language-server: disable
+# Bright Area Refresh CronJob Patch for Podman Local Environment (#331)
+#
+# WHICH FEED: the one you hold credentials for, same as bright-mls-ingest's local patch. Runs
+# frequently for fast local iteration; BRIGHT_AREA_REFRESH_INTERVAL_MS is lowered to match, so a
+# scheduled tick actually finds something due.
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bright-area-refresh
+spec:
+  schedule: "*/15 * * * *"
+  suspend: false
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          # Mounts the enterprise CA ConfigMap (#180), same as the property-service Deployment and
+          # bright-mls-ingest's local patch — without it the Bright OAuth2 call fails at the
+          # transport layer under a TLS-intercepting corporate proxy.
+          volumes:
+            - name: workspace-ca-bundle
+              configMap:
+                name: workspace-ca-bundle
+          containers:
+            - name: refresh
+              image: property-service
+              imagePullPolicy: IfNotPresent
+              volumeMounts:
+                - name: workspace-ca-bundle
+                  mountPath: /etc/workspace-ca
+                  readOnly: true
+              env:
+                - name: NODE_ENV
+                  value: "development"
+                - name: NODE_EXTRA_CA_CERTS
+                  value: "/etc/workspace-ca/workspace-enterprise-roots.pem"
+                - name: BRIGHT_AREA_REFRESH_INTERVAL_MS
+                  value: "900000" # 15 minutes
+                - name: BRIGHT_AREA_REFRESH_MAX_AREAS_PER_RUN
+                  value: "5"

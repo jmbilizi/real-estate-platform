@@ -100,6 +100,21 @@ environments:
         require_approval: false # No approval needed
         rollback_on_failure: false # Disabled in dev for manual investigation
 
+      bright-area-refresh:
+        # Scheduled per-area freshness refresh (#331). Own identity label, own key, decidable
+        # separately from property-service and from bright-mls-ingest — see the CronJob's header.
+        enabled: true
+        auto_deploy: true # Auto-deploy in dev
+        require_approval: false # No approval needed
+        rollback_on_failure: false # Disabled in dev for manual investigation
+
+      bright-area-reconcile:
+        # Daily key reconciliation (#331). Same reasoning as bright-area-refresh above.
+        enabled: true
+        auto_deploy: true # Auto-deploy in dev
+        require_approval: false # No approval needed
+        rollback_on_failure: false # Disabled in dev for manual investigation
+
       cribstop-web:
         enabled: true
         auto_deploy: true # Auto-deploy in dev
@@ -190,6 +205,19 @@ environments:
         require_approval: false # Optional approval
         rollback_on_failure: false # Disabled for manual validation
 
+      bright-area-refresh:
+        # Reads the same tier as bright-mls-ingest above (#331).
+        enabled: true
+        auto_deploy: false # Manual deployment in test
+        require_approval: false # Optional approval
+        rollback_on_failure: false # Disabled for manual validation
+
+      bright-area-reconcile:
+        enabled: true
+        auto_deploy: false # Manual deployment in test
+        require_approval: false # Optional approval
+        rollback_on_failure: false # Disabled for manual validation
+
       cribstop-web:
         enabled: false # Not yet deployed to test
         auto_deploy: false # Manual deployment in test
@@ -273,6 +301,19 @@ environments:
         # never an assumption carried over from a green dev run — the credential here authenticates
         # against real licensed inventory, and #102/#117 item 6 (production display-URL
         # registration) is not settled. The prod overlay additionally sets `suspend: true`.
+        enabled: false # Not yet deployed to production
+        auto_deploy: false # Manual deployment only
+        require_approval: true # Always require approval
+        rollback_on_failure: false # Manual review recommended for production
+
+      bright-area-refresh:
+        # Same reasoning as bright-mls-ingest above (#331): not yet deployed to production.
+        enabled: false # Not yet deployed to production
+        auto_deploy: false # Manual deployment only
+        require_approval: true # Always require approval
+        rollback_on_failure: false # Manual review recommended for production
+
+      bright-area-reconcile:
         enabled: false # Not yet deployed to production
         auto_deploy: false # Manual deployment only
         require_approval: true # Always require approval

@@ -74,7 +74,9 @@ describe('runAreaReconcile', () => {
   });
 
   it('skips an area, without deleting anything, when a status read was capped', async () => {
-    const tracked: TrackedArea[] = [{ areaKey: 'frederick', sourceStatus: 'Active', syncedAt: new Date() }];
+    const tracked: TrackedArea[] = [
+      { areaKey: 'frederick', sourceStatus: 'Active', syncedAt: new Date() },
+    ];
     const softDelete = jest.fn(() => Promise.resolve(0));
 
     const report = await runAreaReconcile(
