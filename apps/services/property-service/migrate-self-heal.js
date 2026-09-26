@@ -37,7 +37,7 @@ const ORPHANED_MIGRATION_PATTERN =
 
 /**
  * True only when the local self-heal is explicitly opted into and this is not a production
- * process. The NODE_ENV check mirrors seed-on-start.ts: a flag alone must never be enough to
+ * process. The NODE_ENV check is a second, independent gate: a flag alone must never be enough to
  * enable a destructive-adjacent path in a misconfigured production container.
  */
 function isSelfHealEnabled(env = process.env) {

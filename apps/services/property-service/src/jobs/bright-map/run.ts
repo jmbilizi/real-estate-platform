@@ -21,7 +21,7 @@ import {
   replaceFeedListingMedia,
   upsertListingBySourceKey,
 } from '../../db/write';
-import { PropertyRow, UnitRow } from '../../seed/types';
+import { PropertyRow, UnitRow } from '../../db/types';
 import { randomUUID } from 'node:crypto';
 
 import { buildListingGallery, mapBrightMediaRecord, type MappedBrightMedia } from './map-media';

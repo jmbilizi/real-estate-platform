@@ -13,11 +13,12 @@ module.exports = async function () {
   const port = process.env.PORT ? Number(process.env.PORT) : 3002;
   await waitForPortOpen(port, { host });
 
-  // Guarded compliance fixtures (#22): the seed dataset alone has zero suppressed addresses, zero
+  // Guarded compliance fixtures (#22): a real listing set has zero suppressed addresses, zero
   // suppressed listings, zero unapproved descriptions, zero non-consumer statuses, zero `Land` rows
-  // and zero NULL beds/baths/sqft, so without these every compliance assertion the e2e suite makes
-  // would be vacuously true. Loading is opt-in (`PROPERTY_SERVICE_E2E_FIXTURES=1`) because this talks
-  // directly to whatever `DATABASE_URL` points at.
+  // and zero NULL beds/baths/sqft in the general case, so without these every compliance assertion
+  // the e2e suite makes would be vacuously true. Loading is opt-in
+  // (`PROPERTY_SERVICE_E2E_FIXTURES=1`) because this talks directly to whatever `DATABASE_URL`
+  // points at.
   //
   // `globalSetup` runs once in Jest's PARENT process, BEFORE it forks the workers that actually run
   // `tests/**/*.e2e.spec.ts`. A `process.env` mutation made here is inherited by every forked worker,

@@ -87,7 +87,7 @@ export interface BrightStagingStore {
 
 /**
  * The narrow seam this module needs, so a unit test can drive the store with a fake and no
- * database. A real `pg.PoolClient` satisfies it structurally. Same shape as `src/seed/seed.ts`.
+ * database. A real `pg.PoolClient` satisfies it structurally.
  */
 export interface Queryable {
   query(

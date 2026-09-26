@@ -2,7 +2,7 @@
 #
 # Runs the `bright-ingest` entry point of the property-service image (bundled by
 # apps/services/property-service/webpack.config.js → additionalEntryPoints, the same mechanism
-# `seed-on-start` uses). It is the property-service image with a different command rather than a
+# `bright-audit` uses). It is the property-service image with a different command rather than a
 # separate project on purpose: `property_db` is property-service's database, its append-only
 # migration chain is where #92's staging tables have to land, and `src/db/write.ts` must stay the
 # only module that writes `listings` (see apps/services/property-service/AGENTS.md — "the split that

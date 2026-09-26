@@ -14,15 +14,7 @@ module.exports = {
       target: 'node',
       compiler: 'tsc',
       main: './src/main.ts',
-      // Seeding runs inside the cluster, from the `migrate` initContainer (#111), so its code has to
-      // reach the runtime image. It is not imported by main.ts — deliberately, a dev-only concern
-      // stays off the production startup path — so without its own entry it would not be bundled at
-      // all and `migrate.js` would have nothing to spawn.
       additionalEntryPoints: [
-        {
-          entryName: 'seed-on-start',
-          entryPath: './src/seed/seed-on-start.main.ts',
-        },
         // The Bright MLS ingestion job (#91) runs as its own scheduled process — the workload is
         // throughput-bound and must not compete with request-serving CPU (see AGENTS.md, "the split
         // that does matter is by workload, not language"). It reuses this image with a different

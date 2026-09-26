@@ -6,12 +6,13 @@ import type { ComplianceFixtureIds } from './fixtures';
  * header for why the value crosses the worker-process boundary via `process.env` and not
  * `globalThis`).
  *
- * ANTI-VACUITY, THE POINT OF THIS FILE: the seed dataset (`src/seed/mock-listings.ts`) has zero
- * suppressed addresses, zero suppressed listings, zero unapproved descriptions, zero non-consumer
- * statuses, zero `Land` rows and zero NULL beds/baths/sqft. Every compliance assertion this e2e
- * suite makes is therefore vacuously true against the seed alone — a suppressed-address test
- * "passes" trivially if there is no suppressed row to find, regardless of whether suppression
- * actually works. If this function returned a stub, or specs wrapped their assertions in
+ * ANTI-VACUITY, THE POINT OF THIS FILE: no environment carries sample or test-feed inventory
+ * (#340), so a real listing set has zero suppressed addresses, zero suppressed listings, zero
+ * unapproved descriptions, zero non-consumer statuses, zero `Land` rows and zero NULL
+ * beds/baths/sqft in the general case. Every compliance assertion this e2e suite makes is
+ * therefore vacuously true without these fixtures — a suppressed-address test "passes" trivially
+ * if there is no suppressed row to find, regardless of whether suppression actually works. If this
+ * function returned a stub, or specs wrapped their assertions in
  * `describe.skip`/an `if (fixtures)` guard when the env var is absent, the suite would report green
  * while testing nothing — reproducing exactly the failure this module exists to catch, with extra
  * steps. So it THROWS instead of returning anything usable: loud failure over silent vacuity.
@@ -34,9 +35,9 @@ export function complianceFixtureIds(): ComplianceFixtureIds {
         'tests/support/global-setup.ts before the test workers start. That only happens when BOTH ' +
         'PROPERTY_SERVICE_E2E_FIXTURES=1 and DATABASE_URL are set for the process running `nx e2e` ' +
         `— run:\n  ${command}\n` +
-        'Do not add a fallback or a skip here: the seed dataset alone makes every compliance ' +
-        'assertion in this suite vacuously true, so a suite that tolerates missing fixtures is a ' +
-        'suite that is not actually testing anything.',
+        'Do not add a fallback or a skip here: without these fixtures every compliance assertion ' +
+        'in this suite is vacuously true, so a suite that tolerates missing fixtures is a suite ' +
+        'that is not actually testing anything.',
     );
   }
 

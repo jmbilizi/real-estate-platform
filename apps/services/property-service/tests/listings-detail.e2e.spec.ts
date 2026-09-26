@@ -7,7 +7,7 @@ import { complianceFixtureIds } from './support/fixture-ids';
  * `GET /listings/:id` against a REAL service and REAL database, with the guarded compliance
  * fixtures loaded. See tests/support/fixture-ids.ts for why this throws instead of skipping when
  * they are absent — a suite that tolerates missing fixtures is a suite that is not actually testing
- * anything, since the seed dataset alone makes every compliance assertion here vacuously true.
+ * anything, since a real listing set makes every compliance assertion here vacuously true.
  */
 const fixtures = complianceFixtureIds();
 

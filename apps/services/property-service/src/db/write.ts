@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
-import { ListingRow, MediaRow, OpenHouseRow, PropertyRow, UnitRow } from '../seed/types';
-import { CommunityRow } from '../seed/types';
+import { ListingRow, MediaRow, OpenHouseRow, PropertyRow, UnitRow } from './types';
+import { CommunityRow } from './types';
 
 /**
  * THE ONLY MODULE THAT WRITES `listings`.
@@ -824,17 +824,17 @@ export const SAMPLE_DATA_DELETE_STATEMENTS: readonly string[] = [
 ];
 
 /**
- * Removes every sample row so the current dataset can be inserted fresh (#111).
+ * Removes every sample row. Used by `bright-map/sweep.ts` (#331) when the dev environment's Bright
+ * tier changes, to clear the other tier's rows.
  *
- * Delete-then-insert rather than upsert, for a reason upsert cannot address: a listing REMOVED from
- * `mock-listings.ts` has to actually disappear, and no upsert expresses that. It also sidesteps the
- * terminal-snapshot freeze instead of fighting it — `applyTerminalCorrection()` is the audited path
- * for changing one closed listing, not a bulk re-seed mechanism.
+ * Deletes rather than upserts: a swept row has to actually disappear, and no upsert expresses that.
+ * It also sidesteps the terminal-snapshot freeze instead of fighting it —
+ * `applyTerminalCorrection()` is the audited path for changing one closed listing, not a bulk sweep.
  *
  * This lives in `write.ts` because it writes `listings`, and this module is the only one permitted
- * to (`seed.spec.ts` asserts it, for DELETE as well as INSERT/UPDATE). It takes a `Queryable`, never
- * a pool: the caller must already be inside the seeding transaction, so a failed insert rolls the
- * deletes back with it and the database is never left empty.
+ * to (`write-containment.spec.ts` asserts it, for DELETE as well as INSERT/UPDATE). It takes a
+ * `Queryable`, never a pool: the caller must already be inside its own transaction, so a failure
+ * rolls the deletes back with it and the database is never left empty.
  */
 export async function deleteSampleData(client: Queryable): Promise<void> {
   for (const statement of SAMPLE_DATA_DELETE_STATEMENTS) {

@@ -130,13 +130,6 @@
         "cwd": "apps/services/property-service"
       }
     },
-    "seed": {
-      "executor": "nx:run-commands",
-      "options": {
-        "command": "ts-node -P tsconfig.app.json src/seed/seed.ts",
-        "cwd": "apps/services/property-service"
-      }
-    },
     "container-build": {
       "executor": "nx:run-commands",
       "options": {
