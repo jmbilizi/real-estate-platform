@@ -4,18 +4,19 @@ import { buildAreaQuery } from './odata-query';
 import type { BrightStagingStore, StagedRecord } from './staging-store';
 
 /**
- * On-demand load of one area's publicly searchable listings into staging.
+ * On-demand load of one area's ONE Bright `StandardStatus` pass into staging.
  *
- * Called when a search for a city or ZIP finds nothing locally (`src/listings/on-demand.ts`). The
+ * Called when a search for a city or ZIP needs more coverage (`src/listings/on-demand.ts`). The
  * scheduled job replicates by `ModificationTimestamp`, which on the production feed scans the whole
  * feed and did not return a 1000-record page within 120 seconds (2026-09-22). An area query filters
  * to one place and one status, so Bright answers from a small match set.
  *
  * Bright rejects `OR` in `$filter` (see `odata-query.ts`), so a load that covers every publicly
- * searchable status (#330) cannot ask for them in one query. `fetchAreaListings` runs one keyset
- * pass per status instead, resetting `afterKey` between statuses. `params.statuses` is the caller's
- * job to derive from `listing_statuses` (`bright-map/status.ts` `searchableStatuses`) — this module
- * only pages the ones it is given.
+ * searchable status (#330) cannot ask for them in one query. This module fetches exactly one
+ * status per call; `on-demand.ts` drives the loop across statuses and persists per-status coverage
+ * (`bright_area_sync`, #329) between calls, so each status resumes from its own cursor and a large
+ * `Closed` (sold) backlog cannot consume the cap a `city=Frederick` search needs for the statuses
+ * that keep a listing on the market.
  *
  * Staging only, like the rest of this directory. The caller maps the returned keys.
  */
@@ -31,10 +32,12 @@ export interface AreaFetchParams {
   readonly city?: string;
   readonly state?: string;
   readonly zip?: string;
-  /** Bright `StandardStatus` wire values to fetch, one keyset pass each. Never empty in practice. */
-  readonly statuses: readonly string[];
+  /** Bright `StandardStatus` wire value this call fetches. */
+  readonly status: string;
+  /** Resume cursor for this status's keyset pass; `null` starts it over. */
+  readonly afterKey: string | null;
   readonly pageSize: number;
-  /** Stop after this many records total, across every status, so one search cannot pull a region. */
+  /** Stop after this many NEW records, so one call cannot pull an unbounded backlog. */
   readonly maxRecords: number;
   readonly pageOptions?: BrightPageOptions;
 }
@@ -42,8 +45,10 @@ export interface AreaFetchParams {
 export interface AreaFetchResult {
   readonly listingKeys: readonly string[];
   readonly pagesFetched: number;
-  /** True when every status's pass read to its end before the record cap was reached. */
+  /** True when this status's pass read to its end before the record cap was reached. */
   readonly complete: boolean;
+  /** The cursor to resume from next time; `null` once `complete` is true. */
+  readonly afterKey: string | null;
 }
 
 function toStaged(record: Record<string, unknown>): StagedRecord | null {
@@ -62,17 +67,10 @@ function toStaged(record: Record<string, unknown>): StagedRecord | null {
   return { recordKey: listingKey, modifiedAt: parsed.toISOString(), payload: record };
 }
 
-/**
- * One status's keyset pass, stopping at the shared `maxRecords` cap. Appends to `listingKeys` in
- * place, so the cap applies across every status a call to `fetchAreaListings` covers.
- */
-async function fetchOneStatus(
-  params: AreaFetchParams,
-  status: string,
-  listingKeys: string[],
-): Promise<{ pagesFetched: number; complete: boolean }> {
-  let afterKey: string | null = null;
+export async function fetchAreaListings(params: AreaFetchParams): Promise<AreaFetchResult> {
+  const listingKeys: string[] = [];
   let pagesFetched = 0;
+  let afterKey = params.afterKey;
 
   while (listingKeys.length < params.maxRecords) {
     const url = buildAreaQuery({
@@ -80,7 +78,7 @@ async function fetchOneStatus(
       ...(params.city === undefined ? {} : { city: params.city }),
       ...(params.state === undefined ? {} : { state: params.state }),
       ...(params.zip === undefined ? {} : { zip: params.zip }),
-      status,
+      status: params.status,
       afterKey,
       top: params.pageSize,
     });
@@ -107,28 +105,10 @@ async function fetchOneStatus(
 
     const last = staged[staged.length - 1];
     if (page.records.length < params.pageSize || last === undefined) {
-      return { pagesFetched, complete: true };
+      return { listingKeys, pagesFetched, complete: true, afterKey: null };
     }
     afterKey = last.recordKey;
   }
 
-  return { pagesFetched, complete: false };
-}
-
-export async function fetchAreaListings(params: AreaFetchParams): Promise<AreaFetchResult> {
-  const listingKeys: string[] = [];
-  let pagesFetched = 0;
-
-  for (const status of params.statuses) {
-    if (listingKeys.length >= params.maxRecords) {
-      return { listingKeys, pagesFetched, complete: false };
-    }
-    const pass = await fetchOneStatus(params, status, listingKeys);
-    pagesFetched += pass.pagesFetched;
-    if (!pass.complete) {
-      return { listingKeys, pagesFetched, complete: false };
-    }
-  }
-
-  return { listingKeys, pagesFetched, complete: true };
+  return { listingKeys, pagesFetched, complete: false, afterKey };
 }
