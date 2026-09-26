@@ -1,4 +1,10 @@
-import { type ListingStatusLookup, mapStandardStatus, searchableStatuses } from './status';
+import {
+  BRIGHT_STATUS_FILTER_LABELS,
+  brightStatusFilterLabel,
+  type ListingStatusLookup,
+  mapStandardStatus,
+  searchableStatuses,
+} from './status';
 
 const STATUSES: readonly ListingStatusLookup[] = [
   {
@@ -64,8 +70,9 @@ describe('mapStandardStatus', () => {
 });
 
 describe('searchableStatuses', () => {
-  it('returns the reso_standard_status of every publicly searchable status', () => {
-    expect(searchableStatuses(STATUSES)).toEqual(['Active', 'Closed']);
+  it('returns the reso_standard_status of every publicly searchable, non-terminal status', () => {
+    // Closed is searchable but terminal: an area load never pages through 5 M sold records (#337).
+    expect(searchableStatuses(STATUSES)).toEqual(['Active']);
   });
 
   it('drops a searchable status with no reso_standard_status', () => {
@@ -99,5 +106,38 @@ describe('searchableStatuses', () => {
       },
     ];
     expect(searchableStatuses(shared)).toEqual(['Active']);
+  });
+});
+
+describe('Bright  labels vs payload values (#337)', () => {
+  // Measured against production Bright on 2026-09-26: the spaced labels return 200 in a ,
+  // the compact payload values return 400. Records carry the compact values.
+  it('maps each payload value to the label Bright accepts in a ', () => {
+    expect(BRIGHT_STATUS_FILTER_LABELS).toEqual({
+      Active: 'Active',
+      ComingSoon: 'Coming Soon',
+      ActiveUnderContract: 'Active Under Contract',
+      Pending: 'Pending',
+      Closed: 'Closed',
+    });
+  });
+
+  it('keeps the mapper on payload values: ComingSoon resolves, the label is a different token', () => {
+    const statuses: readonly ListingStatusLookup[] = [
+      {
+        code: 'Coming Soon',
+        consumerStatus: 'Coming Soon',
+        isTerminal: false,
+        resoStandardStatus: 'ComingSoon',
+        isPubliclySearchable: true,
+      },
+    ];
+    expect(mapStandardStatus('ComingSoon', statuses)?.code).toBe('Coming Soon');
+    expect(brightStatusFilterLabel('ComingSoon')).toBe('Coming Soon');
+    expect(brightStatusFilterLabel('ActiveUnderContract')).toBe('Active Under Contract');
+  });
+
+  it('refuses a payload value with no measured label rather than sending it raw', () => {
+    expect(() => brightStatusFilterLabel('Hold')).toThrow('No Bright $filter label');
   });
 });

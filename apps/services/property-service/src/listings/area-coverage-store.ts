@@ -138,6 +138,8 @@ export interface TrackedArea {
  * least once, so `synced_at` is a real watermark rather than null. A `partial` or `failed` row is
  * still being populated by the on-demand loader (`on-demand.ts`) and is left to it — the refresh
  * job's bounded `ModificationTimestamp` window only makes sense on top of a completed baseline.
+ *
+ * `Closed` rows written before #337 are left out, so neither job pages sold records again.
  */
 export async function listTrackedAreas(
   client: AreaSyncClient,
@@ -145,7 +147,8 @@ export async function listTrackedAreas(
 ): Promise<TrackedArea[]> {
   const { rows } = await client.query<{ area_key: string; source_status: string; synced_at: Date }>(
     `SELECT area_key, source_status, synced_at FROM bright_area_sync
-      WHERE feed_tier = $1 AND status = 'complete' AND synced_at IS NOT NULL`,
+      WHERE feed_tier = $1 AND status = 'complete' AND synced_at IS NOT NULL
+        AND source_status <> 'Closed'`,
     [feedTier],
   );
   return rows.map((row) => ({

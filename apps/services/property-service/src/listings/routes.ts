@@ -189,14 +189,14 @@ export function createListingsRouter(pool: ReadPool, areaLoader?: AreaLoader): R
       // `resolvedSearchRequest()` parsed out of it instead (`on-demand.ts`). `appliedFilters` below
       // echoes that resolved request, city/state in place of query, because it is what actually ran.
       const effectiveRequest = resolvedSearchRequest(parsed.value);
-      let envelope = await searchListings(pool, effectiveRequest);
+      const envelope = await searchListings(pool, effectiveRequest);
       let cacheControl = LISTINGS_CACHE_CONTROL;
-      // A first-page search for a place whose `bright_area_sync` coverage is missing, partial, or
-      // stale loads that place from Bright (`on-demand.ts`), not only when this page came back
-      // empty (#329). A price/bed filter that empties a place we DO fully hold must never trigger
-      // one: `placeHasNoListings` (the place alone, filters stripped) is the guard for that,
-      // checked only when this request's own result was empty. A load still running when the wait
-      // ends must not be cached as "empty".
+      // The search answers from Postgres only and never waits on Bright (#337). A first-page
+      // search for a place whose `bright_area_sync` coverage is missing, partial or stale starts a
+      // load in the background (`on-demand.ts`). A price/bed filter that empties a place we DO
+      // hold must never start one: `placeHasNoListings` (the place alone, filters stripped) is the
+      // guard, checked only when this result was empty. A response that started a load is not
+      // cached, so the next request reads the loaded rows.
       if (
         envelope.page === 1 &&
         areaLoader !== undefined &&
@@ -205,12 +205,9 @@ export function createListingsRouter(pool: ReadPool, areaLoader?: AreaLoader): R
         const filterEmptiedAPlaceWeHold =
           envelope.total === 0 && !(await placeHasNoListings(pool, parsed.value));
         if (!filterEmptiedAPlaceWeHold) {
-          const outcome = await areaLoader.load(parsed.value);
-          if (outcome === 'loaded') {
-            envelope = await searchListings(pool, effectiveRequest);
-          } else if (outcome === 'pending') {
-            cacheControl = 'no-store';
-          }
+          // `load()` logs and swallows its own failures; the catch only keeps a rejection unhandled-free.
+          void areaLoader.load(parsed.value).catch(() => undefined);
+          cacheControl = 'no-store';
         }
       }
       res.set('Cache-Control', cacheControl).status(200).json(envelope);

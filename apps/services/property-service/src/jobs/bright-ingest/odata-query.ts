@@ -37,6 +37,7 @@
  * of 1000.
  */
 
+import { brightStatusFilterLabel } from '../bright-map/status';
 import type { BrightResource } from './resources';
 
 /** Where a pass resumes from. `recordKey` is absent on the first pass and after a full resync. */
@@ -119,7 +120,7 @@ export interface AreaQueryParams {
   readonly city?: string;
   readonly state?: string;
   readonly zip?: string;
-  /** The Bright `StandardStatus` wire value this page fetches. One pass per status; see #330. */
+  /** The `StandardStatus` payload value this page fetches; translated to its $filter label. */
   readonly status: string;
   /** Keyset page: the last `ListingKey` already read, as decimal text. `null` on the first page. */
   readonly afterKey: string | null;
@@ -174,7 +175,7 @@ export function buildAreaQuery(params: AreaQueryParams): string {
     ...(params.city === undefined ? [] : [`City eq ${stringLiteral(params.city)}`]),
     ...(params.state === undefined ? [] : [`StateOrProvince eq ${stringLiteral(params.state)}`]),
     ...(params.zip === undefined ? [] : [`PostalCode eq ${stringLiteral(params.zip)}`]),
-    `StandardStatus eq ${stringLiteral(params.status)}`,
+    `StandardStatus eq ${stringLiteral(brightStatusFilterLabel(params.status))}`,
     `ListingKey gt ${params.afterKey ?? '0'}`,
     ...(params.modifiedAfter === undefined
       ? []
@@ -197,7 +198,7 @@ export function buildAreaQuery(params: AreaQueryParams): string {
 export interface AreaCountQueryParams {
   readonly serviceRoot: string;
   readonly city: string;
-  /** The Bright wire value, e.g. `'Active'` or `'ComingSoon'` — see resources.ts on this vocabulary. */
+  /** The `StandardStatus` payload value, e.g. `'ComingSoon'`; translated to its $filter label. */
   readonly standardStatus: string;
 }
 
@@ -213,7 +214,7 @@ export interface AreaCountQueryParams {
 export function buildAreaCountQuery(params: AreaCountQueryParams): string {
   const clauses = [
     `City eq ${stringLiteral(params.city)}`,
-    `StandardStatus eq ${stringLiteral(params.standardStatus)}`,
+    `StandardStatus eq ${stringLiteral(brightStatusFilterLabel(params.standardStatus))}`,
   ];
 
   const search = new URLSearchParams();

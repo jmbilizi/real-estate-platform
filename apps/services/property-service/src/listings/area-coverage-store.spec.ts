@@ -25,6 +25,8 @@ describe('listTrackedAreas', () => {
     const [query] = captured;
     expect(query?.text).toContain("status = 'complete'");
     expect(query?.text).toContain('synced_at IS NOT NULL');
+    // Sold records are never paged by an area job (#337).
+    expect(query?.text).toContain("source_status <> 'Closed'");
     expect(query?.values).toEqual(['production']);
   });
 

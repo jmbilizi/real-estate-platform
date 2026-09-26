@@ -107,6 +107,26 @@ describe('GET /listings triggers an on-demand load on bright_area_sync coverage,
     expect(loader.loadCalls).toBe(1);
   });
 
+  it('answers without waiting on the load, and marks that response uncacheable (#337)', async () => {
+    const loader = fakeAreaLoader(true);
+    let loadStarted = false;
+    const stalled: AreaLoader = {
+      ...loader,
+      needsLoad: () => Promise.resolve(true),
+      load: () => {
+        loadStarted = true;
+        return new Promise<AreaLoadOutcome>(() => undefined);
+      },
+    };
+    const response = await request(createApp({ pool: fakePool(5), areaLoader: stalled }))
+      .get('/listings')
+      .query({ city: 'Frederick' });
+
+    expect(response.status).toBe(200);
+    expect(loadStarted).toBe(true);
+    expect(response.headers['cache-control']).toBe('no-store');
+  });
+
   it('never checks coverage past page 1', async () => {
     const loader = fakeAreaLoader(true);
     await request(createApp({ pool: fakePool(50), areaLoader: loader }))
