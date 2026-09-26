@@ -134,13 +134,45 @@ describe('listings gateway query allowlist', () => {
       expect(forwarded.get('query')).toBe('condo with a pool');
     });
 
-    it('does not let `query` suppress itself: neighborhood is unaffected', () => {
+    // #339. neighborhood and county pin a place exactly as precisely as city does, so they now
+    // join the same drop-query rule city/zip/street already had.
+    it('drops `query` when `neighborhood` is present', () => {
       const forwarded = new URLSearchParams(
         buildListingsQuery(new URLSearchParams({ query: 'Bethesda', neighborhood: 'Old Town' })),
       );
 
-      expect(forwarded.get('query')).toBe('Bethesda');
       expect(forwarded.get('neighborhood')).toBe('Old Town');
+      expect(forwarded.has('query')).toBe(false);
+    });
+
+    it('drops `query` when `county` is present', () => {
+      const forwarded = new URLSearchParams(
+        buildListingsQuery(new URLSearchParams({ query: 'Fairfax County', county: '51059' })),
+      );
+
+      expect(forwarded.get('county')).toBe('51059');
+      expect(forwarded.has('query')).toBe(false);
+    });
+
+    it('keeps `state` alongside `neighborhood` — a neighborhood name alone can collide', () => {
+      const forwarded = new URLSearchParams(
+        buildListingsQuery(
+          new URLSearchParams({ neighborhood: 'Capitol Hill', city: 'Washington', state: 'DC' }),
+        ),
+      );
+
+      expect(forwarded.get('neighborhood')).toBe('Capitol Hill');
+      expect(forwarded.get('city')).toBe('Washington');
+      expect(forwarded.get('state')).toBe('DC');
+    });
+
+    it('forwards a boundary polygon alongside neighborhood/county', () => {
+      const boundary = JSON.stringify({ type: 'Polygon', coordinates: [[[0, 0]]] });
+      const forwarded = new URLSearchParams(
+        buildListingsQuery(new URLSearchParams({ county: '11001', boundary })),
+      );
+
+      expect(forwarded.get('boundary')).toBe(boundary);
     });
   });
 

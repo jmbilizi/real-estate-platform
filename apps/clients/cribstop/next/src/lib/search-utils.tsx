@@ -116,49 +116,234 @@ export function bareZip(value: string): string | undefined {
   return /^\d{5}$/.test(trimmed) ? trimmed : undefined;
 }
 
-/** Suggestion types that name a place smaller than a city but resolved the same way — the
- *  address block still carries a `city`, and this is what puts it on screen (`getLocationParts`). */
-const CITY_LIKE_TYPES = ['city', 'town', 'village', 'suburb', 'neighbourhood', 'hamlet', 'quarter'];
-
 /**
- * Extract the one structured filter a suggestion implies — never more than one shape.
- *
- * A place search has three shapes: a picked postcode, a picked road/house, and a picked
- * city/town/village (or a smaller place inside one). Each maps to its own filter set, so the API
- * never has to AND two location filters that could disagree (a city holds many zips; a zip can
- * straddle two cities).
+ * "Washington, DC" / "Washington DC" / "DC", typed verbatim, checked before any suggestion type —
+ * the same guarantee `bareZip` gives a zip. Washington, D.C. is a Nominatim `district`, which
+ * `extractSearchTerms` below also resolves correctly now, but the AC (#339) names these three
+ * literal strings, so this is a second, independent guarantee that does not depend on Nominatim's
+ * response shape at all.
  */
-export function extractSearchTerms(loc: any): {
+const DC_LITERAL = /^(washington,?\s*d\.?\s*c\.?|d\.?c\.?)$/i;
+export function bareDC(value: string): string | undefined {
+  return DC_LITERAL.test((value || '').trim()) ? 'DC' : undefined;
+}
+
+/** Every field one resolved suggestion can imply. Never more than one "shape" is populated at
+ *  once — see `extractSearchTerms`. */
+export interface LocationFilters {
   zip?: string;
   street?: string;
   city?: string;
   state?: string;
-} {
+  neighborhood?: string;
+  county?: string;
+}
+
+/** True if a resolved suggestion implies at least one filter. Used to refuse a search that would
+ *  otherwise run unfiltered (#339) — every branch of `extractSearchTerms` below is meant to
+ *  always set one, but a caller that failed to would rather learn that than run unfiltered. */
+export function hasLocationFilter(terms: LocationFilters): boolean {
+  return Boolean(
+    terms.zip || terms.street || terms.city || terms.state || terms.neighborhood || terms.county,
+  );
+}
+
+const NEIGHBORHOOD_TYPES = ['suburb', 'neighbourhood', 'quarter'];
+const CITY_TYPES = ['city', 'town', 'village', 'hamlet'];
+const COUNTY_TYPES = ['county'];
+const STATE_TYPES = ['state'];
+// Nominatim's own vocabulary for a state-level or larger administrative area is inconsistent
+// across versions and countries — Washington, D.C. (the bug this ticket fixes) has come back
+// tagged all three ways. Handled as one bucket: prefer whatever address component IS present,
+// most specific first, rather than trusting the type name to say which one that is.
+const DISTRICT_TYPES = ['district', 'state_district', 'administrative'];
+
+function resolveState(address: Record<string, string | undefined>): string | undefined {
+  return address.state_code || (address.state ? stateAbbr(address.state) : undefined);
+}
+
+/**
+ * Extract the one structured filter a suggestion implies — never more than one shape.
+ *
+ * A place search has these shapes: a picked postcode, a picked road/house, a picked
+ * city/town/village, a picked neighborhood/suburb/quarter (inside a city), a picked county, a
+ * picked state, or a district-class hit (Washington, D.C. and similar) resolved by whichever
+ * address component it actually carries. Each maps to its own filter set, so the API never has to
+ * AND two location filters that could disagree (a city holds many zips; a zip can straddle two
+ * cities) — see `listings-query.ts`'s precedence rules for how the API-facing proxy enforces that.
+ *
+ * Every branch returns at least one field whenever the address has ANY of
+ * neighbourhood/city/county/state — `{}` is reachable only when Nominatim's address block is
+ * empty, which `/api/geocode`'s `countrycodes=us` filter makes vanishingly rare. Callers still
+ * check `hasLocationFilter` before searching (#339's "never unfiltered" requirement) rather than
+ * trust that as a proof.
+ */
+export function extractSearchTerms(loc: any): LocationFilters {
   const address = loc.address || {};
   if (loc.type === 'postcode' && address.postcode) return { zip: address.postcode };
   if ((loc.type === 'road' || loc.type === 'house' || loc.type === 'residential') && address.road) {
     const street = address.house_number ? `${address.house_number} ${address.road}` : address.road;
     return { street };
   }
-  if (CITY_LIKE_TYPES.includes(loc.type)) {
+
+  const state = resolveState(address);
+
+  if (NEIGHBORHOOD_TYPES.includes(loc.type)) {
+    const neighborhood = address.suburb || address.neighbourhood || address.quarter;
     const city = address.city || address.town || address.village;
-    const state = address.state_code || stateAbbr(address.state || '');
-    const result: { city?: string; state?: string } = {};
+    const result: LocationFilters = {};
+    if (neighborhood) result.neighborhood = neighborhood;
     if (city) result.city = city;
     if (state) result.state = state;
     return result;
   }
+
+  if (CITY_TYPES.includes(loc.type)) {
+    const city = address.city || address.town || address.village || address.hamlet;
+    const result: LocationFilters = {};
+    if (city) result.city = city;
+    if (state) result.state = state;
+    return result;
+  }
+
+  if (COUNTY_TYPES.includes(loc.type)) {
+    const county = address.county || loc.name;
+    const result: LocationFilters = {};
+    if (county) result.county = county;
+    if (state) result.state = state;
+    return result;
+  }
+
+  if (STATE_TYPES.includes(loc.type)) {
+    return state ? { state } : {};
+  }
+
+  if (DISTRICT_TYPES.includes(loc.type)) {
+    const city = address.city || address.town || address.village;
+    if (city) return state ? { city, state } : { city };
+    if (address.county)
+      return state ? { county: address.county, state } : { county: address.county };
+    return state ? { state } : {};
+  }
+
   return {};
 }
 
-/** The one structured filter this search implies — a typed bare zip wins over whatever the
- *  suggestion resolved to, so an autocomplete mismatch can never send it as free text (#220). */
-export function resolveSearchTerms(
+/** The one structured filter this search implies — a typed bare zip or "DC" literal wins over
+ *  whatever the suggestion resolved to, so an autocomplete mismatch can never send it as free
+ *  text (#220), and the literal DC strings the AC names always resolve regardless of how
+ *  Nominatim happened to tag that particular hit. */
+export function resolveSearchTerms(typedValue: string, loc: any): LocationFilters {
+  const zip = bareZip(typedValue);
+  if (zip) return { zip };
+  const dc = bareDC(typedValue);
+  if (dc) return { state: dc };
+  return extractSearchTerms(loc);
+}
+
+/**
+ * Re-fetches a suggestion's boundary polygon on demand, for the two place types (neighborhood,
+ * county) where a boundary sharpens an otherwise flat text match — see search-query.ts's AC.
+ *
+ * Never included in the original suggestion list: `/api/geocode`'s `polygon=1` flag adds real
+ * cost (an OSM boundary relation, simplified server-side, still several KB), which is fine once
+ * per selection but not once per keystroke across up to `limit=5` suggestions.
+ *
+ * Re-issues the SAME `q` the original suggestion resolved from — the same idiom
+ * `SearchExperience.tsx` already uses for the results-page map boundary — rather than adding a
+ * lookup-by-osm-id endpoint this proxy does not expose. Nominatim's ranking for one query string
+ * is deterministic, so the top result is the same place.
+ */
+export async function fetchBoundaryFor(
+  loc: any,
+  signal?: AbortSignal,
+): Promise<string | undefined> {
+  const q = loc?.display_name;
+  if (!q) return undefined;
+  try {
+    const params = new URLSearchParams({ q, limit: '1', addressdetails: '0', polygon: '1' });
+    const resp = await fetch(`/api/geocode?${params.toString()}`, { signal });
+    if (!resp.ok) return undefined;
+    const data = await resp.json();
+    const geo = data?.[0]?.geojson;
+    if (geo?.type !== 'Polygon' && geo?.type !== 'MultiPolygon') return undefined;
+    return JSON.stringify(geo);
+  } catch (e: any) {
+    if (e?.name === 'AbortError') throw e;
+    console.error('[Nominatim] Boundary fetch failed', e);
+    return undefined;
+  }
+}
+
+/**
+ * Writes every filter a resolved suggestion implies onto `params`, fetching the boundary polygon
+ * too when the filter is neighborhood or county (#339).
+ *
+ * **The web never sends `county`.** `extractSearchTerms` resolves it to a Nominatim place NAME
+ * ("Fairfax County"), and `search-query.ts` matches the contract's `county` parameter against the
+ * `county_fips` CODE column ("51059") — a name can never equal a code, so sending it would not be
+ * a working filter that degrades once ingestion catches up, it would be a permanently-inert one.
+ * `boundary` is the only mechanism this client has for a county today, because `geog` is already
+ * populated (from lat/long) where `county_fips` is not. If the boundary fetch fails, the request
+ * still degrades to whatever `state` was resolved above — coarser than a county, but a real,
+ * populated filter — rather than an unfiltered one. `county` stays a contract parameter for a
+ * caller that already has the FIPS code; this client is not one.
+ *
+ * A resolved boundary replaces `neighborhood` and `city`. `neighborhood` and `city` are the
+ * fallback when the boundary fetch fails.
+ */
+/**
+ * Returns whether at least one filter was actually written to `params`.
+ *
+ * A synchronous `hasLocationFilter(resolveSearchTerms(...))` check at the call site is not
+ * sufficient on its own: a county resolution with no `state` in its address (rare, but not
+ * provably impossible) depends entirely on the boundary fetch below, which is async and can fail.
+ * Without this return value, that combination would write nothing to `params` at all and the
+ * caller would search on `q` alone — unfiltered, exactly what #339 forbids. Callers must check it
+ * and refuse to search when it is false, the same way they refuse an unresolved suggestion.
+ */
+export async function appendLocationParams(
+  params: URLSearchParams,
   typedValue: string,
   loc: any,
-): { zip?: string; street?: string; city?: string; state?: string } {
-  const zip = bareZip(typedValue);
-  return zip ? { zip } : extractSearchTerms(loc);
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const terms = resolveSearchTerms(typedValue, loc);
+  let applied = false;
+  if (terms.zip) {
+    params.set('zip', terms.zip);
+    applied = true;
+  }
+  if (terms.street) {
+    params.set('street', terms.street);
+    applied = true;
+  }
+  if (terms.city) {
+    params.set('city', terms.city);
+    applied = true;
+  }
+  if (terms.state) {
+    params.set('state', terms.state);
+    applied = true;
+  }
+  if (terms.neighborhood) {
+    params.set('neighborhood', terms.neighborhood);
+    applied = true;
+  }
+
+  if (terms.neighborhood || terms.county) {
+    const boundary = await fetchBoundaryFor(loc, signal);
+    if (boundary) {
+      // The boundary replaces the text filters. Bright's SubdivisionName is often a plat or condo
+      // name, and its City is the postal city, so ANDing either one drops listings inside the area.
+      params.delete('neighborhood');
+      params.delete('city');
+      params.set('boundary', boundary);
+      applied = true;
+    }
+  }
+
+  return applied;
 }
 
 // Highlight the portion of `text` that matches `query` (case-insensitive).

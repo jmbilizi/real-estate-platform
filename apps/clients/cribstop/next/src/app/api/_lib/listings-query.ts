@@ -29,20 +29,25 @@ export const FORWARDABLE_LISTING_PARAMS: readonly string[] = Object.freeze(
  * Copies only allowlisted parameters onto the upstream query string, preserving repeats
  * (`amenities` may legitimately appear more than once).
  *
- * **A place search never ANDs two location filters (#220).** `zip`, `street` and `city` each
- * pin a place more precisely than free-text `query` can, and a city holds many zips while a zip
- * can straddle two cities — ANDing `query` on top narrows the result below what the user picked,
- * or matches nothing at all when the label (`"Rockville, MD"`) does not equal any single field.
- * `query` is dropped whenever one of those is present, rather than split or reduced, because
- * this proxy is the one place every route into the API passes through — the picker, a pasted or
- * bookmarked link, the backdrop behind a directly-loaded listing.
+ * **A place search never ANDs two location filters (#220).** `zip`, `street`, `city`,
+ * `neighborhood` and `county` each pin a place more precisely than free-text `query` can, and a
+ * city holds many zips while a zip can straddle two cities — ANDing `query` on top narrows the
+ * result below what the user picked, or matches nothing at all when the label
+ * (`"Rockville, MD"`) does not equal any single field. `query` is dropped whenever one of those
+ * is present, rather than split or reduced, because this proxy is the one place every route into
+ * the API passes through — the picker, a pasted or bookmarked link, the backdrop behind a
+ * directly-loaded listing.
  *
  * **`state` never rides alongside `zip` (#220).** The zip already implies the state, so sending
- * both adds no precision.
+ * both adds no precision. `neighborhood`/`county` DO ride alongside `state` (and `city`,
+ * for `neighborhood`) — a neighborhood or county name alone can collide across states, so the
+ * search bar sends it paired with state precisely because it does add precision there (#339).
  */
 export function buildListingsQuery(incoming: URLSearchParams): string {
   const forwarded = new URLSearchParams();
-  const hasPlaceFilter = ['zip', 'street', 'city'].some((key) => incoming.get(key));
+  const hasPlaceFilter = ['zip', 'street', 'city', 'neighborhood', 'county', 'boundary'].some(
+    (key) => incoming.get(key),
+  );
   const hasZip = Boolean(incoming.get('zip'));
 
   for (const key of FORWARDABLE_LISTING_PARAMS) {

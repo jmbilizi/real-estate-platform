@@ -246,6 +246,24 @@ describe('seller address suppression is structural, not a rule callers must reme
       expect(projection?.expression).toMatch(/CASE\s+WHEN[\s\S]*address_display_allowed/i);
     }
   });
+
+  it('masks geog on the same predicate (#339): a boundary search must not re-disclose it', () => {
+    // A boundary-polygon search (search-query.ts's ST_Intersects) is a location query. An
+    // unmasked geog would answer it for a suppressed-address listing, defeating the opt-out the
+    // same way an unmasked latitude/longitude would.
+    const geog = projections.find((candidate) => candidate.outputName === 'geog');
+    expect(geog).toBeDefined();
+    expect(geog?.expression).toMatch(/CASE\s+WHEN[\s\S]*address_display_allowed/i);
+  });
+});
+
+describe('county search support (#339)', () => {
+  it('exposes county_fips unmasked', () => {
+    // County-level granularity does not re-identify a specific address, unlike address/geog above.
+    const countyFips = projections.find((candidate) => candidate.outputName === 'county_fips');
+    expect(countyFips).toBeDefined();
+    expect(countyFips?.expression).not.toMatch(/address_display_allowed/i);
+  });
 });
 
 describe('the opt-out covers the free-text fields too (#59)', () => {
