@@ -1,0 +1,31 @@
+# yaml-language-server: disable
+# Bright Area Refresh CronJob Patch for Hetzner Dev Environment (#331)
+#
+# WHICH FEED: the one this environment's BRIGHT_MLS_ENV secret declares, same as bright-mls-ingest.
+#
+# SCHEDULE: every 30 minutes, well inside the 12h NAR IDX rule, so a mapping fix or a status change
+# on the dev/staging feed shows up fast during iteration. BRIGHT_AREA_REFRESH_INTERVAL_MS is lowered
+# to match — otherwise the job would wake up every 30 minutes and find nothing due for another 6h.
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bright-area-refresh
+spec:
+  schedule: "*/30 * * * *"
+  suspend: false
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: refresh
+              image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:dev
+              imagePullPolicy: Always
+              env:
+                - name: NODE_ENV
+                  value: "development"
+                - name: BRIGHT_AREA_REFRESH_INTERVAL_MS
+                  value: "1800000" # 30 minutes
+                - name: BRIGHT_AREA_REFRESH_MAX_AREAS_PER_RUN
+                  value: "10"

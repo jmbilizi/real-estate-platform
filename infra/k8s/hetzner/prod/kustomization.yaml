@@ -38,6 +38,8 @@ patches:
 
   ## CronJobs (scheduled tasks)
   - path: patches/cronjobs/bright-mls-ingest.cronjob.yaml
+  - path: patches/cronjobs/bright-area-refresh.cronjob.yaml
+  - path: patches/cronjobs/bright-area-reconcile.cronjob.yaml
 
 # Common labels for all resources
 labels:

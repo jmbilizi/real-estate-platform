@@ -1,4 +1,9 @@
-import { getListingAttributes, getPropertyAttributes, type ReadClient } from './repository';
+import {
+  getListingAttributes,
+  getPropertyAttributes,
+  listBrightListingIdentities,
+  type ReadClient,
+} from './repository';
 
 /**
  * `getListingAttributes()`/`getPropertyAttributes()` (#128) push the address-suppression decision
@@ -79,5 +84,42 @@ describe('getPropertyAttributes', () => {
     await getPropertyAttributes(client, 'property-1');
 
     expect(captured[0]?.values).toHaveLength(1);
+  });
+});
+
+/** The daily key reconciliation's local read (#331). */
+describe('listBrightListingIdentities', () => {
+  it('reads listings directly, not listing_search_v, and excludes soft-deleted rows', async () => {
+    const { client, captured } = fakeClient();
+
+    await listBrightListingIdentities(client, {
+      city: 'Frederick',
+      state: 'MD',
+      statusCodes: ['Active', 'Pending'],
+    });
+
+    const [query] = captured;
+    expect(query?.text).toContain('FROM listings');
+    expect(query?.text).not.toContain('listing_search_v');
+    expect(query?.text).toContain("source_system = 'BrightMLS'");
+    expect(query?.text).toContain('deleted_at IS NULL');
+    expect(query?.values).toEqual([['Active', 'Pending'], 'Frederick', 'MD', null]);
+  });
+
+  it('returns no rows and issues no query for an empty status list', async () => {
+    const { client, captured } = fakeClient();
+
+    const result = await listBrightListingIdentities(client, { statusCodes: [] });
+
+    expect(result).toEqual([]);
+    expect(captured).toEqual([]);
+  });
+
+  it('maps rows to the id/sourceListingKey shape the reconciliation diff needs', async () => {
+    const { client } = fakeClient([{ id: 'l1', source_listing_key: '111' }]);
+
+    const result = await listBrightListingIdentities(client, { statusCodes: ['Active'] });
+
+    expect(result).toEqual([{ id: 'l1', sourceListingKey: '111' }]);
   });
 });

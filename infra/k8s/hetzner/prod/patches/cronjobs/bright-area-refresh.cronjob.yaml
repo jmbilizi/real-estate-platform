@@ -1,0 +1,27 @@
+# yaml-language-server: disable
+# Bright Area Refresh CronJob Patch for Hetzner Prod Environment (#331)
+#
+# WHICH FEED: the one this environment's `bright-mls-secret` declares in BRIGHT_MLS_ENV.
+#
+# SUSPENDED until property-service itself is promoted to prod (`infra/deploy-control.yaml` keeps
+# property-service `enabled: false` there) — same reasoning as bright-mls-ingest's prod patch.
+# Schedule stays the base default (every 6 hours), comfortably inside the 12h NAR IDX rule.
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bright-area-refresh
+spec:
+  schedule: "0 */6 * * *"
+  suspend: true
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: refresh
+              image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:latest
+              imagePullPolicy: Always
+              env:
+                - name: NODE_ENV
+                  value: "production"

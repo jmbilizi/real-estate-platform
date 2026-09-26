@@ -1,0 +1,34 @@
+# yaml-language-server: disable
+# Bright Area Reconciliation CronJob Patch for Podman Local Environment (#331)
+#
+# WHICH FEED: the one you hold credentials for, same as bright-mls-ingest's local patch.
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bright-area-reconcile
+spec:
+  schedule: "30 * * * *"
+  suspend: false
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          # Same CA mount as bright-area-refresh's local patch — see there for why.
+          volumes:
+            - name: workspace-ca-bundle
+              configMap:
+                name: workspace-ca-bundle
+          containers:
+            - name: reconcile
+              image: property-service
+              imagePullPolicy: IfNotPresent
+              volumeMounts:
+                - name: workspace-ca-bundle
+                  mountPath: /etc/workspace-ca
+                  readOnly: true
+              env:
+                - name: NODE_ENV
+                  value: "development"
+                - name: NODE_EXTRA_CA_CERTS
+                  value: "/etc/workspace-ca/workspace-enterprise-roots.pem"

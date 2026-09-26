@@ -1,0 +1,30 @@
+# yaml-language-server: disable
+# Bright Area Refresh CronJob Patch for Hetzner Test Environment (#331)
+#
+# WHICH FEED: the one this environment's BRIGHT_MLS_ENV secret declares, same as bright-mls-ingest.
+#
+# SCHEDULE: every 30 minutes, offset 10 minutes from dev's `*/30`, since dev and test share the same
+# Bright test-feed rate limit.
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bright-area-refresh
+spec:
+  schedule: "10-59/30 * * * *"
+  suspend: false
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: refresh
+              image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:test
+              imagePullPolicy: Always
+              env:
+                - name: NODE_ENV
+                  value: "production"
+                - name: BRIGHT_AREA_REFRESH_INTERVAL_MS
+                  value: "1800000" # 30 minutes
+                - name: BRIGHT_AREA_REFRESH_MAX_AREAS_PER_RUN
+                  value: "10"

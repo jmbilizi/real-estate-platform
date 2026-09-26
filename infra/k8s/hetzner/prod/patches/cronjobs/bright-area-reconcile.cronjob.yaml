@@ -1,0 +1,26 @@
+# yaml-language-server: disable
+# Bright Area Reconciliation CronJob Patch for Hetzner Prod Environment (#331)
+#
+# WHICH FEED: the one this environment's `bright-mls-secret` declares in BRIGHT_MLS_ENV.
+#
+# SUSPENDED until property-service itself is promoted to prod — same reasoning as
+# bright-mls-ingest's prod patch. Schedule stays the base default (daily).
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bright-area-reconcile
+spec:
+  schedule: "30 4 * * *"
+  suspend: true
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: reconcile
+              image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:latest
+              imagePullPolicy: Always
+              env:
+                - name: NODE_ENV
+                  value: "production"

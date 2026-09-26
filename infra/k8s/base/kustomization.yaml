@@ -67,3 +67,5 @@ resources:
 
   ## CronJobs (scheduled tasks like backups, cleanup, reports )
   - cronjobs/bright-mls-ingest.cronjob.yaml
+  - cronjobs/bright-area-refresh.cronjob.yaml
+  - cronjobs/bright-area-reconcile.cronjob.yaml

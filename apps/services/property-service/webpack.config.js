@@ -39,6 +39,14 @@ module.exports = {
           entryName: 'bright-audit',
           entryPath: './src/jobs/bright-ingest/bright-audit.main.ts',
         },
+        // The scheduled per-area refresh and daily key reconciliation (#331). Two CronJobs
+        // (`bright-area-refresh`, `bright-area-reconcile`) run this ONE entry with different
+        // `command` arguments (`refresh` | `reconcile`), for the same reason `bright-audit` needs
+        // its own entry: nothing on the request-serving or ingestion startup path imports it.
+        {
+          entryName: 'bright-area-sync',
+          entryPath: './src/jobs/bright-area-sync/bright-area-sync.main.ts',
+        },
       ],
       tsConfig: './tsconfig.app.json',
       assets: ['./src/assets'],
