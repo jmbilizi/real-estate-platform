@@ -12,6 +12,7 @@ export interface ListingStatusLookup {
   readonly consumerStatus: 'Active' | 'Pending' | 'Coming Soon' | 'Sold' | null;
   readonly isTerminal: boolean;
   readonly resoStandardStatus: string | null;
+  readonly isPubliclySearchable: boolean;
 }
 
 export interface StatusMapResult {
@@ -37,4 +38,21 @@ export function mapStandardStatus(
     return null;
   }
   return { code: match.code, consumerStatus: match.consumerStatus, isTerminal: match.isTerminal };
+}
+
+/**
+ * The Bright `StandardStatus` wire values an area load must fetch (#330).
+ *
+ * `is_publicly_searchable` is the search-display gate. A status carries no `reso_standard_status`
+ * on this feed, or duplicates one another status already reports, is skipped: Bright takes one
+ * value per pass, and a duplicate would run the same query twice.
+ */
+export function searchableStatuses(statuses: readonly ListingStatusLookup[]): string[] {
+  const seen = new Set<string>();
+  for (const status of statuses) {
+    if (status.isPubliclySearchable && status.resoStandardStatus !== null) {
+      seen.add(status.resoStandardStatus);
+    }
+  }
+  return [...seen];
 }

@@ -16,19 +16,25 @@ import {
   fetchListingMedia,
   type ListingMediaTarget,
 } from '../jobs/bright-ingest/listing-media-fetch';
-import { mapStagedBrightMedia, mapStagedBrightProperties } from '../jobs/bright-map/run';
+import {
+  loadListingStatuses,
+  mapStagedBrightMedia,
+  mapStagedBrightProperties,
+} from '../jobs/bright-map/run';
+import { searchableStatuses } from '../jobs/bright-map/status';
 
 /**
  * On-demand area load: a search for a place we hold nothing for loads that place from Bright.
  *
  * The search always reads our own database first (`repository.ts`). Only when a first-page search
- * for a city or ZIP returns zero results does the route ask this loader to fetch that area's ACTIVE
- * listings from Bright, stage them, map them, and then search again. Bright is slow, so the route
- * waits at most `waitMs`; past that it answers with what it has and the load finishes in the
- * background, so the next request finds the listings.
+ * for a city or ZIP returns zero results does the route ask this loader to fetch that area's
+ * publicly searchable listings from Bright, stage them, map them, and then search again — every
+ * status `listing_statuses.is_publicly_searchable` allows, not Active alone (#330). Bright is slow,
+ * so the route waits at most `waitMs`; past that it answers with what it has and the load finishes
+ * in the background, so the next request finds the listings.
  *
- * Each area is attempted at most once per `cooldownMs`, so a place with no active listings does not
- * cost a Bright request on every search. Concurrent searches for the same area share one load.
+ * Each area is attempted at most once per `cooldownMs`, so a place with no searchable listings does
+ * not cost a Bright request on every search. Concurrent searches for the same area share one load.
  */
 
 export type AreaLoadOutcome = 'loaded' | 'pending' | 'skipped';
@@ -334,6 +340,14 @@ export function createAreaLoader(options: AreaLoaderOptions = {}): AreaLoader {
 
   async function loadArea(area: Area, active: ActiveConfig): Promise<void> {
     const started = now();
+    const listingStatuses = await loadListingStatuses(getPool());
+    const statuses = searchableStatuses(listingStatuses);
+    if (statuses.length === 0) {
+      log(
+        `On-demand Bright load for ${areaKey(area)}: no publicly searchable status is configured.`,
+      );
+      return;
+    }
     const result = await fetchAreaListings({
       serviceRoot: active.endpoint.serviceRoot,
       serviceRootHost: active.endpoint.serviceRootHost,
@@ -342,6 +356,7 @@ export function createAreaLoader(options: AreaLoaderOptions = {}): AreaLoader {
       runId: randomUUID(),
       feedTier: active.feed,
       ...area,
+      statuses,
       pageSize: active.replication.pageSize ?? 200,
       maxRecords,
       pageOptions: pageOptions(active),
@@ -353,6 +368,9 @@ export function createAreaLoader(options: AreaLoaderOptions = {}): AreaLoader {
             feed: active.feed,
             soldDisplayDelayDays: soldDisplayDelayDays(env),
             listingKeys: result.listingKeys,
+            // Already loaded above to derive `statuses`; re-querying would cost this request a
+            // second round trip to a table that never changes per-request.
+            statuses: listingStatuses,
           });
     log(
       `On-demand Bright load for ${areaKey(area)} from ${active.endpoint.serviceRootHost}: ` +
