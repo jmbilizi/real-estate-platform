@@ -30,7 +30,7 @@ import {
   mapStagedBrightMedia,
   mapStagedBrightProperties,
 } from '../jobs/bright-map/run';
-import { searchableStatuses } from '../jobs/bright-map/status';
+import { type ListingStatusLookup, searchableStatuses } from '../jobs/bright-map/status';
 
 /**
  * `Closed` (sold) listings run last in `listing_statuses.sort_order` and can be numerous for a busy
@@ -354,18 +354,20 @@ export function createAreaLoader(options: AreaLoaderOptions = {}): AreaLoader {
   }
 
   /**
-   * The `bright_area_sync` rows for `area`, keyed by Bright `StandardStatus`, and the currently
-   * searchable statuses to check them against. Both callers of this (`needsLoad`, `loadArea`) need
-   * the identical pair, so it is read once here rather than twice with a chance to disagree.
+   * The `bright_area_sync` rows for `area`, the currently searchable statuses to check them
+   * against, and the raw `listing_statuses` lookup those statuses were derived from. Both callers
+   * (`needsLoad`, `loadArea`) need the identical pair, so it is read once here rather than twice
+   * with a chance to disagree — and `loadArea` reuses `listingStatuses` for
+   * `mapStagedBrightProperties` rather than querying the table a second time.
    */
   async function coverage(
     area: Area,
     feedTier: ActiveConfig['feed'],
-  ): Promise<{ rows: AreaSyncRows; statuses: string[] }> {
+  ): Promise<{ rows: AreaSyncRows; statuses: string[]; listingStatuses: ListingStatusLookup[] }> {
     const listingStatuses = await loadListingStatuses(areaSync());
     const statuses = searchableStatuses(listingStatuses);
     const rows = await getAreaSync(areaSync(), areaKey(area), feedTier);
-    return { rows, statuses };
+    return { rows, statuses, listingStatuses };
   }
 
   async function fetchGallery(active: ActiveConfig, listing: ListingMediaTarget): Promise<void> {
@@ -426,7 +428,7 @@ export function createAreaLoader(options: AreaLoaderOptions = {}): AreaLoader {
   async function loadArea(area: Area, active: ActiveConfig): Promise<boolean> {
     const started = now();
     const key = areaKey(area);
-    const { rows, statuses } = await coverage(area, active.feed);
+    const { rows, statuses, listingStatuses } = await coverage(area, active.feed);
     if (statuses.length === 0) {
       log(`On-demand Bright load for ${key}: no publicly searchable status is configured.`);
       return false;
@@ -450,13 +452,16 @@ export function createAreaLoader(options: AreaLoaderOptions = {}): AreaLoader {
         feedTier: active.feed,
         ...area,
         status: target,
-        afterKey: prior?.status === 'partial' ? prior.resumeKey : null,
+        // `complete` rows are never picked by `pickNextStatus`, so `prior` here is always
+        // `undefined`, `partial`, or `failed` — and a `failed` row keeps whatever cursor the
+        // attempt before it left (`recordAreaFailure`), precisely so THIS resume can use it rather
+        // than restart the whole pass and double-count already-staged records into `loaded_count`.
+        afterKey: prior?.resumeKey ?? null,
         pageSize: active.replication.pageSize ?? 200,
         maxRecords: budget,
         pageOptions: pageOptions(active),
       });
 
-      const listingStatuses = await loadListingStatuses(areaSync());
       const mapping =
         result.listingKeys.length === 0
           ? null
