@@ -12,6 +12,12 @@ export interface ListingStatusLookup {
   readonly consumerStatus: 'Active' | 'Pending' | 'Coming Soon' | 'Sold' | null;
   readonly isTerminal: boolean;
   readonly resoStandardStatus: string | null;
+  /**
+   * The display gate (`listing_statuses.is_publicly_searchable`). Optional because
+   * `mapStandardStatus` never reads it — only the Bright count audit (#328) does, which is also
+   * the only caller that needs `loadListingStatuses` to select the column at all.
+   */
+  readonly isPubliclySearchable?: boolean;
 }
 
 export interface StatusMapResult {

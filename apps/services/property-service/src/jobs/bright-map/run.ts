@@ -53,13 +53,15 @@ export async function loadListingStatuses(client: Queryable): Promise<ListingSta
     // ORDER BY sort_order: two codes ('Hold' and 'Temporarily Off Market') share the same
     // reso_standard_status ('Hold'). mapStandardStatus() takes the first array match, so the order
     // here — not incidental — decides which code an ambiguous Bright value resolves to.
-    'SELECT code, consumer_status, is_terminal, reso_standard_status FROM listing_statuses ORDER BY sort_order',
+    'SELECT code, consumer_status, is_terminal, reso_standard_status, is_publicly_searchable ' +
+      'FROM listing_statuses ORDER BY sort_order',
   );
   return rows.map((row) => ({
     code: String(row.code),
     consumerStatus: (row.consumer_status ?? null) as ListingStatusLookup['consumerStatus'],
     isTerminal: Boolean(row.is_terminal),
     resoStandardStatus: (row.reso_standard_status ?? null) as string | null,
+    isPubliclySearchable: Boolean(row.is_publicly_searchable),
   }));
 }
 

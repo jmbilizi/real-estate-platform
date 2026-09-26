@@ -32,6 +32,13 @@ module.exports = {
           entryName: 'bright-ingest',
           entryPath: './src/jobs/bright-ingest/bright-ingest.main.ts',
         },
+        // The Bright `$count` audit (#328): a manually-run diagnostic, not a CronJob. Nothing on
+        // the request-serving or ingestion startup path imports it, so it needs its own entry for
+        // the same reason `bright-ingest` does.
+        {
+          entryName: 'bright-audit',
+          entryPath: './src/jobs/bright-ingest/bright-audit.main.ts',
+        },
       ],
       tsConfig: './tsconfig.app.json',
       assets: ['./src/assets'],

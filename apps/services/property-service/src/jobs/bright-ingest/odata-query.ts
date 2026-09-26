@@ -161,6 +161,36 @@ export function buildAreaQuery(params: AreaQueryParams): string {
   return `${base}/BrightProperties?${search.toString()}`;
 }
 
+/** One city and one Bright `StandardStatus` value, for one `$count` request (#328). */
+export interface AreaCountQueryParams {
+  readonly serviceRoot: string;
+  readonly city: string;
+  /** The Bright wire value, e.g. `'Active'` or `'ComingSoon'` — see resources.ts on this vocabulary. */
+  readonly standardStatus: string;
+}
+
+/**
+ * Builds a `$count` request for one city and one status: `GET .../BrightProperties/$count?$filter=...`.
+ *
+ * OData v4's `$count` segment returns the row count as a bare integer body, not a page. There is
+ * therefore no `$orderby` and no `$top` to get wrong here, and this function never emits either.
+ * Bright rejects `OR` in `$filter` (see the module header), so a caller wanting several statuses for
+ * one city sends one request per status and sums the results — this builder never joins statuses
+ * itself.
+ */
+export function buildAreaCountQuery(params: AreaCountQueryParams): string {
+  const clauses = [
+    `City eq ${stringLiteral(params.city)}`,
+    `StandardStatus eq ${stringLiteral(params.standardStatus)}`,
+  ];
+
+  const search = new URLSearchParams();
+  search.set('$filter', clauses.join(' and '));
+
+  const base = params.serviceRoot.replace(/\/+$/, '');
+  return `${base}/BrightProperties/$count?${search.toString()}`;
+}
+
 /**
  * Reports whether a URL breaks the rule this module exists to enforce.
  *

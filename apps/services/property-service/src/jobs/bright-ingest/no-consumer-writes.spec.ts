@@ -80,7 +80,7 @@ const CONSUMER_TABLES = [
 ];
 
 /** Files allowed to open a database connection. Anything else has no business holding one. */
-const POOL_IMPORTERS = ['staging-store.ts', 'bright-ingest.main.ts'];
+const POOL_IMPORTERS = ['staging-store.ts', 'bright-ingest.main.ts', 'bright-audit.main.ts'];
 
 /** The single module allowed to write an OData `$orderby`. Specs and the mock read it, not emit it. */
 const ORDERBY_EMITTER = 'odata-query.ts';
