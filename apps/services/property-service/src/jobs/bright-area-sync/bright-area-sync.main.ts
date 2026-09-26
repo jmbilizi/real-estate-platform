@@ -74,6 +74,10 @@ async function runRefreshMode(): Promise<void> {
   const store = createStagingStore();
   const pageSize = config.replication.pageSize ?? 200;
   const maxRecordsPerWindow = positiveInt(env, 'BRIGHT_AREA_REFRESH_MAX_RECORDS', 500);
+  // Read once for the whole run, not once per due window: listing_statuses is a small, static
+  // vocabulary table, and a run with the default 25-area cap would otherwise issue 25 identical
+  // reads for it.
+  const statusesPromise = loadListingStatuses(pool);
 
   const deps: RefreshDeps = {
     listTracked: (): Promise<TrackedArea[]> => listTrackedAreas(pool, config.feed),
@@ -98,12 +102,11 @@ async function runRefreshMode(): Promise<void> {
       return { listingKeys: result.listingKeys, complete: result.complete };
     },
     mapRecords: async (listingKeys) => {
-      const statuses = await loadListingStatuses(pool);
       const mapping = await mapStagedBrightProperties(pool, {
         feed: config.feed,
         soldDisplayDelayDays: resolveSoldDisplayDelayDays(env),
         listingKeys: [...listingKeys],
-        statuses,
+        statuses: await statusesPromise,
       });
       return { published: mapping.published };
     },
@@ -172,7 +175,24 @@ async function runReconcileMode(): Promise<void> {
     wireToLocalCode: (wireStatus) => wireToCode.get(wireStatus) ?? null,
     listLocal: ({ area, statusCodes }) =>
       listBrightListingIdentities(pool, { ...area, statusCodes }),
-    softDelete: (listingIds, reason) => softDeleteListings(pool, listingIds, reason),
+    // The UPDATE and its per-row listing_events INSERT must commit together (see
+    // softDeleteListings' doc comment), so this opens its own connection and wraps both in one
+    // transaction — the pool itself cannot: each `pool.query()` call may land on a different
+    // connection.
+    softDelete: async (listingIds, reason) => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const deleted = await softDeleteListings(client, listingIds, reason);
+        await client.query('COMMIT');
+        return deleted;
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
     log: (message) => console.info(JSON.stringify({ job: 'bright-area-reconcile', message })),
     now: () => Date.now(),
   };

@@ -381,6 +381,11 @@ export async function applyTerminalCorrection(
  * Idempotent (`deleted_at IS NULL` in the WHERE), so a listing already deleted by an earlier pass is
  * silently skipped rather than re-timestamped, and the `RETURNING` list only ever names listings
  * newly taken down this call. Returns that count so a run can report what it did.
+ *
+ * **Caller supplies the transaction**, same contract as `replaceFeedListingMedia()`. The UPDATE and
+ * its per-row `listing_events` INSERT must commit together: a pod killed between them would leave a
+ * listing marked deleted with no audit row, and because the WHERE clause is `deleted_at IS NULL`, no
+ * later run would ever re-select it to backfill the missing event.
  */
 export async function softDeleteListings(
   client: Queryable,
