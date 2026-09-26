@@ -2,6 +2,15 @@ import { randomUUID } from 'node:crypto';
 
 import type { SearchRequest, SearchRequestInput } from '@cribstop/property-contracts';
 
+import {
+  type AreaSyncClient,
+  type AreaSyncRows,
+  getAreaSync,
+  recordAreaAttempt,
+  recordAreaFailure,
+  recordAreaOutcome,
+} from './area-coverage-store';
+import { needsAreaLoad, pickNextStatus } from './area-coverage';
 import { getPool } from '../db/pool';
 import { fetchAreaListings } from '../jobs/bright-ingest/area-fetch';
 import {
@@ -11,7 +20,7 @@ import {
 } from '../jobs/bright-ingest/bright-client';
 import { type BrightConfig, resolveBrightConfig } from '../jobs/bright-ingest/config';
 import { RateLimiter } from '../jobs/bright-ingest/rate-limiter';
-import { createStagingStore } from '../jobs/bright-ingest/staging-store';
+import { type BrightStagingStore, createStagingStore } from '../jobs/bright-ingest/staging-store';
 import {
   fetchListingMedia,
   type ListingMediaTarget,
@@ -24,17 +33,31 @@ import {
 import { searchableStatuses } from '../jobs/bright-map/status';
 
 /**
- * On-demand area load: a search for a place we hold nothing for loads that place from Bright.
+ * `Closed` (sold) listings run last in `listing_statuses.sort_order` and can be numerous for a busy
+ * city. Fetching them through the same cap as the statuses that keep a listing on the market let a
+ * large sold backlog starve those statuses' resume progress and never let the area read `complete`
+ * (#329). It is not a `listing_statuses` code — checked against the RESO `StandardStatus` wire
+ * value `fetchAreaListings` requests — so this is a literal, not an import from `bright-map/status`.
+ */
+const CLOSED_STANDARD_STATUS = 'Closed';
+
+/**
+ * On-demand area load: a search for a place we do not fully hold loads that place from Bright.
  *
- * The search always reads our own database first (`repository.ts`). Only when a first-page search
- * for a city or ZIP returns zero results does the route ask this loader to fetch that area's
- * publicly searchable listings from Bright, stage them, map them, and then search again — every
- * status `listing_statuses.is_publicly_searchable` allows, not Active alone (#330). Bright is slow,
- * so the route waits at most `waitMs`; past that it answers with what it has and the load finishes
- * in the background, so the next request finds the listings.
+ * The search always reads our own database first (`repository.ts`). `routes.ts` asks `needsLoad()`
+ * whether the searched place's `bright_area_sync` coverage is missing, not complete, or older than
+ * the freshness window — not only when the search returned zero rows (#329). Every publicly
+ * searchable status is tracked (`listing_statuses.is_publicly_searchable`, not Active alone, #330),
+ * one row per `(area, status)`, so a load resumes each status from its own cursor and a capped call
+ * never restarts at the beginning. Bright is slow, so the route waits at most `waitMs`; past that it
+ * answers with what it has and the load finishes in the background, so the next request finds the
+ * listings.
  *
- * Each area is attempted at most once per `cooldownMs`, so a place with no searchable listings does
- * not cost a Bright request on every search. Concurrent searches for the same area share one load.
+ * `bright_area_sync.attempted_at` is the cooldown: shared across pods and surviving a pod restart,
+ * unlike the in-memory map this replaced. A `failed` status cools down for `failedCooldownMs`, far
+ * shorter than the `cooldownMs` a `complete`/`partial` status uses, so a transient Bright error does
+ * not block the next search from retrying for a full hour. Concurrent searches for the same area
+ * share one in-flight load (per process).
  */
 
 export type AreaLoadOutcome = 'loaded' | 'pending' | 'skipped';
@@ -43,6 +66,8 @@ export interface AreaLoader {
   load(request: SearchRequest): Promise<AreaLoadOutcome>;
   /** Fetches one Bright listing's full photo gallery (the listing detail view). */
   loadGallery(listing: ListingMediaTarget): Promise<AreaLoadOutcome>;
+  /** Whether `request`'s place needs a load: coverage missing, not complete, or stale. */
+  needsLoad(request: SearchRequest): Promise<boolean>;
 }
 
 type ActiveConfig = Extract<BrightConfig, { state: 'configured' }>;
@@ -168,10 +193,26 @@ export interface AreaLoaderOptions {
   readonly env?: NodeJS.ProcessEnv;
   readonly waitMs?: number;
   readonly cooldownMs?: number;
+  /** Cooldown after a `failed` status pass — short, so a transient error self-heals fast (#329). */
+  readonly failedCooldownMs?: number;
   readonly maxRecords?: number;
+  /** Independent cap for the `Closed` (sold) pass, so a sold backlog cannot borrow this budget. */
+  readonly closedMaxRecords?: number;
+  /** How long a `complete` area's coverage stays trusted before the next search re-triggers it. */
+  readonly freshnessMs?: number;
   readonly now?: () => number;
   readonly fetchImpl?: FetchLike;
   readonly log?: (message: string) => void;
+  /**
+   * Test seam for every plain read/write this loader issues against `property_db` —
+   * `bright_area_sync`, `listing_statuses`, and the mapper's staging reads — so a unit test can
+   * pass an in-memory fake instead of opening a socket. Defaults to `getPool()`. The gallery path
+   * (`fetchGallery`) still opens its own connection: it needs a transaction, which this seam's
+   * plain `query()` shape does not provide.
+   */
+  readonly areaSyncClient?: AreaSyncClient;
+  /** Test seam for the staging writes `fetchAreaListings` issues; defaults to `createStagingStore()`. */
+  readonly stagingStore?: BrightStagingStore;
 }
 
 function soldDisplayDelayDays(env: NodeJS.ProcessEnv): number | null {
@@ -204,14 +245,29 @@ export function createAreaLoader(options: AreaLoaderOptions = {}): AreaLoader {
   const env = options.env ?? process.env;
   const waitMs = options.waitMs ?? Number(env.BRIGHT_ON_DEMAND_WAIT_MS ?? 20_000);
   const galleryWaitMs = Number(env.BRIGHT_ON_DEMAND_GALLERY_WAIT_MS ?? 10_000);
-  const cooldownMs = options.cooldownMs ?? 60 * 60 * 1000;
+  const cooldownMs =
+    options.cooldownMs ?? Number(env.BRIGHT_ON_DEMAND_COOLDOWN_MS ?? 60 * 60 * 1000);
+  const failedCooldownMs =
+    options.failedCooldownMs ?? Number(env.BRIGHT_ON_DEMAND_FAILED_COOLDOWN_MS ?? 5 * 60 * 1000);
   const maxRecords = options.maxRecords ?? 1000;
+  const closedMaxRecords =
+    options.closedMaxRecords ?? Number(env.BRIGHT_ON_DEMAND_CLOSED_MAX_RECORDS ?? maxRecords);
+  const freshnessMs =
+    options.freshnessMs ?? Number(env.BRIGHT_AREA_FRESHNESS_MS ?? 24 * 60 * 60 * 1000);
   const now = options.now ?? (() => Date.now());
   const log = options.log ?? ((message: string) => console.warn(message));
+  // Lazy: `getPool()` throws when `DATABASE_URL` is unset, and a Bright-not-configured loader
+  // (`config === null`) must still construct cleanly — it never reaches a call site that needs one.
+  let areaSyncClient: AreaSyncClient | null = null;
+  function areaSync(): AreaSyncClient {
+    areaSyncClient ??= options.areaSyncClient ?? getPool();
+    return areaSyncClient;
+  }
 
   const config = resolveConfigOrNull(env);
   const inFlight = new Map<string, Promise<void>>();
-  const attemptedAt = new Map<string, number>();
+  const areaInFlight = new Map<string, Promise<boolean>>();
+  const galleryAttemptedAt = new Map<string, number>();
   let tokenProvider: TokenProvider | null = null;
   const limiter =
     config === null
@@ -240,26 +296,30 @@ export function createAreaLoader(options: AreaLoaderOptions = {}): AreaLoader {
   }
 
   /**
-   * Records an attempt. Expired entries are pruned first; if the map is still full, the oldest
-   * (Map keeps insertion order) are dropped. Arbitrary search text cannot grow it without limit.
+   * Records a gallery-fetch attempt. Expired entries are pruned first; if the map is still full,
+   * the oldest (Map keeps insertion order) are dropped. Arbitrary listing keys cannot grow it
+   * without limit. Area-load cooldowns are no longer tracked here — see `bright_area_sync` (#329).
    */
-  function remember(key: string): void {
-    if (attemptedAt.size >= MAX_TRACKED_KEYS) {
-      for (const [tracked, at] of attemptedAt) {
-        if (now() - at >= cooldownMs) attemptedAt.delete(tracked);
+  function rememberGallery(key: string): void {
+    if (galleryAttemptedAt.size >= MAX_TRACKED_KEYS) {
+      for (const [tracked, at] of galleryAttemptedAt) {
+        if (now() - at >= cooldownMs) galleryAttemptedAt.delete(tracked);
       }
-      for (const tracked of attemptedAt.keys()) {
-        if (attemptedAt.size < MAX_TRACKED_KEYS) break;
-        attemptedAt.delete(tracked);
+      for (const tracked of galleryAttemptedAt.keys()) {
+        if (galleryAttemptedAt.size < MAX_TRACKED_KEYS) break;
+        galleryAttemptedAt.delete(tracked);
       }
     }
-    attemptedAt.delete(key);
-    attemptedAt.set(key, now());
+    galleryAttemptedAt.delete(key);
+    galleryAttemptedAt.set(key, now());
   }
 
   /**
    * Starts `work` once per key per cooldown, shares an in-flight run between callers, and waits
    * at most `wait` for it. `'skipped'` means it ran recently, so nothing new will arrive.
+   *
+   * Gallery fetches only — an area load's cooldown lives in `bright_area_sync` and is decided by
+   * `pickNextStatus()` inside `loadArea()`, not here (#329).
    */
   async function once(
     key: string,
@@ -268,11 +328,11 @@ export function createAreaLoader(options: AreaLoaderOptions = {}): AreaLoader {
   ): Promise<AreaLoadOutcome> {
     let pending = inFlight.get(key);
     if (pending === undefined) {
-      const last = attemptedAt.get(key);
+      const last = galleryAttemptedAt.get(key);
       if (last !== undefined && now() - last < cooldownMs) {
         return 'skipped';
       }
-      remember(key);
+      rememberGallery(key);
       pending = work()
         .catch((error: unknown) => {
           log(
@@ -293,6 +353,21 @@ export function createAreaLoader(options: AreaLoaderOptions = {}): AreaLoader {
     return outcome;
   }
 
+  /**
+   * The `bright_area_sync` rows for `area`, keyed by Bright `StandardStatus`, and the currently
+   * searchable statuses to check them against. Both callers of this (`needsLoad`, `loadArea`) need
+   * the identical pair, so it is read once here rather than twice with a chance to disagree.
+   */
+  async function coverage(
+    area: Area,
+    feedTier: ActiveConfig['feed'],
+  ): Promise<{ rows: AreaSyncRows; statuses: string[] }> {
+    const listingStatuses = await loadListingStatuses(areaSync());
+    const statuses = searchableStatuses(listingStatuses);
+    const rows = await getAreaSync(areaSync(), areaKey(area), feedTier);
+    return { rows, statuses };
+  }
+
   async function fetchGallery(active: ActiveConfig, listing: ListingMediaTarget): Promise<void> {
     const started = now();
     const result = await fetchListingMedia(
@@ -300,7 +375,7 @@ export function createAreaLoader(options: AreaLoaderOptions = {}): AreaLoader {
         serviceRoot: active.endpoint.serviceRoot,
         serviceRootHost: active.endpoint.serviceRootHost,
         tokenProvider: tokens(active),
-        store: createStagingStore(),
+        store: options.stagingStore ?? createStagingStore(),
         runId: randomUUID(),
         feedTier: active.feed,
         listing,
@@ -338,49 +413,128 @@ export function createAreaLoader(options: AreaLoaderOptions = {}): AreaLoader {
     })();
   }
 
-  async function loadArea(area: Area, active: ActiveConfig): Promise<void> {
+  /**
+   * Works on exactly one status pass per invocation — whichever `pickNextStatus` names, budgeted
+   * `closedMaxRecords` for `Closed` and `maxRecords` for every other status — and persists the
+   * result to `bright_area_sync` before returning. A single search may trigger several loads in a
+   * row (each one advances one status), but never more than one status's cap of Bright records.
+   *
+   * Returns whether it actually ran a Bright request, so the in-flight wrapper can tell a `loaded`
+   * outcome from `pickNextStatus` finding nothing to do (already complete, or every incomplete
+   * status still cooling down).
+   */
+  async function loadArea(area: Area, active: ActiveConfig): Promise<boolean> {
     const started = now();
-    const listingStatuses = await loadListingStatuses(getPool());
-    const statuses = searchableStatuses(listingStatuses);
+    const key = areaKey(area);
+    const { rows, statuses } = await coverage(area, active.feed);
     if (statuses.length === 0) {
-      log(
-        `On-demand Bright load for ${areaKey(area)}: no publicly searchable status is configured.`,
-      );
-      return;
+      log(`On-demand Bright load for ${key}: no publicly searchable status is configured.`);
+      return false;
     }
-    const result = await fetchAreaListings({
-      serviceRoot: active.endpoint.serviceRoot,
-      serviceRootHost: active.endpoint.serviceRootHost,
-      tokenProvider: tokens(active),
-      store: createStagingStore(),
-      runId: randomUUID(),
-      feedTier: active.feed,
-      ...area,
-      statuses,
-      pageSize: active.replication.pageSize ?? 200,
-      maxRecords,
-      pageOptions: pageOptions(active),
+    const target = pickNextStatus(statuses, rows, now(), cooldownMs, failedCooldownMs);
+    if (target === null) {
+      return false;
+    }
+
+    await recordAreaAttempt(areaSync(), key, active.feed, target, new Date(now()));
+
+    try {
+      const prior = rows.get(target) ?? null;
+      const budget = target === CLOSED_STANDARD_STATUS ? closedMaxRecords : maxRecords;
+      const result = await fetchAreaListings({
+        serviceRoot: active.endpoint.serviceRoot,
+        serviceRootHost: active.endpoint.serviceRootHost,
+        tokenProvider: tokens(active),
+        store: options.stagingStore ?? createStagingStore(),
+        runId: randomUUID(),
+        feedTier: active.feed,
+        ...area,
+        status: target,
+        afterKey: prior?.status === 'partial' ? prior.resumeKey : null,
+        pageSize: active.replication.pageSize ?? 200,
+        maxRecords: budget,
+        pageOptions: pageOptions(active),
+      });
+
+      const listingStatuses = await loadListingStatuses(areaSync());
+      const mapping =
+        result.listingKeys.length === 0
+          ? null
+          : await mapStagedBrightProperties(areaSync(), {
+              feed: active.feed,
+              soldDisplayDelayDays: soldDisplayDelayDays(env),
+              listingKeys: result.listingKeys,
+              statuses: listingStatuses,
+            });
+
+      const totalLoaded = (prior?.loadedCount ?? 0) + result.listingKeys.length;
+      await recordAreaOutcome(
+        areaSync(),
+        key,
+        active.feed,
+        target,
+        {
+          status: result.complete ? 'complete' : 'partial',
+          loadedCount: totalLoaded,
+          sourceCount: result.complete ? totalLoaded : null,
+          resumeKey: result.afterKey,
+          syncedAt: result.complete ? new Date(now()) : null,
+        },
+        new Date(now()),
+      );
+
+      log(
+        `On-demand Bright load for ${key} [${target}] from ${active.endpoint.serviceRootHost}: ` +
+          `${result.listingKeys.length} staged in ${result.pagesFetched} page(s), ` +
+          `${mapping?.published ?? 0} published, ${now() - started} ms` +
+          (result.complete ? '.' : ' (capped).'),
+      );
+      // Only the keys the mapper actually published, never every staged key: a rejected record
+      // (missing attribution, an unrecognised status) has no gallery to show.
+      prefetchGalleries(active, mapping?.publishedListingKeys ?? []);
+      return true;
+    } catch (error) {
+      // Marks THIS status `failed`, keeping whatever the prior attempt already staged/resumed —
+      // the shorter `failedCooldownMs` applies to it alone, other statuses are unaffected.
+      await recordAreaFailure(areaSync(), key, active.feed, target, new Date(now()));
+      throw error;
+    }
+  }
+
+  /**
+   * Dedupes concurrent callers for the same area (per process, via `areaInFlight`); the cooldown
+   * decision itself lives in `bright_area_sync`, read fresh by `loadArea` every time.
+   */
+  async function onceArea(
+    area: Area,
+    active: ActiveConfig,
+    wait: number,
+  ): Promise<AreaLoadOutcome> {
+    const key = areaKey(area);
+    let pending = areaInFlight.get(key);
+    if (pending === undefined) {
+      pending = loadArea(area, active)
+        .catch((error: unknown) => {
+          log(
+            `On-demand Bright load for ${key} failed: ` +
+              (error instanceof Error ? error.message : String(error)),
+          );
+          return false;
+        })
+        .finally(() => areaInFlight.delete(key));
+      areaInFlight.set(key, pending);
+    }
+
+    let timer: NodeJS.Timeout | undefined;
+    const timedOut = new Promise<'pending'>((resolve) => {
+      timer = setTimeout(() => resolve('pending'), wait);
     });
-    const mapping =
-      result.listingKeys.length === 0
-        ? null
-        : await mapStagedBrightProperties(getPool(), {
-            feed: active.feed,
-            soldDisplayDelayDays: soldDisplayDelayDays(env),
-            listingKeys: result.listingKeys,
-            // Already loaded above to derive `statuses`; re-querying would cost this request a
-            // second round trip to a table that never changes per-request.
-            statuses: listingStatuses,
-          });
-    log(
-      `On-demand Bright load for ${areaKey(area)} from ${active.endpoint.serviceRootHost}: ` +
-        `${result.listingKeys.length} staged in ${result.pagesFetched} page(s), ` +
-        `${mapping?.published ?? 0} published, ${now() - started} ms` +
-        (result.complete ? '.' : ' (capped).'),
-    );
-    // Only the keys the mapper actually published, never every staged key: a rejected record
-    // (missing attribution, an unrecognised status) has no gallery to show.
-    prefetchGalleries(active, mapping?.publishedListingKeys ?? []);
+    const outcome = await Promise.race([
+      pending.then((ran) => (ran ? ('loaded' as const) : ('skipped' as const))),
+      timedOut,
+    ]);
+    clearTimeout(timer);
+    return outcome;
   }
 
   return {
@@ -389,7 +543,16 @@ export function createAreaLoader(options: AreaLoaderOptions = {}): AreaLoader {
       if (area === null || config === null) {
         return 'skipped';
       }
-      return once(areaKey(area), waitMs, () => loadArea(area, config));
+      return onceArea(area, config, waitMs);
+    },
+
+    async needsLoad(request) {
+      const area = areaOf(request);
+      if (area === null || config === null) {
+        return false;
+      }
+      const { rows, statuses } = await coverage(area, config.feed);
+      return needsAreaLoad(rows, statuses, freshnessMs, now());
     },
 
     async loadGallery(listing) {

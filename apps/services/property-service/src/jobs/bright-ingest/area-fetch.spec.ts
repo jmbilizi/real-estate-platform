@@ -112,7 +112,8 @@ describe('fetchAreaListings', () => {
       feedTier: 'production',
       runId: 'run-1',
       city: 'Rockville',
-      statuses: ['Active'],
+      status: 'Active',
+      afterKey: null,
       pageSize: 2,
       maxRecords: 100,
       pageOptions: { fetchImpl, maxRetries: 0 },
@@ -122,12 +123,13 @@ describe('fetchAreaListings', () => {
       listingKeys: ['1', '2', '3', '4', '5'],
       pagesFetched: 3,
       complete: true,
+      afterKey: null,
     });
     expect(memory.cursors.size).toBe(0);
     expect(memory.rows.size).toBe(5);
   });
 
-  it('runs one keyset pass per searchable status, resetting afterKey between statuses', async () => {
+  it('fetches only the requested status', async () => {
     const memory = createMemoryStore();
     const all = [
       listing(1, 'Active'),
@@ -145,19 +147,24 @@ describe('fetchAreaListings', () => {
       feedTier: 'production',
       runId: 'run-1',
       city: 'Rockville',
-      statuses: ['Active', 'ComingSoon', 'ActiveUnderContract'],
+      status: 'ComingSoon',
+      afterKey: null,
       pageSize: 200,
       maxRecords: 100,
       pageOptions: { fetchImpl, maxRetries: 0 },
     });
 
     expect(result).toEqual({
-      listingKeys: ['1', '2', '10', '20'],
-      pagesFetched: 3,
+      listingKeys: ['10'],
+      pagesFetched: 1,
       complete: true,
+      afterKey: null,
     });
-    // One request per status, each starting from ListingKey gt 0.
-    expect(urls.filter((url) => url.includes('ListingKey+gt+0')).length).toBe(3);
+    expect(
+      urls.every((url) =>
+        decodeURIComponent(url.replace(/\+/g, ' ')).includes("StandardStatus eq 'ComingSoon'"),
+      ),
+    ).toBe(true);
   });
 
   it('returns a Coming Soon listing for a city with no Active listings', async () => {
@@ -173,7 +180,8 @@ describe('fetchAreaListings', () => {
       feedTier: 'production',
       runId: 'run-1',
       city: 'Frederick',
-      statuses: ['Active', 'ComingSoon'],
+      status: 'ComingSoon',
+      afterKey: null,
       pageSize: 200,
       maxRecords: 100,
       pageOptions: { fetchImpl, maxRetries: 0 },
@@ -181,5 +189,56 @@ describe('fetchAreaListings', () => {
 
     expect(result.listingKeys).toEqual(['7']);
     expect(result.complete).toBe(true);
+  });
+
+  it('stops at maxRecords and returns the cursor to resume from, instead of restarting at null', async () => {
+    const memory = createMemoryStore();
+    const all = [1, 2, 3, 4, 5, 6].map((key) => listing(key));
+    const { fetchImpl } = fixtureFetch(all, 2);
+
+    const capped = await fetchAreaListings({
+      serviceRoot: SERVICE_ROOT,
+      serviceRootHost: HOST,
+      tokenProvider,
+      store: memory.store,
+      feedTier: 'production',
+      runId: 'run-1',
+      city: 'Rockville',
+      status: 'Active',
+      afterKey: null,
+      pageSize: 2,
+      maxRecords: 4,
+      pageOptions: { fetchImpl, maxRetries: 0 },
+    });
+
+    expect(capped).toEqual({
+      listingKeys: ['1', '2', '3', '4'],
+      pagesFetched: 2,
+      complete: false,
+      afterKey: '4',
+    });
+
+    const resumed = await fetchAreaListings({
+      serviceRoot: SERVICE_ROOT,
+      serviceRootHost: HOST,
+      tokenProvider,
+      store: memory.store,
+      feedTier: 'production',
+      runId: 'run-2',
+      city: 'Rockville',
+      status: 'Active',
+      afterKey: capped.afterKey,
+      pageSize: 2,
+      maxRecords: 100,
+      pageOptions: { fetchImpl, maxRetries: 0 },
+    });
+
+    // Two pages: [5, 6] (a full page, pageSize 2) and then a short (empty) page that signals the end.
+    expect(resumed).toEqual({
+      listingKeys: ['5', '6'],
+      pagesFetched: 2,
+      complete: true,
+      afterKey: null,
+    });
   });
 });
