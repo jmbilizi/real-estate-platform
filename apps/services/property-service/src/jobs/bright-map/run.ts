@@ -45,6 +45,12 @@ export interface MapStagedBrightPropertiesOptions {
   readonly soldDisplayDelayDays: number | null;
   /** Map only these staged `ListingKey`s (the on-demand area load). Absent maps every staged row. */
   readonly listingKeys?: readonly string[];
+  /**
+   * The vocabulary to map against. Absent re-reads `listing_statuses`. A caller that already loaded
+   * it this request (the on-demand loader, to derive its searchable-status set) passes it through
+   * instead, so one request does not query the table twice.
+   */
+  readonly statuses?: readonly ListingStatusLookup[];
 }
 
 /** Reads the current vocabulary, so an added `listing_statuses` row needs no code change here. */
@@ -53,13 +59,15 @@ export async function loadListingStatuses(client: Queryable): Promise<ListingSta
     // ORDER BY sort_order: two codes ('Hold' and 'Temporarily Off Market') share the same
     // reso_standard_status ('Hold'). mapStandardStatus() takes the first array match, so the order
     // here — not incidental — decides which code an ambiguous Bright value resolves to.
-    'SELECT code, consumer_status, is_terminal, reso_standard_status FROM listing_statuses ORDER BY sort_order',
+    'SELECT code, consumer_status, is_terminal, reso_standard_status, is_publicly_searchable ' +
+      'FROM listing_statuses ORDER BY sort_order',
   );
   return rows.map((row) => ({
     code: String(row.code),
     consumerStatus: (row.consumer_status ?? null) as ListingStatusLookup['consumerStatus'],
     isTerminal: Boolean(row.is_terminal),
     resoStandardStatus: (row.reso_standard_status ?? null) as string | null,
+    isPubliclySearchable: Boolean(row.is_publicly_searchable),
   }));
 }
 
@@ -110,7 +118,7 @@ export async function mapStagedBrightProperties(
     return ZERO_MAP_REPORT;
   }
 
-  const statuses = await loadListingStatuses(client);
+  const statuses = options.statuses ?? (await loadListingStatuses(client));
   const withheldByReason: Record<string, number> = {};
   const outOfRangeFieldCounts: Record<string, number> = {};
   const publishedListingKeys: string[] = [];

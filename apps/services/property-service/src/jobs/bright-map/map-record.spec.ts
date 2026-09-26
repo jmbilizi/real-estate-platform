@@ -2,9 +2,27 @@ import { type ListingStatusLookup } from './status';
 import { mapBrightPropertyRecord, type MapContext } from './map-record';
 
 const STATUSES: readonly ListingStatusLookup[] = [
-  { code: 'Active', consumerStatus: 'Active', isTerminal: false, resoStandardStatus: 'Active' },
-  { code: 'Closed', consumerStatus: 'Sold', isTerminal: true, resoStandardStatus: 'Closed' },
-  { code: 'Withdrawn', consumerStatus: null, isTerminal: true, resoStandardStatus: 'Withdrawn' },
+  {
+    code: 'Active',
+    consumerStatus: 'Active',
+    isTerminal: false,
+    resoStandardStatus: 'Active',
+    isPubliclySearchable: true,
+  },
+  {
+    code: 'Closed',
+    consumerStatus: 'Sold',
+    isTerminal: true,
+    resoStandardStatus: 'Closed',
+    isPubliclySearchable: true,
+  },
+  {
+    code: 'Withdrawn',
+    consumerStatus: null,
+    isTerminal: true,
+    resoStandardStatus: 'Withdrawn',
+    isPubliclySearchable: false,
+  },
 ];
 
 const BASE_PAYLOAD: Record<string, unknown> = {
