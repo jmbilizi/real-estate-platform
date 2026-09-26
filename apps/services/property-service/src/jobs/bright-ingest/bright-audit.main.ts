@@ -30,7 +30,10 @@ import { resolveBrightConfig } from './config';
 import { buildAreaCountQuery } from './odata-query';
 
 function resolveCities(argv: readonly string[], env: NodeJS.ProcessEnv): string[] {
-  const positional = argv.slice(2).map((c) => c.trim()).filter((c) => c.length > 0);
+  const positional = argv
+    .slice(2)
+    .map((c) => c.trim())
+    .filter((c) => c.length > 0);
   if (positional.length > 0) {
     return positional;
   }
@@ -109,6 +112,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  console.error(`Bright count audit crashed: ${error instanceof Error ? error.message : String(error)}`);
+  console.error(
+    `Bright count audit crashed: ${error instanceof Error ? error.message : String(error)}`,
+  );
   process.exitCode = 1;
 });
