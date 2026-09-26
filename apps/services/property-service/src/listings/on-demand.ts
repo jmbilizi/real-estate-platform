@@ -95,7 +95,7 @@ const PLACE = /^[A-Za-z][A-Za-z .'-]{1,59}$/;
 const CITY_STATE_ZIP = /^([A-Za-z][A-Za-z .'-]*?)[,\s]+([A-Za-z]{2})(?:[,\s]+(\d{5}))?$/;
 
 /** Bright stores city names capitalised ("Silver Spring"); search input arrives in any case. */
-function titleCase(value: string): string {
+export function titleCase(value: string): string {
   return value
     .trim()
     .toLowerCase()
@@ -143,8 +143,28 @@ export function areaOf(request: SearchRequest): Area | null {
   return { ...place, ...withExplicitState };
 }
 
-function areaKey(area: Area): string {
+export function areaKey(area: Area): string {
   return [area.city ?? '', area.zip ?? '', area.state ?? ''].join('|').toLowerCase();
+}
+
+/**
+ * The inverse of `areaKey()`, for the scheduled refresh and reconciliation jobs (#331): both read
+ * `bright_area_sync`, which stores only the composite key, and need the city/zip/state back to
+ * build a Bright request. Safe because `areaKey()`'s three parts cannot themselves contain `|`
+ * (`PLACE`/`CITY_STATE_ZIP` allow letters, spaces, and `.'-` only; a ZIP is digits; a state is two
+ * letters), and because `titleCase()` is idempotent over its own output, so re-titlecasing the
+ * lowercased city recovers the casing `areaOf()` originally applied.
+ */
+export function parseAreaKey(key: string): Area {
+  const [cityPart, zipPart, statePart] = key.split('|');
+  const city = cityPart !== undefined && cityPart.length > 0 ? titleCase(cityPart) : undefined;
+  const zip = zipPart !== undefined && zipPart.length > 0 ? zipPart : undefined;
+  const state = statePart !== undefined && statePart.length > 0 ? statePart.toUpperCase() : undefined;
+  return {
+    ...(city === undefined ? {} : { city }),
+    ...(state === undefined ? {} : { state }),
+    ...(zip === undefined ? {} : { zip }),
+  };
 }
 
 /**

@@ -126,6 +126,58 @@ export async function recordAreaOutcome(
   );
 }
 
+/** One `(area_key, source_status)` pair that has completed a full load at least once (#331). */
+export interface TrackedArea {
+  readonly areaKey: string;
+  readonly sourceStatus: string;
+  readonly syncedAt: Date;
+}
+
+/**
+ * Every area/status the scheduled refresh (#331) may act on: rows that have reached `complete` at
+ * least once, so `synced_at` is a real watermark rather than null. A `partial` or `failed` row is
+ * still being populated by the on-demand loader (`on-demand.ts`) and is left to it — the refresh
+ * job's bounded `ModificationTimestamp` window only makes sense on top of a completed baseline.
+ */
+export async function listTrackedAreas(
+  client: AreaSyncClient,
+  feedTier: BrightFeedTier,
+): Promise<TrackedArea[]> {
+  const { rows } = await client.query<{ area_key: string; source_status: string; synced_at: Date }>(
+    `SELECT area_key, source_status, synced_at FROM bright_area_sync
+      WHERE feed_tier = $1 AND status = 'complete' AND synced_at IS NOT NULL`,
+    [feedTier],
+  );
+  return rows.map((row) => ({
+    areaKey: row.area_key,
+    sourceStatus: row.source_status,
+    syncedAt: row.synced_at,
+  }));
+}
+
+/**
+ * Records a successful bounded refresh pass (#331): only `synced_at`/`attempted_at` move.
+ *
+ * Deliberately narrower than `recordAreaOutcome`: that function also rewrites `loaded_count` and
+ * `resume_key`, which belong to the ORIGINAL full-area-population resume (#329) and must not be
+ * touched by a delta pass on top of it — doing so would corrupt the count `recordAreaOutcome` needs
+ * if that area is ever reloaded from scratch. Scoped to `status = 'complete'` so a refresh can never
+ * mark an area synced while the initial load is still `partial`/`failed`.
+ */
+export async function recordAreaRefresh(
+  client: AreaSyncClient,
+  areaKey: string,
+  feedTier: BrightFeedTier,
+  sourceStatus: string,
+  syncedAt: Date,
+): Promise<void> {
+  await client.query(
+    `UPDATE bright_area_sync SET synced_at = $4, attempted_at = $4
+      WHERE area_key = $1 AND feed_tier = $2 AND source_status = $3 AND status = 'complete'`,
+    [areaKey, feedTier, sourceStatus, syncedAt],
+  );
+}
+
 /** Records a thrown load as `failed`, keeping whatever counts/cursor the prior attempt left. */
 export async function recordAreaFailure(
   client: AreaSyncClient,

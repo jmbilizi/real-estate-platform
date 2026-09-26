@@ -1,6 +1,12 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { applyTerminalCorrection, insertMedia, Queryable, upsertListingBySourceKey } from './write';
+import {
+  applyTerminalCorrection,
+  insertMedia,
+  Queryable,
+  softDeleteListings,
+  upsertListingBySourceKey,
+} from './write';
 import { ListingRow } from '../seed/types';
 
 /**
@@ -338,5 +344,51 @@ describe('upsertListingBySourceKey', () => {
 
     expect(id).toBe('listing-1');
     expect(queries.some((q) => q.text.includes('INSERT INTO listings'))).toBe(false);
+  });
+});
+
+/**
+ * The daily key reconciliation's write (#331): a listing absent from Bright's live key set is
+ * soft-deleted, never hard-deleted, and the takedown is audited the same way every other listing
+ * write is.
+ */
+describe('softDeleteListings', () => {
+  function fakeClient(returnedRows: Record<string, unknown>[]): {
+    client: Queryable;
+    queries: RecordedQuery[];
+  } {
+    const queries: RecordedQuery[] = [];
+    const client: Queryable = {
+      query: (text: string, values?: unknown[]) => {
+        queries.push({ text, values });
+        if (text.includes('UPDATE listings')) {
+          return Promise.resolve({ rows: returnedRows });
+        }
+        return Promise.resolve({ rows: [] });
+      },
+    };
+    return { client, queries };
+  }
+
+  it('soft-deletes only the listings the UPDATE actually touched, and audits each one', async () => {
+    const { client, queries } = fakeClient([{ id: 'listing-1', property_id: 'property-1' }]);
+
+    const deleted = await softDeleteListings(client, ['listing-1', 'listing-2'], 'reconciliation');
+
+    expect(deleted).toBe(1);
+    const update = queries.find((q) => q.text.includes('UPDATE listings'));
+    expect(update?.text).toContain('deleted_at = now()');
+    expect(update?.text).toContain('deleted_at IS NULL');
+    expect(update?.values).toEqual([['listing-1', 'listing-2']]);
+    const event = queries.find((q) => q.text.includes('INSERT INTO listing_events'));
+    expect(event?.values).toEqual(
+      expect.arrayContaining(['listing-1', 'property-1', 'withdrawn', 'reconciliation']),
+    );
+  });
+
+  it('does nothing and issues no query for an empty list', async () => {
+    const { client, queries } = fakeClient([]);
+    expect(await softDeleteListings(client, [], 'reconciliation')).toBe(0);
+    expect(queries).toEqual([]);
   });
 });

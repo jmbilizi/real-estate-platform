@@ -369,6 +369,46 @@ export async function applyTerminalCorrection(
   });
 }
 
+/**
+ * Soft-deletes listings a daily reconciliation found absent from Bright's live key set (#331).
+ *
+ * RESO sends no delete event, so a listing genuinely withdrawn from the feed (rather than moved to
+ * another tracked status, which is a status change and never reaches this function — see
+ * `bright-area-reconcile`) has to be inferred from its key's absence and taken down explicitly.
+ * `deleted_at` is the same soft-delete column `listing_search_v` already excludes on (migration
+ * 003), so a reconciled listing stops appearing in search results the instant this commits.
+ *
+ * Idempotent (`deleted_at IS NULL` in the WHERE), so a listing already deleted by an earlier pass is
+ * silently skipped rather than re-timestamped, and the `RETURNING` list only ever names listings
+ * newly taken down this call. Returns that count so a run can report what it did.
+ */
+export async function softDeleteListings(
+  client: Queryable,
+  listingIds: readonly string[],
+  reason: string,
+): Promise<number> {
+  if (listingIds.length === 0) {
+    return 0;
+  }
+  const { rows } = await client.query(
+    `UPDATE listings SET deleted_at = now()
+      WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL
+      RETURNING id, property_id`,
+    [listingIds],
+  );
+  for (const row of rows) {
+    await appendEvent(client, {
+      listing_id: row.id as string,
+      property_id: row.property_id as string,
+      event_type: 'withdrawn',
+      occurred_at: new Date().toISOString(),
+      note: reason,
+      is_sample: false,
+    });
+  }
+  return rows.length;
+}
+
 /** Append-only history. Never updated, never deleted. */
 async function appendEvent(
   client: Queryable,

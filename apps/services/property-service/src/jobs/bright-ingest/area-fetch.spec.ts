@@ -96,6 +96,48 @@ describe('buildAreaQuery', () => {
       buildAreaQuery({ serviceRoot: SERVICE_ROOT, status: 'Active', afterKey: null, top: 10 }),
     ).toThrow();
   });
+
+  /**
+   * The scheduled per-area refresh (#331) bounds its pass to what changed since the area's last
+   * sync, so it never re-reads a status's whole backlog on every scheduled tick.
+   */
+  it('adds a ModificationTimestamp window only when the refresh job asks for one', () => {
+    const url = new URL(
+      buildAreaQuery({
+        serviceRoot: SERVICE_ROOT,
+        city: 'Rockville',
+        status: 'Active',
+        afterKey: null,
+        top: 200,
+        modifiedAfter: '2026-09-25T00:00:00Z',
+        modifiedUntil: '2026-09-26T00:00:00Z',
+      }),
+    );
+
+    expect(url.searchParams.get('$filter')).toBe(
+      "City eq 'Rockville' and StandardStatus eq 'Active' and ListingKey gt 0 and " +
+        'ModificationTimestamp gt 2026-09-25T00:00:00.000Z and ' +
+        'ModificationTimestamp le 2026-09-26T00:00:00.000Z',
+    );
+
+    const ordinary = new URL(
+      buildAreaQuery({ serviceRoot: SERVICE_ROOT, city: 'Rockville', status: 'Active', afterKey: null, top: 200 }),
+    );
+    expect(ordinary.searchParams.get('$filter')).not.toContain('ModificationTimestamp');
+  });
+
+  it('rejects an unparsable ModificationTimestamp bound', () => {
+    expect(() =>
+      buildAreaQuery({
+        serviceRoot: SERVICE_ROOT,
+        city: 'Rockville',
+        status: 'Active',
+        afterKey: null,
+        top: 200,
+        modifiedAfter: 'not-a-date',
+      }),
+    ).toThrow(/not a valid ISO-8601/);
+  });
 });
 
 describe('fetchAreaListings', () => {

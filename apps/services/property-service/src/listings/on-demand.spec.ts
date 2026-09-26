@@ -1,7 +1,14 @@
 import { searchRequestSchema } from '@cribstop/property-contracts';
 
 import type { AreaSyncClient } from './area-coverage-store';
-import { areaOf, createAreaLoader, placeSearchRequest, resolvedSearchRequest } from './on-demand';
+import {
+  areaKey,
+  areaOf,
+  createAreaLoader,
+  parseAreaKey,
+  placeSearchRequest,
+  resolvedSearchRequest,
+} from './on-demand';
 import { BRIGHT_ENV_VARS } from '../jobs/bright-ingest/config';
 import type { FetchLike } from '../jobs/bright-ingest/bright-client';
 import { createMemoryStore } from '../jobs/bright-ingest/mock-reso-server';
@@ -201,6 +208,33 @@ describe('areaOf', () => {
   it('returns null for a query that is not a place', () => {
     expect(areaOf(request({ query: '123 Main St #4' }))).toBeNull();
     expect(areaOf(request({}))).toBeNull();
+  });
+});
+
+/**
+ * `bright_area_sync` (#329) stores only the composite `areaKey()`. The scheduled refresh and
+ * reconciliation jobs (#331) read that key back out and need the city/zip/state to build a Bright
+ * request, so `parseAreaKey()` has to invert `areaKey()` exactly.
+ */
+describe('parseAreaKey', () => {
+  it('round-trips a city/state area through areaKey()', () => {
+    const area = { city: 'Silver Spring', state: 'MD' };
+    expect(parseAreaKey(areaKey(area))).toEqual(area);
+  });
+
+  it('round-trips a ZIP-only area', () => {
+    const area = { zip: '20910' };
+    expect(parseAreaKey(areaKey(area))).toEqual(area);
+  });
+
+  it('round-trips a city/state/zip area', () => {
+    const area = { city: 'Frederick', state: 'MD', zip: '21701' };
+    expect(parseAreaKey(areaKey(area))).toEqual(area);
+  });
+
+  it('recovers title-case for a multi-word, hyphenated city', () => {
+    const area = { city: 'Winston-Salem', state: 'NC' };
+    expect(parseAreaKey(areaKey(area))).toEqual(area);
   });
 });
 

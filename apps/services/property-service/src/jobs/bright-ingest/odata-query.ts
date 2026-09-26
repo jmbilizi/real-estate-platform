@@ -124,6 +124,28 @@ export interface AreaQueryParams {
   /** Keyset page: the last `ListingKey` already read, as decimal text. `null` on the first page. */
   readonly afterKey: string | null;
   readonly top: number;
+  /**
+   * Bounds the scheduled per-area refresh (#331) to records changed since the area's last sync:
+   * `ModificationTimestamp gt modifiedAfter`. Omitted for an ordinary area load, which wants every
+   * record in the status regardless of when it last changed.
+   */
+  readonly modifiedAfter?: string;
+  /**
+   * Pairs with `modifiedAfter` to close the window: `ModificationTimestamp le modifiedUntil`. A run
+   * started at this instant never reads a record touched after it started, so the NEXT run's
+   * `modifiedAfter` (this run's `modifiedUntil`, minus a small overlap) cannot skip a record that
+   * changed while this run was in flight.
+   */
+  readonly modifiedUntil?: string;
+}
+
+/** Re-parsed rather than interpolated, so a malformed bound fails here, not as a broken Bright query. */
+function modificationTimestampLiteral(iso: string): string {
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`ModificationTimestamp bound "${iso}" is not a valid ISO-8601 timestamp.`);
+  }
+  return parsed.toISOString();
 }
 
 /** OData string literal: single quotes doubled. */
@@ -154,6 +176,12 @@ export function buildAreaQuery(params: AreaQueryParams): string {
     ...(params.zip === undefined ? [] : [`PostalCode eq ${stringLiteral(params.zip)}`]),
     `StandardStatus eq ${stringLiteral(params.status)}`,
     `ListingKey gt ${params.afterKey ?? '0'}`,
+    ...(params.modifiedAfter === undefined
+      ? []
+      : [`ModificationTimestamp gt ${modificationTimestampLiteral(params.modifiedAfter)}`]),
+    ...(params.modifiedUntil === undefined
+      ? []
+      : [`ModificationTimestamp le ${modificationTimestampLiteral(params.modifiedUntil)}`]),
   ];
 
   const search = new URLSearchParams();

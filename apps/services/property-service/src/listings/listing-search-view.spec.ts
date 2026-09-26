@@ -166,6 +166,21 @@ function parseProjections(createViewSql: string): Projection[] {
 const projections = parseProjections(newestCreateViewSql());
 const outputNames = projections.map((projection) => projection.outputName);
 
+/**
+ * The daily key reconciliation (#331) soft-deletes a listing absent from Bright's live key set by
+ * setting `deleted_at` (migration 003). That write only takes a listing out of search if the view's
+ * own `WHERE` still excludes it — this guard is what makes that true independent of the
+ * reconciliation code itself.
+ */
+describe('soft-deleted listings are excluded from search (#331)', () => {
+  it('filters deleted_at IS NULL in the view WHERE clause', () => {
+    const createView = newestCreateViewSql();
+    const withoutComments = createView.replace(/--[^\n]*/g, '');
+    const whereClause = /\bWHERE\b([\s\S]*?)(?:;\s*$|$)/i.exec(withoutComments)?.[1] ?? '';
+    expect(whereClause).toMatch(/deleted_at\s+IS\s+NULL/i);
+  });
+});
+
 describe('the parser these guards depend on', () => {
   // ANTI-VACUITY. Every assertion below is of the form "no projection does X". A parser that
   // silently returned nothing — or that split the SELECT list on a comma inside a comment and

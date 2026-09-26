@@ -40,6 +40,10 @@ export interface AreaFetchParams {
   /** Stop after this many NEW records, so one call cannot pull an unbounded backlog. */
   readonly maxRecords: number;
   readonly pageOptions?: BrightPageOptions;
+  /** Bounds the pass to records changed since this instant (#331 scheduled refresh). */
+  readonly modifiedAfter?: string;
+  /** Pairs with `modifiedAfter`; closes the window at this instant (#331). */
+  readonly modifiedUntil?: string;
 }
 
 export interface AreaFetchResult {
@@ -81,6 +85,8 @@ export async function fetchAreaListings(params: AreaFetchParams): Promise<AreaFe
       status: params.status,
       afterKey,
       top: params.pageSize,
+      ...(params.modifiedAfter === undefined ? {} : { modifiedAfter: params.modifiedAfter }),
+      ...(params.modifiedUntil === undefined ? {} : { modifiedUntil: params.modifiedUntil }),
     });
     const page = await fetchPage(
       url,

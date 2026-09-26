@@ -375,4 +375,44 @@ export async function countListingsByCityAndStatus(
   return result.rows[0]?.total ?? 0;
 }
 
+/** One local Bright-sourced listing, identified for the daily key reconciliation (#331). */
+export interface BrightListingIdentity {
+  readonly id: string;
+  readonly sourceListingKey: string;
+}
+
+/**
+ * Local, live (`deleted_at IS NULL`) Bright listings for one area and one set of local status
+ * codes, read directly from `listings` rather than `listing_search_v` (#331).
+ *
+ * Bypasses the view deliberately: reconciliation must find a listing to soft-delete even when it is
+ * display-suppressed, address-masked, or otherwise excluded from the view — the view answers "is
+ * this shown", not "does Bright still hold this record".
+ */
+export async function listBrightListingIdentities(
+  pool: ReadClient,
+  params: {
+    readonly city?: string;
+    readonly state?: string;
+    readonly zip?: string;
+    readonly statusCodes: readonly string[];
+  },
+): Promise<BrightListingIdentity[]> {
+  if (params.statusCodes.length === 0) {
+    return [];
+  }
+  const result = await pool.query<{ id: string; source_listing_key: string }>(
+    `SELECT id, source_listing_key FROM listings
+      WHERE source_system = 'BrightMLS'
+        AND source_listing_key IS NOT NULL
+        AND deleted_at IS NULL
+        AND status = ANY($1::text[])
+        AND ($2::text IS NULL OR city = $2)
+        AND ($3::text IS NULL OR state = $3)
+        AND ($4::text IS NULL OR zip5 = $4)`,
+    [params.statusCodes, params.city ?? null, params.state ?? null, params.zip ?? null],
+  );
+  return result.rows.map((row) => ({ id: row.id, sourceListingKey: row.source_listing_key }));
+}
+
 export { NOT_FOUND_BODY };
