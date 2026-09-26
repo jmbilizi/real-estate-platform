@@ -357,4 +357,22 @@ export async function findBrightListingKeys(
   return row === undefined ? null : { listingKey: row.listing_key, listingId: row.listing_id };
 }
 
+/**
+ * Local count for one city and one status code, filtered the same way search is (#328): reads
+ * `listing_search_v`, so an excluded or soft-deleted row is never counted. `status` is
+ * `source_status` — the raw feed code (`l.status`, matching `listing_statuses.code`) — not the
+ * consumer-facing `status` column, because the audit compares this count against one Bright
+ * `$count` request per feed status code.
+ */
+export async function countListingsByCityAndStatus(
+  pool: ReadClient,
+  params: { readonly city: string; readonly status: string },
+): Promise<number> {
+  const result = await pool.query<{ total: number }>(
+    'SELECT count(*)::int AS total FROM listing_search_v v WHERE v.city = $1 AND v.source_status = $2',
+    [params.city, params.status],
+  );
+  return result.rows[0]?.total ?? 0;
+}
+
 export { NOT_FOUND_BODY };
