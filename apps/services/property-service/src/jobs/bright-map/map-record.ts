@@ -11,11 +11,11 @@
  * carry. None of these guess — a record this function cannot confidently map does not publish.
  */
 
-import { buildAddressKey, splitUnitDesignator } from '../../seed/address';
+import { buildAddressKey, splitUnitDesignator } from '../../db/address';
 import { composeStreetLine, titleCase } from './address-format';
-import { PropertyType } from '../../seed/constants';
-import { ListingStatus } from '../../seed/constants';
-import { OfferKind } from '../../seed/types';
+import { PropertyType } from '../../db/constants';
+import { ListingStatus } from '../../db/constants';
+import { OfferKind } from '../../db/types';
 
 import { AttributionFields, mapAttribution } from './attribution';
 import { mapPropertyType } from './property-type';

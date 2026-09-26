@@ -70,8 +70,7 @@ pnpm exec nx lint property-service         # Also: type-check, build
 pnpm run infra:local:property-db:url            # Derive DATABASE_URL from the local cluster
 pnpm exec nx run property-service:migrate       # Apply migrations (needs DATABASE_URL)
 pnpm exec nx run property-service:migrate-down  # Roll back the last migration
-pnpm exec nx run property-service:seed          # Load the sample dataset into $DATABASE_URL
-pnpm run skaffold:services                 # Deploy into the local cluster (seeds itself — see below)
+pnpm run skaffold:services                 # Deploy into the local cluster
 ```
 
 ## Data model — durable home vs. listing episode
@@ -91,12 +90,12 @@ is what PRD §3.2 claims and §4.6 service history attach to.
 
 **`src/db/write.ts` is the only module that writes `listings`.** The snapshot cannot be constrained
 in the database (for a terminal listing it is _deliberately_ unequal to the durable rows), so the
-containment is structural, and `seed.spec.ts` asserts no other module issues INSERT/UPDATE on the
-table. `upsertListing()` resolves the snapshot itself and ignores whatever the caller passed for
-those columns; it refuses to re-snapshot a terminal listing, and `applyTerminalCorrection()` is the
-audited path for correcting one.
+containment is structural, and `write-containment.spec.ts` asserts no other module issues
+INSERT/UPDATE on the table. `upsertListing()` resolves the snapshot itself and ignores whatever the
+caller passed for those columns; it refuses to re-snapshot a terminal listing, and
+`applyTerminalCorrection()` is the audited path for correcting one.
 
-`properties.address_key` (from `src/seed/address.ts`) is the deduplication identity. Never insert a
+`properties.address_key` (from `src/db/address.ts`) is the deduplication identity. Never insert a
 property blindly — use `getOrCreateProperty()`, or one physical building becomes two rows and two
 accounts can each hold an approved `owner` claim on it.
 
@@ -105,7 +104,7 @@ accounts can each hold an approved `owner` claim on it.
 persists steering-adjacent fields with no migration to review), no `keywords`/`tags`/`features`
 free-text array, no `school_rating`/`crime_index`/`safety_score`/`desirability`/demographic columns,
 and no audience/segment column on anything holding consumer-visible copy. `amenities` is a closed
-15-value set enforced by a DB CHECK as well as `validateAmenities()`.
+15-value set (`AMENITIES` in `src/db/constants.ts`) enforced by a DB CHECK.
 
 `listing_search_v` **enforces** the display rules rather than carrying flags for callers to
 remember. When `address_display_allowed` is false it masks, on that one predicate: the address, the
@@ -140,8 +139,7 @@ native and every primary key uses it rather than random `uuid_generate_v4()`.
   the database name and the URL shape from the live `property-service` Deployment, the password from
   `postgres-secret`, and the host port from the `postgres-svc` `portForward` entry in
   `skaffold.yaml`. A wrong kube context, an absent Deployment or a closed port each refuse by name.
-  This is the workstation path for `migrate`, `migrate-down`, `seed` and the e2e compliance fixtures
-  — it is **not** how you get sample data into a cluster (see below).
+  This is the workstation path for `migrate`, `migrate-down` and the e2e compliance fixtures.
   - The password it reads is the committed placeholder on the local cluster, so it is **not
     sensitive** there: local-only, gitignored, never shared. Dev, test and prod are unchanged, and
     CI substitutes real values in memory. The script still refuses any context but the local
@@ -153,52 +151,23 @@ native and every primary key uses it rather than random `uuid_generate_v4()`.
   Dockerfile copies that directory into the runtime image explicitly. If you move it, the
   initContainer silently has nothing to apply.
 
-### Sample data: seeded in-cluster, not from a workstation (#111)
+### No environment holds sample or test-feed data (#340)
 
-**`pnpm run skaffold:services` brings up a populated `property_db` on its own.** There is no `.env`,
-no `kubectl port-forward` and no credential to lift out of `postgres.secret.yaml` — the `migrate`
-initContainer already holds the host, the user and the secret, so it seeds itself immediately after
-migrations by spawning `seed-on-start.js` (bundled next to `main.js` by `webpack.config.js` →
-`additionalEntryPoints`). Nothing runs in `src/main.ts`: a seed there would add a database
-round-trip before `listen()` and would race across replicas.
+Stakeholder ruling 2026-09-26: environments are protected now, so no environment needs sample or
+Bright test-feed data. The in-cluster seeder (`src/seed/`, `PROPERTY_SERVICE_SEED_ON_START`, the
+`seed` Nx target) is removed. `write-containment.spec.ts` fails the build if any `src/` code path
+pairs `is_sample: true` with `source: 'internal'` on a `listings` row, so the pattern cannot come
+back unnoticed.
 
-Three conditions, all required, implemented in `src/seed/seed-on-start.ts`:
-
-1. `PROPERTY_SERVICE_SEED_ON_START` is exactly `'1'`, set **only** in `infra/k8s/podman/local` and
-   `infra/k8s/hetzner/dev`. `hetzner/test` and `hetzner/prod` never set it.
-2. `NODE_ENV` is not `production` — independent of the flag, mirroring `tests/support/fixtures.ts`.
-   Those two overlays therefore also set `NODE_ENV=development` **on the initContainer**, because
-   the runtime image bakes `NODE_ENV=production` and the api container's override does not reach an
-   initContainer.
-3. There is something to do: either `listings` is empty (first run), or the dataset's content hash
-   differs from the one recorded in `seed_state`. Neither is ever the sole trigger — a fresh
-   production `property_db` is empty by definition, and emptiness alone would self-populate it with
-   fabricated inventory.
-
-**A changed dataset is re-applied destructively**, and this is the part to understand before editing
-`mock-listings.ts`. `deleteSampleData()` in `src/db/write.ts` removes every `is_sample = true` row
-and then the dataset is inserted fresh, all in one transaction. Upsert cannot do the job: a listing
-**removed** from the dataset has to actually disappear, and no upsert expresses that.
-
-It is also worse than "upsert wouldn't remove things". An insert-only second pass **silently
-duplicates the entire dataset**: `seed.ts` mints a fresh `randomUUID()` per row, the `listings`
-INSERT has no `ON CONFLICT` target, and the table's only unique index (`idx_listings_source_key`) is
-partial on `source_listing_key IS NOT NULL`, which seeded rows leave NULL. If you find a local
-`property_db` holding an exact multiple of 13 listings, this is why.
-
+`deleteSampleData()` in `src/db/write.ts` still exists — `bright-map/sweep.ts` (#331) calls it when
+an environment's configured Bright tier changes, to clear the other tier's `is_sample = true` rows.
 The deletes are ordered by the foreign keys, not by preference — `listing_events` is
 `ON DELETE RESTRICT` on both `listings` and `properties`, so history goes first — and the durable
 tables are guarded by `NOT EXISTS` so a property, unit or community that any **non-sample** listing
-still references survives (PRD §6.3). `seed.spec.ts` asserts the single-writer rule for `DELETE` as
-well as `INSERT`/`UPDATE`.
+still references survives (PRD §6.3).
 
-The hash is over the dataset **content**, never the image tag: a rebuild that changed no data must
-not destructively churn the database. So an unchanged dataset is a true no-op — no transaction opens
-at all. `seed_state` is deliberately not `is_sample`-labelled, so it survives the sweep it governs.
-
-The `seed` Nx target still exists for loading the dataset into an arbitrary database you have
-pointed `DATABASE_URL` at — it is no longer the way to get local data, and it does **not** perform
-the delete-then-insert re-apply.
+`property_db` in a freshly deployed environment is empty until the Bright ingestion CronJob
+(`infra/k8s/base/cronjobs/bright-mls-ingest.cronjob.yaml`) runs.
 
 ### The MLS attribute model — the long tail of the feed (#127)
 
@@ -234,14 +203,14 @@ column are all constraint violations even from a manual `psql` session. `value_k
 to be the second half of those keys; they are not data.
 
 **`src/db/mls-attributes.ts` is the only module that writes these four tables**, mirroring (not
-merged into) `write.ts`'s rule — `seed.spec.ts` asserts both directions. The reason differs and is
-worth keeping straight: `write.ts` exists because the dwelling snapshot is drift-capable and
-_cannot_ be constrained; this module exists for the fail-closed **behaviour** the constraints cannot
-express — an unregistered value is detected first and returned as a structured rejection, so one
-unknown vocabulary token does not abort the ingest of a whole batch. Rejections are diagnostics for
-an ingestion run to record (#93 owns retention); this module persists none of them, and truncates
-the offending value to 120 characters, because a value long enough to be prose is by that fact not a
-lookup token.
+merged into) `write.ts`'s rule — `write-containment.spec.ts` asserts both directions. The reason
+differs and is worth keeping straight: `write.ts` exists because the dwelling snapshot is
+drift-capable and _cannot_ be constrained; this module exists for the fail-closed **behaviour** the
+constraints cannot express — an unregistered value is detected first and returned as a structured
+rejection, so one unknown vocabulary token does not abort the ingest of a whole batch. Rejections
+are diagnostics for an ingestion run to record (#93 owns retention); this module persists none of
+them, and truncates the offending value to 120 characters, because a value long enough to be prose
+is by that fact not a lookup token.
 
 **A field's address exposure is a closed-vocabulary classification, not a bare flag** (#128, after a
 2026-09-19 regression: this whole section, the registry migration and its writer module were deleted
@@ -380,7 +349,7 @@ Two fail-closed rules in `map-media.ts` worth keeping:
 `replaceFeedListingMedia()` in `src/db/write.ts` is the writer. It clears `is_primary` before
 upserting, because `idx_listing_media_one_primary` is violated mid-statement otherwise on any
 reordered gallery, and it deletes the feed rows a pass did not send, scoped to
-`source_media_key IS NOT NULL` so seeded photos survive.
+`source_media_key IS NOT NULL` so a non-feed photo row survives.
 
 **A Bright row still never appears on the map** — the property mapper writes `latitude`/`longitude`
 as null. That is #310, not a media problem. The map popup renders the same `primaryMedia` through
@@ -392,7 +361,7 @@ The scheduled ingestion job is **this image with a different command**, exactly 
 prescribes: a separate process because the workload is throughput-bound and must not compete with
 request-serving CPU, but the same Nx project because `property_db` is this service's database and
 `src/db/write.ts` must stay the only writer. `bright-ingest.main.ts` is a second webpack entry point
-(`webpack.config.js` → `additionalEntryPoints`, the same mechanism `seed-on-start` uses), run by the
+(`webpack.config.js` → `additionalEntryPoints`, the same mechanism `bright-audit` uses), run by the
 `bright-mls-ingest` CronJob in `infra/k8s/base/cronjobs/`.
 
 A run resolves configuration and then either reports `not_configured`, or authenticates, probes
@@ -491,10 +460,10 @@ Five things here are load-bearing and easy to undo by accident:
   exercise routes with no socket and no database.
 - `src/db/pool.ts` — lazily-created `pg` pool, configured only from `DATABASE_URL`. It throws if the
   variable is unset rather than silently connecting somewhere unexpected.
-- `src/seed/` — `mock-listings.ts` (dataset), `transform.ts` (pure mapping, unit-tested with no DB),
-  `seed.ts` (transactional load over a narrow queryable seam), `seed-on-start.ts` (the in-cluster
-  gate) and `seed-on-start.main.ts` (its program entry — a separate file because
-  `require.main === module` is silently always false inside a webpack bundle).
+- `src/db/address.ts` (property identity), `constants.ts` (schema enums) and `types.ts` (row shapes)
+  are shared by `write.ts` and the Bright mapper (`src/jobs/bright-map/`), not owned by either. They
+  lived under a since-removed `src/seed/` (#340); the move is the only reason they are not still
+  there.
 - **Tests live in this project**, matching `account-service/Tests/` and
   `multi-model-inference/tests/` — there is deliberately no `property-service-e2e` sibling project.
   Unit specs sit beside their subject as `src/**/*.spec.ts`; the e2e suite is
@@ -504,9 +473,9 @@ Five things here are load-bearing and easy to undo by accident:
 
 ## Rules
 
-- `source` is forced to `internal` for every seeded row, and sample titles are labelled — never
-  represent sample data as MLS-sourced (PRD §6.2/§6.3). Invariants are asserted against the dataset
-  in `src/seed/mock-listings.spec.ts`, not just against the transform.
+- No environment holds sample or Bright test-feed data (PRD §6.2/§6.3, #340).
+  `write-containment.spec.ts` fails the build if any `src/` code path pairs `is_sample: true` with
+  `source: 'internal'`.
 - Every listing response must carry the full broker/office attribution block (PRD §6.2, NAR 7.58).
 - Saved/favorited listings are #23. Property relationship claims (PRD §3.2) are not modelled yet.
 - Listing inquiries are #131 (`src/inquiries/`). Never add a read endpoint for them.
@@ -635,11 +604,12 @@ database, which is why nearly all of the logic lives in them:
 
 ### e2e fixtures — why they exist and why they fail loudly
 
-The seed dataset has **zero** suppressed addresses, zero suppressed listings, zero unapproved
-descriptions, zero non-consumer statuses, zero `Land` rows and zero NULL beds/baths/sqft, so every
-compliance assertion in this repo was **vacuously true** before #22. `tests/support/fixtures.ts`
-supplies one row per scenario, behind three independent guards: it lives in `tests/` (not bundled,
-not in the image context, ignored by `nx test`), it refuses to run unless
+A real listing set has **zero** suppressed addresses, zero suppressed listings, zero unapproved
+descriptions, zero non-consumer statuses, zero `Land` rows and zero NULL beds/baths/sqft in the
+general case, so every compliance assertion in this repo would be **vacuously true** without a
+dataset built for it (#22, and #340 for why no environment holds sample data instead).
+`tests/support/fixtures.ts` supplies one row per scenario, behind three independent guards: it lives
+in `tests/` (not bundled, not in the image context, ignored by `nx test`), it refuses to run unless
 `PROPERTY_SERVICE_E2E_FIXTURES=1` and unconditionally when `NODE_ENV=production`, and every row is
 `is_sample` with a `(Sample)`-suffixed title and an `internal` source.
 

@@ -1,11 +1,11 @@
 /**
  * Guarded compliance fixtures for the Property API e2e suite (#22).
  *
- * The seed dataset (`src/seed/mock-listings.ts`) has zero suppressed addresses, zero suppressed
- * listings, zero unapproved descriptions, zero non-consumer statuses, zero `Land` rows and zero NULL
- * beds/baths/sqft. Every compliance assertion #22's e2e suite wants to make is therefore vacuously
- * true against the seed alone — this module is what gives those assertions something real to fail
- * against.
+ * No environment carries sample or test-feed inventory (#340), so a real listing set has zero
+ * suppressed addresses, zero suppressed listings, zero unapproved descriptions, zero non-consumer
+ * statuses, zero `Land` rows and zero NULL beds/baths/sqft in the general case. Every compliance
+ * assertion #22's e2e suite wants to make would therefore be vacuously true without a dataset built
+ * for it — this module is what gives those assertions something real to fail against.
  *
  * THREE INDEPENDENT GUARDS, because any one of them alone is a single point of failure:
  *
@@ -24,9 +24,10 @@
  *     that do not exist. A leaked row is unmistakable on sight.
  *
  * WRITER DISCIPLINE: `src/db/write.ts` is the only module that writes `listings`
- * (`src/seed/seed.spec.ts` asserts this), so every listing/property/unit/community row below goes
- * through its exported functions — `getOrCreateProperty()`, `getOrCreateUnit()`, `insertCommunity()`,
- * `insertOpenHouse()`, `upsertListing()`. This module never issues a raw INSERT/UPDATE against
+ * (`src/db/write-containment.spec.ts` asserts this), so every listing/property/unit/community row
+ * below goes through its exported functions — `getOrCreateProperty()`, `getOrCreateUnit()`,
+ * `insertCommunity()`, `insertOpenHouse()`, `upsertListing()`. This module never issues a raw
+ * INSERT/UPDATE against
  * `listings`, `properties` or `units`. `removeComplianceFixtures()` is the one exception, and only
  * for DELETE (see its own comment) — there is no exported "delete a listing" helper because nothing
  * in the product needs one yet, and this module only ever deletes rows carrying its own fixture
@@ -60,8 +61,8 @@ import {
   Queryable,
   upsertListing,
 } from '../../src/db/write';
-import { buildAddressKey } from '../../src/seed/address';
-import { Amenity, ListingStatus, PropertyType } from '../../src/seed/constants';
+import { buildAddressKey } from '../../src/db/address';
+import { Amenity, ListingStatus, PropertyType } from '../../src/db/constants';
 import {
   CommunityRow,
   DescriptionModeration,
@@ -70,7 +71,7 @@ import {
   OfferKind,
   PropertyRow,
   UnitRow,
-} from '../../src/seed/types';
+} from '../../src/db/types';
 
 /** Ids of every fixture row, keyed by the scenario name a spec asserts against. */
 export interface ComplianceFixtureIds {
@@ -139,7 +140,7 @@ export interface ComplianceFixtureIds {
   suppressedMediaNoMarkerListingId: string;
 }
 
-/** The narrow seam this module needs, mirroring src/seed/seed.ts's SeedQueryable/SeedConnectable. */
+/** The narrow seam this module needs against `pg.Pool`/`pg.PoolClient`. */
 interface FixturesQueryable extends Queryable {
   release: () => void;
 }
@@ -1257,8 +1258,9 @@ export async function loadComplianceFixtures(pool: FixturesPool): Promise<Compli
  * blanket `DELETE FROM listings`/`properties`/`units`.
  *
  * This is the one place in this module that issues raw SQL against those tables, and it is DELETE
- * only, never INSERT/UPDATE (the restriction `src/seed/seed.spec.ts` enforces is specifically about
- * writers that create/mutate rows in `listings`; there is no exported "delete a listing" helper on
+ * only, never INSERT/UPDATE (the restriction `src/db/write-containment.spec.ts` enforces is
+ * specifically about writers that create/mutate rows in `listings`; there is no exported "delete a
+ * listing" helper on
  * `src/db/write.ts` because nothing in the product needs one yet). Deletion order follows the FKs
  * those tables declare: `listing_events` RESTRICTs against both `listings` and `properties`, so it
  * must go first; `listing_open_houses`/`listing_media` CASCADE from `listings` and need no separate

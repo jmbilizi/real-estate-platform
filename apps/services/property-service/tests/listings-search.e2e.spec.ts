@@ -23,9 +23,9 @@ import { complianceFixtureIds } from './support/fixture-ids';
 const fixtures = complianceFixtureIds();
 
 /**
- * Fixture rows coexist with the seed dataset and whatever else lives in the target database, so no
- * test in this file asserts an absolute `total`. Existence/absence is always checked by id within a
- * result set, paged through to completion rather than assumed to fit on page 1.
+ * Fixture rows coexist with whatever else lives in the target database, so no test in this file
+ * asserts an absolute `total`. Existence/absence is always checked by id within a result set, paged
+ * through to completion rather than assumed to fit on page 1.
  */
 async function fetchAllResults(
   params: Record<string, unknown> = {},
@@ -383,8 +383,8 @@ describe('openHouse=true (soonest UPCOMING occurrence only)', () => {
 
 describe('pagination is a total order', () => {
   const SORTS = ['recommended', 'newest', 'price-asc', 'price-desc'] as const;
-  // Small enough to force at least two pages against the seed-plus-fixture dataset, without
-  // depending on (or asserting) any particular absolute count.
+  // Small enough to force at least two pages against the fixture dataset, without depending on
+  // (or asserting) any particular absolute count.
   const PAGE_SIZE = 5;
 
   it.each(SORTS)(
@@ -420,9 +420,9 @@ describe('pagination is a total order', () => {
 
     expect(response.status).toBe(200);
     const farPage = listingsEnvelopeSchema.parse(response.data);
-    // The seed-plus-fixture dataset is a few hundred rows, so the last in-window page is past its
-    // end. If this ever stops holding the dataset has grown past the window, and that is worth
-    // knowing loudly rather than having the assertion quietly weaken.
+    // The fixture dataset is a small, fixed row count, so the last in-window page is past its end.
+    // If this ever stops holding the dataset has grown past the window, and that is worth knowing
+    // loudly rather than having the assertion quietly weaken.
     expect(first.total).toBeLessThan(MAX_RESULT_OFFSET);
     expect(farPage.results).toEqual([]);
     expect(farPage.total).toBe(first.total);

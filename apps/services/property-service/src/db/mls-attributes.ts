@@ -41,8 +41,8 @@ function requireTransactionScoped(client: Queryable): asserts client is Transact
  * is a different one — governance and fail-closed vocabulary — and it IS expressible in the database
  * (migration `1785801600013` enforces every rule below with composite foreign keys). Two unrelated
  * invariants under one header make both easier to misread, so the containment is mirrored rather than
- * merged: `seed.spec.ts` asserts that this module is the only writer of these four tables, and that
- * this module never writes `listings`.
+ * merged: `write-containment.spec.ts` asserts that this module is the only writer of these four
+ * tables, and that this module never writes `listings`.
  *
  * ── FAIL CLOSED, BUT DO NOT ABORT THE BATCH ───────────────────────────────────────────────────────
  *
@@ -61,8 +61,8 @@ function requireTransactionScoped(client: Queryable): asserts client is Transact
  * ── A FIELD IS PROCESSED ALL-OR-NOTHING ───────────────────────────────────────────────────────────
  *
  * `putListingAttributes` REPLACES the stored set for each field it mentions, because an upsert cannot
- * express a value the feed has stopped sending (the same argument `deleteSampleData` records for the
- * seed). But if any value for a field fails to resolve, that field is skipped entirely and its
+ * express a value the feed has stopped sending (the same argument `deleteSampleData` records for a
+ * swept row). But if any value for a field fails to resolve, that field is skipped entirely and its
  * existing rows are left alone — a half-applied set would be worse than a stale one, and deleting good
  * values because a NEW one is unregistered would turn a governance gap into data loss.
  */

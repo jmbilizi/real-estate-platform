@@ -1,10 +1,9 @@
 /**
  * The Bright MLS ingestion run — the decision half.
  *
- * `bright-ingest.main.ts` is the program that invokes this; the split mirrors
- * `seed-on-start.ts` / `seed-on-start.main.ts` and exists for the same reason: a bundled entry point
- * cannot hold logic that anything wants to unit-test, because `require.main === module` is silently
- * always false inside a webpack bundle.
+ * `bright-ingest.main.ts` is the program that invokes this; the split exists because a bundled
+ * entry point cannot hold logic that anything wants to unit-test — `require.main === module` is
+ * silently always false inside a webpack bundle.
  *
  * ## What a run does
  *

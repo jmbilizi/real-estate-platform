@@ -378,10 +378,10 @@ export const DEFAULT_REPLICATION: BrightReplicationConfig = {
 /**
  * Reads the full-resync switch.
  *
- * `'1'` is the repo's convention for a boolean environment flag, matching
- * `PROPERTY_SERVICE_SEED_ON_START`. An unrecognised value THROWS rather than reading as false: an
- * operator who sets `BRIGHT_MLS_FULL_RESYNC=true` to force a resync would otherwise get an ordinary
- * incremental run, with no cursor reset and nothing in the log saying the flag was ignored.
+ * `'1'` is the repo's convention for a boolean environment flag. An unrecognised value THROWS
+ * rather than reading as false: an operator who sets `BRIGHT_MLS_FULL_RESYNC=true` to force a
+ * resync would otherwise get an ordinary incremental run, with no cursor reset and nothing in the
+ * log saying the flag was ignored.
  */
 function resolveFullResync(env: NodeJS.ProcessEnv): boolean {
   const raw = present(env[BRIGHT_ENV_VARS.fullResync]);

@@ -1,59 +1,9 @@
-import { Amenity, ListingSource, ListingStatus, ListingType, PropertyType } from './constants';
+import { Amenity, ListingSource, ListingStatus, PropertyType } from './constants';
 
 /**
- * Shape of one entry in the frontend mock dataset
- * (`apps/clients/cribstop/next/src/lib/listings.ts`), trimmed to the fields
- * the seed transform needs. Field names/casing mirror the frontend `Listing`
- * interface (`apps/clients/cribstop/next/src/lib/types.ts`).
- *
- * Note this is the CONSUMER shape, which is deliberately flat. The database is not: facts are stored at
- * the level whose lifetime they share (see the migrations), and `transform.ts` is where the flat entry
- * is decomposed into community / property / unit / listing rows.
+ * Row shapes for `src/db/write.ts`, the only module permitted to write these tables
+ * (`write-containment.spec.ts` asserts this).
  */
-export interface MockListing {
-  id: string;
-  title: string;
-  address: string;
-  city: string;
-  state: string;
-  zip: string;
-  neighborhood: string;
-  price: number;
-  status: ListingStatus;
-  listingType: ListingType;
-  source: ListingSource;
-  propertyType: PropertyType;
-  beds: number;
-  baths: number;
-  sqft: number;
-  lotSqft?: number;
-  yearBuilt?: number;
-  imageUrls: string[];
-  brokerName: string;
-  brokerPhone: string;
-  brokerEmail: string;
-  officeName: string;
-  officeBrokerLeadPhone?: string;
-  officeBrokerLeadMail?: string;
-  lastUpdated: string;
-  description: string;
-  amenities: string[];
-  latitude: number;
-  longitude: number;
-  featured: boolean;
-  /**
-   * A single open house in the consumer shape. The database models open houses as their own multi-row
-   * child table, so this maps to zero or one `listing_open_houses` row — a listing with two weekends of
-   * showings is representable in the schema even though this mock shape cannot express it.
-   */
-  openHouse?: { date: string; startTime: string; endTime: string } | null;
-  priceReduced?: boolean;
-  newConstruction?: boolean;
-  /** Sale price, for a listing that has already closed. Requires `closeDate`. */
-  closePrice?: number;
-  /** Close date, required for a sold listing to be publicly displayable (Bright solds-display policy). */
-  closeDate?: string;
-}
 
 export interface CommunityRow {
   id: string;

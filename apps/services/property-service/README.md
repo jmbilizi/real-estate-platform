@@ -6,9 +6,9 @@ Listings** hierarchy (PRD §3) and the consumer listing model (PRD §3.1).
 Backed by the `property_db` PostgreSQL database, which infra already provisions with `uuid-ossp`,
 `postgis`, `pg_trgm`, and `btree_gist` (`infra/k8s/base/configmaps/postgres.configmap.yaml`).
 
-> **Scope today.** Schema, migrations, a seed dataset, and the **Property API** — listings search,
-> detail, dataset freshness, and listing inquiries (#131). Saved/favorited listings are #23;
-> property relationship claims (PRD §3.2) are not modelled yet.
+> **Scope today.** Schema, migrations, and the **Property API** — listings search, detail, dataset
+> freshness, and listing inquiries (#131). Saved/favorited listings are #23; property relationship
+> claims (PRD §3.2) are not modelled yet.
 
 ## The Property API
 
@@ -120,7 +120,6 @@ pnpm exec nx build property-service
 pnpm run infra:local:property-db:url            # Derive DATABASE_URL from the local cluster
 pnpm exec nx run property-service:migrate       # Apply migrations (needs DATABASE_URL)
 pnpm exec nx run property-service:migrate-down  # Roll back the last migration
-pnpm exec nx run property-service:seed          # Load the sample dataset into $DATABASE_URL
 
 pnpm exec nx e2e property-service        # Boots the service, then hits it over HTTP
 ```
@@ -155,41 +154,15 @@ listing does, and `listings` holds one offer. A property is fully meaningful wit
 GiST index on `properties.geog`, a GIN index on `amenities`, and a `pg_trgm` GIN index on
 `neighborhood` for the fuzzy search #22 will add.
 
-`amenities` is enforced by a **database CHECK** against the fixed 15-value set as well as by
-`validateAmenities()` in `src/seed/constants.ts` — a Fair Housing surface is not left to application
-code alone. Widening it is a deliberate migration, which is the point.
+`amenities` is enforced by a **database CHECK** against the fixed 15-value set in
+`src/db/constants.ts` (`AMENITIES`). Widening it is a deliberate migration, which is the point.
 
 See the project `AGENTS.md` for the migration rules and the columns that must never be added.
 
-## Seed data and compliance
+## No sample or test-feed data (#340)
 
-**A cluster seeds itself.** `pnpm run skaffold:services` brings up a populated `property_db` with no
-`.env`, no port-forward and no credential step: the `migrate` initContainer loads the dataset right
-after migrations, gated on `PROPERTY_SERVICE_SEED_ON_START=1` (set only in the `podman/local` and
-`hetzner/dev` overlays), a non-production `NODE_ENV`, and either an empty `listings` table or a
-dataset that has changed since the hash recorded in `seed_state`. Editing `mock-listings.ts` and
-redeploying therefore updates the data; a redeploy that changed no data does nothing at all. A
-changed dataset is re-applied by deleting every `is_sample` row and inserting fresh. See the project
-`AGENTS.md`. The `seed` target listed above remains for loading the dataset into an arbitrary
-database you have already pointed `DATABASE_URL` at.
-
-The seed loads 13 sample listings across 12 properties — two of them share an address, so the
-property → many-listings case the schema exists for is actually exercised — adapted from the web
-app's mock dataset. This data is **sample data, not real inventory**, and is authored so that it can
-never be mistaken for real (PRD §6.2/§6.3):
-
-- `source` is `internal` on every row — never `brightMLS`. This data did not come from the MLS.
-- Every `title` ends in `(Sample)`, and every row sets `is_sample = true`, so the labelling reaches
-  any client regardless of what it renders.
-- Agents are synthetic (`Sample Agent N`) on RFC 2606 reserved `example.com` mailboxes and reserved
-  `555-01xx` phone numbers.
-- All attribution is to **Real Broker, LLC** (the legal name, per the web app's `brand.ts`).
-  Inventing agents at a real competitor's domain would be false attribution to that firm.
-- Descriptions carry objective property facts only — no school-quality claims or other Fair Housing
-  steering proxies.
-
-`src/seed/mock-listings.spec.ts` enforces each of these against the dataset itself, not just the
-transform, because anything importing `mockListings` directly bypasses the transform.
-
-Street addresses and prices stay plausible so search and map rendering get exercised realistically;
-the markers above are what keep that plausibility from reading as a real listing.
+Stakeholder ruling 2026-09-26: environments are protected now, so no environment needs sample or
+Bright test-feed data. `write-containment.spec.ts` fails the build if any `src/` code path pairs
+`is_sample: true` with `source: 'internal'` on a `listings` row. See the project `AGENTS.md` for
+`bright-map/sweep.ts`, which clears an environment's stale test-feed rows when its Bright tier
+changes.

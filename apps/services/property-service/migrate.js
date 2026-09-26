@@ -16,7 +16,6 @@
  */
 
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
 const { Client } = require('pg');
 const { runner } = require('node-pg-migrate');
 const {
@@ -125,46 +124,6 @@ async function attemptMigrations(databaseUrl, checkOrder) {
   }
 }
 
-/**
- * Sample-data seeding for the environments that opt in (#111), run here rather than on a
- * workstation: this container already holds the database host, the user and the secret, so there is
- * no port-forward and no credential to reconstruct by hand.
- *
- * A child process rather than a `require`, for two reasons. `seed-on-start.js` is a webpack bundle
- * whose work happens at top level, so requiring it would start async work this function could not
- * await and whose failure would surface as an unhandled rejection. Spawning gives an exit code, and
- * a non-zero one fails the initContainer — a seed that half-ran must not be reported as a clean
- * migrate.
- *
- * The flag is checked twice on purpose, and the two checks are not duplicates: this one is
- * deliberately the weaker (any non-empty value) and only decides whether to start a process at all,
- * so an environment that never opts in — `hetzner/test`, `hetzner/prod` — executes no seed code
- * whatsoever. `seed-on-start.ts` remains the authority: exactly `'1'`, never under
- * NODE_ENV=production, and only into an empty `listings` table.
- */
-function seedIfRequested() {
-  if (!process.env.PROPERTY_SERVICE_SEED_ON_START) {
-    return;
-  }
-
-  const result = spawnSync(process.execPath, ['seed-on-start.js'], {
-    stdio: 'inherit',
-    cwd: __dirname,
-  });
-
-  if (result.error) {
-    throw result.error;
-  }
-  if (result.status !== 0) {
-    // `status` is null when the child was killed by a signal (an OOM kill being the realistic case
-    // here), so report the signal too rather than "status null".
-    const cause = result.signal
-      ? `killed by signal ${result.signal}`
-      : `exited with status ${result.status}`;
-    throw new Error(`Seeding failed: seed-on-start.js ${cause}.`);
-  }
-}
-
 async function main() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
@@ -200,8 +159,6 @@ async function main() {
       selfHealAttemptsLeft -= 1;
     }
   }
-
-  seedIfRequested();
 }
 
 main().catch((error) => {

@@ -1,4 +1,4 @@
-import { PropertyType } from '../../seed/constants';
+import { PropertyType } from '../../db/constants';
 
 /**
  * Bright `PropertySubType` onto the closed `properties.property_type` vocabulary (#93).

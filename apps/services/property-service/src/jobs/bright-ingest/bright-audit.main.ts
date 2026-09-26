@@ -10,8 +10,8 @@
  * nothing more.
  *
  * Bundled as its own webpack entry (`bright-audit`, see `webpack.config.js`) for the same reason
- * `bright-ingest.main.ts` and `seed-on-start.main.ts` are: nothing on the request-serving startup
- * path imports this file, so without its own entry it would never reach the runtime image.
+ * `bright-ingest.main.ts` is: nothing on the request-serving startup path imports this file, so
+ * without its own entry it would never reach the runtime image.
  *
  * City list: positional CLI arguments, or `BRIGHT_AUDIT_CITIES` (comma-separated) if none are given.
  * Neither present is a usage error, not a silent no-op — an empty audit produces an empty table that

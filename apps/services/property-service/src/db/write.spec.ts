@@ -7,7 +7,7 @@ import {
   softDeleteListings,
   upsertListingBySourceKey,
 } from './write';
-import { ListingRow } from '../seed/types';
+import { ListingRow } from './types';
 
 /**
  * Guards on the terminal-correction escape hatch.
