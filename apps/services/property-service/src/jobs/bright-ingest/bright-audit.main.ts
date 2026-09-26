@@ -47,7 +47,7 @@ function resolveCities(argv: readonly string[], env: NodeJS.ProcessEnv): string[
 /** The searchable status vocabulary the audit compares against, derived from `listing_statuses`. */
 function toAuditStatuses(statuses: Awaited<ReturnType<typeof loadListingStatuses>>): AuditStatus[] {
   return statuses
-    .filter((s) => s.isPubliclySearchable === true && s.resoStandardStatus !== null)
+    .filter((s) => s.isPubliclySearchable && s.resoStandardStatus !== null)
     .map((s) => ({ code: s.code, resoStandardStatus: s.resoStandardStatus as string }));
 }
 

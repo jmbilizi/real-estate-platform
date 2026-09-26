@@ -119,6 +119,8 @@ export interface AreaQueryParams {
   readonly city?: string;
   readonly state?: string;
   readonly zip?: string;
+  /** The Bright `StandardStatus` wire value this page fetches. One pass per status; see #330. */
+  readonly status: string;
   /** Keyset page: the last `ListingKey` already read, as decimal text. `null` on the first page. */
   readonly afterKey: string | null;
   readonly top: number;
@@ -130,10 +132,12 @@ function stringLiteral(value: string): string {
 }
 
 /**
- * Builds one page of an on-demand area load: the ACTIVE `BrightProperties` in one city or ZIP.
+ * Builds one page of an on-demand area load: one status's `BrightProperties` in one city or ZIP.
  *
  * The area and status filters keep the match set small, so this avoids the whole-feed scan that
- * makes a `ModificationTimestamp` page slow on production. Pages are keyset pages on `ListingKey`
+ * makes a `ModificationTimestamp` page slow on production. Bright rejects `OR` in `$filter`
+ * (see the header), so a caller fetching more than one status runs one query per status, each with
+ * its own `status` value and its own keyset pass. Pages are keyset pages on `ListingKey`
  * (`ListingKey gt k`, ordered by `ListingKey`): no OR, no `$skip`, and the ordered field is always
  * in the filter. `$top` suppresses nextLink, so the caller pages by `afterKey`.
  */
@@ -148,7 +152,7 @@ export function buildAreaQuery(params: AreaQueryParams): string {
     ...(params.city === undefined ? [] : [`City eq ${stringLiteral(params.city)}`]),
     ...(params.state === undefined ? [] : [`StateOrProvince eq ${stringLiteral(params.state)}`]),
     ...(params.zip === undefined ? [] : [`PostalCode eq ${stringLiteral(params.zip)}`]),
-    "StandardStatus eq 'Active'",
+    `StandardStatus eq ${stringLiteral(params.status)}`,
     `ListingKey gt ${params.afterKey ?? '0'}`,
   ];
 

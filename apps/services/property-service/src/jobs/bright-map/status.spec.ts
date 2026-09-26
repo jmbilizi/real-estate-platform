@@ -1,14 +1,33 @@
-import { type ListingStatusLookup, mapStandardStatus } from './status';
+import { type ListingStatusLookup, mapStandardStatus, searchableStatuses } from './status';
 
 const STATUSES: readonly ListingStatusLookup[] = [
-  { code: 'Active', consumerStatus: 'Active', isTerminal: false, resoStandardStatus: 'Active' },
-  { code: 'Closed', consumerStatus: 'Sold', isTerminal: true, resoStandardStatus: 'Closed' },
-  { code: 'Withdrawn', consumerStatus: null, isTerminal: true, resoStandardStatus: 'Withdrawn' },
+  {
+    code: 'Active',
+    consumerStatus: 'Active',
+    isTerminal: false,
+    resoStandardStatus: 'Active',
+    isPubliclySearchable: true,
+  },
+  {
+    code: 'Closed',
+    consumerStatus: 'Sold',
+    isTerminal: true,
+    resoStandardStatus: 'Closed',
+    isPubliclySearchable: true,
+  },
+  {
+    code: 'Withdrawn',
+    consumerStatus: null,
+    isTerminal: true,
+    resoStandardStatus: 'Withdrawn',
+    isPubliclySearchable: false,
+  },
   {
     code: 'Temporarily Off Market',
     consumerStatus: null,
     isTerminal: false,
     resoStandardStatus: 'Hold',
+    isPubliclySearchable: false,
   },
 ];
 
@@ -41,5 +60,44 @@ describe('mapStandardStatus', () => {
 
   it('is case-sensitive: Bright vocabulary is exact-match, never fuzzy', () => {
     expect(mapStandardStatus('active', STATUSES)).toBeNull();
+  });
+});
+
+describe('searchableStatuses', () => {
+  it('returns the reso_standard_status of every publicly searchable status', () => {
+    expect(searchableStatuses(STATUSES)).toEqual(['Active', 'Closed']);
+  });
+
+  it('drops a searchable status with no reso_standard_status', () => {
+    const noWireValue: readonly ListingStatusLookup[] = [
+      {
+        code: 'Active',
+        consumerStatus: 'Active',
+        isTerminal: false,
+        resoStandardStatus: null,
+        isPubliclySearchable: true,
+      },
+    ];
+    expect(searchableStatuses(noWireValue)).toEqual([]);
+  });
+
+  it('de-duplicates two codes sharing one reso_standard_status', () => {
+    const shared: readonly ListingStatusLookup[] = [
+      {
+        code: 'A',
+        consumerStatus: 'Active',
+        isTerminal: false,
+        resoStandardStatus: 'Active',
+        isPubliclySearchable: true,
+      },
+      {
+        code: 'B',
+        consumerStatus: 'Active',
+        isTerminal: false,
+        resoStandardStatus: 'Active',
+        isPubliclySearchable: true,
+      },
+    ];
+    expect(searchableStatuses(shared)).toEqual(['Active']);
   });
 });

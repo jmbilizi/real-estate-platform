@@ -45,6 +45,12 @@ export interface MapStagedBrightPropertiesOptions {
   readonly soldDisplayDelayDays: number | null;
   /** Map only these staged `ListingKey`s (the on-demand area load). Absent maps every staged row. */
   readonly listingKeys?: readonly string[];
+  /**
+   * The vocabulary to map against. Absent re-reads `listing_statuses`. A caller that already loaded
+   * it this request (the on-demand loader, to derive its searchable-status set) passes it through
+   * instead, so one request does not query the table twice.
+   */
+  readonly statuses?: readonly ListingStatusLookup[];
 }
 
 /** Reads the current vocabulary, so an added `listing_statuses` row needs no code change here. */
@@ -112,7 +118,7 @@ export async function mapStagedBrightProperties(
     return ZERO_MAP_REPORT;
   }
 
-  const statuses = await loadListingStatuses(client);
+  const statuses = options.statuses ?? (await loadListingStatuses(client));
   const withheldByReason: Record<string, number> = {};
   const outOfRangeFieldCounts: Record<string, number> = {};
   const publishedListingKeys: string[] = [];
