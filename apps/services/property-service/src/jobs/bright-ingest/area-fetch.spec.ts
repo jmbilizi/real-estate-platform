@@ -1,6 +1,7 @@
 import type { FetchLike } from './bright-client';
 import { fetchAreaListings } from './area-fetch';
 import { createMemoryStore } from './mock-reso-server';
+import { BRIGHT_STATUS_FILTER_LABELS } from '../bright-map/status';
 import { buildAreaQuery, isOrderedWithoutFilter } from './odata-query';
 
 const SERVICE_ROOT = 'https://bright-reso.tst.brightmls.com/RESO/OData/bright';
@@ -26,7 +27,8 @@ function listing(key: number, status = 'Active'): FixtureListing {
 
 /**
  * A `FetchLike` over an in-memory record set, keyset-paging on `ListingKey` and filtering on
- * `StandardStatus`, the two predicates `buildAreaQuery` emits. Records every requested URL so a
+ * `StandardStatus`, the two predicates `buildAreaQuery` emits. Like Bright, it matches the $filter
+ * LABEL ('Coming Soon') against the payload value a record carries ('ComingSoon'). Records every requested URL so a
  * test can assert how many passes ran and with which status.
  */
 function fixtureFetch(
@@ -40,7 +42,10 @@ function fixtureFetch(
     const after = Number(/ListingKey gt (\d+)/.exec(decoded)?.[1] ?? 0);
     const status = /StandardStatus eq '([^']*)'/.exec(decoded)?.[1] ?? '';
     const value = all
-      .filter((row) => row.StandardStatus === status && row.ListingKey > after)
+      .filter(
+        (row) =>
+          BRIGHT_STATUS_FILTER_LABELS[row.StandardStatus] === status && row.ListingKey > after,
+      )
       .slice(0, pageSize);
     return Promise.resolve({
       ok: true,
@@ -87,7 +92,7 @@ describe('buildAreaQuery', () => {
     );
 
     expect(url.searchParams.get('$filter')).toBe(
-      "City eq 'Rockville' and StandardStatus eq 'ComingSoon' and ListingKey gt 0",
+      "City eq 'Rockville' and StandardStatus eq 'Coming Soon' and ListingKey gt 0",
     );
   });
 
@@ -210,7 +215,7 @@ describe('fetchAreaListings', () => {
     });
     expect(
       urls.every((url) =>
-        decodeURIComponent(url.replace(/\+/g, ' ')).includes("StandardStatus eq 'ComingSoon'"),
+        decodeURIComponent(url.replace(/\+/g, ' ')).includes("StandardStatus eq 'Coming Soon'"),
       ),
     ).toBe(true);
   });

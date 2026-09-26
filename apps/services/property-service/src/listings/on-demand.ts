@@ -33,15 +33,6 @@ import {
 import { type ListingStatusLookup, searchableStatuses } from '../jobs/bright-map/status';
 
 /**
- * `Closed` (sold) listings run last in `listing_statuses.sort_order` and can be numerous for a busy
- * city. Fetching them through the same cap as the statuses that keep a listing on the market let a
- * large sold backlog starve those statuses' resume progress and never let the area read `complete`
- * (#329). It is not a `listing_statuses` code — checked against the RESO `StandardStatus` wire
- * value `fetchAreaListings` requests — so this is a literal, not an import from `bright-map/status`.
- */
-const CLOSED_STANDARD_STATUS = 'Closed';
-
-/**
  * On-demand area load: a search for a place we do not fully hold loads that place from Bright.
  *
  * The search always reads our own database first (`repository.ts`). `routes.ts` asks `needsLoad()`
@@ -49,9 +40,8 @@ const CLOSED_STANDARD_STATUS = 'Closed';
  * the freshness window — not only when the search returned zero rows (#329). Every publicly
  * searchable status is tracked (`listing_statuses.is_publicly_searchable`, not Active alone, #330),
  * one row per `(area, status)`, so a load resumes each status from its own cursor and a capped call
- * never restarts at the beginning. Bright is slow, so the route waits at most `waitMs`; past that it
- * answers with what it has and the load finishes in the background, so the next request finds the
- * listings.
+ * never restarts at the beginning. The search route never waits on a load (#337): it answers from
+ * the database and the load runs in the background, so the next request finds the listings.
  *
  * `bright_area_sync.attempted_at` is the cooldown: shared across pods and surviving a pod restart,
  * unlike the in-memory map this replaced. A `failed` status cools down for `failedCooldownMs`, far
@@ -217,8 +207,6 @@ export interface AreaLoaderOptions {
   /** Cooldown after a `failed` status pass — short, so a transient error self-heals fast (#329). */
   readonly failedCooldownMs?: number;
   readonly maxRecords?: number;
-  /** Independent cap for the `Closed` (sold) pass, so a sold backlog cannot borrow this budget. */
-  readonly closedMaxRecords?: number;
   /** How long a `complete` area's coverage stays trusted before the next search re-triggers it. */
   readonly freshnessMs?: number;
   readonly now?: () => number;
@@ -271,8 +259,6 @@ export function createAreaLoader(options: AreaLoaderOptions = {}): AreaLoader {
   const failedCooldownMs =
     options.failedCooldownMs ?? Number(env.BRIGHT_ON_DEMAND_FAILED_COOLDOWN_MS ?? 5 * 60 * 1000);
   const maxRecords = options.maxRecords ?? 1000;
-  const closedMaxRecords =
-    options.closedMaxRecords ?? Number(env.BRIGHT_ON_DEMAND_CLOSED_MAX_RECORDS ?? maxRecords);
   const freshnessMs =
     options.freshnessMs ?? Number(env.BRIGHT_AREA_FRESHNESS_MS ?? 24 * 60 * 60 * 1000);
   const now = options.now ?? (() => Date.now());
@@ -437,9 +423,8 @@ export function createAreaLoader(options: AreaLoaderOptions = {}): AreaLoader {
   }
 
   /**
-   * Works on exactly one status pass per invocation — whichever `pickNextStatus` names, budgeted
-   * `closedMaxRecords` for `Closed` and `maxRecords` for every other status — and persists the
-   * result to `bright_area_sync` before returning. A single search may trigger several loads in a
+   * Works on exactly one status pass per invocation — whichever `pickNextStatus` names, capped at
+   * `maxRecords` — and persists the result to `bright_area_sync` before returning. A single search may trigger several loads in a
    * row (each one advances one status), but never more than one status's cap of Bright records.
    *
    * Returns whether it actually ran a Bright request, so the in-flight wrapper can tell a `loaded`
@@ -463,7 +448,6 @@ export function createAreaLoader(options: AreaLoaderOptions = {}): AreaLoader {
 
     try {
       const prior = rows.get(target) ?? null;
-      const budget = target === CLOSED_STANDARD_STATUS ? closedMaxRecords : maxRecords;
       const result = await fetchAreaListings({
         serviceRoot: active.endpoint.serviceRoot,
         serviceRootHost: active.endpoint.serviceRootHost,
@@ -479,7 +463,7 @@ export function createAreaLoader(options: AreaLoaderOptions = {}): AreaLoader {
         // than restart the whole pass and double-count already-staged records into `loaded_count`.
         afterKey: prior?.resumeKey ?? null,
         pageSize: active.replication.pageSize ?? 200,
-        maxRecords: budget,
+        maxRecords,
         pageOptions: pageOptions(active),
       });
 

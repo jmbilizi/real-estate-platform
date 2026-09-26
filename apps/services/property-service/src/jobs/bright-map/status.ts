@@ -41,18 +41,48 @@ export function mapStandardStatus(
 }
 
 /**
- * The Bright `StandardStatus` wire values an area load must fetch (#330).
+ * The Bright `StandardStatus` payload values an area load must fetch (#330).
  *
- * `is_publicly_searchable` is the search-display gate. A status carries no `reso_standard_status`
- * on this feed, or duplicates one another status already reports, is skipped: Bright takes one
- * value per pass, and a duplicate would run the same query twice.
+ * `is_publicly_searchable` is the search-display gate. A terminal status (`Closed`) is left out:
+ * Bright holds about 5 M sold records, and an area load must never page through them (#337). A
+ * status with no `reso_standard_status`, or one that duplicates another, is skipped: Bright takes
+ * one value per pass, and a duplicate would run the same query twice.
  */
 export function searchableStatuses(statuses: readonly ListingStatusLookup[]): string[] {
   const seen = new Set<string>();
   for (const status of statuses) {
-    if (status.isPubliclySearchable && status.resoStandardStatus !== null) {
+    if (status.isPubliclySearchable && !status.isTerminal && status.resoStandardStatus !== null) {
       seen.add(status.resoStandardStatus);
     }
   }
   return [...seen];
+}
+
+/**
+ * Bright `$filter` labels, keyed by the `StandardStatus` payload value a record carries (#337).
+ *
+ * The two vocabularies differ. A record returns `ComingSoon`; a `$filter` must say
+ * `StandardStatus eq 'Coming Soon'`. The compact form in a filter is a 400 syntax error. Measured
+ * against production Bright on 2026-09-26. `reso_standard_status` holds the payload values
+ * (migration 021), so the mapper matches records by that column and a query builder translates
+ * through this table.
+ */
+export const BRIGHT_STATUS_FILTER_LABELS: Readonly<Record<string, string>> = {
+  Active: 'Active',
+  ComingSoon: 'Coming Soon',
+  ActiveUnderContract: 'Active Under Contract',
+  Pending: 'Pending',
+  Closed: 'Closed',
+};
+
+/** The `$filter` label for a payload value. Throws on a value with no measured label. */
+export function brightStatusFilterLabel(payloadValue: string): string {
+  const label = BRIGHT_STATUS_FILTER_LABELS[payloadValue];
+  if (label === undefined) {
+    throw new Error(
+      `No Bright $filter label is recorded for StandardStatus "${payloadValue}". Probe the label ` +
+        'against Bright and add it to BRIGHT_STATUS_FILTER_LABELS.',
+    );
+  }
+  return label;
 }
