@@ -54,7 +54,11 @@ describe('PropertyPageView — market-status badge (#349)', () => {
     // dangling update outside `act`.
     await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
 
-    expect(screen.getByTestId('market-status-badge')).toHaveTextContent(marketStatus);
+    // One badge only, with the market status, so Under Contract never also reads Pending.
+    expect(screen.getByText(marketStatus, { selector: '.badge' })).toBeInTheDocument();
+    expect(screen.queryAllByText(/^(Active|Pending|Coming Soon|Sold)$/)).toHaveLength(
+      marketStatus === 'Under Contract' ? 0 : 1,
+    );
   });
 });
 

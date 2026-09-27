@@ -11,25 +11,18 @@ import { formatNumber } from '@/lib/format';
  * every display rule into `detail`/`propertyRecord`; re-deriving a rule from the status string
  * here would be a second, separately-maintained copy of that rule.
  *
- * The market-status badge renders once here, for both branches, rather than inside
- * `ListingDetailContent`. That component's own status badge draws from `ConsumerStatus`
- * (`Active`/`Pending`/`Coming Soon`/`Sold`), which has no `Under Contract` value — this page's own
- * `marketStatus` is the one field required to render verbatim.
+ * One status badge per page, with `marketStatus` verbatim. The detail branch passes it to
+ * `ListingDetailContent`, whose own `ConsumerStatus` has no `Under Contract` value.
  */
 export default function PropertyPageView({ page }: { page: PropertyPage }) {
   const { propertyRecord, detail, marketStatus } = page;
 
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="px-6 pt-4 sm:px-8">
-        <span className="badge bg-surface-border text-ink" data-testid="market-status-badge">
-          {marketStatus}
-        </span>
-      </div>
       {detail !== null ? (
-        <ListingDetailContent listing={toListingDetailView(detail)} />
+        <ListingDetailContent listing={toListingDetailView(detail)} statusLabel={marketStatus} />
       ) : (
-        <OffMarketPropertyView propertyRecord={propertyRecord} />
+        <OffMarketPropertyView propertyRecord={propertyRecord} marketStatus={marketStatus} />
       )}
     </div>
   );
@@ -42,7 +35,13 @@ export default function PropertyPageView({ page }: { page: PropertyPage }) {
  * remarks or agent data may appear on this branch, by construction — those fields simply are not
  * read here.
  */
-function OffMarketPropertyView({ propertyRecord }: { propertyRecord: PropertyRecord }) {
+function OffMarketPropertyView({
+  propertyRecord,
+  marketStatus,
+}: {
+  propertyRecord: PropertyRecord;
+  marketStatus: string;
+}) {
   // `address` already carries the unit designator.
   const streetLine = propertyRecord.address;
 
@@ -64,6 +63,9 @@ function OffMarketPropertyView({ propertyRecord }: { propertyRecord: PropertyRec
 
   return (
     <div className="px-6 py-8 sm:px-8">
+      <span className="badge bg-surface-border text-ink" data-testid="market-status-badge">
+        {marketStatus}
+      </span>
       <h1 className="text-xl font-semibold tracking-tight text-ink">
         {streetLine ?? 'Address withheld'}
       </h1>

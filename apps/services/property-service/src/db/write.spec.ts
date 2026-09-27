@@ -429,8 +429,9 @@ describe('markListingsOffMarket (#349)', () => {
 
     const update = queries.find((q) => q.text.includes('UPDATE listings'));
     expect(update?.text).toContain("status = 'Off Market', consumer_status = NULL");
+    expect(update?.text).toContain('NOT s.is_terminal');
     expect(update?.text).not.toContain('deleted_at = now()');
-    expect(update?.text).toContain("status <> 'Off Market'");
+    expect(update?.text).toContain("l.status <> 'Off Market'");
     const event = queries.find((q) => q.text.includes('INSERT INTO listing_events'));
     expect(event?.values).toEqual(
       expect.arrayContaining(['listing-1', 'property-1', 'status_change', 'Off Market', 'absent']),

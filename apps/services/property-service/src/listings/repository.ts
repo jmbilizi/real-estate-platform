@@ -476,15 +476,16 @@ export async function findAddressCandidates(
   const result = await pool.query<PropertyRecordDbRow>(
     `SELECT ${PROPERTY_RECORD_SELECT}
        FROM listing_detail_v d
-      WHERE lower(d.city) = $1
+      WHERE regexp_replace(lower(d.city), '[^a-z0-9]+', ' ', 'g') = $1
         AND d.state = $2
         AND d.address_street ILIKE $3
         AND ($4::text IS NULL OR d.zip = $4)
-      LIMIT 200`,
+      LIMIT 500`,
     [
       params.city.toLowerCase(),
       params.state.toUpperCase(),
-      `${params.houseNumber.replace(/[%_\\]/g, '')} %`,
+      // A prefix, not `<n> %`, so `118-120 Main St` is a candidate for `118-120-main-st`.
+      `${params.houseNumber.replace(/[%_\\]/g, '')}%`,
       params.zip,
     ],
   );

@@ -35,6 +35,8 @@ type ActiveConfig = Extract<BrightConfig, { state: 'configured' }>;
 
 const MAX_RECORDS = 50;
 const MAX_TRACKED_KEYS = 2000;
+/** Inside the gateway QoS timeout for `/property/properties/lookup` (8 s), with the token call. */
+const REQUEST_PATH_TIMEOUT_MS = 3000;
 
 const odataString = (value: string): string => value.replace(/'/g, "''");
 
@@ -130,7 +132,7 @@ export function createAddressLoader(options: AddressLoaderOptions = {}): Address
       if (coolingDown(key)) return;
       tokenProvider ??= createTokenProvider(active.endpoint, active.credentials, {
         fetchImpl: options.fetchImpl,
-        timeoutMs: active.replication.requestTimeoutMs,
+        timeoutMs: Math.min(active.replication.requestTimeoutMs, REQUEST_PATH_TIMEOUT_MS),
       });
       try {
         const page = await fetchPage(
@@ -140,8 +142,8 @@ export function createAddressLoader(options: AddressLoaderOptions = {}): Address
           {
             ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
             ...(limiter === null ? {} : { limiter }),
-            maxRetries: 1,
-            timeoutMs: active.replication.requestTimeoutMs,
+            maxRetries: 0,
+            timeoutMs: Math.min(active.replication.requestTimeoutMs, REQUEST_PATH_TIMEOUT_MS),
           },
         );
         const records = page.records as Record<string, unknown>[];
@@ -174,6 +176,8 @@ export function createAddressLoader(options: AddressLoaderOptions = {}): Address
         }
       } catch (error) {
         // A failed read is a 404 for this request, never a 500: the page has nothing to show.
+        // Only a completed read starts the cooldown. The rate limiter bounds the retries.
+        attemptedAt.delete(key);
         log(
           `Bright address lookup failed: ${error instanceof Error ? error.message : String(error)}`,
         );

@@ -422,8 +422,10 @@ export async function softDeleteListings(
  * and `listing_detail_v` shows only the address and the property record. `Off Market` is not
  * terminal, so a record that maps again re-snapshots the listing.
  *
- * Idempotent: a listing already `Off Market` is skipped. Caller supplies the transaction, so the
- * UPDATE and its `listing_events` row commit together.
+ * A terminal listing (Closed, Withdrawn, Expired, Canceled) is skipped: its status is frozen with
+ * its snapshot, and only `applyTerminalCorrection()` changes it. Idempotent: a listing already
+ * `Off Market` is skipped. Caller supplies the transaction, so the UPDATE and its
+ * `listing_events` row commit together.
  */
 export async function markListingsOffMarket(
   client: Queryable,
@@ -434,9 +436,11 @@ export async function markListingsOffMarket(
     return 0;
   }
   const { rows } = await client.query(
-    `UPDATE listings SET status = 'Off Market', consumer_status = NULL
-      WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL AND status <> 'Off Market'
-      RETURNING id, property_id, is_sample`,
+    `UPDATE listings l SET status = 'Off Market', consumer_status = NULL
+       FROM listing_statuses s
+      WHERE s.code = l.status AND NOT s.is_terminal
+        AND l.id = ANY($1::uuid[]) AND l.deleted_at IS NULL AND l.status <> 'Off Market'
+      RETURNING l.id, l.property_id, l.is_sample`,
     [listingIds],
   );
   for (const row of rows) {

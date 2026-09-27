@@ -1,5 +1,6 @@
 import {
   marketStatusSchema,
+  normalizePlaceName,
   normalizeStreetLine,
   normalizeUnit,
   type ParsedPropertyPath,
@@ -51,15 +52,37 @@ export function toPropertyRecord(row: PropertyRecordDbRow): PropertyRecord {
   });
 }
 
-function sameAddress(row: PropertyRecordDbRow, parsed: ParsedPropertyPath): boolean {
-  if (row.address_street === null) return false;
-  if (normalizeStreetLine(row.address_street) !== normalizeStreetLine(parsed.streetLine)) {
-    return false;
-  }
-  if (parsed.unitNumber === null) return true;
+/** Compared in slug form, so `O'Donnell` and `118-120` match the path that slugify built. */
+function slugStreet(streetLine: string): string {
+  return normalizeStreetLine(normalizePlaceName(streetLine));
+}
+
+function sameStreet(row: PropertyRecordDbRow, parsed: ParsedPropertyPath): boolean {
   return (
-    row.unit_number !== null && normalizeUnit(row.unit_number) === normalizeUnit(parsed.unitNumber)
+    row.address_street !== null &&
+    normalizePlaceName(row.city) === parsed.city &&
+    (parsed.zip === null || row.zip === parsed.zip) &&
+    slugStreet(row.address_street) === slugStreet(parsed.streetLine)
   );
+}
+
+/**
+ * A path with a unit matches that unit. A path with no unit matches the whole-property listings,
+ * and falls back to every unit only when the address has no whole-property listing.
+ */
+function atAddress(
+  rows: readonly PropertyRecordDbRow[],
+  parsed: ParsedPropertyPath,
+): PropertyRecordDbRow[] {
+  const street = rows.filter((row) => sameStreet(row, parsed));
+  const unit = parsed.unitNumber;
+  if (unit !== null) {
+    return street.filter(
+      (row) => row.unit_number !== null && normalizeUnit(row.unit_number) === normalizeUnit(unit),
+    );
+  }
+  const whole = street.filter((row) => row.unit_number === null);
+  return whole.length > 0 ? whole : street;
 }
 
 function lastUpdatedMs(row: PropertyRecordDbRow): number {
@@ -86,7 +109,7 @@ export async function resolveAddress(
     zip: parsed.zip,
   });
   const best = new Map<string, PropertyRecordDbRow>();
-  for (const row of candidates.filter((candidate) => sameAddress(candidate, parsed))) {
+  for (const row of atAddress(candidates, parsed)) {
     const key = `${row.property_id}|${row.unit_id ?? ''}`;
     const held = best.get(key);
     if (held === undefined || preferred(row, held) < 0) best.set(key, row);
@@ -110,7 +133,9 @@ function pathOf(row: PropertyRecordDbRow, withZip: boolean): string | null {
 
 /**
  * The address URL of one listing. The ZIP is added only when the short form names more than one
- * property. `null` when the seller withheld the address, or the street line has no house number.
+ * property. `null` when the seller withheld the address, when the street line has no house number,
+ * or when the address resolves to a different listing (a rental beside a sale, an older listing).
+ * A null path keeps `/listing/<id>` as that listing's URL.
  */
 export async function canonicalPathFor(
   pool: ReadClient,
@@ -122,7 +147,12 @@ export async function canonicalPathFor(
   const parsed = parsePropertyPath(citySeg ?? '', addressSeg ?? '');
   if (parsed === null) return null;
   const places = await resolveAddress(pool, parsed);
-  return places.length > 1 ? pathOf(row, true) : short;
+  if (!places.some((place) => place.id === row.id)) return null;
+  if (places.length === 1) return short;
+  const withZip = parsePropertyPath(citySeg ?? '', `${addressSeg ?? ''}-${row.zip.slice(0, 5)}`);
+  if (withZip === null) return null;
+  const zipPlaces = await resolveAddress(pool, withZip);
+  return zipPlaces.length === 1 && zipPlaces[0]?.id === row.id ? pathOf(row, true) : null;
 }
 
 /** The property page for one listing id, or `null` for the one frozen 404. */

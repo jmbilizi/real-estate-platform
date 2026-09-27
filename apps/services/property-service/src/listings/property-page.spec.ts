@@ -153,6 +153,48 @@ describe('findPropertyPage: status by status (#349)', () => {
   });
 });
 
+describe('canonical paths after review (#349)', () => {
+  it('gives no address path to a rental whose address resolves to the sale beside it', async () => {
+    const rental = recordRow({
+      id: '018f2f2a-6d1b-7c3d-8b2e-000000000009',
+      last_updated: '2026-01-01T00:00:00.000Z',
+    });
+    const pool = fakePool({
+      record: rental,
+      candidates: [recordRow(), rental],
+      detailVisible: true,
+    });
+
+    expect((await findPropertyPage(pool, rental.id))?.path).toBeNull();
+  });
+
+  it('resolves a street with an apostrophe and a hyphenated city through its own slug', async () => {
+    const row = recordRow({ address_street: "9 O'Neil Ct", city: 'St. Michaels', state: 'MD' });
+    const pool = fakePool({ record: row, candidates: [row], detailVisible: true });
+
+    expect((await findPropertyPage(pool, LISTING_ID))?.path).toBe(
+      '/st-michaels-md/9-o-neil-ct-st-michaels-md',
+    );
+  });
+
+  it('a path with no unit prefers the whole-property listing over the units', async () => {
+    const condo = recordRow({
+      id: '018f2f2a-6d1b-7c3d-8b2e-000000000009',
+      unit_id: '018f2f2a-6d1b-7c3d-8b2e-000000000010',
+      unit_number: '2',
+    });
+    const pool = fakePool({
+      record: recordRow(),
+      candidates: [recordRow(), condo],
+      detailVisible: true,
+    });
+
+    expect((await findPropertyPage(pool, LISTING_ID))?.path).toBe(
+      '/alexandria-va/118-baggett-pl-alexandria-va',
+    );
+  });
+});
+
 describe('lookupProperty (#349)', () => {
   const segments = { city: 'alexandria-va', address: '118-baggett-place-alexandria-va' };
 
