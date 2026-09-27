@@ -166,6 +166,35 @@ describe('findHomePage: status by status (#382)', () => {
     expect(page?.canonicalPath).toBe(`/property/118-baggett-pl-alexandria-va-unit-a4/${unitId}`);
   });
 
+  it('masks the whole page when any listing of the home withheld the address', async () => {
+    const withheld = recordRow({
+      id: '018f2f2a-6d1b-7c3d-8b2e-000000000033',
+      address_street: null,
+      market_status: 'Off market',
+      listing_data_displayable: false,
+      last_updated: '2020-01-01T00:00:00.000Z',
+    });
+    const pool = fakePool({
+      record: recordRow(),
+      home: [recordRow(), withheld],
+      detailVisible: true,
+    });
+
+    const page = await findHomePage(pool, PROPERTY_ID);
+
+    expect(page?.canonicalPath).toBe(`/property/alexandria-va/${PROPERTY_ID}`);
+    expect(page?.propertyRecord.address).toBeNull();
+    expect(page?.latestListing?.listing.address).toBeNull();
+    expect(page?.latestListing?.listing.latitude).toBeNull();
+    expect(JSON.stringify(page)).not.toContain('Baggett');
+  });
+
+  it('keys the page on a lower-case id', async () => {
+    const pool = fakePool({ record: recordRow(), detailVisible: true });
+
+    expect((await findHomePage(pool, PROPERTY_ID.toUpperCase()))?.homeId).toBe(PROPERTY_ID);
+  });
+
   it('a live listing wins over a newer Off market duplicate', async () => {
     const stale = recordRow({
       id: '018f2f2a-6d1b-7c3d-8b2e-000000000007',

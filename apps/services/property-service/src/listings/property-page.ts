@@ -32,6 +32,7 @@ import {
   type ReadPool,
   searchListings,
 } from './repository';
+import { applyAddressSuppression } from './suppression';
 
 /**
  * The property page (#382). `listing_detail_v` decides the market status and whether listing data
@@ -124,21 +125,14 @@ function toHistoryEntry(
 /**
  * Past listings whose data may display. The facts come from `listing_search_v`, so a withdrawn,
  * expired or canceled listing, or a sale outside the sold rule, has no facts and is left out.
- * On a page that shows the address, a listing whose seller withheld the address is left out too:
- * its price and date must not be tied to the address.
+ * A page with a withheld listing masks its address, so no history row is tied to an address.
  */
 async function historyOf(
   pool: ReadClient,
   rows: readonly PropertyRecordDbRow[],
   latest: PropertyRecordDbRow,
 ): Promise<PropertyHistoryEntry[]> {
-  const pageShowsAddress = latest.address_street !== null;
-  const past = rows.filter(
-    (row) =>
-      row.id !== latest.id &&
-      row.listing_data_displayable &&
-      (!pageShowsAddress || row.address_street !== null),
-  );
+  const past = rows.filter((row) => row.id !== latest.id && row.listing_data_displayable);
   const facts = new Map(
     (
       await findHistoryFacts(
@@ -234,13 +228,35 @@ export function seoOf(
 }
 
 /** The whole property page of one home, or `null` for the one frozen 404. */
-export async function findHomePage(pool: ReadPool, homeId: string): Promise<PropertyPage | null> {
+export async function findHomePage(
+  pool: ReadPool,
+  requestedId: string,
+): Promise<PropertyPage | null> {
+  // One casing per home, so each home has one canonical URL.
+  const homeId = requestedId.toLowerCase();
   const rows = await findHomeRows(pool, homeId);
-  const latest = latestOf(rows);
-  if (latest === null) return null;
+  const found = latestOf(rows);
+  if (found === null) return null;
+  // One listing that withheld the address masks it on the whole page. A page that showed another
+  // listing's address would tie the withheld listing to it through the shared home id.
+  const masked = rows.some((row) => row.address_street === null);
+  const latest = masked ? { ...found, address_street: null, unit_number: null } : found;
+  const canonicalPath = propertyPagePath(pageAddress(latest), homeId);
   // The reads are separate statements, so a sync can change the row between them. A listing that
   // left the search view in between renders as Off market, never with stale listing data.
-  const detail = latest.listing_data_displayable ? await findListingById(pool, latest.id) : null;
+  let detail = latest.listing_data_displayable ? await findListingById(pool, latest.id) : null;
+  if (detail !== null && masked && detail.listing.address !== null) {
+    detail = applyAddressSuppression({
+      ...detail,
+      listing: {
+        ...detail.listing,
+        address: null,
+        latitude: null,
+        longitude: null,
+        propertyPath: canonicalPath,
+      },
+    });
+  }
   const displayable = detail !== null;
   const marketStatus = displayable ? marketStatusSchema.parse(latest.market_status) : 'Off market';
   const record = toPropertyRecord(latest);
@@ -253,7 +269,7 @@ export async function findHomePage(pool: ReadPool, homeId: string): Promise<Prop
     propertyId: latest.property_id,
     unitId: latest.unit_id,
     slug: propertySlug(pageAddress(latest)),
-    canonicalPath: propertyPagePath(pageAddress(latest), homeId),
+    canonicalPath,
     marketStatus,
     listingDataDisplayable: displayable,
     seo: seoOf(record, marketStatus, detail),

@@ -16,6 +16,15 @@ type RouteProps = { params: Promise<{ slug: string; id: string }> };
  * resolved. This route only renders it, and sends a stale slug to the canonical path with a 308.
  */
 
+/** A malformed escape is a stale slug too, so it gets the 308 and not a 500. */
+function safeDecode(segment: string): string | null {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return null;
+  }
+}
+
 async function load(id: string) {
   return idSchema.safeParse(id).success ? loadHomePage(id) : ({ status: 'not-found' } as const);
 }
@@ -51,7 +60,7 @@ export default async function PropertyRoute({ params }: RouteProps) {
   if (state.status === 'error') {
     return <ListingErrorState message={state.message} className="mx-auto my-16 max-w-lg" />;
   }
-  if (decodeURIComponent(slug) !== state.page.slug) {
+  if (safeDecode(slug) !== state.page.slug) {
     permanentRedirect(state.page.canonicalPath);
   }
   return <PropertyPageView page={state.page} />;
