@@ -183,7 +183,7 @@ export default function NeighborhoodRow({ title, subtitle, href, neighborhoods, 
             {href && (
               <Link
                 href={href}
-                className="ml-1 flex h-8 w-8 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition hover:bg-surface-alt hover:shadow-card"
+                className="ml-1 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition hover:bg-surface-alt hover:shadow-card"
                 aria-label="See all"
               >
                 <svg
@@ -203,7 +203,7 @@ export default function NeighborhoodRow({ title, subtitle, href, neighborhoods, 
               type="button"
               onClick={() => scroll('left')}
               aria-label="Scroll left"
-              className={`flex h-9 w-9 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition hover:shadow-card ${atStart ? 'opacity-50 cursor-default' : 'hover:bg-surface-alt'}`}
+              className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition hover:shadow-card ${atStart ? 'opacity-50 cursor-default' : 'hover:bg-surface-alt'}`}
               disabled={atStart}
             >
               <svg
@@ -220,7 +220,7 @@ export default function NeighborhoodRow({ title, subtitle, href, neighborhoods, 
               type="button"
               onClick={() => scroll('right')}
               aria-label="Scroll right"
-              className={`flex h-9 w-9 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition hover:shadow-card ${atEnd ? 'opacity-50 cursor-default' : 'hover:bg-surface-alt'}`}
+              className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition hover:shadow-card ${atEnd ? 'opacity-50 cursor-default' : 'hover:bg-surface-alt'}`}
               disabled={atEnd}
             >
               <svg

@@ -70,6 +70,9 @@ pnpm exec nx lint cribstop-next        # Also: test, type-check
 ## Rules
 
 - Airbnb-quality polish; mobile-first; accessible (labels, alt text, focus states, semantic HTML).
+- **Mobile first (stakeholder rule, 2026-09-27).** Verify every new or changed UI at 360px and
+  390px, before a PR. Check: no sideways body scroll, tap targets at least 44px, text stays readable
+  with no clipping, and any card row scrolls horizontally by touch.
 - All listing/marketing microcopy must be Fair-Housing compliant and attribute Real Broker, LLC
   (most prominent brand per Bright MLS rule).
 - Follow existing component patterns and Tailwind config; no new dependencies unless clearly

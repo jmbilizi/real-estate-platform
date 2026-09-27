@@ -853,12 +853,15 @@ export default function CompactSearchBar({
     }
   }, []);
 
-  // Save recent searches to localStorage
+  // Save recent searches to localStorage. Carries the listing type active for this search
+  // (#398) so the home page can order its sale/rent sections by the visitor's last search,
+  // reusing this key rather than a second one.
   const addRecentSearch = (item: any) => {
     if (!item) return;
+    const entry = { ...item, listingType: searchListingType };
     setRecentSearches((prev) => {
-      const filtered = prev.filter((s) => s.display_name !== item.display_name);
-      const updated = [item, ...filtered].slice(0, 5);
+      const filtered = prev.filter((s) => s.display_name !== entry.display_name);
+      const updated = [entry, ...filtered].slice(0, 5);
       if (typeof window !== 'undefined') {
         localStorage.setItem('recentSearches', JSON.stringify(updated));
       }
