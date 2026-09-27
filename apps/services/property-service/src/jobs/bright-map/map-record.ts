@@ -15,6 +15,7 @@ import { buildAddressKey, splitUnitDesignator } from '../../db/address';
 import { composeStreetLine, titleCase } from './address-format';
 import { PropertyType } from '../../db/constants';
 import { ListingStatus } from '../../db/constants';
+import { parseCalendarDate } from '../../db/date';
 import { OfferKind } from '../../db/types';
 
 import { AttributionFields, mapAttribution } from './attribution';
@@ -172,7 +173,8 @@ function toDateOnly(value: unknown): string | null {
  *  so the date is widened to midnight UTC rather than left ambiguous about a time zone. */
 function toDateInstant(value: unknown): string | null {
   const date = toDateOnly(value);
-  return date === null ? null : `${date}T00:00:00.000Z`;
+  const parsed = date === null ? null : parseCalendarDate(date);
+  return parsed === null ? null : parsed.toISOString();
 }
 
 function reject(listingKey: string | null, reason: RejectReason): RejectedRecord {
@@ -239,16 +241,15 @@ export function mapBrightPropertyRecord(
     if (ctx.soldDisplayDelayDays === null) {
       return reject(listingKey, 'sold_display_delay_not_configured');
     }
-    const closedAt = closeDate ? new Date(`${closeDate}T00:00:00Z`).getTime() : NaN;
-    // A malformed CloseDate (or none at all) parses to NaN, and every comparison against NaN is
-    // false — including `Date.now() < NaN`, which would otherwise fall through as "not still in
-    // the delay window" and publish an undated sold with zero delay. Reject explicitly instead of
-    // relying on the comparison to fail safe.
-    if (!closeDate || Number.isNaN(closedAt)) {
+    const closedAtDate = closeDate ? parseCalendarDate(closeDate) : null;
+    // A malformed or absent CloseDate parses to null. Reject explicitly rather than falling
+    // through to a comparison a null would make trivially false, which would publish an undated
+    // sold with zero delay.
+    if (closedAtDate === null) {
       return reject(listingKey, 'sold_missing_close_date');
     }
     const delayMs = ctx.soldDisplayDelayDays * 24 * 60 * 60 * 1000;
-    if (Date.now() < closedAt + delayMs) {
+    if (Date.now() < closedAtDate.getTime() + delayMs) {
       return reject(listingKey, 'sold_still_in_display_delay_window');
     }
   }

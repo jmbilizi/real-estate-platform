@@ -1,3 +1,4 @@
+import { parseCalendarDate } from './date';
 import { Queryable, requireId } from './write';
 
 /**
@@ -420,11 +421,10 @@ function coerceScalar(dataType: MlsDataType, raw: unknown): TypedValue | undefin
         return undefined;
       }
       // The regex checks SHAPE, not calendar validity: `2026-02-30` and `2026-13-01` both match it and
-      // then raise `date/time field value out of range` at the column. Round-tripping through Date is
-      // what separates the two — JS rolls an impossible day over into the next month, so a date that
+      // then raise `date/time field value out of range` at the column. `parseCalendarDate` is what
+      // separates the two — JS rolls an impossible day over into the next month, so a date that
       // does not come back identical was never a real date.
-      const parsed = new Date(`${raw}T00:00:00Z`);
-      return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== raw
+      return parseCalendarDate(raw) === null
         ? undefined
         : { ...EMPTY_TYPED_VALUE, value_date: raw };
     }
