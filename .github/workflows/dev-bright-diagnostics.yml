@@ -62,7 +62,7 @@ jobs:
             kubectl get pods -n default -l 'app in (property-service,bright-sync-worker)' \
               -o custom-columns='POD:.metadata.name,RESTARTS:.status.containerStatuses[0].restartCount,AGE:.metadata.creationTimestamp'
             echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Wait for postgres-0
         if: inputs.action == 'report'
@@ -102,7 +102,7 @@ jobs:
             echo '```'
             exec_query "select source, listing_type, count(*) from listings where is_sample = true group by source, listing_type order by source, listing_type;"
             echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Report — bright-sync-worker log tail
         if: inputs.action == 'report'
@@ -113,7 +113,7 @@ jobs:
             echo '```'
             kubectl logs deployment/bright-sync-worker -n default --tail=200
             echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       # ── backfill / reconcile / audit: call the admin endpoint on property-service ───────
       - name: Mask admin token
@@ -150,7 +150,7 @@ jobs:
             echo '```json'
             echo "$BODY"
             echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
           if [ "$STATUS" -ge 300 ]; then
             echo "Admin endpoint returned $STATUS" >&2
             exit 1
