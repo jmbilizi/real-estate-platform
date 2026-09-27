@@ -2,7 +2,6 @@ import type { BrightPage } from '../bright-ingest/bright-client';
 import { BRIGHT_STATUS_FILTER_LABELS } from '../bright-map/status';
 import {
   backfillStream,
-  type Checkpoint,
   INCREMENTAL_STREAM,
   PAGE_SIZE,
   type PageResult,
@@ -95,13 +94,12 @@ function harness(all: Rec[], options: { failOnApply?: number } = {}) {
   const deps: SyncDeps = {
     serviceRoot: ROOT,
     fetchPage: bright.fetchPage,
-    applyPage: (page, checkpoint: Checkpoint | null) => {
+    applyPage: (page: readonly Record<string, unknown>[]) => {
       applyCalls += 1;
       if (options.failOnApply === applyCalls) {
         return Promise.reject(new Error('pod killed'));
       }
       applied.push(...page.map((r) => String(r.ListingKey)));
-      if (checkpoint !== null) state.set(checkpoint.stream, checkpoint.state);
       return Promise.resolve({ ...RESULT, staged: page.length, mapped: page.length });
     },
     readState: <T>(stream: string) => Promise.resolve((state.get(stream) as T) ?? null),
@@ -256,14 +254,14 @@ describe('runBackfill', () => {
     const gated: SyncDeps = {
       ...h.deps,
       concurrency: 2,
-      applyPage: (page, checkpoint) => {
+      applyPage: (page: readonly Record<string, unknown>[]) => {
         applyCalls += 1;
         if (applyCalls === 1) {
           return new Promise((resolve) => {
-            unblockFirstApply = () => resolve(h.deps.applyPage(page, checkpoint));
+            unblockFirstApply = () => resolve(h.deps.applyPage(page));
           });
         }
-        return h.deps.applyPage(page, checkpoint);
+        return h.deps.applyPage(page);
       },
     };
 
@@ -283,6 +281,60 @@ describe('runBackfill', () => {
     await run;
 
     expect(h.applied.sort()).toEqual(keysOf(all));
+  });
+
+  it('applies slices concurrently but never advances the checkpoint past an uncommitted slice (#359)', async () => {
+    // pageSize 10 over 50 one-a-minute records forces several leaves.
+    const all = records(50);
+    const h = harness(all);
+    const checkpointWrites: unknown[] = [];
+    let releaseSecond: (() => void) | undefined;
+    let applyCalls = 0;
+    const gated: SyncDeps = {
+      ...h.deps,
+      pageSize: 10,
+      applyConcurrency: 3,
+      applyPage: (page: readonly Record<string, unknown>[]) => {
+        const callIndex = applyCalls;
+        applyCalls += 1;
+        // The SECOND slice to start applying is held open. Slices around it (including later
+        // ones, started concurrently) are free to finish their own data write.
+        if (callIndex === 1) {
+          return new Promise((resolve) => {
+            releaseSecond = () => resolve(h.deps.applyPage(page));
+          });
+        }
+        return h.deps.applyPage(page);
+      },
+      writeState: (stream, state) => {
+        checkpointWrites.push(state);
+        return h.deps.writeState(stream, state);
+      },
+    };
+
+    const run = runBackfill(gated, { ...BACKFILL, statuses: ['Active'] });
+    for (let i = 0; i < 20; i += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+
+    // The blocked slice sits at the front of the checkpoint queue, so nothing later than it may
+    // commit a checkpoint yet — even though later slices' own data already applied.
+    expect(applyCalls).toBeGreaterThan(2);
+    expect(h.applied.length).toBeGreaterThan(10);
+    expect(checkpointWrites).toHaveLength(1);
+
+    releaseSecond?.();
+    await run;
+
+    expect(h.applied.sort()).toEqual(keysOf(all));
+    expect(h.state.get(backfillStream('Active'))).toEqual({ through: NOW, complete: true });
+    // Every checkpoint write after the release landed in order: `through` only ever grows.
+    const throughs = checkpointWrites
+      .filter(
+        (s): s is { through: string } => typeof s === 'object' && s !== null && 'through' in s,
+      )
+      .map((s) => Date.parse(s.through));
+    expect(throughs).toEqual([...throughs].sort((a, b) => a - b));
   });
 
   it('keeps no checkpoint for an area pass', async () => {

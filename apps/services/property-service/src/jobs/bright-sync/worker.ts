@@ -75,6 +75,8 @@ export interface WorkerSettings {
   /** Records per slice request (`$top`). Bright streams a roughly fixed rate per request (#348), so
    * a bigger page moves more rows per request; 10,000 is the largest measured on production. */
   readonly pageSize: number;
+  /** Pages applied at once, on separate pool connections (#359). The write path's own ceiling. */
+  readonly applyConcurrency: number;
 }
 
 function numberFrom(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
@@ -119,6 +121,7 @@ export function resolveWorkerSettings(env: NodeJS.ProcessEnv = process.env): Wor
     pollMs: numberFrom(env, 'BRIGHT_SYNC_POLL_MS', 10_000),
     concurrency: positiveIntFrom(env, 'BRIGHT_SYNC_CONCURRENCY', 6),
     pageSize,
+    applyConcurrency: positiveIntFrom(env, 'BRIGHT_SYNC_APPLY_CONCURRENCY', 4),
   };
 }
 
@@ -145,15 +148,53 @@ function toStaged(record: Record<string, unknown>): StagedRecord | null {
   }
 }
 
-async function inTransaction<T>(client: PoolClient, work: () => Promise<T>): Promise<T> {
-  await client.query('BEGIN');
-  try {
-    const result = await work();
-    await client.query('COMMIT');
-    return result;
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
+/**
+ * Postgres error codes a concurrent transaction can hit through no fault of its own: two pages
+ * that touch the same property or unit row can lock it in a different order (#359). Both codes
+ * name a transaction Postgres itself chose to abort, never a data problem, so the fix is to redo
+ * the whole transaction, not to inspect what it wrote.
+ */
+const RETRYABLE_PG_CODES = new Set([
+  '40001', // serialization_failure
+  '40P01', // deadlock_detected
+]);
+
+function pgErrorCode(error: unknown): string | null {
+  return typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code: unknown }).code)
+    : null;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Runs `work` inside `BEGIN`/`COMMIT`, retrying the whole attempt — a fresh `BEGIN`, not a resumed
+ * one — when Postgres aborts it as the loser of a lock conflict with a sibling page's transaction
+ * (#359). Safe because every write `work` can make is an idempotent upsert (`db/write.ts`), so
+ * redoing it from scratch produces the same row, not a duplicate.
+ */
+async function inTransaction<T>(
+  client: PoolClient,
+  work: () => Promise<T>,
+  maxAttempts = 5,
+): Promise<T> {
+  for (let attempt = 1; ; attempt += 1) {
+    await client.query('BEGIN');
+    try {
+      const result = await work();
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      if (attempt >= maxAttempts || !RETRYABLE_PG_CODES.has(pgErrorCode(error) ?? '')) {
+        throw error;
+      }
+      // Exponential backoff with jitter, so two transactions retrying the same conflict do not
+      // collide again on the same schedule.
+      await sleep(2 ** attempt * 10 * (0.5 + Math.random()));
+    }
   }
 }
 
@@ -243,6 +284,7 @@ function createDeps(
     serviceRoot: config.endpoint.serviceRoot,
     pageSize: settings.pageSize,
     concurrency: settings.concurrency,
+    applyConcurrency: settings.applyConcurrency,
     now,
     log: ctx.log,
     fetchPage: (url: string): Promise<BrightPage> =>
@@ -263,7 +305,7 @@ function createDeps(
         },
       }),
 
-    async applyPage(records, checkpoint): Promise<PageResult> {
+    async applyPage(records): Promise<PageResult> {
       const staged = records
         .map((record) => toStaged(record as Record<string, unknown>))
         .filter((record): record is StagedRecord => record !== null);
@@ -303,9 +345,6 @@ function createDeps(
                 `Bright sync: record now rejected (${reason})`,
               );
             }
-          }
-          if (checkpoint !== null) {
-            await writeState(client, feed, checkpoint.stream, checkpoint.state);
           }
           return {
             staged: report.staged,
@@ -484,10 +523,6 @@ async function scheduled(
 
 /** Wait after a failed backfill before the resume tries again. */
 const BACKFILL_RETRY_MS = 60_000;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 /**
  * Waits until Postgres answers and the property-service `migrate` initContainer has created the

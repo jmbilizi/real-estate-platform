@@ -65,6 +65,7 @@ describe('worker settings', () => {
       pollMs: 10_000,
       concurrency: 6,
       pageSize: 5_000,
+      applyConcurrency: 4,
     });
   });
 
@@ -77,6 +78,15 @@ describe('worker settings', () => {
     );
     expect(() => resolveWorkerSettings({ BRIGHT_SYNC_CONCURRENCY: '0' })).toThrow(
       'BRIGHT_SYNC_CONCURRENCY must be a positive integer',
+    );
+  });
+
+  it('reads the apply concurrency (#359)', () => {
+    expect(resolveWorkerSettings({ BRIGHT_SYNC_APPLY_CONCURRENCY: '8' })).toEqual(
+      expect.objectContaining({ applyConcurrency: 8 }),
+    );
+    expect(() => resolveWorkerSettings({ BRIGHT_SYNC_APPLY_CONCURRENCY: '0' })).toThrow(
+      'BRIGHT_SYNC_APPLY_CONCURRENCY must be a positive integer',
     );
   });
 

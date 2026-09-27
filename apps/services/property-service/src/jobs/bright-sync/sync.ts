@@ -64,11 +64,6 @@ export const RECONCILE_MAX_TAKEDOWN_SHARE = 0.2;
 /** Reconcile checks at most this many absent keys one by one before it takes them down. */
 export const RECONCILE_MAX_VERIFY = 500;
 
-export interface Checkpoint {
-  readonly stream: string;
-  readonly state: unknown;
-}
-
 export interface PageResult {
   readonly staged: number;
   readonly mapped: number;
@@ -92,13 +87,13 @@ export interface SyncDeps {
    */
   readonly concurrency?: number;
   /**
-   * Stages and maps one page, takes down each held listing the mapper now rejects, and writes
-   * `checkpoint` in the same transaction as the mapping.
+   * Slices applied at once (#359). Bounds `BRIGHT_SYNC_APPLY_CONCURRENCY` connections' worth of
+   * concurrent `applyPage` transactions. Defaults to 1 (strictly sequential) when absent, so a test
+   * harness that does not set it keeps the old one-page-at-a-time behaviour.
    */
-  readonly applyPage: (
-    records: readonly Record<string, unknown>[],
-    checkpoint: Checkpoint | null,
-  ) => Promise<PageResult>;
+  readonly applyConcurrency?: number;
+  /** Stages and maps one page, and takes down each held listing the mapper now rejects. */
+  readonly applyPage: (records: readonly Record<string, unknown>[]) => Promise<PageResult>;
   readonly readState: <T>(stream: string) => Promise<T | null>;
   readonly writeState: (stream: string, state: unknown) => Promise<void>;
   readonly progress: (counts: Record<string, unknown>, cursor: unknown) => Promise<void>;
@@ -261,15 +256,19 @@ async function fetchLeaf(
 
 /**
  * Reads every record in `scope` within `bounds`, in slices of at most one page, oldest window
- * first. `onSlice` sees each non-empty slice once, with its bounds, in that order.
+ * first. `onSlice` sees each non-empty slice once, with its bounds. Every `onSlice` call is
+ * STARTED in `leaves` order, whatever order the fetches or applies actually finish in (#359) — a
+ * caller that needs its own work sequenced (a per-slice checkpoint) does so itself, with its own
+ * ordering primitive (`runBackfill` uses `Sequencer`), because `onSlice` calls here can be, and
+ * normally are, in flight at the same time.
  *
- * Two phases (#348). `planSlices` first finds every leaf, in order. Then a bounded prefetch reads
- * them: up to `deps.concurrency` leaves fetch at once — that is where the wall-clock cost is — but
- * `onSlice` still fires strictly in `leaves` order, one at a time, so a per-slice checkpoint
- * (`runBackfill`) never advances past a slice that has not actually finished, whatever order the
- * network answers in, and at most `deps.concurrency` slices' worth of fetched data are ever held
- * in memory at once. A leaf that grew past one page since it was counted is re-drained, recursively
- * and sequentially, in its own place in the order — rare enough that it need not join the pipeline.
+ * Three phases. `planSlices` first finds every leaf, in order (#348). Then a bounded prefetch
+ * reads them: up to `deps.concurrency` leaves fetch at once, and at most that many slices' worth
+ * of fetched data are ever held in memory unapplied. Then a bounded apply pool runs `onSlice`, up
+ * to `deps.applyConcurrency` at once (#359) — that is the actual write-path bottleneck, and the
+ * reason this second bound exists apart from the fetch one. A leaf that grew past one page since
+ * it was counted is re-drained, recursively — the apply pool is flushed first, because the
+ * recursive call reuses `onSlice` and must not interleave with the pool's own bound.
  */
 export async function drainSlices(
   deps: SyncDeps,
@@ -288,9 +287,16 @@ export async function drainSlices(
   }
 
   const concurrency = Math.max(1, Math.min(deps.concurrency ?? leaves.length, leaves.length));
+  const applyConcurrency = Math.max(1, deps.applyConcurrency ?? 1);
   const results = new Map<number, LeafFetch>();
   let firstError: unknown;
   let hasError = false;
+  const fail = (error: unknown): void => {
+    if (!hasError) {
+      hasError = true;
+      firstError = error;
+    }
+  };
   let wake: (() => void) | null = null;
   const notify = (): void => {
     const resolve = wake;
@@ -303,12 +309,7 @@ export async function drainSlices(
     const leafBounds = leaves[index] as SliceBounds;
     fetchLeaf(deps, scope, leafBounds, select, ordered, pageSize, tally)
       .then((result) => results.set(index, result))
-      .catch((error: unknown) => {
-        if (!hasError) {
-          hasError = true;
-          firstError = error;
-        }
-      })
+      .catch(fail)
       .finally(notify);
   };
 
@@ -316,28 +317,108 @@ export async function drainSlices(
   for (let i = 0; i < nextToFetch; i += 1) {
     startFetch(i);
   }
+  // Advanced only once a leaf's OWN apply has settled (not merely started, see `runApply` below),
+  // so at most `concurrency` slices' worth of data are ever fetched-but-not-yet-applied at once —
+  // the same bound as before #359, now measured against completion rather than a single sequential
+  // `await`, since several applies can be genuinely in flight together.
+  const advanceFetchWindow = (): void => {
+    if (nextToFetch < leaves.length) {
+      startFetch(nextToFetch);
+      nextToFetch += 1;
+    }
+  };
+
+  // Applies in flight, each wrapped so it never rejects — a failure is recorded via `fail` instead,
+  // so `Promise.all`/`Promise.race` over this set never throws and the pool stays a plain bound.
+  const applying = new Set<Promise<void>>();
+  const runApply = (records: readonly Record<string, unknown>[], leafBounds: SliceBounds): void => {
+    const settled: Promise<void> = onSlice(records, leafBounds)
+      .catch(fail)
+      .finally(() => {
+        applying.delete(settled);
+        advanceFetchWindow();
+      });
+    applying.add(settled);
+  };
+  const waitForApplySlot = async (): Promise<void> => {
+    while (applying.size >= applyConcurrency) {
+      await Promise.race(applying);
+    }
+  };
 
   for (let index = 0; index < leaves.length; index += 1) {
     while (!results.has(index) && !hasError) {
       await waitForArrival();
     }
-    if (hasError) {
-      throw firstError;
-    }
+    if (hasError) break;
     const result = results.get(index) as LeafFetch;
     results.delete(index);
     const leafBounds = leaves[index] as SliceBounds;
     if (result.kind === 'grown') {
-      await drainSlices(deps, scope, leafBounds, select, onSlice, tally, ordered);
+      // A rare re-split (#348): flush the pool so the recursive drain's own `onSlice` calls stay
+      // within `applyConcurrency` and start strictly after every leaf ahead of this one.
+      await Promise.all(applying);
+      if (hasError) break;
+      await drainSlices(deps, scope, leafBounds, select, onSlice, tally, ordered).catch(fail);
+      if (hasError) break;
+      advanceFetchWindow();
     } else if (result.records.length > 0) {
-      await onSlice(result.records, leafBounds);
+      await waitForApplySlot();
+      if (hasError) break;
+      runApply(result.records, leafBounds);
+    } else {
+      // An empty slice has nothing to apply, so it settles instantly.
+      advanceFetchWindow();
     }
-    // Only now — after this slice is fully applied — does the window advance, so at most
-    // `concurrency` slices' worth of data are ever fetched-but-unapplied at once.
-    if (nextToFetch < leaves.length) {
-      startFetch(nextToFetch);
-      nextToFetch += 1;
-    }
+  }
+
+  await Promise.all(applying);
+  if (hasError) {
+    throw firstError;
+  }
+}
+
+/**
+ * Commits checkpoint writes in call order, even though the work deciding what to write (an
+ * `applyPage` transaction) finishes out of order under concurrent apply (#359).
+ *
+ * `reserve()` grabs a place in line synchronously, before its caller awaits anything, so the order
+ * calls arrive in IS the order tickets queue in — call order, not completion order. `commit()` then
+ * waits its own turn and only writes when no earlier ticket has failed; once one has, every later
+ * ticket skips its write instead of persisting a checkpoint past a slice that never committed. A
+ * failed ticket still releases its turn (`fail()`), so a later one is never left waiting forever.
+ */
+class Sequencer {
+  private tail: Promise<void> = Promise.resolve();
+  private failed = false;
+
+  reserve(): { commit: (write: () => Promise<void>) => Promise<void>; fail: () => void } {
+    const turn = this.tail;
+    let release: () => void = () => undefined;
+    this.tail = new Promise((resolve) => {
+      release = resolve;
+    });
+    return {
+      commit: async (write) => {
+        await turn;
+        try {
+          if (!this.failed) {
+            await write();
+          }
+        } catch (error) {
+          this.failed = true;
+          throw error;
+        } finally {
+          // Always releases, success or failure: a wedged ticket blocks every later `await turn`
+          // forever, and this queue has no other way to notice a stuck one.
+          release();
+        }
+      },
+      fail: () => {
+        this.failed = true;
+        release();
+      },
+    };
   }
 }
 
@@ -364,9 +445,14 @@ export function backfillStream(status: string): string {
 }
 
 /**
- * Per status, every record modified in `(EPOCH, now]`, in `$count`-sized slices, oldest first. The
- * checkpoint is the upper bound of the last written slice, written in that slice's mapping
- * transaction. A restart resumes after it, and the upserts make any re-read a no-op.
+ * Per status, every record modified in `(EPOCH, now]`, in `$count`-sized slices, oldest first.
+ * Slices apply concurrently, up to `deps.applyConcurrency` (#359), on separate pool connections;
+ * `Sequencer` still writes the checkpoint in slice order, only once a slice's own `applyPage`
+ * transaction has committed AND every earlier slice's checkpoint write already happened — so a
+ * restart always resumes right after the last slice that is actually, contiguously, in the
+ * database, never past one still in flight or one that failed. A restart re-reads and re-applies
+ * any later slice that had already committed data but not yet its checkpoint; that is extra work,
+ * not lost or duplicate data, because the upserts underneath `applyPage` are idempotent.
  */
 export async function runBackfill(
   deps: SyncDeps,
@@ -388,6 +474,7 @@ export async function runBackfill(
       ...(status === SOLD_STATUS ? { closeDateFrom: options.soldCloseDateFrom } : {}),
       ...(options.area === undefined ? {} : { area: options.area }),
     };
+    const sequencer = new Sequencer();
 
     await drainSlices(
       deps,
@@ -401,12 +488,22 @@ export async function runBackfill(
           bounds.keyUntil === undefined || BigInt(bounds.keyUntil) >= MAX_LISTING_KEY
             ? bounds.until
             : bounds.from;
-        const state: BackfillState = { through, complete: false };
-        tally.add(
-          status,
-          await deps.applyPage(records, stream === null ? null : { stream, state }),
-        );
-        await deps.progress(tally.snapshot(), { status, through });
+        const ticket = stream === null ? null : sequencer.reserve();
+        try {
+          const result = await deps.applyPage(records);
+          tally.add(status, result);
+          await deps.progress(tally.snapshot(), { status, through });
+          if (ticket !== null) {
+            const state: BackfillState = { through, complete: false };
+            await ticket.commit(() => deps.writeState(stream as string, state));
+          }
+        } catch (error) {
+          // Whatever failed — the apply itself, recording progress, or the checkpoint write —
+          // this ticket must still release its turn, or every later slice's `commit()` waits on
+          // it forever (#359).
+          ticket?.fail();
+          throw error;
+        }
       },
       tally,
     );
@@ -453,7 +550,7 @@ export async function runIncremental(
     { from, until },
     BRIGHT_SYNC_SELECT,
     async (records, bounds) => {
-      tally.add('changes', await deps.applyPage(records, null));
+      tally.add('changes', await deps.applyPage(records));
       await deps.progress(tally.snapshot(), bounds);
     },
     tally,

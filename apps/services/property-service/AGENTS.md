@@ -279,10 +279,14 @@ drops every test-feed listing before any backfill writes production rows.
   so a keyset skips records — see the module header), split by `ListingKey` range when one instant
   outgrows a page. `$select` = `BRIGHT_SYNC_SELECT`, `$top` = `BRIGHT_SYNC_PAGE_SIZE` (default
   5,000, max 10,000). Sibling slices fetch concurrently, up to `BRIGHT_SYNC_CONCURRENCY` (default 6,
-  halved for the rest of the run on a 429 or a 5xx); each slice is still staged, mapped and
-  checkpointed in `bright_sync_state` (`backfill:<status>`) in oldest-slice-first order, so a
-  restart resumes after the last slice that actually finished, and the upserts make a re-read a
-  no-op. The worker resumes an incomplete backfill before any other task.
+  halved for the rest of the run on a 429 or a 5xx). Slices then apply concurrently too, up to
+  `BRIGHT_SYNC_APPLY_CONCURRENCY` (default 4, #359) — the write path, not the fetch, is the sync's
+  actual bottleneck. Each apply stages and maps on its own pool connection; a `Sequencer`
+  (`sync.ts`) still writes `bright_sync_state` (`backfill:<status>`) in oldest-slice-first order,
+  only once a slice's own data has committed AND every earlier slice's checkpoint write already
+  landed. So a restart always resumes right after the last slice that is actually, contiguously, in
+  the database — never past one still in flight or one that failed — and the upserts make any
+  re-applied slice a no-op. The worker resumes an incomplete backfill before any other task.
 - **Sold.** `Closed` runs only with `CloseDate ge today - BRIGHT_SOLD_LOOKBACK_DAYS` (default 365),
   and only when `BRIGHT_SOLD_DISPLAY_DELAY_DAYS` is set. Unset, every sold fails closed in the
   mapper, so the pass would stage about 315,000 records to publish none. It is skipped.
