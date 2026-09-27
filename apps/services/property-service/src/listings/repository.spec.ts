@@ -99,7 +99,7 @@ describe('getPropertyAttributes', () => {
  *  real Postgres and is out of this project's DB-free unit-test scope (matching every other test
  *  in this file). */
 describe('getNeighborhoods', () => {
-  it('reads listings directly (not listing_search_v) with the view\'s own visibility predicate, grouped and excluding name == city', async () => {
+  it("reads listings directly (not listing_search_v) with the view's own visibility predicate, grouped and excluding name == city", async () => {
     const { client, captured } = fakeClient();
 
     await getNeighborhoods(client, baseNeighborhoodsRequest);
@@ -109,7 +109,7 @@ describe('getNeighborhoods', () => {
     expect(query?.text).not.toContain('listing_search_v');
     expect(query?.text).toContain('l.deleted_at IS NULL');
     expect(query?.text).toContain('l.internet_display_allowed');
-    expect(query?.text).toContain('GROUP BY lower(l.neighborhood), lower(l.city), l.state');
+    expect(query?.text).toContain('GROUP BY lower(l.state), lower(l.neighborhood), lower(l.city)');
     expect(query?.text).toContain('lower(l.neighborhood) <> lower(l.city)');
   });
 

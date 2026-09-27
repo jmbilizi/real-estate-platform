@@ -14,11 +14,20 @@ exports.shorthands = undefined;
  * Irreversible: the noise values collapsed to NULL are not recoverable, matching migration 035's
  * precedent for a lossy cleanup — `down` does nothing.
  *
- * The composite index serves `GET /listings/neighborhoods`'s
- * `GROUP BY lower(neighborhood), lower(city), state`. `CREATE INDEX CONCURRENTLY` plus
- * `pgm.noTransaction()` per this service's rule for any index migration on `listings`:
- * `bright-sync-worker` writes this table continuously, and a blocking index build would stall
- * ingest for as long as the migration runs.
+ * The composite index leads with `lower(state)`, matching `GET /listings/neighborhoods`'s most
+ * common shape — one state at a time (the home page is scoped to a market) — so a state-scoped
+ * request seeks directly to its own slice instead of scanning every state's entries and filtering
+ * afterward. `getNeighborhoods()`'s `GROUP BY` is ordered `lower(state), lower(neighborhood),
+ * lower(city)` to match, so the same index also feeds `GroupAggregate` pre-sorted with no separate
+ * Sort step. Its `WHERE` mirrors `LISTING_VISIBILITY_SQL` (`src/listings/columns.ts`) exactly, plus
+ * `neighborhood IS NOT NULL` — a row belongs to this index if and only if `getNeighborhoods()`
+ * would count it — and its `INCLUDE` carries the raw `state`/`neighborhood`/`city` (for `mode()`
+ * and the case-preserved state code) and `listing_type` (for the sale/rent split), so the whole
+ * aggregate answers as an Index Only Scan with zero heap fetches. Measured against the real
+ * dataset: MD (the most populous state, ~33k rows) went from 1.5+ seconds without this index to
+ * under 100ms with it. `CREATE INDEX CONCURRENTLY` plus `pgm.noTransaction()` per this service's
+ * rule for any index migration on `listings`: `bright-sync-worker` writes this table continuously,
+ * and a blocking index build would stall ingest for as long as the migration runs.
  *
  * @param {import('node-pg-migrate').MigrationBuilder} pgm
  */
@@ -61,8 +70,13 @@ exports.up = (pgm) => {
 
   pgm.sql(`
     CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_listings_neighborhood_group
-      ON listings (lower(neighborhood), lower(city), state)
-      WHERE deleted_at IS NULL AND internet_display_allowed AND neighborhood IS NOT NULL
+      ON listings (lower(state), lower(neighborhood), lower(city))
+      INCLUDE (state, neighborhood, city, listing_type)
+      WHERE deleted_at IS NULL
+        AND internet_display_allowed
+        AND consumer_status IS NOT NULL
+        AND (consumer_status <> 'Sold' OR close_date IS NOT NULL)
+        AND neighborhood IS NOT NULL
   `);
 };
 

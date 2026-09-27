@@ -305,7 +305,9 @@ export async function getNeighborhoods(
        SELECT
          mode() WITHIN GROUP (ORDER BY l.neighborhood)                          AS name,
          mode() WITHIN GROUP (ORDER BY l.city)                                  AS city,
-         l.state                                                               AS state,
+         -- mode(), not a bare l.state: GROUP BY below groups on lower(l.state), so a raw column
+         -- select needs an aggregate. Also picks the most common raw case, same as name/city.
+         mode() WITHIN GROUP (ORDER BY l.state)                                 AS state,
          count(*) FILTER (WHERE $1::text = 'all' OR l.listing_type = $1)::int  AS total,
          count(*) FILTER (WHERE l.listing_type = 'sale')::int                  AS sale,
          count(*) FILTER (WHERE l.listing_type = 'rent')::int                  AS rent
@@ -315,7 +317,10 @@ export async function getNeighborhoods(
          AND lower(l.neighborhood) <> lower(l.city)
          AND ($2::text IS NULL OR lower(l.state) = lower($2))
          AND ($3::text IS NULL OR lower(l.city) = lower($3))
-       GROUP BY lower(l.neighborhood), lower(l.city), l.state
+       -- Ordered lower(state) first to match idx_listings_neighborhood_group's key order
+       -- (columns.ts's doc comment on that index explains why): a state-scoped request then reads
+       -- one contiguous index slice and needs no separate Sort before GroupAggregate.
+       GROUP BY lower(l.state), lower(l.neighborhood), lower(l.city)
      )
      SELECT *, count(*) OVER ()::int AS group_total
        FROM grouped
