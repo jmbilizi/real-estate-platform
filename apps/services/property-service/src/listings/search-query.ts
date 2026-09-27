@@ -51,6 +51,23 @@ export function buildSearchQuery(request: SearchRequest): {
     conditions.push(`v.property_type = ANY(${bind([...request.propertyType])})`);
   }
 
+  // `v.status` is the view's alias of `consumer_status` (migration
+  // 1785801600007_create-listing-search-view.js). It is never the raw MLS `status` code. The
+  // view exposes that separately as `source_status`.
+  //
+  // The contract's `status` defaults to `['Active', 'Coming Soon']` (search-request.ts). This
+  // condition is present on every ordinary search. It excludes Under Contract listings by
+  // default with no special case here.
+  //
+  // Skipped for `listingType: 'sold'`. A sold row's `v.status` can only ever be `Sold` (the
+  // generated `listing_type` column, migration 1785801600003_create-listings.js). `Sold` is not a
+  // value `STATUS_FILTER_VALUES` accepts (#33). ANDing the default status in would zero the Sold
+  // tab permanently. Asking for `listingType=sold` is itself the status choice for that tab; see
+  // `sold-gate.ts`, THE sold gate, for the visibility rule this defers to.
+  if (request.status.length > 0 && request.listingType !== 'sold') {
+    conditions.push(`v.status = ANY(${bind([...request.status])})`);
+  }
+
   // `zip` is exact-or-prefix (today's `l.zip === zip || l.zip.startsWith(zip)`). `starts_with`
   // covers both without building a LIKE pattern, which would need to escape `%`/`_` from caller
   // input — a footgun this avoids entirely.

@@ -18,6 +18,26 @@ describe('buildSearchQuery', () => {
     expect(params).toContainEqual(['sale', 'rent']);
   });
 
+  it('defaults to Active + Coming Soon status, matching Zillow/Homes.com (#347)', () => {
+    const { where, params } = build();
+    expect(where).toContain('v.status = ANY(');
+    expect(params).toContainEqual(['Active', 'Coming Soon']);
+  });
+
+  it('narrows to the requested statuses, including Under Contract as Pending', () => {
+    const { where, params } = build({ status: 'Pending' });
+    expect(where).toContain('v.status = ANY(');
+    expect(params).toContainEqual(['Pending']);
+  });
+
+  it('never ANDs the default Active/Coming Soon status into a sold search', () => {
+    // A sold listing's `v.status` can only ever be `Sold` (generated column, migration
+    // 1785801600003), and `Sold` is not a value the status filter accepts. ANDing the contract's
+    // default status filter into `listingType=sold` would zero the Sold tab permanently.
+    const { where } = build({ listingType: 'sold' });
+    expect(where).not.toContain('v.status = ANY(');
+  });
+
   it('gives every sort an id tiebreaker so paging is a total order', () => {
     for (const order of Object.values(SORT_ORDERS)) {
       expect(order).toMatch(/v\.id (ASC|DESC)$/);

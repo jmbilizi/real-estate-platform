@@ -28,6 +28,7 @@ export type {
   OpenHouse,
   PropertyType,
   SearchRequest,
+  StatusFilter,
 } from '@cribstop/property-contracts';
 
 /** The consumer-visible statuses a row can carry, taken from the contract. */

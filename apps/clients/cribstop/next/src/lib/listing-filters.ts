@@ -3,6 +3,7 @@ import {
   LISTING_TYPES,
   PROPERTY_TYPES,
   SORT_VALUES,
+  STATUS_FILTER_VALUES,
 } from '@cribstop/property-contracts';
 import type { SearchFilters } from '@/lib/types';
 
@@ -139,6 +140,22 @@ export function parseFiltersFromSearchParams(params: URLSearchParams): SearchFil
   ];
   if (propertyTypes.length > 0) filters.propertyType = propertyTypes;
 
+  // Repeated or comma-joined, against the closed set that excludes `Sold` (#347). Omitted
+  // entirely, not written as "all": the contract's own default (`Active`, `Coming Soon`) applies,
+  // so a URL with no `status` at all still narrows to a shopping-safe default.
+  const statuses = [
+    ...new Set(
+      params
+        .getAll('status')
+        .flatMap((value) => value.split(','))
+        .map((value) => value.trim())
+        .filter((value): value is (typeof STATUS_FILTER_VALUES)[number] =>
+          (STATUS_FILTER_VALUES as readonly string[]).includes(value),
+        ),
+    ),
+  ];
+  if (statuses.length > 0) filters.status = statuses;
+
   filters.minPrice = int('minPrice');
   filters.maxPrice = int('maxPrice');
   filters.beds = int('beds');
@@ -215,6 +232,7 @@ const FILTER_PARAM_KEYS = [
   'type',
   'listingType',
   'propertyType',
+  'status',
   'minPrice',
   'maxPrice',
   'beds',
@@ -269,6 +287,10 @@ export function filtersToSearchParams(
   set('neighborhood', filters.neighborhood);
   if (filters.listingType && filters.listingType !== 'all') set('type', filters.listingType);
   for (const type of filters.propertyType ?? []) params.append('propertyType', type);
+  // Only written when the caller narrowed away from the contract's own default (`Active`,
+  // `Coming Soon`): writing the default explicitly would make `countActiveFilters` and the
+  // modal's "applied" comparison see a filter the user never chose.
+  for (const status of filters.status ?? []) params.append('status', status);
   set('minPrice', filters.minPrice);
   set('maxPrice', filters.maxPrice);
   set('beds', filters.beds);
