@@ -21,6 +21,13 @@ pnpm run nx:dotnet-build               # All .NET projects
   any project add/remove to resync the .sln.
 - See `PRD.md` §2 for the gateway's role in the overall architecture.
 
+## Gateway-Local Endpoints
+
+A `MapGet`/`MapPost` in `Startup.cs`, registered before `UseOcelot()`, is a gateway-local endpoint.
+Use one only for data the gateway itself holds (see `/geo/region`, backed by `GeoIpService`). Route
+everything else through Ocelot to a downstream service. A gateway-local endpoint bypasses Ocelot's
+per-route QoS, so it must carry its own rate limit (`AddRateLimiter` / `RequireRateLimiting`).
+
 ## Quality of Service (timeouts and circuit breakers)
 
 Every route in `Configuration/Routes/*.json` carries `QoSOptions`. `Startup.cs` calls

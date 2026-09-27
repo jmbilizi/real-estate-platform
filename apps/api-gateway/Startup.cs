@@ -5,6 +5,8 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using System.Threading.RateLimiting;
 using ApiGateway.Extensions;
 using ApiGateway.Middleware;
 using ApiGateway.Services;
@@ -31,11 +33,29 @@ namespace ApiGateway
     public class Startup
     {
         /// <summary>
+        /// Requests allowed per client IP, per minute, for <c>GET /geo/region</c>. Internal, not
+        /// private, so the rate-limit test asserts against this value rather than a copy of it.
+        /// </summary>
+        internal const int GeoRegionRateLimitPermits = 30;
+
+        /// <summary>
         /// Display name for the gateway's own docs in the Swagger UI dropdown.
         /// Shared between <see cref="OcelotGatewayItSelfSwaggerGenOptions.GatewayDocsTitle"/>
         /// and <c>urls.primaryName</c> so the gateway loads as the default selection.
         /// </summary>
         private const string GatewaySwaggerTitle = "Gateway";
+
+        /// <summary>
+        /// Rate-limit policy name for <c>GET /geo/region</c>, applied via
+        /// <c>RequireRateLimiting</c> in <see cref="Configure"/>.
+        /// </summary>
+        private const string GeoRegionRateLimitPolicy = "GeoRegion";
+
+        /// <summary>
+        /// JSON options for <c>GET /geo/region</c>. Forces camelCase field names, independent of
+        /// any <see cref="Microsoft.AspNetCore.Http.Json.JsonOptions"/> the app registers.
+        /// </summary>
+        private static readonly JsonSerializerOptions GeoRegionJsonOptions = new(JsonSerializerDefaults.Web);
 
         // LoggerMessage delegates for performance (CA1848)
         private static readonly Action<ILogger, Exception?> LogTracingDisabledAction =
@@ -102,6 +122,22 @@ namespace ApiGateway
 
             // Register GeoIP service as singleton (thread-safe, one database reader for app lifetime)
             services.AddSingleton<GeoIpService>();
+
+            // /geo/region is a gateway-local endpoint (see Configure), so it bypasses Ocelot's
+            // per-route QoS entirely. Rate-limit it here instead (#362).
+            services.AddRateLimiter(options =>
+            {
+                options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                options.AddPolicy(GeoRegionRateLimitPolicy, context =>
+                    RateLimitPartition.GetFixedWindowLimiter(
+                        ResolveTrustedClientIp(context.Request) ?? "unknown",
+                        _ => new FixedWindowRateLimiterOptions
+                        {
+                            PermitLimit = GeoRegionRateLimitPermits,
+                            Window = TimeSpan.FromMinutes(1),
+                            QueueLimit = 0,
+                        }));
+            });
 
             // Configure OpenTelemetry (conditional based on environment)
             // ConfigureOpenTelemetry sets _otelEnabled based on whether MeterProvider was registered
@@ -184,6 +220,8 @@ namespace ApiGateway
 
             app.UseRouting();
 
+            app.UseRateLimiter();
+
             // No authentication scheme is registered at the gateway level yet.
             // Auth is handled entirely by downstream services. Add UseAuthentication()
             // here when gateway-level auth (e.g. JWT validation) is configured.
@@ -223,6 +261,26 @@ namespace ApiGateway
                 // Health check endpoints (must be before Ocelot middleware)
                 endpoints.MapHealthChecks("/health/live");
                 endpoints.MapHealthChecks("/health/ready");
+
+                // Anonymous, no-auth IP-based region lookup for home-page personalization (#362).
+                // City/region granularity only — never coordinates or postal code precision.
+                // A gateway-local MapGet, not an Ocelot route: there is no downstream service to
+                // proxy to, GeoIpService already lives in this process. Bypasses Ocelot's QoS, so
+                // it carries its own rate limit below.
+                endpoints.MapGet("/geo/region", async context =>
+                {
+                    GeoIpService? geoIpService = context.RequestServices.GetService<GeoIpService>();
+                    string? clientIp = ResolveTrustedClientIp(context.Request);
+                    GeoRegionResponse? region = ResolveGeoRegion(geoIpService, clientIp);
+
+                    if (region is null)
+                    {
+                        context.Response.StatusCode = StatusCodes.Status204NoContent;
+                        return;
+                    }
+
+                    await context.Response.WriteAsJsonAsync(region, GeoRegionJsonOptions).ConfigureAwait(false);
+                }).RequireRateLimiting(GeoRegionRateLimitPolicy);
             });
 
             app.UseSwaggerForOcelotUI(
@@ -243,6 +301,64 @@ namespace ApiGateway
             app.UseMiddleware<UpstreamUnavailableMiddleware>();
 
             app.UseOcelot().Wait();
+        }
+
+        /// <summary>
+        /// Resolves the trusted client IP for <c>/geo/region</c>.
+        /// </summary>
+        /// <param name="request">The HTTP request.</param>
+        /// <returns>The trusted client IP, or null if not available.</returns>
+        /// <remarks>
+        /// Reads X-Real-IP, not X-Forwarded-For. Nginx Ingress always sets X-Real-IP from its
+        /// own observed connection, and the gateway's Service is ClusterIP-only, so an external
+        /// caller reaches it only through Ingress and cannot set this header itself. The pipeline
+        /// middleware earlier in <see cref="Configure"/> guarantees X-Real-IP is set before
+        /// routing runs, even locally with no proxy in front. <see cref="ExtractClientIp"/> reads
+        /// the first X-Forwarded-For hop instead, which an external caller sets directly. That
+        /// fits trace enrichment. It does not fit an anonymous endpoint, where a forged hop would
+        /// let an external caller pick their own reported region (#362). This does not cover a
+        /// caller already inside the cluster network — any pod, or a port-forward, can still set
+        /// X-Real-IP itself. That is a wrong personalization region, not a wider compromise, and
+        /// is unchanged by this endpoint: nothing in the gateway trusts X-Real-IP more than that
+        /// today. Closing it needs a NetworkPolicy, out of scope here.
+        /// </remarks>
+        internal static string? ResolveTrustedClientIp(HttpRequest request) =>
+            request.Headers["X-Real-IP"].FirstOrDefault();
+
+        /// <summary>
+        /// Resolves the caller's IP to a city/region-level location for anonymous
+        /// personalization (#362).
+        /// </summary>
+        /// <param name="geoIpService">The GeoIP service, or null if not registered.</param>
+        /// <param name="clientIp">The caller's resolved client IP.</param>
+        /// <returns>The region payload. Null when GeoIP is disabled or the IP is missing.</returns>
+        internal static GeoRegionResponse? ResolveGeoRegion(GeoIpService? geoIpService, string? clientIp)
+        {
+            if (geoIpService is not { IsEnabled: true } || string.IsNullOrEmpty(clientIp))
+            {
+                return null;
+            }
+
+            return MapGeoRegion(geoIpService.GetLocation(clientIp));
+        }
+
+        /// <summary>
+        /// Maps a GeoIP lookup result to the <c>/geo/region</c> response shape.
+        /// </summary>
+        /// <param name="location">The GeoIP lookup result, or null on a miss.</param>
+        /// <returns>
+        /// The region payload, city/region granularity only. Null on a miss — a private or
+        /// loopback IP and an unallocated range both reach here as null, from
+        /// <see cref="GeoIpService.GetLocation"/>.
+        /// </returns>
+        internal static GeoRegionResponse? MapGeoRegion(GeoLocationData? location)
+        {
+            if (location is not { } geo)
+            {
+                return null;
+            }
+
+            return new GeoRegionResponse(geo.City, geo.Region, geo.RegionCode, geo.CountryCode);
         }
 
         private static void LogTracingDisabled(ILogger logger) =>
@@ -295,8 +411,10 @@ namespace ApiGateway
                 // Store IP type classification (no PII risk)
                 activity.SetTag("client.ip_type", ClassifyIpType(clientIp));
 
-                // GeoIP enrichment (if service available and enabled)
-                if (geoIpService?.IsEnabled == true)
+                // GeoIP enrichment (if service available and enabled). Skipped for /geo/region:
+                // its own handler already does one GeoIP lookup, and this would do a second (#362).
+                bool isGeoRegionEndpoint = request.Path.StartsWithSegments("/geo/region", StringComparison.Ordinal);
+                if (!isGeoRegionEndpoint && geoIpService?.IsEnabled == true)
                 {
                     var geoData = geoIpService.GetLocation(clientIp);
                     if (geoData.HasValue)
