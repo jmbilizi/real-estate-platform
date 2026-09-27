@@ -134,6 +134,51 @@ namespace ApiGateway.Services
         }
 
         /// <summary>
+        /// Checks if an IP address is private or loopback (no GeoIP data available).
+        /// </summary>
+        /// <param name="ipAddress">The IP address to check.</param>
+        /// <returns>True if private or loopback, false otherwise.</returns>
+        /// <remarks>
+        /// Internal (not private) so it is unit-testable directly (#362): exercising it through
+        /// <see cref="GetLocation"/> would need a real MaxMind database, which test environments
+        /// do not have — <see cref="IsEnabled"/> is false without one, and <see cref="GetLocation"/>
+        /// short-circuits before this check ever runs.
+        /// </remarks>
+        internal static bool IsPrivateOrLoopback(IPAddress ipAddress)
+        {
+            // An IPv4-mapped IPv6 address (::ffff:10.0.0.1) carries its IPv4 ranges inside an
+            // IPv6 shape. Unwrap it first, or the IPv4 checks below never run against it (#362).
+            if (ipAddress.IsIPv4MappedToIPv6)
+            {
+                ipAddress = ipAddress.MapToIPv4();
+            }
+
+            // IPv4 loopback
+            if (IPAddress.IsLoopback(ipAddress))
+            {
+                return true;
+            }
+
+            byte[] bytes = ipAddress.GetAddressBytes();
+
+            // IPv4 private ranges
+            if (bytes.Length == 4)
+            {
+                return bytes[0] == 10 || // 10.0.0.0/8
+                       (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) || // 172.16.0.0/12
+                       (bytes[0] == 192 && bytes[1] == 168); // 192.168.0.0/16
+            }
+
+            // IPv6 private ranges (simplified check)
+            if (bytes.Length == 16)
+            {
+                return bytes[0] == 0xfc || bytes[0] == 0xfd; // fc00::/7 (unique local)
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Gets geographic location data for an IP address.
         /// </summary>
         /// <param name="ipAddress">The IP address to look up.</param>
@@ -198,38 +243,6 @@ namespace ApiGateway.Services
                 LogGeoIpUnexpectedErrorAction(logger, ipAddress, ex);
                 return null;
             }
-        }
-
-        /// <summary>
-        /// Checks if an IP address is private or loopback (no GeoIP data available).
-        /// </summary>
-        /// <param name="ipAddress">The IP address to check.</param>
-        /// <returns>True if private or loopback, false otherwise.</returns>
-        private static bool IsPrivateOrLoopback(IPAddress ipAddress)
-        {
-            // IPv4 loopback
-            if (IPAddress.IsLoopback(ipAddress))
-            {
-                return true;
-            }
-
-            byte[] bytes = ipAddress.GetAddressBytes();
-
-            // IPv4 private ranges
-            if (bytes.Length == 4)
-            {
-                return bytes[0] == 10 || // 10.0.0.0/8
-                       (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) || // 172.16.0.0/12
-                       (bytes[0] == 192 && bytes[1] == 168); // 192.168.0.0/16
-            }
-
-            // IPv6 private ranges (simplified check)
-            if (bytes.Length == 16)
-            {
-                return bytes[0] == 0xfc || bytes[0] == 0xfd; // fc00::/7 (unique local)
-            }
-
-            return false;
         }
     }
 }
