@@ -70,6 +70,11 @@ export interface WorkerSettings {
   /** `null` = unconfigured: every sold record fails closed, so the `Closed` backfill is skipped. */
   readonly soldDisplayDelayDays: number | null;
   readonly pollMs: number;
+  /** Sibling Bright slices read at once (#348). Also the run's starting concurrency ceiling. */
+  readonly concurrency: number;
+  /** Records per slice request (`$top`). Bright streams a roughly fixed rate per request (#348), so
+   * a bigger page moves more rows per request; 10,000 is the largest measured on production. */
+  readonly pageSize: number;
 }
 
 function numberFrom(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
@@ -82,8 +87,26 @@ function numberFrom(env: NodeJS.ProcessEnv, name: string, fallback: number): num
   return parsed;
 }
 
+const MAX_SYNC_PAGE_SIZE = 10_000;
+
+function positiveIntFrom(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
+  const raw = env[name];
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new Error(`${name} must be a positive integer, got "${raw}".`);
+  }
+  return parsed;
+}
+
 export function resolveWorkerSettings(env: NodeJS.ProcessEnv = process.env): WorkerSettings {
   const delayRaw = env.BRIGHT_SOLD_DISPLAY_DELAY_DAYS;
+  const pageSize = positiveIntFrom(env, 'BRIGHT_SYNC_PAGE_SIZE', 5_000);
+  if (pageSize > MAX_SYNC_PAGE_SIZE) {
+    throw new Error(
+      `BRIGHT_SYNC_PAGE_SIZE must be ${MAX_SYNC_PAGE_SIZE} or less, got ${pageSize}.`,
+    );
+  }
   return {
     incrementalIntervalMs: numberFrom(env, 'BRIGHT_SYNC_INCREMENTAL_INTERVAL_MS', 5 * 60 * 1000),
     overlapMs: numberFrom(env, 'BRIGHT_SYNC_OVERLAP_MS', 2 * 60 * 1000),
@@ -94,6 +117,8 @@ export function resolveWorkerSettings(env: NodeJS.ProcessEnv = process.env): Wor
         ? null
         : numberFrom(env, 'BRIGHT_SOLD_DISPLAY_DELAY_DAYS', 0),
     pollMs: numberFrom(env, 'BRIGHT_SYNC_POLL_MS', 10_000),
+    concurrency: positiveIntFrom(env, 'BRIGHT_SYNC_CONCURRENCY', 6),
+    pageSize,
   };
 }
 
@@ -175,16 +200,21 @@ const sessions = new WeakMap<WorkerContext, BrightSession>();
 function sessionFor(ctx: WorkerContext): BrightSession {
   let session = sessions.get(ctx);
   if (session === undefined) {
-    const { config } = ctx;
+    const { config, settings } = ctx;
     session = {
       tokenProvider: createTokenProvider(config.endpoint, config.credentials, {
         fetchImpl: ctx.fetchImpl,
         timeoutMs: config.replication.requestTimeoutMs,
       }),
+      // `settings.concurrency` (#348), not `config.replication.maxConcurrency`: the latter is the
+      // deliberately-conservative unknown-limit default shared with the gallery fetch path (see
+      // `rate-limiter.ts`). Bright's own measured behaviour (see the ticket) is a roughly fixed rate
+      // per request that scales close to linearly with concurrent requests, so this session's own
+      // per-second/per-minute ceilings are sized to the concurrency itself rather than that default.
       limiter: new RateLimiter({
-        requestsPerSecond: config.replication.requestsPerSecond,
-        requestsPerMinute: config.replication.requestsPerMinute,
-        maxConcurrency: config.replication.maxConcurrency,
+        requestsPerSecond: settings.concurrency,
+        requestsPerMinute: settings.concurrency * 60,
+        maxConcurrency: settings.concurrency,
       }),
     };
     sessions.set(ctx, session);
@@ -206,8 +236,13 @@ function createDeps(
   const feed = config.feed;
   const isSample = feed === 'test';
 
+  // Each run starts at the configured concurrency, whatever an earlier run halved it to (#348).
+  limiter.resetConcurrency();
+
   return {
     serviceRoot: config.endpoint.serviceRoot,
+    pageSize: settings.pageSize,
+    concurrency: settings.concurrency,
     now,
     log: ctx.log,
     fetchPage: (url: string): Promise<BrightPage> =>
@@ -216,6 +251,16 @@ function createDeps(
         limiter,
         maxRetries: config.replication.maxRetries,
         timeoutMs: config.replication.requestTimeoutMs,
+        onRetry: (attempt, status) => {
+          const before = limiter.concurrencyLimit;
+          limiter.halveConcurrency();
+          if (limiter.concurrencyLimit < before) {
+            ctx.log(
+              `Bright sync: HTTP ${status} (attempt ${attempt}). Concurrency ${before} -> ` +
+                `${limiter.concurrencyLimit} for the rest of this run.`,
+            );
+          }
+        },
       }),
 
     async applyPage(records, checkpoint): Promise<PageResult> {
@@ -336,6 +381,19 @@ function createDeps(
   };
 }
 
+/**
+ * `, N Bright request(s) (R.R/min)` when the run counted requests, else `''`.
+ *
+ * The contractual rate ceiling is unknown (#33), so this is how a run's actual pace against Bright
+ * gets read back, from the CronJob's own log, without a dashboard.
+ */
+function requestRateLog(counts: Record<string, unknown>, durationMs: number): string {
+  const requests = counts.brightRequests;
+  if (typeof requests !== 'number') return '';
+  const perMinute = durationMs > 0 ? Math.round((requests / durationMs) * 60_000 * 10) / 10 : 0;
+  return ` ${requests} Bright request(s), ${perMinute}/min.`;
+}
+
 /** Runs one claimed or scheduled run to its end and records the outcome. Never throws. */
 export async function executeRun(ctx: WorkerContext, run: SyncRun): Promise<boolean> {
   const pool = getPool();
@@ -380,9 +438,13 @@ export async function executeRun(ctx: WorkerContext, run: SyncRun): Promise<bool
         });
         break;
     }
-    counts = { ...counts, durationMs: Date.now() - started };
+    const durationMs = Date.now() - started;
+    counts = { ...counts, durationMs };
     await finishRun(pool, run.id, { status: 'succeeded', counts });
-    ctx.log(`Bright sync ${run.mode} ${run.id} succeeded in ${Date.now() - started} ms.`);
+    ctx.log(
+      `Bright sync ${run.mode} ${run.id} succeeded in ${durationMs} ms.` +
+        requestRateLog(counts, durationMs),
+    );
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

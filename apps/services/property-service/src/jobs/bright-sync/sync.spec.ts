@@ -235,6 +235,56 @@ describe('runBackfill', () => {
     expect(filters(h.urls)[0]).toContain('CloseDate ge 2025-09-26');
   });
 
+  it('sizes a slice request to deps.pageSize instead of the 1,000 default (#348)', async () => {
+    const all = records(1500);
+    const h = harness(all);
+    const sized = { ...h.deps, pageSize: 2_000 };
+
+    await runBackfill(sized, { ...BACKFILL, statuses: ['Active'] });
+
+    expect(h.applied.sort()).toEqual(keysOf(all));
+    const read = h.urls.find((u) => new URL(u).searchParams.get('$count') === null) as string;
+    expect(new URL(read).searchParams.get('$top')).toBe('2000');
+  });
+
+  it('bounds slices with fetched data in flight to deps.concurrency (#348)', async () => {
+    // Several slices at the default PAGE_SIZE, so the recursion fans out to more than 2 leaves.
+    const all = records(4000);
+    const h = harness(all);
+    let unblockFirstApply: (() => void) | undefined;
+    let applyCalls = 0;
+    const gated: SyncDeps = {
+      ...h.deps,
+      concurrency: 2,
+      applyPage: (page, checkpoint) => {
+        applyCalls += 1;
+        if (applyCalls === 1) {
+          return new Promise((resolve) => {
+            unblockFirstApply = () => resolve(h.deps.applyPage(page, checkpoint));
+          });
+        }
+        return h.deps.applyPage(page, checkpoint);
+      },
+    };
+
+    const run = runBackfill(gated, { ...BACKFILL, statuses: ['Active'] });
+    // Let every slice that CAN proceed without blocking do so (no real timers are involved, so
+    // draining pending microtasks a few times over is enough — and far short of the 5s test
+    // timeout — for everything but the deliberately-blocked first apply to settle).
+    for (let i = 0; i < 10; i += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+
+    const dataFetches = h.urls.filter((u) => new URL(u).searchParams.get('$count') !== 'true');
+    expect(dataFetches.length).toBeLessThanOrEqual(2);
+    expect(h.applied).toHaveLength(0);
+
+    unblockFirstApply?.();
+    await run;
+
+    expect(h.applied.sort()).toEqual(keysOf(all));
+  });
+
   it('keeps no checkpoint for an area pass', async () => {
     const all = records(3).map((r, i) => (i === 0 ? { ...r, City: 'FREDERICK' } : r));
     const h = harness(all);
