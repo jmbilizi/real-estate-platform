@@ -79,15 +79,54 @@ describe('searchRouteProps (#350)', () => {
     expect(JSON.stringify(result)).not.toContain('"neighborhood"');
   });
 
-  it('scopes a street to its city and a ZIP to itself', async () => {
-    const street = await props(
-      '/alexandria-va/king-street-street/homes-for-sale',
-      '',
-      geocoder([{ type: 'road', address: { road: 'King Street', city: 'Alexandria', ...VA } }]),
-    );
-    expect(street).toMatchObject({
-      place: { filters: { street: 'King Street', state: 'VA' } },
+  describe('street scope', () => {
+    const ROAD = { type: 'road', address: { road: 'King Street', city: 'Alexandria', ...VA } };
+    const CITY = { type: 'city', name: 'Alexandria', address: { city: 'Alexandria', ...VA } };
+    /** Answers the street lookup and the city-boundary lookup separately. */
+    const streetGeocoder =
+      (city: any[] | null): Geocoder =>
+      async (params) =>
+        params.q?.startsWith('king st') ? [ROAD] : city;
+
+    it('scopes a street to its city boundary, never to the whole state', async () => {
+      const result = await props(
+        '/alexandria-va/king-st/homes-for-sale',
+        '',
+        streetGeocoder([{ ...CITY, geojson: POLYGON }]),
+      );
+      expect(result).toMatchObject({
+        place: {
+          filters: { street: 'king st', state: 'VA', boundary: JSON.stringify(POLYGON) },
+          label: 'King Street, Alexandria, VA',
+        },
+      });
     });
+
+    it('falls back to street + city + state when no boundary resolves', async () => {
+      for (const city of [[CITY], null]) {
+        const result = await props(
+          '/alexandria-va/king-st/homes-for-sale',
+          '',
+          streetGeocoder(city),
+        );
+        expect(result).toMatchObject({
+          place: { filters: { street: 'king st', city: 'Alexandria', state: 'VA' } },
+        });
+      }
+    });
+
+    it('scopes a street under a ZIP to the ZIP', async () => {
+      const result = await props(
+        '/alexandria-va/22314/king-st/homes-for-sale',
+        '',
+        streetGeocoder([]),
+      );
+      expect(result).toMatchObject({ place: { filters: { street: 'king st', zip: '22314' } } });
+      expect(result.status === 'found' && result.place.filters.boundary).toBeFalsy();
+    });
+  });
+
+  it('scopes a ZIP to itself', async () => {
     const zip = await props(
       '/alexandria-va/22314/homes-for-sale',
       '',

@@ -4,8 +4,8 @@
  * ZIP is appended only when the short form names more than one property.
  *
  * Path rule shared with the search routes (#350): the first segment is always `<city>-<st>`. A
- * second segment that starts with a digit is an address slug. Any other second segment
- * (`homes-for-sale`, `homes-for-rent`) is a search path.
+ * two-segment path whose second segment starts with a digit is an address slug. A path that ends
+ * in `homes-for-sale` or `homes-for-rent` is a search path (see `parseSearchPath`).
  *
  * The client builds a slug from structured geocoder fields, never from free text. The service
  * resolves a slug by the normalized parts below.
@@ -213,7 +213,13 @@ export interface ParsedSearchPath {
 }
 
 const COUNTY_SEGMENT = /^([a-z0-9]+(?:-[a-z0-9]+)*)-county-([a-z]{2})$/;
-const NAMED_SEGMENT = /^([a-z0-9]+(?:-[a-z0-9]+)*)-(neighborhood|street)$/;
+const NEIGHBORHOOD_SEGMENT = /^([a-z0-9]+(?:-[a-z0-9]+)*)-neighborhood$/;
+const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** A street's path segment: the name with USPS abbreviations, `king-st` for "King Street". */
+export function streetSegment(street: string): string {
+  return slugify(normalizeStreetLine(street));
+}
 
 /** Removes a trailing "County", so that the path is not `fairfax-county-county-va`. */
 export function countyBaseName(county: string): string {
@@ -237,7 +243,9 @@ export function searchPath(place: SearchPlace | null, segment: SearchPathSegment
   if (place.kind === 'zip') parts.push(place.zip.slice(0, 5));
   if (place.kind === 'neighborhood' || place.kind === 'street') {
     if (place.zip) parts.push(place.zip.slice(0, 5));
-    parts.push(`${slugify(place.name)}-${place.kind}`);
+    parts.push(
+      place.kind === 'street' ? streetSegment(place.name) : `${slugify(place.name)}-neighborhood`,
+    );
   }
   return `/${parts.join('/')}/${segment}`;
 }
@@ -285,14 +293,16 @@ export function parseSearchPath(segments: readonly string[]): ParsedSearchPath |
     return { place, segment: listingSegment };
   }
   if (rest.length > 1) return null;
-  const named = NAMED_SEGMENT.exec(rest[0] as string);
-  if (!named) return null;
-  const place: SearchPlace = {
-    kind: named[2] as 'neighborhood' | 'street',
-    name: words(named[1] as string),
-    city,
-    state,
-    zip,
+  // Second segment: ZIP (handled above), `<name>-neighborhood`, or else a street.
+  const named = rest[0] as string;
+  const neighborhood = NEIGHBORHOOD_SEGMENT.exec(named);
+  if (neighborhood) {
+    const name = words(neighborhood[1] as string);
+    return { place: { kind: 'neighborhood', name, city, state, zip }, segment: listingSegment };
+  }
+  if (!SLUG.test(named) || ZIP5.test(named)) return null;
+  return {
+    place: { kind: 'street', name: words(named), city, state, zip },
+    segment: listingSegment,
   };
-  return { place, segment: listingSegment };
 }

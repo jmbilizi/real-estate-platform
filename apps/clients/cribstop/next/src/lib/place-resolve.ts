@@ -1,4 +1,9 @@
-import { countyBaseName, type SearchPlace, slugify } from '@cribstop/property-contracts';
+import {
+  countyBaseName,
+  normalizeStreetLine,
+  type SearchPlace,
+  slugify,
+} from '@cribstop/property-contracts';
 import { buildForwardUrl } from '@/app/api/_lib/nominatim';
 import { proxyNominatim } from '@/app/api/_lib/nominatim-fetch';
 import type { SearchFilters } from '@/lib/types';
@@ -81,18 +86,23 @@ export async function resolvePlace(
     };
   }
 
-  if (place.kind === 'city') {
+  /** The city result for `name`, `undefined` when there is none, `null` when the lookup failed. */
+  const findCity = async (name: string, withBoundary: boolean) => {
     const results = await geocode({
-      q: `${place.city}, ${state}`,
+      q: `${name}, ${state}`,
       limit: '5',
       addressdetails: '1',
+      ...(withBoundary ? { polygon: '1' } : {}),
     });
-    if (results === null) return { status: 'error' };
-    const hit = results.find(
-      (r) =>
-        inState(r) &&
-        (sameSlug(r.name, place.city) || sameSlug(addressCity(r.address ?? {}), place.city)),
+    if (results === null) return null;
+    return results.find(
+      (r) => inState(r) && (sameSlug(r.name, name) || sameSlug(addressCity(r.address ?? {}), name)),
     );
+  };
+
+  if (place.kind === 'city') {
+    const hit = await findCity(place.city, false);
+    if (hit === null) return { status: 'error' };
     if (!hit) return { status: 'not-found' };
     const city = sameSlug(hit.name, place.city) ? hit.name : (addressCity(hit.address) as string);
     const label = placeLabel({ kind: 'city', city, state });
@@ -130,24 +140,42 @@ export async function resolvePlace(
 
   // Neighborhood or street, under a city+state or a ZIP.
   const parent = place.zip ? place.zip : `${place.city}, ${state}`;
-  const results = await geocode({
+  const lookup = geocode({
     q: `${place.name}, ${parent}`,
     limit: '5',
     addressdetails: '1',
     ...(place.kind === 'neighborhood' ? { polygon: '1' } : {}),
   });
-  if (results === null) return { status: 'error' };
 
   if (place.kind === 'street') {
-    const hit = results.find((r) => inState(r) && sameSlug(r.address?.road, place.name));
+    // A street is scoped to its ZIP, else to its city's boundary. The boundary, not `city`,
+    // because Bright stores the postal city, which can differ from the geocoder's city.
+    const [results, cityHit] = await Promise.all([
+      lookup,
+      place.zip ? Promise.resolve(undefined) : findCity(place.city, true),
+    ]);
+    if (results === null) return { status: 'error' };
+    const wanted = normalizeStreetLine(place.name);
+    const hit = results.find(
+      (r) => inState(r) && r.address?.road && normalizeStreetLine(r.address.road) === wanted,
+    );
     if (!hit) return { status: 'not-found' };
-    const street = hit.address.road as string;
+    const road = hit.address.road as string;
+    // Bright addresses use USPS abbreviations ("King St"), and `street` is a substring match.
+    const street = normalizeStreetLine(road);
     const city = addressCity(hit.address) ?? place.city;
-    const label = placeLabel({ ...place, name: street, city });
-    // Not `city`: Bright stores the postal city, which can differ from the geocoder's city.
-    const filters: SearchFilters = place.zip ? { street, zip: place.zip } : { street, state };
+    const label = placeLabel({ ...place, name: road, city });
+    const boundary = cityHit ? boundaryOf(cityHit) : undefined;
+    const filters: SearchFilters = place.zip
+      ? { street, zip: place.zip }
+      : boundary
+        ? { street, state, boundary }
+        : { street, city: cityHit?.name ?? city, state };
     return { status: 'found', filters, label, suggestion: suggestionOf(hit, label) };
   }
+
+  const results = await lookup;
+  if (results === null) return { status: 'error' };
 
   const hit = results.find(
     (r) =>

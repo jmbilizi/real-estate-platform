@@ -1,3 +1,4 @@
+import searchReducer from '@/lib/store/slices/searchSlice';
 import {
   boundsToBoundary,
   legacySearchUrl,
@@ -41,7 +42,7 @@ describe('searchTargetFor + searchTargetUrl (#350)', () => {
       url('', { type: 'suburb', name: 'Del Ray', address: { ...ALEXANDRIA, suburb: 'Del Ray' } }),
     ).toBe('/alexandria-va/del-ray-neighborhood/homes-for-sale');
     expect(url('', { type: 'road', address: { ...ALEXANDRIA, road: 'King Street' } })).toBe(
-      '/alexandria-va/king-street-street/homes-for-sale',
+      '/alexandria-va/king-st/homes-for-sale',
     );
     expect(
       url('', {
@@ -77,6 +78,10 @@ describe('searchTargetFor + searchTargetUrl (#350)', () => {
     const loc = { type: 'city', name: 'Alexandria', address: ALEXANDRIA };
     expect(url('', loc, 'rent')).toBe('/alexandria-va/homes-for-rent');
     expect(url('', loc, 'all')).toBe('/alexandria-va/homes-for-sale?type=all');
+    // The search bar defaults to "For sale", so a default search has no `type` parameter.
+    const defaultType = searchReducer(undefined, { type: '@@init' }).searchListingType;
+    expect(defaultType).toBe('sale');
+    expect(url('', loc, defaultType)).toBe('/alexandria-va/homes-for-sale');
     expect(listingTypeForPath('homes-for-rent', null)).toEqual({
       listingType: 'rent',
       override: null,

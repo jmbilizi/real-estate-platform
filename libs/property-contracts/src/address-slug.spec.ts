@@ -146,7 +146,19 @@ describe('searchPath / parseSearchPath (#350)', () => {
     ],
     [
       { kind: 'street', name: 'King Street', city: 'Alexandria', state: 'VA' },
-      '/alexandria-va/king-street-street/homes-for-sale',
+      '/alexandria-va/king-st/homes-for-sale',
+    ],
+    [
+      { kind: 'street', name: 'Taylor Run Parkway', city: 'Alexandria', state: 'VA' },
+      '/alexandria-va/taylor-run-pkwy/homes-for-sale',
+    ],
+    [
+      { kind: 'street', name: 'West Braddock Road', city: 'Alexandria', state: 'VA', zip: '22302' },
+      '/alexandria-va/22302/w-braddock-rd/homes-for-sale',
+    ],
+    [
+      { kind: 'street', name: '1st Street', city: 'Laurel', state: 'MD' },
+      '/laurel-md/1st-st/homes-for-sale',
     ],
     [
       { kind: 'county', county: 'Fairfax County', state: 'VA' },
@@ -182,7 +194,18 @@ describe('searchPath / parseSearchPath (#350)', () => {
     expect(parseSearchPath(['alexandria-va', '118-baggett-place-alexandria-va'])).toBeNull();
     expect(parseSearchPath(['alexandria-va', 'homes'])).toBeNull();
     expect(parseSearchPath(['alexandria', 'homes-for-sale'])).toBeNull();
-    expect(parseSearchPath(['alexandria-va', 'del-ray', 'homes-for-sale'])).toBeNull();
-    expect(parseSearchPath(['alexandria-va', 'a-street', 'b-street', 'homes-for-sale'])).toBeNull();
+    expect(parseSearchPath(['alexandria-va', 'a-st', 'b-st', 'homes-for-sale'])).toBeNull();
+    expect(parseSearchPath(['alexandria-va', '22314', '22301', 'homes-for-sale'])).toBeNull();
+  });
+
+  it('reads the second segment as ZIP, neighborhood, or else street', () => {
+    const second = (segment: string) =>
+      parseSearchPath(['alexandria-va', segment, 'homes-for-sale'])?.place?.kind;
+    expect(second('22314')).toBe('zip');
+    expect(second('del-ray-neighborhood')).toBe('neighborhood');
+    expect(second('king-st')).toBe('street');
+    expect(parseSearchPath(['alexandria-va', 'king-st', 'homes-for-sale'])?.place).toMatchObject({
+      name: 'king st',
+    });
   });
 });
