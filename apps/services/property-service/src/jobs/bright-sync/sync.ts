@@ -355,7 +355,7 @@ export async function runIncremental(
 export interface ReconcileDeps {
   /** Local, not deleted Bright listings in `statuses` (payload values): key to listing id. */
   readonly listLiveLocal: (statuses: readonly string[]) => Promise<Map<string, string>>;
-  /** Soft-deletes through `src/db/write.ts`. Returns the count taken down. */
+  /** Marks the listings Off market through `src/db/write.ts` (#349). Returns the count changed. */
   readonly takeDown: (listingIds: readonly string[], reason: string) => Promise<number>;
 }
 

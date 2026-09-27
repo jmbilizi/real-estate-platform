@@ -15,47 +15,9 @@
  * expression, and a generated column would freeze the algorithm into the schema.
  */
 
-/** USPS suffix abbreviations (C1 of Publication 28) for the forms that occur in DMV addresses. */
-const STREET_SUFFIXES: Record<string, string> = {
-  alley: 'aly',
-  avenue: 'ave',
-  av: 'ave',
-  boulevard: 'blvd',
-  circle: 'cir',
-  court: 'ct',
-  cove: 'cv',
-  crescent: 'cres',
-  drive: 'dr',
-  expressway: 'expy',
-  heights: 'hts',
-  highway: 'hwy',
-  lane: 'ln',
-  loop: 'loop',
-  parkway: 'pkwy',
-  place: 'pl',
-  plaza: 'plz',
-  point: 'pt',
-  road: 'rd',
-  route: 'rte',
-  square: 'sq',
-  street: 'st',
-  terrace: 'ter',
-  trail: 'trl',
-  turnpike: 'tpke',
-  way: 'way',
-};
+import { normalizeStreetLine } from '@cribstop/property-contracts';
 
-/** Directionals normalise to their compass abbreviation. */
-const DIRECTIONALS: Record<string, string> = {
-  north: 'n',
-  south: 's',
-  east: 'e',
-  west: 'w',
-  northeast: 'ne',
-  northwest: 'nw',
-  southeast: 'se',
-  southwest: 'sw',
-};
+export { normalizeStreetLine };
 
 /**
  * Unit designators as they appear in the dataset: "Unit 1201", "Apt 4", "Loft 3B", "PH1".
@@ -90,20 +52,6 @@ export function splitUnitDesignator(address: string): SplitAddress {
     streetLine: address.slice(0, match.index).trim(),
     unitNumber,
   };
-}
-
-/**
- * Canonicalises a street line for hashing: case-folded, punctuation-stripped, whitespace-collapsed,
- * with USPS suffixes and directionals expanded to their standard abbreviation.
- */
-export function normalizeStreetLine(streetLine: string): string {
-  return streetLine
-    .toLowerCase()
-    .replace(/[.,]/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((token) => DIRECTIONALS[token] ?? STREET_SUFFIXES[token] ?? token)
-    .join(' ');
 }
 
 /**

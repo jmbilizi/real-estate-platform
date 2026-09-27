@@ -59,7 +59,9 @@ function newestCreateViewSql(): string {
 
   const candidates = readdirSync(MIGRATIONS_DIR)
     .filter((file) => file.endsWith('.js'))
-    .filter((file) => readFileSync(join(MIGRATIONS_DIR, file), 'utf8').includes('CREATE VIEW'))
+    .filter((file) =>
+      /CREATE VIEW\s+listing_search_v/.test(readFileSync(join(MIGRATIONS_DIR, file), 'utf8')),
+    )
     // node-pg-migrate orders by filename and `checkOrder` enforces it, so lexicographic sort over
     // the zero-padded numeric prefix is the same order Postgres will see them applied in.
     .sort();

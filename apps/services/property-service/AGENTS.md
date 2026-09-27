@@ -288,14 +288,43 @@ drops every test-feed listing before any backfill writes production rows.
   inclusive, because Bright rejects the `OR` a strict `(t, key)` resume needs. An instant wider than
   one page is drained by `ListingKey` keyset (`buildTieBlockQuery`).
 - **Reconcile**, daily: every live `ListingKey` per status (`$select=ListingKey`). A local live
-  listing absent from all of them is taken down. It refuses when a status read falls more than 1 %
-  short of Bright's own count, or when it would take down more than 20 % of the local listings.
+  listing absent from all of them becomes `Off Market`. It refuses when a status read falls more
+  than 1 % short of Bright's own count, or when it would change more than 20 % of the local
+  listings.
 - **Audit**, after a backfill and after each reconcile: Bright `$count` against the local count per
   status for the places in `DEFAULT_AUDIT_AREAS`. The rows go to the run's `counts`.
 
-**A held listing whose record now fails to map is taken down** (`applyPage` in `worker.ts`), with
-its reason as the `listing_events` note. Stale data must not stay advertised. `upsertListing()`
-clears `deleted_at`, so the listing comes back when its record maps again.
+**The sync never deletes a listing (#349).** A held listing whose record now fails to map
+(`applyPage` in `worker.ts`), or that reconcile finds absent, becomes `Off Market` through
+`markListingsOffMarket()` in `src/db/write.ts`, with its reason as the `listing_events` note.
+`Off Market` has no `consumer_status`, so search drops it and its page shows only the address and
+the property record. It is not terminal, so the listing re-snapshots when its record maps again. A
+record that maps to a non-searchable status (Withdrawn, Expired, Canceled, Hold) keeps that status.
+
+### The property page (#349)
+
+Every held listing has a page in its current market status. `listing_detail_v` (migration 033) is
+the read model. It holds every live, internet-displayable listing. `listing_data_displayable` is
+true exactly when `listing_search_v` holds the row, so the listing-data rules stay in one view.
+`market_status` is `Active`, `Coming Soon`, `Under Contract`, `Pending`, `Sold` or `Off market`. Off
+market covers Withdrawn, Expired, Canceled, Hold, `Off Market` and a sold outside the sold display
+rule (#33). For those rows the view projects only the address (still masked on
+`address_display_allowed`) and property-record facts: NAR 7.58 forbids the display of their listing
+data.
+
+- `GET /listings/:id/page` (`listings/property-page.ts`) returns `PropertyPage` from
+  `@cribstop/property-contracts`. `detail` is the `/listings/:id` detail when displayable, else
+  null. `path` is the address URL, null when the seller withheld the address.
+- `GET /properties/lookup?city=<city-st>&address=<address-slug>` resolves the two segments of
+  `/<city>-<st>/<address-slug>` (`address-slug.ts` in the contracts). It compares the normalized
+  street (`normalizeStreetLine`, the same function `address_key` hashes), the unit, city, state and
+  optional ZIP. A withheld address never matches. On a miss, `listings/address-loader.ts` reads the
+  address from Bright once, across all statuses (`PostalCode` or `City`+`StateOrProvince`, plus
+  `startswith(UnparsedAddress,'<number> <first street word>')`, `$top=50`), maps it through
+  `mapBrightPayloads()`, and resolves again. One address is read at most once per
+  `BRIGHT_ADDRESS_LOOKUP_COOLDOWN_MS` (1 h), so the 404 path cannot drive Bright traffic.
+- **Assumption:** `UnparsedAddress` is title case (`118 Baggett Pl`), and `startswith` compares
+  case-sensitively. A record in another case misses and the page answers 404.
 
 **`bright_sync_runs`** logs every run: mode, scope, status, counts, cursor, times, error,
 `requested_by`. `store.ts` is the only module that writes it or `bright_sync_state`.
@@ -309,7 +338,8 @@ labels. **Assumption:** no user auth or roles exist yet, so no gateway route exp
 port-forward to 3002. Replace the token with role auth when account roles ship.
 
 **The detail page still calls Bright** for one listing's gallery (`listings/gallery-loader.ts`),
-bounded by `BRIGHT_ON_DEMAND_GALLERY_WAIT_MS`. Nothing else in the request path does.
+bounded by `BRIGHT_ON_DEMAND_GALLERY_WAIT_MS`. The property lookup's miss path (above) is the only
+other request-path call.
 
 **Wire facts, all measured. Each one is a defect if rediscovered by guessing.**
 

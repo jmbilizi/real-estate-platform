@@ -3,6 +3,8 @@ import { INTERNAL_ERROR_BODY, toOpenApiDocument } from '@cribstop/property-contr
 import { getPool } from './db/pool';
 import { createGalleryLoader, type GalleryLoader } from './listings/gallery-loader';
 import { createListingsRouter } from './listings/routes';
+import { createAddressLoader } from './listings/address-loader';
+import type { AddressFetcher } from './listings/property-page';
 import type { ReadPool } from './listings/repository';
 import { createBrightSyncAdminRouter } from './admin/bright-sync-routes';
 import type { SyncQueryable } from './jobs/bright-sync/store';
@@ -105,6 +107,7 @@ export interface CreateAppOptions {
    * only when the pool is real too, so a test with a fake pool never reaches Bright.
    */
   galleryLoader?: GalleryLoader;
+  addressFetcher?: AddressFetcher;
   /** The admin sync token (#338). Defaults to reading BRIGHT_ADMIN_TOKEN per request. */
   adminToken?: () => string | undefined;
 }
@@ -143,7 +146,9 @@ export function createApp(options: CreateAppOptions = {}): Express {
 
   const galleryLoader =
     options.galleryLoader ?? (options.pool === undefined ? createGalleryLoader() : undefined);
-  app.use(createListingsRouter(pool, galleryLoader));
+  const addressFetcher =
+    options.addressFetcher ?? (options.pool === undefined ? createAddressLoader() : undefined);
+  app.use(createListingsRouter(pool, galleryLoader, addressFetcher));
   app.use(createInquiriesRouter({ pool, introspection, rateLimiter }));
   app.use(createBrightSyncAdminRouter(pool as unknown as SyncQueryable, options.adminToken));
 

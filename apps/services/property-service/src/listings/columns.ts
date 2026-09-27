@@ -95,6 +95,33 @@ export const LISTING_CARD_SELECT = qualify(CARD_COLUMNS);
  */
 export const LISTING_DETAIL_SELECT = `${LISTING_CARD_SELECT}, v.description`;
 
+/** #349. `listing_detail_v`: the address and the property record, in any market status. */
+const PROPERTY_RECORD_COLUMNS = [
+  'id',
+  'property_id',
+  'unit_id',
+  'listing_data_displayable',
+  'market_status',
+  'address_street',
+  'unit_number',
+  'city',
+  'state',
+  'zip',
+  'property_type',
+  'beds',
+  'baths',
+  'sqft',
+  'lot_sqft',
+  'year_built',
+  'source',
+  'is_sample',
+  'last_updated',
+] as const;
+
+export const PROPERTY_RECORD_SELECT = PROPERTY_RECORD_COLUMNS.map((column) => `d.${column}`).join(
+  ', ',
+);
+
 /**
  * The governed MLS attribute path (#127/#128). `listing_attributes`/`property_attributes` are
  * unreachable from `listing_search_v`, so every read joins `mls_fields` for `address_classification`

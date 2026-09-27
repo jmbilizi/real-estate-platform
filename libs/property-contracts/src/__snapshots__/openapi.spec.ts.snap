@@ -851,6 +851,207 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
         ],
         "type": "object",
       },
+      "PropertyLookupResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "matches": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "address": {
+                  "type": "string",
+                },
+                "city": {
+                  "type": "string",
+                },
+                "listingId": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string",
+                },
+                "marketStatus": {
+                  "enum": [
+                    "Active",
+                    "Coming Soon",
+                    "Under Contract",
+                    "Pending",
+                    "Sold",
+                    "Off market",
+                  ],
+                  "type": "string",
+                },
+                "path": {
+                  "type": "string",
+                },
+                "state": {
+                  "type": "string",
+                },
+                "zip": {
+                  "type": "string",
+                },
+              },
+              "required": [
+                "listingId",
+                "path",
+                "address",
+                "city",
+                "state",
+                "zip",
+                "marketStatus",
+              ],
+              "type": "object",
+            },
+            "minItems": 1,
+            "type": "array",
+          },
+        },
+        "required": [
+          "matches",
+        ],
+        "type": "object",
+      },
+      "PropertyPage": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ListingDetail",
+              },
+            ],
+            "nullable": true,
+          },
+          "listingDataDisplayable": {
+            "type": "boolean",
+          },
+          "marketStatus": {
+            "enum": [
+              "Active",
+              "Coming Soon",
+              "Under Contract",
+              "Pending",
+              "Sold",
+              "Off market",
+            ],
+            "type": "string",
+          },
+          "path": {
+            "nullable": true,
+            "type": "string",
+          },
+          "propertyRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "nullable": true,
+                "type": "string",
+              },
+              "baths": {
+                "minimum": 0,
+                "nullable": true,
+                "type": "number",
+              },
+              "beds": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "nullable": true,
+                "type": "integer",
+              },
+              "city": {
+                "type": "string",
+              },
+              "isSample": {
+                "type": "boolean",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "lotSqft": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "nullable": true,
+                "type": "integer",
+              },
+              "propertyId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "propertyType": {
+                "enum": [
+                  "Single Family",
+                  "Condo",
+                  "Townhome",
+                  "Multi-Family",
+                  "Loft",
+                  "Land",
+                  "New Construction",
+                  "Manufactured/Mobile",
+                ],
+                "type": "string",
+              },
+              "source": {
+                "enum": [
+                  "brightMLS",
+                  "internal",
+                  "other",
+                ],
+                "type": "string",
+              },
+              "sqft": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "nullable": true,
+                "type": "integer",
+              },
+              "state": {
+                "type": "string",
+              },
+              "unitNumber": {
+                "nullable": true,
+                "type": "string",
+              },
+              "yearBuilt": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "nullable": true,
+                "type": "integer",
+              },
+              "zip": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "propertyId",
+              "listingId",
+              "address",
+              "unitNumber",
+              "city",
+              "state",
+              "zip",
+              "propertyType",
+              "beds",
+              "baths",
+              "sqft",
+              "lotSqft",
+              "yearBuilt",
+              "source",
+              "isSample",
+            ],
+            "type": "object",
+          },
+        },
+        "required": [
+          "marketStatus",
+          "listingDataDisplayable",
+          "path",
+          "propertyRecord",
+          "detail",
+        ],
+        "type": "object",
+      },
     },
   },
   "info": {
@@ -1322,6 +1523,124 @@ Rate-limited per client and per listing; a request over either limit gets 429 wi
           },
         },
         "summary": "Submit a message or tour request against a listing",
+      },
+    },
+    "/listings/{id}/page": {
+      "get": {
+        "description": "Returns the market status and the display flags the page renders. An Off market listing returns the property record only, with detail null.",
+        "operationId": "getPropertyPage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyPage",
+                },
+              },
+            },
+            "description": "The property page.",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No such listing.",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+        },
+        "summary": "Property page for one listing, in any market status",
+      },
+    },
+    "/properties/lookup": {
+      "get": {
+        "description": "Takes the two segments of /<city>-<st>/<address-slug>. On a local miss the service reads that one address from the MLS across all statuses, then resolves again.",
+        "operationId": "lookupProperty",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "city",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "address",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyLookupResponse",
+                },
+              },
+            },
+            "description": "One or more matches. More than one means the path is ambiguous.",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "The segments do not form a property path.",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No property at that address.",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+        },
+        "summary": "Resolve a property path to listings",
       },
     },
   },

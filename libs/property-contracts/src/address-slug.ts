@@ -1,0 +1,187 @@
+/**
+ * The property page URL (#349): `/<city>-<st>/<address-slug>`, for example
+ * `/alexandria-va/118-baggett-place-alexandria-va`. A unit adds `unit-<n>` before the city, and a
+ * ZIP is appended only when the short form names more than one property.
+ *
+ * Path rule shared with the search routes (#350): the first segment is always `<city>-<st>`. A
+ * second segment that starts with a digit is an address slug. Any other second segment
+ * (`homes-for-sale`, `homes-for-rent`) is a search path.
+ *
+ * The client builds a slug from structured geocoder fields, never from free text. The service
+ * resolves a slug by the normalized parts below.
+ */
+
+/** USPS suffix abbreviations (C1 of Publication 28) for the forms that occur in DMV addresses. */
+const STREET_SUFFIXES: Readonly<Record<string, string>> = {
+  alley: 'aly',
+  avenue: 'ave',
+  av: 'ave',
+  boulevard: 'blvd',
+  circle: 'cir',
+  court: 'ct',
+  cove: 'cv',
+  crescent: 'cres',
+  drive: 'dr',
+  expressway: 'expy',
+  heights: 'hts',
+  highway: 'hwy',
+  lane: 'ln',
+  loop: 'loop',
+  parkway: 'pkwy',
+  place: 'pl',
+  plaza: 'plz',
+  point: 'pt',
+  road: 'rd',
+  route: 'rte',
+  square: 'sq',
+  street: 'st',
+  terrace: 'ter',
+  trail: 'trl',
+  turnpike: 'tpke',
+  way: 'way',
+};
+
+const DIRECTIONALS: Readonly<Record<string, string>> = {
+  north: 'n',
+  south: 's',
+  east: 'e',
+  west: 'w',
+  northeast: 'ne',
+  northwest: 'nw',
+  southeast: 'se',
+  southwest: 'sw',
+};
+
+/**
+ * Canonical street line for comparison: case-folded, punctuation-stripped, whitespace-collapsed,
+ * with USPS suffixes and directionals abbreviated. `properties.address_key` hashes this value, so
+ * a change here changes property identity.
+ */
+export function normalizeStreetLine(streetLine: string): string {
+  return streetLine
+    .toLowerCase()
+    .replace(/[.,]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((token) => DIRECTIONALS[token] ?? STREET_SUFFIXES[token] ?? token)
+    .join(' ');
+}
+
+/** Lower case, every run of other characters becomes one hyphen. */
+export function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+/** A comparable place name: lower case, every run of other characters becomes one space. */
+export function normalizePlaceName(text: string): string {
+  return slugify(text).replace(/-/g, ' ');
+}
+
+/** A comparable unit designator: lower case, letters and digits only. */
+export function normalizeUnit(unit: string): string {
+  return unit.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+export interface PropertyAddressParts {
+  /** House number and street, for example `118 Baggett Place`. No unit designator. */
+  readonly streetLine: string;
+  readonly unitNumber: string | null;
+  readonly city: string;
+  readonly state: string;
+  readonly zip: string | null;
+}
+
+export const SEARCH_PATH_SEGMENTS = ['homes-for-sale', 'homes-for-rent'] as const;
+
+const CITY_SEGMENT = /^[a-z0-9]+(?:-[a-z0-9]+)*-[a-z]{2}$/;
+const HOUSE_NUMBER = /^\d+[a-z]?$/;
+const ZIP5 = /^\d{5}$/;
+const UNIT_KEYWORDS = new Set(['unit', 'apt', 'suite', 'ste']);
+
+export function citySegment(city: string, state: string): string {
+  return `${slugify(city)}-${slugify(state)}`;
+}
+
+/** True when a second path segment is an address slug rather than a search segment. */
+export function isAddressSegment(segment: string): boolean {
+  return /^\d/.test(segment);
+}
+
+export function isCitySegment(segment: string): boolean {
+  return CITY_SEGMENT.test(segment);
+}
+
+export function addressSegment(
+  parts: PropertyAddressParts,
+  options: { readonly withZip: boolean },
+): string {
+  const unit = parts.unitNumber === null ? '' : `-unit-${slugify(parts.unitNumber)}`;
+  const zip = options.withZip && parts.zip !== null ? `-${parts.zip.slice(0, 5)}` : '';
+  return `${slugify(parts.streetLine)}${unit}-${citySegment(parts.city, parts.state)}${zip}`;
+}
+
+export function propertyPath(
+  parts: PropertyAddressParts,
+  options: { readonly withZip: boolean },
+): string {
+  return `/${citySegment(parts.city, parts.state)}/${addressSegment(parts, options)}`;
+}
+
+export interface ParsedPropertyPath {
+  readonly houseNumber: string;
+  /** Street words after the house number, space-separated, lower case. */
+  readonly street: string;
+  readonly streetLine: string;
+  readonly unitNumber: string | null;
+  /** Lower-case city words, as `normalizePlaceName` yields them. */
+  readonly city: string;
+  readonly state: string;
+  readonly zip: string | null;
+}
+
+/** Parses the two path segments. `null` when they do not form a property path. */
+export function parsePropertyPath(citySeg: string, addressSeg: string): ParsedPropertyPath | null {
+  const cityLower = citySeg.toLowerCase();
+  const addressLower = addressSeg.toLowerCase();
+  if (!isCitySegment(cityLower) || !isAddressSegment(addressLower)) return null;
+
+  const cityTokens = cityLower.split('-');
+  const tokens = addressLower.split('-').filter(Boolean);
+  let zip: string | null = null;
+  if (tokens.length > 0 && ZIP5.test(tokens[tokens.length - 1] as string)) {
+    zip = tokens.pop() as string;
+  }
+  if (tokens.length < cityTokens.length + 2) return null;
+  const tail = tokens.slice(tokens.length - cityTokens.length);
+  if (tail.join('-') !== cityTokens.join('-')) return null;
+  const head = tokens.slice(0, tokens.length - cityTokens.length);
+
+  const houseNumber = head[0] as string;
+  if (!HOUSE_NUMBER.test(houseNumber)) return null;
+
+  let streetTokens = head.slice(1);
+  let unitNumber: string | null = null;
+  for (let i = streetTokens.length - 2; i >= 1; i -= 1) {
+    if (UNIT_KEYWORDS.has(streetTokens[i] as string)) {
+      unitNumber = streetTokens.slice(i + 1).join('-');
+      streetTokens = streetTokens.slice(0, i);
+      break;
+    }
+  }
+  if (streetTokens.length === 0) return null;
+
+  const street = streetTokens.join(' ');
+  return {
+    houseNumber,
+    street,
+    streetLine: `${houseNumber} ${street}`,
+    unitNumber,
+    city: cityTokens.slice(0, -1).join(' '),
+    state: (cityTokens[cityTokens.length - 1] as string).toUpperCase(),
+    zip,
+  };
+}
