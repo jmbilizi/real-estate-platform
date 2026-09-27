@@ -6,8 +6,9 @@ import { getListingsMeta, searchListings } from '@/lib/api/listings';
 import type { ListingSearchQuery } from '@/lib/api/listings';
 import type { ListingCardRow } from '@/lib/types';
 import Link from 'next/link';
-import { useApp } from '@/lib/context';
 import { BRAND } from '@/lib/brand';
+
+type ListingType = 'sale' | 'rent';
 
 /** Small — a carousel shows a handful of cards, never a full results page. */
 const CAROUSEL_PAGE_SIZE = 8;
@@ -126,31 +127,46 @@ function useDatasetListingCount(): number | null {
   return count;
 }
 
-export default function HomePageContent() {
-  const { listingType } = useApp();
-  const datasetCount = useDatasetListingCount();
-
+/**
+ * Fetches one listing-type group's four carousels against a fixed `type`.
+ *
+ * The home page body always shows both sale and rent, so this hook is called exactly twice at the
+ * top level (never conditionally) — once per fixed type — rather than once against a variable
+ * global toggle.
+ */
+function useCarouselGroup(type: ListingType) {
   // `listingType=all` (the default when this query key is omitted) already excludes sold rows
   // server-side, so there is deliberately no separate "sold" carousel here.
   const featured = useCarouselListings({
     sort: 'recommended',
-    listingType,
+    listingType: type,
     pageSize: CAROUSEL_PAGE_SIZE,
   });
-  // Replaces the old separate forSale/forRent filters: only one of the two ever rendered at a
-  // time (gated on the current tab), so this fetches just the one the tab needs instead of both.
-  const primary = useCarouselListings({ listingType, pageSize: CAROUSEL_PAGE_SIZE });
+  const primary = useCarouselListings({ listingType: type, pageSize: CAROUSEL_PAGE_SIZE });
   const luxury = useCarouselListings({
-    listingType,
-    minPrice: listingType === 'sale' ? LUXURY_SALE_MIN_PRICE : LUXURY_RENT_MIN_PRICE,
+    listingType: type,
+    minPrice: type === 'sale' ? LUXURY_SALE_MIN_PRICE : LUXURY_RENT_MIN_PRICE,
     sort: 'price-desc',
     pageSize: CAROUSEL_PAGE_SIZE,
   });
   const recent = useCarouselListings({
     sort: 'newest',
-    listingType,
+    listingType: type,
     pageSize: CAROUSEL_PAGE_SIZE,
   });
+
+  return { featured, primary, luxury, recent };
+}
+
+/** Renders one listing-type group's four carousel rows against its own fixed `type`. */
+function CarouselGroup({
+  type,
+  group,
+}: {
+  type: ListingType;
+  group: ReturnType<typeof useCarouselGroup>;
+}) {
+  const { featured, primary, luxury, recent } = group;
 
   // A carousel with nothing to show — failed state shows retry, loading shows shimmer skeleton.
   const showFeatured = featured.loading || featured.listings.length > 0 || featured.failed;
@@ -168,9 +184,9 @@ export default function HomePageContent() {
        */}
       {showFeatured && (
         <ListingRow
-          title={listingType === 'sale' ? 'Featured homes for sale' : 'Featured homes for rent'}
+          title={type === 'sale' ? 'Featured homes for sale' : 'Featured homes for rent'}
           subtitle="Featured and sponsored listings, shown first"
-          href={listingType === 'sale' ? '/homes-for-sale' : '/homes-for-rent'}
+          href={type === 'sale' ? '/homes-for-sale' : '/homes-for-rent'}
           listings={featured.listings}
           loading={featured.loading}
           failed={featured.failed}
@@ -181,13 +197,13 @@ export default function HomePageContent() {
 
       {showPrimary && (
         <ListingRow
-          title={listingType === 'sale' ? 'Popular homes for sale' : 'Available homes for rent'}
+          title={type === 'sale' ? 'Popular homes for sale' : 'Available homes for rent'}
           subtitle={
-            listingType === 'sale'
+            type === 'sale'
               ? 'Trending in Washington, Baltimore, and Northern Virginia'
               : 'Move-in ready across the DMV'
           }
-          href={listingType === 'sale' ? '/homes-for-sale' : '/homes-for-rent'}
+          href={type === 'sale' ? '/homes-for-sale' : '/homes-for-rent'}
           listings={primary.listings}
           loading={primary.loading}
           failed={primary.failed}
@@ -195,6 +211,59 @@ export default function HomePageContent() {
           max={7}
         />
       )}
+
+      {showLuxury && (
+        <ListingRow
+          title={type === 'sale' ? 'Luxury collection for sale' : 'Luxury homes for rent'}
+          subtitle={
+            type === 'sale'
+              ? 'Standout homes for sale priced $1M and above'
+              : 'High-end homes for rent priced $5K and above'
+          }
+          href={
+            type === 'sale'
+              ? `/homes-for-sale?minPrice=${LUXURY_SALE_MIN_PRICE}`
+              : `/homes-for-rent?minPrice=${LUXURY_RENT_MIN_PRICE}`
+          }
+          listings={luxury.listings}
+          loading={luxury.loading}
+          failed={luxury.failed}
+          onRetry={luxury.refetch}
+          max={7}
+        />
+      )}
+
+      {showRecent && (
+        <ListingRow
+          title={type === 'sale' ? 'Just listed homes for sale' : 'Just listed homes for rent'}
+          subtitle={
+            type === 'sale'
+              ? "Fresh inventory you don't want to miss"
+              : 'Newly available homes for rent'
+          }
+          href={type === 'sale' ? '/homes-for-sale' : '/homes-for-rent'}
+          listings={recent.listings}
+          loading={recent.loading}
+          failed={recent.failed}
+          onRetry={recent.refetch}
+          max={7}
+        />
+      )}
+    </>
+  );
+}
+
+export default function HomePageContent() {
+  const datasetCount = useDatasetListingCount();
+
+  // The home page body is a fixed pair of groups, not a mirror of the search bar's toggle — see
+  // #361. Each group fetches its own fixed type, independent of any search-bar state.
+  const saleGroup = useCarouselGroup('sale');
+  const rentGroup = useCarouselGroup('rent');
+
+  return (
+    <>
+      <CarouselGroup type="sale" group={saleGroup} />
 
       {/*
        * "Popular areas across the DMV" replaced: ranking areas by popularity edges toward
@@ -209,45 +278,7 @@ export default function HomePageContent() {
         max={6}
       />
 
-      {showLuxury && (
-        <ListingRow
-          title={listingType === 'sale' ? 'Luxury collection for sale' : 'Luxury homes for rent'}
-          subtitle={
-            listingType === 'sale'
-              ? 'Standout homes for sale priced $1M and above'
-              : 'High-end homes for rent priced $5K and above'
-          }
-          href={
-            listingType === 'sale'
-              ? `/homes-for-sale?minPrice=${LUXURY_SALE_MIN_PRICE}`
-              : `/homes-for-rent?minPrice=${LUXURY_RENT_MIN_PRICE}`
-          }
-          listings={luxury.listings}
-          loading={luxury.loading}
-          failed={luxury.failed}
-          onRetry={luxury.refetch}
-          max={7}
-        />
-      )}
-
-      {showRecent && (
-        <ListingRow
-          title={
-            listingType === 'sale' ? 'Just listed homes for sale' : 'Just listed homes for rent'
-          }
-          subtitle={
-            listingType === 'sale'
-              ? "Fresh inventory you don't want to miss"
-              : 'Newly available homes for rent'
-          }
-          href={listingType === 'sale' ? '/homes-for-sale' : '/homes-for-rent'}
-          listings={recent.listings}
-          loading={recent.loading}
-          failed={recent.failed}
-          onRetry={recent.refetch}
-          max={7}
-        />
-      )}
+      <CarouselGroup type="rent" group={rentGroup} />
 
       <section className="mx-auto mt-16 max-w-[1760px] px-6 pb-16 sm:px-10 lg:px-20">
         <div className="overflow-hidden rounded-xl bg-surface-alt text-ink border border-surface-border">

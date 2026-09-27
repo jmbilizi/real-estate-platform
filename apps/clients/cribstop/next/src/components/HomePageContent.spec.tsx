@@ -8,8 +8,18 @@ jest.mock('@/lib/api/listings', () => ({
   getListingsMeta: jest.fn(),
 }));
 
+// HomePageContent itself no longer reads useApp()/listingType (#361) — but ListingCard, rendered
+// inside every carousel row, still calls useApp() for save/unsave. Without this mock the cards
+// throw for lack of a react-redux Provider, unrelated to what this file is testing.
+// `listingType` is mutable here so a test can simulate CompactSearchBar's toggle writing it and
+// confirm HomePageContent's output is unaffected either way.
+let mockedGlobalListingType: 'sale' | 'rent' = 'sale';
 jest.mock('@/lib/context', () => ({
-  useApp: () => ({ listingType: 'sale', toggleSave: jest.fn(), isSaved: () => false }),
+  useApp: () => ({
+    listingType: mockedGlobalListingType,
+    toggleSave: jest.fn(),
+    isSaved: () => false,
+  }),
 }));
 
 const mockedSearchListings = searchListings as jest.Mock;
@@ -38,6 +48,7 @@ describe('HomePageContent', () => {
   afterEach(() => {
     mockedSearchListings.mockReset();
     mockedGetListingsMeta.mockReset();
+    mockedGlobalListingType = 'sale';
   });
 
   describe('hero statistics', () => {
@@ -86,17 +97,68 @@ describe('HomePageContent', () => {
     });
   });
 
+  describe('sale and rent groups (#361)', () => {
+    it('renders both a for-sale and a for-rent carousel group on load', async () => {
+      mockedSearchListings.mockResolvedValue(envelope([aListingCardRow()]));
+
+      render(<HomePageContent />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Featured homes for sale')).toBeInTheDocument();
+        expect(screen.getByText('Featured homes for rent')).toBeInTheDocument();
+      });
+      expect(screen.getByText('Popular homes for sale')).toBeInTheDocument();
+      expect(screen.getByText('Available homes for rent')).toBeInTheDocument();
+      expect(screen.getByText('Luxury collection for sale')).toBeInTheDocument();
+      expect(screen.getByText('Luxury homes for rent')).toBeInTheDocument();
+      expect(screen.getByText('Just listed homes for sale')).toBeInTheDocument();
+      expect(screen.getByText('Just listed homes for rent')).toBeInTheDocument();
+    });
+
+    it('fires 8 carousel queries — 4 fixed to sale, 4 fixed to rent', async () => {
+      mockedSearchListings.mockResolvedValue(envelope([aListingCardRow()]));
+
+      render(<HomePageContent />);
+
+      await waitFor(() => expect(mockedSearchListings).toHaveBeenCalledTimes(8));
+      const listingTypesQueried = mockedSearchListings.mock.calls.map(
+        ([query]: [{ listingType?: string }]) => query.listingType,
+      );
+      expect(listingTypesQueried.filter((t) => t === 'sale')).toHaveLength(4);
+      expect(listingTypesQueried.filter((t) => t === 'rent')).toHaveLength(4);
+    });
+
+    it('is unaffected by the search bar writing a global listingType (CompactSearchBar toggle)', async () => {
+      // CompactSearchBar's "What" panel writes useApp()'s global listingType on every click (#361
+      // Problem). Simulate the search bar having just set it to 'rent' and confirm the home page
+      // body still renders its fixed sale/rent split rather than mirroring the toggle.
+      mockedGlobalListingType = 'rent';
+      mockedSearchListings.mockResolvedValue(envelope([aListingCardRow()]));
+
+      render(<HomePageContent />);
+
+      await waitFor(() => expect(mockedSearchListings).toHaveBeenCalledTimes(8));
+      const listingTypesQueried = mockedSearchListings.mock.calls.map(
+        ([query]: [{ listingType?: string }]) => query.listingType,
+      );
+      expect(listingTypesQueried.filter((t) => t === 'sale')).toHaveLength(4);
+      expect(listingTypesQueried.filter((t) => t === 'rent')).toHaveLength(4);
+      expect(screen.getByText('Featured homes for sale')).toBeInTheDocument();
+      expect(screen.getByText('Featured homes for rent')).toBeInTheDocument();
+    });
+  });
+
   it('fires every carousel query in parallel rather than one after another', () => {
     mockedSearchListings.mockReturnValue(new Promise(() => {})); // never resolves
     render(<HomePageContent />);
 
     // All carousel queries are issued on the same tick — none is gated behind another's result.
-    expect(mockedSearchListings.mock.calls.length).toBeGreaterThanOrEqual(4);
+    expect(mockedSearchListings.mock.calls.length).toBeGreaterThanOrEqual(8);
   });
 
   it('renders one carousel once its own fetch resolves, even while others are still pending', async () => {
-    mockedSearchListings.mockImplementation((query: { sort?: string }) => {
-      if (query.sort === 'recommended') {
+    mockedSearchListings.mockImplementation((query: { sort?: string; listingType?: string }) => {
+      if (query.sort === 'recommended' && query.listingType === 'sale') {
         return Promise.resolve(
           envelope([aListingCardRow({ id: 'featured-1', title: 'Featured Row' })]),
         );
@@ -110,11 +172,11 @@ describe('HomePageContent', () => {
   });
 
   it('degrades gracefully when one carousel fails — the rest of the page still renders', async () => {
-    mockedSearchListings.mockImplementation((query: { sort?: string }) => {
-      if (query.sort === 'recommended') {
+    mockedSearchListings.mockImplementation((query: { sort?: string; listingType?: string }) => {
+      if (query.sort === 'recommended' && query.listingType === 'sale') {
         return Promise.reject(new Error('featured carousel is down'));
       }
-      if (query.sort === 'newest') {
+      if (query.sort === 'newest' && query.listingType === 'sale') {
         return Promise.resolve(
           envelope([aListingCardRow({ id: 'recent-1', title: 'Recent Row' })]),
         );
