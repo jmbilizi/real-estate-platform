@@ -11,26 +11,16 @@ jest.mock('@/lib/api/listings', () => ({
 // HomePageContent itself does not read useApp()/listingType (#361, #392) — but ListingCard,
 // rendered inside every carousel row, still calls useApp() for save/unsave. Without this mock the
 // cards throw for lack of a react-redux Provider, unrelated to what this file is testing.
-let mockedGlobalListingType: 'sale' | 'rent' = 'sale';
 jest.mock('@/lib/context', () => ({
   useApp: () => ({
-    listingType: mockedGlobalListingType,
+    listingType: 'sale',
     toggleSave: jest.fn(),
     isSaved: () => false,
   }),
 }));
 
-// Overrides the app-wide `useSearchParams` stub from jest.setup.ts (which always returns an empty
-// URLSearchParams) so the `?show=` tests can drive it. Mirrors NavBar.spec.tsx's own override.
-let mockedSearchParams = '';
-jest.mock('next/navigation', () => ({
-  useSearchParams: () => new URLSearchParams(mockedSearchParams),
-}));
-
 const mockedSearchListings = searchListings as jest.Mock;
 const mockedGetListingsMeta = getListingsMeta as jest.Mock;
-
-const INTENT_STORAGE_KEY = 'cribstop:home-intent';
 
 function envelope(rows: ReturnType<typeof aListingCardRow>[], total = rows.length) {
   return {
@@ -43,17 +33,11 @@ function envelope(rows: ReturnType<typeof aListingCardRow>[], total = rows.lengt
   };
 }
 
-/**
- * The most recent query with a `status` filter is the "Coming soon" row — every other row omits
- * it. The *most recent* one, not the first: the row re-fetches once the intent control's effect
- * resolves a `?show=` override or a persisted `localStorage` pick, after firing its initial
- * "Both" query on first paint.
- */
-function comingSoonQuery(): { listingType?: string } | undefined {
-  const calls = mockedSearchListings.mock.calls.filter(
-    ([q]) => (q as { status?: string[] }).status,
-  );
-  return calls.at(-1)?.[0];
+/** Every "Coming soon" query, in call order — one per section (#398 always renders both). */
+function comingSoonQueries(): { listingType?: string }[] {
+  return mockedSearchListings.mock.calls
+    .map(([q]) => q as { status?: string[]; listingType?: string })
+    .filter((q) => q.status);
 }
 
 describe('HomePageContent', () => {
@@ -69,86 +53,42 @@ describe('HomePageContent', () => {
   afterEach(() => {
     mockedSearchListings.mockReset();
     mockedGetListingsMeta.mockReset();
-    mockedGlobalListingType = 'sale';
-    mockedSearchParams = '';
     window.localStorage.clear();
   });
 
-  describe('intent control (#392)', () => {
-    it('defaults to "Both": queries the coming-soon row with "all" and shows both budget sub-rows', async () => {
+  describe('sale/rent sections (#398)', () => {
+    it('always shows both a for-sale and a for-rent coming-soon section, sale first by default', async () => {
       render(<HomePageContent />);
 
-      const both = await screen.findByRole('radio', { name: 'Both' });
-      expect(both).toHaveAttribute('aria-checked', 'true');
-
-      await waitFor(() => expect(comingSoonQuery()).toMatchObject({ listingType: 'all' }));
-      expect(await screen.findByText('Homes for sale')).toBeInTheDocument();
-      expect(screen.getByText('Homes for rent')).toBeInTheDocument();
+      await waitFor(() => expect(comingSoonQueries().length).toBe(2));
+      expect(comingSoonQueries()[0]).toMatchObject({ listingType: 'sale' });
+      expect(comingSoonQueries()[1]).toMatchObject({ listingType: 'rent' });
     });
 
-    it('honors a `?show=` override on load, overriding the "Both" default', async () => {
-      mockedSearchParams = 'show=rent';
-      render(<HomePageContent />);
-
-      const rentOption = await screen.findByRole('radio', { name: 'For rent' });
-      await waitFor(() => expect(rentOption).toHaveAttribute('aria-checked', 'true'));
-      await waitFor(() => expect(comingSoonQuery()).toMatchObject({ listingType: 'rent' }));
-      expect(await screen.findByText('Homes for rent')).toBeInTheDocument();
-      expect(screen.queryByText('Homes for sale')).not.toBeInTheDocument();
-    });
-
-    it('is keyboard operable and exposes role="radiogroup" with a visible focus ring', async () => {
-      render(<HomePageContent />);
-      const group = await screen.findByRole('radiogroup');
-      expect(group).toBeInTheDocument();
-
-      const forSale = screen.getByRole('radio', { name: 'For sale' });
-      expect(forSale.tagName).toBe('BUTTON');
-      forSale.focus();
-      expect(forSale).toHaveFocus();
-      expect(forSale.className).toMatch(/focus-visible:ring/);
-    });
-
-    it('persists a manual pick to localStorage and reads it back on the next visit', async () => {
-      const { unmount } = render(<HomePageContent />);
-      const forSale = await screen.findByRole('radio', { name: 'For sale' });
-      fireEvent.click(forSale);
-
-      await waitFor(() => expect(window.localStorage.getItem(INTENT_STORAGE_KEY)).toBe('sale'));
-      unmount();
-
-      mockedSearchListings.mockClear();
-      render(<HomePageContent />);
-      const forSaleAgain = await screen.findByRole('radio', { name: 'For sale' });
-      await waitFor(() => expect(forSaleAgain).toHaveAttribute('aria-checked', 'true'));
-      await waitFor(() => expect(comingSoonQuery()).toMatchObject({ listingType: 'sale' }));
-      expect(screen.getByText('Homes for sale')).toBeInTheDocument();
-      expect(screen.queryByText('Homes for rent')).not.toBeInTheDocument();
-    });
-
-    it('each mode issues the expected listingType on the coming-soon row', async () => {
-      render(<HomePageContent />);
-      await waitFor(() => expect(comingSoonQuery()).toMatchObject({ listingType: 'all' }));
-
-      mockedSearchListings.mockClear();
-      fireEvent.click(await screen.findByRole('radio', { name: 'For rent' }));
-      await waitFor(() => expect(comingSoonQuery()).toMatchObject({ listingType: 'rent' }));
-
-      mockedSearchListings.mockClear();
-      fireEvent.click(await screen.findByRole('radio', { name: 'For sale' }));
-      await waitFor(() => expect(comingSoonQuery()).toMatchObject({ listingType: 'sale' }));
-    });
-
-    it('never reads or writes the search bar’s global listingType (#361)', async () => {
-      mockedGlobalListingType = 'rent';
-      render(<HomePageContent />);
-
-      // Still defaults to "Both" — untouched by the search bar's own state.
-      expect(await screen.findByRole('radio', { name: 'Both' })).toHaveAttribute(
-        'aria-checked',
-        'true',
+    it('orders rent first when the visitor last searched rent', async () => {
+      // Call order stays sale-then-rent (each side mounts once and never re-fetches on reorder —
+      // React matches the two coming-soon rows by their `side` key, not by JSX position). The
+      // visible order is what #398 asks for, so this checks the rendered "See all" link order.
+      window.localStorage.setItem(
+        'recentSearches',
+        JSON.stringify([{ display_name: 'Baltimore, MD', listingType: 'rent' }]),
       );
-      await waitFor(() => expect(comingSoonQuery()).toMatchObject({ listingType: 'all' }));
+
+      const { container } = render(<HomePageContent />);
+
+      await waitFor(() => {
+        const links = Array.from(container.querySelectorAll('a[aria-label="See all"]'));
+        expect(links.length).toBeGreaterThanOrEqual(2);
+        expect(links[0].getAttribute('href')).toContain('homes-for-rent');
+        expect(links[1].getAttribute('href')).toContain('homes-for-sale');
+      });
+    });
+
+    it('renders no selection control for intent', async () => {
+      render(<HomePageContent />);
+      await screen.findByText('What your budget buys');
+      expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
+      expect(screen.queryByRole('radio')).not.toBeInTheDocument();
     });
   });
 
@@ -163,10 +103,10 @@ describe('HomePageContent', () => {
 
       render(<HomePageContent />);
 
-      expect(await screen.findByText('Coming soon')).toBeInTheDocument();
+      expect(await screen.findAllByText('Coming soon')).toHaveLength(2);
       expect(
-        await screen.findByText('3,041 listed early. Showings have not started.'),
-      ).toBeInTheDocument();
+        (await screen.findAllByText('3,041 listed early. Showings have not started.')).length,
+      ).toBeGreaterThan(0);
     });
 
     it('is hidden when the total is 0 and the fetch has settled', async () => {
@@ -208,12 +148,21 @@ describe('HomePageContent', () => {
       );
     });
 
-    it('renders one sub-row per listing type when the intent is "Both"', async () => {
+    it('renders one sub-row per listing type', async () => {
       render(<HomePageContent />);
 
       await screen.findByText('What your budget buys');
       expect(screen.getByText('Homes for sale')).toBeInTheDocument();
       expect(screen.getByText('Homes for rent')).toBeInTheDocument();
+    });
+
+    it('uses the canonical selected-chip style, not a brand color', async () => {
+      render(<HomePageContent />);
+      await screen.findByText('What your budget buys');
+
+      const active = await screen.findByRole('button', { name: 'Under $300K' });
+      expect(active.className).toContain('border-ink bg-ink text-white');
+      expect(active.className).not.toContain('brand-900');
     });
 
     it('keeps the chips live and shows a plain empty message for a band with no matches', async () => {
@@ -239,9 +188,9 @@ describe('HomePageContent', () => {
       mockedSearchListings.mockReturnValue(new Promise(() => {})); // never resolves
       render(<HomePageContent />);
 
-      // Coming soon + the sale and rent budget sub-rows — three independent fetches on the same
-      // tick, none gated behind another's result.
-      expect(mockedSearchListings.mock.calls.length).toBeGreaterThanOrEqual(3);
+      // Sale + rent coming-soon, sale + rent budget sub-rows — four independent fetches on the
+      // same tick, none gated behind another's result.
+      expect(mockedSearchListings.mock.calls.length).toBeGreaterThanOrEqual(4);
     });
 
     it('renders one row once its own fetch resolves, even while others are still pending', async () => {
@@ -255,7 +204,9 @@ describe('HomePageContent', () => {
       render(<HomePageContent />);
 
       await waitFor(() =>
-        expect(screen.getByText('7 listed early. Showings have not started.')).toBeInTheDocument(),
+        expect(
+          screen.getAllByText('7 listed early. Showings have not started.').length,
+        ).toBeGreaterThan(0),
       );
     });
 
@@ -269,10 +220,9 @@ describe('HomePageContent', () => {
 
       render(<HomePageContent />);
 
-      await waitFor(() => expect(screen.getByText('Coming soon')).toBeInTheDocument());
-      expect(screen.getByText('Failed to load')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Tap to retry' })).toBeInTheDocument();
-      // The rest of the page is unaffected by the failed row.
+      await waitFor(() => expect(screen.getAllByText('Failed to load').length).toBeGreaterThan(0));
+      expect(screen.getAllByRole('button', { name: 'Tap to retry' }).length).toBeGreaterThan(0);
+      // The rest of the page is unaffected by the failed rows.
       expect(await screen.findByText('What your budget buys')).toBeInTheDocument();
       expect(screen.getByText('Homes for sale')).toBeInTheDocument();
     });

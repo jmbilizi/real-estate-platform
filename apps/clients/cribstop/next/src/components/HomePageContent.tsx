@@ -1,6 +1,5 @@
 'use client';
-import { Suspense, useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import ListingRow from '@/components/ListingRow';
 import NeighborhoodRow from '@/components/NeighborhoodRow';
 import { getListingsMeta, searchListings } from '@/lib/api/listings';
@@ -11,21 +10,44 @@ import { formatRelativeTime } from '@/lib/format';
 import Link from 'next/link';
 import { BRAND } from '@/lib/brand';
 
-/** The three choices the intent control offers. Never `'sold'` — this page only browses. */
-const INTENT_VALUES = ['sale', 'rent', 'all'] as const;
-type Intent = (typeof INTENT_VALUES)[number];
+/** The one distinction this page ever browses by. Never `'all'`/`'sold'` — #398 always shows both
+ *  sale and rent, each as its own section. */
+type ListingSide = 'sale' | 'rent';
 
 /** Small — a carousel shows a handful of cards, never a full results page. */
 const CAROUSEL_PAGE_SIZE = 8;
 
-const INTENT_STORAGE_KEY = 'cribstop:home-intent';
+/**
+ * The recent-search storage `CompactSearchBar` already writes (`recentSearches`). #398 reuses this
+ * key rather than adding one: an entry now carries the listing type active at the time of that
+ * search, so the newest entry says which side the visitor searched last.
+ */
+/** Only `'rent'` flips the order; a last search of `'sale'`, `'all'`, `'sold'`, or none at all
+ *  all fall to the "otherwise sale first" branch `useSectionOrder` applies below. */
+function lastSearchedSide(): ListingSide | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const stored = window.localStorage.getItem('recentSearches');
+    if (!stored) return null;
+    const parsed = JSON.parse(stored);
+    const latest = Array.isArray(parsed) ? parsed[0] : null;
+    return latest?.listingType === 'rent' ? 'rent' : null;
+  } catch {
+    return null;
+  }
+}
 
-/** `?show=` spelling → the internal `listingType` value (#392). Values drawn from `INTENT_VALUES`
- *  — an entry pointing outside that set fails to compile. */
-const SHOW_PARAM_TO_INTENT: Record<string, Intent> = { sale: 'sale', rent: 'rent', both: 'all' };
-
-function isIntent(value: string | null): value is Intent {
-  return (INTENT_VALUES as readonly string[]).includes(value ?? '');
+/**
+ * The page's two sections, ordered by the visitor's own last search. `['sale', 'rent']` until the
+ * client reads `localStorage` (server render has none), so the order can shift once on mount — the
+ * same trade-off the removed intent control made.
+ */
+function useSectionOrder(): [ListingSide, ListingSide] {
+  const [rentFirst, setRentFirst] = useState(false);
+  useEffect(() => {
+    setRentFirst(lastSearchedSide() === 'rent');
+  }, []);
+  return rentFirst ? ['rent', 'sale'] : ['sale', 'rent'];
 }
 
 type CarouselState = {
@@ -158,27 +180,19 @@ function useListingsMeta(): ListingsMeta | null {
  * (`searchTargetUrl`) so the segment, the `type=all` override and the extra query merge exactly
  * the way every other search link on the site does, rather than a second implementation of it.
  */
-function searchHref(intent: Intent, params: Record<string, string>): string {
+function searchHref(side: ListingSide, params: Record<string, string>): string {
   return searchTargetUrl(
     { kind: 'area', params: new URLSearchParams() },
-    intent,
+    side,
     new URLSearchParams(params),
   );
 }
 
 /**
- * Reads `?show=` reactively — a `<Suspense>`-wrapped leaf per the same pattern as
- * `AuthModalListener` (`useSearchParams` unwinds to a Suspense boundary during static generation).
- * A plain `window.location.search` read on mount would miss a client-side navigation to a new
- * `?show=` on this same route; `useSearchParams` re-renders this leaf whenever it changes.
+ * A pill-shaped toggle button, used by the budget chips. Active state matches the app's one
+ * canonical selected-chip style (`FilterModalContent`'s Home Type / Amenities chips): black fill,
+ * not a brand color — #398 found the previous `brand-900` fill read as an off-theme dark red.
  */
-function ShowParamWatcher({ onChange }: { onChange: (show: string | null) => void }) {
-  const show = useSearchParams().get('show');
-  useEffect(() => onChange(show), [show, onChange]);
-  return null;
-}
-
-/** A pill-shaped toggle button, shared by the intent control's radios and the budget chips. */
 function PillButton({
   active,
   className = '',
@@ -187,9 +201,9 @@ function PillButton({
   return (
     <button
       type="button"
-      className={`rounded-full border px-4 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 ${
+      className={`inline-flex min-h-11 items-center justify-center rounded-full border px-4 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 ${
         active
-          ? 'border-brand-900 bg-brand-900 text-white'
+          ? 'border-ink bg-ink text-white'
           : 'border-surface-border bg-white text-ink hover:bg-surface-alt'
       } ${className}`}
       {...props}
@@ -197,83 +211,12 @@ function PillButton({
   );
 }
 
-/**
- * The intent control (#392): "For sale" / "For rent" / "Both", default "Both".
- *
- * Body-owned and independent of the search bar's own `listingType` (#361 rule) — it never reads or
- * writes `useApp()`. `?show=` overrides the default and stays reactive to it; a manual pick
- * persists to `localStorage` and is read back on a later visit that carries no `?show=`.
- */
-function useIntentControl(showParam: string | null): [Intent, (next: Intent) => void] {
-  const [intent, setIntent] = useState<Intent>('all');
-  // Whether the persisted value has already been consulted — read at most once, so a manual pick
-  // (or a `?show=` that later clears) can never be clobbered by a stale replay of this effect.
-  const [consultedStorage, setConsultedStorage] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const fromQuery = SHOW_PARAM_TO_INTENT[showParam ?? ''];
-    if (fromQuery) {
-      setIntent(fromQuery);
-      return;
-    }
-    if (consultedStorage) return;
-    setConsultedStorage(true);
-    try {
-      const persisted = window.localStorage.getItem(INTENT_STORAGE_KEY);
-      if (isIntent(persisted)) setIntent(persisted);
-    } catch {
-      // Chrome, not a task: private-browsing / disabled storage just keeps the default.
-    }
-  }, [showParam, consultedStorage]);
-
-  const choose = (next: Intent) => {
-    setIntent(next);
-    try {
-      window.localStorage.setItem(INTENT_STORAGE_KEY, next);
-    } catch {
-      // Chrome, not a task.
-    }
-  };
-
-  return [intent, choose];
-}
-
-const INTENT_OPTIONS: { value: Intent; label: string }[] = [
-  { value: 'sale', label: 'For sale' },
-  { value: 'rent', label: 'For rent' },
-  { value: 'all', label: 'Both' },
-];
-
-function IntentControl({ value, onChange }: { value: Intent; onChange: (next: Intent) => void }) {
-  return (
-    <div
-      role="radiogroup"
-      aria-label="Show homes for sale, for rent, or both"
-      className="inline-flex gap-1 rounded-full border border-surface-border bg-white p-1 shadow-sm"
-    >
-      {INTENT_OPTIONS.map((option) => (
-        <PillButton
-          key={option.value}
-          active={value === option.value}
-          role="radio"
-          aria-checked={value === option.value}
-          onClick={() => onChange(option.value)}
-        >
-          {option.label}
-        </PillButton>
-      ))}
-    </div>
-  );
-}
-
 /** "Coming soon" (#392): listed early, showings not started. Hidden while empty and settled. */
-function ComingSoonRow({ intent }: { intent: Intent }) {
+function ComingSoonRow({ side }: { side: ListingSide }) {
   const { listings, total, loading, failed, refetch } = useCarouselListings({
     status: ['Coming Soon'],
     sort: 'newest',
-    listingType: intent,
+    listingType: side,
     pageSize: CAROUSEL_PAGE_SIZE,
   });
 
@@ -286,12 +229,13 @@ function ComingSoonRow({ intent }: { intent: Intent }) {
       subtitle={
         loading ? undefined : `${total.toLocaleString()} listed early. Showings have not started.`
       }
-      href={searchHref(intent, { status: 'Coming Soon' })}
+      href={searchHref(side, { status: 'Coming Soon' })}
       listings={listings}
       loading={loading}
       failed={failed}
       onRetry={refetch}
       max={7}
+      sectionClassName="px-6 pt-3 sm:px-10 lg:px-20"
     />
   );
 }
@@ -370,7 +314,7 @@ function BudgetSubRow({ type, bands }: { type: 'sale' | 'rent'; bands: BudgetBan
           failed={failed}
           onRetry={refetch}
           max={7}
-          sectionClassName="pt-4"
+          sectionClassName="pt-2"
           titleClassName="font-display text-lg font-bold tracking-tight"
         />
       )}
@@ -378,16 +322,18 @@ function BudgetSubRow({ type, bands }: { type: 'sale' | 'rent'; bands: BudgetBan
   );
 }
 
-/** "What your budget buys" (#392): one sub-row per listing type visible under the intent control. */
-function BudgetSection({ intent }: { intent: Intent }) {
+/** "What your budget buys" (#392): both sub-rows, ordered by the visitor's last search (#398). */
+function BudgetSection({ order }: { order: [ListingSide, ListingSide] }) {
+  const bands: Record<ListingSide, BudgetBand[]> = { sale: SALE_BANDS, rent: RENT_BANDS };
   return (
-    <section className="mx-auto mt-12 max-w-[1760px] px-6 sm:px-10 lg:px-20">
+    <section className="mx-auto mt-8 max-w-[1760px] px-6 sm:px-10 lg:px-20">
       <h2 className="font-display text-xl font-bold tracking-tight sm:text-2xl">
         What your budget buys
       </h2>
-      <div className="mt-6 flex flex-col gap-10">
-        {intent !== 'rent' && <BudgetSubRow key="sale" type="sale" bands={SALE_BANDS} />}
-        {intent !== 'sale' && <BudgetSubRow key="rent" type="rent" bands={RENT_BANDS} />}
+      <div className="mt-4 flex flex-col gap-6">
+        {order.map((side) => (
+          <BudgetSubRow key={side} type={side} bands={bands[side]} />
+        ))}
       </div>
     </section>
   );
@@ -399,7 +345,7 @@ function TrustBlock() {
   const lastUpdated = meta?.dataUpdatedAt != null ? formatRelativeTime(meta.dataUpdatedAt) : null;
 
   return (
-    <section className="mx-auto mt-16 max-w-[1760px] px-6 pb-16 sm:px-10 lg:px-20">
+    <section className="mx-auto mt-10 max-w-[1760px] px-6 pb-10 sm:px-10 lg:px-20">
       <div className="overflow-hidden rounded-xl bg-surface-alt text-ink border border-surface-border">
         <div className="grid gap-8 px-8 py-12 sm:grid-cols-[1.4fr_1fr] sm:items-center sm:px-12 sm:py-16 lg:px-16">
           <div>
@@ -459,20 +405,13 @@ function TrustBlock() {
 }
 
 export default function HomePageContent() {
-  const [showParam, setShowParam] = useState<string | null>(null);
-  const [intent, setIntent] = useIntentControl(showParam);
+  const order = useSectionOrder();
 
   return (
     <>
-      <Suspense fallback={null}>
-        <ShowParamWatcher onChange={setShowParam} />
-      </Suspense>
-
-      <div className="mx-auto flex max-w-[1760px] justify-center px-6 pt-8 sm:px-10 lg:justify-start lg:px-20">
-        <IntentControl value={intent} onChange={setIntent} />
-      </div>
-
-      <ComingSoonRow intent={intent} />
+      {order.map((side) => (
+        <ComingSoonRow key={side} side={side} />
+      ))}
 
       {/*
        * "Popular areas across the DMV" replaced: ranking areas by popularity edges toward
@@ -491,7 +430,7 @@ export default function HomePageContent() {
         max={6}
       />
 
-      <BudgetSection intent={intent} />
+      <BudgetSection order={order} />
 
       <TrustBlock />
     </>

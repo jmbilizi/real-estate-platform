@@ -849,20 +849,25 @@ export default function CompactSearchBar({
   const panelRef = useRef<HTMLDivElement | null>(null);
   // Load recent searches from localStorage
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('recentSearches');
-      if (stored) {
-        setRecentSearches(JSON.parse(stored));
-      }
+    if (typeof window === 'undefined') return;
+    const stored = localStorage.getItem('recentSearches');
+    if (!stored) return;
+    try {
+      setRecentSearches(JSON.parse(stored));
+    } catch {
+      // Corrupted value (hand-edited, or written by an older format) — keep the empty default.
     }
   }, []);
 
-  // Save recent searches to localStorage
+  // Save recent searches to localStorage. Carries the listing type active for this search
+  // (#398) so the home page can order its sale/rent sections by the visitor's last search,
+  // reusing this key rather than a second one.
   const addRecentSearch = (item: any) => {
     if (!item) return;
+    const entry = { ...item, listingType: searchListingType };
     setRecentSearches((prev) => {
-      const filtered = prev.filter((s) => s.display_name !== item.display_name);
-      const updated = [item, ...filtered].slice(0, 5);
+      const filtered = prev.filter((s) => s.display_name !== entry.display_name);
+      const updated = [entry, ...filtered].slice(0, 5);
       if (typeof window !== 'undefined') {
         localStorage.setItem('recentSearches', JSON.stringify(updated));
       }
