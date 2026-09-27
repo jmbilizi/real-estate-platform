@@ -1,0 +1,162 @@
+name: Dev Bright Diagnostics
+
+# #378: engineers have no dev kubeconfig. This workflow is the only access path to dev's
+# Postgres and the bright-sync-worker admin endpoint, using the `KUBECONFIG` secret already
+# scoped to the GitHub `dev` environment for deploy-k8s-resources.yml.
+#
+# `workflow_dispatch` only runs from the default branch (dev). The first run needs this file
+# merged first.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Diagnostic action"
+        required: true
+        type: choice
+        default: report
+        options:
+          - report
+          - backfill
+          - reconcile
+          - audit
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostics:
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - name: Install kubectl
+        run: |
+          KUBECTL_VERSION=$(curl -Ls https://dl.k8s.io/release/stable.txt || echo "v1.31.0")
+          curl -LO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl get ns default >/dev/null
+
+      # ── report: read-only, no admin token needed ─────────────────────────────────────────
+      - name: Report — image tags and pod status
+        if: inputs.action == 'report'
+        run: |
+          {
+            echo "## Bright diagnostics: images and pods"
+            echo ""
+            echo "### Image tags"
+            echo '```'
+            kubectl get deployment property-service -n default \
+              -o jsonpath='property-service: {.spec.template.spec.containers[0].image}{"\n"}'
+            kubectl get deployment bright-sync-worker -n default \
+              -o jsonpath='bright-sync-worker: {.spec.template.spec.containers[0].image}{"\n"}'
+            echo '```'
+            echo ""
+            echo "### Pod restarts and age"
+            echo '```'
+            kubectl get pods -n default -l 'app in (property-service,bright-sync-worker)' \
+              -o custom-columns='POD:.metadata.name,RESTARTS:.status.containerStatuses[0].restartCount,AGE:.metadata.creationTimestamp'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Wait for postgres-0
+        if: inputs.action == 'report'
+        run: kubectl wait pod/postgres-0 -n default --for=condition=Ready --timeout=120s
+
+      - name: Report — bright_sync_runs and listing_search_v
+        if: inputs.action == 'report'
+        run: |
+          # DB owner comes from the pod's own env, never a workflow secret — the same
+          # pattern deploy-k8s-resources.yml uses to run init-databases.sh / sync-passwords.sh.
+          run_query() {
+            kubectl exec postgres-0 -n default -- \
+              psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname property_db -c "$1"
+          }
+          exec_query() {
+            kubectl exec postgres-0 -n default -- bash -c \
+              'psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname property_db -c "'"$1"'"'
+          }
+          {
+            echo ""
+            echo "### Last 15 bright_sync_runs"
+            echo '```'
+            exec_query "select mode, status, started_at, finished_at, counts, error from bright_sync_runs order by started_at desc limit 15;"
+            echo '```'
+            echo ""
+            echo "### listing_search_v: DC sale counts by status"
+            echo '```'
+            exec_query "select status, count(*) from listing_search_v where lower(city)='"'"'washington'"'"' and state='"'"'DC'"'"' and listing_type='"'"'sale'"'"' group by status order by status;"
+            echo '```'
+            echo ""
+            echo "### listing_search_v: whole-table counts by status"
+            echo '```'
+            exec_query "select status, count(*) from listing_search_v group by status order by status;"
+            echo '```'
+            echo ""
+            echo "### is_sample = true listings, by source and listing_type"
+            echo '```'
+            exec_query "select source, listing_type, count(*) from listings where is_sample = true group by source, listing_type order by source, listing_type;"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report — bright-sync-worker log tail
+        if: inputs.action == 'report'
+        run: |
+          {
+            echo ""
+            echo "### bright-sync-worker log tail (200 lines)"
+            echo '```'
+            kubectl logs deployment/bright-sync-worker -n default --tail=200
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ── backfill / reconcile / audit: call the admin endpoint on property-service ───────
+      - name: Mask admin token
+        if: inputs.action != 'report'
+        run: |
+          TOKEN=$(kubectl get secret bright-mls-secret -n default -o jsonpath='{.data.BRIGHT_ADMIN_TOKEN}' | base64 -d)
+          echo "::add-mask::$TOKEN"
+          echo "BRIGHT_ADMIN_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+
+      - name: Port-forward to property-service
+        if: inputs.action != 'report'
+        run: |
+          kubectl port-forward svc/property-service-svc 3002:3002 -n default &
+          echo "PF_PID=$!" >> "$GITHUB_ENV"
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3002/health >/dev/null && break
+            sleep 1
+          done
+
+      - name: Trigger Bright sync run
+        if: inputs.action != 'report'
+        run: |
+          MODE="${{ inputs.action }}"
+          RESPONSE=$(curl -sS -w '\n%{http_code}' -X POST http://localhost:3002/admin/bright/sync \
+            -H "Authorization: Bearer $BRIGHT_ADMIN_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"mode\":\"$MODE\"}")
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          STATUS=$(echo "$RESPONSE" | tail -n 1)
+          {
+            echo "## Bright sync run requested: $MODE"
+            echo ""
+            echo "HTTP status: $STATUS"
+            echo '```json'
+            echo "$BODY"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$STATUS" -ge 300 ]; then
+            echo "Admin endpoint returned $STATUS" >&2
+            exit 1
+          fi
+
+      - name: Stop port-forward
+        if: always() && inputs.action != 'report'
+        run: |
+          [ -n "$PF_PID" ] && kill "$PF_PID" 2>/dev/null || true
