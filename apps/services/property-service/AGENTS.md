@@ -398,7 +398,9 @@ a size variant. A record must be identifiably a photo by `MediaType` or URL exte
 - **These files are immutable once merged.** `pgmigrations` keys applied migrations by **filename**,
   and there is no checksum check, so editing an applied migration diverges a fresh database from a
   deployed one with no error. New migrations only ever append — `checkOrder` is on, so a migration
-  hand-numbered _below_ an already-applied one throws forever.
+  hand-numbered _below_ an already-applied one throws forever. CI's `tools` job runs
+  `tools/validation/migration-order.js` on every PR and fails it before merge (#405); `pre-push`
+  runs the same guard on a feature branch.
 - **Recovery after an in-place edit is to drop and recreate `property_db`** as `postgres_sa`, then
   let the next deploy's `migrate` initContainer rebuild it. That is the minimum blast radius, and it
   is the same operation a persistent dev/test environment needs — so it is the one worth rehearsing
