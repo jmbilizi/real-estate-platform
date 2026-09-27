@@ -2,11 +2,14 @@ import React, { useRef, useState } from 'react';
 import { DropdownContainer } from '@/components/DropdownContainer';
 import type { SearchFilters } from '@/lib/types';
 
+// #391. "Newest" means the listing itself is new to the market, matching Zillow/Redfin — not the
+// last time the feed touched the record, which is what the API's own `newest` sort orders by. The
+// API keeps `newest` for that modification-time case; this dropdown never offers it.
 const SORT_OPTIONS: { value: SearchFilters['sort']; label: string }[] = [
   { value: 'recommended', label: 'Recommended' },
   { value: 'price-desc', label: 'Highest price' },
   { value: 'price-asc', label: 'Lowest price' },
-  { value: 'newest', label: 'Newest' },
+  { value: 'newly-listed', label: 'Newest' },
 ];
 
 export default function SortDropdown({
