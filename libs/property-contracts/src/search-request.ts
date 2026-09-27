@@ -98,6 +98,13 @@ const queryPageSize = z
 
 const queryBoolean = z.enum(['true', 'false']).transform((value) => value === 'true');
 
+/** Same reasoning as `queryPage`/`queryPageSize`: the bound is a regex, not a `.pipe()` `.max()`,
+ *  because `z.toJSONSchema({io: 'input'})` cannot see past a `.pipe()`. */
+const queryDaysUpTo30 = z
+  .string()
+  .regex(/^([1-9]|[12][0-9]|30)$/, 'must be a whole number from 1 to 30')
+  .transform(Number);
+
 /**
  * Vertex cap for a client-sent boundary polygon, checked BEFORE the character cap below so the
  * error names the actual problem (a huge polygon) rather than a generic length overflow.
@@ -344,8 +351,7 @@ export const searchRequestSchema = z.strictObject({
   amenities: amenityList.optional(),
   // #391. A listing with no `listed_at` never matches — the same "never a false match" rule
   // minPrice/maxPrice already apply to a seller-suppressed price.
-  listedWithinDays: queryInt
-    .pipe(z.number().int().min(1).max(30))
+  listedWithinDays: queryDaysUpTo30
     .optional()
     .describe(
       'Whole number, 1 to 30. Matches a listing whose listed_at is within this many days of now. ' +

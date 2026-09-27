@@ -382,7 +382,9 @@ describe('openHouse=true (soonest UPCOMING occurrence only)', () => {
 });
 
 describe('pagination is a total order', () => {
-  const SORTS = ['recommended', 'newest', 'price-asc', 'price-desc'] as const;
+  // Every sort the contract publishes, not a hand-copied list — a sort added there is covered here
+  // with no edit needed.
+  const SORTS = SORT_VALUES;
   // Small enough to force at least two pages against the fixture dataset, without depending on
   // (or asserting) any particular absolute count.
   const PAGE_SIZE = 5;

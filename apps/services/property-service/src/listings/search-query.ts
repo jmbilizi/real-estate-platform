@@ -226,7 +226,7 @@ export function buildSearchQuery(request: SearchRequest): {
   // needed, same reasoning `minPrice`/`maxPrice` document above.
   if (typeof request.listedWithinDays === 'number') {
     conditions.push(
-      `v.listed_at >= now() - (${bind(request.listedWithinDays)} || ' days')::interval`,
+      `v.listed_at >= now() - make_interval(days => ${bind(request.listedWithinDays)}::int)`,
     );
   }
   if (request.priceReduced === true) {

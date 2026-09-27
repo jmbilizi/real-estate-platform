@@ -1609,7 +1609,7 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
             "required": false,
             "schema": {
               "description": "Whole number, 1 to 30. Matches a listing whose listed_at is within this many days of now. A listing with no listed_at (the feed carried no list date) never matches.",
-              "pattern": "^\\d+$",
+              "pattern": "^([1-9]|[12][0-9]|30)$",
               "type": "string",
             },
           },
@@ -1948,7 +1948,7 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
             "required": false,
             "schema": {
               "description": "Whole number, 1 to 30. Matches a listing whose listed_at is within this many days of now. A listing with no listed_at (the feed carried no list date) never matches.",
-              "pattern": "^\\d+$",
+              "pattern": "^([1-9]|[12][0-9]|30)$",
               "type": "string",
             },
           },

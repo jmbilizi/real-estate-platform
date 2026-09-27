@@ -147,6 +147,23 @@ describe('buildSearchQuery', () => {
     expect(params).toContainEqual(['Pool', 'Garage']);
   });
 
+  it('orders newly-listed by listed_at, nulls last, with an id tiebreaker (#391)', () => {
+    expect(SORT_ORDERS['newly-listed']).toBe('v.listed_at DESC NULLS LAST, v.id DESC');
+  });
+
+  it('filters listedWithinDays with make_interval, so a listing with no listed_at never matches (#391)', () => {
+    const { where, params } = build({ listedWithinDays: '7' });
+    expect(where).toContain('v.listed_at >= now() - make_interval(days => ');
+    expect(params).toContainEqual(7);
+    expect(build().where).not.toContain('listed_at');
+  });
+
+  it('restricts to price cuts only when priceReduced is true (#391)', () => {
+    expect(build({ priceReduced: 'true' }).where).toContain('v.price_reduced');
+    expect(build({ priceReduced: 'false' }).where).not.toContain('v.price_reduced');
+    expect(build().where).not.toContain('v.price_reduced');
+  });
+
   it('binds exactly one parameter per placeholder', () => {
     const { where, params } = build({ zip: '22314', beds: '3', amenities: 'Pool' });
     const placeholders = new Set(where.match(/\$\d+/g) ?? []);
