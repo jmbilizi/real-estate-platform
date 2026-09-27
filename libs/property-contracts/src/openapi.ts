@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { idSchema } from './common';
 import { listingCardSchema, listingsEnvelopeSchema } from './listing-card';
 import { listingDetailSchema } from './listing-detail';
+import { propertyLookupResponseSchema, propertyPageSchema } from './property-page';
 import { listingInquiryRequestSchema, listingInquiryResponseSchema } from './listing-inquiry';
 import { listingsMetaSchema } from './listings-meta';
 import { errorBodySchema } from './errors';
@@ -69,6 +70,8 @@ function componentSchemas() {
   registry.add(listingCardSchema, { id: 'ListingCardRow' });
   registry.add(listingsEnvelopeSchema, { id: 'ListingsEnvelope' });
   registry.add(listingDetailSchema, { id: 'ListingDetail' });
+  registry.add(propertyPageSchema, { id: 'PropertyPage' });
+  registry.add(propertyLookupResponseSchema, { id: 'PropertyLookupResponse' });
   registry.add(listingsMetaSchema, { id: 'ListingsMeta' });
   registry.add(listingInquiryRequestSchema, { id: 'ListingInquiryRequest' });
   registry.add(listingInquiryResponseSchema, { id: 'ListingInquiryResponse' });
@@ -232,6 +235,69 @@ export function toOpenApiDocument() {
             },
             '404': {
               description: 'No such listing.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/listings/{id}/page': {
+        get: {
+          operationId: 'getPropertyPage',
+          summary: 'Property page for one listing, in any market status',
+          description:
+            'Returns the market status and the display flags the page renders. An Off market ' +
+            'listing returns the property record only, with detail null.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: schema(idSchema, 'input') },
+          ],
+          responses: {
+            '200': {
+              description: 'The property page.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/PropertyPage' } },
+              },
+            },
+            '404': {
+              description: 'No such listing.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/properties/lookup': {
+        get: {
+          operationId: 'lookupProperty',
+          summary: 'Resolve a property path to listings',
+          description:
+            'Takes the two segments of /<city>-<st>/<address-slug>. On a local miss the ' +
+            'service reads that one address from the MLS across all statuses, then resolves again.',
+          parameters: [
+            { name: 'city', in: 'query', required: true, schema: { type: 'string' } },
+            { name: 'address', in: 'query', required: true, schema: { type: 'string' } },
+          ],
+          responses: {
+            '200': {
+              description: 'One or more matches. More than one means the path is ambiguous.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/PropertyLookupResponse' },
+                },
+              },
+            },
+            '400': {
+              description: 'The segments do not form a property path.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '404': {
+              description: 'No property at that address.',
               content: {
                 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
               },

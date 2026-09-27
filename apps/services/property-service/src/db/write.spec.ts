@@ -3,6 +3,7 @@ import { join } from 'path';
 import {
   applyTerminalCorrection,
   insertMedia,
+  markListingsOffMarket,
   Queryable,
   softDeleteListings,
   upsertListingBySourceKey,
@@ -400,6 +401,46 @@ describe('softDeleteListings', () => {
   it('does nothing and issues no query for an empty list', async () => {
     const { client, queries } = fakeClient([]);
     expect(await softDeleteListings(client, [], 'reconciliation')).toBe(0);
+    expect(queries).toEqual([]);
+  });
+});
+
+describe('markListingsOffMarket (#349)', () => {
+  function fakeClient(returnedRows: Record<string, unknown>[]): {
+    client: Queryable;
+    queries: RecordedQuery[];
+  } {
+    const queries: RecordedQuery[] = [];
+    const client: Queryable = {
+      query: (text: string, values?: unknown[]) => {
+        queries.push({ text, values });
+        return Promise.resolve({ rows: text.includes('UPDATE listings') ? returnedRows : [] });
+      },
+    };
+    return { client, queries };
+  }
+
+  it('keeps the row, sets Off Market with no consumer status, and audits a status change', async () => {
+    const { client, queries } = fakeClient([
+      { id: 'listing-1', property_id: 'property-1', is_sample: false },
+    ]);
+
+    expect(await markListingsOffMarket(client, ['listing-1', 'listing-2'], 'absent')).toBe(1);
+
+    const update = queries.find((q) => q.text.includes('UPDATE listings'));
+    expect(update?.text).toContain("status = 'Off Market', consumer_status = NULL");
+    expect(update?.text).toContain('NOT s.is_terminal');
+    expect(update?.text).not.toContain('deleted_at = now()');
+    expect(update?.text).toContain("l.status <> 'Off Market'");
+    const event = queries.find((q) => q.text.includes('INSERT INTO listing_events'));
+    expect(event?.values).toEqual(
+      expect.arrayContaining(['listing-1', 'property-1', 'status_change', 'Off Market', 'absent']),
+    );
+  });
+
+  it('issues no query for an empty list', async () => {
+    const { client, queries } = fakeClient([]);
+    expect(await markListingsOffMarket(client, [], 'absent')).toBe(0);
     expect(queries).toEqual([]);
   });
 });

@@ -11,7 +11,7 @@
 import type { PoolClient } from 'pg';
 
 import { getPool } from '../../db/pool';
-import { softDeleteListings } from '../../db/write';
+import { markListingsOffMarket } from '../../db/write';
 import {
   type BrightPage,
   createTokenProvider,
@@ -239,7 +239,8 @@ function createDeps(
             { feed, soldDisplayDelayDays: settings.soldDisplayDelayDays, statuses },
           );
           // A held listing whose current record no longer maps must not stay advertised with the
-          // old data. Fail closed: take it down. It comes back when the record maps again.
+          // old data. It becomes Off market (#349): its page keeps the address and the property
+          // record only. It comes back when the record maps again.
           const keyed = rejected.filter(
             (r): r is { listingKey: string; reason: string } => r.listingKey !== null,
           );
@@ -251,7 +252,7 @@ function createDeps(
           for (const { listingKey, reason } of keyed) {
             const id = held.get(listingKey);
             if (id !== undefined) {
-              takenDown += await softDeleteListings(
+              takenDown += await markListingsOffMarket(
                 client,
                 [id],
                 `Bright sync: record now rejected (${reason})`,
@@ -297,7 +298,7 @@ function createDeps(
         const client = await pool.connect();
         try {
           total += await inTransaction(client, () =>
-            softDeleteListings(client, listingIds.slice(start, start + CHUNK), reason),
+            markListingsOffMarket(client, listingIds.slice(start, start + CHUNK), reason),
           );
         } finally {
           client.release();

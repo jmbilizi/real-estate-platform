@@ -32,6 +32,8 @@ interface Props {
   listing: ListingDetailView;
   /** Called when the back button is pressed */
   onClose?: () => void;
+  /** #349: the property page passes its market status ('Under Contract' has no consumer status). */
+  statusLabel?: string;
 }
 
 /**
@@ -59,7 +61,7 @@ type SimilarState =
   | { status: 'loading'; results: [] }
   | { status: 'ready' | 'error'; results: ListingCardRow[] };
 
-export default function ListingDetailContent({ listing, onClose }: Props) {
+export default function ListingDetailContent({ listing, onClose, statusLabel }: Props) {
   const { toggleSave, isSaved } = useApp();
   const { toast } = useToast();
   const saved = isSaved(listing.id);
@@ -266,7 +268,9 @@ export default function ListingDetailContent({ listing, onClose }: Props) {
             {/* Badges + price + address */}
             <div className={`${PANEL} p-6`}>
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="badge bg-surface-border text-ink">{listing.status}</span>
+                <span className="badge bg-surface-border text-ink">
+                  {statusLabel ?? listing.status}
+                </span>
                 {listing.isSample && <SampleBadge />}
                 {listing.sponsored && <SponsoredBadge />}
                 {listing.priceReduced && (

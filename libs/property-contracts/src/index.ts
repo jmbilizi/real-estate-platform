@@ -6,3 +6,5 @@ export * from './listing-inquiry';
 export * from './listings-meta';
 export * from './errors';
 export * from './openapi';
+export * from './address-slug';
+export * from './property-page';

@@ -4,12 +4,14 @@ import {
   exceedsResultWindow,
   idSchema,
   NOT_FOUND_BODY,
+  propertyLookupRequestSchema,
   RESULT_WINDOW_EXCEEDED_BODY,
   type SearchRequest,
   searchRequestSchema,
 } from '@cribstop/property-contracts';
 import type { GalleryLoader } from './gallery-loader';
 import { resolvedSearchRequest } from './on-demand';
+import { type AddressFetcher, findPropertyPage, lookupProperty } from './property-page';
 import {
   findBrightListingKeys,
   findListingById,
@@ -133,7 +135,11 @@ const asyncRoute =
     handler(req, res).catch(next);
   };
 
-export function createListingsRouter(pool: ReadPool, galleryLoader?: GalleryLoader): Router {
+export function createListingsRouter(
+  pool: ReadPool,
+  galleryLoader?: GalleryLoader,
+  addressFetcher?: AddressFetcher,
+): Router {
   const router = Router();
 
   router.get(
@@ -230,6 +236,45 @@ export function createListingsRouter(pool: ReadPool, galleryLoader?: GalleryLoad
         }
       }
       res.set('Cache-Control', cacheControl).status(200).json(detail);
+    }),
+  );
+
+  // #349. The property page in any market status. The same one 404 as `/listings/:id`.
+  router.get(
+    '/listings/:id/page',
+    asyncRoute(async (req: Request, res: Response) => {
+      const id = idSchema.safeParse(req.params.id);
+      const page = id.success ? await findPropertyPage(pool, id.data) : null;
+      if (page === null) {
+        notFound(res);
+        return;
+      }
+      res.set('Cache-Control', LISTINGS_CACHE_CONTROL).status(200).json(page);
+    }),
+  );
+
+  // #349. Resolves `/<city>-<st>/<address-slug>` to listings, reading the MLS once on a miss.
+  router.get(
+    '/properties/lookup',
+    asyncRoute(async (req: Request, res: Response) => {
+      const parsed = propertyLookupRequestSchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json(invalidRequest('Query parameters city and address are required.'));
+        return;
+      }
+      const result = await lookupProperty(pool, parsed.data, addressFetcher);
+      if (result.kind === 'invalid') {
+        res.status(400).json(invalidRequest('The city and address do not form a property path.'));
+        return;
+      }
+      if (result.kind === 'not-found') {
+        notFound(res);
+        return;
+      }
+      res
+        .set('Cache-Control', LISTINGS_CACHE_CONTROL)
+        .status(200)
+        .json({ matches: result.matches });
     }),
   );
 

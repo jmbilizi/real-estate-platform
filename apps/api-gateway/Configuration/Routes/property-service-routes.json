@@ -78,6 +78,56 @@
       }
     },
     {
+      "UpstreamPathTemplate": "/property/listings/{id}/page",
+      "UpstreamHttpMethod": ["GET"],
+      "DownstreamPathTemplate": "/listings/{id}/page",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "property-service-svc",
+          "Port": 3002
+        }
+      ],
+      "Priority": 1,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 90
+      },
+      "QoSOptions": {
+        "Timeout": 3000,
+        "MinimumThroughput": 5,
+        "SamplingDuration": 30000,
+        "BreakDuration": 5000
+      }
+    },
+    {
+      "UpstreamPathTemplate": "/property/properties/lookup",
+      "UpstreamHttpMethod": ["GET"],
+      "DownstreamPathTemplate": "/properties/lookup",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "property-service-svc",
+          "Port": 3002
+        }
+      ],
+      "Priority": 1,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 30
+      },
+      "QoSOptions": {
+        "Timeout": 8000,
+        "MinimumThroughput": 5,
+        "SamplingDuration": 30000,
+        "BreakDuration": 5000
+      }
+    },
+    {
       "UpstreamPathTemplate": "/property/listings/{id}/inquiries",
       "UpstreamHttpMethod": ["POST"],
       "DownstreamPathTemplate": "/listings/{id}/inquiries",

@@ -1,21 +1,10 @@
 import type { Metadata } from 'next';
+import { permanentRedirect } from 'next/navigation';
 import StandaloneListingView from '@/components/listing/StandaloneListingView';
 import { loadListingState } from '@/lib/api/listings-server';
+import { loadPropertyPage } from '@/lib/api/property-page';
 import { listingMetadata, unresolvedListingMetadata } from '@/lib/listing-metadata';
-
-/**
- * The origin to publish in the canonical link and `og:url`, or null when we have none to vouch
- * for.
- *
- * Only `SITE_ORIGIN` counts. The request's `Host` / `X-Forwarded-Host` is client-controlled and
- * the ingress rule for this app is a catch-all, so a crafted header would otherwise publish a real
- * listing's canonical URL on an attacker's domain — to the one audience that acts on it, a
- * crawler. `SITE_ORIGIN` is not wired per environment yet, so today both tags are simply omitted.
- */
-function publishableOrigin(): string | null {
-  const configured = process.env.SITE_ORIGIN?.trim();
-  return configured ? configured.replace(/\/$/, '') : null;
-}
+import { publishableOrigin } from '@/lib/publishable-origin';
 
 /** The listing's link preview. The rules it obeys live in `lib/listing-metadata`. */
 export async function generateMetadata({
@@ -66,6 +55,17 @@ export async function generateMetadata({
  */
 export default async function ListingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+
+  /**
+   * The property page (#349) is the canonical URL for a listing whose address resolves to one.
+   * `path` is null only when the seller withheld the address, in which case there is no such URL
+   * and this route keeps rendering below, exactly as it always has.
+   */
+  const propertyPage = await loadPropertyPage(id);
+  if (propertyPage.status === 'ready' && propertyPage.page.path !== null) {
+    permanentRedirect(propertyPage.page.path);
+  }
+
   const initialState = await loadListingState(id);
 
   /**

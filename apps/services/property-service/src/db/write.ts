@@ -416,6 +416,47 @@ export async function softDeleteListings(
   return rows.length;
 }
 
+/**
+ * #349. The sync's replacement for a take-down: the listing keeps its row and its property page,
+ * and changes to `Off Market`. `consumer_status` becomes NULL, so `listing_search_v` excludes it
+ * and `listing_detail_v` shows only the address and the property record. `Off Market` is not
+ * terminal, so a record that maps again re-snapshots the listing.
+ *
+ * A terminal listing (Closed, Withdrawn, Expired, Canceled) is skipped: its status is frozen with
+ * its snapshot, and only `applyTerminalCorrection()` changes it. Idempotent: a listing already
+ * `Off Market` is skipped. Caller supplies the transaction, so the UPDATE and its
+ * `listing_events` row commit together.
+ */
+export async function markListingsOffMarket(
+  client: Queryable,
+  listingIds: readonly string[],
+  reason: string,
+): Promise<number> {
+  if (listingIds.length === 0) {
+    return 0;
+  }
+  const { rows } = await client.query(
+    `UPDATE listings l SET status = 'Off Market', consumer_status = NULL
+       FROM listing_statuses s
+      WHERE s.code = l.status AND NOT s.is_terminal
+        AND l.id = ANY($1::uuid[]) AND l.deleted_at IS NULL AND l.status <> 'Off Market'
+      RETURNING l.id, l.property_id, l.is_sample`,
+    [listingIds],
+  );
+  for (const row of rows) {
+    await appendEvent(client, {
+      listing_id: row.id as string,
+      property_id: row.property_id as string,
+      event_type: 'status_change',
+      occurred_at: new Date().toISOString(),
+      new_status: 'Off Market',
+      note: reason,
+      is_sample: row.is_sample === true,
+    });
+  }
+  return rows.length;
+}
+
 /** Append-only history. Never updated, never deleted. */
 async function appendEvent(
   client: Queryable,

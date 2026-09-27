@@ -793,6 +793,8 @@ describe('GET /openapi.json', () => {
       '/listings/meta',
       '/listings/{id}',
       '/listings/{id}/inquiries',
+      '/listings/{id}/page',
+      '/properties/lookup',
     ]);
   });
 

@@ -63,7 +63,14 @@ interface ParsedFilter {
   readonly key: number | null;
   /** True when Bright would answer 400 rather than run the query. */
   readonly rejected: boolean;
+  /** #349 address lookup: `<field> eq '<v>' and ... startswith(UnparsedAddress,'<prefix>')`. */
+  readonly address?: {
+    readonly equals: readonly (readonly [string, string])[];
+    readonly prefix: string;
+  };
 }
+
+const ADDRESS_FILTER = /^((?:\w+ eq '[^']*' and )+)startswith\(UnparsedAddress,'((?:[^']|'')*)'\)$/;
 
 export const OR_REJECTED_ERROR =
   'SubSystem(SearchEngine) = 20015 - Query Too Complex - Message = OR Expressions allowed in top ' +
@@ -80,6 +87,21 @@ export const OR_REJECTED_ERROR =
 function parseFilter(filter: string): ParsedFilter {
   if (/\bor\b/i.test(filter)) {
     return { cursorField: '', instant: Number.NaN, keyField: null, key: null, rejected: true };
+  }
+
+  const address = ADDRESS_FILTER.exec(filter);
+  if (address !== null) {
+    const equals = [...(address[1] ?? '').matchAll(/(\w+) eq '([^']*)'/g)].map(
+      (match) => [match[1] ?? '', match[2] ?? ''] as const,
+    );
+    return {
+      cursorField: '',
+      instant: Number.NaN,
+      keyField: null,
+      key: null,
+      rejected: false,
+      address: { equals, prefix: (address[2] ?? '').replace(/''/g, "'") },
+    };
   }
 
   const simple = /^(\w+) ge (\S+)$/.exec(filter);
@@ -100,6 +122,15 @@ function parseFilter(filter: string): ParsedFilter {
 }
 
 function matches(record: Record<string, unknown>, filter: ParsedFilter): boolean {
+  if (filter.address !== undefined) {
+    // Bright matches City case-insensitively. The other fields compare exactly.
+    const placeMatches = filter.address.equals.every(([field, value]) =>
+      field === 'City'
+        ? String(record[field] ?? '').toLowerCase() === value.toLowerCase()
+        : String(record[field] ?? '') === value,
+    );
+    return placeMatches && String(record.UnparsedAddress ?? '').startsWith(filter.address.prefix);
+  }
   const at = Date.parse(String(record[filter.cursorField] ?? ''));
   if (Number.isNaN(at)) {
     return false;

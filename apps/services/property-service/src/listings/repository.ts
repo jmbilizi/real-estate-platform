@@ -7,7 +7,12 @@ import {
   type SearchRequest,
 } from '@cribstop/property-contracts';
 import type { AddressClassification } from '../db/mls-attributes';
-import { ATTRIBUTE_SELECT, LISTING_CARD_SELECT, LISTING_DETAIL_SELECT } from './columns';
+import {
+  ATTRIBUTE_SELECT,
+  LISTING_CARD_SELECT,
+  LISTING_DETAIL_SELECT,
+  PROPERTY_RECORD_SELECT,
+} from './columns';
 import { buildSearchQuery } from './search-query';
 import {
   type ListingCardDbRow,
@@ -413,6 +418,78 @@ export async function listBrightListingIdentities(
     [params.statusCodes, params.city ?? null, params.state ?? null, params.zip ?? null],
   );
   return result.rows.map((row) => ({ id: row.id, sourceListingKey: row.source_listing_key }));
+}
+
+/** One `listing_detail_v` row (#349). The view masks the address and decides displayability. */
+export interface PropertyRecordDbRow {
+  id: string;
+  property_id: string;
+  unit_id: string | null;
+  listing_data_displayable: boolean;
+  market_status: string;
+  address_street: string | null;
+  unit_number: string | null;
+  city: string;
+  state: string;
+  zip: string;
+  property_type: string;
+  beds: number | null;
+  baths: number | string | null;
+  sqft: number | null;
+  lot_sqft: number | null;
+  year_built: number | null;
+  source: string;
+  is_sample: boolean;
+  last_updated: string | Date;
+}
+
+/**
+ * One listing in any market status (#349), from `listing_detail_v`. The view already reduces an
+ * Off market row to the address and the property record. `null` for an unknown, deleted or
+ * internet-suppressed id, so all three share the one 404.
+ */
+export async function findPropertyRecord(
+  pool: ReadClient,
+  id: string,
+): Promise<PropertyRecordDbRow | null> {
+  const result = await pool.query<PropertyRecordDbRow>(
+    `SELECT ${PROPERTY_RECORD_SELECT} FROM listing_detail_v d WHERE d.id = $1`,
+    [id],
+  );
+  return result.rows[0] ?? null;
+}
+
+/**
+ * Listings at one house number in one city and state (#349), optionally one ZIP. The caller
+ * compares the normalized street and unit. A seller-withheld address has a NULL `address_street`,
+ * so it never matches: a lookup must not confirm an address the seller withheld.
+ */
+export async function findAddressCandidates(
+  pool: ReadClient,
+  params: {
+    readonly city: string;
+    readonly state: string;
+    readonly houseNumber: string;
+    readonly zip: string | null;
+  },
+): Promise<PropertyRecordDbRow[]> {
+  const result = await pool.query<PropertyRecordDbRow>(
+    `SELECT ${PROPERTY_RECORD_SELECT}
+       FROM listing_detail_v d
+      WHERE regexp_replace(lower(d.city), '[^a-z0-9]+', ' ', 'g') = $1
+        AND d.state = $2
+        AND d.address_street ILIKE $3
+        AND ($4::text IS NULL OR d.zip = $4)
+      LIMIT 500`,
+    [
+      params.city.toLowerCase(),
+      params.state.toUpperCase(),
+      // A prefix, not `<n> %`, so `118-120 Main St` is a candidate for `118-120-main-st`.
+      `${params.houseNumber.replace(/[%_\\]/g, '')}%`,
+      params.zip,
+    ],
+  );
+  return result.rows;
 }
 
 export { NOT_FOUND_BODY };
