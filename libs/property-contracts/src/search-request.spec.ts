@@ -1,6 +1,7 @@
 import {
   DEFAULT_STATUS_FILTER,
   exceedsResultWindow,
+  isDefaultStatusFilter,
   MAX_RESULT_OFFSET,
   maxReachablePage,
   PAGE_SIZE_DEFAULT,
@@ -8,6 +9,21 @@ import {
   resultOffsetFor,
   searchRequestSchema,
 } from './search-request';
+
+describe('isDefaultStatusFilter', () => {
+  it('is true for the default set, any order, any duplicates', () => {
+    expect(isDefaultStatusFilter(['Active', 'Coming Soon'])).toBe(true);
+    expect(isDefaultStatusFilter(['Coming Soon', 'Active'])).toBe(true);
+    expect(isDefaultStatusFilter(['Active', 'Active', 'Coming Soon'])).toBe(true);
+  });
+
+  it('is false for any real narrowing', () => {
+    expect(isDefaultStatusFilter(['Active'])).toBe(false);
+    expect(isDefaultStatusFilter(['Pending'])).toBe(false);
+    expect(isDefaultStatusFilter(['Active', 'Coming Soon', 'Pending'])).toBe(false);
+    expect(isDefaultStatusFilter([])).toBe(false);
+  });
+});
 
 describe('searchRequestSchema', () => {
   it('defaults to all listing types and a page size of 20', () => {

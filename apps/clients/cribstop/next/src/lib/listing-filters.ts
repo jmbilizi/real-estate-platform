@@ -1,5 +1,6 @@
 import {
   AMENITIES,
+  isDefaultStatusFilter,
   LISTING_TYPES,
   PROPERTY_TYPES,
   SORT_VALUES,
@@ -154,7 +155,11 @@ export function parseFiltersFromSearchParams(params: URLSearchParams): SearchFil
         ),
     ),
   ];
-  if (statuses.length > 0) filters.status = statuses;
+  // Collapsed back to absent when it spells out the default explicitly (`?status=Active,Coming
+  // Soon`), matching the modal's own invariant: a present `status` must always be a real
+  // narrowing, or `countActiveFilters` reports "1 filter applied" for a bookmarked URL that
+  // narrows nothing.
+  if (statuses.length > 0 && !isDefaultStatusFilter(statuses)) filters.status = statuses;
 
   filters.minPrice = int('minPrice');
   filters.maxPrice = int('maxPrice');

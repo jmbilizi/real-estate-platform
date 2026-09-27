@@ -215,6 +215,22 @@ export const DEFAULT_STATUS_FILTER: readonly (typeof STATUS_FILTER_VALUES)[numbe
 ];
 
 /**
+ * True when `status` holds exactly `DEFAULT_STATUS_FILTER`'s distinct values, any order, any
+ * duplicates — i.e. the caller never narrowed this filter.
+ *
+ * The single shared definition: `property-service`'s search query and the web client's URL parser
+ * and filter modal all need this same comparison, and each keeping its own copy is exactly the
+ * kind of drift a second implementation of one predicate always risks.
+ */
+export function isDefaultStatusFilter(status: readonly string[]): boolean {
+  const distinct = new Set(status);
+  return (
+    distinct.size === DEFAULT_STATUS_FILTER.length &&
+    DEFAULT_STATUS_FILTER.every((value) => distinct.has(value))
+  );
+}
+
+/**
  * Any of the listed statuses matches. Omission means `DEFAULT_STATUS_FILTER`. An explicit empty
  * value (`?status=`) means it too.
  *

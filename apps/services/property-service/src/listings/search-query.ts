@@ -1,4 +1,4 @@
-import type { SearchRequest } from '@cribstop/property-contracts';
+import { isDefaultStatusFilter, type SearchRequest } from '@cribstop/property-contracts';
 import { visibleListingTypesFor } from './sold-gate';
 
 /**
@@ -59,13 +59,20 @@ export function buildSearchQuery(request: SearchRequest): {
   // condition is present on every ordinary search. It excludes Under Contract listings by
   // default with no special case here.
   //
-  // Skipped for `listingType: 'sold'`. A sold row's `v.status` can only ever be `Sold` (the
-  // generated `listing_type` column, migration 1785801600003_create-listings.js). `Sold` is not a
-  // value `STATUS_FILTER_VALUES` accepts (#33). ANDing the default status in would zero the Sold
-  // tab permanently. Asking for `listingType=sold` is itself the status choice for that tab; see
-  // `sold-gate.ts`, THE sold gate, for the visibility rule this defers to.
-  if (request.status.length > 0 && request.listingType !== 'sold') {
-    conditions.push(`v.status = ANY(${bind([...request.status])})`);
+  // Skipped for `listingType: 'sold'`, but ONLY while `status` is untouched. A sold row's
+  // `v.status` can only ever be `Sold` (the generated `listing_type` column, migration
+  // 1785801600003_create-listings.js). `Sold` is not a value `STATUS_FILTER_VALUES` accepts
+  // (#33). ANDing the contract's default status in would zero the Sold tab permanently, for a
+  // filter nobody touched. An EXPLICIT status alongside `listingType=sold` is a different
+  // request — Active/Coming Soon/Pending asked for on top of Sold — and must still apply, which
+  // correctly zeroes that specific combination rather than silently dropping the filter (the same
+  // rule `query`/`zip`/`street` follow above: never drop a filter the caller actually asked for).
+  if (request.status.length > 0) {
+    const skipForUnnarrowedSold =
+      request.listingType === 'sold' && isDefaultStatusFilter(request.status);
+    if (!skipForUnnarrowedSold) {
+      conditions.push(`v.status = ANY(${bind([...request.status])})`);
+    }
   }
 
   // `zip` is exact-or-prefix (today's `l.zip === zip || l.zip.startsWith(zip)`). `starts_with`

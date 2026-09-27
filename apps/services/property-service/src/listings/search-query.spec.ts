@@ -30,12 +30,20 @@ describe('buildSearchQuery', () => {
     expect(params).toContainEqual(['Pending']);
   });
 
-  it('never ANDs the default Active/Coming Soon status into a sold search', () => {
+  it('never ANDs the default Active/Coming Soon status into an untouched sold search', () => {
     // A sold listing's `v.status` can only ever be `Sold` (generated column, migration
     // 1785801600003), and `Sold` is not a value the status filter accepts. ANDing the contract's
     // default status filter into `listingType=sold` would zero the Sold tab permanently.
     const { where } = build({ listingType: 'sold' });
     expect(where).not.toContain('v.status = ANY(');
+  });
+
+  it('still applies an explicit status alongside listingType=sold, rather than dropping it', () => {
+    // A caller who asks for Sold AND Pending gets what they asked for: a query that correctly
+    // matches nothing, not a silently unfiltered sold search.
+    const { where, params } = build({ listingType: 'sold', status: 'Pending' });
+    expect(where).toContain('v.status = ANY(');
+    expect(params).toContainEqual(['Pending']);
   });
 
   it('gives every sort an id tiebreaker so paging is a total order', () => {
