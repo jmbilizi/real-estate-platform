@@ -9,6 +9,17 @@
  * page copy, etc.
  */
 
+/** The two-letter codes behind `BRAND.licensedStates` — the single source both derive from, so a
+ *  prose sentence and a state-count tile can never disagree about how many states that is. */
+const LICENSED_STATE_CODES = ['MD', 'DC', 'VA'] as const;
+
+/** "MD, DC, and VA" — an Oxford-comma join, generic over the list length. */
+function joinWithAnd(items: readonly string[]): string {
+  if (items.length <= 1) return items[0] ?? '';
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+}
+
 export const BRAND = {
   /** Licensed brokerage — must be the most prominent brand on the site. */
   brokerage: 'Real Broker, LLC',
@@ -34,8 +45,11 @@ export const BRAND = {
    */
   contactEmail: 'contact@cribstop.com',
 
-  /** States where the brokerage is licensed. */
-  licensedStates: 'MD, DC, and VA',
+  /** Two-letter codes for every state where the brokerage is licensed. */
+  licensedStateCodes: LICENSED_STATE_CODES,
+
+  /** States where the brokerage is licensed, as running prose. Derived from `licensedStateCodes`. */
+  licensedStates: joinWithAnd(LICENSED_STATE_CODES),
 
   /** Page-title suffix used in <head>. */
   titleSuffix: 'Find Your Next Home',
