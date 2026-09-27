@@ -19,9 +19,9 @@ import {
 export const listingCardSchema = z
   .object({
     id: idSchema,
-    // #382. The id in the property page URL: the unit id in a subdivided building, else the
-    // property id. `propertyPath` is that page's canonical path, built by the service.
-    homeId: idSchema,
+    // #386. The home this listing is on: the unit id in a subdivided building, else the property
+    // id. Internal identity only — the page URL (`propertyPath`) carries this listing's own id.
+    propertyId: idSchema,
     propertyPath: z.string(),
     title: z.string(),
     // Null when the seller opted out of address display. The coordinates are masked with it —

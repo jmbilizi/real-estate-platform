@@ -2,7 +2,7 @@ import { listingCardSchema, listingsEnvelopeSchema } from './listing-card';
 
 const row = {
   id: '0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b',
-  homeId: '0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5d',
+  propertyId: '0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5d',
   propertyPath: '/property/alexandria-va/0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5d',
   title: 'Sample listing',
   address: null,

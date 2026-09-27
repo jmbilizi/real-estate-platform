@@ -112,11 +112,6 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
           "featured": {
             "type": "boolean",
           },
-          "homeId": {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
-            "type": "string",
-          },
           "id": {
             "format": "uuid",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
@@ -232,6 +227,11 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             ],
             "type": "object",
           },
+          "propertyId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string",
+          },
           "propertyPath": {
             "type": "string",
           },
@@ -292,7 +292,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
         },
         "required": [
           "id",
-          "homeId",
+          "propertyId",
           "propertyPath",
           "title",
           "address",
@@ -418,11 +418,6 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
               "featured": {
                 "type": "boolean",
               },
-              "homeId": {
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
-                "type": "string",
-              },
               "id": {
                 "format": "uuid",
                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
@@ -542,6 +537,11 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
               "priceReduced": {
                 "type": "boolean",
               },
+              "propertyId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
               "propertyPath": {
                 "type": "string",
               },
@@ -602,7 +602,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             },
             "required": [
               "id",
-              "homeId",
+              "propertyId",
               "propertyPath",
               "title",
               "address",
@@ -1046,11 +1046,6 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "city": {
                   "type": "string",
                 },
-                "homeId": {
-                  "format": "uuid",
-                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
-                  "type": "string",
-                },
                 "marketStatus": {
                   "enum": [
                     "Active",
@@ -1065,6 +1060,11 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "path": {
                   "type": "string",
                 },
+                "propertyId": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string",
+                },
                 "state": {
                   "type": "string",
                 },
@@ -1073,7 +1073,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 },
               },
               "required": [
-                "homeId",
+                "propertyId",
                 "path",
                 "address",
                 "city",
@@ -1161,11 +1161,6 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             },
             "type": "array",
           },
-          "homeId": {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
-            "type": "string",
-          },
           "latestListing": {
             "allOf": [
               {
@@ -1176,6 +1171,12 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
           },
           "listingDataDisplayable": {
             "type": "boolean",
+          },
+          "listingId": {
+            "format": "uuid",
+            "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string",
           },
           "marketStatus": {
             "enum": [
@@ -1315,17 +1316,10 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
           "slug": {
             "type": "string",
           },
-          "unitId": {
-            "format": "uuid",
-            "nullable": true,
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
-            "type": "string",
-          },
         },
         "required": [
-          "homeId",
           "propertyId",
-          "unitId",
+          "listingId",
           "slug",
           "canonicalPath",
           "marketStatus",
