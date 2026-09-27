@@ -4,41 +4,61 @@ exports.shorthands = undefined;
  * #391. "Just listed" and "New this week" need a real list date; the feed mapper stored none.
  *
  * `listings.listed_at` is Bright's `MLSListDate`, widened to an instant. `listing_search_v` exposes
- * it unmasked — a list date does not re-identify a suppressed address, unlike `address`/`geog`.
+ * it unmasked. A list date does not re-identify a suppressed address, unlike `address`/`geog`.
  *
- * Two indexes: `idx_listings_newly_listed` serves both the new `newly-listed` sort and the
- * `listedWithinDays` range filter (a leading `listed_at` column serves a range scan the same way
- * `idx_listings_newest`'s `last_updated` does). `idx_listings_price_reduced` serves the new
- * `priceReduced` filter — a small partial index, since most rows never carry a price cut.
+ * `listing_detail_v` (migration 033) is `LEFT JOIN listing_search_v`. This is the first view
+ * migration since 033, so the first to hit that dependency: a bare `DROP VIEW listing_search_v`
+ * fails with "other objects depend on it" unless the dependent view is dropped first.
+ * `LISTING_DETAIL_V_SQL` below is migration 033's definition, unchanged, kept as one constant so
+ * `up()` and `down()` recreate the exact same view rather than two hand-copies that can drift.
+ * A later view migration must repeat the same drop-detail / drop-search / create-search /
+ * create-detail order for as long as `listing_detail_v` exists.
  *
- * `listing_detail_v` (migration 033) is `LEFT JOIN listing_search_v` — the first view migration
- * since 033, so the first to hit it: a bare `DROP VIEW listing_search_v` fails with "other objects
- * depend on it" unless the dependent is dropped first. `listing_detail_v` is dropped and recreated
- * here verbatim (033's definition, unchanged) around the `listing_search_v` replacement, the same
- * ordering a future view migration must repeat for as long as `listing_detail_v` exists.
+ * The two new indexes (`newly-listed` sort, `listedWithinDays`, `priceReduced`) are a separate
+ * migration (`1785801600039`): `CREATE INDEX CONCURRENTLY` cannot run inside this migration's
+ * transaction, and this file's `ADD COLUMN`/view work needs one.
  *
  * @param {import('node-pg-migrate').MigrationBuilder} pgm
  */
+
+const LISTING_DETAIL_V_SQL = `
+    CREATE VIEW listing_detail_v AS
+    SELECT
+      l.id,
+      l.property_id,
+      l.unit_id,
+      (v.id IS NOT NULL)                                    AS listing_data_displayable,
+      CASE
+        WHEN v.id IS NULL THEN 'Off market'
+        WHEN l.status = 'Active Under Contract' THEN 'Under Contract'
+        WHEN l.status = 'Closed' THEN 'Sold'
+        ELSE l.consumer_status
+      END                                                   AS market_status,
+      CASE WHEN l.address_display_allowed THEN p.street_line END AS address_street,
+      CASE WHEN l.address_display_allowed THEN u.unit_number END AS unit_number,
+      l.city,
+      l.state,
+      l.zip5                                                AS zip,
+      p.property_type,
+      COALESCE(u.beds, p.beds)                              AS beds,
+      COALESCE(u.baths_display, p.baths_display)            AS baths,
+      COALESCE(u.living_sqft, p.living_sqft)                AS sqft,
+      p.lot_sqft,
+      p.year_built,
+      l.source,
+      (l.is_sample OR p.is_sample OR COALESCE(u.is_sample, false)) AS is_sample,
+      l.last_updated
+    FROM listings l
+    JOIN properties p ON p.id = l.property_id
+    LEFT JOIN units u ON u.id = l.unit_id
+    LEFT JOIN listing_search_v v ON v.id = l.id
+    WHERE l.deleted_at IS NULL
+      AND l.internet_display_allowed
+  `;
+
 exports.up = (pgm) => {
   pgm.addColumn('listings', {
     listed_at: { type: 'timestamptz' },
-  });
-
-  pgm.createIndex(
-    'listings',
-    [
-      { name: 'listed_at', sort: 'DESC NULLS LAST' },
-      { name: 'id', sort: 'DESC' },
-    ],
-    {
-      where: 'deleted_at IS NULL AND internet_display_allowed',
-      name: 'idx_listings_newly_listed',
-    },
-  );
-
-  pgm.createIndex('listings', ['id'], {
-    where: 'deleted_at IS NULL AND internet_display_allowed AND price_reduced',
-    name: 'idx_listings_price_reduced',
   });
 
   pgm.sql('DROP VIEW IF EXISTS listing_detail_v');
@@ -151,46 +171,11 @@ exports.up = (pgm) => {
       AND l.consumer_status IS NOT NULL
       AND (l.consumer_status <> 'Sold' OR l.close_date IS NOT NULL)
   `);
-
-  // Migration 033's definition, verbatim and unchanged — recreated because it was dropped above.
-  pgm.sql(`
-    CREATE VIEW listing_detail_v AS
-    SELECT
-      l.id,
-      l.property_id,
-      l.unit_id,
-      (v.id IS NOT NULL)                                    AS listing_data_displayable,
-      CASE
-        WHEN v.id IS NULL THEN 'Off market'
-        WHEN l.status = 'Active Under Contract' THEN 'Under Contract'
-        WHEN l.status = 'Closed' THEN 'Sold'
-        ELSE l.consumer_status
-      END                                                   AS market_status,
-      CASE WHEN l.address_display_allowed THEN p.street_line END AS address_street,
-      CASE WHEN l.address_display_allowed THEN u.unit_number END AS unit_number,
-      l.city,
-      l.state,
-      l.zip5                                                AS zip,
-      p.property_type,
-      COALESCE(u.beds, p.beds)                              AS beds,
-      COALESCE(u.baths_display, p.baths_display)            AS baths,
-      COALESCE(u.living_sqft, p.living_sqft)                AS sqft,
-      p.lot_sqft,
-      p.year_built,
-      l.source,
-      (l.is_sample OR p.is_sample OR COALESCE(u.is_sample, false)) AS is_sample,
-      l.last_updated
-    FROM listings l
-    JOIN properties p ON p.id = l.property_id
-    LEFT JOIN units u ON u.id = l.unit_id
-    LEFT JOIN listing_search_v v ON v.id = l.id
-    WHERE l.deleted_at IS NULL
-      AND l.internet_display_allowed
-  `);
+  pgm.sql(LISTING_DETAIL_V_SQL);
 };
 
 /**
- * Restores migration 030's view verbatim and drops this migration's two indexes and column.
+ * Restores migration 030's view verbatim and drops this migration's column.
  *
  * **RUNNING THIS RE-OPENS THE SAME SELLER PRIVACY LEAK AS EVERY PRIOR VIEW MIGRATION'S `down`.**
  * Never run `migrate-down` past this migration against an environment holding real or fixture
@@ -293,44 +278,7 @@ exports.down = (pgm) => {
       AND l.consumer_status IS NOT NULL
       AND (l.consumer_status <> 'Sold' OR l.close_date IS NOT NULL)
   `);
+  pgm.sql(LISTING_DETAIL_V_SQL);
 
-  // Migration 033's definition, verbatim and unchanged — recreated because it was dropped above.
-  pgm.sql(`
-    CREATE VIEW listing_detail_v AS
-    SELECT
-      l.id,
-      l.property_id,
-      l.unit_id,
-      (v.id IS NOT NULL)                                    AS listing_data_displayable,
-      CASE
-        WHEN v.id IS NULL THEN 'Off market'
-        WHEN l.status = 'Active Under Contract' THEN 'Under Contract'
-        WHEN l.status = 'Closed' THEN 'Sold'
-        ELSE l.consumer_status
-      END                                                   AS market_status,
-      CASE WHEN l.address_display_allowed THEN p.street_line END AS address_street,
-      CASE WHEN l.address_display_allowed THEN u.unit_number END AS unit_number,
-      l.city,
-      l.state,
-      l.zip5                                                AS zip,
-      p.property_type,
-      COALESCE(u.beds, p.beds)                              AS beds,
-      COALESCE(u.baths_display, p.baths_display)            AS baths,
-      COALESCE(u.living_sqft, p.living_sqft)                AS sqft,
-      p.lot_sqft,
-      p.year_built,
-      l.source,
-      (l.is_sample OR p.is_sample OR COALESCE(u.is_sample, false)) AS is_sample,
-      l.last_updated
-    FROM listings l
-    JOIN properties p ON p.id = l.property_id
-    LEFT JOIN units u ON u.id = l.unit_id
-    LEFT JOIN listing_search_v v ON v.id = l.id
-    WHERE l.deleted_at IS NULL
-      AND l.internet_display_allowed
-  `);
-
-  pgm.dropIndex('listings', ['id'], { name: 'idx_listings_price_reduced' });
-  pgm.dropIndex('listings', ['listed_at', 'id'], { name: 'idx_listings_newly_listed' });
   pgm.dropColumn('listings', 'listed_at');
 };
