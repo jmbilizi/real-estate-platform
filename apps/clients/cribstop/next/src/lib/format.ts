@@ -40,6 +40,26 @@ export function formatDate(iso: string): string {
   }
 }
 
+/**
+ * "3 hours ago" style freshness copy for the home page trust block.
+ *
+ * Bucketed by hand rather than `Intl.RelativeTimeFormat`: that API rounds toward the nearest unit
+ * and reads oddly at the edges ("in 0 hours"). Buckets floor toward the past, which always reads
+ * as a plain elapsed-time statement — the only shape this compliance-facing copy needs.
+ */
+export function formatRelativeTime(iso: string, now: number = Date.now()): string {
+  const diffMs = Math.max(0, now - new Date(iso).getTime());
+  const minutes = Math.floor(diffMs / 60_000);
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
+  const months = Math.floor(days / 30);
+  return `${months} month${months === 1 ? '' : 's'} ago`;
+}
+
 export function formatDateTime(iso: string): string {
   try {
     return new Date(iso).toLocaleString('en-US', {

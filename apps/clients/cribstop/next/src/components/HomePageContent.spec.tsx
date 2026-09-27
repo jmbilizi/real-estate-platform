@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { aListingCardRow } from '@/test/fixtures';
 import { getListingsMeta, searchListings } from '@/lib/api/listings';
 import HomePageContent from './HomePageContent';
@@ -8,11 +8,9 @@ jest.mock('@/lib/api/listings', () => ({
   getListingsMeta: jest.fn(),
 }));
 
-// HomePageContent itself no longer reads useApp()/listingType (#361) — but ListingCard, rendered
-// inside every carousel row, still calls useApp() for save/unsave. Without this mock the cards
-// throw for lack of a react-redux Provider, unrelated to what this file is testing.
-// `listingType` is mutable here so a test can simulate CompactSearchBar's toggle writing it and
-// confirm HomePageContent's output is unaffected either way.
+// HomePageContent itself does not read useApp()/listingType (#361, #392) — but ListingCard,
+// rendered inside every carousel row, still calls useApp() for save/unsave. Without this mock the
+// cards throw for lack of a react-redux Provider, unrelated to what this file is testing.
 let mockedGlobalListingType: 'sale' | 'rent' = 'sale';
 jest.mock('@/lib/context', () => ({
   useApp: () => ({
@@ -22,18 +20,40 @@ jest.mock('@/lib/context', () => ({
   }),
 }));
 
+// Overrides the app-wide `useSearchParams` stub from jest.setup.ts (which always returns an empty
+// URLSearchParams) so the `?show=` tests can drive it. Mirrors NavBar.spec.tsx's own override.
+let mockedSearchParams = '';
+jest.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(mockedSearchParams),
+}));
+
 const mockedSearchListings = searchListings as jest.Mock;
 const mockedGetListingsMeta = getListingsMeta as jest.Mock;
 
-function envelope(rows: ReturnType<typeof aListingCardRow>[]) {
+const INTENT_STORAGE_KEY = 'cribstop:home-intent';
+
+function envelope(rows: ReturnType<typeof aListingCardRow>[], total = rows.length) {
   return {
     results: rows,
-    total: rows.length,
+    total,
     page: 1,
     pageSize: 8,
     pageCount: 1,
     appliedFilters: {},
   };
+}
+
+/**
+ * The most recent query with a `status` filter is the "Coming soon" row — every other row omits
+ * it. The *most recent* one, not the first: the row re-fetches once the intent control's effect
+ * resolves a `?show=` override or a persisted `localStorage` pick, after firing its initial
+ * "Both" query on first paint.
+ */
+function comingSoonQuery(): { listingType?: string } | undefined {
+  const calls = mockedSearchListings.mock.calls.filter(
+    ([q]) => (q as { status?: string[] }).status,
+  );
+  return calls.at(-1)?.[0];
 }
 
 describe('HomePageContent', () => {
@@ -43,157 +63,280 @@ describe('HomePageContent', () => {
       sources: ['internal'],
       listingCount: 13,
     });
+    mockedSearchListings.mockResolvedValue(envelope([aListingCardRow()]));
   });
 
   afterEach(() => {
     mockedSearchListings.mockReset();
     mockedGetListingsMeta.mockReset();
     mockedGlobalListingType = 'sale';
+    mockedSearchParams = '';
+    window.localStorage.clear();
   });
 
-  describe('hero statistics', () => {
-    it('renders the real dataset count rather than a hardcoded figure', async () => {
-      mockedSearchListings.mockResolvedValue(envelope([aListingCardRow()]));
-
+  describe('intent control (#392)', () => {
+    it('defaults to "Both": queries the coming-soon row with "all" and shows both budget sub-rows', async () => {
       render(<HomePageContent />);
 
-      await waitFor(() => expect(screen.getByText('13')).toBeInTheDocument());
-      expect(screen.getByText('Homes listed')).toBeInTheDocument();
-      // The old tile asserted "12k+ Active listings", which was a fabricated inventory figure.
-      expect(screen.queryByText(/12k\+/)).not.toBeInTheDocument();
+      const both = await screen.findByRole('radio', { name: 'Both' });
+      expect(both).toHaveAttribute('aria-checked', 'true');
+
+      await waitFor(() => expect(comingSoonQuery()).toMatchObject({ listingType: 'all' }));
+      expect(await screen.findByText('Homes for sale')).toBeInTheDocument();
+      expect(screen.getByText('Homes for rent')).toBeInTheDocument();
     });
 
-    it('makes no MLS claim, because every row is internal and there is no Bright licence yet', async () => {
-      mockedSearchListings.mockResolvedValue(envelope([aListingCardRow()]));
-
+    it('honors a `?show=` override on load, overriding the "Both" default', async () => {
+      mockedSearchParams = 'show=rent';
       render(<HomePageContent />);
 
-      await waitFor(() => expect(screen.getByText('States licensed')).toBeInTheDocument());
-      expect(screen.queryByText('MLS')).not.toBeInTheDocument();
-      expect(screen.queryByText(/Daily updates/)).not.toBeInTheDocument();
+      const rentOption = await screen.findByRole('radio', { name: 'For rent' });
+      await waitFor(() => expect(rentOption).toHaveAttribute('aria-checked', 'true'));
+      await waitFor(() => expect(comingSoonQuery()).toMatchObject({ listingType: 'rent' }));
+      expect(await screen.findByText('Homes for rent')).toBeInTheDocument();
+      expect(screen.queryByText('Homes for sale')).not.toBeInTheDocument();
     });
 
-    it('omits the count tile entirely when the dataset count is unavailable', async () => {
-      mockedGetListingsMeta.mockRejectedValue(new Error('unavailable'));
-      mockedSearchListings.mockResolvedValue(envelope([aListingCardRow()]));
-
+    it('is keyboard operable and exposes role="radiogroup" with a visible focus ring', async () => {
       render(<HomePageContent />);
+      const group = await screen.findByRole('radiogroup');
+      expect(group).toBeInTheDocument();
 
-      await waitFor(() => expect(screen.getByText('States licensed')).toBeInTheDocument());
-      expect(screen.queryByText('Homes listed')).not.toBeInTheDocument();
+      const forSale = screen.getByRole('radio', { name: 'For sale' });
+      expect(forSale.tagName).toBe('BUTTON');
+      forSale.focus();
+      expect(forSale).toHaveFocus();
+      expect(forSale.className).toMatch(/focus-visible:ring/);
     });
-  });
 
-  describe('neighborhood tiles', () => {
-    it('asserts no per-neighborhood inventory count', async () => {
-      mockedSearchListings.mockResolvedValue(envelope([aListingCardRow()]));
+    it('persists a manual pick to localStorage and reads it back on the next visit', async () => {
+      const { unmount } = render(<HomePageContent />);
+      const forSale = await screen.findByRole('radio', { name: 'For sale' });
+      fireEvent.click(forSale);
 
+      await waitFor(() => expect(window.localStorage.getItem(INTENT_STORAGE_KEY)).toBe('sale'));
+      unmount();
+
+      mockedSearchListings.mockClear();
       render(<HomePageContent />);
-
-      await waitFor(() => expect(screen.getByText('Explore neighborhoods')).toBeInTheDocument());
-      // These were hardcoded ("24 homes", "18 homes", …) — fabricated, and verifiably wrong beside
-      // carousels that now come from the real API.
-      expect(screen.queryByText(/\d+ homes/)).not.toBeInTheDocument();
+      const forSaleAgain = await screen.findByRole('radio', { name: 'For sale' });
+      await waitFor(() => expect(forSaleAgain).toHaveAttribute('aria-checked', 'true'));
+      await waitFor(() => expect(comingSoonQuery()).toMatchObject({ listingType: 'sale' }));
+      expect(screen.getByText('Homes for sale')).toBeInTheDocument();
+      expect(screen.queryByText('Homes for rent')).not.toBeInTheDocument();
     });
-  });
 
-  describe('sale and rent groups (#361)', () => {
-    it('renders both a for-sale and a for-rent carousel group on load', async () => {
-      mockedSearchListings.mockResolvedValue(envelope([aListingCardRow()]));
-
+    it('each mode issues the expected listingType on the coming-soon row', async () => {
       render(<HomePageContent />);
+      await waitFor(() => expect(comingSoonQuery()).toMatchObject({ listingType: 'all' }));
 
-      await waitFor(() => {
-        expect(screen.getByText('Featured homes for sale')).toBeInTheDocument();
-        expect(screen.getByText('Featured homes for rent')).toBeInTheDocument();
-      });
-      expect(screen.getByText('Popular homes for sale')).toBeInTheDocument();
-      expect(screen.getByText('Available homes for rent')).toBeInTheDocument();
-      expect(screen.getByText('Luxury collection for sale')).toBeInTheDocument();
-      expect(screen.getByText('Luxury homes for rent')).toBeInTheDocument();
-      expect(screen.getByText('Just listed homes for sale')).toBeInTheDocument();
-      expect(screen.getByText('Just listed homes for rent')).toBeInTheDocument();
+      mockedSearchListings.mockClear();
+      fireEvent.click(await screen.findByRole('radio', { name: 'For rent' }));
+      await waitFor(() => expect(comingSoonQuery()).toMatchObject({ listingType: 'rent' }));
+
+      mockedSearchListings.mockClear();
+      fireEvent.click(await screen.findByRole('radio', { name: 'For sale' }));
+      await waitFor(() => expect(comingSoonQuery()).toMatchObject({ listingType: 'sale' }));
     });
 
-    it('fires 8 carousel queries — 4 fixed to sale, 4 fixed to rent', async () => {
-      mockedSearchListings.mockResolvedValue(envelope([aListingCardRow()]));
-
-      render(<HomePageContent />);
-
-      await waitFor(() => expect(mockedSearchListings).toHaveBeenCalledTimes(8));
-      const listingTypesQueried = mockedSearchListings.mock.calls.map(
-        ([query]: [{ listingType?: string }]) => query.listingType,
-      );
-      expect(listingTypesQueried.filter((t) => t === 'sale')).toHaveLength(4);
-      expect(listingTypesQueried.filter((t) => t === 'rent')).toHaveLength(4);
-    });
-
-    it('is unaffected by the search bar writing a global listingType (CompactSearchBar toggle)', async () => {
-      // CompactSearchBar's "What" panel writes useApp()'s global listingType on every click (#361
-      // Problem). Simulate the search bar having just set it to 'rent' and confirm the home page
-      // body still renders its fixed sale/rent split rather than mirroring the toggle.
+    it('never reads or writes the search bar’s global listingType (#361)', async () => {
       mockedGlobalListingType = 'rent';
-      mockedSearchListings.mockResolvedValue(envelope([aListingCardRow()]));
+      render(<HomePageContent />);
+
+      // Still defaults to "Both" — untouched by the search bar's own state.
+      expect(await screen.findByRole('radio', { name: 'Both' })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      );
+      await waitFor(() => expect(comingSoonQuery()).toMatchObject({ listingType: 'all' }));
+    });
+  });
+
+  describe('coming soon row (#392)', () => {
+    it('renders the envelope total in the subtitle', async () => {
+      mockedSearchListings.mockImplementation((query: { status?: string[] }) => {
+        if (query.status?.includes('Coming Soon')) {
+          return Promise.resolve(envelope([aListingCardRow()], 3041));
+        }
+        return Promise.resolve(envelope([aListingCardRow()]));
+      });
 
       render(<HomePageContent />);
 
-      await waitFor(() => expect(mockedSearchListings).toHaveBeenCalledTimes(8));
-      const listingTypesQueried = mockedSearchListings.mock.calls.map(
-        ([query]: [{ listingType?: string }]) => query.listingType,
+      expect(await screen.findByText('Coming soon')).toBeInTheDocument();
+      expect(
+        await screen.findByText('3,041 listed early. Showings have not started.'),
+      ).toBeInTheDocument();
+    });
+
+    it('is hidden when the total is 0 and the fetch has settled', async () => {
+      mockedSearchListings.mockImplementation((query: { status?: string[] }) => {
+        if (query.status?.includes('Coming Soon')) return Promise.resolve(envelope([], 0));
+        return Promise.resolve(envelope([aListingCardRow()]));
+      });
+
+      render(<HomePageContent />);
+
+      await screen.findByText('What your budget buys');
+      expect(screen.queryByText('Coming soon')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('what your budget buys (#392)', () => {
+    it('fetches only the selected chip, and changing it re-fetches with the new band', async () => {
+      render(<HomePageContent />);
+
+      await waitFor(() =>
+        expect(mockedSearchListings).toHaveBeenCalledWith(
+          expect.objectContaining({ listingType: 'sale', maxPrice: 300_000 }),
+          expect.anything(),
+        ),
       );
-      expect(listingTypesQueried.filter((t) => t === 'sale')).toHaveLength(4);
-      expect(listingTypesQueried.filter((t) => t === 'rent')).toHaveLength(4);
-      expect(screen.getByText('Featured homes for sale')).toBeInTheDocument();
-      expect(screen.getByText('Featured homes for rent')).toBeInTheDocument();
+      expect(mockedSearchListings).not.toHaveBeenCalledWith(
+        expect.objectContaining({ listingType: 'sale', minPrice: 300_000, maxPrice: 500_000 }),
+        expect.anything(),
+      );
+
+      mockedSearchListings.mockClear();
+      fireEvent.click(await screen.findByRole('button', { name: '$300K–$500K' }));
+
+      await waitFor(() =>
+        expect(mockedSearchListings).toHaveBeenCalledWith(
+          expect.objectContaining({ listingType: 'sale', minPrice: 300_000, maxPrice: 500_000 }),
+          expect.anything(),
+        ),
+      );
+    });
+
+    it('renders one sub-row per listing type when the intent is "Both"', async () => {
+      render(<HomePageContent />);
+
+      await screen.findByText('What your budget buys');
+      expect(screen.getByText('Homes for sale')).toBeInTheDocument();
+      expect(screen.getByText('Homes for rent')).toBeInTheDocument();
+    });
+
+    it('keeps the chips live and shows a plain empty message for a band with no matches', async () => {
+      mockedSearchListings.mockImplementation((query: { status?: string[] }) => {
+        if (query.status?.includes('Coming Soon')) return Promise.resolve(envelope([]));
+        return Promise.resolve(envelope([], 0));
+      });
+
+      render(<HomePageContent />);
+
+      // Both budget sub-rows are empty at their default (first) chip.
+      const empty = await screen.findAllByText(
+        'No homes in this price range yet. Try another range.',
+      );
+      expect(empty).toHaveLength(2);
+      // The chips stay usable so the visitor can pick another range.
+      expect(screen.getByRole('button', { name: '$300K–$500K' })).toBeInTheDocument();
     });
   });
 
-  it('fires every carousel query in parallel rather than one after another', () => {
-    mockedSearchListings.mockReturnValue(new Promise(() => {})); // never resolves
-    render(<HomePageContent />);
+  describe('resilience (#392)', () => {
+    it('fires every row query in parallel rather than one after another', () => {
+      mockedSearchListings.mockReturnValue(new Promise(() => {})); // never resolves
+      render(<HomePageContent />);
 
-    // All carousel queries are issued on the same tick — none is gated behind another's result.
-    expect(mockedSearchListings.mock.calls.length).toBeGreaterThanOrEqual(8);
-  });
-
-  it('renders one carousel once its own fetch resolves, even while others are still pending', async () => {
-    mockedSearchListings.mockImplementation((query: { sort?: string; listingType?: string }) => {
-      if (query.sort === 'recommended' && query.listingType === 'sale') {
-        return Promise.resolve(
-          envelope([aListingCardRow({ id: 'featured-1', title: 'Featured Row' })]),
-        );
-      }
-      return new Promise(() => {}); // the rest never resolve in this test
+      // Coming soon + the sale and rent budget sub-rows — three independent fetches on the same
+      // tick, none gated behind another's result.
+      expect(mockedSearchListings.mock.calls.length).toBeGreaterThanOrEqual(3);
     });
 
-    render(<HomePageContent />);
+    it('renders one row once its own fetch resolves, even while others are still pending', async () => {
+      mockedSearchListings.mockImplementation((query: { status?: string[] }) => {
+        if (query.status?.includes('Coming Soon')) {
+          return Promise.resolve(envelope([aListingCardRow()], 7));
+        }
+        return new Promise(() => {}); // the budget rows never resolve in this test
+      });
 
-    await waitFor(() => expect(screen.getByText('Featured homes for sale')).toBeInTheDocument());
-  });
+      render(<HomePageContent />);
 
-  it('degrades gracefully when one carousel fails — the rest of the page still renders', async () => {
-    mockedSearchListings.mockImplementation((query: { sort?: string; listingType?: string }) => {
-      if (query.sort === 'recommended' && query.listingType === 'sale') {
-        return Promise.reject(new Error('featured carousel is down'));
-      }
-      if (query.sort === 'newest' && query.listingType === 'sale') {
-        return Promise.resolve(
-          envelope([aListingCardRow({ id: 'recent-1', title: 'Recent Row' })]),
-        );
-      }
-      return Promise.resolve(envelope([]));
+      await waitFor(() =>
+        expect(screen.getByText('7 listed early. Showings have not started.')).toBeInTheDocument(),
+      );
     });
 
-    render(<HomePageContent />);
+    it('degrades gracefully when one row fails — the rest of the page still renders, with its own retry', async () => {
+      mockedSearchListings.mockImplementation((query: { status?: string[] }) => {
+        if (query.status?.includes('Coming Soon')) {
+          return Promise.reject(new Error('coming-soon row is down'));
+        }
+        return Promise.resolve(envelope([aListingCardRow()]));
+      });
 
-    await waitFor(() => expect(screen.getByText('Just listed homes for sale')).toBeInTheDocument());
+      render(<HomePageContent />);
 
-    // The failed carousel keeps its heading and says so, with a way back. It used to render
-    // nothing at all, which is indistinguishable to the user from "there are no featured homes"
-    // — a failure the page swallowed. One row being down must not take the page down either,
-    // which is what the assertion above holds.
-    expect(screen.getByText('Featured homes for sale')).toBeInTheDocument();
-    expect(screen.getByText('Failed to load')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Tap to retry' })).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByText('Coming soon')).toBeInTheDocument());
+      expect(screen.getByText('Failed to load')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Tap to retry' })).toBeInTheDocument();
+      // The rest of the page is unaffected by the failed row.
+      expect(await screen.findByText('What your budget buys')).toBeInTheDocument();
+      expect(screen.getByText('Homes for sale')).toBeInTheDocument();
+    });
+  });
+
+  describe('removed rows (#392)', () => {
+    it('renders none of the retired carousels', async () => {
+      render(<HomePageContent />);
+      await screen.findByText('What your budget buys');
+
+      for (const title of [
+        'Featured homes for sale',
+        'Featured homes for rent',
+        'Popular homes for sale',
+        'Available homes for rent',
+        'Luxury collection for sale',
+        'Luxury homes for rent',
+        'Just listed homes for sale',
+        'Just listed homes for rent',
+      ]) {
+        expect(screen.queryByText(title)).not.toBeInTheDocument();
+      }
+    });
+  });
+
+  describe('compliance (#392)', () => {
+    it('uses no banned Fair-Housing-adjacent word anywhere in the rendered body', async () => {
+      render(<HomePageContent />);
+      await screen.findByText('What your budget buys');
+
+      const banned =
+        /\b(popular|trending|best|hand-picked|featured|safe|family|young professionals|student|up-and-coming)\b/i;
+      expect(document.body.textContent).not.toMatch(banned);
+    });
+
+    it('removes the unsourced brokerage claims and keeps the block fact-only', async () => {
+      render(<HomePageContent />);
+      await screen.findByText('What your budget buys');
+
+      expect(
+        screen.queryByText(/Trusted by buyers, sellers, and renters across the DMV/),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/one of the fastest-growing brokerages in the country/),
+      ).not.toBeInTheDocument();
+      expect(screen.getByText(/Brokered by Real Broker LLC\./)).toBeInTheDocument();
+      expect(screen.getByText(/licensed in MD, DC, and VA/)).toBeInTheDocument();
+    });
+
+    it('shows an "Updated" freshness tile from dataUpdatedAt', async () => {
+      render(<HomePageContent />);
+      await waitFor(() => expect(screen.getByText('Updated')).toBeInTheDocument());
+    });
+
+    it('omits the "Updated" tile when dataUpdatedAt is null', async () => {
+      mockedGetListingsMeta.mockResolvedValue({
+        dataUpdatedAt: null,
+        sources: ['internal'],
+        listingCount: 13,
+      });
+
+      render(<HomePageContent />);
+      await screen.findByText('What your budget buys');
+      expect(screen.queryByText('Updated')).not.toBeInTheDocument();
+    });
   });
 });
