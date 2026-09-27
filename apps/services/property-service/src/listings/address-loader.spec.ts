@@ -25,12 +25,21 @@ const WITHDRAWN = {
   ListingKey: '3000001',
   ModificationTimestamp: '2026-09-20T10:00:00Z',
   StandardStatus: 'Withdrawn',
-  UnparsedAddress: '118 Baggett Pl',
+  // Production shape: UnparsedAddress can hold no street at all (probed 2026-09-26).
+  UnparsedAddress: 'VA,ALEXANDRIA CITY',
+  StreetNumber: '118',
+  StreetName: 'BAGGETT',
+  StreetSuffix: 'PLACE',
   PostalCode: '22314',
   City: 'ALEXANDRIA',
   StateOrProvince: 'VA',
 };
-const OTHER_STREET = { ...WITHDRAWN, ListingKey: '3000002', UnparsedAddress: '118 King St' };
+const OTHER_STREET = {
+  ...WITHDRAWN,
+  ListingKey: '3000002',
+  StreetName: 'KING',
+  StreetSuffix: 'STREET',
+};
 
 function parsed(address: string) {
   const result = parsePropertyPath('alexandria-va', address);
@@ -72,12 +81,12 @@ function loader(records: Record<string, unknown>[], now = () => 0) {
 beforeEach(() => jest.mocked(mapBrightPayloads).mockClear());
 
 describe('buildAddressLookupUrl', () => {
-  it('filters by ZIP and the house number plus first street word, across all statuses', () => {
+  it('filters by ZIP, StreetNumber and the first StreetName word, across all statuses', () => {
     const url = new URL(
       buildAddressLookupUrl(SERVICE_ROOT, parsed('118-baggett-place-alexandria-va-22314')),
     );
     expect(url.searchParams.get('$filter')).toBe(
-      "PostalCode eq '22314' and startswith(UnparsedAddress,'118 Baggett')",
+      "PostalCode eq '22314' and StreetNumber eq '118' and startswith(tolower(StreetName),'baggett')",
     );
     expect(url.searchParams.get('$filter')).not.toContain('StandardStatus');
     expect(url.searchParams.get('$top')).toBe('50');
@@ -89,7 +98,8 @@ describe('buildAddressLookupUrl', () => {
     if (result === null) throw new Error('fixture path must parse');
     const filter = new URL(buildAddressLookupUrl(SERVICE_ROOT, result)).searchParams.get('$filter');
     expect(filter).toBe(
-      "City eq 'Silver Spring' and StateOrProvince eq 'MD' and startswith(UnparsedAddress,'9 O')",
+      "City eq 'Silver Spring' and StateOrProvince eq 'MD' and StreetNumber eq '9' and " +
+        "startswith(tolower(StreetName),'o')",
     );
   });
 });

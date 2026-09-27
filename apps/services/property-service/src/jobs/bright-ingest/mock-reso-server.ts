@@ -63,14 +63,15 @@ interface ParsedFilter {
   readonly key: number | null;
   /** True when Bright would answer 400 rather than run the query. */
   readonly rejected: boolean;
-  /** #349 address lookup: `<field> eq '<v>' and ... startswith(UnparsedAddress,'<prefix>')`. */
+  /** #349 address lookup: `<field> eq '<v>' and ... startswith(tolower(StreetName),'<prefix>')`. */
   readonly address?: {
     readonly equals: readonly (readonly [string, string])[];
     readonly prefix: string;
   };
 }
 
-const ADDRESS_FILTER = /^((?:\w+ eq '[^']*' and )+)startswith\(UnparsedAddress,'((?:[^']|'')*)'\)$/;
+const ADDRESS_FILTER =
+  /^((?:\w+ eq '[^']*' and )+)startswith\(tolower\(StreetName\),'((?:[^']|'')*)'\)$/;
 
 export const OR_REJECTED_ERROR =
   'SubSystem(SearchEngine) = 20015 - Query Too Complex - Message = OR Expressions allowed in top ' +
@@ -129,7 +130,12 @@ function matches(record: Record<string, unknown>, filter: ParsedFilter): boolean
         ? String(record[field] ?? '').toLowerCase() === value.toLowerCase()
         : String(record[field] ?? '') === value,
     );
-    return placeMatches && String(record.UnparsedAddress ?? '').startsWith(filter.address.prefix);
+    return (
+      placeMatches &&
+      String(record.StreetName ?? '')
+        .toLowerCase()
+        .startsWith(filter.address.prefix)
+    );
   }
   const at = Date.parse(String(record[filter.cursorField] ?? ''));
   if (Number.isNaN(at)) {
