@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   AMENITIES,
   DEFAULT_STATUS_FILTER,
+  isDefaultStatusFilter,
   PROPERTY_TYPES,
   STATUS_FILTER_VALUES,
 } from '@cribstop/property-contracts';
@@ -41,14 +42,6 @@ const STATUS_FILTER_LABELS: Record<StatusFilter, string> = {
   'Coming Soon': 'Coming Soon',
   Pending: 'Under Contract',
 };
-
-/** True when `a` and `b` hold the same statuses, order and duplicates aside — used to collapse
- *  the draft back to "unset" the moment it matches the contract's own default. */
-function sameStatusSet(a: readonly string[], b: readonly string[]): boolean {
-  if (a.length !== b.length) return false;
-  const sorted = (values: readonly string[]) => [...values].sort();
-  return sorted(a).every((value, i) => value === sorted(b)[i]);
-}
 
 /** Icons are decorative; the label is the accessible name. */
 const PROPERTY_TYPE_ICONS: Record<PropertyType, string> = {
@@ -136,7 +129,7 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
     if (removing && current.length === 1) return;
     const next = removing ? current.filter((entry) => entry !== status) : [...current, status];
     set({
-      status: sameStatusSet(next, DEFAULT_STATUS_FILTER) ? undefined : (next as StatusFilter[]),
+      status: isDefaultStatusFilter(next) ? undefined : (next as StatusFilter[]),
     });
   };
 

@@ -384,6 +384,31 @@ export default function SearchExperience({
   const reachablePageCount = Math.min(pageCount, maxReachablePage(pageSize));
 
   /**
+   * True once the result set is bigger than the pager can reach — an increasingly common case
+   * once a real IDX feed backs a city search, where `total` regularly clears the ~1,020-row window
+   * `MAX_RESULT_OFFSET` bounds.
+   *
+   * The headline count above stays honest (`total`, uncapped). This flag only gates the note under
+   * the pager that explains the gap between the two, matching how Zillow/Redfin handle the same
+   * depth cap: cap it, but say so, rather than let a "page 51 of 51" pager look complete against a
+   * headline that reads "3,362 results".
+   */
+  const isPagerCapped = pageCount > reachablePageCount;
+
+  /**
+   * The highest row the pager can actually reach, for the capped-results note.
+   *
+   * `reachablePageCount * pageSize`, never a formula built from `MAX_RESULT_OFFSET` directly:
+   * the reachable row count only equals `MAX_RESULT_OFFSET + pageSize` when `pageSize` evenly
+   * divides `MAX_RESULT_OFFSET`, which the hardcoded default (20) does but an arbitrary echoed
+   * `pageSize` need not. Deriving it from `reachablePageCount` — the same value the pager itself
+   * is built from — is what keeps the note and the last page button agreeing by construction.
+   * Never above `total`: a search whose `total` sits just past the window should not claim more
+   * rows are reachable than exist.
+   */
+  const reachableResultCount = Math.min(reachablePageCount * pageSize, total);
+
+  /**
    * A search that failed because it asked to page past the window is not a failed load (#65). The
    * request is well-formed and the service is healthy; it will answer the same way forever, so the
    * generic error state's "Try again" is a button that cannot work — and the pager, which lives in
@@ -648,6 +673,12 @@ export default function SearchExperience({
                       </button>
                     </nav>
                   </div>
+                )}
+                {isPagerCapped && (
+                  <p className="mt-4 text-center text-xs text-ink-muted" role="status">
+                    Showing the first {reachableResultCount.toLocaleString()} of{' '}
+                    {total.toLocaleString()} homes. Narrow your filters or zoom the map to see more.
+                  </p>
                 )}
               </>
             )}

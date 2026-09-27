@@ -255,6 +255,18 @@ describe('enum parameters are validated against the contract before being forwar
     ]);
   });
 
+  it('collapses an explicit status matching the default back to unset (#347 review)', () => {
+    // A bookmarked `?status=Active,Coming%20Soon` spells out the contract's own default. Left as
+    // `filters.status`, `countActiveFilters` would report "1 filter applied" for a URL that
+    // narrows nothing — the same invariant the modal's chip toggle keeps.
+    expect(
+      parseFiltersFromSearchParams(new URLSearchParams('status=Active,Coming Soon')).status,
+    ).toBeUndefined();
+    expect(
+      parseFiltersFromSearchParams(new URLSearchParams('status=Coming Soon&status=Active')).status,
+    ).toBeUndefined();
+  });
+
   it('drops a listingType the contract does not define', () => {
     expect(
       parseFiltersFromSearchParams(new URLSearchParams('type=lease')).listingType,
