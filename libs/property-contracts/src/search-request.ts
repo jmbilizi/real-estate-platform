@@ -5,6 +5,8 @@ import {
   LISTING_TYPES,
   PROPERTY_TYPES,
   propertyTypeSchema,
+  STATUS_FILTER_VALUES,
+  statusFilterSchema,
 } from './common';
 
 /** Preserves the client's existing paging arithmetic in
@@ -204,6 +206,41 @@ const propertyTypeList = z
   );
 
 /**
+ * Matches Zillow/Homes.com: a shopping search defaults to homes still on the market. `Sold` is
+ * excluded from `STATUS_FILTER_VALUES` entirely (#33), so this default cannot drift to include it.
+ */
+export const DEFAULT_STATUS_FILTER: readonly (typeof STATUS_FILTER_VALUES)[number][] = [
+  'Active',
+  'Coming Soon',
+];
+
+/**
+ * Any of the listed statuses matches. Omission means `DEFAULT_STATUS_FILTER`. An explicit empty
+ * value (`?status=`) means it too.
+ *
+ * The empty case is folded back to the default INSIDE the transform, not left for `.default()`.
+ * `.default()` only fires when the key is absent. A bare `?status=` parses to a defined `''`, so
+ * without this fold it would reach `search-query.ts` as `[]`. That skips the status condition
+ * entirely and widens the search to every status, Under Contract included.
+ */
+const statusList = z
+  .union([z.string(), z.array(z.string())])
+  .transform((value) => {
+    const cleaned = (Array.isArray(value) ? value : value.split(','))
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    return cleaned.length > 0 ? cleaned : [...DEFAULT_STATUS_FILTER];
+  })
+  .pipe(z.array(statusFilterSchema))
+  .describe(
+    `Comma-separated or repeated values from the closed set: ${STATUS_FILTER_VALUES.join(', ')}. ` +
+      `Default when omitted or empty: ${DEFAULT_STATUS_FILTER.join(', ')}. ` +
+      '\'Pending\' means "Under Contract" to consumers. It covers both the Active Under ' +
+      'Contract and Pending MLS statuses. Sold is not a value here. No sold listing publishes ' +
+      'in search yet.',
+  );
+
+/**
  * The sort options, as a value array so a consumer can validate a URL parameter against them.
  *
  * Exported for the same reason as `LISTING_TYPES` and `AMENITIES`: a client parsing `?sort=` needs
@@ -245,6 +282,7 @@ export const searchRequestSchema = z.strictObject({
   // single-enum shape codegen and Swagger UI expect (#47 review, I3).
   listingType: z.enum([...LISTING_TYPES, 'all'] as const).default('all'),
   propertyType: propertyTypeList.default([]),
+  status: statusList.default([...DEFAULT_STATUS_FILTER]),
   // A seller may suppress `price` (#53); a suppressed row's price is null. `NULL >= x` and
   // `NULL <= x` are never true, so these two filters exclude a suppressed-price row from every
   // range they express — never a false match, and never a special case in search-query.ts.

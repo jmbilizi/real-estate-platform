@@ -228,6 +228,33 @@ describe('enum parameters are validated against the contract before being forwar
     ).toBeUndefined();
   });
 
+  it('reads comma-joined and repeated status values as one list (#347)', () => {
+    const joined = parseFiltersFromSearchParams(new URLSearchParams('status=Active,Pending'));
+    const repeated = parseFiltersFromSearchParams(
+      new URLSearchParams('status=Active&status=Pending&status=Active'),
+    );
+    expect(joined.status).toEqual(['Active', 'Pending']);
+    expect(repeated.status).toEqual(['Active', 'Pending']);
+  });
+
+  it('leaves status unset when the URL carries none, so the contract default applies', () => {
+    expect(parseFiltersFromSearchParams(new URLSearchParams('')).status).toBeUndefined();
+  });
+
+  it('drops Sold from a hand-edited URL: it is not a value this filter offers', () => {
+    expect(parseFiltersFromSearchParams(new URLSearchParams('status=Sold')).status).toBeUndefined();
+    expect(parseFiltersFromSearchParams(new URLSearchParams('status=Active,Sold')).status).toEqual([
+      'Active',
+    ]);
+  });
+
+  it('repeats status values when writing the URL', () => {
+    expect(filtersToSearchParams({ status: ['Active', 'Pending'] }).getAll('status')).toEqual([
+      'Active',
+      'Pending',
+    ]);
+  });
+
   it('drops a listingType the contract does not define', () => {
     expect(
       parseFiltersFromSearchParams(new URLSearchParams('type=lease')).listingType,
@@ -273,6 +300,7 @@ describe('filtersToSearchParams', () => {
       neighborhood: 'Downtown',
       listingType: 'rent',
       propertyType: ['Condo'],
+      status: ['Active', 'Pending'],
       minPrice: 1500,
       maxPrice: 3000,
       beds: 2,

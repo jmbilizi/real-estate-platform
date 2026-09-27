@@ -950,6 +950,25 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
           },
           {
             "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                },
+                {
+                  "items": {
+                    "type": "string",
+                  },
+                  "type": "array",
+                },
+              ],
+              "description": "Comma-separated or repeated values from the closed set: Active, Coming Soon, Pending. Default when omitted or empty: Active, Coming Soon. 'Pending' means "Under Contract" to consumers. It covers both the Active Under Contract and Pending MLS statuses. Sold is not a value here. No sold listing publishes in search yet.",
+            },
+          },
+          {
+            "in": "query",
             "name": "minPrice",
             "required": false,
             "schema": {

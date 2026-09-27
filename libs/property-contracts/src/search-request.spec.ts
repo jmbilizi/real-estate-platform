@@ -1,4 +1,5 @@
 import {
+  DEFAULT_STATUS_FILTER,
   exceedsResultWindow,
   MAX_RESULT_OFFSET,
   maxReachablePage,
@@ -14,6 +15,31 @@ describe('searchRequestSchema', () => {
     expect(parsed.listingType).toBe('all');
     expect(parsed.pageSize).toBe(PAGE_SIZE_DEFAULT);
     expect(parsed.page).toBe(1);
+  });
+
+  it('defaults status to Active and Coming Soon when omitted (#347)', () => {
+    expect(searchRequestSchema.parse({}).status).toEqual([...DEFAULT_STATUS_FILTER]);
+  });
+
+  it('accepts status as one value, a comma list, or a repeated parameter', () => {
+    const parse = (status: unknown) => searchRequestSchema.parse({ status }).status;
+    expect(parse('Pending')).toEqual(['Pending']);
+    expect(parse('Active,Coming Soon')).toEqual(['Active', 'Coming Soon']);
+    expect(parse(['Active', 'Pending'])).toEqual(['Active', 'Pending']);
+  });
+
+  it('rejects Sold as a status filter value: no sold listing publishes in search yet (#33)', () => {
+    expect(searchRequestSchema.safeParse({ status: 'Sold' }).success).toBe(false);
+  });
+
+  it('falls back to the default when status is sent explicitly empty, not to every status', () => {
+    // `.default()` only fires when the key is absent; `?status=` parses to a defined `''` and
+    // must not silently widen to every status via an empty array.
+    expect(searchRequestSchema.parse({ status: '' }).status).toEqual([...DEFAULT_STATUS_FILTER]);
+  });
+
+  it('rejects a status outside the closed set', () => {
+    expect(searchRequestSchema.safeParse({ status: 'Withdrawn' }).success).toBe(false);
   });
 
   it('coerces numeric query strings to numbers', () => {

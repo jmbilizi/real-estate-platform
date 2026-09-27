@@ -35,11 +35,20 @@ const PRESERVED_ON_CLEAR = ['query', 'zip', 'street', 'neighborhood', 'sort'] as
  * nought and "Clear all" sits disabled.
  *
  * Amenities count individually because each is an independent narrowing the user chose.
+ *
+ * **A location the user picked in the search bar is never counted here** — `query`, `zip`,
+ * `street`, `city`, `state`, `neighborhood` and `boundary` are the search bar's own filters, not
+ * the filter panel's, and this function reads only the keys `FilterModalContent` renders a
+ * control for. `status` follows the same reasoning as the numeric filters: the modal writes it as
+ * `undefined` the moment it matches the contract's own default (`FilterModalContent.tsx`), so a
+ * present `status` is always a real narrowing away from the default, never the default spelled
+ * out.
  */
 export function countActiveFilters(filters: SearchFilters): number {
   let n = 0;
   if (filters.listingType && filters.listingType !== 'all') n++;
   if (filters.propertyType?.length) n++;
+  if (filters.status?.length) n++;
   if (filters.minPrice !== undefined || filters.maxPrice !== undefined) n++;
   if (filters.beds !== undefined) n++;
   if (filters.baths !== undefined) n++;

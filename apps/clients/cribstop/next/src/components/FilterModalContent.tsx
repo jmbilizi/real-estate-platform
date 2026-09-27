@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { AMENITIES, PROPERTY_TYPES } from '@cribstop/property-contracts';
-import type { Amenity, PropertyType, SearchFilters } from '@/lib/types';
+import {
+  AMENITIES,
+  DEFAULT_STATUS_FILTER,
+  PROPERTY_TYPES,
+  STATUS_FILTER_VALUES,
+} from '@cribstop/property-contracts';
+import type { Amenity, PropertyType, SearchFilters, StatusFilter } from '@/lib/types';
 import { isLandOnly } from '@/lib/listing-filters';
 import { PARCEL_INTERLOCK_HINT } from '@/lib/store/types';
 
@@ -27,6 +32,22 @@ export interface FilterModalContentProps {
   /** The draft filter set being edited. Not the applied one — the parent commits on Show. */
   value: SearchFilters;
   onChange: (next: SearchFilters) => void;
+}
+
+/** `Pending` is the merged consumer status (migration `1785801600003_create-listings.js`); it
+ *  reads to a shopper as "Under Contract", not the RESO field name. */
+const STATUS_FILTER_LABELS: Record<StatusFilter, string> = {
+  Active: 'Active',
+  'Coming Soon': 'Coming Soon',
+  Pending: 'Under Contract',
+};
+
+/** True when `a` and `b` hold the same statuses, order and duplicates aside — used to collapse
+ *  the draft back to "unset" the moment it matches the contract's own default. */
+function sameStatusSet(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  const sorted = (values: readonly string[]) => [...values].sort();
+  return sorted(a).every((value, i) => value === sorted(b)[i]);
 }
 
 /** Icons are decorative; the label is the accessible name. */
@@ -99,6 +120,25 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
    */
   const parcelOnly = isLandOnly(value);
   const parcelHintId = parcelOnly ? PARCEL_HINT_ID : undefined;
+
+  /**
+   * Toggles one status chip. The draft is cleared back to `undefined` — never written as the
+   * default set spelled out explicitly — the moment it matches `DEFAULT_STATUS_FILTER`, so a user
+   * who ticks every box back on lands on exactly the state they started from: no `status` in the
+   * URL, no badge count, same as never having touched this filter.
+   */
+  const toggleStatus = (status: StatusFilter) => {
+    const current = value.status ?? DEFAULT_STATUS_FILTER;
+    const removing = current.includes(status);
+    // Never let the last chip come off. An empty `status` writes no URL param at all
+    // (`filtersToSearchParams`), so the contract's own default would apply underneath a modal
+    // that shows nothing selected — a UI lying about what it is about to search for.
+    if (removing && current.length === 1) return;
+    const next = removing ? current.filter((entry) => entry !== status) : [...current, status];
+    set({
+      status: sameStatusSet(next, DEFAULT_STATUS_FILTER) ? undefined : (next as StatusFilter[]),
+    });
+  };
 
   const toggleAmenity = (amenity: Amenity) => {
     const current = value.amenities ?? [];
@@ -242,6 +282,35 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
                   {PROPERTY_TYPE_ICONS[type]}
                 </span>
                 {type}
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
+
+      {/* ── Listing status ── Multi-select, matching Home Type's chip style. Defaults to
+           `DEFAULT_STATUS_FILTER` (Active, Coming Soon) when `value.status` is unset, so the
+           chips read as checked even before the user has touched this filter. */}
+      <fieldset>
+        <legend className="mb-2 font-semibold uppercase text-xs tracking-wider text-ink">
+          Listing Status
+        </legend>
+        <div className="flex flex-wrap gap-2">
+          {STATUS_FILTER_VALUES.map((status) => {
+            const active = (value.status ?? DEFAULT_STATUS_FILTER).includes(status);
+            return (
+              <button
+                key={status}
+                type="button"
+                aria-pressed={active}
+                onClick={() => toggleStatus(status)}
+                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                  active
+                    ? 'border-ink bg-ink text-white'
+                    : 'border-surface-border text-ink-muted hover:border-ink-subtle'
+                }`}
+              >
+                {STATUS_FILTER_LABELS[status]}
               </button>
             );
           })}

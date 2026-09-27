@@ -32,12 +32,21 @@ export const AMENITIES = [
   'EV Charging',
 ] as const;
 export const CONSUMER_STATUSES = ['Active', 'Pending', 'Coming Soon', 'Sold'] as const;
+/**
+ * The search `status` filter's closed set — `CONSUMER_STATUSES` minus `Sold`. No sold listing
+ * publishes in search yet (#33), so offering it as a filter value would be inert. 'Pending' is
+ * labelled "Under Contract" by callers: it already covers both the `Active Under Contract` and
+ * `Pending` MLS statuses, merged onto one `consumer_status` value upstream (migration
+ * `1785801600003_create-listings.js`).
+ */
+export const STATUS_FILTER_VALUES = ['Active', 'Coming Soon', 'Pending'] as const;
 export const LISTING_SOURCES = ['brightMLS', 'internal', 'other'] as const;
 
 export const listingTypeSchema = z.enum(LISTING_TYPES);
 export const propertyTypeSchema = z.enum(PROPERTY_TYPES);
 export const amenitySchema = z.enum(AMENITIES);
 export const consumerStatusSchema = z.enum(CONSUMER_STATUSES);
+export const statusFilterSchema = z.enum(STATUS_FILTER_VALUES);
 export const listingSourceSchema = z.enum(LISTING_SOURCES);
 
 /** Every entity id in this contract, request and response alike. The database columns are
@@ -118,4 +127,5 @@ export type ListingType = z.infer<typeof listingTypeSchema>;
 export type PropertyType = z.infer<typeof propertyTypeSchema>;
 export type Amenity = z.infer<typeof amenitySchema>;
 export type ConsumerStatus = z.infer<typeof consumerStatusSchema>;
+export type StatusFilter = z.infer<typeof statusFilterSchema>;
 export type ListingSource = z.infer<typeof listingSourceSchema>;
