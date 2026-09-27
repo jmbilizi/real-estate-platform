@@ -5,7 +5,6 @@ import { usePathname, useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
 import { useApp } from '@/lib/context';
 import {
-  bareZip,
   fetchNearbyLocationsByType,
   formatLocationLabel,
   highlightMatch,
@@ -804,6 +803,9 @@ export default function CompactSearchBar({
     pushUrl(searchTargetUrl({ kind: 'area', params }, searchListingType));
   const [whereShake, setWhereShake] = useState(false);
   const [isGeolocating, setIsGeolocating] = useState(false);
+  /** Set when a search ran on typed text that no geocode result matched (#369). Cleared as soon
+   *  as the user edits the location again. */
+  const [locationNotFound, setLocationNotFound] = useState(false);
 
   // When a suggestion is already in context (e.g. restored from URL on navigation),
   // mark it as committed so handleSearch doesn't treat it as unresolved.
@@ -1138,6 +1140,7 @@ export default function CompactSearchBar({
                 const val = e.target.value;
                 isCommittedSelectionRef.current = false;
                 setIsCommittedSelection(false);
+                setLocationNotFound(false);
                 if (typeof setLocation === 'function') setLocation(val);
                 setSelectedSuggestion(null);
                 if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -1173,6 +1176,7 @@ export default function CompactSearchBar({
                   setSelectedSuggestion(null);
                   isCommittedSelectionRef.current = false;
                   setIsCommittedSelection(false);
+                  setLocationNotFound(false);
                   setSuggestions([]);
                   inputRef.current?.focus({ preventScroll: true });
                 }}
@@ -1191,6 +1195,11 @@ export default function CompactSearchBar({
               </button>
             )}
           </div>
+          {locationNotFound && (
+            <p className="mt-2 px-1 text-[13px] text-red-600" role="alert">
+              We could not find that location. Try a different search.
+            </p>
+          )}
         </div>
         <div
           ref={dropdownRef}
@@ -1438,6 +1447,28 @@ export default function CompactSearchBar({
     setTimeout(() => setWhereShake(false), 600);
   }
 
+  /**
+   * Geocodes typed text with the same call the "Where" dropdown uses, and returns its top
+   * path-expressible result, `null` when nothing matches.
+   *
+   * Fixes #369: clicking Search with typed text that was never picked from the dropdown used to
+   * refuse the search outright, even for a real street or address, because `handleSearch` only
+   * ever searched a suggestion object. This runs the same lookup on demand so a search still works
+   * when the user types and submits before, or without, opening the dropdown.
+   */
+  async function geocodeTyped(query: string): Promise<any | null> {
+    const trimmed = query.trim();
+    if (!trimmed) return null;
+    try {
+      const resp = await fetch(`/api/geocode?q=${encodeURIComponent(trimmed)}`);
+      if (!resp.ok) return null;
+      const results = searchableSuggestions(await resp.json());
+      return results[0] ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   // Enhanced search: if location is empty, use geolocation; else require valid suggestion
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1465,7 +1496,22 @@ export default function CompactSearchBar({
       if (typeof setLocation === 'function') setLocation(formatLocationLabel(finalSuggestion));
     }
     if (!finalSuggestion) {
-      // No valid location — open the where panel and shake it to prompt the user
+      // Nothing picked from the dropdown yet — geocode the typed text directly (#369) rather
+      // than refuse a search the user plainly typed a real street or address for.
+      setIsSearching(true);
+      const geocoded = await geocodeTyped(location || '');
+      setIsSearching(false);
+      if (geocoded) {
+        finalSuggestion = geocoded;
+        setSelectedSuggestion(finalSuggestion);
+        isCommittedSelectionRef.current = true;
+        setIsCommittedSelection(true);
+        if (typeof setLocation === 'function') setLocation(formatLocationLabel(finalSuggestion));
+      }
+    }
+    if (!finalSuggestion) {
+      // No location the geocoder recognizes — open the where panel and shake it to prompt the user.
+      setLocationNotFound(true);
       shakeWhere();
       return;
     }
@@ -1473,9 +1519,11 @@ export default function CompactSearchBar({
     // can express (a street or neighborhood with no city) is refused, never searched unfiltered.
     const target = searchTargetFor(location || '', finalSuggestion);
     if (!target) {
+      setLocationNotFound(true);
       shakeWhere();
       return;
     }
+    setLocationNotFound(false);
     const label = formatLocationLabel(finalSuggestion);
     addRecentSearch(finalSuggestion);
     if (typeof setLocation === 'function') setLocation(label);
@@ -1671,6 +1719,7 @@ export default function CompactSearchBar({
       setSelectedSuggestion(null);
       isCommittedSelectionRef.current = false;
       setIsCommittedSelection(false);
+      setLocationNotFound(false);
       setSuggestions([]);
       setDateRange({ start: '', end: '', flexibility: 'exact' });
       setRangePickStep('start');
@@ -1682,24 +1731,21 @@ export default function CompactSearchBar({
       const dates = new URLSearchParams();
       if (dateRange.start) dates.set('moveIn', dateRange.start);
       if (dateRange.end && dateRange.end !== dateRange.start) dates.set('moveInEnd', dateRange.end);
-      if (selectedSuggestion) {
-        // Same refusal as the desktop path (handleSearch): never search unfiltered.
-        const target = searchTargetFor(location || '', selectedSuggestion);
-        if (!target) {
-          setActivePanel('where');
+      // Same fallback as the desktop path (handleSearch, #369): a suggestion picked from the
+      // dropdown wins, else the typed text is geocoded directly, never searched unfiltered.
+      let finalSuggestion = selectedSuggestion;
+      if (!finalSuggestion) finalSuggestion = await geocodeTyped(location || '');
+      if (finalSuggestion) {
+        const target = searchTargetFor(location || '', finalSuggestion);
+        if (target) {
+          setLocationNotFound(false);
+          pushUrl(searchTargetUrl(target, searchListingType, dates));
+          onClose?.();
           return;
         }
-        pushUrl(searchTargetUrl(target, searchListingType, dates));
-      } else {
-        const params = new URLSearchParams(dates);
-        if ((location || '').trim()) {
-          params.set('q', (location || '').trim());
-          const typedZip = bareZip(location || '');
-          if (typedZip) params.set('zip', typedZip);
-        }
-        pushSearch(params);
       }
-      onClose?.();
+      setLocationNotFound(true);
+      setActivePanel('where');
     };
 
     return (
@@ -1764,6 +1810,7 @@ export default function CompactSearchBar({
                         const val = e.target.value;
                         isCommittedSelectionRef.current = false;
                         setIsCommittedSelection(false);
+                        setLocationNotFound(false);
                         if (typeof setLocation === 'function') setLocation(val);
                         setSelectedSuggestion(null);
                         if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -1799,6 +1846,7 @@ export default function CompactSearchBar({
                           setSelectedSuggestion(null);
                           isCommittedSelectionRef.current = false;
                           setIsCommittedSelection(false);
+                          setLocationNotFound(false);
                           setSuggestions([]);
                           inputRef.current?.focus({ preventScroll: true });
                         }}
@@ -1821,6 +1869,11 @@ export default function CompactSearchBar({
                       </button>
                     )}
                   </div>
+                  {locationNotFound && (
+                    <p className="mt-2 px-1 text-[13px] text-red-600" role="alert">
+                      We could not find that location. Try a different search.
+                    </p>
+                  )}
                 </div>
               ) : (
                 <p className="text-[14px] text-ink-muted mt-1 pb-2">{location || 'Anywhere'}</p>
