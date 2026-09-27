@@ -9,7 +9,7 @@ import { join } from 'node:path';
  */
 
 describe('published document identity', () => {
-  it('serves the Property API document with info.title, exactly three paths, and the three operation ids', async () => {
+  it('serves the Property API document with info.title, exactly four paths, and the four operation ids', async () => {
     const response = await axios.get('/openapi.json');
 
     expect(response.status).toBe(200);
@@ -17,10 +17,12 @@ describe('published document identity', () => {
     expect(Object.keys(response.data.paths).sort()).toEqual([
       '/listings',
       '/listings/meta',
+      '/listings/neighborhoods',
       '/listings/{id}',
     ]);
     expect(response.data.paths['/listings'].get.operationId).toBe('searchListings');
     expect(response.data.paths['/listings/meta'].get.operationId).toBe('getListingsMeta');
+    expect(response.data.paths['/listings/neighborhoods'].get.operationId).toBe('getNeighborhoods');
     expect(response.data.paths['/listings/{id}'].get.operationId).toBe('getListing');
   });
 });

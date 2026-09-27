@@ -1,9 +1,17 @@
+import type { NeighborhoodsRequest } from '@cribstop/property-contracts';
 import {
   getListingAttributes,
+  getNeighborhoods,
   getPropertyAttributes,
   listBrightListingIdentities,
   type ReadClient,
 } from './repository';
+
+const baseNeighborhoodsRequest: NeighborhoodsRequest = {
+  listingType: 'all',
+  minCount: 3,
+  limit: 24,
+};
 
 /**
  * `getListingAttributes()`/`getPropertyAttributes()` (#128) push the address-suppression decision
@@ -84,6 +92,89 @@ describe('getPropertyAttributes', () => {
     await getPropertyAttributes(client, 'property-1');
 
     expect(captured[0]?.values).toHaveLength(1);
+  });
+});
+
+/** #390. `getNeighborhoods()` binds the query's shape; the aggregate's actual filtering needs a
+ *  real Postgres and is out of this project's DB-free unit-test scope (matching every other test
+ *  in this file). */
+describe('getNeighborhoods', () => {
+  it("reads listings directly (not listing_search_v) with the view's own visibility predicate, grouped and excluding name == city", async () => {
+    const { client, captured } = fakeClient();
+
+    await getNeighborhoods(client, baseNeighborhoodsRequest);
+
+    const [query] = captured;
+    expect(query?.text).toContain('FROM listings l');
+    expect(query?.text).not.toContain('listing_search_v');
+    expect(query?.text).toContain('l.deleted_at IS NULL');
+    expect(query?.text).toContain('l.internet_display_allowed');
+    expect(query?.text).toContain('GROUP BY lower(l.state), lower(l.neighborhood), lower(l.city)');
+    expect(query?.text).toContain('lower(l.neighborhood) <> lower(l.city)');
+  });
+
+  it('applies the shared noise gate defensively, not a second copy of the rule', async () => {
+    const { client, captured } = fakeClient();
+
+    await getNeighborhoods(client, baseNeighborhoodsRequest);
+
+    expect(captured[0]?.text).toContain("l.neighborhood !~* '^NONE\\y'");
+  });
+
+  it('binds listingType, state, city, minCount, slug and limit in that order', async () => {
+    const { client, captured } = fakeClient();
+
+    await getNeighborhoods(client, {
+      ...baseNeighborhoodsRequest,
+      listingType: 'sale',
+      state: 'MD',
+      city: 'Frederick',
+      minCount: 5,
+      slug: 'downtown',
+      limit: 10,
+    });
+
+    expect(captured[0]?.values).toEqual(['sale', 'MD', 'Frederick', 5, 'downtown', 10]);
+  });
+
+  it('title-cases name, derives slug, and echoes the window count as the envelope total', async () => {
+    const rows = [
+      {
+        name: 'FISHTOWN',
+        city: 'Philadelphia',
+        state: 'PA',
+        total: 42,
+        sale: 30,
+        rent: 12,
+        group_total: 7,
+      },
+    ];
+    const { client } = fakeClient(rows);
+
+    const result = await getNeighborhoods(client, baseNeighborhoodsRequest);
+
+    expect(result).toEqual({
+      results: [
+        {
+          name: 'Fishtown',
+          city: 'Philadelphia',
+          state: 'PA',
+          slug: 'fishtown',
+          total: 42,
+          sale: 30,
+          rent: 12,
+        },
+      ],
+      total: 7,
+    });
+  });
+
+  it('answers an empty result set with total 0', async () => {
+    const { client } = fakeClient([]);
+
+    const result = await getNeighborhoods(client, baseNeighborhoodsRequest);
+
+    expect(result).toEqual({ results: [], total: 0 });
   });
 });
 

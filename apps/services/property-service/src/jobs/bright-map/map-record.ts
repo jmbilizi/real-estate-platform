@@ -12,6 +12,7 @@
  */
 
 import { buildAddressKey, splitUnitDesignator } from '../../db/address';
+import { normalizeNeighborhood } from '../../db/neighborhood-normalize';
 import { composeStreetLine, titleCase } from './address-format';
 import { PropertyType } from '../../db/constants';
 import { ListingStatus } from '../../db/constants';
@@ -307,7 +308,9 @@ export function mapBrightPropertyRecord(
       address_key: addressKey,
       latitude: toNumber(payload.Latitude),
       longitude: toNumber(payload.Longitude),
-      neighborhood: nonBlank(payload.SubdivisionName),
+      // #390: write-time cleanup, not just blank-check. `SubdivisionName` is mostly a "not on
+      // file" placeholder (however misspelled) or a raw feed value with stray quoting/whitespace.
+      neighborhood: normalizeNeighborhood(nonBlank(payload.SubdivisionName)),
       property_type: propertyType,
       year_built: yearBuilt.value,
       lot_sqft: lotSqft.value,

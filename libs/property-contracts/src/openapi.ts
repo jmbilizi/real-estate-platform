@@ -5,6 +5,7 @@ import { listingDetailSchema } from './listing-detail';
 import { propertyLookupResponseSchema, propertyPageSchema } from './property-page';
 import { listingInquiryRequestSchema, listingInquiryResponseSchema } from './listing-inquiry';
 import { listingsMetaSchema } from './listings-meta';
+import { neighborhoodsRequestSchema, neighborhoodsResponseSchema } from './neighborhoods';
 import { mapRequestSchema, mapResponseSchema } from './listing-map';
 import { errorBodySchema } from './errors';
 import {
@@ -74,6 +75,7 @@ function componentSchemas() {
   registry.add(propertyPageSchema, { id: 'PropertyPage' });
   registry.add(propertyLookupResponseSchema, { id: 'PropertyLookupResponse' });
   registry.add(listingsMetaSchema, { id: 'ListingsMeta' });
+  registry.add(neighborhoodsResponseSchema, { id: 'NeighborhoodsResponse' });
   registry.add(mapResponseSchema, { id: 'MapResponse' });
   registry.add(listingInquiryRequestSchema, { id: 'ListingInquiryRequest' });
   registry.add(listingInquiryResponseSchema, { id: 'ListingInquiryResponse' });
@@ -212,6 +214,35 @@ export function toOpenApiDocument() {
               description: 'Dataset freshness and provenance.',
               content: {
                 'application/json': { schema: { $ref: '#/components/schemas/ListingsMeta' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/listings/neighborhoods': {
+        get: {
+          operationId: 'getNeighborhoods',
+          summary: 'Neighborhood counts',
+          description:
+            'Publishable listings grouped by neighborhood. Counts only — no ranking, no ' +
+            'descriptive word. `name` is title case, built from the most frequent raw feed ' +
+            'variant in the group. `slug` matches the property page’s slug rules. `total` in ' +
+            'the response is the exact count of matching neighborhoods, never clamped to `limit`.',
+          parameters: searchParameters(neighborhoodsRequestSchema),
+          responses: {
+            '200': {
+              description: 'Neighborhoods with a listing count at or above minCount.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/NeighborhoodsResponse' },
+                },
+              },
+            },
+            '400': {
+              description: 'Unknown or invalid query parameter (`invalid_request`).',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
               },
             },
             '500': serverErrorResponse,
