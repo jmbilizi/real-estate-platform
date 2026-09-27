@@ -22,6 +22,8 @@ const CAROUSEL_PAGE_SIZE = 8;
  * key rather than adding one: an entry now carries the listing type active at the time of that
  * search, so the newest entry says which side the visitor searched last.
  */
+/** Only `'rent'` flips the order; a last search of `'sale'`, `'all'`, `'sold'`, or none at all
+ *  all fall to the "otherwise sale first" branch `useSectionOrder` applies below. */
 function lastSearchedSide(): ListingSide | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -29,7 +31,7 @@ function lastSearchedSide(): ListingSide | null {
     if (!stored) return null;
     const parsed = JSON.parse(stored);
     const latest = Array.isArray(parsed) ? parsed[0] : null;
-    return latest?.listingType === 'rent' ? 'rent' : latest?.listingType === 'sale' ? 'sale' : null;
+    return latest?.listingType === 'rent' ? 'rent' : null;
   } catch {
     return null;
   }

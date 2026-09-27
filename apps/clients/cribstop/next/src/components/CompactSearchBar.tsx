@@ -845,11 +845,13 @@ export default function CompactSearchBar({
   const panelRef = useRef<HTMLDivElement | null>(null);
   // Load recent searches from localStorage
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('recentSearches');
-      if (stored) {
-        setRecentSearches(JSON.parse(stored));
-      }
+    if (typeof window === 'undefined') return;
+    const stored = localStorage.getItem('recentSearches');
+    if (!stored) return;
+    try {
+      setRecentSearches(JSON.parse(stored));
+    } catch {
+      // Corrupted value (hand-edited, or written by an older format) — keep the empty default.
     }
   }, []);
 
