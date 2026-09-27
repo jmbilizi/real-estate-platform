@@ -156,8 +156,9 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
             {marketingBadge && (
               <span
                 // Only the top row shares the save control's band, so only it is capped short of
-                // `right-3`. 2rem of this container is that control plus its gutter.
-                className="max-w-[calc(100%-2rem)] truncate rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-ink shadow-card"
+                // `right-3`. 3.5rem of this container is the save control's 44px tap target plus
+                // its gutter (right-3 inset + 44px width = 56px = 3.5rem).
+                className="max-w-[calc(100%-3.5rem)] truncate rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-ink shadow-card"
               >
                 {marketingBadge}
               </span>
@@ -193,7 +194,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
                * distinction, and the brand fill pulled the eye off the photo. The bold `Open:`
                * label already separates them.
                */
-              <span className="max-w-[calc(100%-2rem)] truncate rounded-full bg-white px-2 py-1 text-[11px] font-medium text-ink shadow-card">
+              <span className="max-w-[calc(100%-3.5rem)] truncate rounded-full bg-white px-2 py-1 text-[11px] font-medium text-ink shadow-card">
                 {/*
                  * Only the word is bold, so this reads as a label and its value rather than as one
                  * undifferentiated string — at 11px, a uniform weight makes "Open Sat 11am" scan as
@@ -217,7 +218,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
             e.stopPropagation();
             toggleSave(listing.id);
           }}
-          className={`absolute right-1 flex h-11 w-11 items-center justify-center transition hover:scale-110 ${isSold ? 'top-5' : 'top-0'}`}
+          className={`absolute right-3 flex h-11 w-11 items-center justify-center transition hover:scale-110 ${isSold ? 'top-9' : 'top-3'}`}
           aria-label={saved ? 'Unsave' : 'Save'}
         >
           <svg

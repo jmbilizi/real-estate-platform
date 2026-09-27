@@ -338,7 +338,7 @@ describe('ListingCard', () => {
       const marketing = classes(withBoth.getByText('Price reduced'));
       const openHouseClasses = classes(withBoth.getByText('Open:').parentElement as HTMLElement);
 
-      for (const shared of ['max-w-[calc(100%-2rem)]', 'px-2', 'py-1', 'shadow-card', 'bg-white'])
+      for (const shared of ['max-w-[calc(100%-3.5rem)]', 'px-2', 'py-1', 'shadow-card', 'bg-white'])
         expect([shared, marketing.has(shared), openHouseClasses.has(shared)]).toEqual([
           shared,
           true,

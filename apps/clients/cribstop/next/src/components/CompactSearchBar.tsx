@@ -263,6 +263,10 @@ const isMorphPair = (a: DockMode, b: DockMode) => a !== b && (a === 'large') !==
 // pill <-> expanded, the crossfade above for large <-> pill), both of which
 // overwrite and then reset it, silently discarding a manual centering transform
 // and leaving the dock offset to one side.
+// `pill` and `expanded` dock inside SiteHeader's fixed 64px band, which does not
+// reserve safe-area-inset-top (#400 follow-up). Their offsets stay bare numbers
+// so they track the header instead of drifting from it; only overlays that own
+// their own space, like the mobileSheetMode sheet below, add the inset.
 const DOCK_STYLE: Record<'pill' | 'expanded', React.CSSProperties> = {
   pill: {
     position: 'fixed',
