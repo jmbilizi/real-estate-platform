@@ -23,11 +23,16 @@ async function main(): Promise<void> {
   const stop = (): void => {
     stopping = true;
     log('Stop signal received. Exiting.');
-    // A page in flight is safe to abandon: its checkpoint commits with its mapping, or not at all.
+    // A page in flight is safe to abandon: a restart re-applies it, which the upserts make a no-op
+    // past whatever already committed (#359).
     process.exit(0);
   };
   process.on('SIGTERM', stop);
   process.on('SIGINT', stop);
+  // +6 headroom over `applyConcurrency` (#359): the lock connection held for the worker's life, and
+  // a couple of overlapping staging/mapping connections at the moment concurrent applies hand off
+  // between them. Postgres defaults to 100 `max_connections`, so this is nowhere near the ceiling.
+  getPool({ max: settings.applyConcurrency + 6 });
   await waitForSchema(getPool(), log);
   await runWorker({ config, settings, log }, () => stopping);
 }

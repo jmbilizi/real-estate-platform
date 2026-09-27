@@ -78,9 +78,20 @@ async function resolveFacts(
  *
  * The caller's physical fields on `row` are IGNORED — they are recomputed here. That is deliberate: a
  * caller cannot introduce a snapshot that never matched the durable rows.
+ *
+ * `knownNotTerminal` skips the terminal check's own SELECT for a caller that already read the
+ * row's status this transaction (`upsertListingBySourceKey`, right below) — never pass it from
+ * anywhere else, or an unvalidated caller can write past the terminal freeze this module exists to
+ * enforce. Defaults to performing the check, so a direct call stays guarded.
  */
-export async function upsertListing(client: Queryable, row: ListingRow): Promise<string> {
-  await assertNotTerminal(client, row.id);
+export async function upsertListing(
+  client: Queryable,
+  row: ListingRow,
+  options: { knownNotTerminal?: boolean } = {},
+): Promise<string> {
+  if (options.knownNotTerminal !== true) {
+    await assertNotTerminal(client, row.id);
+  }
   const facts = await resolveFacts(client, row.property_id, row.unit_id);
 
   // PRD §6.3: a real listing can legitimately attach to a property that originated from the seed, so the
@@ -262,7 +273,10 @@ export async function upsertListingBySourceKey(
     return existingId;
   }
   const id = typeof existingId === 'string' ? existingId : randomUUID();
-  return upsertListing(client, { ...row, id });
+  // The SELECT above already read `is_terminal` for this id (or it does not exist, so it cannot be
+  // terminal): re-reading it in `upsertListing()` would be a second round trip for an answer this
+  // function already has (#359).
+  return upsertListing(client, { ...row, id }, { knownNotTerminal: true });
 }
 
 /**

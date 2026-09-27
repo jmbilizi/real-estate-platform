@@ -91,3 +91,6 @@ spec:
               value: "6" # sibling slices in flight at once; a 429/5xx halves it for the run
             - name: BRIGHT_SYNC_PAGE_SIZE
               value: "5000" # records per slice request ($top), 10000 max
+            # ── Slice apply (#359) ───────────────────────────────────────────────────────
+            - name: BRIGHT_SYNC_APPLY_CONCURRENCY
+              value: "4" # pages applied at once, on separate pool connections — the write-path ceiling
