@@ -5,7 +5,9 @@ import {
   listingDetailSchema,
   type ListingsMeta,
   listingsMetaSchema,
+  propertyPagePath,
   requiresBrokerContact,
+  streetLineOf,
 } from '@cribstop/property-contracts';
 
 /**
@@ -72,7 +74,8 @@ export interface ListingCardDbRow {
   /** Durable property facts, detail projection only. */
   property_year_built?: number | null;
   property_lot_sqft?: number | null;
-  /** Durable unit facts, detail projection only. Null `unit_id` means there is no unit at all. */
+  /** Durable unit facts. Null `unit_id` means there is no unit at all. Search reads only
+   *  `unit_number`, and only when the view shows the address. */
   unit_number?: string | null;
   unit_beds?: number | null;
   unit_baths?: number | null;
@@ -121,6 +124,20 @@ function openHouseOf(row: ListingCardDbRow): unknown {
   };
 }
 
+/** #382. The canonical property page path. The view nulls `address` when the seller withheld it. */
+function propertyPathOf(row: ListingCardDbRow, homeId: string): string {
+  const unitNumber = row.address === null ? null : (row.unit_number ?? null);
+  return propertyPagePath(
+    {
+      streetLine: row.address === null ? null : streetLineOf(row.address, unitNumber),
+      unitNumber,
+      city: row.city,
+      state: row.state,
+    },
+    homeId,
+  );
+}
+
 /**
  * The fields common to the card and the detail's `listing` block. `sponsored` is the one derived
  * value: it is `featured_reason = 'paid'` and nothing else. `recommended` ranks `featured` first, so a
@@ -138,8 +155,11 @@ function commonFields(row: ListingCardDbRow): Record<string, unknown> {
       `Listing ${row.id} has neither a broker phone nor a broker email (NAR 7.58); refusing to serve it.`,
     );
   }
+  const homeId = row.unit_id ?? row.property_id;
   return {
     id: row.id,
+    homeId,
+    propertyPath: propertyPathOf(row, homeId),
     title: row.title,
     address: row.address,
     city: row.city,

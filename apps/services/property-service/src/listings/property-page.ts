@@ -1,38 +1,69 @@
 import {
+  type ListingCardRow,
+  type ListingDetail,
+  type MarketStatus,
   marketStatusSchema,
   normalizePlaceName,
   normalizeStreetLine,
   normalizeUnit,
   type ParsedPropertyPath,
   parsePropertyPath,
+  type PropertyHistoryEntry,
+  propertyHistoryEntrySchema,
   type PropertyMatch,
   type PropertyPage,
+  propertyPagePath,
   propertyPageSchema,
-  propertyPath,
   type PropertyRecord,
   propertyRecordSchema,
+  type PropertySeo,
+  propertySlug,
+  searchRequestSchema,
 } from '@cribstop/property-contracts';
 import {
   findAddressCandidates,
+  findHistoryFacts,
+  findHomeRows,
   findListingById,
   findPropertyRecord,
+  type HistoryFactsDbRow,
   type PropertyRecordDbRow,
   type ReadClient,
+  type ReadPool,
+  searchListings,
 } from './repository';
 
 /**
- * The property page (#349). `listing_detail_v` decides the market status and whether listing data
- * may show. This module only assembles the response and resolves an address path to listings.
+ * The property page (#382). `listing_detail_v` decides the market status and whether listing data
+ * may show, and `listing_search_v` decides every listing field. This module only selects the
+ * latest listing, assembles the response and resolves an address path to a home.
  */
+
+const NEARBY_LIMIT = 8;
+/** Half the side of the nearby search square, in degrees. About 2 km in the DMV. */
+const NEARBY_HALF_SIDE = 0.02;
+const LIVE_STATUSES: ReadonlySet<string> = new Set([
+  'Active',
+  'Coming Soon',
+  'Under Contract',
+  'Pending',
+]);
 
 function toNumber(value: number | string | null): number | null {
   return value === null ? null : Number(value);
 }
 
+function instant(value: Date | string): string {
+  return new Date(value).toISOString();
+}
+
+export function homeIdOf(row: Pick<PropertyRecordDbRow, 'property_id' | 'unit_id'>): string {
+  return row.unit_id ?? row.property_id;
+}
+
 export function toPropertyRecord(row: PropertyRecordDbRow): PropertyRecord {
   return propertyRecordSchema.parse({
     propertyId: row.property_id,
-    listingId: row.id,
     address:
       row.address_street === null
         ? null
@@ -50,6 +81,196 @@ export function toPropertyRecord(row: PropertyRecordDbRow): PropertyRecord {
     source: row.source,
     isSample: row.is_sample,
   });
+}
+
+/**
+ * The listing the page is about. A live listing wins, because the sync can touch a stale
+ * duplicate after it. Otherwise the most recent listing decides, Off market included.
+ * `rows` is newest first.
+ */
+export function latestOf(rows: readonly PropertyRecordDbRow[]): PropertyRecordDbRow | null {
+  return (
+    rows.find((row) => row.listing_data_displayable && LIVE_STATUSES.has(row.market_status)) ??
+    rows[0] ??
+    null
+  );
+}
+
+function pageAddress(row: PropertyRecordDbRow) {
+  return {
+    streetLine: row.address_street,
+    unitNumber: row.address_street === null ? null : row.unit_number,
+    city: row.city,
+    state: row.state,
+  };
+}
+
+function toHistoryEntry(
+  row: PropertyRecordDbRow,
+  facts: HistoryFactsDbRow,
+): PropertyHistoryEntry | null {
+  const parsed = propertyHistoryEntrySchema.safeParse({
+    listingId: row.id,
+    marketStatus: row.market_status,
+    listingType: facts.listing_type,
+    price: facts.price === null ? null : Number(facts.price),
+    closePrice: facts.close_price === null ? null : Number(facts.close_price),
+    closeDate: facts.close_date,
+    lastUpdated: instant(facts.last_updated),
+  });
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * Past listings whose data may display. The facts come from `listing_search_v`, so a withdrawn,
+ * expired or canceled listing, or a sale outside the sold rule, has no facts and is left out.
+ * On a page that shows the address, a listing whose seller withheld the address is left out too:
+ * its price and date must not be tied to the address.
+ */
+async function historyOf(
+  pool: ReadClient,
+  rows: readonly PropertyRecordDbRow[],
+  latest: PropertyRecordDbRow,
+): Promise<PropertyHistoryEntry[]> {
+  const pageShowsAddress = latest.address_street !== null;
+  const past = rows.filter(
+    (row) =>
+      row.id !== latest.id &&
+      row.listing_data_displayable &&
+      (!pageShowsAddress || row.address_street !== null),
+  );
+  const facts = new Map(
+    (
+      await findHistoryFacts(
+        pool,
+        past.map((row) => row.id),
+      )
+    ).map((fact) => [fact.id, fact]),
+  );
+  return past
+    .map((row) => {
+      const fact = facts.get(row.id);
+      return fact === undefined ? null : toHistoryEntry(row, fact);
+    })
+    .filter((entry): entry is PropertyHistoryEntry => entry !== null);
+}
+
+function square(latitude: number, longitude: number): string {
+  const d = NEARBY_HALF_SIDE;
+  return JSON.stringify({
+    type: 'Polygon',
+    coordinates: [
+      [
+        [longitude - d, latitude - d],
+        [longitude + d, latitude - d],
+        [longitude + d, latitude + d],
+        [longitude - d, latitude + d],
+        [longitude - d, latitude - d],
+      ],
+    ],
+  });
+}
+
+/** Other active listings near the home: a square around its point, else its city. */
+async function nearbyOf(
+  pool: ReadPool,
+  homeId: string,
+  latest: PropertyRecordDbRow,
+  detail: ListingDetail | null,
+): Promise<ListingCardRow[]> {
+  const listing = detail?.listing ?? null;
+  const place =
+    listing !== null && listing.latitude !== null && listing.longitude !== null
+      ? { boundary: square(listing.latitude, listing.longitude) }
+      : { city: latest.city, state: latest.state };
+  const envelope = await searchListings(
+    pool,
+    searchRequestSchema.parse({
+      ...place,
+      listingType: listing?.listingType === 'rent' ? 'rent' : 'sale',
+      status: 'Active',
+      sort: 'newest',
+      pageSize: String(NEARBY_LIMIT + 1),
+    }),
+  );
+  return envelope.results.filter((card) => card.homeId !== homeId).slice(0, NEARBY_LIMIT);
+}
+
+const WHOLE = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
+const usd = (value: number): string => `$${WHOLE.format(value)}`;
+
+function statusLead(marketStatus: MarketStatus, detail: ListingDetail | null): string {
+  const listing = detail?.listing ?? null;
+  if (listing === null) return 'Not listed for sale or rent now';
+  if (marketStatus === 'Sold') {
+    return listing.closePrice === null ? 'Sold' : `Sold for ${usd(listing.closePrice)}`;
+  }
+  const offer = listing.listingType === 'rent' ? 'for rent' : 'for sale';
+  const price =
+    listing.price === null
+      ? ''
+      : ` at ${usd(listing.price)}${listing.listingType === 'rent' ? '/mo' : ''}`;
+  return `${marketStatus} ${offer}${price}`;
+}
+
+/** SEO text from the same facts the page shows, so it never says more than the page. */
+export function seoOf(
+  record: PropertyRecord,
+  marketStatus: MarketStatus,
+  detail: ListingDetail | null,
+): PropertySeo {
+  const place = `${record.city}, ${record.state} ${record.zip}`;
+  const title = record.address === null ? `Home in ${place}` : `${record.address}, ${place}`;
+  const facts = [
+    record.beds === null ? null : `${record.beds} bd`,
+    record.baths === null ? null : `${record.baths} ba`,
+    record.sqft === null ? null : `${WHOLE.format(record.sqft)} sq ft`,
+  ].filter((fact): fact is string => fact !== null);
+  const home = `${facts.length > 0 ? `${facts.join(', ')} ` : ''}${record.propertyType}`;
+  return {
+    title,
+    description: `${statusLead(marketStatus, detail)}. ${home} in ${record.city}, ${record.state}.`,
+  };
+}
+
+/** The whole property page of one home, or `null` for the one frozen 404. */
+export async function findHomePage(pool: ReadPool, homeId: string): Promise<PropertyPage | null> {
+  const rows = await findHomeRows(pool, homeId);
+  const latest = latestOf(rows);
+  if (latest === null) return null;
+  // The reads are separate statements, so a sync can change the row between them. A listing that
+  // left the search view in between renders as Off market, never with stale listing data.
+  const detail = latest.listing_data_displayable ? await findListingById(pool, latest.id) : null;
+  const displayable = detail !== null;
+  const marketStatus = displayable ? marketStatusSchema.parse(latest.market_status) : 'Off market';
+  const record = toPropertyRecord(latest);
+  const [history, nearby] = await Promise.all([
+    historyOf(pool, rows, latest),
+    nearbyOf(pool, homeId, latest, detail),
+  ]);
+  return propertyPageSchema.parse({
+    homeId,
+    propertyId: latest.property_id,
+    unitId: latest.unit_id,
+    slug: propertySlug(pageAddress(latest)),
+    canonicalPath: propertyPagePath(pageAddress(latest), homeId),
+    marketStatus,
+    listingDataDisplayable: displayable,
+    seo: seoOf(record, marketStatus, detail),
+    propertyRecord: record,
+    latestListing: detail,
+    history,
+    nearby,
+  });
+}
+
+/** The page of the home one listing is on. `null` for the one frozen 404. */
+export async function findListingHomePage(
+  pool: ReadPool,
+  listingId: string,
+): Promise<PropertyPage | null> {
+  const row = await findPropertyRecord(pool, listingId);
+  return row === null ? null : findHomePage(pool, homeIdOf(row));
 }
 
 /** Compared in slug form, so `O'Donnell` and `118-120` match the path that slugify built. */
@@ -97,7 +318,7 @@ function preferred(a: PropertyRecordDbRow, b: PropertyRecordDbRow): number {
   return lastUpdatedMs(b) - lastUpdatedMs(a);
 }
 
-/** One row per property and unit at the parsed address: its current listing. */
+/** One row per home at the parsed address: its current listing. */
 export async function resolveAddress(
   pool: ReadClient,
   parsed: ParsedPropertyPath,
@@ -110,66 +331,11 @@ export async function resolveAddress(
   });
   const best = new Map<string, PropertyRecordDbRow>();
   for (const row of atAddress(candidates, parsed)) {
-    const key = `${row.property_id}|${row.unit_id ?? ''}`;
+    const key = homeIdOf(row);
     const held = best.get(key);
     if (held === undefined || preferred(row, held) < 0) best.set(key, row);
   }
   return [...best.values()].sort(preferred);
-}
-
-function pathOf(row: PropertyRecordDbRow, withZip: boolean): string | null {
-  if (row.address_street === null) return null;
-  return propertyPath(
-    {
-      streetLine: row.address_street,
-      unitNumber: row.unit_number,
-      city: row.city,
-      state: row.state,
-      zip: row.zip,
-    },
-    { withZip },
-  );
-}
-
-/**
- * The address URL of one listing. The ZIP is added only when the short form names more than one
- * property. `null` when the seller withheld the address, when the street line has no house number,
- * or when the address resolves to a different listing (a rental beside a sale, an older listing).
- * A null path keeps `/listing/<id>` as that listing's URL.
- */
-export async function canonicalPathFor(
-  pool: ReadClient,
-  row: PropertyRecordDbRow,
-): Promise<string | null> {
-  const short = pathOf(row, false);
-  if (short === null) return null;
-  const [, citySeg, addressSeg] = short.split('/');
-  const parsed = parsePropertyPath(citySeg ?? '', addressSeg ?? '');
-  if (parsed === null) return null;
-  const places = await resolveAddress(pool, parsed);
-  if (!places.some((place) => place.id === row.id)) return null;
-  if (places.length === 1) return short;
-  const withZip = parsePropertyPath(citySeg ?? '', `${addressSeg ?? ''}-${row.zip.slice(0, 5)}`);
-  if (withZip === null) return null;
-  const zipPlaces = await resolveAddress(pool, withZip);
-  return zipPlaces.length === 1 && zipPlaces[0]?.id === row.id ? pathOf(row, true) : null;
-}
-
-/** The property page for one listing id, or `null` for the one frozen 404. */
-export async function findPropertyPage(pool: ReadClient, id: string): Promise<PropertyPage | null> {
-  const row = await findPropertyRecord(pool, id);
-  if (row === null) return null;
-  // The two reads are separate statements, so a sync can change the row between them. A listing
-  // that left the search view in between renders as Off market, never with stale listing data.
-  const detail = row.listing_data_displayable ? await findListingById(pool, id) : null;
-  const displayable = detail !== null;
-  return propertyPageSchema.parse({
-    marketStatus: displayable ? marketStatusSchema.parse(row.market_status) : 'Off market',
-    listingDataDisplayable: displayable,
-    path: await canonicalPathFor(pool, row),
-    propertyRecord: toPropertyRecord(row),
-    detail,
-  });
 }
 
 export interface AddressFetcher {
@@ -182,13 +348,13 @@ export type LookupResult =
   | { readonly kind: 'not-found' }
   | { readonly kind: 'found'; readonly matches: PropertyMatch[] };
 
-function toMatch(row: PropertyRecordDbRow, withZip: boolean): PropertyMatch | null {
-  const path = pathOf(row, withZip);
+function toMatch(row: PropertyRecordDbRow): PropertyMatch | null {
   const record = toPropertyRecord(row);
-  if (path === null || record.address === null) return null;
+  if (record.address === null) return null;
+  const homeId = homeIdOf(row);
   return {
-    listingId: row.id,
-    path,
+    homeId,
+    path: propertyPagePath(pageAddress(row), homeId),
     address: record.address,
     city: row.city,
     state: row.state,
@@ -197,7 +363,7 @@ function toMatch(row: PropertyRecordDbRow, withZip: boolean): PropertyMatch | nu
   };
 }
 
-/** Resolves the two path segments. On a local miss, reads the address from the MLS once. */
+/** Resolves the two #349 path segments. On a local miss, reads the address from the MLS once. */
 export async function lookupProperty(
   pool: ReadClient,
   segments: { readonly city: string; readonly address: string },
@@ -210,9 +376,8 @@ export async function lookupProperty(
     await fetcher.fetchAddress(parsed);
     rows = await resolveAddress(pool, parsed);
   }
-  const withZip = parsed.zip !== null || rows.length > 1;
   const matches = rows
-    .map((row) => toMatch(row, withZip))
+    .map((row) => toMatch(row))
     .filter((match): match is PropertyMatch => match !== null);
   return matches.length === 0 ? { kind: 'not-found' } : { kind: 'found', matches };
 }

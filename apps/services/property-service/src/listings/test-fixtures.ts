@@ -11,6 +11,8 @@ import type { ListingCardRow, ListingDetail, Media, OpenHouse } from '@cribstop/
 
 const BASE_CARD_INPUT = {
   id: '018f2f2a-6d1b-7c3d-8b2e-000000000001',
+  homeId: '018f2f2a-6d1b-7c3d-8b2e-000000000003',
+  propertyPath: '/property/900-king-st-alexandria-va-unit-4b/018f2f2a-6d1b-7c3d-8b2e-000000000003',
   title: 'Sample Listing (Sample)',
   // Widened from the `as const` literal so a test can express the masked case — `address === null`
   // is the signal the whole suppression boundary keys off (`suppression.ts`).
