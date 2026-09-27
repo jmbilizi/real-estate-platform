@@ -29,3 +29,8 @@ spec:
             # tools/infra/node-heap-ratio.js checks this ratio against the limit above.
             - name: NODE_OPTIONS
               value: "--max-old-space-size=341"
+            # Lowered from the default of 4 (#388): 4 concurrent applies starved dev Postgres
+            # (shared by every DB) and pushed property-service queries past the gateway's 5 s
+            # QoS timeout.
+            - name: BRIGHT_SYNC_APPLY_CONCURRENCY
+              value: "2"

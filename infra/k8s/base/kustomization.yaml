@@ -57,6 +57,9 @@ resources:
   - deployments/bright-sync-worker.deployment.yaml
   - deployments/cribstop-web.deployment.yaml
 
+  ## PodDisruptionBudgets (voluntary-disruption protection)
+  - poddisruptionbudgets/property-service.poddisruptionbudget.yaml
+
   # Ingress rules (external routing - uses Nginx controller above)
   - ingresses/jaeger.ingress.yaml
   - ingresses/api-gateway.ingress.yaml

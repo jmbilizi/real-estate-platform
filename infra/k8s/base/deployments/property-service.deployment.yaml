@@ -7,6 +7,14 @@ metadata:
     app: property-service
 spec:
   replicas: 1
+  # #388: a rolling update never drops below the pre-update replica count (maxUnavailable: 0), so
+  # search stays up through a deploy. It costs one extra pod (maxSurge: 1) only for the rollout's
+  # duration.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: property-service
@@ -138,8 +146,10 @@ spec:
             timeoutSeconds: 5
             failureThreshold: 3
           readinessProbe:
+            # #388: readiness checks the DB (SELECT 1), not just the process, so a pod that can't
+            # reach Postgres stops receiving traffic instead of returning slow 5xx responses.
             httpGet:
-              path: /health
+              path: /health/ready
               port: 3002
             initialDelaySeconds: 5
             periodSeconds: 5

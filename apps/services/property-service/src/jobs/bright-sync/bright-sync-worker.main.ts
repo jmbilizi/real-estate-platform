@@ -32,7 +32,10 @@ async function main(): Promise<void> {
   // +6 headroom over `applyConcurrency` (#359): the lock connection held for the worker's life, and
   // a couple of overlapping staging/mapping connections at the moment concurrent applies hand off
   // between them. Postgres defaults to 100 `max_connections`, so this is nowhere near the ceiling.
-  getPool({ max: settings.applyConcurrency + 6 });
+  //
+  // `statement_timeout: 0` (#388) opts out of the API's default 4 s cap: a bulk page apply can
+  // legitimately run longer, and this pool is never shared with the API process.
+  getPool({ max: settings.applyConcurrency + 6, statement_timeout: 0 });
   await waitForSchema(getPool(), log);
   await runWorker({ config, settings, log }, () => stopping);
 }

@@ -19,13 +19,16 @@ spec:
         - name: postgres
           # Built image (PostGIS + pgvector) — see infra/docker/postgres/Dockerfile.
           image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/postgres-postgis-pgvector:dev
+          # Raised from 250m/512Mi limits (#388): the sync worker's concurrent applies starved
+          # every DB on this instance, pushing property-service queries past the gateway's 5 s
+          # QoS timeout. cpx21 dev nodes have 3 vCPU / 4 GB headroom for this.
           resources:
             requests:
-              memory: "256Mi"
-              cpu: "100m"
-            limits:
-              memory: "512Mi"
+              memory: "768Mi"
               cpu: "250m"
+            limits:
+              memory: "1536Mi"
+              cpu: "1500m"
   volumeClaimTemplates:
     - metadata:
         name: postgres-data

@@ -1,0 +1,14 @@
+# #388: keeps at least one property-service pod Ready through a voluntary disruption (node
+# drain, cluster upgrade), so search stays up. Carries the same `app` label as every other
+# property-service resource — deploy-control selects services by that label, not by name.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: property-service
+  labels:
+    app: property-service
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: property-service

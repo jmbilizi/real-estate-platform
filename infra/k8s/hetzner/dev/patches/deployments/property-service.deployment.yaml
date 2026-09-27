@@ -7,7 +7,9 @@ kind: Deployment
 metadata:
   name: property-service
 spec:
-  replicas: 1
+  # #388: 2 replicas so search stays up through a pod restart or a slow rollout, backed by a
+  # RollingUpdate strategy (base) and a PodDisruptionBudget (base) that keep at least one Ready.
+  replicas: 2
   selector:
     matchLabels:
       app: property-service
