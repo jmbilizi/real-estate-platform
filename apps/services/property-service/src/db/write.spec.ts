@@ -138,6 +138,8 @@ describe('upsertListing column coverage for the suppression flags', () => {
     'media_display_allowed',
     'days_on_market_display_allowed',
     'days_on_market',
+    'original_list_price',
+    'listed_at',
   ])('names %s in the INSERT, so the caller-supplied value is not lost to a default', (column) => {
     expect(insertColumns()).toContain(column);
   });
@@ -247,7 +249,6 @@ describe('upsertListingBySourceKey', () => {
     description_moderation: 'approved',
     featured: false,
     featured_reason: null,
-    price_reduced: false,
     new_construction: false,
     internet_display_allowed: true,
     address_display_allowed: true,
@@ -265,11 +266,14 @@ describe('upsertListingBySourceKey', () => {
     listing_agent_name: null,
     is_sample: true,
     last_updated: '2026-09-18T00:00:00Z',
+    listed_at: '2026-09-01T00:00:00Z',
   };
 
   function createFakeClient(options: {
     lookupRows: Record<string, unknown>[];
     factsRows?: Record<string, unknown>[];
+    /** The listing's stored `original_list_price`, as if a prior write already froze one. */
+    originalListPriceRows?: Record<string, unknown>[];
   }): { client: Queryable; queries: RecordedQuery[] } {
     const queries: RecordedQuery[] = [];
     const client: Queryable = {
@@ -283,6 +287,9 @@ describe('upsertListingBySourceKey', () => {
           return Promise.resolve({
             rows: options.lookupRows.length > 0 ? [{ is_terminal: false }] : [],
           });
+        }
+        if (text.includes('SELECT original_list_price FROM listings')) {
+          return Promise.resolve({ rows: options.originalListPriceRows ?? [] });
         }
         if (text.includes('FROM properties p')) {
           return Promise.resolve({
@@ -356,6 +363,66 @@ describe('upsertListingBySourceKey', () => {
 
     expect(id).toBe('listing-1');
     expect(queries.some((q) => q.text.includes('INSERT INTO listings'))).toBe(false);
+  });
+
+  /**
+   * #391. Bright never populates `OriginalListPrice`/`PreviousListPrice` on this MLS (confirmed
+   * against the production feed), so this service is the only place "the original price" can be
+   * recorded — the first write for a listing id freezes its list price, and every later write
+   * compares the CURRENT list price against that frozen value rather than the previous write's.
+   */
+  describe('original_list_price / price_reduced (#391)', () => {
+    it('freezes the first list price as its own original on first insert, never reduced', async () => {
+      const { client, queries } = createFakeClient({ lookupRows: [] });
+
+      await upsertListingBySourceKey(client, baseRow);
+
+      const insert = queries.find((q) => q.text.includes('INSERT INTO listings'));
+      // original_list_price is the second-to-last bound value, price_reduced is bound earlier
+      // alongside featured/featured_reason — asserted by column name via the text, not by index,
+      // so a reordering of the column list cannot silently swap this assertion's meaning.
+      expect(insert?.text).toContain('original_list_price');
+      const originalListPriceIndex = insert!.text
+        .slice(insert!.text.indexOf('INSERT INTO listings'), insert!.text.indexOf('VALUES'))
+        .split(',')
+        .findIndex((column) => column.trim() === 'original_list_price');
+      expect(insert?.values?.[originalListPriceIndex]).toBe(baseRow.list_price);
+    });
+
+    it('keeps the frozen original on an update and reports reduced when the new price is lower', async () => {
+      const { client, queries } = createFakeClient({
+        lookupRows: [{ id: 'listing-1', is_terminal: false }],
+        originalListPriceRows: [{ original_list_price: '600000' }],
+      });
+
+      await upsertListingBySourceKey(client, { ...baseRow, list_price: 550000 });
+
+      const insert = queries.find((q) => q.text.includes('INSERT INTO listings'));
+      const columnList = insert!.text
+        .slice(insert!.text.indexOf('INSERT INTO listings'), insert!.text.indexOf('VALUES'))
+        .split(',')
+        .map((column) => column.trim());
+      expect(insert?.values?.[columnList.findIndex((c) => c === 'original_list_price')]).toBe(
+        600000,
+      );
+      expect(insert?.values?.[columnList.findIndex((c) => c === 'price_reduced')]).toBe(true);
+    });
+
+    it('reports not-reduced once the price rises back above the frozen original', async () => {
+      const { client, queries } = createFakeClient({
+        lookupRows: [{ id: 'listing-1', is_terminal: false }],
+        originalListPriceRows: [{ original_list_price: '600000' }],
+      });
+
+      await upsertListingBySourceKey(client, { ...baseRow, list_price: 650000 });
+
+      const insert = queries.find((q) => q.text.includes('INSERT INTO listings'));
+      const columnList = insert!.text
+        .slice(insert!.text.indexOf('INSERT INTO listings'), insert!.text.indexOf('VALUES'))
+        .split(',')
+        .map((column) => column.trim());
+      expect(insert?.values?.[columnList.findIndex((c) => c === 'price_reduced')]).toBe(false);
+    });
   });
 });
 

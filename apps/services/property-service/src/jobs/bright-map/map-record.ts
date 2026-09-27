@@ -67,6 +67,10 @@ export interface MappedListingInput {
   readonly suppression: SuppressionFlags;
   readonly isSample: boolean;
   readonly lastUpdated: string;
+  /** #391. `MLSListDate`, widened to an instant (midnight UTC). Null when the feed omits it. */
+  readonly listedAt: string | null;
+  /** #391. `DaysOnMarket` — the current marketing period, not the lifetime total. */
+  readonly daysOnMarket: number | null;
 }
 
 export interface MappedRecord {
@@ -162,6 +166,13 @@ function toDateOnly(value: unknown): string | null {
   }
   // Bright sends dates as `YYYY-MM-DD`; only the date part is kept if a timestamp slips through.
   return value.slice(0, 10);
+}
+
+/** #391. `MLSListDate` is `Edm.Date` (`YYYY-MM-DD`, no time). `listings.listed_at` is `timestamptz`,
+ *  so the date is widened to midnight UTC rather than left ambiguous about a time zone. */
+function toDateInstant(value: unknown): string | null {
+  const date = toDateOnly(value);
+  return date === null ? null : `${date}T00:00:00.000Z`;
 }
 
 function reject(listingKey: string | null, reason: RejectReason): RejectedRecord {
@@ -266,7 +277,18 @@ export function mapBrightPropertyRecord(
   const bathsFull = toBoundedInteger('BathroomsFull', payload.BathroomsFull);
   const bathsHalf = toBoundedInteger('BathroomsHalf', payload.BathroomsHalf);
   const livingSqft = toBoundedInteger('LivingArea', payload.LivingArea);
-  const outOfRangeFields = [yearBuilt, lotSqft, beds, bathsFull, bathsHalf, livingSqft]
+  // #391. `DaysOnMarket` is `Edm.Int16` (max 32767) — comfortably inside `integer`, but bounded the
+  // same way as every other feed numeric so a wire anomaly drops to null instead of crashing the pass.
+  const daysOnMarket = toBoundedInteger('DaysOnMarket', payload.DaysOnMarket);
+  const outOfRangeFields = [
+    yearBuilt,
+    lotSqft,
+    beds,
+    bathsFull,
+    bathsHalf,
+    livingSqft,
+    daysOnMarket,
+  ]
     .map((f) => f.outOfRangeField)
     .filter((f): f is string => f !== null);
 
@@ -307,6 +329,8 @@ export function mapBrightPropertyRecord(
       suppression,
       isSample,
       lastUpdated,
+      listedAt: toDateInstant(payload.MLSListDate),
+      daysOnMarket: daysOnMarket.value,
     },
   };
 }
