@@ -245,11 +245,11 @@ export function toOpenApiDocument() {
       },
       '/listings/{id}/page': {
         get: {
-          operationId: 'getPropertyPage',
-          summary: 'Property page for one listing, in any market status',
+          operationId: 'getListingPropertyPage',
+          summary: 'Property page of the home that one listing is on',
           description:
-            'Returns the market status and the display flags the page renders. An Off market ' +
-            'listing returns the property record only, with detail null.',
+            'Returns the same page as /properties/{id}/page for the home of this listing. ' +
+            'A client uses canonicalPath to redirect an old /listing/<id> URL.',
           parameters: [
             { name: 'id', in: 'path', required: true, schema: schema(idSchema, 'input') },
           ],
@@ -262,6 +262,35 @@ export function toOpenApiDocument() {
             },
             '404': {
               description: 'No such listing.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/properties/{id}/page': {
+        get: {
+          operationId: 'getPropertyPage',
+          summary: 'Everything the property page renders, in any market status',
+          description:
+            'The id is the unit id in a subdivided building, else the property id. The response ' +
+            'carries the canonical path and slug, the status label, the display flags, the ' +
+            'latest listing, the compliance-filtered history, nearby active listings and SEO ' +
+            'text. An Off market home returns the property record only, with latestListing null.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: schema(idSchema, 'input') },
+          ],
+          responses: {
+            '200': {
+              description: 'The property page.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/PropertyPage' } },
+              },
+            },
+            '404': {
+              description: 'No such home.',
               content: {
                 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
               },
