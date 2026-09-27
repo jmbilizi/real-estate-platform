@@ -94,7 +94,7 @@ describe('findHomePage: status by status (#382)', () => {
       expect(page?.listingDataDisplayable).toBe(true);
       expect(page?.latestListing).not.toBeNull();
       expect(page?.slug).toBe('118-baggett-pl-alexandria-va');
-      expect(page?.canonicalPath).toBe(`/property/118-baggett-pl-alexandria-va/${PROPERTY_ID}`);
+      expect(page?.canonicalPath).toBe(`/property/118-baggett-pl-alexandria-va/${LISTING_ID}`);
       expect(page?.seo.title).toBe('118 Baggett Pl, Alexandria, VA 22314');
     },
   );
@@ -148,7 +148,7 @@ describe('findHomePage: status by status (#382)', () => {
 
     const page = await findHomePage(pool, PROPERTY_ID);
 
-    expect(page?.canonicalPath).toBe(`/property/alexandria-va/${PROPERTY_ID}`);
+    expect(page?.canonicalPath).toBe(`/property/alexandria-va/${LISTING_ID}`);
     expect(page?.propertyRecord.address).toBeNull();
     expect(page?.seo.title).toBe('Home in Alexandria, VA 22314');
   });
@@ -162,8 +162,10 @@ describe('findHomePage: status by status (#382)', () => {
 
     const page = await findHomePage(pool, unitId);
 
-    expect(page).toMatchObject({ homeId: unitId, propertyId: PROPERTY_ID, unitId });
-    expect(page?.canonicalPath).toBe(`/property/118-baggett-pl-alexandria-va-unit-a4/${unitId}`);
+    expect(page).toMatchObject({ propertyId: unitId, listingId: LISTING_ID });
+    expect(page?.canonicalPath).toBe(
+      `/property/118-baggett-pl-alexandria-va-unit-a4/${LISTING_ID}`,
+    );
   });
 
   it('masks the whole page when any listing of the home withheld the address', async () => {
@@ -182,7 +184,7 @@ describe('findHomePage: status by status (#382)', () => {
 
     const page = await findHomePage(pool, PROPERTY_ID);
 
-    expect(page?.canonicalPath).toBe(`/property/alexandria-va/${PROPERTY_ID}`);
+    expect(page?.canonicalPath).toBe(`/property/alexandria-va/${LISTING_ID}`);
     expect(page?.propertyRecord.address).toBeNull();
     expect(page?.latestListing?.listing.address).toBeNull();
     expect(page?.latestListing?.listing.latitude).toBeNull();
@@ -192,7 +194,7 @@ describe('findHomePage: status by status (#382)', () => {
   it('keys the page on a lower-case id', async () => {
     const pool = fakePool({ record: recordRow(), detailVisible: true });
 
-    expect((await findHomePage(pool, PROPERTY_ID.toUpperCase()))?.homeId).toBe(PROPERTY_ID);
+    expect((await findHomePage(pool, PROPERTY_ID.toUpperCase()))?.propertyId).toBe(PROPERTY_ID);
   });
 
   it('a live listing wins over a newer Off market duplicate', async () => {
@@ -263,9 +265,9 @@ describe('findHomePage: status by status (#382)', () => {
 
     const page = await findHomePage(pool, PROPERTY_ID);
 
-    expect(page?.nearby.map((card) => card.homeId)).toEqual([NEARBY_PROPERTY_ID]);
+    expect(page?.nearby.map((card) => card.propertyId)).toEqual([NEARBY_PROPERTY_ID]);
     expect(page?.nearby[0]?.propertyPath).toBe(
-      `/property/900-king-st-alexandria-va/${NEARBY_PROPERTY_ID}`,
+      '/property/900-king-st-alexandria-va/018f2f2a-6d1b-7c3d-8b2e-000000000021',
     );
   });
 
@@ -281,7 +283,7 @@ describe('findHomePage: status by status (#382)', () => {
   it('a listing id resolves to the page of its home', async () => {
     const pool = fakePool({ record: recordRow(), detailVisible: true });
 
-    expect((await findListingHomePage(pool, LISTING_ID))?.homeId).toBe(PROPERTY_ID);
+    expect((await findListingHomePage(pool, LISTING_ID))?.propertyId).toBe(PROPERTY_ID);
   });
 });
 
@@ -304,8 +306,8 @@ describe('lookupProperty (#349)', () => {
       kind: 'found',
       matches: [
         {
-          homeId: PROPERTY_ID,
-          path: `/property/118-baggett-pl-alexandria-va/${PROPERTY_ID}`,
+          propertyId: PROPERTY_ID,
+          path: `/property/118-baggett-pl-alexandria-va/${LISTING_ID}`,
           address: '118 Baggett Pl',
           city: 'Alexandria',
           state: 'VA',
@@ -362,8 +364,8 @@ describe('lookupProperty (#349)', () => {
     const result = await lookupProperty(pool, segments);
 
     expect(result.kind === 'found' && result.matches.map((m) => m.path)).toEqual([
-      `/property/118-baggett-pl-alexandria-va/${PROPERTY_ID}`,
-      '/property/118-baggett-pl-alexandria-va/018f2f2a-6d1b-7c3d-8b2e-000000000008',
+      `/property/118-baggett-pl-alexandria-va/${LISTING_ID}`,
+      '/property/118-baggett-pl-alexandria-va/018f2f2a-6d1b-7c3d-8b2e-000000000009',
     ]);
   });
 

@@ -124,8 +124,8 @@ function openHouseOf(row: ListingCardDbRow): unknown {
   };
 }
 
-/** #382. The canonical property page path. The view nulls `address` when the seller withheld it. */
-function propertyPathOf(row: ListingCardDbRow, homeId: string): string {
+/** #382/#386. The canonical property page path: this listing's own id decides the page. */
+function propertyPathOf(row: ListingCardDbRow): string {
   const unitNumber = row.address === null ? null : (row.unit_number ?? null);
   return propertyPagePath(
     {
@@ -134,7 +134,7 @@ function propertyPathOf(row: ListingCardDbRow, homeId: string): string {
       city: row.city,
       state: row.state,
     },
-    homeId,
+    row.id,
   );
 }
 
@@ -155,11 +155,10 @@ function commonFields(row: ListingCardDbRow): Record<string, unknown> {
       `Listing ${row.id} has neither a broker phone nor a broker email (NAR 7.58); refusing to serve it.`,
     );
   }
-  const homeId = row.unit_id ?? row.property_id;
   return {
     id: row.id,
-    homeId,
-    propertyPath: propertyPathOf(row, homeId),
+    propertyId: row.unit_id ?? row.property_id,
+    propertyPath: propertyPathOf(row),
     title: row.title,
     address: row.address,
     city: row.city,
