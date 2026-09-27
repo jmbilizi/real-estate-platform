@@ -73,32 +73,6 @@ async function resolveFacts(
 }
 
 /**
- * The frozen "first ever asked" price for one listing id (#391).
- *
- * Neither Bright field this MLS declares for it (`OriginalListPrice`, `PreviousListPrice`) is ever
- * populated — confirmed against the production feed, 2026-09-27: 250 sampled Active/Closed records,
- * including several with a recent `PriceChangeTimestamp`, carried null on both. This service is
- * therefore the only place the fact can be recorded: the first successful write for a listing id
- * freezes its list price as the baseline, and every later write compares the CURRENT list price
- * against that same frozen value, never against the previous write's.
- *
- * Returns the current list price unchanged when no row exists yet (a first insert IS its own
- * baseline, so it can never read as reduced) or when a prior row exists but never recorded one
- * (defensive: a pre-#391 row has `original_list_price IS NULL`).
- */
-async function resolveOriginalListPrice(
-  client: Queryable,
-  listingId: string,
-  currentListPrice: number,
-): Promise<number> {
-  const { rows } = await client.query('SELECT original_list_price FROM listings WHERE id = $1', [
-    listingId,
-  ]);
-  const existing = rows[0]?.original_list_price;
-  return existing === null || existing === undefined ? currentListPrice : Number(existing);
-}
-
-/**
  * Inserts a listing with its dwelling snapshot resolved from durable truth, and records a
  * `listing_events` row so the property-level history exists from the first write.
  *
@@ -119,14 +93,12 @@ export async function upsertListing(
     await assertNotTerminal(client, row.id);
   }
   const facts = await resolveFacts(client, row.property_id, row.unit_id);
-  const originalListPrice = await resolveOriginalListPrice(client, row.id, row.list_price);
-  const priceReduced = originalListPrice > row.list_price;
 
   // PRD §6.3: a real listing can legitimately attach to a property that originated from the seed, so the
   // label is the OR across every level that contributed a displayed fact.
   const isSample = row.is_sample || facts.is_sample;
 
-  await client.query(
+  const { rows: writeResult } = await client.query(
     `INSERT INTO listings
        (id, property_id, unit_id, title, offer_kind, consumer_status, status, source,
         source_system, source_listing_key, source_listing_id, source_modification_timestamp,
@@ -198,15 +170,21 @@ export async function upsertListing(
        office_broker_lead_email = EXCLUDED.office_broker_lead_email,
        listing_agent_name = EXCLUDED.listing_agent_name,
        last_updated = EXCLUDED.last_updated,
-       -- #391. Both computed above from the row this same statement is about to write, so this is
-       -- a plain refresh, not a second copy of the freeze logic.
-       original_list_price = EXCLUDED.original_list_price,
-       price_reduced = EXCLUDED.price_reduced,
+       -- #391. Bright never sends an original or a previous list price on this MLS (checked
+       -- against the production feed). This service is the only place the fact can be recorded:
+       -- the first write for a listing id freezes its list price as the baseline, and every later
+       -- write keeps that frozen value here (COALESCE keeps the OLD row's value when it is not
+       -- null) and compares it against the price THIS write carries.
+       original_list_price = COALESCE(listings.original_list_price, EXCLUDED.list_price),
+       price_reduced = COALESCE(listings.original_list_price, EXCLUDED.list_price) > EXCLUDED.list_price,
        -- #391. Refreshed, never frozen: MLSListDate marks the CURRENT marketing period, and a
        -- relist is a new "just listed" moment that should surface again.
        listed_at = EXCLUDED.listed_at,
        -- A record the feed maps again is live again (#338): a takedown is not permanent.
-       deleted_at = NULL`,
+       deleted_at = NULL
+     -- #391. xmax = 0 is Postgres' own "this row was just inserted, not updated" signal, cheaper
+     -- and more direct than a second SELECT to tell the two cases apart for the event below.
+     RETURNING (xmax = 0) AS inserted`,
     [
       row.id,
       row.property_id,
@@ -241,7 +219,8 @@ export async function upsertListing(
       row.amenities,
       row.featured,
       row.featured_reason,
-      priceReduced,
+      // #391. A fresh row's price cannot be reduced against a baseline it is about to become.
+      false,
       row.new_construction,
       // The two RESO seller display-suppression flags. Bound explicitly and never defaulted here:
       // the columns default to `true` in the database, so a caller that omitted them would publish a
@@ -265,19 +244,25 @@ export async function upsertListing(
       row.listing_agent_name,
       isSample,
       row.last_updated,
-      originalListPrice,
+      // #391. A fresh row's own list price is its own baseline.
+      row.list_price,
       row.listed_at,
     ],
   );
+
+  const isFreshInsert = writeResult[0]?.inserted === true;
+  // #391. `listed_at` (Bright's MLSListDate) only stands in for `last_updated` on the FIRST write.
+  // A re-ingest keeps refreshing `listed_at` on the listing row itself (the current marketing
+  // period), so using it here on every write would date every later event the same, no matter how
+  // long ago the listing actually first appeared.
+  const occurredAt =
+    !row.close_date && isFreshInsert ? (row.listed_at ?? row.last_updated) : row.last_updated;
 
   await appendEvent(client, {
     listing_id: row.id,
     property_id: row.property_id,
     event_type: row.close_date ? 'closed' : 'listed',
-    // #391. `listed_at` (Bright's MLSListDate) is the true list moment when the feed supplies it;
-    // `last_updated` (ModificationTimestamp) is a fallback for a record with none, or a non-Bright
-    // (internal/FSBO) listing.
-    occurred_at: row.close_date ? row.last_updated : (row.listed_at ?? row.last_updated),
+    occurred_at: occurredAt,
     new_price: row.close_date ? row.close_price : row.list_price,
     new_status: row.status,
     is_sample: isSample,
