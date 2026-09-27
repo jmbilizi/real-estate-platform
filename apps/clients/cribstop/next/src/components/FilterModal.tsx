@@ -160,12 +160,12 @@ export default function FilterModal({ onClose, filters, onChange, resultCount }:
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-surface-border shrink-0">
           {/* Spacer to keep title centered */}
-          <div className="h-8 w-8" />
+          <div className="h-11 w-11" />
           <h2 className="font-semibold text-[15px] text-ink">Filters</h2>
           <button
             onClick={onClose}
             aria-label="Close filters"
-            className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-surface-alt transition shrink-0"
+            className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-surface-alt transition shrink-0"
           >
             <svg
               className="h-4 w-4 text-ink"
@@ -191,7 +191,7 @@ export default function FilterModal({ onClose, filters, onChange, resultCount }:
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-surface-border shrink-0 bg-white">
+        <div className="flex items-center justify-between px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-surface-border shrink-0 bg-white">
           <button
             onClick={() => setDraft(clearedDraft())}
             disabled={!hasFilters}

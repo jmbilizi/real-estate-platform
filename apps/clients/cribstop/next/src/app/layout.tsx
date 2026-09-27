@@ -1,5 +1,5 @@
 import './globals.css';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Suspense } from 'react';
 import NextTopLoader from 'nextjs-toploader';
 import { AppProvider } from '@/lib/context';
@@ -14,6 +14,15 @@ import { BRAND } from '@/lib/brand';
 export const metadata: Metadata = {
   title: `${BRAND.brokerage} — ${BRAND.titleSuffix}`,
   description: BRAND.metaDescription,
+};
+
+// `viewportFit: 'cover'` lets full-screen overlays (the mobile search sheet, bottom
+// sheets) read `env(safe-area-inset-*)` so their padding clears a phone's notch and
+// home indicator. Without it every safe-area inset resolves to 0.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({

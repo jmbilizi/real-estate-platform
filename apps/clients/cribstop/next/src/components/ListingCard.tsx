@@ -217,7 +217,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
             e.stopPropagation();
             toggleSave(listing.id);
           }}
-          className={`absolute right-3 transition hover:scale-110 ${isSold ? 'top-9' : 'top-3'}`}
+          className={`absolute right-1 flex h-11 w-11 items-center justify-center transition hover:scale-110 ${isSold ? 'top-5' : 'top-0'}`}
           aria-label={saved ? 'Unsave' : 'Save'}
         >
           <svg
