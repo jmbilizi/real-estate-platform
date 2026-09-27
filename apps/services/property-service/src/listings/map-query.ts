@@ -60,7 +60,8 @@ interface PinDbRow {
 
 interface ClusterDbRow {
   count: number;
-  sample_count: number;
+  in_view_count: number;
+  in_view_sample_count: number;
   latitude: number;
   longitude: number;
   west: number;
@@ -129,9 +130,12 @@ export async function findMapPins(
       const cell = cellSizeFor(request.bounds, request.zoom);
       const snapped = snapToCells(request.bounds, cell);
       const cellParam = bind(cell);
+      // Clusters cover the snapped cells. `count` and `sampleCount` cover the viewport only.
+      const inView = inBounds(request.bounds);
       const clusterResult = await client.query<ClusterDbRow>(
         `SELECT count(*)::int AS count,
-                count(*) FILTER (WHERE v.is_sample)::int AS sample_count,
+                count(*) FILTER (WHERE ${inView})::int AS in_view_count,
+                count(*) FILTER (WHERE v.is_sample AND ${inView})::int AS in_view_sample_count,
                 avg(v.latitude) AS latitude, avg(v.longitude) AS longitude,
                 min(v.longitude) AS west, min(v.latitude) AS south,
                 max(v.longitude) AS east, max(v.latitude) AS north
@@ -155,8 +159,8 @@ export async function findMapPins(
       }));
       response = {
         kind: 'clusters',
-        count: clusters.reduce((total, c) => total + c.count, 0),
-        sampleCount: clusterResult.rows.reduce((total, row) => total + row.sample_count, 0),
+        count: clusterResult.rows.reduce((total, row) => total + row.in_view_count, 0),
+        sampleCount: clusterResult.rows.reduce((total, row) => total + row.in_view_sample_count, 0),
         clusters,
       };
     }

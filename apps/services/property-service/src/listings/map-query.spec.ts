@@ -81,7 +81,8 @@ describe('GET /listings/map', () => {
   it('returns clusters above the threshold', async () => {
     const cluster = {
       count: 40,
-      sample_count: 0,
+      in_view_count: 40,
+      in_view_sample_count: 0,
       latitude: 38.9,
       longitude: -77.03,
       west: -77.05,
@@ -89,7 +90,10 @@ describe('GET /listings/map', () => {
       east: -77.01,
       north: 38.92,
     };
-    const pool = mapPool(4, [cluster, { ...cluster, count: 2, sample_count: 1 }]);
+    const pool = mapPool(4, [
+      cluster,
+      { ...cluster, count: 5, in_view_count: 2, in_view_sample_count: 1 },
+    ]);
     const response = await request(createApp({ pool, mapPinThreshold: 3 }))
       .get('/listings/map')
       .query({ bounds: DC_BOUNDS, zoom: '11' });

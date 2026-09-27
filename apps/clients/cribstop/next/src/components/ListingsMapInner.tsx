@@ -634,9 +634,10 @@ export default function ListingsMapInner({
     [viewport, pins],
   );
   // The list is the search area and the map is the viewport. Say so when they hold different sets.
+  // A withheld-address home has no pin, so the copy counts pins, never homes in the area.
   const viewportNote =
     viewport !== null && typeof total === 'number' && viewport.count < total
-      ? `This map view shows ${viewport.count.toLocaleString()} of ${total.toLocaleString()} homes. The list shows all ${total.toLocaleString()}.`
+      ? `${viewport.count.toLocaleString()} of ${total.toLocaleString()} homes have a pin in this map view. The list shows all ${total.toLocaleString()}.`
       : null;
 
   const center = useMemo<[number, number]>(() => {
