@@ -270,7 +270,10 @@ dedicated connection for its whole life. A second replica waits. One task runs a
 
 **Startup**, after the lock: runs a dead worker left `running` are marked failed, then
 `sweepOtherFeedTiers()` (`bright-map/sweep.ts`) runs. A switch from the test tier to production
-drops every test-feed listing before any backfill writes production rows.
+drops every test-feed listing before any backfill writes production rows. A deploy or a restart
+never re-runs a full backfill on its own (2026-09-27 ruling). `resetBackfillIfEmpty()` (`worker.ts`)
+resets the backfill checkpoints only when the tier has no live listing left, so a purge or a restore
+that empties `listings` while the checkpoint still reads complete still refills.
 
 **The four modes** (`sync.ts`, pure over injected deps; `worker.ts` supplies the real ones):
 
