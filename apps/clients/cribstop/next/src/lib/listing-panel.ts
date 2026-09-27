@@ -79,10 +79,23 @@ function emit(): void {
   for (const listener of listeners) listener();
 }
 
-/** The listing id in a `/listing/<id>` pathname, or null for any other route. */
+/** The listing id that this document opened at each property page path (#382). */
+const openedPaths = new Map<string, string>();
+
+/**
+ * The listing id of a listing URL, or null for any other route. A `/listing/<id>` path carries
+ * the id. A property page path (#382) carries a home id, so only a path this document opened
+ * resolves to a listing.
+ */
 export function listingIdFromPath(pathname: string): string | null {
   const match = /^\/listing\/([^/]+)\/?$/.exec(pathname);
-  return match ? decodeURIComponent(match[1]) : null;
+  if (match) return decodeURIComponent(match[1]);
+  return openedPaths.get(pathname.replace(/\/$/, '')) ?? null;
+}
+
+/** The URL an open pushes: the service's property page path when the row carries it. */
+function panelPath(id: string, row?: ListingCardRow): string {
+  return row?.propertyPath ?? `/listing/${encodeURIComponent(id)}`;
 }
 
 /**
@@ -98,8 +111,10 @@ export function openListingPanel(id: string, row?: ListingCardRow): void {
   openPanel = { id, row };
   emit();
 
-  if (typeof window !== 'undefined' && window.location.pathname !== `/listing/${id}`) {
-    window.history.pushState(null, '', `/listing/${id}`);
+  const path = panelPath(id, row);
+  openedPaths.set(path, id);
+  if (typeof window !== 'undefined' && window.location.pathname !== path) {
+    window.history.pushState(null, '', path);
   }
 }
 
@@ -170,5 +185,6 @@ export function useListingPanel(): OpenListingPanel | null {
 export function resetListingPanel(): void {
   openPanel = null;
   openedRows.clear();
+  openedPaths.clear();
   emit();
 }

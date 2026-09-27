@@ -83,6 +83,10 @@ const PRIMARY_MEDIA_JOIN = `
       LIMIT 1
     ) pm ON true`;
 
+/** #382. The unit number that `propertyPath` needs, read only when the view shows the address. */
+const CARD_UNIT_NUMBER = `CASE WHEN v.address IS NULL THEN NULL
+         ELSE (SELECT u.unit_number FROM units u WHERE u.id = v.unit_id) END AS unit_number`;
+
 /**
  * Search: an exact `COUNT(*)` and one page, as two statements inside ONE
  * `REPEATABLE READ READ ONLY` transaction.
@@ -128,7 +132,8 @@ export async function searchListings(
     const offset = resultOffsetFor(request.page, request.pageSize);
 
     const pageResult = await client.query<ListingCardDbRow>(
-      `SELECT ${LISTING_CARD_SELECT}, pm.primary_media_url, pm.primary_media_alt_text
+      `SELECT ${LISTING_CARD_SELECT}, pm.primary_media_url, pm.primary_media_alt_text,
+              ${CARD_UNIT_NUMBER}
        FROM listing_search_v v${PRIMARY_MEDIA_JOIN}
        WHERE ${where}
        ORDER BY ${orderBy}
@@ -457,6 +462,49 @@ export async function findPropertyRecord(
     [id],
   );
   return result.rows[0] ?? null;
+}
+
+/**
+ * Every listing of one home (#382), newest first. The home id is a unit id in a subdivided
+ * building, else a property id. The view already reduces each Off market row to the record.
+ */
+export async function findHomeRows(
+  pool: ReadClient,
+  homeId: string,
+): Promise<PropertyRecordDbRow[]> {
+  const result = await pool.query<PropertyRecordDbRow>(
+    `SELECT ${PROPERTY_RECORD_SELECT}
+       FROM listing_detail_v d
+      WHERE d.unit_id = $1 OR (d.unit_id IS NULL AND d.property_id = $1)
+      ORDER BY d.last_updated DESC, d.id DESC
+      LIMIT 100`,
+    [homeId],
+  );
+  return result.rows;
+}
+
+/** The history facts of a past listing (#382). Only a row in `listing_search_v` can return. */
+export interface HistoryFactsDbRow {
+  id: string;
+  listing_type: string;
+  price: number | null;
+  close_price: number | null;
+  close_date: string | null;
+  last_updated: Date | string;
+}
+
+export async function findHistoryFacts(
+  pool: ReadClient,
+  ids: readonly string[],
+): Promise<HistoryFactsDbRow[]> {
+  if (ids.length === 0) return [];
+  const result = await pool.query<HistoryFactsDbRow>(
+    `SELECT v.id, v.listing_type, v.price, v.close_price, v.close_date, v.last_updated
+       FROM listing_search_v v
+      WHERE v.id = ANY($1::uuid[])`,
+    [ids],
+  );
+  return result.rows;
 }
 
 /**

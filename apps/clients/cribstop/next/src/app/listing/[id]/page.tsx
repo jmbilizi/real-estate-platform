@@ -57,14 +57,11 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
   const { id } = await params;
 
   /**
-   * The property page (#349) is the canonical URL for a listing whose address resolves to one.
-   * `path` is null only when the seller withheld the address, in which case there is no such URL
-   * and this route keeps rendering below, exactly as it always has.
+   * The property page (#382) is the canonical URL of every listing, so a hard load answers 308.
+   * Only a gateway failure falls through and renders the listing below as before.
    */
   const propertyPage = await loadPropertyPage(id);
-  if (propertyPage.status === 'ready' && propertyPage.page.path !== null) {
-    permanentRedirect(propertyPage.page.path);
-  }
+  if (propertyPage.status === 'ready') permanentRedirect(propertyPage.page.canonicalPath);
 
   const initialState = await loadListingState(id);
 

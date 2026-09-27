@@ -5,13 +5,19 @@ import {
   idSchema,
   NOT_FOUND_BODY,
   propertyLookupRequestSchema,
+  type PropertyPage,
   RESULT_WINDOW_EXCEEDED_BODY,
   type SearchRequest,
   searchRequestSchema,
 } from '@cribstop/property-contracts';
 import type { GalleryLoader } from './gallery-loader';
 import { resolvedSearchRequest } from './on-demand';
-import { type AddressFetcher, findPropertyPage, lookupProperty } from './property-page';
+import {
+  type AddressFetcher,
+  findHomePage,
+  findListingHomePage,
+  lookupProperty,
+} from './property-page';
 import {
   findBrightListingKeys,
   findListingById,
@@ -239,17 +245,61 @@ export function createListingsRouter(
     }),
   );
 
-  // #349. The property page in any market status. The same one 404 as `/listings/:id`.
+  /**
+   * #382. The property page, from a listing id (the old `/listing/<id>` URL) or a home id. A
+   * Bright latest listing with at most one photo fetches its gallery first, as `/listings/:id` does.
+   */
+  const sendPage = async (
+    res: Response,
+    load: () => Promise<PropertyPage | null>,
+  ): Promise<void> => {
+    let page = await load();
+    if (page === null) {
+      notFound(res);
+      return;
+    }
+    let cacheControl = LISTINGS_CACHE_CONTROL;
+    const latest = page.latestListing;
+    if (
+      galleryLoader !== undefined &&
+      latest !== null &&
+      latest.listing.source === 'brightMLS' &&
+      latest.listing.media.length <= 1
+    ) {
+      const keys = await findBrightListingKeys(pool, latest.listing.id);
+      if (keys !== null) {
+        const outcome = await galleryLoader.loadGallery(keys);
+        if (outcome === 'loaded') {
+          page = (await load()) ?? page;
+        } else if (outcome === 'pending') {
+          cacheControl = 'no-store';
+        }
+      }
+    }
+    res.set('Cache-Control', cacheControl).status(200).json(page);
+  };
+
   router.get(
     '/listings/:id/page',
     asyncRoute(async (req: Request, res: Response) => {
       const id = idSchema.safeParse(req.params.id);
-      const page = id.success ? await findPropertyPage(pool, id.data) : null;
-      if (page === null) {
+      if (!id.success) {
         notFound(res);
         return;
       }
-      res.set('Cache-Control', LISTINGS_CACHE_CONTROL).status(200).json(page);
+      await sendPage(res, () => findListingHomePage(pool, id.data));
+    }),
+  );
+
+  router.get(
+    '/properties/:id/page',
+    asyncRoute(async (req: Request, res: Response) => {
+      const id = idSchema.safeParse(req.params.id);
+      if (!id.success) {
+        notFound(res);
+        return;
+      }
+      await sendPage(res, () => findHomePage(pool, id.data));
     }),
   );
 

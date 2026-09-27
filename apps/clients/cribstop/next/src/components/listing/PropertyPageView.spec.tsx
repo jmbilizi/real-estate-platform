@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import type { MarketStatus } from '@cribstop/property-contracts';
-import { aPropertyPage } from '@/test/fixtures';
+import { aListingCardRow, aPropertyPage } from '@/test/fixtures';
 import { searchListings } from '@/lib/api/listings';
 import PropertyPageView from './PropertyPageView';
 
@@ -50,9 +50,11 @@ describe('PropertyPageView — market-status badge (#349)', () => {
   it.each(DISPLAYABLE_STATUSES)('renders the exact badge text for %s', async (marketStatus) => {
     render(<PropertyPageView page={aPropertyPage({ marketStatus })} />);
 
-    // The detail branch also fires the "similar homes" fetch; settle it so no test leaves a
-    // dangling update outside `act`.
-    await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
+    // #382: the page API sends the nearby listings, so the client runs no search of its own.
+    await waitFor(() =>
+      expect(screen.getByText(marketStatus, { selector: '.badge' })).toBeVisible(),
+    );
+    expect(mockedSearchListings).not.toHaveBeenCalled();
 
     // One badge only, with the market status, so Under Contract never also reads Pending.
     expect(screen.getByText(marketStatus, { selector: '.badge' })).toBeInTheDocument();
@@ -137,5 +139,37 @@ describe('PropertyPageView — Off market (#349)', () => {
     render(<PropertyPageView page={page} />);
 
     expect(screen.queryByText('Sample data')).toBeNull();
+  });
+});
+
+describe('PropertyPageView — history and nearby (#382)', () => {
+  const soldEntry = {
+    listingId: '55555555-5555-4555-8555-555555555555',
+    marketStatus: 'Sold' as const,
+    listingType: 'sold' as const,
+    price: 480000,
+    closePrice: 475000,
+    closeDate: '2025-04-30',
+    lastUpdated: '2025-05-01T12:00:00.000Z',
+  };
+
+  it('renders the service history and nearby homes on an Off market page', () => {
+    const page = aPropertyPage({
+      marketStatus: 'Off market',
+      history: [soldEntry],
+      nearby: [aListingCardRow({ id: '66666666-6666-4666-8666-666666666666' })],
+    });
+
+    render(<PropertyPageView page={page} />);
+
+    expect(screen.getByTestId('property-history')).toHaveTextContent('Sold for $475,000');
+    expect(screen.getByText('Nearby homes')).toBeInTheDocument();
+  });
+
+  it('renders no history panel when the service sends none', () => {
+    render(<PropertyPageView page={aPropertyPage({ marketStatus: 'Off market' })} />);
+
+    expect(screen.queryByTestId('property-history')).toBeNull();
+    expect(screen.queryByText('Nearby homes')).toBeNull();
   });
 });

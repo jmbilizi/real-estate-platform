@@ -17,6 +17,8 @@ import type {
 export function aListingCardRow(overrides: Partial<ListingCardRow> = {}): ListingCardRow {
   return {
     id: '11111111-1111-4111-8111-111111111111',
+    homeId: '44444444-4444-4444-8444-444444444444',
+    propertyPath: '/property/100-test-st-bethesda-md/44444444-4444-4444-8444-444444444444',
     title: 'Test Row (Sample)',
     address: '100 Test St',
     city: 'Bethesda',
@@ -117,7 +119,6 @@ export function aListingDetail(
 export function aPropertyRecord(overrides: Partial<PropertyRecord> = {}): PropertyRecord {
   return {
     propertyId: '44444444-4444-4444-8444-444444444444',
-    listingId: '11111111-1111-4111-8111-111111111111',
     address: '118 Baggett Place',
     unitNumber: null,
     city: 'Alexandria',
@@ -135,8 +136,8 @@ export function aPropertyRecord(overrides: Partial<PropertyRecord> = {}): Proper
   };
 }
 
-/** #349: one page per address. Defaults to a displayable, `Active` page — override `marketStatus`
- *  to get an `Off market` one; `detail` and `listingDataDisplayable` follow it unless overridden. */
+/** #382: one page per home. Defaults to a displayable, `Active` page. Override `marketStatus` to
+ *  get an `Off market` one. `latestListing` and `listingDataDisplayable` follow it. */
 export function aPropertyPage(
   overrides: Partial<Omit<PropertyPage, 'propertyRecord'>> & {
     propertyRecord?: Partial<PropertyRecord>;
@@ -147,11 +148,18 @@ export function aPropertyPage(
   const displayable = rest.listingDataDisplayable ?? marketStatus !== 'Off market';
 
   return {
+    homeId: '44444444-4444-4444-8444-444444444444',
+    propertyId: '44444444-4444-4444-8444-444444444444',
+    unitId: null,
+    slug: '118-baggett-place-alexandria-va',
+    canonicalPath: '/property/118-baggett-place-alexandria-va/44444444-4444-4444-8444-444444444444',
     marketStatus,
     listingDataDisplayable: displayable,
-    path: '/alexandria-va/118-baggett-place-alexandria-va-22301',
+    seo: { title: '118 Baggett Place, Alexandria, VA 22301', description: 'Test description.' },
     propertyRecord: aPropertyRecord(propertyRecordOverrides),
-    detail: displayable ? aListingDetail() : null,
+    latestListing: displayable ? aListingDetail() : null,
+    history: [],
+    nearby: [],
     ...rest,
   };
 }
@@ -159,8 +167,8 @@ export function aPropertyPage(
 /** #349: one row of a `PropertyLookupResponse`. */
 export function aPropertyMatch(overrides: Partial<PropertyMatch> = {}): PropertyMatch {
   return {
-    listingId: '11111111-1111-4111-8111-111111111111',
-    path: '/alexandria-va/118-baggett-place-alexandria-va-22301',
+    homeId: '44444444-4444-4444-8444-444444444444',
+    path: '/property/118-baggett-place-alexandria-va/44444444-4444-4444-8444-444444444444',
     address: '118 Baggett Place',
     city: 'Alexandria',
     state: 'VA',

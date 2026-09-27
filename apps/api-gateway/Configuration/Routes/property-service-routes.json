@@ -96,7 +96,7 @@
         "Limit": 90
       },
       "QoSOptions": {
-        "Timeout": 3000,
+        "Timeout": 5000,
         "MinimumThroughput": 5,
         "SamplingDuration": 30000,
         "BreakDuration": 5000
@@ -124,6 +124,31 @@
         "Timeout": 8000,
         "MinimumThroughput": 5,
         "SamplingDuration": 60000,
+        "BreakDuration": 5000
+      }
+    },
+    {
+      "UpstreamPathTemplate": "/property/properties/{id}/page",
+      "UpstreamHttpMethod": ["GET"],
+      "DownstreamPathTemplate": "/properties/{id}/page",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "property-service-svc",
+          "Port": 3002
+        }
+      ],
+      "Priority": 1,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 90
+      },
+      "QoSOptions": {
+        "Timeout": 5000,
+        "MinimumThroughput": 5,
+        "SamplingDuration": 30000,
         "BreakDuration": 5000
       }
     },

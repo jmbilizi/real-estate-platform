@@ -25,6 +25,7 @@ const DEFAULT_ERROR_MESSAGE = "We couldn't load your saved homes. Please try aga
 function toFavoriteCardRow(detail: ListingDetailView): ListingCardRow {
   return {
     ...detail,
+    homeId: detail.subjectId,
     primaryMedia: detail.media[0] ?? null,
     openHouse: detail.openHouses[0] ?? null,
   };

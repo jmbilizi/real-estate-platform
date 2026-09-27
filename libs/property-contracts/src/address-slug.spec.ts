@@ -3,10 +3,13 @@ import {
   normalizeStreetLine,
   parsePropertyPath,
   parseSearchPath,
+  propertyPagePath,
   propertyPath,
+  propertySlug,
   SEARCH_PATH_SEGMENTS,
   searchPath,
   type SearchPlace,
+  streetLineOf,
 } from './address-slug';
 import { propertyPageSchema } from './property-page';
 
@@ -81,7 +84,6 @@ describe('normalizeStreetLine', () => {
 describe('propertyPageSchema', () => {
   const record = {
     propertyId: '018f2f2a-6d1b-7c3d-8b2e-000000000002',
-    listingId: '018f2f2a-6d1b-7c3d-8b2e-000000000001',
     address: '118 Baggett Pl',
     unitNumber: null,
     city: 'Alexandria',
@@ -96,21 +98,30 @@ describe('propertyPageSchema', () => {
     source: 'brightMLS',
     isSample: false,
   };
+  const base = {
+    homeId: record.propertyId,
+    propertyId: record.propertyId,
+    unitId: null,
+    slug: '118-baggett-pl-alexandria-va',
+    canonicalPath: '/property/118-baggett-pl-alexandria-va/' + record.propertyId,
+    seo: { title: '118 Baggett Pl, Alexandria, VA 22314', description: 'Facts.' },
+    propertyRecord: record,
+    latestListing: null,
+    history: [],
+    nearby: [],
+  };
 
-  it('accepts Off market with no detail', () => {
+  it('accepts Off market with no latest listing', () => {
     expect(
       propertyPageSchema.safeParse({
+        ...base,
         marketStatus: 'Off market',
         listingDataDisplayable: false,
-        path: null,
-        propertyRecord: record,
-        detail: null,
       }).success,
     ).toBe(true);
   });
 
-  it('refuses a displayable status with no detail, and Off market marked displayable', () => {
-    const base = { path: null, propertyRecord: record, detail: null };
+  it('refuses a displayable status with no listing, and Off market marked displayable', () => {
     expect(
       propertyPageSchema.safeParse({
         ...base,
@@ -125,6 +136,36 @@ describe('propertyPageSchema', () => {
         listingDataDisplayable: true,
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('propertySlug / propertyPagePath (#382)', () => {
+  const id = '018f2f2a-6d1b-7c3d-8b2e-000000000002';
+
+  it('puts the unit after the city, as the stakeholder example does', () => {
+    expect(
+      propertyPagePath(
+        { streetLine: '2123 California St NW', unitNumber: 'A4', city: 'Washington', state: 'DC' },
+        id,
+      ),
+    ).toBe('/property/2123-california-st-nw-washington-dc-unit-a4/' + id);
+  });
+
+  it('drops a unit keyword so that the slug does not say unit twice', () => {
+    expect(
+      propertySlug({ streetLine: '1 Main St', unitNumber: 'Apt #2B', city: 'Reston', state: 'VA' }),
+    ).toBe('1-main-st-reston-va-unit-2b');
+  });
+
+  it('gives the city segment only when the seller withheld the address', () => {
+    expect(
+      propertySlug({ streetLine: null, unitNumber: null, city: 'Silver Spring', state: 'MD' }),
+    ).toBe('silver-spring-md');
+  });
+
+  it('splits a display address back into its street line', () => {
+    expect(streetLineOf('2123 California St NW A4', 'A4')).toBe('2123 California St NW');
+    expect(streetLineOf('118 Baggett Pl', null)).toBe('118 Baggett Pl');
   });
 });
 

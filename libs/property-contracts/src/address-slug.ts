@@ -306,3 +306,50 @@ export function parseSearchPath(segments: readonly string[]): ParsedSearchPath |
     segment: listingSegment,
   };
 }
+
+// ---------------------------------------------------------------------------------------------
+// Property page paths (#382)
+// ---------------------------------------------------------------------------------------------
+
+/** The first segment of every property page path. */
+export const PROPERTY_PAGE_SEGMENT = 'property';
+
+/** The address of a home as its page shows it. `streetLine` is null when the seller withheld it. */
+export interface PropertyPageAddress {
+  readonly streetLine: string | null;
+  readonly unitNumber: string | null;
+  readonly city: string;
+  readonly state: string;
+}
+
+const UNIT_PREFIX = /^(?:unit|apt|apartment|suite|ste|#)\s*/i;
+
+/**
+ * `2123-california-st-nw-washington-dc-unit-a4`. A withheld address gives the city segment only,
+ * so the slug never names a home more precisely than its page does.
+ */
+export function propertySlug(address: PropertyPageAddress): string {
+  const place = citySegment(address.city, address.state);
+  if (address.streetLine === null) return place;
+  const unit =
+    address.unitNumber === null ? '' : slugify(address.unitNumber.replace(UNIT_PREFIX, ''));
+  return `${slugify(address.streetLine)}-${place}${unit === '' ? '' : `-unit-${unit}`}`;
+}
+
+/**
+ * `/property/<slug>/<homeId>`. The id decides the page. The slug is for people and search engines,
+ * and the page sends a stale slug to this canonical path with a 308.
+ */
+export function propertyPagePath(address: PropertyPageAddress, homeId: string): string {
+  return `/${PROPERTY_PAGE_SEGMENT}/${propertySlug(address)}/${encodeURIComponent(homeId)}`;
+}
+
+/**
+ * The street line of a display address. The views build the display address as
+ * `street_line || ' ' || unit_number`, so this is the one inverse.
+ */
+export function streetLineOf(address: string, unitNumber: string | null): string {
+  if (unitNumber === null) return address;
+  const suffix = ` ${unitNumber}`;
+  return address.endsWith(suffix) ? address.slice(0, -suffix.length) : address;
+}

@@ -112,6 +112,11 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
           "featured": {
             "type": "boolean",
           },
+          "homeId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string",
+          },
           "id": {
             "format": "uuid",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
@@ -227,6 +232,9 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             ],
             "type": "object",
           },
+          "propertyPath": {
+            "type": "string",
+          },
           "propertyType": {
             "enum": [
               "Single Family",
@@ -284,6 +292,8 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
         },
         "required": [
           "id",
+          "homeId",
+          "propertyPath",
           "title",
           "address",
           "city",
@@ -408,6 +418,11 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
               "featured": {
                 "type": "boolean",
               },
+              "homeId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
               "id": {
                 "format": "uuid",
                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
@@ -527,6 +542,9 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
               "priceReduced": {
                 "type": "boolean",
               },
+              "propertyPath": {
+                "type": "string",
+              },
               "propertyType": {
                 "enum": [
                   "Single Family",
@@ -584,6 +602,8 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             },
             "required": [
               "id",
+              "homeId",
+              "propertyPath",
               "title",
               "address",
               "city",
@@ -866,7 +886,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "city": {
                   "type": "string",
                 },
-                "listingId": {
+                "homeId": {
                   "format": "uuid",
                   "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
                   "type": "string",
@@ -893,7 +913,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 },
               },
               "required": [
-                "listingId",
+                "homeId",
                 "path",
                 "address",
                 "city",
@@ -915,7 +935,78 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
       "PropertyPage": {
         "additionalProperties": false,
         "properties": {
-          "detail": {
+          "canonicalPath": {
+            "type": "string",
+          },
+          "history": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "closeDate": {
+                  "format": "date",
+                  "nullable": true,
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                  "type": "string",
+                },
+                "closePrice": {
+                  "minimum": 0,
+                  "nullable": true,
+                  "type": "number",
+                },
+                "lastUpdated": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                  "type": "string",
+                },
+                "listingId": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string",
+                },
+                "listingType": {
+                  "enum": [
+                    "sale",
+                    "rent",
+                    "sold",
+                  ],
+                  "type": "string",
+                },
+                "marketStatus": {
+                  "enum": [
+                    "Active",
+                    "Coming Soon",
+                    "Under Contract",
+                    "Pending",
+                    "Sold",
+                    "Off market",
+                  ],
+                  "type": "string",
+                },
+                "price": {
+                  "minimum": 0,
+                  "nullable": true,
+                  "type": "number",
+                },
+              },
+              "required": [
+                "listingId",
+                "marketStatus",
+                "listingType",
+                "price",
+                "closePrice",
+                "closeDate",
+                "lastUpdated",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
+          "homeId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string",
+          },
+          "latestListing": {
             "allOf": [
               {
                 "$ref": "#/components/schemas/ListingDetail",
@@ -937,8 +1028,15 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             ],
             "type": "string",
           },
-          "path": {
-            "nullable": true,
+          "nearby": {
+            "items": {
+              "$ref": "#/components/schemas/ListingCardRow",
+            },
+            "type": "array",
+          },
+          "propertyId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
             "type": "string",
           },
           "propertyRecord": {
@@ -964,11 +1062,6 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
               },
               "isSample": {
                 "type": "boolean",
-              },
-              "listingId": {
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
-                "type": "string",
               },
               "lotSqft": {
                 "maximum": 9007199254740991,
@@ -1027,7 +1120,6 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             },
             "required": [
               "propertyId",
-              "listingId",
               "address",
               "unitNumber",
               "city",
@@ -1044,13 +1136,45 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             ],
             "type": "object",
           },
+          "seo": {
+            "additionalProperties": false,
+            "properties": {
+              "description": {
+                "type": "string",
+              },
+              "title": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "title",
+              "description",
+            ],
+            "type": "object",
+          },
+          "slug": {
+            "type": "string",
+          },
+          "unitId": {
+            "format": "uuid",
+            "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string",
+          },
         },
         "required": [
+          "homeId",
+          "propertyId",
+          "unitId",
+          "slug",
+          "canonicalPath",
           "marketStatus",
           "listingDataDisplayable",
-          "path",
+          "seo",
           "propertyRecord",
-          "detail",
+          "latestListing",
+          "history",
+          "nearby",
         ],
         "type": "object",
       },
@@ -1548,8 +1672,8 @@ Rate-limited per client and per listing; a request over either limit gets 429 wi
     },
     "/listings/{id}/page": {
       "get": {
-        "description": "Returns the market status and the display flags the page renders. An Off market listing returns the property record only, with detail null.",
-        "operationId": "getPropertyPage",
+        "description": "Returns the same page as /properties/{id}/page for the home of this listing. A client uses canonicalPath to redirect an old /listing/<id> URL.",
+        "operationId": "getListingPropertyPage",
         "parameters": [
           {
             "in": "path",
@@ -1594,7 +1718,7 @@ Rate-limited per client and per listing; a request over either limit gets 429 wi
             "description": "Unexpected server error. The body carries no detail by design.",
           },
         },
-        "summary": "Property page for one listing, in any market status",
+        "summary": "Property page of the home that one listing is on",
       },
     },
     "/properties/lookup": {
@@ -1662,6 +1786,57 @@ Rate-limited per client and per listing; a request over either limit gets 429 wi
           },
         },
         "summary": "Resolve a property path to listings",
+      },
+    },
+    "/properties/{id}/page": {
+      "get": {
+        "description": "The id is the unit id in a subdivided building, else the property id. The response carries the canonical path and slug, the status label, the display flags, the latest listing, the compliance-filtered history, nearby active listings and SEO text. An Off market home returns the property record only, with latestListing null.",
+        "operationId": "getPropertyPage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyPage",
+                },
+              },
+            },
+            "description": "The property page.",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No such home.",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+        },
+        "summary": "Everything the property page renders, in any market status",
       },
     },
   },
