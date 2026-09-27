@@ -1,4 +1,11 @@
-import type { ListingCardRow, ListingDetail } from '@cribstop/property-contracts';
+import type {
+  ListingCardRow,
+  ListingDetail,
+  MarketStatus,
+  PropertyMatch,
+  PropertyPage,
+  PropertyRecord,
+} from '@cribstop/property-contracts';
 
 /**
  * Test fixtures shaped by the wire contract, not by the old mock array.
@@ -103,5 +110,62 @@ export function aListingDetail(
       openHouses: [],
       ...overrides.listing,
     },
+  };
+}
+
+/** #349: the property record alone — no photo, price, remarks or agent data can live here. */
+export function aPropertyRecord(overrides: Partial<PropertyRecord> = {}): PropertyRecord {
+  return {
+    propertyId: '44444444-4444-4444-8444-444444444444',
+    listingId: '11111111-1111-4111-8111-111111111111',
+    address: '118 Baggett Place',
+    unitNumber: null,
+    city: 'Alexandria',
+    state: 'VA',
+    zip: '22301',
+    propertyType: 'Single Family',
+    beds: 3,
+    baths: 2,
+    sqft: 1800,
+    lotSqft: 6000,
+    yearBuilt: 1994,
+    source: 'internal',
+    isSample: true,
+    ...overrides,
+  };
+}
+
+/** #349: one page per address. Defaults to a displayable, `Active` page — override `marketStatus`
+ *  to get an `Off market` one; `detail` and `listingDataDisplayable` follow it unless overridden. */
+export function aPropertyPage(
+  overrides: Partial<Omit<PropertyPage, 'propertyRecord'>> & {
+    propertyRecord?: Partial<PropertyRecord>;
+  } = {},
+): PropertyPage {
+  const { propertyRecord: propertyRecordOverrides, ...rest } = overrides;
+  const marketStatus: MarketStatus = rest.marketStatus ?? 'Active';
+  const displayable = rest.listingDataDisplayable ?? marketStatus !== 'Off market';
+
+  return {
+    marketStatus,
+    listingDataDisplayable: displayable,
+    path: '/alexandria-va/118-baggett-place-alexandria-va-22301',
+    propertyRecord: aPropertyRecord(propertyRecordOverrides),
+    detail: displayable ? aListingDetail() : null,
+    ...rest,
+  };
+}
+
+/** #349: one row of a `PropertyLookupResponse`. */
+export function aPropertyMatch(overrides: Partial<PropertyMatch> = {}): PropertyMatch {
+  return {
+    listingId: '11111111-1111-4111-8111-111111111111',
+    path: '/alexandria-va/118-baggett-place-alexandria-va-22301',
+    address: '118 Baggett Place',
+    city: 'Alexandria',
+    state: 'VA',
+    zip: '22301',
+    marketStatus: 'Active',
+    ...overrides,
   };
 }
