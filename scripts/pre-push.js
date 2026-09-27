@@ -703,6 +703,26 @@ function checkInfrastructure(base) {
   return true;
 }
 
+// #405: catch a node-pg-migrate migration numbered at or below one already on the base branch
+// before it reaches CI (#399's failure mode). Only meaningful with a base to diff against, i.e.
+// on a feature branch about to become a PR — a push to dev/test/main itself has no base.
+function checkMigrationOrder(base) {
+  if (!base) {
+    log('\nℹ On a base branch — skipping migration order guard (no base to diff against)', 'cyan');
+    return true;
+  }
+
+  logStep('Validating Migration Order (node-pg-migrate)');
+
+  const result = run(`node tools/validation/migration-order.js --base ${base}`);
+  if (!result.success) {
+    logError('Migration order guard failed - see the message above for the fix');
+    return false;
+  }
+  logSuccess('Migration order guard passed');
+  return true;
+}
+
 // Unit tests for tools/ — not an Nx project, so no nx target covers it (see #38).
 function checkToolsScripts() {
   logStep('Validating tools/ Scripts');
@@ -855,6 +875,10 @@ function main() {
   // Check infrastructure files (Kustomize + deploy-control) if changed
   const infraResult = checkInfrastructure(base);
   allPassed = allPassed && infraResult;
+
+  // Check migration order (node-pg-migrate) against the base branch
+  const migrationOrderResult = checkMigrationOrder(base);
+  allPassed = allPassed && migrationOrderResult;
 
   // Already run above, before the empty-workspace early exit — just fold the result in.
   allPassed = allPassed && toolsResult;

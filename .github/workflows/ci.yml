@@ -182,6 +182,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Needed to diff against origin/<base_ref> for the migration-order guard
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -203,6 +205,13 @@ jobs:
 
       - name: Run tools tests
         run: pnpm run tools:test
+
+      # #405: a node-pg-migrate migration numbered at or below one already merged crashes the
+      # migrate initContainer (#399). Runs only on PRs, where a base branch exists to compare
+      # against; a direct push to a protected branch has nothing to diff and is not gated here.
+      - name: Check migration order (node-pg-migrate)
+        if: github.event_name == 'pull_request'
+        run: node tools/validation/migration-order.js --base "origin/${{ github.base_ref }}"
 
   node:
     needs: [setup-base, detect-languages]
