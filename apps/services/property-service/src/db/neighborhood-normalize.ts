@@ -6,7 +6,7 @@
  *
  *  - `normalizeNeighborhood()` — write-time cleanup. Called by the Bright mapper
  *    (`bright-map/map-record.ts`) for every incoming record, and by migration
- *    `1785801600037_normalize-neighborhood-values.js` once, for rows already stored.
+ *    `1785801600040_normalize-neighborhood-values.js` once, for rows already stored.
  *  - `NEIGHBORHOOD_NOT_NOISE_SQL` — the same rule in SQL, applied by the neighborhoods aggregate
  *    query (`listings/repository.ts`) as a second, defensive gate. Write-time cleanup should
  *    already leave no noise in the column; this is belt-and-suspenders, never the only gate.
