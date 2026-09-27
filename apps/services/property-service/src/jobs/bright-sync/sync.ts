@@ -19,7 +19,12 @@ import {
 } from '../bright-ingest/odata-query';
 import { BRIGHT_SYNC_SELECT } from './select';
 
-/** Records per request. `$top` suppresses `@odata.nextLink`, so a slice is sized to one page. */
+/**
+ * Records per request when `deps.pageSize` is not set. `$top` suppresses `@odata.nextLink`, so a
+ * slice is sized to one page. Production defaults to `BRIGHT_SYNC_PAGE_SIZE` (see `worker.ts`),
+ * measured faster per row the larger it is (#348); this constant only backstops a caller — a test
+ * harness — that builds `SyncDeps` without one.
+ */
 export const PAGE_SIZE = 1000;
 
 /** The lower bound of a full pass. Bright holds no record modified before it. */
@@ -27,8 +32,8 @@ export const EPOCH = '1970-01-01T00:00:00.000Z';
 
 /** A slice splits into at most this many parts per level. */
 const MAX_SPLIT = 16;
-/** Target records per slice after a split, below `PAGE_SIZE` so an uneven split still fits. */
-const SPLIT_TARGET = 700;
+/** Target share of the page size per slice after a split, so an uneven split still fits one page. */
+const SPLIT_TARGET_SHARE = 0.7;
 /** Bright timestamps have whole-second precision. A narrower window cannot split further. */
 const MIN_WINDOW_MS = 1000;
 /** Above every `ListingKey` Bright issues (12 digits on 2026-09-26). */
@@ -76,6 +81,16 @@ export interface PageResult {
 export interface SyncDeps {
   readonly serviceRoot: string;
   readonly fetchPage: (url: string) => Promise<BrightPage>;
+  /** Records per request (`$top`). Defaults to `PAGE_SIZE` when absent (a test harness). */
+  readonly pageSize?: number;
+  /**
+   * Leaf slices `drainSlices` fetches ahead of `onSlice` at once. Unbounded when absent (a test
+   * harness). This, not the HTTP-level `RateLimiter`, is what bounds memory (#348): the
+   * `RateLimiter`'s own concurrency only caps requests actually in flight, and releases a slot as
+   * soon as the response arrives, before its data is applied — so on its own it would let every
+   * slice in a backfill fetch ahead of a slow `onSlice` and pile up in memory.
+   */
+  readonly concurrency?: number;
   /**
    * Stages and maps one page, takes down each held listing the mapper now rejects, and writes
    * `checkpoint` in the same transaction as the mapping.
@@ -167,13 +182,13 @@ function splitWindow(from: string, until: string, parts: number): SliceBounds[] 
 }
 
 /** `parts` equal `ListingKey` ranges of `(after, until]` inside one window. */
-function splitKeys(bounds: SliceBounds, parts: number): SliceBounds[] {
+function splitKeys(bounds: SliceBounds, parts: number, pageSize: number): SliceBounds[] {
   const after = BigInt(bounds.keyAfter ?? '0');
   const until = BigInt(bounds.keyUntil ?? MAX_LISTING_KEY.toString());
   const span = until - after;
   if (span <= 1n) {
     throw new Error(
-      `One ListingKey (${until}) matches more than ${PAGE_SIZE} records. The slice cannot split.`,
+      `One ListingKey (${until}) matches more than ${pageSize} records. The slice cannot split.`,
     );
   }
   const n = BigInt(parts) > span ? span : BigInt(parts);
@@ -187,8 +202,74 @@ function splitKeys(bounds: SliceBounds, parts: number): SliceBounds[] {
 }
 
 /**
+ * Every leaf slice inside `bounds`, oldest first — `$count` queries only, no data, no `onSlice`.
+ * Order-independent and side-effect-free besides `tally`, so unlike the actual reads (`drainSlices`
+ * below) this recursion stays plain sequential: a `$count` answers in under a second (module
+ * header), so it is never the pipeline's bottleneck, and a sequential walk cannot deadlock.
+ */
+async function planSlices(
+  deps: SyncDeps,
+  scope: SliceScope,
+  bounds: SliceBounds,
+  pageSize: number,
+  tally: Tally | undefined,
+  out: SliceBounds[],
+): Promise<void> {
+  const total = await countOf(deps, buildSliceCountQuery(deps.serviceRoot, scope, bounds), tally);
+  if (total === 0) {
+    return;
+  }
+  if (total < pageSize) {
+    out.push(bounds);
+    return;
+  }
+  const splitTarget = Math.max(1, Math.round(pageSize * SPLIT_TARGET_SHARE));
+  const parts = Math.min(MAX_SPLIT, Math.max(2, Math.ceil(total / splitTarget)));
+  const byTime = bounds.keyAfter === undefined && bounds.keyUntil === undefined;
+  const children =
+    byTime && Date.parse(bounds.until) - Date.parse(bounds.from) > MIN_WINDOW_MS
+      ? splitWindow(bounds.from, bounds.until, parts)
+      : splitKeys(bounds, parts, pageSize);
+  for (const child of children) {
+    await planSlices(deps, scope, child, pageSize, tally, out);
+  }
+}
+
+/** A planned leaf's fetch outcome: its records, or a signal that it grew past one page. */
+type LeafFetch =
+  | { readonly kind: 'records'; readonly records: readonly Record<string, unknown>[] }
+  | { readonly kind: 'grown' };
+
+async function fetchLeaf(
+  deps: SyncDeps,
+  scope: SliceScope,
+  bounds: SliceBounds,
+  select: readonly string[],
+  ordered: boolean,
+  pageSize: number,
+  tally: Tally | undefined,
+): Promise<LeafFetch> {
+  const page = await deps.fetchPage(
+    buildSliceQuery(deps.serviceRoot, scope, bounds, { top: pageSize, select, ordered }),
+  );
+  if (tally !== undefined) tally.requests += 1;
+  // A full page means the slice grew after the count, and `$top` cut it.
+  return page.records.length < pageSize
+    ? { kind: 'records', records: page.records }
+    : { kind: 'grown' };
+}
+
+/**
  * Reads every record in `scope` within `bounds`, in slices of at most one page, oldest window
  * first. `onSlice` sees each non-empty slice once, with its bounds, in that order.
+ *
+ * Two phases (#348). `planSlices` first finds every leaf, in order. Then a bounded prefetch reads
+ * them: up to `deps.concurrency` leaves fetch at once — that is where the wall-clock cost is — but
+ * `onSlice` still fires strictly in `leaves` order, one at a time, so a per-slice checkpoint
+ * (`runBackfill`) never advances past a slice that has not actually finished, whatever order the
+ * network answers in, and at most `deps.concurrency` slices' worth of fetched data are ever held
+ * in memory at once. A leaf that grew past one page since it was counted is re-drained, recursively
+ * and sequentially, in its own place in the order — rare enough that it need not join the pipeline.
  */
 export async function drainSlices(
   deps: SyncDeps,
@@ -199,31 +280,64 @@ export async function drainSlices(
   tally?: Tally,
   ordered = false,
 ): Promise<void> {
-  const total = await countOf(deps, buildSliceCountQuery(deps.serviceRoot, scope, bounds), tally);
-  if (total === 0) {
+  const pageSize = deps.pageSize ?? PAGE_SIZE;
+  const leaves: SliceBounds[] = [];
+  await planSlices(deps, scope, bounds, pageSize, tally, leaves);
+  if (leaves.length === 0) {
     return;
   }
-  let size = total;
-  if (total < PAGE_SIZE) {
-    const page = await deps.fetchPage(
-      buildSliceQuery(deps.serviceRoot, scope, bounds, { top: PAGE_SIZE, select, ordered }),
-    );
-    if (tally !== undefined) tally.requests += 1;
-    // A full page means the slice grew after the count, and `$top` cut it. Split it instead.
-    if (page.records.length < PAGE_SIZE) {
-      await onSlice(page.records, bounds);
-      return;
-    }
-    size = page.records.length + 1;
+
+  const concurrency = Math.max(1, Math.min(deps.concurrency ?? leaves.length, leaves.length));
+  const results = new Map<number, LeafFetch>();
+  let firstError: unknown;
+  let hasError = false;
+  let wake: (() => void) | null = null;
+  const notify = (): void => {
+    const resolve = wake;
+    wake = null;
+    resolve?.();
+  };
+  const waitForArrival = (): Promise<void> => new Promise((resolve) => (wake = resolve));
+
+  const startFetch = (index: number): void => {
+    const leafBounds = leaves[index] as SliceBounds;
+    fetchLeaf(deps, scope, leafBounds, select, ordered, pageSize, tally)
+      .then((result) => results.set(index, result))
+      .catch((error: unknown) => {
+        if (!hasError) {
+          hasError = true;
+          firstError = error;
+        }
+      })
+      .finally(notify);
+  };
+
+  let nextToFetch = Math.min(concurrency, leaves.length);
+  for (let i = 0; i < nextToFetch; i += 1) {
+    startFetch(i);
   }
-  const parts = Math.min(MAX_SPLIT, Math.max(2, Math.ceil(size / SPLIT_TARGET)));
-  const byTime = bounds.keyAfter === undefined && bounds.keyUntil === undefined;
-  const children =
-    byTime && Date.parse(bounds.until) - Date.parse(bounds.from) > MIN_WINDOW_MS
-      ? splitWindow(bounds.from, bounds.until, parts)
-      : splitKeys(bounds, parts);
-  for (const child of children) {
-    await drainSlices(deps, scope, child, select, onSlice, tally, ordered);
+
+  for (let index = 0; index < leaves.length; index += 1) {
+    while (!results.has(index) && !hasError) {
+      await waitForArrival();
+    }
+    if (hasError) {
+      throw firstError;
+    }
+    const result = results.get(index) as LeafFetch;
+    results.delete(index);
+    const leafBounds = leaves[index] as SliceBounds;
+    if (result.kind === 'grown') {
+      await drainSlices(deps, scope, leafBounds, select, onSlice, tally, ordered);
+    } else if (result.records.length > 0) {
+      await onSlice(result.records, leafBounds);
+    }
+    // Only now — after this slice is fully applied — does the window advance, so at most
+    // `concurrency` slices' worth of data are ever fetched-but-unapplied at once.
+    if (nextToFetch < leaves.length) {
+      startFetch(nextToFetch);
+      nextToFetch += 1;
+    }
   }
 }
 
@@ -388,17 +502,26 @@ export async function runReconcile(
   const live = new Set<string>();
   const byStatus: Record<string, { bright: number; read: number }> = {};
   const until = deps.now().toISOString();
+  const tally = new Tally();
 
   for (const status of options.statuses) {
     const expected = await countOf(
       deps,
       buildCountQuery({ serviceRoot: deps.serviceRoot, status }),
+      tally,
     );
     let read = 0;
-    await drainSlices(deps, { status }, { from: EPOCH, until }, ['ListingKey'], async (records) => {
-      for (const record of records) live.add(listingKeyOf(record));
-      read += records.length;
-    });
+    await drainSlices(
+      deps,
+      { status },
+      { from: EPOCH, until },
+      ['ListingKey'],
+      async (records) => {
+        for (const record of records) live.add(listingKeyOf(record));
+        read += records.length;
+      },
+      tally,
+    );
     byStatus[status] = { bright: expected, read };
     await deps.progress({ byStatus }, { status });
     if (read < expected * (1 - RECONCILE_SHORTFALL_TOLERANCE)) {
@@ -435,6 +558,7 @@ export async function runReconcile(
     keptLive,
     unchecked: absent.length - checked.length,
     takenDown,
+    brightRequests: tally.requests,
   };
 }
 

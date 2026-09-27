@@ -63,7 +63,21 @@ describe('worker settings', () => {
       soldLookbackDays: 365,
       soldDisplayDelayDays: null,
       pollMs: 10_000,
+      concurrency: 6,
+      pageSize: 5_000,
     });
+  });
+
+  it('reads the sync concurrency and page size, and refuses a page size over 10,000', () => {
+    expect(
+      resolveWorkerSettings({ BRIGHT_SYNC_CONCURRENCY: '3', BRIGHT_SYNC_PAGE_SIZE: '10000' }),
+    ).toEqual(expect.objectContaining({ concurrency: 3, pageSize: 10_000 }));
+    expect(() => resolveWorkerSettings({ BRIGHT_SYNC_PAGE_SIZE: '10001' })).toThrow(
+      'BRIGHT_SYNC_PAGE_SIZE must be 10000 or less',
+    );
+    expect(() => resolveWorkerSettings({ BRIGHT_SYNC_CONCURRENCY: '0' })).toThrow(
+      'BRIGHT_SYNC_CONCURRENCY must be a positive integer',
+    );
   });
 
   it('backfills Closed only when the sold display delay is configured', () => {

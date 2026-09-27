@@ -79,6 +79,12 @@ export class RateLimiter {
   /** Serialises admission, so two callers cannot both read the window and both decide to go. */
   private admission: Promise<void> = Promise.resolve();
   private waiters: (() => void)[] = [];
+  /**
+   * The concurrency ceiling in force now. Starts at `config.maxConcurrency` and only ever moves down,
+   * through `halveConcurrency()`, for a run that hit a 429 or a 5xx. `resetConcurrency()` restores it
+   * for the next run.
+   */
+  private currentMaxConcurrency: number;
 
   constructor(config: RateLimitConfig = DEFAULT_RATE_LIMITS, options: RateLimiterOptions = {}) {
     for (const [name, value] of Object.entries(config)) {
@@ -87,8 +93,24 @@ export class RateLimiter {
       }
     }
     this.config = config;
+    this.currentMaxConcurrency = config.maxConcurrency;
     this.now = options.now ?? (() => Date.now());
     this.sleep = options.sleep ?? defaultSleep;
+  }
+
+  /** The concurrency ceiling in force now, after any `halveConcurrency()` this run. */
+  get concurrencyLimit(): number {
+    return this.currentMaxConcurrency;
+  }
+
+  /** Halves the concurrency ceiling, floor 1. A 429 or a 5xx calls this once per occurrence. */
+  halveConcurrency(): void {
+    this.currentMaxConcurrency = Math.max(1, Math.floor(this.currentMaxConcurrency / 2));
+  }
+
+  /** Restores the configured ceiling. Called once at the start of each run. */
+  resetConcurrency(): void {
+    this.currentMaxConcurrency = this.config.maxConcurrency;
   }
 
   /** Requests started inside the window ending now. Exposed for the run report and the tests. */
@@ -124,7 +146,7 @@ export class RateLimiter {
   }
 
   private async admit(): Promise<void> {
-    while (this.inFlight >= this.config.maxConcurrency) {
+    while (this.inFlight >= this.currentMaxConcurrency) {
       await new Promise<void>((resolve) => this.waiters.push(resolve));
     }
 

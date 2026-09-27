@@ -158,6 +158,58 @@ describe('RateLimiter — the ceiling holds', () => {
       () => new RateLimiter({ requestsPerSecond: 0, requestsPerMinute: 60, maxConcurrency: 1 }),
     ).toThrow(/positive integer/);
   });
+
+  it('halves concurrency, floored at 1, and restores it on reset (#348)', () => {
+    const limiter = new RateLimiter({
+      requestsPerSecond: 100,
+      requestsPerMinute: 1_000,
+      maxConcurrency: 6,
+    });
+
+    expect(limiter.concurrencyLimit).toBe(6);
+    limiter.halveConcurrency();
+    expect(limiter.concurrencyLimit).toBe(3);
+    limiter.halveConcurrency();
+    expect(limiter.concurrencyLimit).toBe(1);
+    limiter.halveConcurrency();
+    expect(limiter.concurrencyLimit).toBe(1);
+
+    limiter.resetConcurrency();
+    expect(limiter.concurrencyLimit).toBe(6);
+  });
+
+  it('admits no more than the halved concurrency once it drops', async () => {
+    const clock = virtualClock();
+    const limiter = new RateLimiter(
+      { requestsPerSecond: 1_000, requestsPerMinute: 10_000, maxConcurrency: 4 },
+      clock,
+    );
+    limiter.halveConcurrency();
+    limiter.halveConcurrency();
+    expect(limiter.concurrencyLimit).toBe(1);
+
+    let inFlight = 0;
+    let peak = 0;
+    let open = () => undefined as void;
+    const gate = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+
+    const running = Array.from({ length: 3 }, () =>
+      limiter.schedule(async () => {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await gate;
+        inFlight -= 1;
+      }),
+    );
+
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(inFlight).toBe(1);
+    open();
+    await Promise.all(running);
+    expect(peak).toBe(1);
+  });
 });
 
 describe('backoff', () => {

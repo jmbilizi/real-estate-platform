@@ -86,3 +86,8 @@ spec:
               value: "10000" # scheduler tick, not a Bright request rate
             - name: BRIGHT_MLS_REQUEST_TIMEOUT_MS
               value: "120000"
+            # ── Slice fetch (#348) ───────────────────────────────────────────────────────
+            - name: BRIGHT_SYNC_CONCURRENCY
+              value: "6" # sibling slices in flight at once; a 429/5xx halves it for the run
+            - name: BRIGHT_SYNC_PAGE_SIZE
+              value: "5000" # records per slice request ($top), 10000 max
