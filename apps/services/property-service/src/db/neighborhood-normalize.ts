@@ -53,13 +53,32 @@ export function normalizeNeighborhood(raw: string | null): string | null {
  * The same noise rule as `isNoiseNeighborhood()`, as a SQL boolean expression that is TRUE when
  * `column` is real — i.e. NOT NULL and not noise. `~*` is Postgres's case-insensitive regex match,
  * so this mirrors `isNoiseNeighborhood()`'s upper-cased comparison without calling `upper()`
- * per-pattern.
+ * per-pattern. `\y` is Postgres's word-boundary metacharacter, matching the JS side's `/^NONE\b/`
+ * exactly — a bare `'^NONE'` would also match a real name like "Nonesuch" or "Nonantum".
  */
+/**
+ * `slugify()` (`@cribstop/property-contracts/address-slug.ts`), reimplemented in SQL: lower case,
+ * `&` -> ` and `, every run of non `[a-z0-9]` -> one hyphen, leading/trailing hyphens trimmed.
+ * `getNeighborhoods()`'s `slug` query parameter filters on this expression applied to the group's
+ * raw name — it must produce the SAME slug `slugify()` would, or `?slug=fishtown` stops matching
+ * the row the app-code mapping labels `slug: "fishtown"`.
+ *
+ * ONE DEFINITION IN TWO LANGUAGES, NOT A SECOND ONE: if `slugify()` changes, this must change with
+ * it. There is no automated cross-check — proving two implementations produce the same string for
+ * every input needs a real Postgres running this exact expression, which is out of this project's
+ * DB-free unit-test scope (see `repository.spec.ts`'s file-level doc comment). Grep both files for
+ * `SQL mirrors slugify()` before changing either one.
+ */
+export function neighborhoodSlugSql(column: string): string {
+  // SQL mirrors slugify() — see this function's doc comment before changing either one.
+  return `trim(both '-' from regexp_replace(lower(replace(${column}, '&', ' and ')), '[^a-z0-9]+', '-', 'g'))`;
+}
+
 export function neighborhoodNotNoiseSql(column: string): string {
   return `(
     ${column} IS NOT NULL
     AND trim(${column}) <> ''
-    AND ${column} !~* '^NONE'
+    AND ${column} !~* '^NONE\\y'
     AND ${column} !~* '^N/?A$'
     AND ${column} !~* '^UNKNOWN$'
     AND ${column} !~* '^NOT ON (THE )?LIST$'

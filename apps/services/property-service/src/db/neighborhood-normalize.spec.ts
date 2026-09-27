@@ -1,6 +1,7 @@
 import {
   isNoiseNeighborhood,
   neighborhoodNotNoiseSql,
+  neighborhoodSlugSql,
   normalizeNeighborhood,
 } from './neighborhood-normalize';
 
@@ -78,7 +79,23 @@ describe('neighborhoodNotNoiseSql', () => {
   it('excludes null and every JS-side noise pattern the same way', () => {
     const sql = neighborhoodNotNoiseSql('v.neighborhood');
     expect(sql).toContain('v.neighborhood IS NOT NULL');
-    expect(sql).toContain("v.neighborhood !~* '^NONE'");
+    expect(sql).toContain("v.neighborhood !~* '^NONE\\y'");
     expect(sql).toContain("v.neighborhood !~ '^[0-9\\s.,_/-]*$'");
+  });
+});
+
+/**
+ * Documents the exact SQL text this function must keep in sync with `slugify()`
+ * (`@cribstop/property-contracts`). It cannot prove the two produce the same string for every
+ * input — that needs a real Postgres, per this file's own DB-free scope — so a change to either
+ * `slugify()` or this function must update the other by hand; see the doc comment on
+ * `neighborhoodSlugSql` for the mirrored steps.
+ */
+describe('neighborhoodSlugSql', () => {
+  it('lower-cases, expands &, collapses non-alphanumeric runs to one hyphen, and trims hyphens', () => {
+    const sql = neighborhoodSlugSql('name');
+    expect(sql).toBe(
+      "trim(both '-' from regexp_replace(lower(replace(name, '&', ' and ')), '[^a-z0-9]+', '-', 'g'))",
+    );
   });
 });

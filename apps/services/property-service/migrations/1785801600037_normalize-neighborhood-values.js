@@ -7,9 +7,15 @@ exports.shorthands = undefined;
  * collapse internal whitespace, strip wrapping quotes and a trailing period run, then map a noise
  * value ("NONE AVAILABLE" and its misspellings, "N/A", "000", ...) to NULL.
  *
- * Two statements rather than one: the first cleans up formatting only, so a value that becomes
- * noise ONLY after cleanup ("NONE AVAILABLE.") is still caught by the second statement's noise
- * check, which runs against the already-cleaned value.
+ * Three UPDATEs rather than one, run in order, each against the previous one's output:
+ *  1. Trim, collapse internal whitespace, strip a trailing period run.
+ *  2. Strip wrapping quotes. Separate from (1) because `trim(both ... from ...)` only strips
+ *     leading/trailing characters, not the trailing-period run, and running it first would leave
+ *     a value like `'"Old Town."'` with its closing quote still attached to the period.
+ *  3. The noise check, against the now-cleaned value — so a value that becomes noise ONLY after
+ *     cleanup (`"NONE AVAILABLE."`, `'""'` after step 2 leaves it as `''`) is still caught. Step 2
+ *     can leave an empty string rather than NULL (a value that was ONLY quotes); this step's
+ *     `trim(neighborhood) = ''` branch is what turns that into NULL, not step 2 itself.
  *
  * Irreversible: the noise values collapsed to NULL are not recoverable, matching migration 035's
  * precedent for a lossy cleanup — `down` does nothing.
@@ -58,7 +64,7 @@ exports.up = (pgm) => {
      WHERE neighborhood IS NOT NULL
        AND (
              trim(neighborhood) = ''
-             OR neighborhood ~* '^NONE'
+             OR neighborhood ~* '^NONE\\y'
              OR neighborhood ~* '^N/?A$'
              OR neighborhood ~* '^UNKNOWN$'
              OR neighborhood ~* '^NOT ON (THE )?LIST$'

@@ -12,7 +12,7 @@ import {
 } from '@cribstop/property-contracts';
 import { titleCase } from '../jobs/bright-map/address-format';
 import type { AddressClassification } from '../db/mls-attributes';
-import { neighborhoodNotNoiseSql } from '../db/neighborhood-normalize';
+import { neighborhoodNotNoiseSql, neighborhoodSlugSql } from '../db/neighborhood-normalize';
 import {
   ATTRIBUTE_SELECT,
   LISTING_CARD_SELECT,
@@ -325,12 +325,7 @@ export async function getNeighborhoods(
      SELECT *, count(*) OVER ()::int AS group_total
        FROM grouped
       WHERE total >= $4
-        AND (
-              $5::text IS NULL
-              OR trim(both '-' from
-                   regexp_replace(lower(replace(name, '&', ' and ')), '[^a-z0-9]+', '-', 'g')
-                 ) = $5
-            )
+        AND ($5::text IS NULL OR ${neighborhoodSlugSql('name')} = $5)
       ORDER BY total DESC, name ASC, city ASC
       LIMIT $6`,
     [

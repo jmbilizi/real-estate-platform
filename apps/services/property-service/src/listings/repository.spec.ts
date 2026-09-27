@@ -118,7 +118,7 @@ describe('getNeighborhoods', () => {
 
     await getNeighborhoods(client, baseNeighborhoodsRequest);
 
-    expect(captured[0]?.text).toContain("l.neighborhood !~* '^NONE'");
+    expect(captured[0]?.text).toContain("l.neighborhood !~* '^NONE\\y'");
   });
 
   it('binds listingType, state, city, minCount, slug and limit in that order', async () => {
