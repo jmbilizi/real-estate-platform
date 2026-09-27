@@ -392,13 +392,17 @@ describe('GET /listings', () => {
     });
 
     it('bounds the offset, not the page number, so the bound moves with page size', async () => {
-      // `pageSize=100, page=11` is offset 1000 — in window. `page=12` is offset 1100 — out. The
-      // deepest row a larger page size reaches is one page further in (1,100 vs 1,020), which is
-      // what bounding the OFFSET means; what it cannot do is scale with the dataset.
-      const app = createApp({ pool: createSearchPool([], 5000) });
+      // The deepest in-window page at pageSize=100 is one page further than at the default page
+      // size, which is what bounding the OFFSET means; what it cannot do is scale with the dataset.
+      const app = createApp({ pool: createSearchPool([], 20_000) });
+      const lastPageAt100 = maxReachablePage(100);
 
-      expect((await request(app).get('/listings?pageSize=100&page=11')).status).toBe(200);
-      expect((await request(app).get('/listings?pageSize=100&page=12')).status).toBe(400);
+      expect((await request(app).get(`/listings?pageSize=100&page=${lastPageAt100}`)).status).toBe(
+        200,
+      );
+      expect(
+        (await request(app).get(`/listings?pageSize=100&page=${lastPageAt100 + 1}`)).status,
+      ).toBe(400);
     });
 
     it('applies identically across every sort', async () => {
@@ -435,13 +439,13 @@ describe('GET /listings', () => {
     });
 
     it('leaves total untouched on the deepest in-window page — it is the full filtered count, never the window', async () => {
-      const response = await request(createApp({ pool: createSearchPool([], 5000) })).get(
+      const response = await request(createApp({ pool: createSearchPool([], 20_000) })).get(
         `/listings?page=${lastPage}`,
       );
 
-      expect(response.body.total).toBe(5000);
+      expect(response.body.total).toBe(20_000);
       expect(response.body.total).toBeGreaterThan(MAX_RESULT_OFFSET);
-      expect(response.body.pageCount).toBe(250);
+      expect(response.body.pageCount).toBe(1000);
     });
 
     it('adds no parameter that lifts the bound', async () => {
