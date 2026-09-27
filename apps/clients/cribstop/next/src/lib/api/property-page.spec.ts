@@ -84,8 +84,8 @@ describe('lookupProperty', () => {
 
   it('returns ambiguous with every match when more than one address resolves', async () => {
     const matches = [
-      aPropertyMatch({ homeId: '11111111-1111-4111-8111-111111111111' }),
-      aPropertyMatch({ homeId: '22222222-2222-4222-8222-222222222222' }),
+      aPropertyMatch({ propertyId: '11111111-1111-4111-8111-111111111111' }),
+      aPropertyMatch({ propertyId: '22222222-2222-4222-8222-222222222222' }),
     ];
     fetchGateway.mockResolvedValue(mockUpstream(200, { matches }));
 
