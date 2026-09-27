@@ -24,6 +24,7 @@ import type { BrightArea } from '../bright-ingest/odata-query';
 import { RateLimiter } from '../bright-ingest/rate-limiter';
 import { createStagingStore, type StagedRecord } from '../bright-ingest/staging-store';
 import { loadListingStatuses, mapBrightPayloads } from '../bright-map/run';
+import { isSampleFeed } from '../bright-map/sample';
 import type { ListingStatusLookup } from '../bright-map/status';
 import { sweepOtherFeedTiers } from '../bright-map/sweep';
 import {
@@ -510,6 +511,44 @@ export async function backfillIncomplete(
   return false;
 }
 
+/** True when the tier holds a live Bright listing. A cheap existence check, not `count(*)`. */
+async function hasLiveListings(client: SyncQueryable, isSample: boolean): Promise<boolean> {
+  const { rows } = await client.query(
+    `SELECT EXISTS (
+       SELECT 1 FROM listings
+        WHERE source_system = $1 AND deleted_at IS NULL AND is_sample = $2
+     ) AS present`,
+    [SOURCE_SYSTEM, isSample],
+  );
+  return rows[0]?.present === true;
+}
+
+/**
+ * Resets the full-backfill checkpoints when the tier holds no live listings (2026-09-27 ruling: a
+ * deploy or restart must never re-run a full backfill on its own). A purge or a restore can empty
+ * the tier while a checkpoint still reads complete, so the checkpoint alone is not proof the data
+ * is there. An incomplete checkpoint already resumes on its own and is left untouched.
+ */
+export async function resetBackfillIfEmpty(
+  pool: WorkerPool,
+  feed: string,
+  isSample: boolean,
+  statuses: readonly string[],
+  log: (message: string) => void,
+): Promise<void> {
+  if (await hasLiveListings(pool, isSample)) return;
+  for (const status of statuses) {
+    await writeState(pool, feed, backfillStream(status), {
+      through: null,
+      complete: false,
+    } satisfies BackfillState);
+  }
+  log(
+    `Bright sync: feed tier ${feed} has no live listings. Reset ${statuses.length} backfill ` +
+      'checkpoint(s) for a full backfill.',
+  );
+}
+
 /** Starts and runs a worker-scheduled run. Returns whether it succeeded. */
 async function scheduled(
   ctx: WorkerContext,
@@ -563,12 +602,14 @@ export interface WorkerPool extends SyncQueryable {
 
 /**
  * Startup, after the lock and before any backfill: fail the runs a dead worker left `running`,
- * then sweep the other feed tier (#314). A switch from the test tier to production drops every
- * test-feed listing (`is_sample`) before production rows arrive.
+ * sweep the other feed tier (#314), then reset the backfill checkpoints if this tier is empty
+ * (2026-09-27 ruling). A switch from the test tier to production drops every test-feed listing
+ * (`is_sample`) before production rows arrive.
  */
 export async function prepareWorker(
   pool: WorkerPool,
   feed: ActiveConfig['feed'],
+  settings: WorkerSettings,
   log: (message: string) => void,
 ): Promise<void> {
   const interrupted = await failInterruptedRuns(pool);
@@ -586,6 +627,8 @@ export async function prepareWorker(
   } finally {
     client.release();
   }
+
+  await resetBackfillIfEmpty(pool, feed, isSampleFeed(feed), backfillStatuses(settings), log);
 }
 
 /**
@@ -609,7 +652,7 @@ export async function runWorker(
   }
   ctx.log(`Bright sync worker holds the lock. Feed tier: ${ctx.config.feed}.`);
 
-  await prepareWorker(pool, ctx.config.feed, ctx.log);
+  await prepareWorker(pool, ctx.config.feed, ctx.settings, ctx.log);
 
   const settings = ctx.settings;
   const fullStatuses = backfillStatuses(settings);

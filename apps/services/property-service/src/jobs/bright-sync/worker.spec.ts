@@ -1,4 +1,6 @@
+import type { BackfillState } from './sync';
 import {
+  backfillIncomplete,
   backfillStatuses,
   prepareWorker,
   resolveWorkerSettings,
@@ -7,9 +9,12 @@ import {
   type WorkerPool,
 } from './worker';
 
+const SETTINGS = resolveWorkerSettings({});
+
 function fakePool(
   otherTier: string | null,
   sampleCount = 663,
+  liveListings = true,
 ): { pool: WorkerPool; sql: string[] } {
   const sql: string[] = [];
   const query = (text: string) => {
@@ -19,6 +24,9 @@ function fakePool(
     }
     if (text.includes('count(*)::int AS n FROM listings WHERE is_sample')) {
       return Promise.resolve({ rows: [{ n: sampleCount }] });
+    }
+    if (text.includes('SELECT EXISTS')) {
+      return Promise.resolve({ rows: [{ present: liveListings }] });
     }
     return Promise.resolve({ rows: [], rowCount: 0 });
   };
@@ -33,7 +41,7 @@ describe('prepareWorker', () => {
     const { pool, sql } = fakePool('test');
     const log: string[] = [];
 
-    await prepareWorker(pool, 'production', (m) => log.push(m));
+    await prepareWorker(pool, 'production', SETTINGS, (m) => log.push(m));
 
     const failed = sql.findIndex((s) => s.includes("SET status = 'failed'"));
     const sampleDelete = sql.findIndex((s) => s.startsWith('DELETE FROM listings'));
@@ -51,7 +59,7 @@ describe('prepareWorker', () => {
   it('deletes leftover test-feed listings on production even with no other-tier staging rows (#375)', async () => {
     const { pool, sql } = fakePool(null, 12);
 
-    await prepareWorker(pool, 'production', () => undefined);
+    await prepareWorker(pool, 'production', SETTINGS, () => undefined);
 
     expect(sql.some((s) => s.startsWith('DELETE FROM listings'))).toBe(true);
   });
@@ -59,9 +67,75 @@ describe('prepareWorker', () => {
   it('deletes nothing when every staged row is already the current tier and no sample rows exist', async () => {
     const { pool, sql } = fakePool(null, 0);
 
-    await prepareWorker(pool, 'production', () => undefined);
+    await prepareWorker(pool, 'production', SETTINGS, () => undefined);
 
     expect(sql.some((s) => s.startsWith('DELETE'))).toBe(false);
+  });
+});
+
+/**
+ * Backfill checkpoints keyed by `feed:stream`, so `readState`/`writeState`'s real SQL text
+ * (matched literally, as the worker calls it) drives one in-memory checkpoint per status.
+ */
+function checkpointPool(
+  liveListings: boolean,
+  seed: BackfillState,
+): {
+  pool: WorkerPool;
+  states: Map<string, BackfillState>;
+} {
+  const states = new Map<string, BackfillState>();
+  const query = (text: string, params: unknown[] = []) => {
+    const sql = text.replace(/\s+/g, ' ').trim();
+    if (sql.startsWith('SELECT EXISTS')) {
+      return Promise.resolve({ rows: [{ present: liveListings }] });
+    }
+    if (sql.startsWith('SELECT state FROM bright_sync_state')) {
+      const key = `${String(params[0])}:${String(params[1])}`;
+      const state = states.get(key) ?? seed;
+      return Promise.resolve({ rows: [{ state: JSON.stringify(state) }] });
+    }
+    if (sql.startsWith('INSERT INTO bright_sync_state')) {
+      const key = `${String(params[0])}:${String(params[1])}`;
+      states.set(key, JSON.parse(String(params[2])) as BackfillState);
+      return Promise.resolve({ rows: [] });
+    }
+    if (sql.includes('SELECT feed_tier FROM bright_staging_records')) {
+      return Promise.resolve({ rows: [] });
+    }
+    return Promise.resolve({ rows: [], rowCount: 0 });
+  };
+  return {
+    pool: { query, connect: () => Promise.resolve({ query, release: () => undefined }) },
+    states,
+  };
+}
+
+describe('prepareWorker resets an empty tier (2026-09-27 ruling)', () => {
+  const statuses = backfillStatuses(SETTINGS);
+
+  it('resets a complete checkpoint to run a full backfill when the tier has no live listings', async () => {
+    const { pool } = checkpointPool(false, { through: '2026-01-01', complete: true });
+
+    await prepareWorker(pool, 'production', SETTINGS, () => undefined);
+
+    expect(await backfillIncomplete(pool, 'production', statuses)).toBe(true);
+  });
+
+  it('leaves a complete checkpoint alone when the tier has live listings', async () => {
+    const { pool } = checkpointPool(true, { through: '2026-01-01', complete: true });
+
+    await prepareWorker(pool, 'production', SETTINGS, () => undefined);
+
+    expect(await backfillIncomplete(pool, 'production', statuses)).toBe(false);
+  });
+
+  it('leaves an incomplete checkpoint to resume, unchanged', async () => {
+    const { pool } = checkpointPool(true, { through: '2026-01-01', complete: false });
+
+    await prepareWorker(pool, 'production', SETTINGS, () => undefined);
+
+    expect(await backfillIncomplete(pool, 'production', statuses)).toBe(true);
   });
 });
 
