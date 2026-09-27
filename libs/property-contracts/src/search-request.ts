@@ -29,8 +29,8 @@ export const PAGE_SIZE_MAX = 100;
  * footer's "Search All", the default search) is a deliberate shopping path, and "tell us where
  * before we show you anything" is friction a housing product should not add.
  *
- * A search UI does not need more: at the default page size this reaches page 51, and no consumer
- * refines a housing search by paging to result 1,001 — they narrow the filters. The limit is on the
+ * At the default page size this reaches page 501, deep enough for a large city's full for-sale
+ * count (#368: DC's ~3,400 listings hit the old 1,000-row/page-51 bound). The limit is on the
  * offset itself, as the acceptance criterion states it, so the deepest row reachable is
  * `MAX_RESULT_OFFSET + pageSize`.
  *
@@ -38,7 +38,7 @@ export const PAGE_SIZE_MAX = 100;
  * set, because it is what the headline result count and every "narrow your search" affordance are
  * built on — clamping it would be a fabricated fact (PRD §6.3).
  */
-export const MAX_RESULT_OFFSET = 1000;
+export const MAX_RESULT_OFFSET = 10_000;
 
 /** The offset a `(page, pageSize)` pair asks the database for. One definition, so the bound the
  *  route enforces and the offset the repository issues cannot drift apart. */
@@ -46,7 +46,7 @@ export function resultOffsetFor(page: number, pageSize: number): number {
   return (page - 1) * pageSize;
 }
 
-/** The deepest page number still inside the window at a given page size (51 at the default 20).
+/** The deepest page number still inside the window at a given page size (501 at the default 20).
  *  Exported so a client can bound its own pager rather than rendering a page button that 400s. */
 export function maxReachablePage(pageSize: number): number {
   return Math.floor(MAX_RESULT_OFFSET / pageSize) + 1;

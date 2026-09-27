@@ -411,14 +411,14 @@ export default function SearchExperience({
   const reachablePageCount = Math.min(pageCount, maxReachablePage(pageSize));
 
   /**
-   * True once the result set is bigger than the pager can reach — an increasingly common case
-   * once a real IDX feed backs a city search, where `total` regularly clears the ~1,020-row window
-   * `MAX_RESULT_OFFSET` bounds.
+   * True once the result set is bigger than the pager can reach — rare now that
+   * `MAX_RESULT_OFFSET` (#368) covers a large city's full for-sale count, but still possible for an
+   * unfiltered, nationwide browse.
    *
    * The headline count above stays honest (`total`, uncapped). This flag only gates the note under
    * the pager that explains the gap between the two, matching how Zillow/Redfin handle the same
-   * depth cap: cap it, but say so, rather than let a "page 51 of 51" pager look complete against a
-   * headline that reads "3,362 results".
+   * depth cap: cap it, but say so, rather than let a "page 501 of 501" pager look complete against
+   * a headline that reads a bigger count.
    */
   const isPagerCapped = pageCount > reachablePageCount;
 

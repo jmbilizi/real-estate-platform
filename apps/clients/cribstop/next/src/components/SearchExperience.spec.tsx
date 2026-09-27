@@ -212,12 +212,11 @@ describe('SearchExperience never offers a page the API will refuse', () => {
   });
 
   /**
-   * #347 follow-up: `total` regularly clears `MAX_RESULT_OFFSET` once a real IDX feed backs a
-   * city search, but the headline count and the pager disagreed silently — the count read
-   * "3,362 results" while the pager topped out at page 51 with no explanation. These three tests
-   * lock in the fix: an uncapped pager shows no note, a capped one names the gap (matching how
-   * Zillow/Redfin handle the same depth cap), and a filter narrowing the result set updates both
-   * together.
+   * #347 follow-up, revised for #368's wider window: `total` can still clear `MAX_RESULT_OFFSET`
+   * for an unfiltered, nationwide browse, and the headline count and the pager must not disagree
+   * silently when it does. These three tests lock in the fix: an uncapped pager shows no note, a
+   * capped one names the gap (matching how Zillow/Redfin handle the same depth cap), and a filter
+   * narrowing the result set updates both together.
    */
   it('shows no capped-results note when the pager is not clamped', async () => {
     mockedSearchListings.mockResolvedValue(withResults(300, 15));
@@ -229,24 +228,25 @@ describe('SearchExperience never offers a page the API will refuse', () => {
   });
 
   it('names the reachable count once the pager is clamped', async () => {
-    // 3,362 rows at the default page size is 169 pages — well past the 51-page reachable window.
-    mockedSearchListings.mockResolvedValue(withResults(3362, 169));
+    // 50,000 rows at the default page size is 2,500 pages — well past the 501-page reachable
+    // window (#368).
+    mockedSearchListings.mockResolvedValue(withResults(50_000, 2500));
 
     render(<SearchExperience initialQuery="q=Alexandria" />);
 
     await waitFor(() => expect(pageButtonLabels()).toContain(String(LAST_REACHABLE)));
     expect(
       screen.getByText(
-        'Showing the first 1,020 of 3,362 homes. Narrow your filters or zoom the map to see more.',
+        'Showing the first 10,020 of 50,000 homes. Narrow your filters or zoom the map to see more.',
       ),
     ).toBeInTheDocument();
   });
 
-  it('names the reachable count off the page size the API applied, not a hardcoded 1,020', async () => {
-    // pageSize=15 does not evenly divide MAX_RESULT_OFFSET (1000): maxReachablePage(15) is 67, so
-    // the true last reachable row is 67 * 15 = 1005, not 1000 + 15 = 1015.
+  it('names the reachable count off the page size the API applied, not a hardcoded 10,020', async () => {
+    // pageSize=15 does not evenly divide MAX_RESULT_OFFSET (10,000): maxReachablePage(15) is 667,
+    // so the true last reachable row is 667 * 15 = 10,005, not 10,000 + 15 = 10,015.
     mockedSearchListings.mockResolvedValue({
-      ...withResults(3362, 225),
+      ...withResults(50_000, 3334),
       pageSize: 15,
     });
 
@@ -255,13 +255,13 @@ describe('SearchExperience never offers a page the API will refuse', () => {
     await waitFor(() => expect(pageButtonLabels()).toContain(String(maxReachablePage(15))));
     expect(
       screen.getByText(
-        'Showing the first 1,005 of 3,362 homes. Narrow your filters or zoom the map to see more.',
+        'Showing the first 10,005 of 50,000 homes. Narrow your filters or zoom the map to see more.',
       ),
     ).toBeInTheDocument();
   });
 
   it('updates the pager and the note together once a filter narrows the result set', async () => {
-    mockedSearchListings.mockResolvedValue(withResults(3362, 169));
+    mockedSearchListings.mockResolvedValue(withResults(50_000, 2500));
     render(<SearchExperience initialQuery="q=Alexandria" />);
     await waitFor(() => expect(pageButtonLabels()).toContain(String(LAST_REACHABLE)));
     expect(screen.getByText(/Narrow your filters or zoom the map/)).toBeInTheDocument();

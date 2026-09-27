@@ -222,8 +222,8 @@ describe('boundary polygon (#339)', () => {
 });
 
 describe('the result window (#65)', () => {
-  it('bounds the offset at 1,000 — the documented number', () => {
-    expect(MAX_RESULT_OFFSET).toBe(1000);
+  it('bounds the offset at 10,000 — the documented number', () => {
+    expect(MAX_RESULT_OFFSET).toBe(10_000);
   });
 
   it('computes the offset as (page - 1) * pageSize', () => {
@@ -241,8 +241,8 @@ describe('the result window (#65)', () => {
     }
   });
 
-  it('reaches page 51 at the default page size', () => {
-    expect(maxReachablePage(PAGE_SIZE_DEFAULT)).toBe(51);
+  it('reaches page 501 at the default page size', () => {
+    expect(maxReachablePage(PAGE_SIZE_DEFAULT)).toBe(501);
   });
 
   // The bound is on the OFFSET, so a larger page size buys fewer pages — it does not let a caller
