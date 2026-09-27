@@ -1,4 +1,4 @@
-import { searchRequestSchema } from '@cribstop/property-contracts';
+import { mapRequestSchema, searchRequestSchema } from '@cribstop/property-contracts';
 
 /**
  * Pure query-parameter handling for the Property API proxy.
@@ -25,6 +25,11 @@ export const FORWARDABLE_LISTING_PARAMS: readonly string[] = Object.freeze(
   Object.keys(searchRequestSchema.shape),
 );
 
+/** The map endpoint's allowlist (#377): the search filters without paging or sort, plus the viewport. */
+export const FORWARDABLE_MAP_PARAMS: readonly string[] = Object.freeze(
+  Object.keys(mapRequestSchema.shape),
+);
+
 /**
  * Copies only allowlisted parameters onto the upstream query string, preserving repeats
  * (`amenities` may legitimately appear more than once).
@@ -43,14 +48,17 @@ export const FORWARDABLE_LISTING_PARAMS: readonly string[] = Object.freeze(
  * for `neighborhood`) — a neighborhood or county name alone can collide across states, so the
  * search bar sends it paired with state precisely because it does add precision there (#339).
  */
-export function buildListingsQuery(incoming: URLSearchParams): string {
+export function buildListingsQuery(
+  incoming: URLSearchParams,
+  allowed: readonly string[] = FORWARDABLE_LISTING_PARAMS,
+): string {
   const forwarded = new URLSearchParams();
   const hasPlaceFilter = ['zip', 'street', 'city', 'neighborhood', 'county', 'boundary'].some(
     (key) => incoming.get(key),
   );
   const hasZip = Boolean(incoming.get('zip'));
 
-  for (const key of FORWARDABLE_LISTING_PARAMS) {
+  for (const key of allowed) {
     if (key === 'query' && hasPlaceFilter) continue;
     if (key === 'state' && hasZip) continue;
 

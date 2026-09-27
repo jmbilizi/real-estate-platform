@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
+import type { ListingSearchQuery } from '@/lib/api/listings';
 import type { ListingCardRow } from '@/lib/types';
 import { MAP_PANEL_CLASS } from './map-panel';
 
@@ -13,6 +14,10 @@ interface Props {
   className?: string;
   searchCenter?: [number, number] | null;
   searchPolygon?: object | null;
+  /** The list's filters, for the viewport pin request (#377). */
+  filters?: ListingSearchQuery;
+  /** The list's `total`. */
+  total?: number;
   /**
    * Whether the map may start loading, as opposed to being deliberately held on its placeholder.
    *
