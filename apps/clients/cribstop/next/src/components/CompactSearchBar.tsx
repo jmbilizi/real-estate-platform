@@ -263,6 +263,10 @@ const isMorphPair = (a: DockMode, b: DockMode) => a !== b && (a === 'large') !==
 // pill <-> expanded, the crossfade above for large <-> pill), both of which
 // overwrite and then reset it, silently discarding a manual centering transform
 // and leaving the dock offset to one side.
+// `pill` and `expanded` dock inside SiteHeader's fixed 64px band, which does not
+// reserve safe-area-inset-top (#400 follow-up). Their offsets stay bare numbers
+// so they track the header instead of drifting from it; only overlays that own
+// their own space, like the mobileSheetMode sheet below, add the inset.
 const DOCK_STYLE: Record<'pill' | 'expanded', React.CSSProperties> = {
   pill: {
     position: 'fixed',
@@ -1760,13 +1764,16 @@ export default function CompactSearchBar({
         </style>
 
         {/* ── Top bar ──────────────────────────────────────────────────── */}
-        <div className="flex-shrink-0 bg-white border-b border-surface-border shadow-card">
+        <div
+          className="flex-shrink-0 bg-white border-b border-surface-border shadow-card"
+          style={{ paddingTop: 'env(safe-area-inset-top)' }}
+        >
           {/* Title row */}
           <div className="flex items-center justify-between px-4 pt-4 pb-3">
             <p className="text-[15px] font-bold text-ink tracking-tight">Search homes</p>
             <button
               onClick={onClose}
-              className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-surface-alt transition-colors"
+              className="h-11 w-11 flex items-center justify-center rounded-full hover:bg-surface-alt transition-colors"
               aria-label="Close search"
             >
               <svg
@@ -1785,7 +1792,10 @@ export default function CompactSearchBar({
         </div>
 
         {/* ── Cards ────────────────────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto px-4 pt-4 pb-4 space-y-2.5">
+        <div
+          className="flex-1 overflow-y-auto px-4 pt-4 pb-4 space-y-2.5"
+          style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+        >
           {/* WHERE card */}
           <div
             className={`bg-white rounded-md shadow-card transition-all duration-200 overflow-hidden ${

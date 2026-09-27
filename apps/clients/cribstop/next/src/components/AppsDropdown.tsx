@@ -205,7 +205,7 @@ export default function AppsDropdown() {
         aria-expanded={open}
         aria-haspopup="dialog"
         className={[
-          'flex items-center justify-center hover:text-brand',
+          'flex h-11 w-11 items-center justify-center hover:text-brand',
           open ? 'text-brand' : 'text-ink',
         ].join(' ')}
       >

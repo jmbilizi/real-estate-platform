@@ -27,7 +27,7 @@ export default function SortDropdown({
       <div ref={wrapperRef}>
         <button
           type="button"
-          className="bg-transparent px-0 py-0.5 text-sm font-semibold transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 cursor-pointer text-red-500 flex items-center gap-1.5"
+          className="min-h-11 bg-transparent px-2 py-0.5 text-sm font-semibold transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 cursor-pointer text-red-500 flex items-center gap-1.5"
           onClick={() => setOpen((v) => !v)}
           aria-haspopup="listbox"
           aria-expanded={open}
