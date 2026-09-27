@@ -9,6 +9,9 @@ import { visibleListingTypesFor } from './sold-gate';
 export const SORT_ORDERS: Record<SearchRequest['sort'], string> = {
   recommended: 'v.featured DESC, v.last_updated DESC, v.id DESC',
   newest: 'v.last_updated DESC, v.id DESC',
+  // #391. `listed_at` is nullable (a listing the feed carried no list date for), so a suppressed
+  // or absent value sorts last, same reasoning as `price-desc` below.
+  'newly-listed': 'v.listed_at DESC NULLS LAST, v.id DESC',
   // `price` is nullable in the contract (Bright's seller-directed field suppression can withhold
   // it). Postgres' implicit null ordering is NULLS LAST for ASC but NULLS FIRST for DESC, so
   // price-desc needs an explicit NULLS LAST or every price-suppressed row would float to the top.
@@ -217,6 +220,17 @@ export function buildSearchQuery(request: SearchRequest): {
   // ALL requested amenities must be present — containment (`@>`), never overlap (`&&`).
   if (request.amenities && request.amenities.length > 0) {
     conditions.push(`v.amenities @> ${bind([...request.amenities])}::text[]`);
+  }
+
+  // #391. NULL >= interval is NULL, so a listing with no listed_at never matches — no COALESCE
+  // needed, same reasoning `minPrice`/`maxPrice` document above.
+  if (typeof request.listedWithinDays === 'number') {
+    conditions.push(
+      `v.listed_at >= now() - make_interval(days => ${bind(request.listedWithinDays)}::int)`,
+    );
+  }
+  if (request.priceReduced === true) {
+    conditions.push('v.price_reduced');
   }
 
   return {

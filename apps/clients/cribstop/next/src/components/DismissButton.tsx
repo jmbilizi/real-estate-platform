@@ -16,7 +16,7 @@ export default function DismissButton({ onClick, label = 'Close', className }: D
       onClick={onClick}
       aria-label={label}
       className={[
-        'flex items-center justify-center w-9 h-9 rounded-full',
+        'flex items-center justify-center w-11 h-11 rounded-full',
         'text-gray-600 hover:bg-gray-100',
         'transition-colors duration-150',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink/30',

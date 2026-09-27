@@ -138,6 +138,8 @@ describe('upsertListing column coverage for the suppression flags', () => {
     'media_display_allowed',
     'days_on_market_display_allowed',
     'days_on_market',
+    'original_list_price',
+    'listed_at',
   ])('names %s in the INSERT, so the caller-supplied value is not lost to a default', (column) => {
     expect(insertColumns()).toContain(column);
   });
@@ -247,7 +249,6 @@ describe('upsertListingBySourceKey', () => {
     description_moderation: 'approved',
     featured: false,
     featured_reason: null,
-    price_reduced: false,
     new_construction: false,
     internet_display_allowed: true,
     address_display_allowed: true,
@@ -265,11 +266,15 @@ describe('upsertListingBySourceKey', () => {
     listing_agent_name: null,
     is_sample: true,
     last_updated: '2026-09-18T00:00:00Z',
+    listed_at: '2026-09-01T00:00:00Z',
   };
 
   function createFakeClient(options: {
     lookupRows: Record<string, unknown>[];
     factsRows?: Record<string, unknown>[];
+    /** Whether the fake `INSERT ... RETURNING (xmax = 0)` reports a fresh insert. Defaults to
+     *  the natural reading of `lookupRows`: empty means no prior row, so this write inserts one. */
+    inserted?: boolean;
   }): { client: Queryable; queries: RecordedQuery[] } {
     const queries: RecordedQuery[] = [];
     const client: Queryable = {
@@ -283,6 +288,10 @@ describe('upsertListingBySourceKey', () => {
           return Promise.resolve({
             rows: options.lookupRows.length > 0 ? [{ is_terminal: false }] : [],
           });
+        }
+        if (text.includes('INSERT INTO listings')) {
+          const inserted = options.inserted ?? options.lookupRows.length === 0;
+          return Promise.resolve({ rows: [{ inserted }] });
         }
         if (text.includes('FROM properties p')) {
           return Promise.resolve({
@@ -356,6 +365,85 @@ describe('upsertListingBySourceKey', () => {
 
     expect(id).toBe('listing-1');
     expect(queries.some((q) => q.text.includes('INSERT INTO listings'))).toBe(false);
+  });
+
+  /**
+   * #391. Bright never populates `OriginalListPrice`/`PreviousListPrice` on this MLS (confirmed
+   * against the production feed). This service is the only place "the original price" can be
+   * recorded. The freeze and the comparison both run inside the one UPSERT statement, in the
+   * `ON CONFLICT` clause's own `COALESCE`, never as a second round trip.
+   */
+  describe('original_list_price / price_reduced (#391)', () => {
+    function insertColumnList(sql: string): string[] {
+      return sql
+        .slice(sql.indexOf('INSERT INTO listings'), sql.indexOf('VALUES'))
+        .split(',')
+        .map((column) => column.trim());
+    }
+
+    it('binds a fresh row its own list price as original, and false for price_reduced', async () => {
+      const { client, queries } = createFakeClient({ lookupRows: [] });
+
+      await upsertListingBySourceKey(client, baseRow);
+
+      const insert = queries.find((q) => q.text.includes('INSERT INTO listings'));
+      const columns = insertColumnList(insert!.text);
+      expect(insert?.values?.[columns.findIndex((c) => c === 'original_list_price')]).toBe(
+        baseRow.list_price,
+      );
+      expect(insert?.values?.[columns.findIndex((c) => c === 'price_reduced')]).toBe(false);
+    });
+
+    it('keeps the frozen original on conflict, comparing it against THIS write price', () => {
+      // A single generated SQL statement, asserted once for every row this module writes — there
+      // is no second call path to check separately.
+      const sql = readFileSync(join(__dirname, 'write.ts'), 'utf8');
+      expect(sql).toContain(
+        'original_list_price = COALESCE(listings.original_list_price, EXCLUDED.list_price)',
+      );
+      expect(sql).toContain(
+        'price_reduced = COALESCE(listings.original_list_price, EXCLUDED.list_price) > EXCLUDED.list_price',
+      );
+    });
+  });
+
+  /**
+   * #391. `listed_at` only stands in for `last_updated` as a `listed` event's `occurred_at` on the
+   * FIRST write for a listing id — a re-ingest keeps refreshing `listed_at` on the row itself (the
+   * current marketing period), so reusing it for every event would date every later event the
+   * same, no matter how long ago the listing actually first appeared.
+   */
+  describe('listed event occurred_at (#391)', () => {
+    it('uses listed_at on the first write when the feed supplied one', async () => {
+      const { client, queries } = createFakeClient({ lookupRows: [], inserted: true });
+
+      await upsertListingBySourceKey(client, baseRow);
+
+      const event = queries.find((q) => q.text.includes('INSERT INTO listing_events'));
+      expect(event?.values).toContain(baseRow.listed_at);
+    });
+
+    it('falls back to last_updated on the first write when the feed supplied no listed_at', async () => {
+      const { client, queries } = createFakeClient({ lookupRows: [], inserted: true });
+
+      await upsertListingBySourceKey(client, { ...baseRow, listed_at: null });
+
+      const event = queries.find((q) => q.text.includes('INSERT INTO listing_events'));
+      expect(event?.values).toContain(baseRow.last_updated);
+    });
+
+    it('uses last_updated, never listed_at, on a re-ingest (not a fresh insert)', async () => {
+      const { client, queries } = createFakeClient({
+        lookupRows: [{ id: 'listing-1', is_terminal: false }],
+        inserted: false,
+      });
+
+      await upsertListingBySourceKey(client, baseRow);
+
+      const event = queries.find((q) => q.text.includes('INSERT INTO listing_events'));
+      expect(event?.values).toContain(baseRow.last_updated);
+      expect(event?.values).not.toContain(baseRow.listed_at);
+    });
   });
 });
 

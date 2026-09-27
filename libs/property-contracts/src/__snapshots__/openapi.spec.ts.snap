@@ -129,6 +129,12 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "nullable": true,
             "type": "number",
           },
+          "listedAt": {
+            "format": "date-time",
+            "nullable": true,
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string",
+          },
           "listedBy": {
             "type": "string",
           },
@@ -324,6 +330,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
           "closePrice",
           "closeDate",
           "lastUpdated",
+          "listedAt",
           "listingAgentName",
           "brokerName",
           "brokerPhone",
@@ -434,6 +441,12 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
               "latitude": {
                 "nullable": true,
                 "type": "number",
+              },
+              "listedAt": {
+                "format": "date-time",
+                "nullable": true,
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "type": "string",
               },
               "listedBy": {
                 "type": "string",
@@ -632,6 +645,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
               "closePrice",
               "closeDate",
               "lastUpdated",
+              "listedAt",
               "listingAgentName",
               "brokerName",
               "brokerPhone",
@@ -1032,6 +1046,66 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "type": "object",
           },
         ],
+      },
+      "NeighborhoodsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "results": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "city": {
+                  "type": "string",
+                },
+                "name": {
+                  "type": "string",
+                },
+                "rent": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer",
+                },
+                "sale": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer",
+                },
+                "slug": {
+                  "type": "string",
+                },
+                "state": {
+                  "type": "string",
+                },
+                "total": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer",
+                },
+              },
+              "required": [
+                "name",
+                "city",
+                "state",
+                "slug",
+                "total",
+                "sale",
+                "rent",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer",
+          },
+        },
+        "required": [
+          "results",
+          "total",
+        ],
+        "type": "object",
       },
       "PropertyLookupResponse": {
         "additionalProperties": false,
@@ -1591,6 +1665,28 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
           },
           {
             "in": "query",
+            "name": "listedWithinDays",
+            "required": false,
+            "schema": {
+              "description": "Whole number, 1 to 30. Matches a listing whose listed_at is within this many days of now. A listing with no listed_at (the feed carried no list date) never matches.",
+              "pattern": "^([1-9]|[12][0-9]|30)$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "priceReduced",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
             "name": "sort",
             "required": false,
             "schema": {
@@ -1599,6 +1695,7 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
               "enum": [
                 "recommended",
                 "newest",
+                "newly-listed",
                 "price-asc",
                 "price-desc",
               ],
@@ -1907,6 +2004,28 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
           },
           {
             "in": "query",
+            "name": "listedWithinDays",
+            "required": false,
+            "schema": {
+              "description": "Whole number, 1 to 30. Matches a listing whose listed_at is within this many days of now. A listing with no listed_at (the feed carried no list date) never matches.",
+              "pattern": "^([1-9]|[12][0-9]|30)$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "priceReduced",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
             "name": "bounds",
             "required": true,
             "schema": {
@@ -1988,6 +2107,110 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
           },
         },
         "summary": "Dataset freshness",
+      },
+    },
+    "/listings/neighborhoods": {
+      "get": {
+        "description": "Publishable listings grouped by neighborhood. Counts only — no ranking, no descriptive word. \`name\` is title case, built from the most frequent raw feed variant in the group. \`slug\` matches the property page’s slug rules. \`total\` in the response is the exact count of matching neighborhoods, never clamped to \`limit\`.",
+        "operationId": "getNeighborhoods",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "description": "Two-letter state code, case-insensitive exact match (e.g. \`MD\`). ANDed with every other filter, including \`query\` — no parameter suppresses another. Full state names are the client’s job to normalize before sending this parameter.",
+              "pattern": "^[A-Za-z]{2}$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "city",
+            "required": false,
+            "schema": {
+              "description": "Case-insensitive exact match against the neighborhood’s city.",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "listingType",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "description": "\`sale\`, \`rent\` or \`all\` (default). Each returned row’s \`total\` counts only this type; \`sale\` and \`rent\` are always both reported regardless of this filter.",
+              "enum": [
+                "sale",
+                "rent",
+                "all",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "minCount",
+            "required": false,
+            "schema": {
+              "description": "Whole number from 1 to 1000. Default 3. A neighborhood whose matching count (see \`listingType\`) is below this is omitted.",
+              "pattern": "^([1-9]\\d{0,2}|1000)$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "description": "Whole number from 1 to 100. Default 24.",
+              "pattern": "^([1-9][0-9]?|100)$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "slug",
+            "required": false,
+            "schema": {
+              "description": "Exact match against the derived slug (see \`NeighborhoodRow.slug\`).",
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NeighborhoodsResponse",
+                },
+              },
+            },
+            "description": "Neighborhoods with a listing count at or above minCount.",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unknown or invalid query parameter (\`invalid_request\`).",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+        },
+        "summary": "Neighborhood counts",
       },
     },
     "/listings/{id}": {

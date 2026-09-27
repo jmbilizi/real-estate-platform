@@ -9,6 +9,32 @@
  * a future migration adds, and defence in depth on a seller opt-out is worth one line per column.
  */
 
+/**
+ * #390. `listing_search_v`'s row-visibility predicate (migration
+ * `1785801600011_replace-listing-search-view-suppress-free-text.js`), duplicated ONLY here and
+ * ONLY for performance.
+ *
+ * `getNeighborhoods()` in `repository.ts` aggregates over `listings` directly with this predicate,
+ * instead of reading `listing_search_v` the way every other query in this file does. Going through
+ * the view pulls in its INNER JOIN to `properties` and its LATERAL open-house join for every
+ * candidate row — needed for the view's OTHER columns, never for this aggregate's `COUNT` — and
+ * measured at 1-3 seconds for a populous state (MD, VA) against the real dataset, well past the
+ * 300ms budget. Reading `listings` directly with just this predicate measures under 100ms for the
+ * same states.
+ *
+ * `listing-search-view.spec.ts`'s "the neighborhoods predicate duplicate" block asserts this
+ * string's four conditions are still substrings of the view's actual WHERE clause, resolved from
+ * the newest view migration the same way every other guard in that file is. A future suppression
+ * rule added to the view and missed here fails that test loudly instead of silently letting this
+ * aggregate count a listing the view would have excluded.
+ */
+export const LISTING_VISIBILITY_SQL = `
+  l.deleted_at IS NULL
+  AND l.internet_display_allowed
+  AND l.consumer_status IS NOT NULL
+  AND (l.consumer_status <> 'Sold' OR l.close_date IS NOT NULL)
+`;
+
 /** Columns that must never appear in a projection, with the reason each one is barred. */
 export const FORBIDDEN_COLUMNS = [
   // #48: the raw street line. The view no longer exposes it, and this entry is what keeps a future
@@ -68,6 +94,8 @@ const CARD_COLUMNS = [
   'close_price',
   'close_date',
   'last_updated',
+  // #391. Bright's MLSListDate, refreshed on every write — the current marketing period's start.
+  'listed_at',
   'listing_agent_name',
   'broker_name',
   'broker_phone',

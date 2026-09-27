@@ -400,7 +400,6 @@ function buildFixtureListingRow(input: {
     // Never 'paid': the Sponsored disclosure label can't render until #24, and a later spec asserts
     // no row anywhere carries it.
     featured_reason: input.featuredReason,
-    price_reduced: false,
     new_construction: false,
     internet_display_allowed: input.internetDisplayAllowed,
     address_display_allowed: input.addressDisplayAllowed,
@@ -418,6 +417,7 @@ function buildFixtureListingRow(input: {
     listing_agent_name: FIXTURE_AGENT_NAME,
     is_sample: true,
     last_updated: new Date().toISOString(),
+    listed_at: null,
   };
 }
 

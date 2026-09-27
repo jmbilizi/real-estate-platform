@@ -270,7 +270,10 @@ dedicated connection for its whole life. A second replica waits. One task runs a
 
 **Startup**, after the lock: runs a dead worker left `running` are marked failed, then
 `sweepOtherFeedTiers()` (`bright-map/sweep.ts`) runs. A switch from the test tier to production
-drops every test-feed listing before any backfill writes production rows.
+drops every test-feed listing before any backfill writes production rows. A deploy or a restart
+never re-runs a full backfill on its own (2026-09-27 ruling). `resetBackfillIfEmpty()` (`worker.ts`)
+resets the backfill checkpoints only when the tier has no live listing left, so a purge or a restore
+that empties `listings` while the checkpoint still reads complete still refills.
 
 **The four modes** (`sync.ts`, pure over injected deps; `worker.ts` supplies the real ones):
 
@@ -398,7 +401,9 @@ a size variant. A record must be identifiably a photo by `MediaType` or URL exte
 - **These files are immutable once merged.** `pgmigrations` keys applied migrations by **filename**,
   and there is no checksum check, so editing an applied migration diverges a fresh database from a
   deployed one with no error. New migrations only ever append — `checkOrder` is on, so a migration
-  hand-numbered _below_ an already-applied one throws forever.
+  hand-numbered _below_ an already-applied one throws forever. CI's `tools` job runs
+  `tools/validation/migration-order.js` on every PR and fails it before merge (#405); `pre-push`
+  runs the same guard on a feature branch.
 - **Recovery after an in-place edit is to drop and recreate `property_db`** as `postgres_sa`, then
   let the next deploy's `migrate` initContainer rebuild it. That is the minimum blast radius, and it
   is the same operation a persistent dev/test environment needs — so it is the one worth rehearsing

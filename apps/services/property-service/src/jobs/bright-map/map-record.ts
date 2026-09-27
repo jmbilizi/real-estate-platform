@@ -12,9 +12,11 @@
  */
 
 import { buildAddressKey, splitUnitDesignator } from '../../db/address';
+import { normalizeNeighborhood } from '../../db/neighborhood-normalize';
 import { composeStreetLine, titleCase } from './address-format';
 import { PropertyType } from '../../db/constants';
 import { ListingStatus } from '../../db/constants';
+import { parseCalendarDate } from '../../db/date';
 import { OfferKind } from '../../db/types';
 
 import { AttributionFields, mapAttribution } from './attribution';
@@ -67,6 +69,10 @@ export interface MappedListingInput {
   readonly suppression: SuppressionFlags;
   readonly isSample: boolean;
   readonly lastUpdated: string;
+  /** #391. `MLSListDate`, widened to an instant (midnight UTC). Null when the feed omits it. */
+  readonly listedAt: string | null;
+  /** #391. `DaysOnMarket` — the current marketing period, not the lifetime total. */
+  readonly daysOnMarket: number | null;
 }
 
 export interface MappedRecord {
@@ -164,6 +170,14 @@ function toDateOnly(value: unknown): string | null {
   return value.slice(0, 10);
 }
 
+/** #391. `MLSListDate` is `Edm.Date` (`YYYY-MM-DD`, no time). `listings.listed_at` is `timestamptz`,
+ *  so the date is widened to midnight UTC rather than left ambiguous about a time zone. */
+function toDateInstant(value: unknown): string | null {
+  const date = toDateOnly(value);
+  const parsed = date === null ? null : parseCalendarDate(date);
+  return parsed === null ? null : parsed.toISOString();
+}
+
 function reject(listingKey: string | null, reason: RejectReason): RejectedRecord {
   return { kind: 'rejected', listingKey, reason };
 }
@@ -228,16 +242,15 @@ export function mapBrightPropertyRecord(
     if (ctx.soldDisplayDelayDays === null) {
       return reject(listingKey, 'sold_display_delay_not_configured');
     }
-    const closedAt = closeDate ? new Date(`${closeDate}T00:00:00Z`).getTime() : NaN;
-    // A malformed CloseDate (or none at all) parses to NaN, and every comparison against NaN is
-    // false — including `Date.now() < NaN`, which would otherwise fall through as "not still in
-    // the delay window" and publish an undated sold with zero delay. Reject explicitly instead of
-    // relying on the comparison to fail safe.
-    if (!closeDate || Number.isNaN(closedAt)) {
+    const closedAtDate = closeDate ? parseCalendarDate(closeDate) : null;
+    // A malformed or absent CloseDate parses to null. Reject explicitly rather than falling
+    // through to a comparison a null would make trivially false, which would publish an undated
+    // sold with zero delay.
+    if (closedAtDate === null) {
       return reject(listingKey, 'sold_missing_close_date');
     }
     const delayMs = ctx.soldDisplayDelayDays * 24 * 60 * 60 * 1000;
-    if (Date.now() < closedAt + delayMs) {
+    if (Date.now() < closedAtDate.getTime() + delayMs) {
       return reject(listingKey, 'sold_still_in_display_delay_window');
     }
   }
@@ -266,7 +279,18 @@ export function mapBrightPropertyRecord(
   const bathsFull = toBoundedInteger('BathroomsFull', payload.BathroomsFull);
   const bathsHalf = toBoundedInteger('BathroomsHalf', payload.BathroomsHalf);
   const livingSqft = toBoundedInteger('LivingArea', payload.LivingArea);
-  const outOfRangeFields = [yearBuilt, lotSqft, beds, bathsFull, bathsHalf, livingSqft]
+  // #391. `DaysOnMarket` is `Edm.Int16` (max 32767) — comfortably inside `integer`, but bounded the
+  // same way as every other feed numeric so a wire anomaly drops to null instead of crashing the pass.
+  const daysOnMarket = toBoundedInteger('DaysOnMarket', payload.DaysOnMarket);
+  const outOfRangeFields = [
+    yearBuilt,
+    lotSqft,
+    beds,
+    bathsFull,
+    bathsHalf,
+    livingSqft,
+    daysOnMarket,
+  ]
     .map((f) => f.outOfRangeField)
     .filter((f): f is string => f !== null);
 
@@ -284,7 +308,9 @@ export function mapBrightPropertyRecord(
       address_key: addressKey,
       latitude: toNumber(payload.Latitude),
       longitude: toNumber(payload.Longitude),
-      neighborhood: nonBlank(payload.SubdivisionName),
+      // #390: write-time cleanup, not just blank-check. `SubdivisionName` is mostly a "not on
+      // file" placeholder (however misspelled) or a raw feed value with stray quoting/whitespace.
+      neighborhood: normalizeNeighborhood(nonBlank(payload.SubdivisionName)),
       property_type: propertyType,
       year_built: yearBuilt.value,
       lot_sqft: lotSqft.value,
@@ -307,6 +333,8 @@ export function mapBrightPropertyRecord(
       suppression,
       isSample,
       lastUpdated,
+      listedAt: toDateInstant(payload.MLSListDate),
+      daysOnMarket: daysOnMarket.value,
     },
   };
 }

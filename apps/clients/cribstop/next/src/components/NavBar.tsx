@@ -267,7 +267,7 @@ export default function NavBar() {
              */}
             <Link
               href="/favorites"
-              className="flex items-center justify-center rounded-full text-ink transition hover:text-brand active:text-brand"
+              className="flex h-11 w-11 items-center justify-center rounded-full text-ink transition hover:text-brand active:text-brand"
               aria-label="Saved"
             >
               {hydrated ? (

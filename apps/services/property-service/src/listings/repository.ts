@@ -2,15 +2,22 @@ import {
   type ListingDetail,
   type ListingsEnvelope,
   type ListingsMeta,
+  type NeighborhoodsRequest,
+  type NeighborhoodsResponse,
+  neighborhoodsResponseSchema,
   NOT_FOUND_BODY,
   resultOffsetFor,
   type SearchRequest,
+  slugify,
 } from '@cribstop/property-contracts';
+import { titleCase } from '../jobs/bright-map/address-format';
 import type { AddressClassification } from '../db/mls-attributes';
+import { neighborhoodNotNoiseSql, neighborhoodSlugSql } from '../db/neighborhood-normalize';
 import {
   ATTRIBUTE_SELECT,
   LISTING_CARD_SELECT,
   LISTING_DETAIL_SELECT,
+  LISTING_VISIBILITY_SQL,
   PROPERTY_RECORD_SELECT,
 } from './columns';
 import { buildSearchQuery } from './search-query';
@@ -247,6 +254,102 @@ export async function getListingsMeta(pool: ReadClient): Promise<ListingsMeta> {
     throw new Error('Aggregate query over listing_search_v returned no row.');
   }
   return toListingsMeta(row);
+}
+
+/** One group row from the neighborhoods aggregate, before the app-code display transform below. */
+interface NeighborhoodDbRow {
+  name: string;
+  city: string;
+  state: string;
+  total: number;
+  sale: number;
+  rent: number;
+  group_total: number;
+}
+
+/**
+ * `GET /listings/neighborhoods` (#390): publishable listings grouped by
+ * `(lower(neighborhood), lower(city), state)`.
+ *
+ * Reads `listings` directly with `LISTING_VISIBILITY_SQL` (`columns.ts`) rather than
+ * `listing_search_v` the way every other endpoint in this file does — see that constant's doc
+ * comment for why: the view's INNER JOIN to `properties` and LATERAL open-house join measured at
+ * 1-3 seconds for a populous state against the real dataset, because they run for every candidate
+ * row to produce columns this aggregate never selects. `listing-search-view.spec.ts` guards the
+ * duplicate predicate against drift.
+ *
+ * A single query in two parts: the `grouped` CTE computes the aggregate (one row per
+ * neighborhood), the outer SELECT applies `minCount`/`slug` and the window `count(*) OVER ()` for
+ * the envelope's exact `total` — computed over the CTE's post-`HAVING`-equivalent rows, so it is
+ * never inflated by a group `LIMIT` later discards.
+ *
+ * `mode() WITHIN GROUP` picks the group's most frequent RAW variant for both `name` and `city` —
+ * "FISHTOWN" wins over "Fishtown" if it is the more common feed spelling. `name` is title-cased,
+ * and `slug` is derived, only in the app-code mapping below; the raw variant is what a caller
+ * would see if this changed to select it directly, which is deliberately never exposed.
+ *
+ * `neighborhoodNotNoiseSql()` is a defensive second gate: write-time normalization
+ * (`db/neighborhood-normalize.ts`) already NULLs a noise value before it reaches this table, so in
+ * the ordinary case this excludes nothing beyond a plain `IS NOT NULL` — the belt to that
+ * suspenders is the module the two share, never a second definition of "noise".
+ *
+ * `lower(l.state) = lower($n)` and `lower(l.city) = lower($n)` follow `search-query.ts`'s own
+ * convention for these two filters, rather than assuming the caller sent upper case.
+ */
+export async function getNeighborhoods(
+  pool: ReadClient,
+  request: NeighborhoodsRequest,
+): Promise<NeighborhoodsResponse> {
+  const result = await pool.query<NeighborhoodDbRow>(
+    `WITH grouped AS (
+       SELECT
+         mode() WITHIN GROUP (ORDER BY l.neighborhood)                          AS name,
+         mode() WITHIN GROUP (ORDER BY l.city)                                  AS city,
+         -- mode(), not a bare l.state: GROUP BY below groups on lower(l.state), so a raw column
+         -- select needs an aggregate. Also picks the most common raw case, same as name/city.
+         mode() WITHIN GROUP (ORDER BY l.state)                                 AS state,
+         count(*) FILTER (WHERE $1::text = 'all' OR l.listing_type = $1)::int  AS total,
+         count(*) FILTER (WHERE l.listing_type = 'sale')::int                  AS sale,
+         count(*) FILTER (WHERE l.listing_type = 'rent')::int                  AS rent
+       FROM listings l
+       WHERE ${LISTING_VISIBILITY_SQL}
+         AND ${neighborhoodNotNoiseSql('l.neighborhood')}
+         AND lower(l.neighborhood) <> lower(l.city)
+         AND ($2::text IS NULL OR lower(l.state) = lower($2))
+         AND ($3::text IS NULL OR lower(l.city) = lower($3))
+       -- Ordered lower(state) first to match idx_listings_neighborhood_group's key order
+       -- (columns.ts's doc comment on that index explains why): a state-scoped request then reads
+       -- one contiguous index slice and needs no separate Sort before GroupAggregate.
+       GROUP BY lower(l.state), lower(l.neighborhood), lower(l.city)
+     )
+     SELECT *, count(*) OVER ()::int AS group_total
+       FROM grouped
+      WHERE total >= $4
+        AND ($5::text IS NULL OR ${neighborhoodSlugSql('name')} = $5)
+      ORDER BY total DESC, name ASC, city ASC
+      LIMIT $6`,
+    [
+      request.listingType,
+      request.state ?? null,
+      request.city ?? null,
+      request.minCount,
+      request.slug ?? null,
+      request.limit,
+    ],
+  );
+
+  return neighborhoodsResponseSchema.parse({
+    results: result.rows.map((row) => ({
+      name: titleCase(row.name),
+      city: row.city,
+      state: row.state,
+      slug: slugify(row.name),
+      total: row.total,
+      sale: row.sale,
+      rent: row.rent,
+    })),
+    total: result.rows[0]?.group_total ?? 0,
+  });
 }
 
 /**

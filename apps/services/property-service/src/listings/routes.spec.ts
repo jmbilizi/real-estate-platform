@@ -60,3 +60,39 @@ describe('GET /listings never calls Bright', () => {
     expect(response.headers['cache-control']).toBe('public, max-age=60');
   });
 });
+
+/** #390. */
+describe('GET /listings/neighborhoods', () => {
+  function neighborhoodsPool(rows: unknown[]): ReadPool {
+    const query = <T>(): Promise<{ rows: T[] }> => Promise.resolve({ rows: rows as T[] });
+    return { query, connect: () => Promise.resolve({ query, release: () => undefined }) };
+  }
+
+  it('answers with the same cache-control as /listings/meta', async () => {
+    const response = await request(createApp({ pool: neighborhoodsPool([]) })).get(
+      '/listings/neighborhoods',
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ results: [], total: 0 });
+    expect(response.headers['cache-control']).toBe(
+      'public, max-age=60, s-maxage=300, stale-while-revalidate=60',
+    );
+  });
+
+  it('rejects an unknown query parameter with 400', async () => {
+    const response = await request(createApp({ pool: neighborhoodsPool([]) }))
+      .get('/listings/neighborhoods')
+      .query({ neighborhood: 'Fishtown' });
+
+    expect(response.status).toBe(400);
+  });
+
+  it('rejects listingType=sold, which this endpoint does not accept', async () => {
+    const response = await request(createApp({ pool: neighborhoodsPool([]) }))
+      .get('/listings/neighborhoods')
+      .query({ listingType: 'sold' });
+
+    expect(response.status).toBe(400);
+  });
+});

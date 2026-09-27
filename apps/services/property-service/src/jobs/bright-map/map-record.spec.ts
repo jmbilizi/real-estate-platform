@@ -291,4 +291,37 @@ describe('mapBrightPropertyRecord', () => {
     const second = mapBrightPropertyRecord(BASE_PAYLOAD, ctx());
     expect(first).toEqual(second);
   });
+
+  describe('MLSListDate and DaysOnMarket (#391)', () => {
+    it('widens MLSListDate to midnight UTC', () => {
+      const result = mapBrightPropertyRecord({ ...BASE_PAYLOAD, MLSListDate: '2026-07-04' }, ctx());
+      if (result.kind !== 'mapped') throw new Error('expected mapped');
+      expect(result.listing.listedAt).toBe('2026-07-04T00:00:00.000Z');
+    });
+
+    it('is null when the feed carries no MLSListDate', () => {
+      const result = mapBrightPropertyRecord(BASE_PAYLOAD, ctx());
+      if (result.kind !== 'mapped') throw new Error('expected mapped');
+      expect(result.listing.listedAt).toBeNull();
+    });
+
+    it('rejects an impossible calendar date rather than rolling it into the next month', () => {
+      const result = mapBrightPropertyRecord({ ...BASE_PAYLOAD, MLSListDate: '2026-02-30' }, ctx());
+      if (result.kind !== 'mapped') throw new Error('expected mapped');
+      expect(result.listing.listedAt).toBeNull();
+    });
+
+    it('maps DaysOnMarket through', () => {
+      const result = mapBrightPropertyRecord({ ...BASE_PAYLOAD, DaysOnMarket: 12 }, ctx());
+      if (result.kind !== 'mapped') throw new Error('expected mapped');
+      expect(result.listing.daysOnMarket).toBe(12);
+    });
+
+    it('drops a DaysOnMarket that overflows the integer column instead of crashing', () => {
+      const result = mapBrightPropertyRecord({ ...BASE_PAYLOAD, DaysOnMarket: 4216172400 }, ctx());
+      if (result.kind !== 'mapped') throw new Error('expected mapped');
+      expect(result.listing.daysOnMarket).toBeNull();
+      expect(result.outOfRangeFields).toEqual(['DaysOnMarket']);
+    });
+  });
 });
