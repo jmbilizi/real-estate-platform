@@ -102,3 +102,9 @@ pnpm exec nx lint cribstop-next        # Also: test, type-check
   `local`, `dev`, `test`, `prod`); #245 wires it into a Kubernetes CronJob the same way.
   `is-production-build.js` is a separate, unrelated signal: it only toggles Next.js standalone
   output and must not be reused for environment checks (#157).
+- **Frontend-only work runs against the deployed dev gateway, not local k8s** (stakeholder rule,
+  2026-09-27). Set `API_GATEWAY_URL` to the dev gateway and `API_GATEWAY_BASIC_AUTH` (its ingress
+  basic-auth credential, `user:password`) in `next/.env.local`, then run `pnpm run cribstop:web`.
+  Both keys are server-only: `.env.local.example` documents them with placeholders. Do not deploy
+  local services or sync MLS for a frontend-only change. Reserve `pnpm run skaffold:services` and
+  the local cluster for backend or contract changes.
