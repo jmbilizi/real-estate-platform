@@ -1355,6 +1355,8 @@ spec:
               value: development
             - name: NODE_OPTIONS
               value: --max-old-space-size=341
+            - name: BRIGHT_SYNC_APPLY_CONCURRENCY
+              value: "2"
             - name: PROPERTY_DB_HOST
               value: postgres-svc
             - name: PROPERTY_DB_PORT
@@ -1397,6 +1399,10 @@ spec:
               value: "10000"
             - name: BRIGHT_MLS_REQUEST_TIMEOUT_MS
               value: "120000"
+            - name: BRIGHT_SYNC_CONCURRENCY
+              value: "6"
+            - name: BRIGHT_SYNC_PAGE_SIZE
+              value: "5000"
           image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:dev
           imagePullPolicy: Always
           name: worker
@@ -1537,10 +1543,15 @@ metadata:
   name: property-service
   namespace: default
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: property-service
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
   template:
     metadata:
       labels:
@@ -1621,7 +1632,7 @@ spec:
           readinessProbe:
             failureThreshold: 3
             httpGet:
-              path: /health
+              path: /health/ready
               port: 3002
             initialDelaySeconds: 5
             periodSeconds: 5
@@ -2010,11 +2021,11 @@ spec:
             timeoutSeconds: 3
           resources:
             limits:
-              cpu: 250m
-              memory: 512Mi
+              cpu: 1500m
+              memory: 1536Mi
             requests:
-              cpu: 100m
-              memory: 256Mi
+              cpu: 250m
+              memory: 768Mi
           volumeMounts:
             - mountPath: /var/lib/postgresql
               name: postgres-data
@@ -2213,6 +2224,22 @@ spec:
           requests:
             storage: 2Gi
         storageClassName: hcloud-volumes
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  labels:
+    app: property-service
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: property-service
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: property-service
 ---
 apiVersion: batch/v1
 kind: Job
