@@ -99,15 +99,18 @@ describe('getPropertyAttributes', () => {
  *  real Postgres and is out of this project's DB-free unit-test scope (matching every other test
  *  in this file). */
 describe('getNeighborhoods', () => {
-  it('reads listing_search_v, groups by lower(neighborhood)/lower(city)/state, and excludes name == city', async () => {
+  it('reads listings directly (not listing_search_v) with the view\'s own visibility predicate, grouped and excluding name == city', async () => {
     const { client, captured } = fakeClient();
 
     await getNeighborhoods(client, baseNeighborhoodsRequest);
 
     const [query] = captured;
-    expect(query?.text).toContain('FROM listing_search_v v');
-    expect(query?.text).toContain('GROUP BY lower(v.neighborhood), lower(v.city), v.state');
-    expect(query?.text).toContain('lower(v.neighborhood) <> lower(v.city)');
+    expect(query?.text).toContain('FROM listings l');
+    expect(query?.text).not.toContain('listing_search_v');
+    expect(query?.text).toContain('l.deleted_at IS NULL');
+    expect(query?.text).toContain('l.internet_display_allowed');
+    expect(query?.text).toContain('GROUP BY lower(l.neighborhood), lower(l.city), l.state');
+    expect(query?.text).toContain('lower(l.neighborhood) <> lower(l.city)');
   });
 
   it('applies the shared noise gate defensively, not a second copy of the rule', async () => {
@@ -115,7 +118,7 @@ describe('getNeighborhoods', () => {
 
     await getNeighborhoods(client, baseNeighborhoodsRequest);
 
-    expect(captured[0]?.text).toContain("v.neighborhood !~* '^NONE'");
+    expect(captured[0]?.text).toContain("l.neighborhood !~* '^NONE'");
   });
 
   it('binds listingType, state, city, minCount, slug and limit in that order', async () => {

@@ -382,3 +382,27 @@ describe('field-level seller suppression (#53)', () => {
     }
   });
 });
+
+/**
+ * #390. `getNeighborhoods()` (`repository.ts`) reads `listings` directly with
+ * `LISTING_VISIBILITY_SQL` (`columns.ts`) instead of `listing_search_v`, for performance — see
+ * that constant's doc comment. This is the guard that keeps the duplicate from drifting: it
+ * resolves the SAME newest view migration every guard above does, and asserts each of the
+ * duplicate's four conditions is still a substring of the view's actual WHERE clause. A future
+ * suppression rule added to the view and missed in the duplicate fails here, not silently in
+ * production.
+ */
+describe("the neighborhoods aggregate's visibility predicate matches the view's", () => {
+  it('contains every condition LISTING_VISIBILITY_SQL asserts', () => {
+    const createView = newestCreateViewSql();
+    const withoutComments = createView.replace(/--[^\n]*/g, '');
+    const whereClause = /\bWHERE\b([\s\S]*?)(?:;\s*$|$)/i.exec(withoutComments)?.[1] ?? '';
+
+    expect(whereClause).toMatch(/l\.deleted_at\s+IS\s+NULL/i);
+    expect(whereClause).toMatch(/l\.internet_display_allowed/i);
+    expect(whereClause).toMatch(/l\.consumer_status\s+IS\s+NOT\s+NULL/i);
+    expect(whereClause).toMatch(
+      /l\.consumer_status\s*<>\s*'Sold'\s+OR\s+l\.close_date\s+IS\s+NOT\s+NULL/i,
+    );
+  });
+});

@@ -17,6 +17,7 @@ import {
   ATTRIBUTE_SELECT,
   LISTING_CARD_SELECT,
   LISTING_DETAIL_SELECT,
+  LISTING_VISIBILITY_SQL,
   PROPERTY_RECORD_SELECT,
 } from './columns';
 import { buildSearchQuery } from './search-query';
@@ -268,9 +269,14 @@ interface NeighborhoodDbRow {
 
 /**
  * `GET /listings/neighborhoods` (#390): publishable listings grouped by
- * `(lower(neighborhood), lower(city), state)`, reading `listing_search_v` like every other
- * endpoint in this file — the same publishability and suppression rules apply because the source
- * is the view.
+ * `(lower(neighborhood), lower(city), state)`.
+ *
+ * Reads `listings` directly with `LISTING_VISIBILITY_SQL` (`columns.ts`) rather than
+ * `listing_search_v` the way every other endpoint in this file does — see that constant's doc
+ * comment for why: the view's INNER JOIN to `properties` and LATERAL open-house join measured at
+ * 1-3 seconds for a populous state against the real dataset, because they run for every candidate
+ * row to produce columns this aggregate never selects. `listing-search-view.spec.ts` guards the
+ * duplicate predicate against drift.
  *
  * A single query in two parts: the `grouped` CTE computes the aggregate (one row per
  * neighborhood), the outer SELECT applies `minCount`/`slug` and the window `count(*) OVER ()` for
@@ -287,7 +293,7 @@ interface NeighborhoodDbRow {
  * the ordinary case this excludes nothing beyond a plain `IS NOT NULL` — the belt to that
  * suspenders is the module the two share, never a second definition of "noise".
  *
- * `lower(v.state) = lower($n)` and `lower(v.city) = lower($n)` follow `search-query.ts`'s own
+ * `lower(l.state) = lower($n)` and `lower(l.city) = lower($n)` follow `search-query.ts`'s own
  * convention for these two filters, rather than assuming the caller sent upper case.
  */
 export async function getNeighborhoods(
@@ -297,18 +303,19 @@ export async function getNeighborhoods(
   const result = await pool.query<NeighborhoodDbRow>(
     `WITH grouped AS (
        SELECT
-         mode() WITHIN GROUP (ORDER BY v.neighborhood)                          AS name,
-         mode() WITHIN GROUP (ORDER BY v.city)                                  AS city,
-         v.state                                                               AS state,
-         count(*) FILTER (WHERE $1::text = 'all' OR v.listing_type = $1)::int  AS total,
-         count(*) FILTER (WHERE v.listing_type = 'sale')::int                  AS sale,
-         count(*) FILTER (WHERE v.listing_type = 'rent')::int                  AS rent
-       FROM listing_search_v v
-       WHERE ${neighborhoodNotNoiseSql('v.neighborhood')}
-         AND lower(v.neighborhood) <> lower(v.city)
-         AND ($2::text IS NULL OR lower(v.state) = lower($2))
-         AND ($3::text IS NULL OR lower(v.city) = lower($3))
-       GROUP BY lower(v.neighborhood), lower(v.city), v.state
+         mode() WITHIN GROUP (ORDER BY l.neighborhood)                          AS name,
+         mode() WITHIN GROUP (ORDER BY l.city)                                  AS city,
+         l.state                                                               AS state,
+         count(*) FILTER (WHERE $1::text = 'all' OR l.listing_type = $1)::int  AS total,
+         count(*) FILTER (WHERE l.listing_type = 'sale')::int                  AS sale,
+         count(*) FILTER (WHERE l.listing_type = 'rent')::int                  AS rent
+       FROM listings l
+       WHERE ${LISTING_VISIBILITY_SQL}
+         AND ${neighborhoodNotNoiseSql('l.neighborhood')}
+         AND lower(l.neighborhood) <> lower(l.city)
+         AND ($2::text IS NULL OR lower(l.state) = lower($2))
+         AND ($3::text IS NULL OR lower(l.city) = lower($3))
+       GROUP BY lower(l.neighborhood), lower(l.city), l.state
      )
      SELECT *, count(*) OVER ()::int AS group_total
        FROM grouped
