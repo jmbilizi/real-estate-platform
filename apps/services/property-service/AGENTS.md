@@ -643,3 +643,8 @@ endpoint and there must never be one**: an inquiry is never returned by any list
   limiter and account-service's `AccountRecoveryRateLimiter` — the effective limit multiplies by
   replica count. Redis is the scale-out path if that bound stops being acceptable; this ticket does
   not introduce it for one endpoint.
+- **New index/DDL migrations on `listings`/`properties` use
+  `pgm.createIndex(..., { concurrently: true })` plus `pgm.noTransaction()`** (Postgres refuses
+  `CREATE INDEX CONCURRENTLY` inside a transaction block), because `bright-sync-worker` writes these
+  tables continuously and a plain `CREATE INDEX` blocks it for the index build's duration (#388).
+  Migrations 034 and 036 predate this rule and are not rewritten.

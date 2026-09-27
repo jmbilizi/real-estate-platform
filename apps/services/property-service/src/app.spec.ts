@@ -67,6 +67,45 @@ describe('GET /health', () => {
   });
 });
 
+describe('GET /health/ready (#388)', () => {
+  it('responds 200 when the pool answers SELECT 1', async () => {
+    const response = await request(createApp({ pool: createSearchPool() })).get('/health/ready');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ status: 'ok' });
+  });
+
+  it('responds 503 when the pool query rejects', async () => {
+    const pool: FakePool = {
+      statements: [],
+      query: () => Promise.reject(new Error('connection terminated')),
+      connect: () => Promise.reject(new Error('connection terminated')),
+    };
+
+    const response = await request(createApp({ pool })).get('/health/ready');
+
+    expect(response.status).toBe(503);
+    expect(response.body).toEqual({ status: 'unavailable' });
+  });
+
+  it('responds 503 when the query hangs past the readiness timeout', async () => {
+    process.env.PROPERTY_DB_READY_TIMEOUT_MS = '10';
+    const pool: FakePool = {
+      statements: [],
+      query: () => new Promise(() => undefined), // never resolves
+      connect: () => Promise.reject(new Error('unused')),
+    };
+
+    try {
+      const response = await request(createApp({ pool })).get('/health/ready');
+
+      expect(response.status).toBe(503);
+    } finally {
+      delete process.env.PROPERTY_DB_READY_TIMEOUT_MS;
+    }
+  });
+});
+
 describe('read-model invariants, asserted against the SQL actually issued', () => {
   it('reads every endpoint through listing_search_v', async () => {
     const pool = createSearchPool();

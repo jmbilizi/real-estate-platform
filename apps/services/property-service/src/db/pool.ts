@@ -36,6 +36,16 @@ types.setTypeParser(types.builtins.NUMERIC, (value) => (value === null ? null : 
 types.setTypeParser(types.builtins.DATE, (value) => value);
 
 /**
+ * The API's default `statement_timeout`, in ms (#388). It sits below the gateway's 5 s Ocelot QoS
+ * timeout, so a query stuck behind Bright-sync write load fails fast and frees the connection,
+ * instead of holding it until the gateway itself gives up with a 503.
+ *
+ * The worker (`bright-sync-worker.main.ts`) must not inherit this: a bulk apply can legitimately
+ * run longer than 4 s, so it passes its own `statement_timeout` explicitly at its `getPool()` call.
+ */
+const DEFAULT_STATEMENT_TIMEOUT_MS = 4000;
+
+/**
  * Lazily-created singleton `pg` connection pool for the `property_db`
  * database, configured entirely from the `DATABASE_URL` env var (standard
  * for both `pg.Pool` and `node-pg-migrate`) — never hardcode credentials
@@ -51,7 +61,13 @@ export function getPool(config: PoolConfig = {}): Pool {
         'DATABASE_URL is not set. Copy .env.example to .env and point it at your property_db instance.',
       );
     }
-    pool = new Pool({ connectionString, ...config });
+    const statementTimeoutRaw = process.env.PROPERTY_DB_STATEMENT_TIMEOUT_MS;
+    const envStatementTimeout =
+      statementTimeoutRaw === undefined ? NaN : Number(statementTimeoutRaw);
+    const statementTimeout =
+      config.statement_timeout ??
+      (Number.isFinite(envStatementTimeout) ? envStatementTimeout : DEFAULT_STATEMENT_TIMEOUT_MS);
+    pool = new Pool({ connectionString, statement_timeout: statementTimeout, ...config });
   }
   return pool;
 }

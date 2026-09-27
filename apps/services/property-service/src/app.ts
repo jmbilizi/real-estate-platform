@@ -36,6 +36,10 @@ const DEFAULT_ACCOUNT_SERVICE_INTROSPECT_URL =
   'http://account-service-svc:8080/internal/account/introspect';
 const DEFAULT_ACCOUNT_SERVICE_INTROSPECT_TIMEOUT_MS = 2000;
 
+/** `/health/ready`'s own timeout on `SELECT 1` (#388), independent of the pool's statement_timeout,
+ *  so a hung connection acquisition (not just a slow query) still fails the probe promptly. */
+const DEFAULT_DB_READY_TIMEOUT_MS = 2000;
+
 const DEFAULT_INQUIRY_RATE_LIMIT_PER_IP_MAX = 5;
 const DEFAULT_INQUIRY_RATE_LIMIT_PER_IP_WINDOW_MS = 60 * 60 * 1000;
 const DEFAULT_INQUIRY_RATE_LIMIT_PER_LISTING_MAX = 20;
@@ -139,6 +143,27 @@ export function createApp(options: CreateAppOptions = {}): Express {
 
   app.get('/health', (_req, res) => {
     res.status(200).json({ status: 'ok' });
+  });
+
+  /**
+   * Readiness (#388): does the pool actually reach Postgres, not just "is the process up". The
+   * `readinessProbe` points here so Kubernetes stops routing traffic to a pod that cannot serve a
+   * query, without restarting it — a DB outage must not turn into a crash-loop, which is why
+   * `/health` (liveness, above) stays a pure process check.
+   */
+  app.get('/health/ready', (_req, res) => {
+    const timeoutMs = envInt('PROPERTY_DB_READY_TIMEOUT_MS', DEFAULT_DB_READY_TIMEOUT_MS);
+    const timeout = new Promise<never>((_resolve, reject) => {
+      setTimeout(() => reject(new Error('readiness check timed out')), timeoutMs);
+    });
+    Promise.race([pool.query('SELECT 1'), timeout])
+      .then(() => {
+        res.status(200).json({ status: 'ok' });
+      })
+      .catch((error: unknown) => {
+        console.error('Readiness check failed:', error);
+        res.status(503).json({ status: 'unavailable' });
+      });
   });
 
   /**
