@@ -29,6 +29,7 @@ describe('toOpenApiDocument', () => {
   it('declares the listings paths', () => {
     expect(Object.keys(doc.paths).sort()).toEqual([
       '/listings',
+      '/listings/map',
       '/listings/meta',
       '/listings/{id}',
       '/listings/{id}/inquiries',

@@ -1,5 +1,9 @@
 import express, { type Express, type NextFunction, type Request, type Response } from 'express';
-import { INTERNAL_ERROR_BODY, toOpenApiDocument } from '@cribstop/property-contracts';
+import {
+  INTERNAL_ERROR_BODY,
+  MAP_PIN_THRESHOLD_DEFAULT,
+  toOpenApiDocument,
+} from '@cribstop/property-contracts';
 import { getPool } from './db/pool';
 import { createGalleryLoader, type GalleryLoader } from './listings/gallery-loader';
 import { createListingsRouter } from './listings/routes';
@@ -108,6 +112,8 @@ export interface CreateAppOptions {
    */
   galleryLoader?: GalleryLoader;
   addressFetcher?: AddressFetcher;
+  /** Pins above this count in a viewport become clusters (#377). Env: MAP_PIN_THRESHOLD. */
+  mapPinThreshold?: number;
   /** The admin sync token (#338). Defaults to reading BRIGHT_ADMIN_TOKEN per request. */
   adminToken?: () => string | undefined;
 }
@@ -148,7 +154,14 @@ export function createApp(options: CreateAppOptions = {}): Express {
     options.galleryLoader ?? (options.pool === undefined ? createGalleryLoader() : undefined);
   const addressFetcher =
     options.addressFetcher ?? (options.pool === undefined ? createAddressLoader() : undefined);
-  app.use(createListingsRouter(pool, galleryLoader, addressFetcher));
+  app.use(
+    createListingsRouter(
+      pool,
+      galleryLoader,
+      addressFetcher,
+      options.mapPinThreshold ?? envInt('MAP_PIN_THRESHOLD', MAP_PIN_THRESHOLD_DEFAULT),
+    ),
+  );
   app.use(createInquiriesRouter({ pool, introspection, rateLimiter }));
   app.use(createBrightSyncAdminRouter(pool as unknown as SyncQueryable, options.adminToken));
 

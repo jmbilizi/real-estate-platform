@@ -5,6 +5,7 @@ import { listingDetailSchema } from './listing-detail';
 import { propertyLookupResponseSchema, propertyPageSchema } from './property-page';
 import { listingInquiryRequestSchema, listingInquiryResponseSchema } from './listing-inquiry';
 import { listingsMetaSchema } from './listings-meta';
+import { mapRequestSchema, mapResponseSchema } from './listing-map';
 import { errorBodySchema } from './errors';
 import {
   MAX_RESULT_OFFSET,
@@ -25,8 +26,8 @@ const schema = (value: z.ZodType, io: 'input' | 'output' = 'output') =>
   z.toJSONSchema(value, { target: 'openapi-3.0', io });
 
 /** Query parameters, derived from the request schema so the two cannot drift. */
-function searchParameters() {
-  const requestJsonSchema = schema(searchRequestSchema, 'input') as {
+function searchParameters(requestSchema: z.ZodType = searchRequestSchema) {
+  const requestJsonSchema = schema(requestSchema, 'input') as {
     properties: Record<string, unknown>;
     required?: string[];
   };
@@ -73,6 +74,7 @@ function componentSchemas() {
   registry.add(propertyPageSchema, { id: 'PropertyPage' });
   registry.add(propertyLookupResponseSchema, { id: 'PropertyLookupResponse' });
   registry.add(listingsMetaSchema, { id: 'ListingsMeta' });
+  registry.add(mapResponseSchema, { id: 'MapResponse' });
   registry.add(listingInquiryRequestSchema, { id: 'ListingInquiryRequest' });
   registry.add(listingInquiryResponseSchema, { id: 'ListingInquiryResponse' });
   registry.add(errorBodySchema, { id: 'ErrorBody' });
@@ -210,6 +212,34 @@ export function toOpenApiDocument() {
               description: 'Dataset freshness and provenance.',
               content: {
                 'application/json': { schema: { $ref: '#/components/schemas/ListingsMeta' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/listings/map': {
+        get: {
+          operationId: 'getListingsMap',
+          summary: 'Map pins or clusters for a viewport',
+          description:
+            'Takes the same filters as `/listings`, without paging or sort, plus the viewport ' +
+            '`bounds` and `zoom`. The matching set is the search set limited to the viewport. ' +
+            'Up to a configured threshold the response is one pin per listing. Above it, the ' +
+            'response is grid clusters sized by `zoom`. A listing whose street address is ' +
+            'withheld has no coordinates, so it is in no pin, no cluster and no `count`.',
+          parameters: searchParameters(mapRequestSchema),
+          responses: {
+            '200': {
+              description: 'Pins or clusters for the viewport.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/MapResponse' } },
+              },
+            },
+            '400': {
+              description: 'Unknown or invalid query parameter (`invalid_request`).',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
               },
             },
             '500': serverErrorResponse,

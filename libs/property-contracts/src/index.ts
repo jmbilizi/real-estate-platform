@@ -4,6 +4,7 @@ export * from './listing-card';
 export * from './listing-detail';
 export * from './listing-inquiry';
 export * from './listings-meta';
+export * from './listing-map';
 export * from './errors';
 export * from './openapi';
 export * from './address-slug';

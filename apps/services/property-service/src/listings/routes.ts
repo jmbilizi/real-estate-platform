@@ -3,6 +3,9 @@ import {
   type ErrorBody,
   exceedsResultWindow,
   idSchema,
+  MAP_PIN_THRESHOLD_DEFAULT,
+  type MapRequest,
+  mapRequestSchema,
   NOT_FOUND_BODY,
   propertyLookupRequestSchema,
   RESULT_WINDOW_EXCEEDED_BODY,
@@ -10,6 +13,7 @@ import {
   searchRequestSchema,
 } from '@cribstop/property-contracts';
 import type { GalleryLoader } from './gallery-loader';
+import { findMapPins } from './map-query';
 import { resolvedSearchRequest } from './on-demand';
 import { type AddressFetcher, findPropertyPage, lookupProperty } from './property-page';
 import {
@@ -59,7 +63,7 @@ const invalidRequest = (message: string): ErrorBody => ({
  * The message names the offending parameters but does not echo their values back — an error string is
  * a reflection surface, and there is no reason to put caller-controlled content in one.
  */
-type ParseResult = { ok: true; value: SearchRequest } | { ok: false; body: ErrorBody };
+type ParseResult<T> = { ok: true; value: T } | { ok: false; body: ErrorBody };
 
 /**
  * A parameter name safe to reflect. Names ARE caller-controlled — an unknown-key issue reports the key
@@ -72,8 +76,13 @@ function safeParameterName(name: string): string {
   return /^[A-Za-z0-9_.-]+$/.test(trimmed) ? trimmed : '(unnamed)';
 }
 
-function parseSearchRequest(query: unknown): ParseResult {
-  const parsed = searchRequestSchema.safeParse(query);
+function parseQuery(schema: typeof searchRequestSchema, query: unknown): ParseResult<SearchRequest>;
+function parseQuery(schema: typeof mapRequestSchema, query: unknown): ParseResult<MapRequest>;
+function parseQuery(
+  schema: typeof searchRequestSchema | typeof mapRequestSchema,
+  query: unknown,
+): ParseResult<SearchRequest | MapRequest> {
+  const parsed = schema.safeParse(query);
   if (parsed.success) {
     return { ok: true as const, value: parsed.data };
   }
@@ -139,13 +148,14 @@ export function createListingsRouter(
   pool: ReadPool,
   galleryLoader?: GalleryLoader,
   addressFetcher?: AddressFetcher,
+  mapPinThreshold = MAP_PIN_THRESHOLD_DEFAULT,
 ): Router {
   const router = Router();
 
   router.get(
     '/listings',
     asyncRoute(async (req: Request, res: Response) => {
-      const parsed = parseSearchRequest(req.query);
+      const parsed = parseQuery(searchRequestSchema, req.query);
       if (!parsed.ok) {
         res.status(400).json(parsed.body);
         return;
@@ -196,6 +206,20 @@ export function createListingsRouter(
     asyncRoute(async (_req: Request, res: Response) => {
       const meta = await getListingsMeta(pool);
       res.set('Cache-Control', META_CACHE_CONTROL).status(200).json(meta);
+    }),
+  );
+
+  // #377. Registered before `/listings/:id` for the same reason as `/listings/meta`.
+  router.get(
+    '/listings/map',
+    asyncRoute(async (req: Request, res: Response) => {
+      const parsed = parseQuery(mapRequestSchema, req.query);
+      if (!parsed.ok) {
+        res.status(400).json(parsed.body);
+        return;
+      }
+      const map = await findMapPins(pool, parsed.value, mapPinThreshold);
+      res.set('Cache-Control', LISTINGS_CACHE_CONTROL).status(200).json(map);
     }),
   );
 
