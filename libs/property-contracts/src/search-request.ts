@@ -165,8 +165,11 @@ const boundaryPolygon = z
       `${MAX_BOUNDARY_CHARS} characters.`,
   );
 
-/** Exactly two letters, case-insensitive. Anything else is the contract's normal 400. */
-const stateCode = z
+/**
+ * Exactly two letters, case-insensitive. Anything else is the contract's normal 400.
+ * Exported for `neighborhoods.ts`, so the two `state` query parameters cannot drift apart.
+ */
+export const stateCode = z
   .string()
   .regex(/^[A-Za-z]{2}$/, 'must be a two-letter state code')
   .describe(
