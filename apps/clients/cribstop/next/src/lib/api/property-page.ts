@@ -4,7 +4,7 @@ import type { ErrorBody, PropertyMatch, PropertyPage } from '@cribstop/property-
 import { fetchGateway } from '@/app/api/_lib/gateway';
 
 /**
- * Server-side loaders for the property page (#349).
+ * Server-side loaders for the property page (#382).
  *
  * Same pattern as `./listings-server`: server modules only, reads `API_GATEWAY_URL` directly, and
  * every outcome is a state the route renders rather than a thrown error — a rejected promise here
@@ -13,6 +13,7 @@ import { fetchGateway } from '@/app/api/_lib/gateway';
 
 const PROPERTY_LISTING = '/property/listings';
 const PROPERTY_LOOKUP = '/property/properties/lookup';
+const PROPERTY_HOME = '/property/properties';
 
 const UNAVAILABLE = 'We could not load this property just now. Please try again.';
 
@@ -21,12 +22,8 @@ export type PropertyPageState =
   | { status: 'not-found' }
   | { status: 'error'; message: string };
 
-/** `GET /property/listings/{id}/page`. `cache` dedupes the route's `generateMetadata` and page
- *  readers into one gateway call, same reason as `loadListingState`. */
-export const loadPropertyPage = cache(async function loadPropertyPage(
-  listingId: string,
-): Promise<PropertyPageState> {
-  const upstream = await fetchGateway(`${PROPERTY_LISTING}/${encodeURIComponent(listingId)}/page`, {
+async function fetchPage(path: string): Promise<PropertyPageState> {
+  const upstream = await fetchGateway(path, {
     method: 'GET',
     headers: { Accept: 'application/json' },
   }).catch(() => null);
@@ -45,6 +42,23 @@ export const loadPropertyPage = cache(async function loadPropertyPage(
   if (!parsed.success) return { status: 'error', message: UNAVAILABLE };
 
   return { status: 'ready', page: parsed.data };
+}
+
+/**
+ * `GET /property/listings/{id}/page`: the page of the home one listing is on. `cache` dedupes the
+ * route's `generateMetadata` and page readers into one gateway call.
+ */
+export const loadPropertyPage = cache(async function loadPropertyPage(
+  listingId: string,
+): Promise<PropertyPageState> {
+  return fetchPage(`${PROPERTY_LISTING}/${encodeURIComponent(listingId)}/page`);
+});
+
+/** `GET /property/properties/{homeId}/page`: the page of one home. */
+export const loadHomePage = cache(async function loadHomePage(
+  homeId: string,
+): Promise<PropertyPageState> {
+  return fetchPage(`${PROPERTY_HOME}/${encodeURIComponent(homeId)}/page`);
 });
 
 export type PropertyLookupState =

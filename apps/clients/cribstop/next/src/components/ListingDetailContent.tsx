@@ -35,6 +35,13 @@ interface Props {
   onClose?: () => void;
   /** #349: the property page passes its market status ('Under Contract' has no consumer status). */
   statusLabel?: string;
+  /**
+   * #382: the property page passes the service's nearby listings. They replace the client-side
+   * "Similar homes" fetch, so the page renders only what the page API returned.
+   */
+  nearby?: ListingCardRow[];
+  /** #382: property page panels (the listing history), rendered before the nearby row. */
+  propertyPanel?: React.ReactNode;
 }
 
 /**
@@ -62,7 +69,13 @@ type SimilarState =
   | { status: 'loading'; results: [] }
   | { status: 'ready' | 'error'; results: ListingCardRow[] };
 
-export default function ListingDetailContent({ listing, onClose, statusLabel }: Props) {
+export default function ListingDetailContent({
+  listing,
+  onClose,
+  statusLabel,
+  nearby,
+  propertyPanel,
+}: Props) {
   const { toggleSave, isSaved } = useApp();
   const { toast } = useToast();
   const saved = isSaved(listing.id);
@@ -79,7 +92,7 @@ export default function ListingDetailContent({ listing, onClose, statusLabel }: 
    * Open Graph tags, which are built from the same module.
    */
   async function handleShare() {
-    const url = listingShareUrl(listing.id, window.location.origin);
+    const url = listingShareUrl(listing.propertyPath, window.location.origin);
 
     if (typeof navigator.share === 'function') {
       try {
@@ -104,7 +117,10 @@ export default function ListingDetailContent({ listing, onClose, statusLabel }: 
 
   const [similar, setSimilar] = useState<SimilarState>({ status: 'loading', results: [] });
 
+  const serverNearby = nearby !== undefined;
+
   useEffect(() => {
+    if (serverNearby) return;
     const controller = new AbortController();
     setSimilar({ status: 'loading', results: [] });
 
@@ -137,7 +153,7 @@ export default function ListingDetailContent({ listing, onClose, statusLabel }: 
       });
 
     return () => controller.abort();
-  }, [listing.id, listing.propertyType, listing.listingType]);
+  }, [serverNearby, listing.id, listing.propertyType, listing.listingType]);
 
   const similarHref = searchTargetUrl(
     { kind: 'place', place: { kind: 'city', city: listing.city, state: listing.state } },
@@ -543,13 +559,28 @@ export default function ListingDetailContent({ listing, onClose, statusLabel }: 
           </aside>
         </div>
 
+        {propertyPanel !== undefined && <div className={`mt-4 ${PANEL}`}>{propertyPanel}</div>}
+
+        {nearby !== undefined && nearby.length > 0 && (
+          <div className={`mt-4 ${PANEL}`}>
+            <ListingRow
+              title="Nearby homes"
+              listings={nearby}
+              max={6}
+              href={similarHref}
+              sectionClassName="px-6 py-6"
+              titleClassName="text-xl font-semibold tracking-tight"
+            />
+          </div>
+        )}
+
         {/* Similar homes — the last panel, so the stack closes the way it opened. */}
-        {similar.status === 'loading' && (
+        {!serverNearby && similar.status === 'loading' && (
           <div className={`mt-4 ${PANEL}`}>
             <SimilarHomesSkeleton />
           </div>
         )}
-        {similar.status === 'ready' && similar.results.length > 0 && (
+        {!serverNearby && similar.status === 'ready' && similar.results.length > 0 && (
           <div className={`mt-4 ${PANEL}`}>
             {/* `ListingRow` defaults to the page-level gutter (`px-6 sm:px-10 lg:px-20`), which is
                 a full-bleed section's padding, not a panel's — inside a panel it put the heading

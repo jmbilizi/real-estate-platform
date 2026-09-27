@@ -177,6 +177,8 @@ export interface ListingDetailView {
   unitNumber: string | null;
   /** True only for a genuinely subdivided building. `false` is meaningful, never "unknown". */
   isSubdivided: boolean;
+  /** #382. The canonical property page path, built by the service. */
+  propertyPath: string;
   /** A parcel has no dwelling to describe, so the detail page suppresses the stat block. */
   isParcel: boolean;
 
@@ -252,6 +254,7 @@ export function toListingDetailView(detail: ListingDetail): ListingDetailView {
     unitId: unit ? unit.id : null,
     unitNumber: unit ? unit.unitNumber : null,
     isSubdivided: unit !== null,
+    propertyPath: listing.propertyPath,
     /*
      * From the advertised snapshot, not the durable site record, because this gates a *display*
      * decision (suppressing the dwelling stat block) and every other displayed value on this view

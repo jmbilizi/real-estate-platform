@@ -1,18 +1,9 @@
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
-import {
-  parseSearchPath,
-  type PropertyMatch,
-  type PropertyPage,
-  type PropertyRecord,
-} from '@cribstop/property-contracts';
+import { notFound, permanentRedirect } from 'next/navigation';
+import { parseSearchPath, type PropertyMatch } from '@cribstop/property-contracts';
 import { ListingErrorState } from '@/components/listing/ListingStates';
-import PropertyPageView from '@/components/listing/PropertyPageView';
-import { toListingDetailView } from '@/lib/api/listings';
-import { loadPropertyPage, lookupProperty } from '@/lib/api/property-page';
-import { BRAND } from '@/lib/brand';
-import { listingMetadata, unresolvedListingMetadata } from '@/lib/listing-metadata';
-import { publishableOrigin } from '@/lib/publishable-origin';
+import { lookupProperty } from '@/lib/api/property-page';
+import { unresolvedListingMetadata } from '@/lib/listing-metadata';
 import SearchPathView, { searchPathMetadata } from '@/components/SearchPathView';
 import { toSearchParams } from '@/lib/search-route';
 import { isPropertyPath } from '../route-shape';
@@ -23,59 +14,19 @@ type RouteProps = {
 };
 
 /**
- * The property page route (#349), `/<city>-<st>/<address-slug>`, and the place search paths
- * (#350), `/<city>-<st>/.../homes-for-sale`. `parseSearchPath` and `../route-shape` tell them apart.
+ * The #349 address path, `/<city>-<st>/<address-slug>`, and the #350 place search paths,
+ * `/<city>-<st>/.../homes-for-sale`. `parseSearchPath` and `../route-shape` tell them apart.
  *
- * The requested path is resolved by address lookup and rendered as found. It is never compared
- * against the canonical `page.path` the service returns, so a short form that omits the ZIP still
- * renders rather than redirecting to the longer canonical one. (The reverse direction — a hard
- * load of `/listing/[id]` redirecting to this page — is `listing/[id]/page.tsx`'s job.)
+ * An address path is no longer a page (#382). The lookup resolves it, reading the MLS once on a
+ * miss, and one match answers 308 to its canonical `/property/<slug>/<homeId>` path.
  */
-
-type Resolved =
-  | { kind: 'property'; page: PropertyPage }
-  /** More than one property answered the same two segments: let the visitor pick. */
-  | { kind: 'choice'; matches: PropertyMatch[] }
-  | { kind: 'not-found' }
-  | { kind: 'error'; message: string };
-
-async function resolveRoute(citySegment: string, addressSegment: string): Promise<Resolved> {
-  const lookup = await lookupProperty(citySegment, addressSegment);
-
-  if (lookup.status === 'not-found') return { kind: 'not-found' };
-  if (lookup.status === 'error') return { kind: 'error', message: lookup.message };
-  if (lookup.status === 'ambiguous') return { kind: 'choice', matches: lookup.matches };
-
-  const pageState = await loadPropertyPage(lookup.match.listingId);
-  if (pageState.status === 'not-found') return { kind: 'not-found' };
-  if (pageState.status === 'error') return { kind: 'error', message: pageState.message };
-  return { kind: 'property', page: pageState.page };
-}
-
-/** A neutral preview for a page NAR 7.58 keeps unlisted: address + city + state, no price, no
- *  photo, no description. */
-function offMarketMetadata(propertyRecord: PropertyRecord): Metadata {
-  const location = [propertyRecord.address, propertyRecord.city, propertyRecord.state]
-    .filter(Boolean)
-    .join(', ');
-  return { title: `${location} · ${BRAND.brokerage}` };
-}
 
 export async function generateMetadata({ params, searchParams }: RouteProps): Promise<Metadata> {
   const { city, rest } = await params;
   const search = parseSearchPath([city, ...rest]);
   if (search) return searchPathMetadata(search, toSearchParams(await searchParams));
-  if (!isPropertyPath(city, rest)) return unresolvedListingMetadata({ noindex: true });
-
-  const resolved = await resolveRoute(city, rest[0]);
-
-  if (resolved.kind === 'property') {
-    const { page } = resolved;
-    if (page.detail === null) return offMarketMetadata(page.propertyRecord);
-    return listingMetadata(toListingDetailView(page.detail), publishableOrigin());
-  }
-  if (resolved.kind === 'choice') return unresolvedListingMetadata({ noindex: true });
-  return unresolvedListingMetadata({ noindex: resolved.kind === 'not-found' });
+  // A resolved address path redirects, so only the choice, the error and the 404 reach here.
+  return unresolvedListingMetadata({ noindex: true });
 }
 
 export default async function PropertyPathPage({ params, searchParams }: RouteProps) {
@@ -86,15 +37,14 @@ export default async function PropertyPathPage({ params, searchParams }: RoutePr
   }
   if (!isPropertyPath(city, rest)) notFound();
 
-  const resolved = await resolveRoute(city, rest[0]);
+  const lookup = await lookupProperty(city, rest[0]);
 
-  if (resolved.kind === 'not-found') notFound();
-  if (resolved.kind === 'error') {
-    return <ListingErrorState message={resolved.message} className="mx-auto my-16 max-w-lg" />;
+  if (lookup.status === 'not-found') notFound();
+  if (lookup.status === 'error') {
+    return <ListingErrorState message={lookup.message} className="mx-auto my-16 max-w-lg" />;
   }
-  if (resolved.kind === 'choice') return <PropertyChoiceList matches={resolved.matches} />;
-
-  return <PropertyPageView page={resolved.page} />;
+  if (lookup.status === 'ready') permanentRedirect(lookup.match.path);
+  return <PropertyChoiceList matches={lookup.matches} />;
 }
 
 function PropertyChoiceList({ matches }: { matches: PropertyMatch[] }) {
@@ -103,7 +53,7 @@ function PropertyChoiceList({ matches }: { matches: PropertyMatch[] }) {
       <h1 className="text-xl font-semibold tracking-tight text-ink">Choose an address</h1>
       <ul className="mt-4 space-y-2">
         {matches.map((match) => (
-          <li key={match.listingId}>
+          <li key={match.homeId}>
             <a
               href={match.path}
               className="block rounded-2xl border border-surface-border p-4 hover:bg-surface-soft"

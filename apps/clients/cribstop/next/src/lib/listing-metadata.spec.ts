@@ -26,11 +26,11 @@ function publishedText(meta: ReturnType<typeof listingMetadata>): string {
 }
 
 describe('listingMetadata — canonical URL', () => {
-  it('points at the canonical listing route on the configured origin', () => {
-    const meta = metaFor({ id: 'abc-123' });
+  it('points at the canonical property page (#382) on the configured origin', () => {
+    const meta = metaFor({ propertyPath: '/property/1-main-st-reston-va/abc-123' });
 
-    expect(meta.alternates?.canonical).toBe(`${ORIGIN}/listing/abc-123`);
-    expect(meta.openGraph?.url).toBe(`${ORIGIN}/listing/abc-123`);
+    expect(meta.alternates?.canonical).toBe(`${ORIGIN}/property/1-main-st-reston-va/abc-123`);
+    expect(meta.openGraph?.url).toBe(`${ORIGIN}/property/1-main-st-reston-va/abc-123`);
   });
 
   it('publishes no canonical URL at all when no origin is vouched for', () => {

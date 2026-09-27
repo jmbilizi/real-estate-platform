@@ -278,7 +278,8 @@ describe('ListingDetailContent — NAR 7.58 attribution', () => {
 
 describe('ListingDetailContent — Share (#135)', () => {
   const LISTING_ID = '11111111-1111-4111-8111-111111111111';
-  const CANONICAL = `http://localhost/listing/${LISTING_ID}`;
+  const CANONICAL =
+    'http://localhost/property/100-test-st-bethesda-md/44444444-4444-4444-8444-444444444444';
 
   /** Replaces one `navigator` member for the duration of a test and restores it after. */
   function stubNavigator(key: string, value: unknown) {

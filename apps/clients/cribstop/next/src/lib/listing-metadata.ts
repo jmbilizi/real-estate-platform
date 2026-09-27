@@ -79,7 +79,7 @@ export function listingMetadata(listing: ListingDetailView, origin: string | nul
    * else's domain. Omitting the tags costs nothing — an unfurler falls back to the URL it fetched,
    * which is the right one.
    */
-  const url = origin === null ? null : listingShareUrl(listing.id, origin);
+  const url = origin === null ? null : listingShareUrl(listing.propertyPath, origin);
 
   return {
     title,

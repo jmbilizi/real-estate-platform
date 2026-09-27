@@ -541,7 +541,9 @@ describe('ListingCard', () => {
 
       fireEvent.click(screen.getByRole('link'));
 
-      expect(window.location.pathname).toBe('/listing/row-1');
+      expect(window.location.pathname).toBe(
+        '/property/100-test-st-bethesda-md/44444444-4444-4444-8444-444444444444',
+      );
     });
 
     // The card was a plain `onClick` div, so a keyboard user could not open a listing at all.

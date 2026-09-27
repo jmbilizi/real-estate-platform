@@ -68,20 +68,19 @@ export function shareDisclosures(listing: ShareableListing): string[] {
 }
 
 /**
- * The canonical path for a listing.
- *
- * `/listing/<id>` is the hard-navigation route, which server-renders the listing into the first
- * HTML. It is deliberately not `location.pathname`: a card click opens the panel as client state
- * and pushes this URL with `history.pushState`, but the address bar can still be a search URL, and
- * sharing that sends a recipient to a result set rather than to the home.
+ * The old listing URL. The route answers it with a 308 to the property page (#382), so it is only
+ * the fallback for an open that has no card row to read `propertyPath` from.
  */
 export function listingPath(id: string): string {
   return `/listing/${encodeURIComponent(id)}`;
 }
 
-/** The absolute canonical URL, resolved against the origin the reader is on. */
-export function listingShareUrl(id: string, origin: string): string {
-  return `${origin.replace(/\/$/, '')}${listingPath(id)}`;
+/**
+ * The absolute canonical URL of a home: its property page path (#382), which the service builds.
+ * It is deliberately not `location.pathname`, which can be a search URL.
+ */
+export function listingShareUrl(propertyPath: string, origin: string): string {
+  return `${origin.replace(/\/$/, '')}${propertyPath}`;
 }
 
 /**

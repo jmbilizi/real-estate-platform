@@ -39,23 +39,26 @@ describe('ListingPage — property-page redirect decision', () => {
     mockedLoadListingState.mockResolvedValue({ status: 'not-found' });
   });
 
-  it('redirects to the canonical property path when one resolves', async () => {
+  it('redirects to the canonical property page of the listing home (#382)', async () => {
     mockedLoadPropertyPage.mockResolvedValue({
       status: 'ready',
-      page: { path: '/alexandria-va/118-baggett-place-alexandria-va' },
+      page: { canonicalPath: '/property/118-baggett-place-alexandria-va/home-1' },
     });
 
     await expect(ListingPage({ params: Promise.resolve({ id: 'listing-1' }) })).rejects.toThrow();
 
-    expect(mockedRedirect).toHaveBeenCalledWith('/alexandria-va/118-baggett-place-alexandria-va');
+    expect(mockedRedirect).toHaveBeenCalledWith('/property/118-baggett-place-alexandria-va/home-1');
   });
 
-  it('does not redirect when the address was withheld (path null)', async () => {
-    mockedLoadPropertyPage.mockResolvedValue({ status: 'ready', page: { path: null } });
+  it('redirects a withheld address to its city-only property page', async () => {
+    mockedLoadPropertyPage.mockResolvedValue({
+      status: 'ready',
+      page: { canonicalPath: '/property/alexandria-va/home-2' },
+    });
 
-    await ListingPage({ params: Promise.resolve({ id: 'listing-2' }) });
+    await expect(ListingPage({ params: Promise.resolve({ id: 'listing-2' }) })).rejects.toThrow();
 
-    expect(mockedRedirect).not.toHaveBeenCalled();
+    expect(mockedRedirect).toHaveBeenCalledWith('/property/alexandria-va/home-2');
   });
 
   it('does not redirect when the property-page lookup 404s', async () => {

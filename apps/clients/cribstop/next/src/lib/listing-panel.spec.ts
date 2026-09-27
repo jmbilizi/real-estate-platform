@@ -49,7 +49,19 @@ describe('listing panel store', () => {
   it('moves the URL to the listing without a navigation, so the page underneath stays mounted', () => {
     openListingPanel('listing-1', aListingCardRow({ id: 'listing-1' }));
 
-    expect(window.location.pathname).toBe('/listing/listing-1');
+    expect(window.location.pathname).toBe(
+      '/property/100-test-st-bethesda-md/44444444-4444-4444-8444-444444444444',
+    );
+    // Back and Forward find the listing again from the property page path this document pushed.
+    expect(
+      listingIdFromPath('/property/100-test-st-bethesda-md/44444444-4444-4444-8444-444444444444'),
+    ).toBe('listing-1');
+  });
+
+  it('falls back to the old listing URL when there is no row to read the path from', () => {
+    openListingPanel('listing-2');
+
+    expect(window.location.pathname).toBe('/listing/listing-2');
   });
 
   it('keeps the row, which is what lets the panel open on the listing instead of on grey blocks', () => {

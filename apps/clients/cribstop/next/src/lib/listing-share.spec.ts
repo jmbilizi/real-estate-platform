@@ -26,13 +26,15 @@ function aShareable(overrides: Partial<ShareableListing> = {}): ShareableListing
 }
 
 describe('listingShareUrl', () => {
-  it('is the canonical listing route, not the current address bar', () => {
-    const url = listingShareUrl('abc-123', 'https://example.com');
-    expect(url).toBe('https://example.com/listing/abc-123');
+  it('is the canonical property page path (#382), not the current address bar', () => {
+    const url = listingShareUrl('/property/1-main-st-reston-va/abc-123', 'https://example.com');
+    expect(url).toBe('https://example.com/property/1-main-st-reston-va/abc-123');
   });
 
   it('tolerates a trailing slash on the origin', () => {
-    expect(listingShareUrl('abc', 'https://example.com/')).toBe('https://example.com/listing/abc');
+    expect(listingShareUrl('/property/x/abc', 'https://example.com/')).toBe(
+      'https://example.com/property/x/abc',
+    );
   });
 
   it('encodes the id', () => {
