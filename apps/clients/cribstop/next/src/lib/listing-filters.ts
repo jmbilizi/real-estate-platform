@@ -99,6 +99,13 @@ export function parseFiltersFromSearchParams(params: URLSearchParams): SearchFil
   const stateRaw = str('state');
   filters.state = stateRaw && /^[A-Za-z]{2}$/.test(stateRaw) ? stateRaw.toUpperCase() : undefined;
 
+  // A map-area search (#350) carries its polygon in the URL. The contract checks size and shape.
+  const boundaryRaw = str('boundary');
+  filters.boundary =
+    boundaryRaw && /^\{.*"type"\s*:\s*"(Multi)?Polygon"/s.test(boundaryRaw)
+      ? boundaryRaw
+      : undefined;
+
   /**
    * Enum parameters are validated against the contract's own value sets before being forwarded.
    *
@@ -234,6 +241,7 @@ const FILTER_PARAM_KEYS = [
   'city',
   'state',
   'neighborhood',
+  'boundary',
   'type',
   'listingType',
   'propertyType',
@@ -290,6 +298,7 @@ export function filtersToSearchParams(
   set('city', filters.city);
   set('state', filters.state);
   set('neighborhood', filters.neighborhood);
+  set('boundary', filters.boundary);
   if (filters.listingType && filters.listingType !== 'all') set('type', filters.listingType);
   for (const type of filters.propertyType ?? []) params.append('propertyType', type);
   // Only written when the caller narrowed away from the contract's own default (`Active`,

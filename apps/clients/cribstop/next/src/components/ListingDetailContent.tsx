@@ -26,6 +26,7 @@ import { searchListings } from '@/lib/api/listings';
 import type { ListingDetailView } from '@/lib/api/listings';
 import { useApp } from '@/lib/context';
 import { useToast } from '@/lib/useToast';
+import { searchTargetUrl } from '@/lib/search-place';
 import type { ListingCardRow } from '@/lib/types';
 
 interface Props {
@@ -138,7 +139,11 @@ export default function ListingDetailContent({ listing, onClose, statusLabel }: 
     return () => controller.abort();
   }, [listing.id, listing.propertyType, listing.listingType]);
 
-  const similarHref = `/search?type=${listing.listingType}&q=${encodeURIComponent(`${listing.propertyType} ${listing.city}`)}`;
+  const similarHref = searchTargetUrl(
+    { kind: 'place', place: { kind: 'city', city: listing.city, state: listing.state } },
+    listing.listingType,
+    new URLSearchParams({ propertyType: listing.propertyType }),
+  );
 
   const streetAddress = formatStreetAddress(
     listing.address,

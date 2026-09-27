@@ -139,7 +139,7 @@ export default function FavoritesPage() {
           </p>
         </div>
         {!loading && cards.length > 0 && (
-          <Link href="/search" className="btn-secondary">
+          <Link href="/homes-for-sale?type=all" className="btn-secondary">
             Find more homes
           </Link>
         )}
@@ -176,7 +176,7 @@ export default function FavoritesPage() {
           <p className="mt-1 text-sm text-ink-muted">
             Tap the heart on any listing and it will appear here for easy access.
           </p>
-          <Link href="/search" className="btn-primary mt-6 inline-flex">
+          <Link href="/homes-for-sale?type=all" className="btn-primary mt-6 inline-flex">
             Browse homes
           </Link>
         </div>

@@ -170,7 +170,7 @@ export default function HomePageContent() {
         <ListingRow
           title={listingType === 'sale' ? 'Featured homes for sale' : 'Featured homes for rent'}
           subtitle="Featured and sponsored listings, shown first"
-          href={listingType === 'sale' ? '/search?type=sale' : '/search?type=rent'}
+          href={listingType === 'sale' ? '/homes-for-sale' : '/homes-for-rent'}
           listings={featured.listings}
           loading={featured.loading}
           failed={featured.failed}
@@ -187,7 +187,7 @@ export default function HomePageContent() {
               ? 'Trending in Washington, Baltimore, and Northern Virginia'
               : 'Move-in ready across the DMV'
           }
-          href={listingType === 'sale' ? '/search?type=sale' : '/search?type=rent'}
+          href={listingType === 'sale' ? '/homes-for-sale' : '/homes-for-rent'}
           listings={primary.listings}
           loading={primary.loading}
           failed={primary.failed}
@@ -204,7 +204,7 @@ export default function HomePageContent() {
       <NeighborhoodRow
         title="Explore neighborhoods"
         subtitle="Neighborhoods across Maryland, DC, and Virginia"
-        href="/search?group=neighborhoods"
+        href="/homes-for-sale?type=all&group=neighborhoods"
         neighborhoods={NEIGHBORHOODS}
         max={6}
       />
@@ -219,8 +219,8 @@ export default function HomePageContent() {
           }
           href={
             listingType === 'sale'
-              ? `/search?minPrice=${LUXURY_SALE_MIN_PRICE}&listingType=sale`
-              : `/search?minPrice=${LUXURY_RENT_MIN_PRICE}&listingType=rent`
+              ? `/homes-for-sale?minPrice=${LUXURY_SALE_MIN_PRICE}`
+              : `/homes-for-rent?minPrice=${LUXURY_RENT_MIN_PRICE}`
           }
           listings={luxury.listings}
           loading={luxury.loading}
@@ -240,7 +240,7 @@ export default function HomePageContent() {
               ? "Fresh inventory you don't want to miss"
               : 'Newly available homes for rent'
           }
-          href={listingType === 'sale' ? '/search?type=sale' : '/search?type=rent'}
+          href={listingType === 'sale' ? '/homes-for-sale' : '/homes-for-rent'}
           listings={recent.listings}
           loading={recent.loading}
           failed={recent.failed}
@@ -272,7 +272,7 @@ export default function HomePageContent() {
                   Learn more
                 </Link>
                 <Link
-                  href="/search"
+                  href="/homes-for-sale?type=all"
                   className="inline-flex items-center justify-center rounded-full border border-brand-200 px-5 py-2.5 text-sm font-semibold text-brand-900 transition hover:bg-brand-50 hover:text-brand-900"
                 >
                   Browse homes

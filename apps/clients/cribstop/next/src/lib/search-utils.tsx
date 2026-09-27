@@ -64,7 +64,13 @@ export function getLocationParts(loc: any): { primary: string; secondary: string
   const address = loc.address || {};
   const houseNumber = address.house_number || '';
   const road = address.road || '';
-  const suburb = address.suburb || address.neighbourhood || address.quarter || '';
+  // A picked neighborhood is its own name. Its address block can also name the enclosing one.
+  const suburb =
+    (NEIGHBORHOOD_TYPES.includes(loc.type) && loc.name) ||
+    address.suburb ||
+    address.neighbourhood ||
+    address.quarter ||
+    '';
   const city = address.city || address.town || address.village || address.hamlet || '';
   const raw = address.state || '';
   const st = address.state_code || stateAbbr(raw);

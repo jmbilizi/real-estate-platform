@@ -2,8 +2,11 @@ import {
   isAddressSegment,
   normalizeStreetLine,
   parsePropertyPath,
+  parseSearchPath,
   propertyPath,
   SEARCH_PATH_SEGMENTS,
+  searchPath,
+  type SearchPlace,
 } from './address-slug';
 import { propertyPageSchema } from './property-page';
 
@@ -122,5 +125,64 @@ describe('propertyPageSchema', () => {
         listingDataDisplayable: true,
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('searchPath / parseSearchPath (#350)', () => {
+  const cases: Array<[SearchPlace | null, string]> = [
+    [{ kind: 'city', city: 'Alexandria', state: 'VA' }, '/alexandria-va/homes-for-sale'],
+    [{ kind: 'city', city: 'Winston-Salem', state: 'NC' }, '/winston-salem-nc/homes-for-sale'],
+    [
+      { kind: 'zip', zip: '22314', city: 'Alexandria', state: 'VA' },
+      '/alexandria-va/22314/homes-for-sale',
+    ],
+    [
+      { kind: 'neighborhood', name: 'Del Ray', city: 'Alexandria', state: 'VA' },
+      '/alexandria-va/del-ray-neighborhood/homes-for-sale',
+    ],
+    [
+      { kind: 'neighborhood', name: 'Del Ray', city: 'Alexandria', state: 'VA', zip: '22301' },
+      '/alexandria-va/22301/del-ray-neighborhood/homes-for-sale',
+    ],
+    [
+      { kind: 'street', name: 'King Street', city: 'Alexandria', state: 'VA' },
+      '/alexandria-va/king-street-street/homes-for-sale',
+    ],
+    [
+      { kind: 'county', county: 'Fairfax County', state: 'VA' },
+      '/fairfax-county-va/homes-for-sale',
+    ],
+    [
+      { kind: 'county', county: "Prince George's", state: 'MD' },
+      '/prince-george-s-county-md/homes-for-sale',
+    ],
+    [null, '/homes-for-sale'],
+  ];
+
+  it.each(cases)('builds and round-trips %j', (place, path) => {
+    expect(searchPath(place, 'homes-for-sale')).toBe(path);
+    const parsed = parseSearchPath(path.split('/'));
+    expect(parsed?.segment).toBe('homes-for-sale');
+    expect(searchPath(parsed?.place ?? null, 'homes-for-sale')).toBe(path);
+  });
+
+  it('parses names back to lower-case words', () => {
+    expect(parseSearchPath(['alexandria-va', 'del-ray-neighborhood', 'homes-for-rent'])).toEqual({
+      place: { kind: 'neighborhood', name: 'del ray', city: 'alexandria', state: 'VA', zip: null },
+      segment: 'homes-for-rent',
+    });
+    expect(parseSearchPath(['fairfax-county-va', 'homes-for-sale'])?.place).toEqual({
+      kind: 'county',
+      county: 'fairfax',
+      state: 'VA',
+    });
+  });
+
+  it('refuses shapes that are not search paths', () => {
+    expect(parseSearchPath(['alexandria-va', '118-baggett-place-alexandria-va'])).toBeNull();
+    expect(parseSearchPath(['alexandria-va', 'homes'])).toBeNull();
+    expect(parseSearchPath(['alexandria', 'homes-for-sale'])).toBeNull();
+    expect(parseSearchPath(['alexandria-va', 'del-ray', 'homes-for-sale'])).toBeNull();
+    expect(parseSearchPath(['alexandria-va', 'a-street', 'b-street', 'homes-for-sale'])).toBeNull();
   });
 });

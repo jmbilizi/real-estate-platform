@@ -76,7 +76,7 @@ export default function StandaloneListingView({
      * has to navigate.
      */
     if (!cityQuery) {
-      router.push('/search');
+      router.push('/homes-for-sale?type=all');
       return;
     }
 
@@ -89,7 +89,7 @@ export default function StandaloneListingView({
      * It runs before the flip so that the search results, which begin reading the URL on that same
      * flip, find the URL they expect and not the listing's.
      */
-    window.history.replaceState(null, '', `/search?${cityQuery}`);
+    window.history.replaceState(null, '', `/homes-for-sale?type=all&${cityQuery}`);
     setDismissed(true);
   };
 

@@ -166,7 +166,7 @@ export default function ListingDetailModal({
           <p className="mx-auto mt-2 max-w-sm text-sm text-ink-muted">
             It may have been sold, rented, or removed by the seller.
           </p>
-          <a href="/search" className="btn-primary mt-4">
+          <a href="/homes-for-sale?type=all" className="btn-primary mt-4">
             Browse all homes
           </a>
         </div>
