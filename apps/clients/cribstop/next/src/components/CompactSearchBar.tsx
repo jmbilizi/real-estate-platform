@@ -1,7 +1,7 @@
 ﻿'use client';
 
 import React, { useEffect, useLayoutEffect, useRef, useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
 import { useApp } from '@/lib/context';
 import {
@@ -11,6 +11,7 @@ import {
   highlightMatch,
 } from '@/lib/search-utils';
 import { searchableSuggestions, searchTargetFor, searchTargetUrl } from '@/lib/search-place';
+import { useBodyScrollLock } from '@/lib/useBodyScrollLock';
 import { SearchPanel } from '@/lib/store/types';
 import type { SearchListingType } from '@/lib/store/slices/searchSlice';
 import { Z_LAYERS } from '@/lib/z-layers';
@@ -863,6 +864,11 @@ export default function CompactSearchBar({
     });
   };
 
+  // An outside click closing the typeahead/panel must not also activate whatever was underneath
+  // it (a listing card, a nav link) — Airbnb-style "first tap just closes" (#360). The two
+  // handlers below flag the click; the capture-phase listener further down consumes it.
+  const swallowNextClickRef = useRef(false);
+
   // Close dropdown on outside click
   useEffect(() => {
     if (!isDropdownOpen) return;
@@ -874,6 +880,7 @@ export default function CompactSearchBar({
         !dropdownRef.current.contains(e.target as Node)
       ) {
         setIsDropdownOpen(false);
+        swallowNextClickRef.current = true;
       }
     }
     document.addEventListener('mousedown', handleClick);
@@ -887,11 +894,58 @@ export default function CompactSearchBar({
       if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
         setActivePanel(null);
         setIsDropdownOpen(false);
+        swallowNextClickRef.current = true;
       }
     }
     document.addEventListener('mousedown', handleOutside);
     return () => document.removeEventListener('mousedown', handleOutside);
   }, [activePanel]);
+
+  // Consumes the click that follows an outside-mousedown close, above. A capture-phase listener
+  // on `document` runs before the click ever reaches its target, so stopping it here means the
+  // element underneath the outside click never sees it — not even a bubble-phase handler on the
+  // target itself. Always registered (not gated on activePanel/isDropdownOpen): the mousedown that
+  // set the flag has already closed the panel by the time this same click fires.
+  useEffect(() => {
+    function swallowClick(e: MouseEvent) {
+      if (!swallowNextClickRef.current) return;
+      swallowNextClickRef.current = false;
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    document.addEventListener('click', swallowClick, true);
+    return () => document.removeEventListener('click', swallowClick, true);
+  }, []);
+
+  // Escape closes the open field panel or the location typeahead — the keyboard equivalent of the
+  // outside click above. mobileSheetMode has its own Escape handler (closes the whole sheet) below.
+  useEffect(() => {
+    if (mobileSheetMode || (!activePanel && !isDropdownOpen)) return;
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      setActivePanel(null);
+      setIsDropdownOpen(false);
+    }
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [mobileSheetMode, activePanel, isDropdownOpen]);
+
+  // Route change closes the open panel/dropdown. The bar stays mounted across navigation (see the
+  // component comment above), so nothing else would ever close them on a route change.
+  const pathname = usePathname();
+  const previousPathnameRef = useRef(pathname);
+  useEffect(() => {
+    if (mobileSheetMode || previousPathnameRef.current === pathname) return;
+    previousPathnameRef.current = pathname;
+    setActivePanel(null);
+    setIsDropdownOpen(false);
+  }, [mobileSheetMode, pathname]);
+
+  // Locks page scroll while the typeahead or a field panel is open, so the search bar's
+  // scroll-driven dock swap (large/pill/expanded) can never fire underneath an open panel (#360).
+  // mobileSheetMode is included: its full-screen overlay must not let the page behind scroll
+  // either, and on iOS `overflow: hidden` alone still lets that page rubber-band.
+  useBodyScrollLock(mobileSheetMode || activePanel !== null || isDropdownOpen);
 
   // Recalculate indicator position on window resize
   const [, setResizeTick] = useState(0);
@@ -911,15 +965,6 @@ export default function CompactSearchBar({
     window.addEventListener('searchbar:close', handleClose);
     return () => window.removeEventListener('searchbar:close', handleClose);
   }, []);
-
-  // Mobile sheet mode: lock body scroll
-  useEffect(() => {
-    if (!mobileSheetMode) return;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [mobileSheetMode]);
 
   // Mobile sheet mode: close on Escape
   useEffect(() => {
