@@ -54,6 +54,7 @@ resources:
   - deployments/inference.deployment.yaml
   - deployments/account-service.deployment.yaml
   - deployments/property-service.deployment.yaml
+  - deployments/bright-sync-worker.deployment.yaml
   - deployments/cribstop-web.deployment.yaml
 
   # Ingress rules (external routing - uses Nginx controller above)
@@ -64,8 +65,3 @@ resources:
   ## DaemonSets (node-level services like Logging, monitoring, networking on every node)
 
   ## Jobs (one-time tasks like database schema migration, initialize cache, initial data load, one-time data import)
-
-  ## CronJobs (scheduled tasks like backups, cleanup, reports )
-  - cronjobs/bright-mls-ingest.cronjob.yaml
-  - cronjobs/bright-area-refresh.cronjob.yaml
-  - cronjobs/bright-area-reconcile.cronjob.yaml

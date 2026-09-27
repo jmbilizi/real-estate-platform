@@ -1,0 +1,88 @@
+# Bright MLS sync worker (#338). One long-running process replaces the bright-mls-ingest,
+# bright-area-refresh and bright-area-reconcile CronJobs. See the property-service AGENTS.md
+# section "The Bright sync worker".
+#
+# `replicas: 1` and `strategy: Recreate` keep one worker. The worker also holds a Postgres
+# advisory lock, so a second pod only waits.
+#
+# No ports, no Service and no probes: the worker serves no HTTP.
+#
+# It runs the property-service image. property_db is that service's database, and
+# src/db/write.ts must stay the only module that writes listings.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bright-sync-worker
+  namespace: default
+  labels:
+    app: bright-sync-worker
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: bright-sync-worker
+  template:
+    metadata:
+      labels:
+        app: bright-sync-worker
+    spec:
+      containers:
+        - name: worker
+          # Image format: ghcr.io/<owner>/<repo>/property-service:<tag>
+          # CI/CD workflow substitutes GITHUB_REPOSITORY_OWNER, GITHUB_REPOSITORY_NAME
+          # Local development uses Skaffold override (see podman/local/patches)
+          image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:latest
+          imagePullPolicy: IfNotPresent
+          command: ["node", "bright-sync-worker.js"]
+          env:
+            # ── The property database ────────────────────────────────────────────────────
+            - name: PROPERTY_DB_HOST
+              value: "postgres-svc"
+            - name: PROPERTY_DB_PORT
+              value: "5432"
+            - name: PROPERTY_DB_NAME
+              value: "property_db"
+            - name: PROPERTY_DB_USER
+              value: "property_service_db_user"
+            - name: PROPERTY_SERVICE_DB_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: PROPERTY_SERVICE_DB_USER_PASSWORD
+            - name: DATABASE_URL
+              value: "postgresql://$(PROPERTY_DB_USER):$(PROPERTY_SERVICE_DB_USER_PASSWORD)@$(PROPERTY_DB_HOST):$(PROPERTY_DB_PORT)/$(PROPERTY_DB_NAME)"
+            # ── Which feed, and the credential for it ────────────────────────────────────
+            # Same three keys the removed CronJobs used, same bright-mls-secret. None is
+            # `optional: true`: a missing secret must fail the pod at start, not read as
+            # "not configured".
+            - name: BRIGHT_MLS_ENV
+              valueFrom:
+                secretKeyRef:
+                  name: bright-mls-secret
+                  key: BRIGHT_MLS_ENV
+            - name: BRIGHT_MLS_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: bright-mls-secret
+                  key: BRIGHT_MLS_CLIENT_ID
+            - name: BRIGHT_MLS_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: bright-mls-secret
+                  key: BRIGHT_MLS_CLIENT_SECRET
+            # ── Scheduler intervals (replace the three CronJobs' schedules) ─────────────────
+            - name: BRIGHT_SYNC_INCREMENTAL_INTERVAL_MS
+              value: "300000" # 5 minutes
+            - name: BRIGHT_SYNC_OVERLAP_MS
+              value: "120000" # 2 minutes, covers clock and replication lag
+            - name: BRIGHT_SYNC_RECONCILE_INTERVAL_MS
+              value: "86400000" # 24 hours
+            - name: BRIGHT_SOLD_LOOKBACK_DAYS
+              value: "365"
+            - name: BRIGHT_SYNC_POLL_MS
+              value: "10000" # scheduler tick, not a Bright request rate
+            - name: BRIGHT_MLS_REQUEST_TIMEOUT_MS
+              value: "120000"

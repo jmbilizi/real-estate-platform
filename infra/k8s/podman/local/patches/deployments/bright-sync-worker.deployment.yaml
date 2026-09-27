@@ -1,0 +1,47 @@
+# yaml-language-server: disable
+# Bright Sync Worker Deployment Patch for Podman Local Environment (#338)
+#
+# WHICH FEED: the one you hold credentials for. #160's local secret injection copies the Bright
+# keys from `.env` into this cluster's `bright-mls-secret`. No values in `.env` give the committed
+# placeholders, and the worker treats that as "not configured".
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bright-sync-worker
+spec:
+  template:
+    spec:
+      # Mounts the enterprise CA ConfigMap (#180), as the property-service patch does. Without it
+      # the Bright token call fails under a TLS-intercepting corporate proxy.
+      volumes:
+        - name: workspace-ca-bundle
+          configMap:
+            name: workspace-ca-bundle
+      containers:
+        - name: worker
+          image: property-service
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: workspace-ca-bundle
+              mountPath: /etc/workspace-ca
+              readOnly: true
+          # NODE_ENV is repeated here for the same reason the property-service Deployment patch
+          # repeats it: the runtime image bakes NODE_ENV=production, and there is no other
+          # container's override to inherit.
+          env:
+            - name: NODE_ENV
+              value: "development"
+            - name: NODE_EXTRA_CA_CERTS
+              value: "/etc/workspace-ca/workspace-enterprise-roots.pem"
+            # #315's rule: NODE_OPTIONS follows limits.memory / 1.5. tools/infra/node-heap-ratio.js
+            # checks this ratio against the limit above.
+            - name: NODE_OPTIONS
+              value: "--max-old-space-size=341"

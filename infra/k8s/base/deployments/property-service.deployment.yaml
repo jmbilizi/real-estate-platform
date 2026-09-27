@@ -86,10 +86,10 @@ spec:
                   key: PROPERTY_SERVICE_DB_USER_PASSWORD
             - name: DATABASE_URL
               value: "postgresql://$(PROPERTY_DB_USER):$(PROPERTY_SERVICE_DB_USER_PASSWORD)@$(PROPERTY_DB_HOST):$(PROPERTY_DB_PORT)/$(PROPERTY_DB_NAME)"
-            # On-demand Bright area load (src/listings/on-demand.ts): a search for a place with no
-            # local listings loads it from Bright. Same three keys as the ingest CronJob. The
-            # committed placeholders turn the load off, so an unprovisioned environment just
-            # searches its own database.
+            # Listing-detail gallery fetch only (#338, src/listings/on-demand.ts): a listing with
+            # no local media fetches its gallery from Bright. bright-sync-worker holds these same
+            # three keys for the sync itself. The committed placeholders turn the fetch off, so an
+            # unprovisioned environment just serves whatever media it already has.
             - name: BRIGHT_MLS_ENV
               valueFrom:
                 secretKeyRef:
@@ -107,6 +107,13 @@ spec:
                   key: BRIGHT_MLS_CLIENT_SECRET
             - name: BRIGHT_MLS_PAGE_SIZE
               value: "200"
+            # Bearer token for the admin sync endpoint (#338, POST /admin/bright/sync). The
+            # endpoint refuses every request while the committed placeholder is set.
+            - name: BRIGHT_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: bright-mls-secret
+                  key: BRIGHT_ADMIN_TOKEN
             # Credential introspection (#86/#131). In-cluster DNS, identical in every environment.
             - name: ACCOUNT_SERVICE_INTROSPECT_URL
               value: "http://account-service-svc:8080/internal/account/introspect"

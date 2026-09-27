@@ -147,7 +147,7 @@ test('a registered key matching no rendered resource is caught (reverse check)',
 
 // ── Acceptance criteria: opting one service out ─────────────────────────────────────────
 
-test('AC: with every dev service enabled, all nine workloads are in scope', () => {
+test('AC: with every dev service enabled, all ten workloads are in scope', () => {
   const result = resolveDeployScope({
     documents: devDocuments(),
     registeredKeys: registeredKeys('dev'),
@@ -155,13 +155,14 @@ test('AC: with every dev service enabled, all nine workloads are in scope', () =
   });
 
   assert.deepEqual(describeProblems(result, { mode: 'deploy' }), []);
-  assert.equal(result.inScope.length, 9);
+  assert.equal(result.inScope.length, 10);
   assert.deepEqual(result.outOfScope, []);
 
   const names = result.inScope.map((workload) => `${workload.kind}/${workload.name}`).sort();
   assert.deepEqual(names, [
     'Deployment/account-service',
     'Deployment/api-gateway',
+    'Deployment/bright-sync-worker',
     'Deployment/cribstop-web',
     'Deployment/inference',
     'Deployment/ingress-nginx-controller',
@@ -189,7 +190,7 @@ test('AC: opting property-service out removes exactly that workload — nothing 
   // drift, and must NOT stop the run.
   assert.deepEqual(describeProblems(optedOut, { mode: 'deploy' }), []);
 
-  assert.equal(optedOut.inScope.length, 8);
+  assert.equal(optedOut.inScope.length, 9);
   assert.equal(optedOut.outOfScope.length, 1);
   assert.equal(optedOut.outOfScope[0].name, 'property-service');
   assert.equal(optedOut.outOfScope[0].service, 'property-service');
@@ -234,7 +235,7 @@ test('a targeted single-service deploy (workflow_dispatch) resolves, it does not
   assert.deepEqual(describeProblems(result, { mode: 'deploy' }), []);
   assert.equal(result.inScope.length, 1);
   assert.equal(result.inScope[0].name, 'postgres');
-  assert.equal(result.outOfScope.length, 8);
+  assert.equal(result.outOfScope.length, 9);
 });
 
 // ── Selectors, phases, restarts ─────────────────────────────────────────────────────────
@@ -296,6 +297,7 @@ test('only first-party images are marked for rollout restart', () => {
   assert.deepEqual(restarted, [
     'account-service',
     'api-gateway',
+    'bright-sync-worker',
     'cribstop-web',
     'inference',
     'property-service',
@@ -342,9 +344,10 @@ test('CLI writes scope.txt and a lane plan, and exits 0 with a service opted out
   assert.equal(code, 0);
 
   const scope = fs.readFileSync(path.join(dir, 'scope.txt'), 'utf-8').trim().split('\n');
-  assert.equal(scope.length, 8);
+  assert.equal(scope.length, 9);
   assert.ok(scope.includes('StatefulSet|default|jaeger'));
   assert.ok(scope.includes('Deployment|ingress-nginx|ingress-nginx-controller'));
+  assert.ok(scope.includes('Deployment|default|bright-sync-worker'));
   assert.ok(!scope.some((line) => line.includes('property-service')));
 
   const plan = JSON.parse(fs.readFileSync(path.join(dir, 'scope-plan.json'), 'utf-8'));
@@ -357,34 +360,24 @@ test('CLI writes scope.txt and a lane plan, and exits 0 with a service opted out
 });
 
 /**
- * `bright-mls-ingest` (#91) is the first deploy-control key whose resources are ALL non-workload
- * kinds — a CronJob and its Secret. Emptiness is measured in resources, not workloads, or a
- * single-service deploy of it (`workflow_dispatch` with services=bright-mls-ingest, the natural
- * action once #117 provisions the credential) exits 1 having applied nothing.
+ * `ingress` (#255) is a deploy-control key whose resources are ALL non-workload kinds — a single
+ * Secret, no CronJob or Deployment. Emptiness is measured in resources, not workloads, or a
+ * single-service deploy of it (`workflow_dispatch` with services=ingress) exits 1 having applied
+ * nothing.
  *
  * `scope.txt` must stay empty for it all the same: it drives the rollout-wait and rollback steps,
- * and there is no `kubectl rollout status cronjob/x` to wait on.
+ * and there is no `kubectl rollout status secret/x` to wait on.
  */
 test('CLI deploys a service whose resources are all non-workload kinds', () => {
   const documents = [
     {
-      apiVersion: 'batch/v1',
-      kind: 'CronJob',
-      metadata: {
-        name: 'bright-mls-ingest',
-        namespace: 'default',
-        labels: { app: 'bright-mls-ingest' },
-      },
-      spec: { schedule: '0 3 * * *' },
-    },
-    {
       apiVersion: 'v1',
       kind: 'Secret',
-      metadata: { name: 'bright-mls-secret', labels: { app: 'bright-mls-ingest' } },
+      metadata: { name: 'ingress-secret', namespace: 'default', labels: { app: 'ingress' } },
     },
   ];
 
-  const { code, dir } = runCli(documents, 'dev', 'bright-mls-ingest');
+  const { code, dir } = runCli(documents, 'dev', 'ingress');
 
   assert.equal(code, 0);
   assert.equal(fs.readFileSync(path.join(dir, 'scope.txt'), 'utf-8').trim(), '');
@@ -392,13 +385,13 @@ test('CLI deploys a service whose resources are all non-workload kinds', () => {
   const plan = JSON.parse(fs.readFileSync(path.join(dir, 'scope-plan.json'), 'utf-8'));
   assert.deepEqual(
     plan.services.map((service) => service.selector),
-    ['app=bright-mls-ingest'],
+    ['app=ingress'],
   );
   assert.deepEqual(plan.services[0].workloads, []);
 });
 
 test('CLI still refuses a run in which no in-scope service owns any resource at all', () => {
-  const { code } = runCli([], 'dev', 'bright-mls-ingest');
+  const { code } = runCli([], 'dev', 'ingress');
   assert.equal(code, 1);
 });
 

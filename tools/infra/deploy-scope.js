@@ -503,10 +503,10 @@ function main(argv) {
 
   // Emptiness is measured in RESOURCES, not workloads. The guard exists to catch "you asked for
   // something that would apply nothing at all"; a service whose resources are legitimately all
-  // non-workload kinds still applies them. `bright-mls-ingest` (#91) is the first such service — a
-  // CronJob plus its Secret — and measuring workloads here made a single-service deploy of it exit 1
+  // non-workload kinds still applies them. `ingress` is one such service — a single Secret, no
+  // workload — and measuring workloads here would make a single-service deploy of it exit 1
   // without applying anything. The rollout/rollback steps downstream read `scope.txt`, which stays
-  // workload-only on purpose: there is no `kubectl rollout status cronjob/x` to wait on.
+  // workload-only on purpose: there is no `kubectl rollout status secret/x` to wait on.
   if (result.inScopeServices.length === 0) {
     console.error('\n❌ Deploy scope is empty — no in-scope service owns any rendered resource.');
     console.error(`   Requested: ${requestedServices ? requestedServices.join(', ') : 'all'}`);

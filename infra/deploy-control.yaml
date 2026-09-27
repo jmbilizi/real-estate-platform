@@ -85,31 +85,18 @@ environments:
         require_approval: false # No approval needed
         rollback_on_failure: false # Disabled in dev for manual investigation
 
-      bright-mls-ingest:
-        # The scheduled Bright MLS ingestion CronJob (#91). It runs the property-service image with
-        # a different entry point but carries its own identity label and therefore its own key here,
-        # so whether the job ships to an environment is decidable separately from whether the
-        # Property API does. Which Bright tier it reads is BRIGHT_MLS_ENV in bright-mls-secret.
+      bright-sync-worker:
+        # The Bright MLS sync worker (#338). One long-running Deployment replaces the
+        # bright-mls-ingest / bright-area-refresh / bright-area-reconcile CronJobs (#91, #331). It
+        # runs the property-service image with a different entry point but carries its own identity
+        # label and therefore its own key here, so whether it ships to an environment is decidable
+        # separately from whether the Property API does. Which Bright tier it reads is
+        # BRIGHT_MLS_ENV in bright-mls-secret.
         #
-        # Shipping it to dev now, before credentials exist, is the point of #91: the run completes
-        # with a "credentials not configured" outcome and transmits nothing, so the moment #117
-        # provisions this environment's secret there is a running vehicle to observe leaving that
-        # state. Whether it actually fires is the CronJob's own `suspend` field, per environment.
-        enabled: true
-        auto_deploy: true # Auto-deploy in dev
-        require_approval: false # No approval needed
-        rollback_on_failure: false # Disabled in dev for manual investigation
-
-      bright-area-refresh:
-        # Scheduled per-area freshness refresh (#331). Own identity label, own key, decidable
-        # separately from property-service and from bright-mls-ingest — see the CronJob's header.
-        enabled: true
-        auto_deploy: true # Auto-deploy in dev
-        require_approval: false # No approval needed
-        rollback_on_failure: false # Disabled in dev for manual investigation
-
-      bright-area-reconcile:
-        # Daily key reconciliation (#331). Same reasoning as bright-area-refresh above.
+        # Shipping it to dev now, before credentials exist, is the point carried over from #91: a
+        # run with no credentials reports "not configured" and transmits nothing, so the moment
+        # #117 provisions this environment's secret there is a running vehicle to observe leaving
+        # that state.
         enabled: true
         auto_deploy: true # Auto-deploy in dev
         require_approval: false # No approval needed
@@ -196,25 +183,12 @@ environments:
         require_approval: false # Optional approval
         rollback_on_failure: false # Disabled for manual validation
 
-      bright-mls-ingest:
-        # test reads Bright's TEST/STAGING feed under the 2026-09-19 ruling, which supersedes the
-        # #117 rule that gave test no feed. The gate opens here and the test overlay sets
-        # `suspend: false`. The credential stays the staging set; prod holds the production set.
-        enabled: true
+      bright-sync-worker:
+        # Follows property-service, which is off in test. Only property-service's migrate
+        # initContainer creates the sync tables, so the worker cannot run without it. Turn both on
+        # together.
+        enabled: false
         auto_deploy: false # Manual deployment in test, like every other service in this block
-        require_approval: false # Optional approval
-        rollback_on_failure: false # Disabled for manual validation
-
-      bright-area-refresh:
-        # Reads the same tier as bright-mls-ingest above (#331).
-        enabled: true
-        auto_deploy: false # Manual deployment in test
-        require_approval: false # Optional approval
-        rollback_on_failure: false # Disabled for manual validation
-
-      bright-area-reconcile:
-        enabled: true
-        auto_deploy: false # Manual deployment in test
         require_approval: false # Optional approval
         rollback_on_failure: false # Disabled for manual validation
 
@@ -296,24 +270,11 @@ environments:
         require_approval: true # Always require approval
         rollback_on_failure: false # Manual review recommended for production
 
-      bright-mls-ingest:
+      bright-sync-worker:
         # Deliberately shut. #117's rollout order is dev first and prod as a SEPARATE confirmation,
         # never an assumption carried over from a green dev run — the credential here authenticates
         # against real licensed inventory, and #102/#117 item 6 (production display-URL
-        # registration) is not settled. The prod overlay additionally sets `suspend: true`.
-        enabled: false # Not yet deployed to production
-        auto_deploy: false # Manual deployment only
-        require_approval: true # Always require approval
-        rollback_on_failure: false # Manual review recommended for production
-
-      bright-area-refresh:
-        # Same reasoning as bright-mls-ingest above (#331): not yet deployed to production.
-        enabled: false # Not yet deployed to production
-        auto_deploy: false # Manual deployment only
-        require_approval: true # Always require approval
-        rollback_on_failure: false # Manual review recommended for production
-
-      bright-area-reconcile:
+        # registration) is not settled.
         enabled: false # Not yet deployed to production
         auto_deploy: false # Manual deployment only
         require_approval: true # Always require approval

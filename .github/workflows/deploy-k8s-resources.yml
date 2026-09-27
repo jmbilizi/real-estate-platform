@@ -100,6 +100,9 @@ jobs:
           BRIGHT_MLS_ENV: ${{ secrets.BRIGHT_MLS_ENV }}
           BRIGHT_MLS_CLIENT_ID: ${{ secrets.BRIGHT_MLS_CLIENT_ID }}
           BRIGHT_MLS_CLIENT_SECRET: ${{ secrets.BRIGHT_MLS_CLIENT_SECRET }}
+          # Bearer token for property-service's admin sync endpoint (#338). Independent of the
+          # three feed credentials above; unset keeps the committed placeholder.
+          BRIGHT_ADMIN_TOKEN: ${{ secrets.BRIGHT_ADMIN_TOKEN }}
           # Postmark transactional email (#175). One variable name for every environment.
           # `environment: ${{ matrix.environment }}` above scopes the lookup to that environment's
           # secrets, which is the control that keeps prod's live sender out of a dev or test run:

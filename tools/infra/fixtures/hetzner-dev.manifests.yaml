@@ -733,13 +733,14 @@ apiVersion: v1
 kind: Secret
 metadata:
   labels:
-    app: bright-mls-ingest
+    app: bright-sync-worker
     app.kubernetes.io/managed-by: kustomize
     environment: dev
     managed-by: gitops
     provider: hetzner
   name: bright-mls-secret
 stringData:
+  BRIGHT_ADMIN_TOKEN: StrongBase64Password
   BRIGHT_MLS_CLIENT_ID: StrongBase64Password
   BRIGHT_MLS_CLIENT_SECRET: StrongBase64Password
   BRIGHT_MLS_ENV: StrongBase64Password
@@ -1326,6 +1327,91 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
+    app: bright-sync-worker
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: bright-sync-worker
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bright-sync-worker
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: bright-sync-worker
+    spec:
+      containers:
+        - command:
+            - node
+            - bright-sync-worker.js
+          env:
+            - name: NODE_ENV
+              value: development
+            - name: NODE_OPTIONS
+              value: --max-old-space-size=341
+            - name: PROPERTY_DB_HOST
+              value: postgres-svc
+            - name: PROPERTY_DB_PORT
+              value: "5432"
+            - name: PROPERTY_DB_NAME
+              value: property_db
+            - name: PROPERTY_DB_USER
+              value: property_service_db_user
+            - name: PROPERTY_SERVICE_DB_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: PROPERTY_SERVICE_DB_USER_PASSWORD
+                  name: postgres-secret
+            - name: DATABASE_URL
+              value: postgresql://$(PROPERTY_DB_USER):$(PROPERTY_SERVICE_DB_USER_PASSWORD)@$(PROPERTY_DB_HOST):$(PROPERTY_DB_PORT)/$(PROPERTY_DB_NAME)
+            - name: BRIGHT_MLS_ENV
+              valueFrom:
+                secretKeyRef:
+                  key: BRIGHT_MLS_ENV
+                  name: bright-mls-secret
+            - name: BRIGHT_MLS_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  key: BRIGHT_MLS_CLIENT_ID
+                  name: bright-mls-secret
+            - name: BRIGHT_MLS_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  key: BRIGHT_MLS_CLIENT_SECRET
+                  name: bright-mls-secret
+            - name: BRIGHT_SYNC_INCREMENTAL_INTERVAL_MS
+              value: "300000"
+            - name: BRIGHT_SYNC_OVERLAP_MS
+              value: "120000"
+            - name: BRIGHT_SYNC_RECONCILE_INTERVAL_MS
+              value: "86400000"
+            - name: BRIGHT_SOLD_LOOKBACK_DAYS
+              value: "365"
+            - name: BRIGHT_SYNC_POLL_MS
+              value: "10000"
+            - name: BRIGHT_MLS_REQUEST_TIMEOUT_MS
+              value: "120000"
+          image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:dev
+          imagePullPolicy: Always
+          name: worker
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 50m
+              memory: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
     app: cribstop-web
     app.kubernetes.io/managed-by: kustomize
     environment: dev
@@ -1500,6 +1586,11 @@ spec:
                   name: bright-mls-secret
             - name: BRIGHT_MLS_PAGE_SIZE
               value: "200"
+            - name: BRIGHT_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  key: BRIGHT_ADMIN_TOKEN
+                  name: bright-mls-secret
             - name: ACCOUNT_SERVICE_INTROSPECT_URL
               value: http://account-service-svc:8080/internal/account/introspect
             - name: ACCOUNT_SERVICE_INTROSPECT_TIMEOUT_MS
@@ -2122,268 +2213,6 @@ spec:
           requests:
             storage: 2Gi
         storageClassName: hcloud-volumes
----
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  labels:
-    app: bright-area-reconcile
-    app.kubernetes.io/managed-by: kustomize
-    environment: dev
-    managed-by: gitops
-    provider: hetzner
-  name: bright-area-reconcile
-  namespace: default
-spec:
-  concurrencyPolicy: Forbid
-  failedJobsHistoryLimit: 3
-  jobTemplate:
-    metadata:
-      labels:
-        app: bright-area-reconcile
-    spec:
-      activeDeadlineSeconds: 1800
-      backoffLimit: 2
-      template:
-        metadata:
-          labels:
-            app: bright-area-reconcile
-        spec:
-          containers:
-            - command:
-                - node
-                - bright-area-sync.js
-                - reconcile
-              env:
-                - name: NODE_ENV
-                  value: development
-                - name: NODE_OPTIONS
-                  value: --max-old-space-size=341
-                - name: PROPERTY_DB_HOST
-                  value: postgres-svc
-                - name: PROPERTY_DB_PORT
-                  value: "5432"
-                - name: PROPERTY_DB_NAME
-                  value: property_db
-                - name: PROPERTY_DB_USER
-                  value: property_service_db_user
-                - name: PROPERTY_SERVICE_DB_USER_PASSWORD
-                  valueFrom:
-                    secretKeyRef:
-                      key: PROPERTY_SERVICE_DB_USER_PASSWORD
-                      name: postgres-secret
-                - name: DATABASE_URL
-                  value: postgresql://$(PROPERTY_DB_USER):$(PROPERTY_SERVICE_DB_USER_PASSWORD)@$(PROPERTY_DB_HOST):$(PROPERTY_DB_PORT)/$(PROPERTY_DB_NAME)
-                - name: BRIGHT_MLS_ENV
-                  valueFrom:
-                    secretKeyRef:
-                      key: BRIGHT_MLS_ENV
-                      name: bright-mls-secret
-                - name: BRIGHT_MLS_CLIENT_ID
-                  valueFrom:
-                    secretKeyRef:
-                      key: BRIGHT_MLS_CLIENT_ID
-                      name: bright-mls-secret
-                - name: BRIGHT_MLS_CLIENT_SECRET
-                  valueFrom:
-                    secretKeyRef:
-                      key: BRIGHT_MLS_CLIENT_SECRET
-                      name: bright-mls-secret
-              image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:dev
-              imagePullPolicy: Always
-              name: reconcile
-              resources:
-                limits:
-                  cpu: 300m
-                  memory: 512Mi
-                requests:
-                  cpu: 50m
-                  memory: 192Mi
-          restartPolicy: Never
-  schedule: 15 5 * * *
-  startingDeadlineSeconds: 300
-  successfulJobsHistoryLimit: 3
-  suspend: false
-  timeZone: Etc/UTC
----
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  labels:
-    app: bright-area-refresh
-    app.kubernetes.io/managed-by: kustomize
-    environment: dev
-    managed-by: gitops
-    provider: hetzner
-  name: bright-area-refresh
-  namespace: default
-spec:
-  concurrencyPolicy: Forbid
-  failedJobsHistoryLimit: 3
-  jobTemplate:
-    metadata:
-      labels:
-        app: bright-area-refresh
-    spec:
-      activeDeadlineSeconds: 900
-      backoffLimit: 2
-      template:
-        metadata:
-          labels:
-            app: bright-area-refresh
-        spec:
-          containers:
-            - command:
-                - node
-                - bright-area-sync.js
-                - refresh
-              env:
-                - name: NODE_ENV
-                  value: development
-                - name: BRIGHT_AREA_REFRESH_INTERVAL_MS
-                  value: "1800000"
-                - name: BRIGHT_AREA_REFRESH_MAX_AREAS_PER_RUN
-                  value: "10"
-                - name: NODE_OPTIONS
-                  value: --max-old-space-size=341
-                - name: PROPERTY_DB_HOST
-                  value: postgres-svc
-                - name: PROPERTY_DB_PORT
-                  value: "5432"
-                - name: PROPERTY_DB_NAME
-                  value: property_db
-                - name: PROPERTY_DB_USER
-                  value: property_service_db_user
-                - name: PROPERTY_SERVICE_DB_USER_PASSWORD
-                  valueFrom:
-                    secretKeyRef:
-                      key: PROPERTY_SERVICE_DB_USER_PASSWORD
-                      name: postgres-secret
-                - name: DATABASE_URL
-                  value: postgresql://$(PROPERTY_DB_USER):$(PROPERTY_SERVICE_DB_USER_PASSWORD)@$(PROPERTY_DB_HOST):$(PROPERTY_DB_PORT)/$(PROPERTY_DB_NAME)
-                - name: BRIGHT_MLS_ENV
-                  valueFrom:
-                    secretKeyRef:
-                      key: BRIGHT_MLS_ENV
-                      name: bright-mls-secret
-                - name: BRIGHT_MLS_CLIENT_ID
-                  valueFrom:
-                    secretKeyRef:
-                      key: BRIGHT_MLS_CLIENT_ID
-                      name: bright-mls-secret
-                - name: BRIGHT_MLS_CLIENT_SECRET
-                  valueFrom:
-                    secretKeyRef:
-                      key: BRIGHT_MLS_CLIENT_SECRET
-                      name: bright-mls-secret
-              image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:dev
-              imagePullPolicy: Always
-              name: refresh
-              resources:
-                limits:
-                  cpu: 300m
-                  memory: 512Mi
-                requests:
-                  cpu: 50m
-                  memory: 192Mi
-          restartPolicy: Never
-  schedule: "*/30 * * * *"
-  startingDeadlineSeconds: 300
-  successfulJobsHistoryLimit: 3
-  suspend: false
-  timeZone: Etc/UTC
----
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  labels:
-    app: bright-mls-ingest
-    app.kubernetes.io/managed-by: kustomize
-    environment: dev
-    managed-by: gitops
-    provider: hetzner
-  name: bright-mls-ingest
-  namespace: default
-spec:
-  concurrencyPolicy: Forbid
-  failedJobsHistoryLimit: 3
-  jobTemplate:
-    metadata:
-      labels:
-        app: bright-mls-ingest
-    spec:
-      activeDeadlineSeconds: 900
-      backoffLimit: 2
-      template:
-        metadata:
-          labels:
-            app: bright-mls-ingest
-        spec:
-          containers:
-            - command:
-                - node
-                - bright-ingest.js
-              env:
-                - name: NODE_ENV
-                  value: development
-                - name: BRIGHT_MLS_INITIAL_CURSOR
-                  value: "2026-09-01T00:00:00Z"
-                - name: BRIGHT_MLS_MAX_PAGES_PER_RUN
-                  value: "25"
-                - name: BRIGHT_MLS_CRAWL_RESOURCES
-                  value: BrightMedia
-                - name: BRIGHT_MLS_CRAWL_MAX_PAGES_PER_RUN
-                  value: "400"
-                - name: NODE_OPTIONS
-                  value: --max-old-space-size=512
-                - name: PROPERTY_DB_HOST
-                  value: postgres-svc
-                - name: PROPERTY_DB_PORT
-                  value: "5432"
-                - name: PROPERTY_DB_NAME
-                  value: property_db
-                - name: PROPERTY_DB_USER
-                  value: property_service_db_user
-                - name: PROPERTY_SERVICE_DB_USER_PASSWORD
-                  valueFrom:
-                    secretKeyRef:
-                      key: PROPERTY_SERVICE_DB_USER_PASSWORD
-                      name: postgres-secret
-                - name: DATABASE_URL
-                  value: postgresql://$(PROPERTY_DB_USER):$(PROPERTY_SERVICE_DB_USER_PASSWORD)@$(PROPERTY_DB_HOST):$(PROPERTY_DB_PORT)/$(PROPERTY_DB_NAME)
-                - name: BRIGHT_MLS_PAGE_SIZE
-                  value: "200"
-                - name: BRIGHT_MLS_ENV
-                  valueFrom:
-                    secretKeyRef:
-                      key: BRIGHT_MLS_ENV
-                      name: bright-mls-secret
-                - name: BRIGHT_MLS_CLIENT_ID
-                  valueFrom:
-                    secretKeyRef:
-                      key: BRIGHT_MLS_CLIENT_ID
-                      name: bright-mls-secret
-                - name: BRIGHT_MLS_CLIENT_SECRET
-                  valueFrom:
-                    secretKeyRef:
-                      key: BRIGHT_MLS_CLIENT_SECRET
-                      name: bright-mls-secret
-              image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:dev
-              imagePullPolicy: Always
-              name: ingest
-              resources:
-                limits:
-                  cpu: 500m
-                  memory: 768Mi
-                requests:
-                  cpu: 50m
-                  memory: 256Mi
-          restartPolicy: Never
-  schedule: "*/15 * * * *"
-  startingDeadlineSeconds: 300
-  successfulJobsHistoryLimit: 3
-  suspend: false
-  timeZone: Etc/UTC
 ---
 apiVersion: batch/v1
 kind: Job

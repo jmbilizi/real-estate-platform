@@ -1,14 +1,14 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: bright-mls-ingest
+  name: test-workload
 spec:
   jobTemplate:
     spec:
       template:
         spec:
           containers:
-            - name: ingest
+            - name: worker
               resources:
                 limits:
                   memory: "768Mi"

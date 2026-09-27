@@ -120,7 +120,19 @@ runs:
           echo "::warning::Only some of BRIGHT_MLS_ENV / BRIGHT_MLS_CLIENT_ID / BRIGHT_MLS_CLIENT_SECRET are set for this environment. None was applied; the ingestion job will report 'credentials not configured'. Provision all three together as environment secrets."
         else
           echo "ℹ️  No Bright MLS credentials for this environment — keeping the committed placeholder."
-          echo "   The ingestion job will complete with a 'credentials not configured' outcome (#91)."
+          echo "   bright-sync-worker will complete with a 'credentials not configured' outcome (#91)."
+        fi
+
+        # Bright admin sync token (#338). Independent of the three feed credentials above: it
+        # guards property-service's POST /admin/bright/sync, not the worker's own feed access.
+        # Guarded the same way — an unset variable must not write null into stringData.
+        if [ -n "$BRIGHT_ADMIN_TOKEN" ]; then
+          echo "🔐 Bright admin sync token present for this environment — substituting."
+          yq eval '.stringData.BRIGHT_ADMIN_TOKEN = env(BRIGHT_ADMIN_TOKEN)' infra/k8s/base/secrets/bright-mls.secret.yaml \
+          > /tmp/bright-mls-admin.secret.processed.yaml
+          mv /tmp/bright-mls-admin.secret.processed.yaml infra/k8s/base/secrets/bright-mls.secret.yaml
+        else
+          echo "ℹ️  BRIGHT_ADMIN_TOKEN is not set for this environment. The committed placeholder stays in the Secret and the admin sync endpoint refuses every request."
         fi
 
         # Postmark (#175). Guarded for the same reason as Bright MLS above: the token is absent
@@ -409,6 +421,13 @@ runs:
             /tmp/sts-before.json > /tmp/sts-before.json.tmp
           mv /tmp/sts-before.json.tmp /tmp/sts-before.json
         done
+
+    - name: Remove retired workloads
+      shell: bash
+      run: |
+        # The label-scoped apply never prunes, so a workload removed from the manifests stays in
+        # the cluster. tools/infra/retired-resources.js lists them; the local deploy uses it too.
+        node tools/infra/retired-resources.js
 
     - name: Apply manifests (phased, label-scoped, immutable-safe)
       shell: bash
@@ -945,132 +964,6 @@ runs:
           echo "\n✅ All workloads deployed successfully"
           echo "rollout_success=true" >> $GITHUB_OUTPUT
         fi
-
-    - name: Re-run Bright MLS ingest on deploy (dev/test only)
-      # #224/#232/#315: re-run the ingest Job so today's mapping fix reaches dev/test without
-      # waiting for the CronJob's next tick. Jobs are immutable, so this step deletes and
-      # recreates the Job. Prod keeps its own schedule. Every exit path below returns 0, so
-      # a bad or slow ingest run never fails the deploy.
-      if: ${{ steps.rollout.outputs.rollout_success == 'true' || steps.pvc_cleanup.outputs.rollout_success == 'true' }}
-      shell: bash
-      run: |
-        set -eo pipefail
-        ENVIRONMENT="$(basename "${{ inputs.kustomizePath }}")"
-        if [ "$ENVIRONMENT" != "dev" ] && [ "$ENVIRONMENT" != "test" ]; then
-          echo "ℹ️  $ENVIRONMENT is not dev or test - bright-mls-ingest keeps its own schedule."
-          exit 0
-        fi
-
-        if ! jq -e --arg s bright-mls-ingest '.services | any(.name == $s)' scope-plan.json > /dev/null 2>&1; then
-          echo "ℹ️  bright-mls-ingest is not in this run's deploy scope - nothing to re-run."
-          exit 0
-        fi
-
-        JOB_NAME="bright-mls-ingest-on-deploy"
-
-        # #315: a still-running Job means an earlier deploy's ingest has not finished.
-        # Deleting it here would kill that run with no record of why. Skip this re-run
-        # instead and say so.
-        PREVIOUS_JOB=$(kubectl get job "$JOB_NAME" -o json 2>/dev/null || echo "")
-        if [ -n "$PREVIOUS_JOB" ]; then
-          PREV_COMPLETE=$(echo "$PREVIOUS_JOB" | jq -r '([.status.conditions[]? | select(.type=="Complete") | .status] | first) // empty' 2>/dev/null || true)
-          PREV_FAILED=$(echo "$PREVIOUS_JOB" | jq -r '([.status.conditions[]? | select(.type=="Failed") | .status] | first) // empty' 2>/dev/null || true)
-          if [ "$PREV_COMPLETE" != "True" ] && [ "$PREV_FAILED" != "True" ]; then
-            echo "::notice::$JOB_NAME is still running on $ENVIRONMENT from an earlier deploy. Skipping this run so it is not killed."
-            exit 0
-          fi
-        fi
-
-        echo "🔄 Re-running bright-mls-ingest so today's mapping fix reaches $ENVIRONMENT now."
-        if ! kubectl delete job "$JOB_NAME" --ignore-not-found; then
-          echo "::warning::bright-mls-ingest-on-deploy: could not delete the previous Job on $ENVIRONMENT - skipping this ingest run."
-          exit 0
-        fi
-        if ! kubectl create job "$JOB_NAME" --from=cronjob/bright-mls-ingest; then
-          echo "::warning::bright-mls-ingest-on-deploy: could not create the Job on $ENVIRONMENT - skipping this ingest run."
-          exit 0
-        fi
-
-        # #315: wait only long enough to catch a fast startup failure. A full ingest run can
-        # take minutes, so the deploy does not wait for it. The Job's own activeDeadlineSeconds
-        # (900s) still bounds an unattended run. Still running after this wait is normal, not
-        # a failure.
-        WAIT_SECONDS=60
-        POLL_SECONDS=10
-        ELAPSED=0
-        JOB_RESULT="timeout"
-        echo "⏳ Waiting up to ${WAIT_SECONDS}s for $JOB_NAME to reach a terminal state..."
-        while [ "$ELAPSED" -lt "$WAIT_SECONDS" ]; do
-          # One fetch, both conditions read from it. A separate `kubectl get` per condition
-          # would double the API calls over a wait this long for no extra information.
-          JOB_JSON=$(kubectl get job "$JOB_NAME" -o json 2>/dev/null || true)
-          COMPLETE=$(echo "$JOB_JSON" | jq -r '([.status.conditions[]? | select(.type=="Complete") | .status] | first) // empty' 2>/dev/null || true)
-          FAILED=$(echo "$JOB_JSON" | jq -r '([.status.conditions[]? | select(.type=="Failed") | .status] | first) // empty' 2>/dev/null || true)
-          if [ "$COMPLETE" = "True" ]; then
-            JOB_RESULT="complete"
-            break
-          fi
-          if [ "$FAILED" = "True" ]; then
-            JOB_RESULT="failed"
-            break
-          fi
-          sleep "$POLL_SECONDS"
-          ELAPSED=$((ELAPSED + POLL_SECONDS))
-        done
-
-        # Read by pod name, not `job/$JOB_NAME`. A retried Job (backoffLimit 2) can have more
-        # than one pod. This fetch is the single source for both the printed excerpt below and
-        # the outcome parsed from it, so it is one API round trip and one consistent view.
-        # Sorted oldest-to-newest, then `tail -1` in bash picks the latest attempt, the one
-        # that actually decided the Job's Complete/Failed condition.
-        POD_NAME=$(kubectl get pods -l job-name="$JOB_NAME" --sort-by=.metadata.creationTimestamp \
-          -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | tail -1 || true)
-
-        if [ -n "$POD_NAME" ]; then
-          echo "── $JOB_NAME pod logs ($POD_NAME) ──"
-          POD_LOGS=$(kubectl logs "$POD_NAME" --all-containers --tail=500 2>&1 || true)
-        else
-          echo "── $JOB_NAME pod logs ──"
-          POD_LOGS=""
-        fi
-        if [ -n "$POD_LOGS" ]; then
-          echo "$POD_LOGS"
-        else
-          echo "⚠️  Could not fetch pod logs for $JOB_NAME."
-        fi
-
-        # The job's own run_finished line carries the real outcome (not_configured/replicated
-        # both exit 0, failed exits 1 — see bright-ingest.main.ts and run-log.ts) plus the
-        # published/withheld histogram, already printed above. Pulled out again here only to
-        # build the one-line summary below.
-        RUN_LINE=$(echo "$POD_LOGS" | grep '"event":"run_finished"' | tail -1 || true)
-        OUTCOME=""
-        MESSAGE=""
-        if [ -n "$RUN_LINE" ]; then
-          OUTCOME=$(echo "$RUN_LINE" | jq -r '.outcome // empty' 2>/dev/null || true)
-          MESSAGE=$(echo "$RUN_LINE" | jq -r '.message // empty' 2>/dev/null || true)
-        fi
-
-        case "$JOB_RESULT" in
-          complete)
-            if [ "$OUTCOME" = "failed" ]; then
-              # Should not happen — a `failed` outcome exits 1, which the Job reports as Failed,
-              # not Complete. Reported defensively in case that contract ever drifts.
-              echo "::warning::bright-mls-ingest-on-deploy completed but reported outcome=failed on $ENVIRONMENT: ${MESSAGE:-no message}"
-            else
-              echo "✅ bright-mls-ingest-on-deploy finished on $ENVIRONMENT: outcome=${OUTCOME:-unknown}${MESSAGE:+ ($MESSAGE)}"
-            fi
-            ;;
-          failed)
-            echo "::warning::bright-mls-ingest-on-deploy failed on $ENVIRONMENT: ${MESSAGE:-see pod logs above}"
-            ;;
-          timeout)
-            echo "::notice::$JOB_NAME is still running after ${WAIT_SECONDS}s on $ENVIRONMENT. The deploy does not wait for it."
-            echo "   Follow it with: kubectl logs -f job/$JOB_NAME --all-containers"
-            ;;
-        esac
-
-        exit 0
 
     - name: Conditional rollback
       if: ${{ steps.rollout.outputs.rollout_success != 'true' && steps.pvc_cleanup.outputs.rollout_success != 'true' }}

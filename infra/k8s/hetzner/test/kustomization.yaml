@@ -26,6 +26,7 @@ patches:
   - path: patches/deployments/inference.deployment.yaml
   - path: patches/deployments/account-service.deployment.yaml
   - path: patches/deployments/property-service.deployment.yaml
+  - path: patches/deployments/bright-sync-worker.deployment.yaml
   - path: patches/deployments/cribstop-web.deployment.yaml
 
   ## Services (network access)
@@ -35,11 +36,6 @@ patches:
   - path: patches/ingresses/jaeger.ingress.yaml
   - path: patches/ingresses/api-gateway.ingress.yaml
   - path: patches/ingresses/cribstop-web.ingress.yaml
-
-  ## CronJobs (scheduled tasks)
-  - path: patches/cronjobs/bright-mls-ingest.cronjob.yaml
-  - path: patches/cronjobs/bright-area-refresh.cronjob.yaml
-  - path: patches/cronjobs/bright-area-reconcile.cronjob.yaml
 
 # Common labels for all resources
 labels:

@@ -577,6 +577,21 @@ const env = {
   ...(podmanDockerHost ? { DOCKER_HOST: podmanDockerHost } : {}),
 };
 
+// A deploy applies only what it renders, so a workload removed from the manifests would stay.
+if (['dev', 'run', 'deploy'].includes(args[0])) {
+  // Target the context Skaffold deploys to, not whatever kubectl's current context is.
+  const contextFlag = args.findIndex(
+    (a) => a === '--kube-context' || a.startsWith('--kube-context='),
+  );
+  const context =
+    contextFlag === -1
+      ? undefined
+      : args[contextFlag].includes('=')
+        ? args[contextFlag].split('=')[1]
+        : args[contextFlag + 1];
+  require('./retired-resources').removeRetiredResources({ context });
+}
+
 const result = spawnSync('skaffold', args, {
   cwd: workspaceRoot,
   stdio: 'inherit',
