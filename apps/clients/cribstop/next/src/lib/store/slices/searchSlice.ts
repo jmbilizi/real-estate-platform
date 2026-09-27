@@ -2,7 +2,7 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { LISTING_TYPES } from '@cribstop/property-contracts';
 import { SearchDateRange, SearchSuggestion } from '@/lib/store/types';
 
-/** The search bar's own Listing Type filter — the contract's enum plus `'all'`, its default. */
+/** The search bar's own Listing Type filter — the contract's enum plus `'all'`. Default `'sale'` (#350). */
 export type SearchListingType = (typeof LISTING_TYPES)[number] | 'all';
 
 /**
@@ -33,7 +33,7 @@ const initialState: SearchState = {
   searchMoveInDate: '',
   searchDateRange: { start: '', end: '', flexibility: 'exact' },
   searchPriceIdx: 0,
-  searchListingType: 'all',
+  searchListingType: 'sale',
 };
 
 const searchSlice = createSlice({

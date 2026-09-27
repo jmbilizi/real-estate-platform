@@ -4,8 +4,8 @@
  * ZIP is appended only when the short form names more than one property.
  *
  * Path rule shared with the search routes (#350): the first segment is always `<city>-<st>`. A
- * second segment that starts with a digit is an address slug. Any other second segment
- * (`homes-for-sale`, `homes-for-rent`) is a search path.
+ * two-segment path whose second segment starts with a digit is an address slug. A path that ends
+ * in `homes-for-sale` or `homes-for-rent` is a search path (see `parseSearchPath`).
  *
  * The client builds a slug from structured geocoder fields, never from free text. The service
  * resolves a slug by the normalized parts below.
@@ -183,5 +183,126 @@ export function parsePropertyPath(citySeg: string, addressSeg: string): ParsedPr
     city: cityTokens.slice(0, -1).join(' '),
     state: (cityTokens[cityTokens.length - 1] as string).toUpperCase(),
     zip,
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Search paths (#350)
+// ---------------------------------------------------------------------------------------------
+
+export type SearchPathSegment = (typeof SEARCH_PATH_SEGMENTS)[number];
+
+/** A place that a search path names. A street or neighborhood always has a city+state parent. */
+export type SearchPlace =
+  | { readonly kind: 'city'; readonly city: string; readonly state: string }
+  | { readonly kind: 'zip'; readonly zip: string; readonly city: string; readonly state: string }
+  | {
+      readonly kind: 'neighborhood' | 'street';
+      /** The neighborhood or street name. */
+      readonly name: string;
+      readonly city: string;
+      readonly state: string;
+      readonly zip?: string | null;
+    }
+  | { readonly kind: 'county'; readonly county: string; readonly state: string };
+
+export interface ParsedSearchPath {
+  /** `null` for a map-area search (`/homes-for-sale?boundary=...`). */
+  readonly place: SearchPlace | null;
+  readonly segment: SearchPathSegment;
+}
+
+const COUNTY_SEGMENT = /^([a-z0-9]+(?:-[a-z0-9]+)*)-county-([a-z]{2})$/;
+const NEIGHBORHOOD_SEGMENT = /^([a-z0-9]+(?:-[a-z0-9]+)*)-neighborhood$/;
+const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** A street's path segment: the name with USPS abbreviations, `king-st` for "King Street". */
+export function streetSegment(street: string): string {
+  return slugify(normalizeStreetLine(street));
+}
+
+/** Removes a trailing "County", so that the path is not `fairfax-county-county-va`. */
+export function countyBaseName(county: string): string {
+  return county.replace(/\s+county$/i, '').trim();
+}
+
+function words(slug: string): string {
+  return slug.replace(/-/g, ' ');
+}
+
+/**
+ * The search path for a place, with no trailing slash. Next.js sends the slash form to this form
+ * with a 308. `null` gives the map-area path.
+ */
+export function searchPath(place: SearchPlace | null, segment: SearchPathSegment): string {
+  if (place === null) return `/${segment}`;
+  if (place.kind === 'county') {
+    return `/${slugify(countyBaseName(place.county))}-county-${slugify(place.state)}/${segment}`;
+  }
+  const parts = [citySegment(place.city, place.state)];
+  if (place.kind === 'zip') parts.push(place.zip.slice(0, 5));
+  if (place.kind === 'neighborhood' || place.kind === 'street') {
+    if (place.zip) parts.push(place.zip.slice(0, 5));
+    parts.push(
+      place.kind === 'street' ? streetSegment(place.name) : `${slugify(place.name)}-neighborhood`,
+    );
+  }
+  return `/${parts.join('/')}/${segment}`;
+}
+
+/**
+ * Parses search path segments. Names come back as lower-case words (`del ray`), because a slug
+ * keeps nothing more. The page resolves them to real place names through the geocoder. `null`
+ * when the segments are not a search path.
+ */
+export function parseSearchPath(segments: readonly string[]): ParsedSearchPath | null {
+  const lower = segments.filter(Boolean).map((segment) => segment.toLowerCase());
+  const segment = lower[lower.length - 1];
+  if (segment === undefined || !(SEARCH_PATH_SEGMENTS as readonly string[]).includes(segment)) {
+    return null;
+  }
+  const listingSegment = segment as SearchPathSegment;
+  const head = lower.slice(0, -1);
+  if (head.length === 0) return { place: null, segment: listingSegment };
+
+  const first = head[0] as string;
+  const county = COUNTY_SEGMENT.exec(first);
+  if (county && head.length === 1) {
+    const place: SearchPlace = {
+      kind: 'county',
+      county: words(county[1] as string),
+      state: (county[2] as string).toUpperCase(),
+    };
+    return { place, segment: listingSegment };
+  }
+  if (!isCitySegment(first)) return null;
+  const cityTokens = first.split('-');
+  const city = cityTokens.slice(0, -1).join(' ');
+  const state = (cityTokens[cityTokens.length - 1] as string).toUpperCase();
+
+  let rest = head.slice(1);
+  let zip: string | null = null;
+  if (rest.length > 0 && ZIP5.test(rest[0] as string)) {
+    zip = rest[0] as string;
+    rest = rest.slice(1);
+  }
+  if (rest.length === 0) {
+    const place: SearchPlace = zip
+      ? { kind: 'zip', zip, city, state }
+      : { kind: 'city', city, state };
+    return { place, segment: listingSegment };
+  }
+  if (rest.length > 1) return null;
+  // Second segment: ZIP (handled above), `<name>-neighborhood`, or else a street.
+  const named = rest[0] as string;
+  const neighborhood = NEIGHBORHOOD_SEGMENT.exec(named);
+  if (neighborhood) {
+    const name = words(neighborhood[1] as string);
+    return { place: { kind: 'neighborhood', name, city, state, zip }, segment: listingSegment };
+  }
+  if (!SLUG.test(named) || ZIP5.test(named)) return null;
+  return {
+    place: { kind: 'street', name: words(named), city, state, zip },
+    segment: listingSegment,
   };
 }

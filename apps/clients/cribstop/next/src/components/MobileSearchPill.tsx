@@ -4,6 +4,7 @@ import { useLayoutEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useApp } from '@/lib/context';
 import { SkeletonBar } from './Skeleton';
+import { parseSearchPath } from '@cribstop/property-contracts';
 
 /**
  * Shared mobile search pill used in both ScrollSentinel (in-page, pre-scroll)
@@ -22,9 +23,9 @@ export default function MobileSearchPill() {
   }, []);
 
   // `searchSlice`'s default is always '' and is never persisted (see the slice's own comment).
-  // So on every route except `/search` there is no async seeding: the server and the first
+  // So on every route except a search path (#350) there is no async seeding: the server and the first
   // client render already agree, and there is nothing to placeholder over.
-  const onSearchRoute = pathname.startsWith('/search');
+  const onSearchRoute = parseSearchPath(pathname.split('/')) !== null;
 
   const summary = (() => {
     if (activeTab === 'services') return 'Find services';

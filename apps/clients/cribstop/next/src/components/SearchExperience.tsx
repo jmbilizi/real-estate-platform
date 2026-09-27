@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import ListingCard from '@/components/ListingCard';
 import ListingsMap from '@/components/ListingsMap';
 import { useApp } from '@/lib/context';
 import { listingIdFromPath } from '@/lib/listing-panel';
 
 import type { SearchFilters } from '@/lib/types';
+import type { SearchSuggestionValue } from '@/lib/store/types';
 import SortDropdown from '@/components/SortDropdown';
 import FilterModal, { countActiveFilters } from '@/components/FilterModal';
 import {
@@ -66,6 +67,31 @@ export interface SearchExperienceProps {
    * second render of a different page.
    */
   deferred?: boolean;
+  /**
+   * The place a search path names (#350). Its filters go into every request, but never into the
+   * query string and never into the applied-filter count: the path already says them.
+   */
+  place?: SearchPathPlace;
+}
+
+export interface SearchPathPlace {
+  /** Location filters and the listing type the path implies. */
+  filters: SearchFilters;
+  /** Search bar label, for example "Del Ray, Alexandria, VA". Empty for a map-area search. */
+  label: string;
+  /** Seeds the search bar's selected suggestion. */
+  suggestion?: SearchSuggestionValue | null;
+  /** Query parameters that belong to the path and survive a filter change (`type=all`). */
+  query?: string;
+}
+
+/** Filters from the query string. On a search path, `type` belongs to the place, not the filters. */
+function parseQueryFilters(params: URLSearchParams, place: SearchPathPlace | undefined) {
+  if (!place) return parseFiltersFromSearchParams(params);
+  const own = new URLSearchParams(params);
+  own.delete('type');
+  own.delete('listingType');
+  return parseFiltersFromSearchParams(own);
 }
 
 /**
@@ -79,6 +105,7 @@ export default function SearchExperience({
   initialQuery,
   ownsUrl = true,
   deferred = false,
+  place,
 }: SearchExperienceProps) {
   const {
     savedIds,
@@ -114,28 +141,12 @@ export default function SearchExperience({
        */
       if (listingIdFromPath(window.location.pathname) !== null) return;
 
-      const params = new URLSearchParams(window.location.search);
-      const q = params.get('q') || '';
-      const lat = params.get('lat');
-      const lon = params.get('lon');
-      setLocation(q);
-      if (q && lat && lon) {
-        setSearchSuggestion({ display_name: q, lat, lon });
-      } else if (!q) {
-        setSearchSuggestion(null);
-      }
-      const parsedFilters = parseFiltersFromSearchParams(params);
-      setFilters(parsedFilters);
-      setPage(parsePageFromSearchParams(params));
-      // Keeps the search bar's own "What" summary honest for a shared/bookmarked filtered link
-      // (`?type=rent`) — without this, the bar showed "All listings" and a resubmission from it
-      // silently dropped the listing type the results page was actually applying (#243 review).
-      setSearchListingType(parsedFilters.listingType ?? 'all');
+      seedFromParams(new URLSearchParams(window.location.search));
     };
 
     window.addEventListener('popstate', updateFromParams);
     return () => window.removeEventListener('popstate', updateFromParams);
-  }, [ownsUrl, setLocation, setSearchSuggestion, setSearchListingType]);
+  }, [ownsUrl, place, setLocation, setSearchSuggestion, setSearchListingType]);
   // Track hovered property for map highlight
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   // Map center for search location (lat/lng)
@@ -188,7 +199,12 @@ export default function SearchExperience({
    * rendering: both sides read the same string, so they agree about the active filter count.
    */
   const [filters, setFilters] = useState<SearchFilters>(() =>
-    parseFiltersFromSearchParams(new URLSearchParams(initialQuery)),
+    parseQueryFilters(new URLSearchParams(initialQuery), place),
+  );
+  /** The request: the query-string filters plus whatever the path names. */
+  const requestFilters = useMemo(
+    () => (place ? { ...filters, ...place.filters } : filters),
+    [filters, place],
   );
   // Two-phase geocode:
   //   Phase 1 — no polygon, ~300 bytes → sets map center immediately so tiles load fast
@@ -207,7 +223,7 @@ export default function SearchExperience({
   // routing them through our own origin under an identifying `User-Agent` is what turned it into a
   // flood from a single egress IP. The committed query is also simply the correct key: the map
   // centres on the search that ran, exactly like the results do.
-  const committedLocation = filters.query ?? '';
+  const committedLocation = filters.query ?? place?.label ?? '';
   useEffect(() => {
     // Clear stale state immediately so old boundary/center don't linger
     setSearchCenter(null);
@@ -332,30 +348,41 @@ export default function SearchExperience({
    * the header's search bar reads them — so a shell rendered purely to hold the layout's shape
    * would otherwise blank the bar it is sitting under.
    */
-  useEffect(() => {
-    if (typeof window === 'undefined' || deferred) return;
-
-    const params = new URLSearchParams(initialQuery);
-    const q = params.get('q') || '';
+  function seedFromParams(params: URLSearchParams) {
+    const q = params.get('q') || place?.label || '';
     const lat = params.get('lat');
     const lon = params.get('lon');
     setLocation(q);
     // Restore the suggestion object so CompactSearchBar can search again without re-typing
-    if (q && lat && lon) {
+    if (place?.suggestion) {
+      setSearchSuggestion(place.suggestion);
+    } else if (q && lat && lon) {
       setSearchSuggestion({ display_name: q, lat, lon });
     } else if (!q) {
       setSearchSuggestion(null);
     }
-    const parsedFilters = parseFiltersFromSearchParams(params);
+    const parsedFilters = parseQueryFilters(params, place);
     setFilters(parsedFilters);
     setPage(parsePageFromSearchParams(params));
-    // See the popstate effect above for why the search bar's own listing-type state is seeded
-    // here too — a resubmission from the bar must not silently drop the applied `type=`.
-    setSearchListingType(parsedFilters.listingType ?? 'all');
-  }, [initialQuery, deferred, setLocation, setSearchSuggestion, setSearchListingType]);
+    // Keeps the search bar's "What" summary equal to the listing type the results apply, so that a
+    // new search from the bar does not drop it (#243 review).
+    setSearchListingType((place ? place.filters.listingType : parsedFilters.listingType) ?? 'all');
+  }
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || deferred) return;
+    seedFromParams(new URLSearchParams(initialQuery));
+  }, [initialQuery, place, deferred, setLocation, setSearchSuggestion, setSearchListingType]);
+
+  /** Writes a query string for this path, with the path's own parameters kept. */
+  const writeUrl = (params: URLSearchParams) => {
+    new URLSearchParams(place?.query).forEach((value, key) => params.set(key, value));
+    const qs = params.toString();
+    window.history.pushState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
+  };
 
   const { results, total, pageCount, pageSize, status, error, errorCode, retry } = useListingSearch(
-    filters,
+    requestFilters,
     page,
     !deferred,
   );
@@ -424,8 +451,7 @@ export default function SearchExperience({
     const params = new URLSearchParams(window.location.search);
     if (next === 1) params.delete('page');
     else params.set('page', String(next));
-    const qs = params.toString();
-    window.history.pushState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
+    writeUrl(params);
   };
 
   /**
@@ -450,9 +476,7 @@ export default function SearchExperience({
     setFilters(committed);
     setPage(1);
     if (!ownsUrl) return; // not our URL to write — see `ownsUrl`
-    const params = filtersToSearchParams(committed, new URLSearchParams(window.location.search));
-    const qs = params.toString();
-    window.history.pushState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
+    writeUrl(filtersToSearchParams(committed, new URLSearchParams(window.location.search)));
   };
 
   /**
@@ -465,8 +489,8 @@ export default function SearchExperience({
    * nothing at all.
    */
   const clearFilters = () => {
-    const { query, zip, street, city, state, neighborhood, sort } = filters;
-    applyFilters({ query, zip, street, city, state, neighborhood, sort });
+    const { query, zip, street, city, state, neighborhood, boundary, sort } = filters;
+    applyFilters({ query, zip, street, city, state, neighborhood, boundary, sort });
   };
 
   return (
@@ -585,11 +609,7 @@ export default function SearchExperience({
                   const params = new URLSearchParams(window.location.search);
                   params.set('sort', String(v));
                   params.delete('page');
-                  window.history.pushState(
-                    {},
-                    '',
-                    `${window.location.pathname}?${params.toString()}`,
-                  );
+                  writeUrl(params);
                 }}
               />
             </div>

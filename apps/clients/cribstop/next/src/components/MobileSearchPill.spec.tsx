@@ -27,12 +27,12 @@ beforeEach(() => {
 
 describe('MobileSearchPill before hydration', () => {
   /*
-   * Regression: `searchLocation` only seeds asynchronously on `/search` (via `SearchExperience`).
+   * Regression: `searchLocation` only seeds asynchronously on a search path (via `SearchExperience`).
    * Everywhere else the store's default ('') is already the settled answer server-side, so
    * placeholdering it there swaps a one-line button for a two-line skeleton on hydration — a
    * height change this ticket was written to eliminate, not introduce.
    */
-  it('skips the placeholder off the /search route, where there is nothing async to wait on', () => {
+  it('skips the placeholder off a search path, where there is nothing async to wait on', () => {
     mockPathname.mockReturnValue('/');
     const html = renderToStaticMarkup(<MobileSearchPill />);
 
@@ -40,8 +40,8 @@ describe('MobileSearchPill before hydration', () => {
     expect(html).toContain('Start your search');
   });
 
-  it('placeholders on /search, where searchLocation is seeded from the URL after mount', () => {
-    mockPathname.mockReturnValue('/search');
+  it('placeholders on a search path, where searchLocation is seeded from the URL after mount', () => {
+    mockPathname.mockReturnValue('/alexandria-va/homes-for-sale');
     const html = renderToStaticMarkup(<MobileSearchPill />);
 
     expect(html).toContain('skeleton-fill');

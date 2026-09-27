@@ -5,14 +5,12 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
 import { useApp } from '@/lib/context';
 import {
-  appendLocationParams,
   bareZip,
   fetchNearbyLocationsByType,
   formatLocationLabel,
-  hasLocationFilter,
   highlightMatch,
-  resolveSearchTerms,
 } from '@/lib/search-utils';
+import { searchableSuggestions, searchTargetFor, searchTargetUrl } from '@/lib/search-place';
 import { SearchPanel } from '@/lib/store/types';
 import type { SearchListingType } from '@/lib/store/slices/searchSlice';
 import { Z_LAYERS } from '@/lib/z-layers';
@@ -799,8 +797,10 @@ export default function CompactSearchBar({
   // The bar stays mounted across navigation, so only a transition knows when the new route rendered.
   const [isNavigating, startNavigation] = useTransition();
   const busy = isSearching || isNavigating;
+  const pushUrl = (url: string) => startNavigation(() => router.push(url));
+  /** A search with no place path (current location, typed text): the map-area path. */
   const pushSearch = (params: URLSearchParams) =>
-    startNavigation(() => router.push(`/search?${params.toString()}`));
+    pushUrl(searchTargetUrl({ kind: 'area', params }, searchListingType));
   const [whereShake, setWhereShake] = useState(false);
   const [isGeolocating, setIsGeolocating] = useState(false);
 
@@ -1105,7 +1105,7 @@ export default function CompactSearchBar({
                 debounceRef.current = setTimeout(async () => {
                   try {
                     const resp = await fetch(`/api/geocode?q=${encodeURIComponent(val)}`);
-                    setSuggestions(resp.ok ? await resp.json() : []);
+                    setSuggestions(resp.ok ? searchableSuggestions(await resp.json()) : []);
                   } catch {
                     setSuggestions([]);
                   } finally {
@@ -1383,14 +1383,6 @@ export default function CompactSearchBar({
     if (listingTab && listingTab !== listingType) setListingType(listingTab);
   }, [listingTab]);
 
-  // `searchListingType` already carries the contract's own vocabulary (`sale`/`rent`/`sold`), so no
-  // translation table is needed here — only 'all' (the contract's default) has to be omitted rather
-  // than sent literally.
-  function withListingTypeParam(params: URLSearchParams): URLSearchParams {
-    if (searchListingType !== 'all') params.set('type', searchListingType);
-    return params;
-  }
-
   // Opens the where panel and shakes it — the refusal UX for "no valid location to search with",
   // shared by every reason that can produce it (#339: unselected suggestion, unresolved place
   // type, or a resolved place whose only filter depended on a boundary fetch that failed).
@@ -1432,33 +1424,17 @@ export default function CompactSearchBar({
       shakeWhere();
       return;
     }
-    // #339. Never search unfiltered: a suggestion that resolves to no structured filter at all
-    // (in practice unreachable synchronously — see extractSearchTerms — but not provably so from
-    // here) is refused the same way an unselected suggestion is, rather than searched on `q`
-    // alone. This is a fast, synchronous pre-check; the async one below (after
-    // `appendLocationParams`) is the one that actually enforces it, because a county resolution's
-    // only filter can depend on a boundary fetch that has not run yet at this point.
-    if (!hasLocationFilter(resolveSearchTerms(location || '', finalSuggestion))) {
+    // #350. The pick becomes a place path, which the page resolves to filters. A pick that no path
+    // can express (a street or neighborhood with no city) is refused, never searched unfiltered.
+    const target = searchTargetFor(location || '', finalSuggestion);
+    if (!target) {
       shakeWhere();
       return;
     }
     const label = formatLocationLabel(finalSuggestion);
-    const params = new URLSearchParams();
-    params.set('q', label);
-    params.set('lat', finalSuggestion.lat);
-    params.set('lon', finalSuggestion.lon);
-    const applied = await appendLocationParams(params, location || '', finalSuggestion);
-    if (!applied) {
-      // #339. The boundary fetch a county resolution depended on failed, and it had no `state`
-      // fallback either — refuse rather than search on `q` alone.
-      shakeWhere();
-      return;
-    }
-    // Use the selected/closest suggestion
     addRecentSearch(finalSuggestion);
     if (typeof setLocation === 'function') setLocation(label);
-    withListingTypeParam(params);
-    pushSearch(params);
+    pushUrl(searchTargetUrl(target, searchListingType));
     setIsDropdownOpen(false);
     setActivePanel(null);
     if (mode === 'expanded') setHeaderExpanded(false);
@@ -1519,7 +1495,6 @@ export default function CompactSearchBar({
               if (typeof setLocation === 'function') setLocation(displayName);
               const params = new URLSearchParams();
               params.set('q', displayName);
-              withListingTypeParam(params);
               pushSearch(params);
               resolve();
             })();
@@ -1536,7 +1511,6 @@ export default function CompactSearchBar({
             if (typeof setLocation === 'function') setLocation('');
             const params = new URLSearchParams();
             params.set('q', '');
-            withListingTypeParam(params);
             pushSearch(params);
             resolve();
           },
@@ -1546,7 +1520,6 @@ export default function CompactSearchBar({
         if (typeof setLocation === 'function') setLocation('');
         const params = new URLSearchParams();
         params.set('q', '');
-        withListingTypeParam(params);
         pushSearch(params);
         resolve();
       }
@@ -1656,33 +1629,31 @@ export default function CompactSearchBar({
       setSuggestions([]);
       setDateRange({ start: '', end: '', flexibility: 'exact' });
       setRangePickStep('start');
-      setSearchListingType('all');
+      setSearchListingType('sale');
       setActivePanel('where');
     };
 
     const handleSheetSearch = async () => {
-      const params = new URLSearchParams();
+      const dates = new URLSearchParams();
+      if (dateRange.start) dates.set('moveIn', dateRange.start);
+      if (dateRange.end && dateRange.end !== dateRange.start) dates.set('moveInEnd', dateRange.end);
       if (selectedSuggestion) {
-        params.set('q', formatLocationLabel(selectedSuggestion));
-        params.set('lat', String(selectedSuggestion.lat));
-        params.set('lon', String(selectedSuggestion.lon));
-        // #339. Same refusal as the desktop path (handleSearch): a selected suggestion must
-        // never search unfiltered, including the county-with-no-state-and-a-failed-boundary-fetch
-        // case `appendLocationParams`'s return value exists to catch.
-        if (!(await appendLocationParams(params, location || '', selectedSuggestion))) {
+        // Same refusal as the desktop path (handleSearch): never search unfiltered.
+        const target = searchTargetFor(location || '', selectedSuggestion);
+        if (!target) {
           setActivePanel('where');
           return;
         }
-      } else if ((location || '').trim()) {
-        params.set('q', (location || '').trim());
-        const typedZip = bareZip(location || '');
-        if (typedZip) params.set('zip', typedZip);
+        pushUrl(searchTargetUrl(target, searchListingType, dates));
+      } else {
+        const params = new URLSearchParams(dates);
+        if ((location || '').trim()) {
+          params.set('q', (location || '').trim());
+          const typedZip = bareZip(location || '');
+          if (typedZip) params.set('zip', typedZip);
+        }
+        pushSearch(params);
       }
-      withListingTypeParam(params);
-      if (dateRange.start) params.set('moveIn', dateRange.start);
-      if (dateRange.end && dateRange.end !== dateRange.start)
-        params.set('moveInEnd', dateRange.end);
-      pushSearch(params);
       onClose?.();
     };
 
@@ -1760,7 +1731,7 @@ export default function CompactSearchBar({
                         debounceRef.current = setTimeout(async () => {
                           try {
                             const r = await fetch(`/api/geocode?q=${encodeURIComponent(val)}`);
-                            setSuggestions(r.ok ? await r.json() : []);
+                            setSuggestions(r.ok ? searchableSuggestions(await r.json()) : []);
                           } catch {
                             setSuggestions([]);
                           } finally {

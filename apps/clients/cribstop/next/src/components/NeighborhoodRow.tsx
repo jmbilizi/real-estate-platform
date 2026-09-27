@@ -65,7 +65,7 @@ function NeighborhoodTile({ n }: { n: Neighborhood }) {
 
   return (
     <Link
-      href={`/search?neighborhood=${encodeURIComponent(n.name)}`}
+      href={`/homes-for-sale?type=all&neighborhood=${encodeURIComponent(n.name)}`}
       className="group relative flex-shrink-0 snap-start aspect-[4/5] overflow-hidden rounded-md w-[calc((100%-1.25rem)/2)] sm:w-[calc((100%-2.5rem)/3)] md:w-[calc((100%-3.75rem)/4)] lg:w-[calc((100%-5rem)/5)] xl:w-[calc((100%-6.25rem)/6)] min-w-0"
       // The tile is a placeholder until the photo lands: it names a real destination, but there is
       // nothing on it yet to say which one, so it is not a link anything should land on.

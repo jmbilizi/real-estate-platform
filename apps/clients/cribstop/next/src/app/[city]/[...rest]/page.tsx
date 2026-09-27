@@ -1,6 +1,11 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import type { PropertyMatch, PropertyPage, PropertyRecord } from '@cribstop/property-contracts';
+import {
+  parseSearchPath,
+  type PropertyMatch,
+  type PropertyPage,
+  type PropertyRecord,
+} from '@cribstop/property-contracts';
 import { ListingErrorState } from '@/components/listing/ListingStates';
 import PropertyPageView from '@/components/listing/PropertyPageView';
 import { toListingDetailView } from '@/lib/api/listings';
@@ -8,14 +13,18 @@ import { loadPropertyPage, lookupProperty } from '@/lib/api/property-page';
 import { BRAND } from '@/lib/brand';
 import { listingMetadata, unresolvedListingMetadata } from '@/lib/listing-metadata';
 import { publishableOrigin } from '@/lib/publishable-origin';
+import SearchPathView, { searchPathMetadata } from '@/components/SearchPathView';
+import { toSearchParams } from '@/lib/search-route';
 import { isPropertyPath } from '../route-shape';
 
+type RouteProps = {
+  params: Promise<{ city: string; rest: string[] }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
 /**
- * The property page route (#349): `/<city>-<st>/<address-slug>`.
- *
- * A catch-all because #350 adds search paths (`/<city>-<st>/homes-for-sale/...`) under the same
- * prefix — see `../route-shape` for the rule that tells a property path from a search path, and
- * for why a static route (`/about`, `/search`, `/login`, ...) is never shadowed by this segment.
+ * The property page route (#349), `/<city>-<st>/<address-slug>`, and the place search paths
+ * (#350), `/<city>-<st>/.../homes-for-sale`. `parseSearchPath` and `../route-shape` tell them apart.
  *
  * The requested path is resolved by address lookup and rendered as found. It is never compared
  * against the canonical `page.path` the service returns, so a short form that omits the ZIP still
@@ -52,12 +61,10 @@ function offMarketMetadata(propertyRecord: PropertyRecord): Metadata {
   return { title: `${location} · ${BRAND.brokerage}` };
 }
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ city: string; rest: string[] }>;
-}): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: RouteProps): Promise<Metadata> {
   const { city, rest } = await params;
+  const search = parseSearchPath([city, ...rest]);
+  if (search) return searchPathMetadata(search, toSearchParams(await searchParams));
   if (!isPropertyPath(city, rest)) return unresolvedListingMetadata({ noindex: true });
 
   const resolved = await resolveRoute(city, rest[0]);
@@ -71,13 +78,12 @@ export async function generateMetadata({
   return unresolvedListingMetadata({ noindex: resolved.kind === 'not-found' });
 }
 
-export default async function PropertyPathPage({
-  params,
-}: {
-  params: Promise<{ city: string; rest: string[] }>;
-}) {
+export default async function PropertyPathPage({ params, searchParams }: RouteProps) {
   const { city, rest } = await params;
-  // Not a property path: #350's search segments own every other shape under this prefix.
+  const search = parseSearchPath([city, ...rest]);
+  if (search) {
+    return <SearchPathView parsed={search} params={toSearchParams(await searchParams)} />;
+  }
   if (!isPropertyPath(city, rest)) notFound();
 
   const resolved = await resolveRoute(city, rest[0]);

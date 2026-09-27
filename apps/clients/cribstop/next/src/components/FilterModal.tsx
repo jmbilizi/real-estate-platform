@@ -19,7 +19,16 @@ interface Props {
  * order they asked results in. Clearing `q` would empty the search bar and swap a local search for
  * a nationwide one, which is not what the button says it does.
  */
-const PRESERVED_ON_CLEAR = ['query', 'zip', 'street', 'neighborhood', 'sort'] as const;
+const PRESERVED_ON_CLEAR = [
+  'query',
+  'zip',
+  'street',
+  'city',
+  'state',
+  'neighborhood',
+  'boundary',
+  'sort',
+] as const;
 
 /**
  * How many filters the badge on the Filters button reports.

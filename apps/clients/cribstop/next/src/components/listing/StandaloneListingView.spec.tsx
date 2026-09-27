@@ -92,7 +92,7 @@ describe('StandaloneListingView', () => {
     });
 
     const before = screen.getByTestId('search-results');
-    pathname = '/search';
+    pathname = '/homes-for-sale';
     await closeThePanel();
 
     // The point of the whole arrangement: no navigation, so the results are never rebuilt.
@@ -105,7 +105,9 @@ describe('StandaloneListingView', () => {
       'live',
     );
     expect(screen.getByTestId('search-results')).toHaveAttribute('data-owns-url', 'true');
-    expect(window.location.pathname + window.location.search).toBe('/search?q=Alexandria%2C%20VA');
+    expect(window.location.pathname + window.location.search).toBe(
+      '/homes-for-sale?type=all&q=Alexandria%2C%20VA',
+    );
   });
 
   it('navigates only when there is no city behind the panel to reveal', async () => {

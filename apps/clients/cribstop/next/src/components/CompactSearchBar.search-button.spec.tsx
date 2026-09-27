@@ -74,6 +74,6 @@ it('re-enables the search button once the navigation it started has rendered', a
     fireEvent.click(searchButtons()[0]);
   });
 
-  expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('/search?'));
+  expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('/homes-for-sale'));
   expect(searchButtons()[0]).not.toBeDisabled();
 });
