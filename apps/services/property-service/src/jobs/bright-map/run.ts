@@ -132,6 +132,47 @@ export interface RejectedPayload {
 }
 
 /**
+ * Locks every distinct property this page's records touch, in one fixed order shared by every
+ * transaction, before this page writes any of them (#359).
+ *
+ * Two pages apply concurrently now, each on its own connection. Two listings in the same building
+ * modified minutes apart land in different time-window slices, so two DIFFERENT pages can touch
+ * the SAME property row. Postgres does not order the row locks a transaction's own statements take
+ * by the values they touch, so page A locking property X then wanting Y, while page B holds Y and
+ * wants X, is a real deadlock — measured on the production feed (#359), not a hypothetical.
+ * Acquiring a session-scoped advisory lock per distinct `address_key`, sorted, up front removes the
+ * cycle: every transaction that touches {X, Y} waits for the same one first, so no pair can hold
+ * one and want the other. `pg_advisory_xact_lock` releases itself at COMMIT or ROLLBACK, so a
+ * retried transaction (`worker.ts`'s `inTransaction`) re-acquires cleanly. A hash collision between
+ * two different keys only over-serializes them; it cannot mis-lock the wrong row.
+ *
+ * One round trip locks every key. A page can hold thousands of distinct properties, so locking
+ * them one call at a time would trade the deadlock for a slower write path — the very thing #359
+ * exists to fix. The `ORDER BY` runs in the inner subquery, so its sorted rows are what the outer
+ * SELECT's per-row `pg_advisory_xact_lock` call scans; Postgres does not re-sort a FROM-clause
+ * subquery's already-ordered output, so the lock order matches the sort.
+ */
+async function lockTouchedProperties(
+  client: Queryable,
+  mapped: readonly ReturnType<typeof mapBrightPropertyRecord>[],
+): Promise<void> {
+  const addressKeys = new Set<string>();
+  for (const result of mapped) {
+    if (result.kind !== 'rejected') {
+      addressKeys.add(result.property.address_key);
+    }
+  }
+  if (addressKeys.size === 0) {
+    return;
+  }
+  await client.query(
+    `SELECT pg_advisory_xact_lock(hashtext(sorted.key)::bigint)
+       FROM (SELECT unnest($1::text[]) AS key ORDER BY 1) AS sorted`,
+    [[...addressKeys].sort()],
+  );
+}
+
+/**
  * Maps `BrightProperties` payloads already in memory. The sync worker (#338) maps each page it
  * fetched, so it does not read the page back from staging.
  */
@@ -144,6 +185,16 @@ export async function mapBrightPayloads(
     return { report: ZERO_MAP_REPORT, rejected: [] };
   }
   const statuses = options.statuses ?? (await loadListingStatuses(client));
+  // Mapped once here, and the same results are written below — never re-derived, so a page's
+  // records are validated once each, not twice (#359).
+  const mappedPayloads = payloads.map((payload) =>
+    mapBrightPropertyRecord(payload, {
+      feed: options.feed,
+      statuses,
+      soldDisplayDelayDays: options.soldDisplayDelayDays,
+    }),
+  );
+  await lockTouchedProperties(client, mappedPayloads);
   const rejected: RejectedPayload[] = [];
   const withheldByReason: Record<string, number> = {};
   const outOfRangeFieldCounts: Record<string, number> = {};
@@ -153,13 +204,9 @@ export async function mapBrightPayloads(
   let takenDown = 0;
   let sampleMarked = 0;
 
-  for (const payload of payloads) {
-    const result = mapBrightPropertyRecord(payload, {
-      feed: options.feed,
-      statuses,
-      soldDisplayDelayDays: options.soldDisplayDelayDays,
-    });
-
+  for (let i = 0; i < payloads.length; i += 1) {
+    const payload = payloads[i] as Record<string, unknown>;
+    const result = mappedPayloads[i] as (typeof mappedPayloads)[number];
     if (result.kind === 'rejected') {
       withheldByReason[result.reason] = (withheldByReason[result.reason] ?? 0) + 1;
       rejected.push({ listingKey: result.listingKey, reason: result.reason });
