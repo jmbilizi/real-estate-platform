@@ -2,11 +2,17 @@ import {
   type ListingDetail,
   type ListingsEnvelope,
   type ListingsMeta,
+  type NeighborhoodsRequest,
+  type NeighborhoodsResponse,
+  neighborhoodsResponseSchema,
   NOT_FOUND_BODY,
   resultOffsetFor,
   type SearchRequest,
+  slugify,
 } from '@cribstop/property-contracts';
+import { titleCase } from '../jobs/bright-map/address-format';
 import type { AddressClassification } from '../db/mls-attributes';
+import { neighborhoodNotNoiseSql } from '../db/neighborhood-normalize';
 import {
   ATTRIBUTE_SELECT,
   LISTING_CARD_SELECT,
@@ -247,6 +253,96 @@ export async function getListingsMeta(pool: ReadClient): Promise<ListingsMeta> {
     throw new Error('Aggregate query over listing_search_v returned no row.');
   }
   return toListingsMeta(row);
+}
+
+/** One group row from the neighborhoods aggregate, before the app-code display transform below. */
+interface NeighborhoodDbRow {
+  name: string;
+  city: string;
+  state: string;
+  total: number;
+  sale: number;
+  rent: number;
+  group_total: number;
+}
+
+/**
+ * `GET /listings/neighborhoods` (#390): publishable listings grouped by
+ * `(lower(neighborhood), lower(city), state)`, reading `listing_search_v` like every other
+ * endpoint in this file — the same publishability and suppression rules apply because the source
+ * is the view.
+ *
+ * A single query in two parts: the `grouped` CTE computes the aggregate (one row per
+ * neighborhood), the outer SELECT applies `minCount`/`slug` and the window `count(*) OVER ()` for
+ * the envelope's exact `total` — computed over the CTE's post-`HAVING`-equivalent rows, so it is
+ * never inflated by a group `LIMIT` later discards.
+ *
+ * `mode() WITHIN GROUP` picks the group's most frequent RAW variant for both `name` and `city` —
+ * "FISHTOWN" wins over "Fishtown" if it is the more common feed spelling. `name` is title-cased,
+ * and `slug` is derived, only in the app-code mapping below; the raw variant is what a caller
+ * would see if this changed to select it directly, which is deliberately never exposed.
+ *
+ * `neighborhoodNotNoiseSql()` is a defensive second gate: write-time normalization
+ * (`db/neighborhood-normalize.ts`) already NULLs a noise value before it reaches this table, so in
+ * the ordinary case this excludes nothing beyond a plain `IS NOT NULL` — the belt to that
+ * suspenders is the module the two share, never a second definition of "noise".
+ *
+ * `lower(v.state) = lower($n)` and `lower(v.city) = lower($n)` follow `search-query.ts`'s own
+ * convention for these two filters, rather than assuming the caller sent upper case.
+ */
+export async function getNeighborhoods(
+  pool: ReadClient,
+  request: NeighborhoodsRequest,
+): Promise<NeighborhoodsResponse> {
+  const result = await pool.query<NeighborhoodDbRow>(
+    `WITH grouped AS (
+       SELECT
+         mode() WITHIN GROUP (ORDER BY v.neighborhood)                          AS name,
+         mode() WITHIN GROUP (ORDER BY v.city)                                  AS city,
+         v.state                                                               AS state,
+         count(*) FILTER (WHERE $1::text = 'all' OR v.listing_type = $1)::int  AS total,
+         count(*) FILTER (WHERE v.listing_type = 'sale')::int                  AS sale,
+         count(*) FILTER (WHERE v.listing_type = 'rent')::int                  AS rent
+       FROM listing_search_v v
+       WHERE ${neighborhoodNotNoiseSql('v.neighborhood')}
+         AND lower(v.neighborhood) <> lower(v.city)
+         AND ($2::text IS NULL OR lower(v.state) = lower($2))
+         AND ($3::text IS NULL OR lower(v.city) = lower($3))
+       GROUP BY lower(v.neighborhood), lower(v.city), v.state
+     )
+     SELECT *, count(*) OVER ()::int AS group_total
+       FROM grouped
+      WHERE total >= $4
+        AND (
+              $5::text IS NULL
+              OR trim(both '-' from
+                   regexp_replace(lower(replace(name, '&', ' and ')), '[^a-z0-9]+', '-', 'g')
+                 ) = $5
+            )
+      ORDER BY total DESC, name ASC, city ASC
+      LIMIT $6`,
+    [
+      request.listingType,
+      request.state ?? null,
+      request.city ?? null,
+      request.minCount,
+      request.slug ?? null,
+      request.limit,
+    ],
+  );
+
+  return neighborhoodsResponseSchema.parse({
+    results: result.rows.map((row) => ({
+      name: titleCase(row.name),
+      city: row.city,
+      state: row.state,
+      slug: slugify(row.name),
+      total: row.total,
+      sale: row.sale,
+      rent: row.rent,
+    })),
+    total: result.rows[0]?.group_total ?? 0,
+  });
 }
 
 /**

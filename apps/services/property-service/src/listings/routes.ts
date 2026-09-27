@@ -6,6 +6,8 @@ import {
   MAP_PIN_THRESHOLD_DEFAULT,
   type MapRequest,
   mapRequestSchema,
+  type NeighborhoodsRequest,
+  neighborhoodsRequestSchema,
   NOT_FOUND_BODY,
   propertyLookupRequestSchema,
   type PropertyPage,
@@ -26,6 +28,7 @@ import {
   findBrightListingKeys,
   findListingById,
   getListingsMeta,
+  getNeighborhoods,
   type ReadPool,
   searchListings,
 } from './repository';
@@ -85,9 +88,13 @@ function safeParameterName(name: string): string {
 function parseQuery(schema: typeof searchRequestSchema, query: unknown): ParseResult<SearchRequest>;
 function parseQuery(schema: typeof mapRequestSchema, query: unknown): ParseResult<MapRequest>;
 function parseQuery(
-  schema: typeof searchRequestSchema | typeof mapRequestSchema,
+  schema: typeof neighborhoodsRequestSchema,
   query: unknown,
-): ParseResult<SearchRequest | MapRequest> {
+): ParseResult<NeighborhoodsRequest>;
+function parseQuery(
+  schema: typeof searchRequestSchema | typeof mapRequestSchema | typeof neighborhoodsRequestSchema,
+  query: unknown,
+): ParseResult<SearchRequest | MapRequest | NeighborhoodsRequest> {
   const parsed = schema.safeParse(query);
   if (parsed.success) {
     return { ok: true as const, value: parsed.data };
@@ -226,6 +233,23 @@ export function createListingsRouter(
       }
       const map = await findMapPins(pool, parsed.value, mapPinThreshold);
       res.set('Cache-Control', LISTINGS_CACHE_CONTROL).status(200).json(map);
+    }),
+  );
+
+  // #390. Registered before `/listings/:id` for the same reason as `/listings/meta` and
+  // `/listings/map`.
+  router.get(
+    '/listings/neighborhoods',
+    asyncRoute(async (req: Request, res: Response) => {
+      const parsed = parseQuery(neighborhoodsRequestSchema, req.query);
+      if (!parsed.ok) {
+        res.status(400).json(parsed.body);
+        return;
+      }
+      const envelope = await getNeighborhoods(pool, parsed.value);
+      // Same cache policy as /listings/meta: a cheap aggregate over an indexed view, safe for the
+      // shared cache to hold far longer than the browser does.
+      res.set('Cache-Control', META_CACHE_CONTROL).status(200).json(envelope);
     }),
   );
 
