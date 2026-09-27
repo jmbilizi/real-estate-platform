@@ -846,6 +846,12 @@ export const SAMPLE_DATA_DELETE_STATEMENTS: readonly string[] = [
   // `listings` and rolls the whole transaction back. That would fail the migrate initContainer on
   // every boot, forever, until someone deleted the row by hand. Deleting the history of the listings
   // being deleted makes the sweep complete by construction instead of by coincidence.
+  // `listing_inquiries` is ON DELETE RESTRICT: one inquiry on a sample listing would otherwise
+  // roll the whole sweep back (#375).
+  `DELETE FROM listing_inquiries i
+    USING listings l
+    WHERE i.listing_id = l.id
+      AND l.is_sample = true`,
   `DELETE FROM listing_events e
     USING listings l
     WHERE e.listing_id = l.id

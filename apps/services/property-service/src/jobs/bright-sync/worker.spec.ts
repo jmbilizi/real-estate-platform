@@ -7,7 +7,10 @@ import {
   type WorkerPool,
 } from './worker';
 
-function fakePool(otherTier: string | null): { pool: WorkerPool; sql: string[] } {
+function fakePool(
+  otherTier: string | null,
+  sampleCount = 663,
+): { pool: WorkerPool; sql: string[] } {
   const sql: string[] = [];
   const query = (text: string) => {
     sql.push(text.replace(/\s+/g, ' ').trim());
@@ -15,7 +18,7 @@ function fakePool(otherTier: string | null): { pool: WorkerPool; sql: string[] }
       return Promise.resolve({ rows: otherTier === null ? [] : [{ feed_tier: otherTier }] });
     }
     if (text.includes('count(*)::int AS n FROM listings WHERE is_sample')) {
-      return Promise.resolve({ rows: [{ n: 663 }] });
+      return Promise.resolve({ rows: [{ n: sampleCount }] });
     }
     return Promise.resolve({ rows: [], rowCount: 0 });
   };
@@ -45,8 +48,16 @@ describe('prepareWorker', () => {
     expect(log.join('\n')).toContain('663 sample listing(s)');
   });
 
-  it('deletes nothing when every staged row is already the current tier', async () => {
-    const { pool, sql } = fakePool(null);
+  it('deletes leftover test-feed listings on production even with no other-tier staging rows (#375)', async () => {
+    const { pool, sql } = fakePool(null, 12);
+
+    await prepareWorker(pool, 'production', () => undefined);
+
+    expect(sql.some((s) => s.startsWith('DELETE FROM listings'))).toBe(true);
+  });
+
+  it('deletes nothing when every staged row is already the current tier and no sample rows exist', async () => {
+    const { pool, sql } = fakePool(null, 0);
 
     await prepareWorker(pool, 'production', () => undefined);
 

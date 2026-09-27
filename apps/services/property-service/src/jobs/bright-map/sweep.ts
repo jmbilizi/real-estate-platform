@@ -67,7 +67,10 @@ export async function sweepOtherFeedTiers(
   currentTier: BrightFeedTier,
 ): Promise<SweepReport> {
   const otherTiers = await otherTiersPresent(client, currentTier);
-  if (otherTiers.length === 0) {
+  // On production, a sample-marked listing is always leftover test-feed data, even after the other
+  // tier's staging rows are gone. Dev kept its test-feed listings for exactly that reason (#375).
+  const leftoverSamples = currentTier === 'production' ? await countSampleListings(client) : 0;
+  if (otherTiers.length === 0 && leftoverSamples === 0) {
     return ZERO_SWEEP_REPORT;
   }
 

@@ -58,8 +58,29 @@ describe('sweepOtherFeedTiers (#314)', () => {
     const report = await sweepOtherFeedTiers(client, 'production');
 
     expect(report).toEqual(ZERO_SWEEP_REPORT);
-    // Only the tier-check query ran. Nothing was deleted, and no transaction was opened.
-    expect(calls).toHaveLength(1);
+    // Only the tier check and the leftover-sample count ran. Nothing was deleted, no transaction.
+    expect(calls.map((call) => call.sql.trim())).not.toContain('BEGIN');
+    expect(calls.some((call) => call.sql.includes('DELETE'))).toBe(false);
+  });
+
+  it('on production, deletes leftover sample listings even when no other-tier staging rows remain (#375)', async () => {
+    const { client, calls } = createFakeClient({ otherTiers: [], sampleListingCount: 5 });
+
+    const report = await sweepOtherFeedTiers(client, 'production');
+
+    expect(report.swept).toBe(true);
+    expect(report.sampleListingsDeleted).toBe(5);
+    expect(calls.some((call) => /DELETE FROM listings\b/.test(call.sql))).toBe(true);
+    expect(calls.some((call) => call.sql.includes('DELETE FROM listing_inquiries'))).toBe(true);
+  });
+
+  it('on the test tier, keeps its own sample listings when no other tier is present', async () => {
+    const { client, calls } = createFakeClient({ otherTiers: [], sampleListingCount: 5 });
+
+    const report = await sweepOtherFeedTiers(client, 'test');
+
+    expect(report).toEqual(ZERO_SWEEP_REPORT);
+    expect(calls.some((call) => call.sql.includes('DELETE'))).toBe(false);
   });
 
   it('sweeps the other tier out of both staging tables and every sample listing, in one transaction', async () => {
