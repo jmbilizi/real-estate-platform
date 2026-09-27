@@ -1,6 +1,36 @@
 import { cardDbRowFixture } from './test-fixtures';
 import { toListingCardRow, toListingDetail } from './map-row';
 
+describe('NAR 7.58 contact-method floor (#344)', () => {
+  it('serves a card with a phone and no email', () => {
+    const row = toListingCardRow(
+      cardDbRowFixture({ broker_phone: '2025551234', broker_email: null }),
+    );
+    expect(row.brokerPhone).toBe('2025551234');
+    expect(row.brokerEmail).toBeNull();
+  });
+
+  it('serves a card with an email and no phone', () => {
+    const row = toListingCardRow(
+      cardDbRowFixture({ broker_phone: '', broker_email: 'office@acme.example' }),
+    );
+    expect(row.brokerPhone).toBe('');
+    expect(row.brokerEmail).toBe('office@acme.example');
+  });
+
+  it('refuses to serve a card with neither a phone nor an email', () => {
+    expect(() =>
+      toListingCardRow(cardDbRowFixture({ broker_phone: '', broker_email: null })),
+    ).toThrow(/neither a broker phone nor a broker email/);
+  });
+
+  it('refuses to serve a detail view with neither a phone nor an email', () => {
+    expect(() =>
+      toListingDetail(cardDbRowFixture({ broker_phone: '', broker_email: null })),
+    ).toThrow(/neither a broker phone nor a broker email/);
+  });
+});
+
 /**
  * The trap these tests exist for: `pg`'s per-column type parsers (`src/db/pool.ts`) apply to
  * top-level columns ONLY. Anything inside a `json`/`jsonb` payload is serialised by Postgres itself

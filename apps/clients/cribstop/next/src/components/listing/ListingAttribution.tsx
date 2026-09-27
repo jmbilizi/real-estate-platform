@@ -121,8 +121,9 @@ export default function ListingAttribution({
     );
   }
 
-  // At least one contact method is required. The contract guarantees `brokerPhone` and
-  // `brokerEmail` are non-nullable on every row, so this is a floor, not a best effort.
+  // At least one contact method is required (#344: NAR 7.58 accepts a phone or an email, not
+  // both). `brokerEmail` is nullable and `brokerPhone` can be `''`; the mapper that produces
+  // these rows guarantees at least one is truthy, so this is a floor, not a best effort.
   const contact = brokerPhone || brokerEmail;
   const contactText = [brokerPhone, brokerEmail].filter(Boolean).join(' · ');
   const courtesyText = `Listing courtesy of ${officeName}`;

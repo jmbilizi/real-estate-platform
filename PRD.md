@@ -621,6 +621,11 @@ Exact pricing and packaging per category to be specified.
   freshness.
 - Listings sourced from **Bright MLS** are tagged `source: brightMLS` and carry required
   broker/office attribution on every card and detail view.
+- **Attribution contact method (ruling 2026-09-26, #344):** NAR Policy Statement 7.58 requires the
+  listing firm name plus "the email or phone number provided by the listing participant" — one of
+  the two, not both. A listing displays with the office name and phone when the office email is
+  blank, and with the office name and email when the office phone is blank. Neither present
+  withholds the listing.
 - Internal and FSBO/claimed listings are tagged `source: internal` (or `other`) and must not be
   represented as MLS-sourced.
 - Respect MLS display, refresh/`lastUpdated`, and attribution requirements; support deduplication

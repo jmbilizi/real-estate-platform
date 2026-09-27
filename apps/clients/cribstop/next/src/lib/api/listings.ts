@@ -217,7 +217,7 @@ export interface ListingDetailView {
   listingAgentName: string | null;
   brokerName: string;
   brokerPhone: string;
-  brokerEmail: string;
+  brokerEmail: string | null;
   officeName: string;
   officeBrokerLeadPhone: string | null;
   officeBrokerLeadEmail: string | null;

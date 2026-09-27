@@ -7,6 +7,7 @@ import {
   LISTING_TYPES,
   mediaSchema,
   PROPERTY_TYPES,
+  requiresBrokerContact,
 } from './common';
 import type { Amenity, ListingSource, ListingType, PropertyType } from './common';
 
@@ -61,6 +62,58 @@ describe('common schemas', () => {
       'officeBrokerLeadPhone',
       'officeName',
     ]);
+  });
+
+  // #344: NAR 7.58 accepts a phone or an email, not both. `attributionSchema` alone allows a null
+  // brokerEmail and an empty brokerPhone (both are individually valid field values) — the "one of
+  // the two" rule is `requiresBrokerContact()`, checked separately because a schema-level
+  // `.refine()` here would not survive `listing-card.ts`'s `.extend(attributionSchema.shape)`.
+  it('parses a null brokerEmail when brokerPhone is present', () => {
+    const result = attributionSchema.safeParse({
+      listingAgentName: null,
+      brokerName: 'B',
+      brokerPhone: '2025551234',
+      brokerEmail: null,
+      officeName: 'O',
+      officeBrokerLeadPhone: null,
+      officeBrokerLeadEmail: null,
+      listedBy: 'B – O',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('parses an empty brokerPhone when brokerEmail is present', () => {
+    const result = attributionSchema.safeParse({
+      listingAgentName: null,
+      brokerName: 'B',
+      brokerPhone: '',
+      brokerEmail: 'office@brokerco.com',
+      officeName: 'O',
+      officeBrokerLeadPhone: null,
+      officeBrokerLeadEmail: null,
+      listedBy: 'B – O',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  describe('requiresBrokerContact', () => {
+    it('accepts a phone with no email', () => {
+      expect(requiresBrokerContact({ brokerPhone: '2025551234', brokerEmail: null })).toBe(true);
+    });
+
+    it('accepts an email with no phone', () => {
+      expect(requiresBrokerContact({ brokerPhone: '', brokerEmail: 'office@brokerco.com' })).toBe(
+        true,
+      );
+    });
+
+    it('rejects neither phone nor email', () => {
+      expect(requiresBrokerContact({ brokerPhone: '', brokerEmail: null })).toBe(false);
+    });
+
+    it('treats a whitespace-only phone as absent', () => {
+      expect(requiresBrokerContact({ brokerPhone: '   ', brokerEmail: null })).toBe(false);
+    });
   });
 
   // ATTRIBUTION_KEYS is derived from attributionSchema.shape (`Object.keys(...)`), so asserting it

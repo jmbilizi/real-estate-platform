@@ -5,6 +5,7 @@ import {
   listingDetailSchema,
   type ListingsMeta,
   listingsMetaSchema,
+  requiresBrokerContact,
 } from '@cribstop/property-contracts';
 
 /**
@@ -53,7 +54,7 @@ export interface ListingCardDbRow {
   listing_agent_name: string | null;
   broker_name: string;
   broker_phone: string;
-  broker_email: string;
+  broker_email: string | null;
   office_name: string;
   office_broker_lead_phone: string | null;
   office_broker_lead_email: string | null;
@@ -127,6 +128,16 @@ function openHouseOf(row: ListingCardDbRow): unknown {
  * from the recorded reason is what makes the label renderable from data rather than from a guess.
  */
 function commonFields(row: ListingCardDbRow): Record<string, unknown> {
+  // NAR 7.58 (#344): the office name plus a phone or an email, not both, is the publish floor.
+  // `listingCardSchema`/`listingDetailSchema` cannot carry this check themselves — they are built
+  // from `attributionSchema.shape`, which drops a Zod refinement (see the comment on
+  // `requiresBrokerContact` in `libs/property-contracts`) — so it runs here, at the one place every
+  // served row passes through.
+  if (!requiresBrokerContact({ brokerPhone: row.broker_phone, brokerEmail: row.broker_email })) {
+    throw new Error(
+      `Listing ${row.id} has neither a broker phone nor a broker email (NAR 7.58); refusing to serve it.`,
+    );
+  }
   return {
     id: row.id,
     title: row.title,
