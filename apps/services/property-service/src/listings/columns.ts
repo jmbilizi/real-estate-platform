@@ -68,6 +68,8 @@ const CARD_COLUMNS = [
   'close_price',
   'close_date',
   'last_updated',
+  // #391. Bright's MLSListDate, refreshed on every write — the current marketing period's start.
+  'listed_at',
   'listing_agent_name',
   'broker_name',
   'broker_phone',

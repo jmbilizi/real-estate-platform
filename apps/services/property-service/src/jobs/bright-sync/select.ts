@@ -15,6 +15,11 @@ export const BRIGHT_SYNC_SELECT: readonly string[] = Object.freeze([
   'ListPrice',
   'ClosePrice',
   'CloseDate',
+  // #391. The list date and current-period days-on-market. `ListingContractDate`/`OnMarketDate`/
+  // `OriginalEntryTimestamp` are declared in `$metadata` but are null on every sampled record
+  // (production feed, 2026-09-27) — `MLSListDate` is the field this MLS actually populates.
+  'MLSListDate',
+  'DaysOnMarket',
   'UnparsedAddress',
   'StreetNumber',
   'StreetDirPrefix',

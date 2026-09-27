@@ -112,7 +112,6 @@ export interface ListingRow {
    * from `featured_reason = 'paid'`, so the disclosure is only renderable if this is written.
    */
   featured_reason: FeaturedReason | null;
-  price_reduced: boolean;
   new_construction: boolean;
   /**
    * RESO `InternetEntireListingDisplayYN` — the seller withheld the WHOLE listing.
@@ -144,6 +143,18 @@ export interface ListingRow {
   /** Not stored before #53. Null until a feed populates it; never modelled for internal/FSBO
    *  listings, which have no MLS "days on market" at all. */
   days_on_market: number | null;
+  /**
+   * #391. Bright's `MLSListDate`, widened to an instant. Refreshed on every write (unlike
+   * `original_list_price` below): it marks the CURRENT marketing period, and a relist is a new
+   * "just listed" moment the mapper should surface again, not one to freeze past.
+   *
+   * There is deliberately no `original_list_price`/`price_reduced` field here. Neither Bright field
+   * this MLS declares for them (`OriginalListPrice`, `PreviousListPrice`) is ever populated
+   * (confirmed against the production feed, 2026-09-27), so `upsertListing()` in `write.ts` derives
+   * both itself — the first price this service ever recorded for the listing, frozen — rather than
+   * trusting a feed value that does not exist.
+   */
+  listed_at: string | null;
   // Attribution
   broker_name: string;
   // '' means Bright supplied no office phone (#344) — the column stays NOT NULL.

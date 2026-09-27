@@ -129,6 +129,12 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "nullable": true,
             "type": "number",
           },
+          "listedAt": {
+            "format": "date-time",
+            "nullable": true,
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string",
+          },
           "listedBy": {
             "type": "string",
           },
@@ -324,6 +330,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
           "closePrice",
           "closeDate",
           "lastUpdated",
+          "listedAt",
           "listingAgentName",
           "brokerName",
           "brokerPhone",
@@ -434,6 +441,12 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
               "latitude": {
                 "nullable": true,
                 "type": "number",
+              },
+              "listedAt": {
+                "format": "date-time",
+                "nullable": true,
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "type": "string",
               },
               "listedBy": {
                 "type": "string",
@@ -632,6 +645,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
               "closePrice",
               "closeDate",
               "lastUpdated",
+              "listedAt",
               "listingAgentName",
               "brokerName",
               "brokerPhone",
@@ -1591,6 +1605,28 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
           },
           {
             "in": "query",
+            "name": "listedWithinDays",
+            "required": false,
+            "schema": {
+              "description": "Whole number, 1 to 30. Matches a listing whose listed_at is within this many days of now. A listing with no listed_at (the feed carried no list date) never matches.",
+              "pattern": "^([1-9]|[12][0-9]|30)$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "priceReduced",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
             "name": "sort",
             "required": false,
             "schema": {
@@ -1599,6 +1635,7 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
               "enum": [
                 "recommended",
                 "newest",
+                "newly-listed",
                 "price-asc",
                 "price-desc",
               ],
@@ -1904,6 +1941,28 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
               "description": "Comma-separated or repeated values from the closed set: Pool, Garage, Gym, Elevator, Balcony, Fireplace, Washer/Dryer, Pet Friendly, Waterfront, Office, Rooftop, Garden, Smart Home, Solar, EV Charging.",
             },
             "style": "form",
+          },
+          {
+            "in": "query",
+            "name": "listedWithinDays",
+            "required": false,
+            "schema": {
+              "description": "Whole number, 1 to 30. Matches a listing whose listed_at is within this many days of now. A listing with no listed_at (the feed carried no list date) never matches.",
+              "pattern": "^([1-9]|[12][0-9]|30)$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "priceReduced",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
           },
           {
             "in": "query",

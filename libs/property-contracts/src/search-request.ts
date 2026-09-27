@@ -98,6 +98,13 @@ const queryPageSize = z
 
 const queryBoolean = z.enum(['true', 'false']).transform((value) => value === 'true');
 
+/** Same reasoning as `queryPage`/`queryPageSize`: the bound is a regex, not a `.pipe()` `.max()`,
+ *  because `z.toJSONSchema({io: 'input'})` cannot see past a `.pipe()`. */
+const queryDaysUpTo30 = z
+  .string()
+  .regex(/^([1-9]|[12][0-9]|30)$/, 'must be a whole number from 1 to 30')
+  .transform(Number);
+
 /**
  * Vertex cap for a client-sent boundary polygon, checked BEFORE the character cap below so the
  * error names the actual problem (a huge polygon) rather than a generic length overflow.
@@ -263,7 +270,13 @@ const statusList = z
  * the runtime list, and hand-listing it there means adding a sort here would silently leave that
  * client unable to accept it.
  */
-export const SORT_VALUES = ['recommended', 'newest', 'price-asc', 'price-desc'] as const;
+export const SORT_VALUES = [
+  'recommended',
+  'newest',
+  'newly-listed',
+  'price-asc',
+  'price-desc',
+] as const;
 export const sortSchema = z
   .enum(SORT_VALUES)
   .describe(
@@ -336,6 +349,16 @@ export const searchRequestSchema = z.strictObject({
   waterfront: queryBoolean.optional(),
   petFriendly: queryBoolean.optional(),
   amenities: amenityList.optional(),
+  // #391. A listing with no `listed_at` never matches — the same "never a false match" rule
+  // minPrice/maxPrice already apply to a seller-suppressed price.
+  listedWithinDays: queryDaysUpTo30
+    .optional()
+    .describe(
+      'Whole number, 1 to 30. Matches a listing whose listed_at is within this many days of now. ' +
+        'A listing with no listed_at (the feed carried no list date) never matches.',
+    ),
+  // Restricts only when true, matching `openHouse`/`newConstruction` above.
+  priceReduced: queryBoolean.optional(),
   sort: sortSchema.default('recommended'),
   page: queryPage.default(1),
   pageSize: queryPageSize.default(PAGE_SIZE_DEFAULT),

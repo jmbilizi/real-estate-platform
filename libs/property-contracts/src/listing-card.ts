@@ -59,6 +59,8 @@ export const listingCardSchema = z
     closePrice: z.number().nonnegative().nullable(),
     closeDate: z.iso.date().nullable(),
     lastUpdated: z.iso.datetime(),
+    // #391. Null when the feed carries no list date for this listing.
+    listedAt: z.iso.datetime().nullable(),
   })
   .extend(attributionSchema.shape);
 
