@@ -104,7 +104,7 @@ const BASE_CARD_DB_ROW = {
   listing_agent_name: 'Jane Agent' as string | null,
   broker_name: 'Real Broker, LLC',
   broker_phone: '703-555-0100',
-  broker_email: 'broker@realbroker.example',
+  broker_email: 'broker@realbroker.example' as string | null,
   office_name: 'Real Broker, LLC — DC Metro',
   office_broker_lead_phone: '703-555-0101' as string | null,
   office_broker_lead_email: 'leads@realbroker.example' as string | null,

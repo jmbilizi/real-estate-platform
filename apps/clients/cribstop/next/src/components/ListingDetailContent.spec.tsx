@@ -182,6 +182,46 @@ describe('ListingDetailContent — sample labelling', () => {
   });
 });
 
+describe('ListingDetailContent — Listing Agent card contact method (#344)', () => {
+  it('renders only the phone when brokerEmail is null (office email missing)', async () => {
+    const view = toListingDetailView(
+      aListingDetail({
+        listing: {
+          brokerPhone: '(301) 555-0199',
+          brokerEmail: null,
+          officeBrokerLeadPhone: null,
+          officeBrokerLeadEmail: null,
+        },
+      }),
+    );
+    await renderAndSettle(<ListingDetailContent listing={view} />);
+
+    expect(screen.getByText('(301) 555-0199')).toBeInTheDocument();
+    expect(screen.queryByText(/@/)).not.toBeInTheDocument();
+  });
+
+  it('renders only the email when brokerPhone is blank (office phone missing)', async () => {
+    const view = toListingDetailView(
+      aListingDetail({ listing: { brokerPhone: '', brokerEmail: 'office@acme.example' } }),
+    );
+    await renderAndSettle(<ListingDetailContent listing={view} />);
+
+    expect(screen.getByText('office@acme.example')).toBeInTheDocument();
+  });
+
+  it('renders both when phone and email are present', async () => {
+    const view = toListingDetailView(
+      aListingDetail({
+        listing: { brokerPhone: '(301) 555-0199', brokerEmail: 'office@acme.example' },
+      }),
+    );
+    await renderAndSettle(<ListingDetailContent listing={view} />);
+
+    expect(screen.getByText('(301) 555-0199')).toBeInTheDocument();
+    expect(screen.getByText('office@acme.example')).toBeInTheDocument();
+  });
+});
+
 describe('ListingDetailContent — NAR 7.58 attribution', () => {
   /**
    * The disclosure panel always asks `ListingAttribution` for the reduced `courtesy` density — the

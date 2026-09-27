@@ -137,6 +137,35 @@ describe('ListingAttribution — density="full", the kept IDX block', () => {
   });
 });
 
+describe('ListingAttribution — density="full" contact method (#344)', () => {
+  it('renders the phone alone when brokerEmail is null (office email missing)', () => {
+    const row = aBrightMlsRow({ brokerPhone: '(301) 555-0199', brokerEmail: null });
+    render(<ListingAttribution attribution={row} source={row.source} density="full" />);
+
+    expect(screen.getByText('(301) 555-0199')).toBeInTheDocument();
+    expect(screen.queryByText(/@/)).not.toBeInTheDocument();
+  });
+
+  it('renders the email alone when brokerPhone is blank (office phone missing)', () => {
+    const row = aBrightMlsRow({ brokerPhone: '', brokerEmail: 'office@acme.example' });
+    render(<ListingAttribution attribution={row} source={row.source} density="full" />);
+
+    expect(screen.getByText('office@acme.example')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^\(/ })).not.toBeInTheDocument();
+  });
+
+  it('renders both, separated, when phone and email are present', () => {
+    const row = aBrightMlsRow({
+      brokerPhone: '(301) 555-0199',
+      brokerEmail: 'office@acme.example',
+    });
+    render(<ListingAttribution attribution={row} source={row.source} density="full" />);
+
+    expect(screen.getByText('(301) 555-0199')).toBeInTheDocument();
+    expect(screen.getByText('office@acme.example')).toBeInTheDocument();
+  });
+});
+
 describe('ListingAttribution — detail page', () => {
   it('leaves the detail page\'s density="courtesy" rendering unchanged', () => {
     // The detail page passes `density="courtesy"` on an `internal` row and never passes

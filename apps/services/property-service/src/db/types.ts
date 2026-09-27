@@ -146,8 +146,10 @@ export interface ListingRow {
   days_on_market: number | null;
   // Attribution
   broker_name: string;
+  // '' means Bright supplied no office phone (#344) — the column stays NOT NULL.
   broker_phone: string;
-  broker_email: string;
+  // null means Bright supplied no office email (#344, NAR 7.58 accepts a phone or an email).
+  broker_email: string | null;
   office_name: string;
   office_broker_lead_phone: string | null;
   office_broker_lead_email: string | null;

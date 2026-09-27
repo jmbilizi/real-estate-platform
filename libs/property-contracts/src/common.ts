@@ -59,17 +59,42 @@ export const openHouseSchema = z.object({
   remarks: z.string().nullable(),
 });
 
-/** NAR Policy 7.58 + PRD §6.2. Every key is present on every row; no caller may strip them. */
+/**
+ * NAR Policy 7.58 + PRD §6.2. Every key is present on every row; no caller may strip them.
+ *
+ * Stakeholder ruling, 2026-09-26 (#344): 7.58 requires the listing firm plus "the email or phone
+ * number provided by the listing participant" — one of the two, not both. `brokerEmail` is
+ * `.nullable()` for the listings where Bright supplies an office phone but no office email (the
+ * large majority of the withheld-listing gap). `brokerPhone` stays a required string: the DB column
+ * is still `NOT NULL`, and the mapper (`bright-map/attribution.ts`) uses `''` to mean "no phone" on
+ * the rare row where only the email is present.
+ *
+ * `requiresBrokerContact()` below is the actual enforcement of "one of the two", used by the
+ * mapper before publish and by `property-service`'s `map-row.ts` at the API read boundary. It is
+ * deliberately NOT a `.refine()` on this schema: `listing-card.ts` builds `listingCardSchema` from
+ * `attributionSchema.shape`, which copies only the field definitions — a Zod refinement does not
+ * survive that, so a schema-level check here would silently never run on the schema actually
+ * parsed at the API boundary.
+ */
 export const attributionSchema = z.object({
   listingAgentName: z.string().nullable(),
   brokerName: z.string(),
   brokerPhone: z.string(),
-  brokerEmail: z.email(),
+  brokerEmail: z.email().nullable(),
   officeName: z.string(),
   officeBrokerLeadPhone: z.string().nullable(),
   officeBrokerLeadEmail: z.email().nullable(),
   listedBy: z.string(),
 });
+
+/** NAR 7.58 (#344): a listing needs the office name plus a phone or an email — not both. Call
+ *  this wherever an `Attribution`-shaped row is about to be published or served. */
+export function requiresBrokerContact(fields: {
+  readonly brokerPhone: string;
+  readonly brokerEmail: string | null;
+}): boolean {
+  return fields.brokerPhone.trim().length > 0 || fields.brokerEmail !== null;
+}
 
 /** Derived from the schema itself, not hand-copied, so the published OpenAPI assertions and any
  *  future consumer of "all eight attribution keys" cannot drift from the actual field list. */
