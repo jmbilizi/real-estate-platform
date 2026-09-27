@@ -166,8 +166,8 @@ The deletes are ordered by the foreign keys, not by preference — `listing_even
 tables are guarded by `NOT EXISTS` so a property, unit or community that any **non-sample** listing
 still references survives (PRD §6.3).
 
-`property_db` in a freshly deployed environment is empty until the Bright ingestion CronJob
-(`infra/k8s/base/cronjobs/bright-mls-ingest.cronjob.yaml`) runs.
+`property_db` in a freshly deployed environment is empty until the `bright-sync-worker` backfill
+runs (see "The Bright sync worker" below).
 
 ### The MLS attribute model — the long tail of the feed (#127)
 
@@ -255,165 +255,105 @@ axis neither function here decides.
 `listings.amenities` and `properties.property_type` keep their CHECKs and are untouched; whether to
 converge them onto this store later is deliberately left open in both directions.
 
-### Bright MLS replication (`src/jobs/bright-ingest/`) — what the feed actually allows (#92)
+### The Bright sync worker (`src/jobs/bright-sync/`) — replicate, then search our own store (#338)
 
-The job now replicates. It reads `BrightProperties` incrementally into `bright_staging_records`,
-advancing `bright_replication_cursor` inside the same transaction that writes each page. Mapping
-staging into `properties`/`units`/`listings` is still #93, and `src/db/write.ts` is still the only
-module that writes a consumer table. `no-consumer-writes.spec.ts` is now an **allowlist**: every
-table named in write SQL in that directory must be a staging table, so a consumer table added by a
-later migration is refused with no edit to the spec.
+`GET /listings` reads Postgres only. It never calls Bright and never waits on it. One long-running
+Deployment, `bright-sync-worker`, keeps `property_db` a copy of the feed. It is this image with a
+different command (`node bright-sync-worker.js`, a `webpack.config.js` entry), so `src/db/write.ts`
+stays the only writer of `listings`. It replaced three CronJobs (`bright-mls-ingest`,
+`bright-area-refresh`, `bright-area-reconcile`) and the on-demand area load. The old ingest job
+never fetched a record on production: its unbounded `ModificationTimestamp ge <cursor>` page timed
+out at 120 s.
 
-**Five wire facts, all measured against the live test feed on 2026-09-19. Each one would be a defect
-if rediscovered by guessing.**
+**Single-flight.** The worker holds a session advisory lock (`SYNC_LOCK_KEY` in `store.ts`) on a
+dedicated connection for its whole life. A second replica waits. One task runs at a time.
 
-- **`$top` suppresses `@odata.nextLink`.** The same query returns 1000 records **with** a nextLink
-  when `$top` is absent and 1000 **without** one when `$top=1000` is present. `$top` means "give me
-  this many and stop", not "page size". Sending it caps every run at one page and the job reports
-  itself caught up. `buildCursorQuery` never sends `$top`; `odata-query.spec.ts` asserts it and the
-  mock server reproduces the suppression so the assertion cannot go vacuous.
-- **Bright rejects `or` in a `$filter`.** The exact resume predicate for a non-unique timestamp is
-  `(cursor gt t) or (cursor eq t and key gt k)`. It answers **400 Query Too Complex — OR Expressions
-  allowed in top 2 levels only**, with or without parentheses. So the filter is inclusive,
-  `cursor ge t`, and the records at the watermark instant are read again next pass. That is free
-  because the staging primary key is `(resource, record_key)` and the write is an upsert.
-- **An inclusive filter can starve.** If a block of records sharing one instant is wider than the
-  per-run page cap, every run re-reads the same pages and the cursor never moves. So the page cap
-  **only applies once the cursor instant has advanced past the one the pass started from**, bounded
-  by `HARD_PAGE_CAP_MULTIPLIER`. A pass that hits the hard cap without advancing reports `starved`,
-  which is a fault and not a slow backfill.
-- **`BrightMedia` and `Deletion` accept no `$filter` at all on the IDX test tier** — not on the
-  timestamp and not on their own key. Both answer
-  `The types 'Edm.Boolean' and 'Edm.Int64' are not compatible`, and `Deletion` refuses `$orderby` as
-  well. They page fine with no query options, at 3.4M and 10.5M rows. Incremental replication of
-  either is therefore not expressible today. `resources.ts` records that as
-  `supportsCursorQuery: false` and the job refuses to start rather than producing a nightly 400.
-  **Do not read that as impossible** — it is one account's entitlement, and lifting it is a flag
-  change in that table, not a code path.
-- **No response carries a rate-limit header**, so client-side limiting is the only control.
-  `rate-limiter.ts` holds a sliding-window ceiling over requests per second, per minute, and
-  concurrency, shared by the whole run. The values are configuration with deliberately slow
-  placeholders until #33 records the licence's real numbers. A sliding window, not a token bucket: a
-  bucket is full when idle, so a nightly run's first requests would arrive as a burst.
+**Startup**, after the lock: runs a dead worker left `running` are marked failed, then
+`sweepOtherFeedTiers()` (`bright-map/sweep.ts`) runs. A switch from the test tier to production
+drops every test-feed listing before any backfill writes production rows.
 
-Two more things worth knowing before changing this code:
+**The four modes** (`sync.ts`, pure over injected deps; `worker.ts` supplies the real ones):
 
-- **The bearer token goes only to the configured service-root host.** An `@odata.nextLink` is a
-  server-supplied URL, so a host change there would hand the credential to that host. `fetchPage`
-  refuses it.
-- **`BRIGHT_MLS_ENV` declares the feed tier** (`test` or `production`) — see "Which feed" below.
+- **Backfill.** Per status, keyset pages `StandardStatus eq '<label>' and ListingKey gt k`,
+  `$orderby=ListingKey asc`, `$top=1000`, `$select` = `BRIGHT_SYNC_SELECT`. Each page is staged,
+  mapped, and checkpointed in `bright_sync_state` (`backfill:<status>`) in the mapping's
+  transaction. A restart reads at most one page again, and the upserts make it a no-op. The worker
+  resumes an incomplete backfill before any other task.
+- **Sold.** `Closed` runs only with `CloseDate ge today - BRIGHT_SOLD_LOOKBACK_DAYS` (default 365),
+  and only when `BRIGHT_SOLD_DISPLAY_DELAY_DAYS` is set. Unset, every sold fails closed in the
+  mapper, so the pass would stage about 315,000 records to publish none. It is skipped.
+- **Incremental**, every `BRIGHT_SYNC_INCREMENTAL_INTERVAL_MS` (5 min): the window
+  `(watermark - 2 min, now]`, every status, ordered `ModificationTimestamp asc,ListingKey asc`. The
+  watermark moves only after every page commits. A follow-on page starts at the last instant,
+  inclusive, because Bright rejects the `OR` a strict `(t, key)` resume needs. An instant wider than
+  one page is drained by `ListingKey` keyset (`buildTieBlockQuery`).
+- **Reconcile**, daily: every live `ListingKey` per status (`$select=ListingKey`). A local live
+  listing absent from all of them is taken down. It refuses when a status read falls more than 1 %
+  short of Bright's own count, or when it would take down more than 20 % of the local listings.
+- **Audit**, after a backfill and after each reconcile: Bright `$count` against the local count per
+  status for the places in `DEFAULT_AUDIT_AREAS`. The rows go to the run's `counts`.
 
-### Bright MLS photos — the crawl and the media mapper (#191)
+**A held listing whose record now fails to map is taken down** (`applyPage` in `worker.ts`), with
+its reason as the `listing_events` note. Stale data must not stay advertised. `upsertListing()`
+clears `deleted_at`, so the listing comes back when its record maps again.
 
-Before this, no Bright listing showed a photo anywhere. Two independent causes, either one enough on
-its own. Nothing mapped `BrightMedia` into `listing_media`, so there were no rows. And
-`mapSuppressionFlags` fixed `mediaDisplayAllowed` to false, so `repository.ts`'s
-`(v.media_display_allowed OR m.retained_when_suppressed)` gate hid any row there might have been.
+**`bright_sync_runs`** logs every run: mode, scope, status, counts, cursor, times, error,
+`requested_by`. `store.ts` is the only module that writes it or `bright_sync_state`.
 
-**The media suppression gate is lifted for Bright rows** by a stakeholder ruling of 2026-09-22,
-recorded on #146 and #33. The stated basis is that Bright images arrive already carrying their
-trademark or watermark, and that Cribstop is licensed to display them. **Read the ruling narrowly.**
-It covers media. `priceDisplayAllowed`, `priceHistoryDisplayAllowed` and
-`daysOnMarketDisplayAllowed` stay fail-closed under the #146 hold, and `retained_when_suppressed`
-stays unset by this mapper, because that marker is #146's mechanism and still waits on #33 item
-8(f).
+**Admin endpoint** (`src/admin/bright-sync-routes.ts`): `POST /admin/bright/sync` with
+`{ mode: incremental | backfill | reconcile | audit, statuses?, area? }` queues a run and returns
+`202 { runId }`. `GET /admin/bright/sync` and `GET /admin/bright/sync/:runId` show runs. It needs
+`Authorization: Bearer <BRIGHT_ADMIN_TOKEN>` (`bright-mls-secret`). An unset token or the committed
+placeholder refuses every request. `statuses` takes payload values (`ComingSoon`), never filter
+labels. **Assumption:** no user auth or roles exist yet, so no gateway route exposes it. Reach it by
+port-forward to 3002. Replace the token with role auth when account roles ship.
 
-**The crawl is a full unfiltered scan, because the feed allows nothing else.** `BrightMedia` answers
-400 to every `$filter` on this tier, so `crawl.ts` reads the whole resource and matches client-side
-against the `ListingKey`s already staged for `BrightProperties`. Only matching rows are staged, so
-`property_db` stays small. The cost is the traffic: 3,403,084 rows at 1000 per page is roughly 3,400
-requests, about 28 minutes at the placeholder rate. Off by default (`BRIGHT_MLS_CRAWL_RESOURCES` is
-empty); local and dev opt in with different page caps.
+**The detail page still calls Bright** for one listing's gallery (`listings/gallery-loader.ts`),
+bounded by `BRIGHT_ON_DEMAND_GALLERY_WAIT_MS`. Nothing else in the request path does.
 
-**A pass resumes on the `@odata.nextLink`, not on a timestamp.** An unordered scan has no watermark,
-so the next link is persisted in `bright_replication_cursor.cursor_record_key` and a capped run
-continues from it. A completed pass clears it. The link is never logged or returned — a Bright URL
-is a plausible place for a token — so the report carries only a `nextLinkStored` boolean.
+**Wire facts, all measured. Each one is a defect if rediscovered by guessing.**
 
-**THE PRIMARY-IMAGE RULE is the feed's designation, not ours.** `PreferredPhotoYN === true` wins,
-then the lowest `MediaDisplayOrder` (absent sorts LAST, so unknown never beats a stated order), then
-the lowest `MediaKey` to make the order total and the gallery stable across runs. `sort_order`
-follows the same comparison. The link field is `ResourceRecordKey`.
+- **`$filter` takes spaced labels; records carry compact values.** `StandardStatus eq 'Coming Soon'`
+  returns 200, `'ComingSoon'` returns 400, and a record says `ComingSoon`.
+  `BRIGHT_STATUS_FILTER_LABELS` (`bright-map/status.ts`) holds the labels; `reso_standard_status`
+  holds the payload values the mapper matches. `PropertyType` behaves the same way in a filter
+  (`'Residential Lease'` works). Payloads carry `Residential`, `Residential Lease`, `Multi-Family`,
+  `Commercial Sale`, `CommercialLease`, `Land`, `BusinessOpportunity` (production, 2026-09-26).
+- **`/$count` answers 501 on production.** A count is `?$filter=...&$count=true&$top=0`
+  (`buildCountQuery`), read from `@odata.count`.
+- **`City` matches case-insensitively and comes back upper case** (`WASHINGTON`). DC is audited by
+  `StateOrProvince eq 'DC'`: `City eq 'Washington'` also matches other states.
+- **Speed** (production, from the pod): a keyset page of 1000 answers in about 2 s with `$select`, 4
+  s with full rows (25 KB per record). A bounded window answers in under 1.5 s. A 24 h window page
+  takes about 8 s.
+- **`$top` suppresses `@odata.nextLink`.** Every mode pages by its own key and never follows a link.
+- **Bright rejects `or` in a `$filter`**:
+  `400 Query Too Complex — OR Expressions allowed in top 2 levels only`. One query per status.
+- **An ordered request needs a bounding filter on the ordered field**, or it does not return.
+  `odata-query.ts` is the only module that writes `$orderby`; `isOrderedWithoutFilter()` guards it.
+- **`BrightMedia` and `Deletion` accept no `$filter` on the IDX test tier.** The gallery fetch
+  filters `BrightMedia` by `ResourceRecordKey` and falls back to `ListingId`
+  (`listing-media-fetch.ts`).
+- **No response carries a rate-limit header.** `rate-limiter.ts` holds a sliding-window ceiling. The
+  values are slow placeholders until #33 records the licence's numbers.
+- **The bearer token goes only to the configured service-root host** over HTTPS (`fetchPage`).
 
-Two fail-closed rules in `map-media.ts` worth keeping:
+**Configuration and logging.** "Not configured" is a normal state: with the committed
+`StrongBase64Password` placeholders the worker logs it and idles, and the Deployment does not
+crash-loop. Provisioning the credential needs a pod restart. `BRIGHT_MLS_ENV` (`test` or
+`production`) states the tier of `BRIGHT_MLS_CLIENT_ID` / `BRIGHT_MLS_CLIENT_SECRET`; `config.ts`
+trusts it exactly and derives the endpoints. A test-feed row is marked `is_sample`. Only endpoint
+hosts are logged, never URLs or credential material: `bright-client.ts` keeps only RFC 6749's closed
+`error` codes from a failure body.
 
-- **`MediaURL` only.** The Thumb, Medium, HD, HiRes and Full variants are never a fallback: one
-  would serve a thumbnail into a full-width gallery. No `MediaURL` means no row.
-- **A record must be identifiably a photo.** A stated `MediaType` decides. With none, the URL
-  extension decides. With neither, the record is rejected and counted under `unknown_media_type`.
-  `MediaCategory` and `MediaImageOf` would be the natural filters, but both are `Lookup`-backed and
-  this tier answers 400 to `Lookup` (#162), so their permitted values are unknown. A non-property
-  `ResourceName` is rejected too: `ResourceRecordKey` is a plain Int64 counter, so an office
-  record's key can equal a listing's by coincidence.
-
-`replaceFeedListingMedia()` in `src/db/write.ts` is the writer. It clears `is_primary` before
-upserting, because `idx_listing_media_one_primary` is violated mid-statement otherwise on any
-reordered gallery, and it deletes the feed rows a pass did not send, scoped to
-`source_media_key IS NOT NULL` so a non-feed photo row survives.
-
-**A Bright row still never appears on the map** — the property mapper writes `latitude`/`longitude`
-as null. That is #310, not a media problem. The map popup renders the same `primaryMedia` through
-the same `ListingImage` component the card uses.
-
-### Bright MLS ingestion — the vehicle (#91)
-
-The scheduled ingestion job is **this image with a different command**, exactly as the section above
-prescribes: a separate process because the workload is throughput-bound and must not compete with
-request-serving CPU, but the same Nx project because `property_db` is this service's database and
-`src/db/write.ts` must stay the only writer. `bright-ingest.main.ts` is a second webpack entry point
-(`webpack.config.js` → `additionalEntryPoints`, the same mechanism `bright-audit` uses), run by the
-`bright-mls-ingest` CronJob in `infra/k8s/base/cronjobs/`.
-
-A run resolves configuration and then either reports `not_configured`, or authenticates, probes
-`$metadata`, and replicates (see the section above). `$metadata` is still probed once per run: its
-`sha256` on the run record is comparable with the one in `docs/bright-mls/README.md`, so a schema
-change at Bright arrives as a changed hash rather than as a wrong-looking field weeks later.
-
-Five things here are load-bearing and easy to undo by accident:
-
-- **"Not configured" is a success, exit 0.** An environment that is not wired yet, or that holds the
-  committed `StrongBase64Password` placeholder, completes cleanly — `config.ts` treats the
-  placeholder as absent and never transmits it. Making that a failure would give a CronJob a nightly
-  backoff loop over an entirely expected condition and bury real faults in the noise. A value that
-  is present but **unusable** is the opposite case and does fail the run. An unwired environment is
-  a normal state during rollout, not a fault.
-- **Which feed am I talking to?** Any environment may read either tier. The lower environments are
-  gated and not public, so the tier is whatever credential the environment holds. Three keys, all in
-  `bright-mls-secret`: `BRIGHT_MLS_ENV` (`test` or `production`) states which tier
-  `BRIGHT_MLS_CLIENT_ID` / `BRIGHT_MLS_CLIENT_SECRET` belong to. `config.ts` trusts it exactly —
-  nothing is inferred — and derives the endpoints from it (`BRIGHT_FEED_ENDPOINTS`). Locally, set
-  the three keys in `.env`; in CI they are GitHub environment secrets. An endpoint override
-  (`BRIGHT_MLS_TOKEN_ENDPOINT` / `BRIGHT_MLS_SERVICE_ROOT`, used by the tests) must match the tier:
-  the tiers are separate Okta tenants (measured 2026-09-19: a test credential gets HTTP 400 at
-  `okta.brightmls.com`). A test-feed row is not production inventory, so the mapper marks it
-  `is_sample=true` (`bright-map/sample.ts`).
-- **Photos (`media.ts`, `bright-map/media.ts`).** `BrightMedia` cannot replicate incrementally, so
-  after the property pass the job fetches each changed listing's gallery by `ResourceRecordKey`
-  (falling back to `ListingId` if Bright refuses the Int64 filter), stages it, and the mapper
-  replaces that listing's `listing_media`. `BRIGHT_MLS_MEDIA_LISTINGS_PER_RUN` (default 200) bounds
-  the cost; a listing with no staged gallery still gets `ListPictureURL` as its primary photo.
-- **Only endpoint HOSTS are ever logged**, never full URLs and never credential material. The
-  containment is structural: no log record type in `run-log.ts` has a field a credential could be
-  assigned to. The exception that had to be argued about is `message`, the one free-text field — so
-  `bright-client.ts` keeps only RFC 6749's closed set of `error` CODES from a failure body and drops
-  `error_description` entirely, because a gateway answering `"Client 'abc123' not found"` would
-  otherwise log the client id through it. The redaction assertions live in `run.spec.ts`
-  ("runBrightIngest — redaction"). If one fails, take the field off the record type — do not add a
-  scrubbing pass, which is only ever a list of things somebody remembered.
-- **Both feeds authenticate.** A production credential passed the token call and the `$metadata`
-  probe on 2026-09-22. A 2026-09-18 run against Bright's staging feed (#163) confirmed the
-  endpoints, the OAuth2 shape and the resource inventory, and `docs/bright-mls/bright-metadata.xml`
-  is the committed `$metadata` document. Work `docs/bright-mls-day-one-checklist.md` for what is
-  answered and what is still assumed; an item that comes back different is a product-owner ping, not
-  a quiet local fix. Three answers overturn what the repo previously assumed, and each one is a day
-  if rediscovered: the property entity set is **`BrightProperties`**, keyed on `ListingKey` — a
-  plain `Property` set does not exist and 404s; `$metadata` declares **no `EnumType`s** and the
-  `Lookup` resource returns 400 for our IDX tier, so enumerations are undiscoverable; and
-  `BrightProperty.Location` is typed `Edm.GeographyPoint` while Bright answers
-  `"GeographyPolygon literals not implemented"`, so area search is PostGIS-side (#66) over a numeric
-  `Latitude`/`Longitude` bounding box, which does work on the wire. **Visibility is not access** —
-  the service document advertises 50 entity sets and `$metadata` describes 25. Never read a name as
-  a capability.
+**Photos.** A listing shows its `ListPictureURL` from the property record. The detail page fetches
+the full gallery. The media suppression gate is lifted for Bright rows by the 2026-09-22 ruling
+(#146, #33): Bright images carry their watermark and Cribstop is licensed to show them. Read it
+narrowly: `priceDisplayAllowed`, `priceHistoryDisplayAllowed` and `daysOnMarketDisplayAllowed` stay
+fail-closed. In `map-media.ts`, `PreferredPhotoYN === true` wins, then the lowest
+`MediaDisplayOrder` (absent sorts last), then the lowest `MediaKey`. Only `MediaURL` is used, never
+a size variant. A record must be identifiably a photo by `MediaType` or URL extension.
+`replaceFeedListingMedia()` in `src/db/write.ts` is the writer.
 
 ### Migration rules (each of these fails silently or confusingly if ignored)
 

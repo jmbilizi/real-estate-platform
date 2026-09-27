@@ -8,7 +8,8 @@ import {
   type SearchRequest,
   searchRequestSchema,
 } from '@cribstop/property-contracts';
-import { type AreaLoader, areaOf, placeSearchRequest, resolvedSearchRequest } from './on-demand';
+import type { GalleryLoader } from './gallery-loader';
+import { resolvedSearchRequest } from './on-demand';
 import {
   findBrightListingKeys,
   findListingById,
@@ -132,24 +133,7 @@ const asyncRoute =
     handler(req, res).catch(next);
   };
 
-/**
- * True when the searched PLACE alone has no local listings. The on-demand load is for a place we do
- * not hold; a price or bed filter that empties a place we do hold must not trigger a Bright load.
- *
- * Built from `areaOf()`'s parsed `Area`, never from the raw request fields: a free-text search
- * (`query=Frederick, MD`) and a structured one (`city=Frederick&state=MD`) must run the identical
- * DB check, or they would also earn separate Bright-load cooldown keys for the same place.
- */
-async function placeHasNoListings(pool: ReadPool, request: SearchRequest): Promise<boolean> {
-  const area = areaOf(request);
-  if (area === null) {
-    return false;
-  }
-  const place = searchRequestSchema.parse(placeSearchRequest(area));
-  return (await searchListings(pool, place)).total === 0;
-}
-
-export function createListingsRouter(pool: ReadPool, areaLoader?: AreaLoader): Router {
+export function createListingsRouter(pool: ReadPool, galleryLoader?: GalleryLoader): Router {
   const router = Router();
 
   router.get(
@@ -190,27 +174,9 @@ export function createListingsRouter(pool: ReadPool, areaLoader?: AreaLoader): R
       // echoes that resolved request, city/state in place of query, because it is what actually ran.
       const effectiveRequest = resolvedSearchRequest(parsed.value);
       const envelope = await searchListings(pool, effectiveRequest);
-      let cacheControl = LISTINGS_CACHE_CONTROL;
-      // The search answers from Postgres only and never waits on Bright (#337). A first-page
-      // search for a place whose `bright_area_sync` coverage is missing, partial or stale starts a
-      // load in the background (`on-demand.ts`). A price/bed filter that empties a place we DO
-      // hold must never start one: `placeHasNoListings` (the place alone, filters stripped) is the
-      // guard, checked only when this result was empty. A response that started a load is not
-      // cached, so the next request reads the loaded rows.
-      if (
-        envelope.page === 1 &&
-        areaLoader !== undefined &&
-        (await areaLoader.needsLoad(parsed.value))
-      ) {
-        const filterEmptiedAPlaceWeHold =
-          envelope.total === 0 && !(await placeHasNoListings(pool, parsed.value));
-        if (!filterEmptiedAPlaceWeHold) {
-          // `load()` logs and swallows its own failures; the catch only keeps a rejection unhandled-free.
-          void areaLoader.load(parsed.value).catch(() => undefined);
-          cacheControl = 'no-store';
-        }
-      }
-      res.set('Cache-Control', cacheControl).status(200).json(envelope);
+      // Postgres only. The sync worker (#338) keeps the database current, so search never calls
+      // Bright and never waits on it.
+      res.set('Cache-Control', LISTINGS_CACHE_CONTROL).status(200).json(envelope);
     }),
   );
 
@@ -247,15 +213,15 @@ export function createListingsRouter(pool: ReadPool, areaLoader?: AreaLoader): R
       }
       let cacheControl = LISTINGS_CACHE_CONTROL;
       // A Bright listing opened with at most its ListPictureURL photo fetches its full gallery
-      // (`on-demand.ts`). A fetch still running when the wait ends must not be cached.
+      // (`gallery-loader.ts`). A fetch still running when the wait ends must not be cached.
       if (
-        areaLoader !== undefined &&
+        galleryLoader !== undefined &&
         detail.listing.source === 'brightMLS' &&
         detail.listing.media.length <= 1
       ) {
         const keys = await findBrightListingKeys(pool, id.data);
         if (keys !== null) {
-          const outcome = await areaLoader.loadGallery(keys);
+          const outcome = await galleryLoader.loadGallery(keys);
           if (outcome === 'loaded') {
             detail = (await findListingById(pool, id.data)) ?? detail;
           } else if (outcome === 'pending') {

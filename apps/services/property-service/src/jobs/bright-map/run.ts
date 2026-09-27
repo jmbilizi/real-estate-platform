@@ -117,8 +117,34 @@ export async function mapStagedBrightProperties(
   if (staged.length === 0) {
     return ZERO_MAP_REPORT;
   }
+  const payloads = staged.map((row) =>
+    typeof row.payload === 'string'
+      ? (JSON.parse(row.payload) as Record<string, unknown>)
+      : (row.payload as Record<string, unknown>),
+  );
+  return (await mapBrightPayloads(client, payloads, options)).report;
+}
 
+/** One record the mapper refused, with the reason (#338 takes a held listing down on it). */
+export interface RejectedPayload {
+  readonly listingKey: string | null;
+  readonly reason: string;
+}
+
+/**
+ * Maps `BrightProperties` payloads already in memory. The sync worker (#338) maps each page it
+ * fetched, so it does not read the page back from staging.
+ */
+export async function mapBrightPayloads(
+  client: Queryable,
+  payloads: readonly Record<string, unknown>[],
+  options: Omit<MapStagedBrightPropertiesOptions, 'listingKeys'>,
+): Promise<{ report: BrightMapRunReport; rejected: RejectedPayload[] }> {
+  if (payloads.length === 0) {
+    return { report: ZERO_MAP_REPORT, rejected: [] };
+  }
   const statuses = options.statuses ?? (await loadListingStatuses(client));
+  const rejected: RejectedPayload[] = [];
   const withheldByReason: Record<string, number> = {};
   const outOfRangeFieldCounts: Record<string, number> = {};
   const publishedListingKeys: string[] = [];
@@ -127,12 +153,7 @@ export async function mapStagedBrightProperties(
   let takenDown = 0;
   let sampleMarked = 0;
 
-  for (const row of staged) {
-    const payload =
-      typeof row.payload === 'string'
-        ? (JSON.parse(row.payload) as Record<string, unknown>)
-        : (row.payload as Record<string, unknown>);
-
+  for (const payload of payloads) {
     const result = mapBrightPropertyRecord(payload, {
       feed: options.feed,
       statuses,
@@ -141,6 +162,7 @@ export async function mapStagedBrightProperties(
 
     if (result.kind === 'rejected') {
       withheldByReason[result.reason] = (withheldByReason[result.reason] ?? 0) + 1;
+      rejected.push({ listingKey: result.listingKey, reason: result.reason });
       continue;
     }
 
@@ -246,15 +268,18 @@ export async function mapStagedBrightProperties(
   const withheld = Object.values(withheldByReason).reduce((total, count) => total + count, 0);
 
   return {
-    staged: staged.length,
-    mapped,
-    published,
-    publishedListingKeys,
-    withheld,
-    withheldByReason,
-    takenDown,
-    sampleMarked,
-    outOfRangeFieldCounts,
+    report: {
+      staged: payloads.length,
+      mapped,
+      published,
+      publishedListingKeys,
+      withheld,
+      withheldByReason,
+      takenDown,
+      sampleMarked,
+      outOfRangeFieldCounts,
+    },
+    rejected,
   };
 }
 

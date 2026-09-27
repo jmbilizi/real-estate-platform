@@ -1,0 +1,46 @@
+/**
+ * The `$select` list for every page the sync worker reads (#338).
+ *
+ * A full `BrightProperties` record is about 25 KB (931 fields). The mapper reads the fields below,
+ * so the worker asks for these only. `select.spec.ts` runs the mapper over recording proxies and
+ * fails when the mapper reads a field this list does not carry.
+ */
+export const BRIGHT_SYNC_SELECT: readonly string[] = Object.freeze([
+  'ListingKey',
+  'ModificationTimestamp',
+  'StandardStatus',
+  'PropertyType',
+  'PropertySubType',
+  'StructureDesignType',
+  'ListPrice',
+  'ClosePrice',
+  'CloseDate',
+  'UnparsedAddress',
+  'StreetNumber',
+  'StreetDirPrefix',
+  'StreetName',
+  'StreetSuffix',
+  'StreetDirSuffix',
+  'UnitNumber',
+  'City',
+  'StateOrProvince',
+  'PostalCode',
+  'SubdivisionName',
+  'Latitude',
+  'Longitude',
+  'BedroomsTotal',
+  'BathroomsFull',
+  'BathroomsHalf',
+  'LivingArea',
+  'LotSizeSquareFeet',
+  'YearBuilt',
+  'PublicRemarks',
+  'ListPictureURL',
+  'InternetEntireListingDisplayYN',
+  'InternetAddressDisplayYN',
+  'ListAgentFullName',
+  'ListAgentOfficePhone',
+  'ListOfficeName',
+  'ListOfficePhone',
+  'ListOfficeEmail',
+]);

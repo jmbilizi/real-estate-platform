@@ -1,0 +1,36 @@
+# yaml-language-server: disable
+# Bright Sync Worker Deployment Patch for Hetzner Prod Environment (#338)
+#
+# WHICH FEED: the one this environment's `bright-mls-secret` declares in BRIGHT_MLS_ENV. The
+# production credential authenticates Real Broker, LLC's MLS participation against real licensed
+# inventory (PRD §6.2).
+#
+# `infra/deploy-control.yaml` keeps this service `enabled: false` for prod, same reasoning the
+# removed CronJobs carried: #102 chooses the production hostnames and #117 item 6 confirms
+# display-URL registration, and neither is settled.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bright-sync-worker
+spec:
+  template:
+    spec:
+      containers:
+        - name: worker
+          image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:latest
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          env:
+            - name: NODE_ENV
+              value: "production"
+            # #315's rule: NODE_OPTIONS follows limits.memory / 1.5.
+            # tools/infra/node-heap-ratio.js checks this ratio against the limit above.
+            - name: NODE_OPTIONS
+              value: "--max-old-space-size=341"

@@ -1,9 +1,11 @@
 import express, { type Express, type NextFunction, type Request, type Response } from 'express';
 import { INTERNAL_ERROR_BODY, toOpenApiDocument } from '@cribstop/property-contracts';
 import { getPool } from './db/pool';
-import { type AreaLoader, createAreaLoader } from './listings/on-demand';
+import { createGalleryLoader, type GalleryLoader } from './listings/gallery-loader';
 import { createListingsRouter } from './listings/routes';
 import type { ReadPool } from './listings/repository';
+import { createBrightSyncAdminRouter } from './admin/bright-sync-routes';
+import type { SyncQueryable } from './jobs/bright-sync/store';
 import { createInquiriesRouter } from './inquiries/routes';
 import {
   createHttpIntrospectionClient,
@@ -99,10 +101,12 @@ export interface CreateAppOptions {
   /** Injected so tests can exercise rate limiting deterministically (#131). */
   rateLimiter?: RateLimiter;
   /**
-   * On-demand Bright area load (`listings/on-demand.ts`). Defaults to a real loader only when the
-   * pool is real too, so a test with a fake pool never reaches Bright.
+   * The listing-detail gallery fetch (`listings/gallery-loader.ts`). Defaults to a real loader
+   * only when the pool is real too, so a test with a fake pool never reaches Bright.
    */
-  areaLoader?: AreaLoader;
+  galleryLoader?: GalleryLoader;
+  /** The admin sync token (#338). Defaults to reading BRIGHT_ADMIN_TOKEN per request. */
+  adminToken?: () => string | undefined;
 }
 
 /**
@@ -137,10 +141,11 @@ export function createApp(options: CreateAppOptions = {}): Express {
     res.set('Cache-Control', 'public, max-age=300').status(200).json(OPEN_API_DOCUMENT);
   });
 
-  const areaLoader =
-    options.areaLoader ?? (options.pool === undefined ? createAreaLoader() : undefined);
-  app.use(createListingsRouter(pool, areaLoader));
+  const galleryLoader =
+    options.galleryLoader ?? (options.pool === undefined ? createGalleryLoader() : undefined);
+  app.use(createListingsRouter(pool, galleryLoader));
   app.use(createInquiriesRouter({ pool, introspection, rateLimiter }));
+  app.use(createBrightSyncAdminRouter(pool as unknown as SyncQueryable, options.adminToken));
 
   /**
    * The error boundary. Handlers forward rejections here via the `asyncRoute` wrapper in

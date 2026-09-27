@@ -158,7 +158,9 @@ export async function upsertListing(client: Queryable, row: ListingRow): Promise
        office_broker_lead_phone = EXCLUDED.office_broker_lead_phone,
        office_broker_lead_email = EXCLUDED.office_broker_lead_email,
        listing_agent_name = EXCLUDED.listing_agent_name,
-       last_updated = EXCLUDED.last_updated`,
+       last_updated = EXCLUDED.last_updated,
+       -- A record the feed maps again is live again (#338): a takedown is not permanent.
+       deleted_at = NULL`,
     [
       row.id,
       row.property_id,

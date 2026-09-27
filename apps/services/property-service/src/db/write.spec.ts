@@ -335,6 +335,17 @@ describe('upsertListingBySourceKey', () => {
     expect(insert?.values?.[0]).toBe('listing-1');
   });
 
+  it('makes a taken-down listing live again when the feed maps it again (#338)', async () => {
+    const { client, queries } = createFakeClient({
+      lookupRows: [{ id: 'listing-1', is_terminal: false }],
+    });
+
+    await upsertListingBySourceKey(client, baseRow);
+
+    const insert = queries.find((q) => q.text.includes('INSERT INTO listings'));
+    expect(insert?.text).toContain('deleted_at = NULL');
+  });
+
   it('leaves a terminal match untouched instead of re-snapshotting it', async () => {
     const { client, queries } = createFakeClient({
       lookupRows: [{ id: 'listing-1', is_terminal: true }],

@@ -114,114 +114,9 @@ export function buildCursorQuery(params: CursorQueryParams): string {
   return `${base}/${resource.entitySet}?${search.toString()}`;
 }
 
-/** One place to load on demand (`area-fetch.ts`). At least one of `city` / `zip` is set. */
-export interface AreaQueryParams {
-  readonly serviceRoot: string;
-  readonly city?: string;
-  readonly state?: string;
-  readonly zip?: string;
-  /** The `StandardStatus` payload value this page fetches; translated to its $filter label. */
-  readonly status: string;
-  /** Keyset page: the last `ListingKey` already read, as decimal text. `null` on the first page. */
-  readonly afterKey: string | null;
-  readonly top: number;
-  /**
-   * Bounds the scheduled per-area refresh (#331) to records changed since the area's last sync:
-   * `ModificationTimestamp gt modifiedAfter`. Omitted for an ordinary area load, which wants every
-   * record in the status regardless of when it last changed.
-   */
-  readonly modifiedAfter?: string;
-  /**
-   * Pairs with `modifiedAfter` to close the window: `ModificationTimestamp le modifiedUntil`. A run
-   * started at this instant never reads a record touched after it started, so the NEXT run's
-   * `modifiedAfter` (this run's `modifiedUntil`, minus a small overlap) cannot skip a record that
-   * changed while this run was in flight.
-   */
-  readonly modifiedUntil?: string;
-}
-
-/** Re-parsed rather than interpolated, so a malformed bound fails here, not as a broken Bright query. */
-function modificationTimestampLiteral(iso: string): string {
-  const parsed = new Date(iso);
-  if (Number.isNaN(parsed.getTime())) {
-    throw new Error(`ModificationTimestamp bound "${iso}" is not a valid ISO-8601 timestamp.`);
-  }
-  return parsed.toISOString();
-}
-
 /** OData string literal: single quotes doubled. */
 function stringLiteral(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
-}
-
-/**
- * Builds one page of an on-demand area load: one status's `BrightProperties` in one city or ZIP.
- *
- * The area and status filters keep the match set small, so this avoids the whole-feed scan that
- * makes a `ModificationTimestamp` page slow on production. Bright rejects `OR` in `$filter`
- * (see the header), so a caller fetching more than one status runs one query per status, each with
- * its own `status` value and its own keyset pass. Pages are keyset pages on `ListingKey`
- * (`ListingKey gt k`, ordered by `ListingKey`): no OR, no `$skip`, and the ordered field is always
- * in the filter. `$top` suppresses nextLink, so the caller pages by `afterKey`.
- */
-export function buildAreaQuery(params: AreaQueryParams): string {
-  if (params.city === undefined && params.zip === undefined) {
-    throw new Error('An area query needs a city or a ZIP.');
-  }
-  if (params.afterKey !== null && !/^\d+$/.test(params.afterKey)) {
-    throw new Error(`ListingKey "${params.afterKey}" is not a decimal integer.`);
-  }
-  const clauses = [
-    ...(params.city === undefined ? [] : [`City eq ${stringLiteral(params.city)}`]),
-    ...(params.state === undefined ? [] : [`StateOrProvince eq ${stringLiteral(params.state)}`]),
-    ...(params.zip === undefined ? [] : [`PostalCode eq ${stringLiteral(params.zip)}`]),
-    `StandardStatus eq ${stringLiteral(brightStatusFilterLabel(params.status))}`,
-    `ListingKey gt ${params.afterKey ?? '0'}`,
-    ...(params.modifiedAfter === undefined
-      ? []
-      : [`ModificationTimestamp gt ${modificationTimestampLiteral(params.modifiedAfter)}`]),
-    ...(params.modifiedUntil === undefined
-      ? []
-      : [`ModificationTimestamp le ${modificationTimestampLiteral(params.modifiedUntil)}`]),
-  ];
-
-  const search = new URLSearchParams();
-  search.set('$filter', clauses.join(' and '));
-  search.set('$orderby', 'ListingKey asc');
-  search.set('$top', String(params.top));
-
-  const base = params.serviceRoot.replace(/\/+$/, '');
-  return `${base}/BrightProperties?${search.toString()}`;
-}
-
-/** One city and one Bright `StandardStatus` value, for one `$count` request (#328). */
-export interface AreaCountQueryParams {
-  readonly serviceRoot: string;
-  readonly city: string;
-  /** The `StandardStatus` payload value, e.g. `'ComingSoon'`; translated to its $filter label. */
-  readonly standardStatus: string;
-}
-
-/**
- * Builds a `$count` request for one city and one status: `GET .../BrightProperties/$count?$filter=...`.
- *
- * OData v4's `$count` segment returns the row count as a bare integer body, not a page. There is
- * therefore no `$orderby` and no `$top` to get wrong here, and this function never emits either.
- * Bright rejects `OR` in `$filter` (see the module header), so a caller wanting several statuses for
- * one city sends one request per status and sums the results — this builder never joins statuses
- * itself.
- */
-export function buildAreaCountQuery(params: AreaCountQueryParams): string {
-  const clauses = [
-    `City eq ${stringLiteral(params.city)}`,
-    `StandardStatus eq ${stringLiteral(brightStatusFilterLabel(params.standardStatus))}`,
-  ];
-
-  const search = new URLSearchParams();
-  search.set('$filter', clauses.join(' and '));
-
-  const base = params.serviceRoot.replace(/\/+$/, '');
-  return `${base}/BrightProperties/$count?${search.toString()}`;
 }
 
 /**
@@ -247,4 +142,152 @@ export function isOrderedWithoutFilter(url: string): boolean {
   // is still unbounded along the axis it sorts on.
   const orderedField = orderBy.split(',')[0]?.trim().split(/\s+/)[0] ?? '';
   return orderedField.length > 0 && !filter.includes(orderedField);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+ * Sync worker queries (#338). Measured on production Bright, 2026-09-26, from the pod:
+ *
+ * - **Bright ignores `$orderby=ListingKey`.** `asc` and `desc` return the same unordered page, so a
+ *   `ListingKey gt k` keyset skips records: a Pending pass read 5,260 of 20,080. `$orderby` on
+ *   `ModificationTimestamp` is honoured, but it sorts every match first (43 s over one status).
+ * - **`$count=true&$top=0` is fast** (under 1 s). The `/$count` segment answers 501.
+ *
+ * So the worker never relies on server order. It asks for a `$count` over a slice (a
+ * `ModificationTimestamp` window, then a `ListingKey` range inside one instant), splits any slice
+ * wider than one page, and reads each slice of at most one page with a single request.
+ * ════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/** A place to scope a slice or a count to. Bright matches `City` case-insensitively. */
+export interface BrightArea {
+  readonly city?: string;
+  readonly state?: string;
+  readonly zip?: string;
+}
+
+function areaClauses(area: BrightArea | undefined): string[] {
+  if (area === undefined) {
+    return [];
+  }
+  return [
+    ...(area.city === undefined ? [] : [`City eq ${stringLiteral(area.city)}`]),
+    ...(area.state === undefined ? [] : [`StateOrProvince eq ${stringLiteral(area.state)}`]),
+    ...(area.zip === undefined ? [] : [`PostalCode eq ${stringLiteral(area.zip)}`]),
+  ];
+}
+
+/** OData `Edm.Date` literal: bare `YYYY-MM-DD`. */
+function dateLiteral(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(value))) {
+    throw new Error(`"${value}" is not a YYYY-MM-DD date.`);
+  }
+  return value;
+}
+
+function decimalKey(value: string): string {
+  if (!/^\d+$/.test(value)) {
+    throw new Error(`ListingKey "${value}" is not a decimal integer.`);
+  }
+  return value;
+}
+
+function propertiesUrl(serviceRoot: string, search: URLSearchParams): string {
+  return `${serviceRoot.replace(/\/+$/, '')}/BrightProperties?${search.toString()}`;
+}
+
+/** What a slice selects, apart from its bounds. */
+export interface SliceScope {
+  /** `StandardStatus` payload value, translated to its `$filter` label. Absent: every status. */
+  readonly status?: string;
+  readonly area?: BrightArea;
+  /** `CloseDate ge <date>`. The sold backfill is never unbounded. */
+  readonly closeDateFrom?: string;
+}
+
+/** `ModificationTimestamp gt from and le until`, and optionally `ListingKey gt a and le b`. */
+export interface SliceBounds {
+  readonly from: string;
+  readonly until: string;
+  readonly keyAfter?: string;
+  readonly keyUntil?: string;
+}
+
+function sliceFilter(scope: SliceScope, bounds: SliceBounds): string {
+  return [
+    ...areaClauses(scope.area),
+    ...(scope.status === undefined
+      ? []
+      : [`StandardStatus eq ${stringLiteral(brightStatusFilterLabel(scope.status))}`]),
+    ...(scope.closeDateFrom === undefined
+      ? []
+      : [`CloseDate ge ${dateLiteral(scope.closeDateFrom)}`]),
+    `ModificationTimestamp gt ${timestampLiteral(bounds.from)}`,
+    `ModificationTimestamp le ${timestampLiteral(bounds.until)}`,
+    ...(bounds.keyAfter === undefined ? [] : [`ListingKey gt ${decimalKey(bounds.keyAfter)}`]),
+    ...(bounds.keyUntil === undefined ? [] : [`ListingKey le ${decimalKey(bounds.keyUntil)}`]),
+  ].join(' and ');
+}
+
+/** The `$count` of one slice: an empty page that carries `@odata.count`. */
+export function buildSliceCountQuery(
+  serviceRoot: string,
+  scope: SliceScope,
+  bounds: SliceBounds,
+): string {
+  const search = new URLSearchParams();
+  search.set('$filter', sliceFilter(scope, bounds));
+  search.set('$count', 'true');
+  search.set('$top', '0');
+  return propertiesUrl(serviceRoot, search);
+}
+
+/**
+ * One slice's records. The caller sizes the slice to one page with `buildSliceCountQuery` first,
+ * so correctness does not depend on order. `ordered` adds
+ * `$orderby=ModificationTimestamp asc,ListingKey asc` for the incremental window. It costs a sort,
+ * so the backfill and reconcile reads leave it out.
+ */
+export function buildSliceQuery(
+  serviceRoot: string,
+  scope: SliceScope,
+  bounds: SliceBounds,
+  options: {
+    readonly top: number;
+    readonly select?: readonly string[];
+    readonly ordered?: boolean;
+  },
+): string {
+  const search = new URLSearchParams();
+  search.set('$filter', sliceFilter(scope, bounds));
+  if (options.ordered === true) {
+    search.set('$orderby', 'ModificationTimestamp asc,ListingKey asc');
+  }
+  search.set('$top', String(options.top));
+  if (options.select !== undefined && options.select.length > 0) {
+    search.set('$select', options.select.join(','));
+  }
+  return propertiesUrl(serviceRoot, search);
+}
+
+export interface CountQueryParams {
+  readonly serviceRoot: string;
+  /** `StandardStatus` payload value; translated to its `$filter` label. */
+  readonly status: string;
+  readonly area?: BrightArea;
+  readonly closeDateFrom?: string;
+}
+
+/** `$count=true&$top=0` over one status, with no time bounds (audit and reconcile). */
+export function buildCountQuery(params: CountQueryParams): string {
+  const clauses = [
+    ...areaClauses(params.area),
+    `StandardStatus eq ${stringLiteral(brightStatusFilterLabel(params.status))}`,
+    ...(params.closeDateFrom === undefined
+      ? []
+      : [`CloseDate ge ${dateLiteral(params.closeDateFrom)}`]),
+  ];
+  const search = new URLSearchParams();
+  search.set('$filter', clauses.join(' and '));
+  search.set('$count', 'true');
+  search.set('$top', '0');
+  return propertiesUrl(params.serviceRoot, search);
 }

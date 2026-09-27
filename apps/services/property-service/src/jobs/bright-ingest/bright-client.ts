@@ -348,6 +348,8 @@ export async function probeMetadata(
 export interface BrightPage {
   readonly records: readonly Record<string, unknown>[];
   readonly nextLink: string | null;
+  /** `@odata.count`, present only when the request asked for `$count=true`. */
+  readonly count?: number;
 }
 
 export interface BrightPageOptions extends BrightClientOptions {
@@ -404,8 +406,7 @@ export function createTokenProvider(
 /**
  * Parses `url` and refuses to send the Bright bearer token anywhere but `allowedHost` over HTTPS.
  *
- * Shared by `fetchPage` and `fetchCount` so the one security-relevant check — host pinning — has
- * one definition. `url` is either built locally (`odata-query.ts`) or is an `@odata.nextLink` Bright
+ * The one definition of the security-relevant check, host pinning. `url` is either built locally (`odata-query.ts`) or is an `@odata.nextLink` Bright
  * returned; either way, a host change is either a feed misconfiguration or an attempt to collect our
  * bearer token, and a non-HTTPS URL would send it in the clear.
  */
@@ -509,69 +510,6 @@ export async function fetchPage(
 }
 
 /**
- * Fetches one `$count` request (#328) and returns the row count.
- *
- * `url` is always built by `odata-query.ts`'s `buildAreaCountQuery`, never a server-supplied link,
- * but the host/protocol are still pinned to `allowedHost` — the same rule `fetchPage` enforces, so
- * a config mistake here fails the same way a nextLink mismatch would.
- *
- * OData v4's `$count` segment returns the count as a bare integer text body, not a JSON envelope, so
- * this does not go through `parsePage`. No retry loop: this is a diagnostic read run interactively
- * against a handful of cities and statuses, not a scheduled job competing for a rate-limit budget.
- */
-export async function fetchCount(
-  url: string,
-  tokenProvider: TokenProvider,
-  allowedHost: string,
-  options: BrightClientOptions = {},
-): Promise<number> {
-  const fetchImpl = resolveFetch(options);
-  const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
-
-  assertAllowedHost(url, allowedHost, 'A Bright count query');
-
-  const token = await tokenProvider();
-  const { response, body } = await withTransportContext(
-    'Bright MLS count request',
-    allowedHost,
-    async () => {
-      const response = await fetchImpl(url, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token.accessToken}`,
-          Accept: 'text/plain',
-        },
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-      return { response, body: await response.text() };
-    },
-  );
-
-  if (!response.ok) {
-    throw new BrightRequestError({
-      what: 'Bright MLS count request',
-      host: allowedHost,
-      status: response.status,
-      statusText: response.statusText,
-      oauthError: readOAuthError(body),
-      odataMessage: readODataMessage(body),
-    });
-  }
-
-  const trimmed = body.trim();
-  // `Number('')` is 0, not NaN, so an empty body (a truncated response, a proxy hiccup) would
-  // otherwise read as a real zero count and the audit would report a false gap for that city.
-  const count = trimmed.length === 0 ? NaN : Number(trimmed);
-  if (!Number.isInteger(count) || count < 0) {
-    throw new Error(
-      `Bright MLS count request to ${allowedHost} returned a non-numeric body: ` +
-        `"${trimmed.slice(0, 100)}"`,
-    );
-  }
-  return count;
-}
-
-/**
  * Reads an OData collection response.
  *
  * Only `value` and `@odata.nextLink` are read. Nothing else on the envelope is kept, and no record
@@ -598,8 +536,10 @@ function parsePage(body: string, host: string): BrightPage {
   }
 
   const nextLink = envelope['@odata.nextLink'];
+  const count = envelope['@odata.count'];
   return {
     records: value as Record<string, unknown>[],
     nextLink: typeof nextLink === 'string' && nextLink.length > 0 ? nextLink : null,
+    ...(typeof count === 'number' && Number.isSafeInteger(count) ? { count } : {}),
   };
 }
