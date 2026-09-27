@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import CompactSearchBar from './CompactSearchBar';
 
@@ -40,6 +40,9 @@ beforeAll(() => {
       onchange: null,
     }),
   });
+  // jsdom does not implement real scrolling; useBodyScrollLock calls this to restore the scroll
+  // position whenever a field panel closes.
+  window.scrollTo = jest.fn();
 });
 
 function appValue(searchLocation: string) {
@@ -144,5 +147,56 @@ describe('CompactSearchBar before hydration', () => {
 
     expect(container.querySelector('.skeleton-fill')).toBeNull();
     expect(container.querySelectorAll('.content-resolved').length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Regression guard for #360: an outside click that closes the open field panel must not also
+ * activate whatever was underneath it (a listing card, a nav link) — Airbnb-style "first tap
+ * just closes". A real click is mousedown, then a separate click event; the bar closes the
+ * panel on the mousedown and must swallow the click that follows.
+ */
+describe('CompactSearchBar — outside click closes without activating what is underneath', () => {
+  it('closes the open panel and consumes the click, so the element underneath never sees it', () => {
+    mockUseApp.mockReturnValue(appValue(''));
+    const onOutsideClick = jest.fn();
+    render(
+      <div>
+        <CompactSearchBar />
+        <button onClick={onOutsideClick}>Outside target</button>
+      </div>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'What For Sale' }));
+    expect(screen.getByText('Listing type')).toBeInTheDocument();
+
+    const outsideTarget = screen.getByRole('button', { name: 'Outside target' });
+    fireEvent.mouseDown(outsideTarget);
+    fireEvent.click(outsideTarget);
+
+    expect(screen.queryByText('Listing type')).not.toBeInTheDocument();
+    expect(onOutsideClick).not.toHaveBeenCalled();
+  });
+
+  /** The very next click, unrelated to the close, must behave normally. */
+  it('does not swallow a later, unrelated click', () => {
+    mockUseApp.mockReturnValue(appValue(''));
+    const onOutsideClick = jest.fn();
+    render(
+      <div>
+        <CompactSearchBar />
+        <button onClick={onOutsideClick}>Outside target</button>
+      </div>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'What For Sale' }));
+    const outsideTarget = screen.getByRole('button', { name: 'Outside target' });
+    fireEvent.mouseDown(outsideTarget);
+    fireEvent.click(outsideTarget);
+    expect(onOutsideClick).not.toHaveBeenCalled();
+
+    fireEvent.mouseDown(outsideTarget);
+    fireEvent.click(outsideTarget);
+    expect(onOutsideClick).toHaveBeenCalledTimes(1);
   });
 });

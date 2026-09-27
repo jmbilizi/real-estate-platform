@@ -2,7 +2,10 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import CompactSearchBar from './CompactSearchBar';
 
 const mockPush = jest.fn();
-jest.mock('next/navigation', () => ({ useRouter: () => ({ push: mockPush }) }));
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mockPush }),
+  usePathname: () => '/',
+}));
 
 jest.mock('motion/react', () => ({
   motion: new Proxy(
@@ -62,6 +65,9 @@ beforeAll(() => {
       onchange: null,
     }),
   });
+  // jsdom does not implement real scrolling; useBodyScrollLock calls this to restore the scroll
+  // position whenever a field panel closes.
+  window.scrollTo = jest.fn();
 });
 
 // The bar stays mounted across navigation. A search must not leave the button spinning.
