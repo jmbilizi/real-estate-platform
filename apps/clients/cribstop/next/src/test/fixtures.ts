@@ -17,8 +17,8 @@ import type {
 export function aListingCardRow(overrides: Partial<ListingCardRow> = {}): ListingCardRow {
   return {
     id: '11111111-1111-4111-8111-111111111111',
-    homeId: '44444444-4444-4444-8444-444444444444',
-    propertyPath: '/property/100-test-st-bethesda-md/44444444-4444-4444-8444-444444444444',
+    propertyId: '44444444-4444-4444-8444-444444444444',
+    propertyPath: '/property/100-test-st-bethesda-md/11111111-1111-4111-8111-111111111111',
     title: 'Test Row (Sample)',
     address: '100 Test St',
     city: 'Bethesda',
@@ -148,11 +148,10 @@ export function aPropertyPage(
   const displayable = rest.listingDataDisplayable ?? marketStatus !== 'Off market';
 
   return {
-    homeId: '44444444-4444-4444-8444-444444444444',
     propertyId: '44444444-4444-4444-8444-444444444444',
-    unitId: null,
+    listingId: '11111111-1111-4111-8111-111111111111',
     slug: '118-baggett-place-alexandria-va',
-    canonicalPath: '/property/118-baggett-place-alexandria-va/44444444-4444-4444-8444-444444444444',
+    canonicalPath: '/property/118-baggett-place-alexandria-va/11111111-1111-4111-8111-111111111111',
     marketStatus,
     listingDataDisplayable: displayable,
     seo: { title: '118 Baggett Place, Alexandria, VA 22301', description: 'Test description.' },
@@ -167,8 +166,8 @@ export function aPropertyPage(
 /** #349: one row of a `PropertyLookupResponse`. */
 export function aPropertyMatch(overrides: Partial<PropertyMatch> = {}): PropertyMatch {
   return {
-    homeId: '44444444-4444-4444-8444-444444444444',
-    path: '/property/118-baggett-place-alexandria-va/44444444-4444-4444-8444-444444444444',
+    propertyId: '44444444-4444-4444-8444-444444444444',
+    path: '/property/118-baggett-place-alexandria-va/11111111-1111-4111-8111-111111111111',
     address: '118 Baggett Place',
     city: 'Alexandria',
     state: 'VA',

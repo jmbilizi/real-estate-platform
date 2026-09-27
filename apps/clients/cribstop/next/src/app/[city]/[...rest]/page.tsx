@@ -18,7 +18,7 @@ type RouteProps = {
  * `/<city>-<st>/.../homes-for-sale`. `parseSearchPath` and `../route-shape` tell them apart.
  *
  * An address path is no longer a page (#382). The lookup resolves it, reading the MLS once on a
- * miss, and one match answers 308 to its canonical `/property/<slug>/<homeId>` path.
+ * miss, and one match answers 308 to its canonical `/property/<slug>/<listingId>` path.
  */
 
 export async function generateMetadata({ params, searchParams }: RouteProps): Promise<Metadata> {
@@ -53,7 +53,7 @@ function PropertyChoiceList({ matches }: { matches: PropertyMatch[] }) {
       <h1 className="text-xl font-semibold tracking-tight text-ink">Choose an address</h1>
       <ul className="mt-4 space-y-2">
         {matches.map((match) => (
-          <li key={match.homeId}>
+          <li key={match.propertyId}>
             <a
               href={match.path}
               className="block rounded-2xl border border-surface-border p-4 hover:bg-surface-soft"

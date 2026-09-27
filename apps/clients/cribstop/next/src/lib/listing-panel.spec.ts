@@ -50,11 +50,11 @@ describe('listing panel store', () => {
     openListingPanel('listing-1', aListingCardRow({ id: 'listing-1' }));
 
     expect(window.location.pathname).toBe(
-      '/property/100-test-st-bethesda-md/44444444-4444-4444-8444-444444444444',
+      '/property/100-test-st-bethesda-md/11111111-1111-4111-8111-111111111111',
     );
     // Back and Forward find the listing again from the property page path this document pushed.
     expect(
-      listingIdFromPath('/property/100-test-st-bethesda-md/44444444-4444-4444-8444-444444444444'),
+      listingIdFromPath('/property/100-test-st-bethesda-md/11111111-1111-4111-8111-111111111111'),
     ).toBe('listing-1');
   });
 

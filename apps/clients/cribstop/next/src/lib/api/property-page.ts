@@ -54,11 +54,15 @@ export const loadPropertyPage = cache(async function loadPropertyPage(
   return fetchPage(`${PROPERTY_LISTING}/${encodeURIComponent(listingId)}/page`);
 });
 
-/** `GET /property/properties/{homeId}/page`: the page of one home. */
-export const loadHomePage = cache(async function loadHomePage(
-  homeId: string,
+/**
+ * `GET /property/properties/{propertyId}/page`: the page of one home, keyed by the property or
+ * unit id. Only for a stale #382 URL: the property page route falls back to this when `id` is not
+ * a listing id, so a link minted before the #386 correction still 308s to its canonical URL.
+ */
+export const loadPropertyByHomeId = cache(async function loadPropertyByHomeId(
+  propertyId: string,
 ): Promise<PropertyPageState> {
-  return fetchPage(`${PROPERTY_HOME}/${encodeURIComponent(homeId)}/page`);
+  return fetchPage(`${PROPERTY_HOME}/${encodeURIComponent(propertyId)}/page`);
 });
 
 export type PropertyLookupState =

@@ -99,9 +99,8 @@ describe('propertyPageSchema', () => {
     isSample: false,
   };
   const base = {
-    homeId: record.propertyId,
     propertyId: record.propertyId,
-    unitId: null,
+    listingId: '018f2f2a-6d1b-7c3d-8b2e-000000000001',
     slug: '118-baggett-pl-alexandria-va',
     canonicalPath: '/property/118-baggett-pl-alexandria-va/' + record.propertyId,
     seo: { title: '118 Baggett Pl, Alexandria, VA 22314', description: 'Facts.' },

@@ -337,11 +337,14 @@ export function propertySlug(address: PropertyPageAddress): string {
 }
 
 /**
- * `/property/<slug>/<homeId>`. The id decides the page. The slug is for people and search engines,
- * and the page sends a stale slug to this canonical path with a 308.
+ * `/property/<slug>/<listingId>`. The id is the property's most recent listing, and it decides the
+ * page. `null` gives the address-only path, for a property with no listing. The slug is for people
+ * and search engines, and the page sends a stale slug or an older listing's id to this canonical
+ * path with a 308.
  */
-export function propertyPagePath(address: PropertyPageAddress, homeId: string): string {
-  return `/${PROPERTY_PAGE_SEGMENT}/${propertySlug(address)}/${encodeURIComponent(homeId)}`;
+export function propertyPagePath(address: PropertyPageAddress, listingId: string | null): string {
+  const base = `/${PROPERTY_PAGE_SEGMENT}/${propertySlug(address)}`;
+  return listingId === null ? base : `${base}/${encodeURIComponent(listingId)}`;
 }
 
 /**

@@ -4,7 +4,8 @@ import { listingCardSchema } from './listing-card';
 import { listingDetailSchema } from './listing-detail';
 
 /**
- * The property page (#382): `/property/<slug>/<homeId>`, one page per home in any market status.
+ * The property page (#382, corrected #386): `/property/<slug>/<listingId>`, one page per home in
+ * any market status. The URL id is the property's most recent listing, not the property itself.
  *
  * The service decides every display rule and resolves every value the page renders. A client
  * renders `latestListing` when it is present and the property record alone when it is null. It
@@ -66,11 +67,11 @@ export const propertySeoSchema = z.object({
 
 export const propertyPageSchema = z
   .object({
-    /** The id in the URL: the unit id in a subdivided building, else the property id. */
-    homeId: idSchema,
+    /** The home this page is about: the unit id in a subdivided building, else the property id. */
     propertyId: idSchema,
-    unitId: idSchema.nullable(),
-    /** The slug segment of `canonicalPath`. A request with another slug gets a 308. */
+    /** The id in the URL: the property's most recent listing. Null for a property with none. */
+    listingId: idSchema.nullable(),
+    /** The slug segment of `canonicalPath`. A request with another slug or listing id gets a 308. */
     slug: z.string(),
     canonicalPath: z.string(),
     marketStatus: marketStatusSchema,
@@ -103,7 +104,7 @@ export const propertyLookupRequestSchema = z
   .strict();
 
 export const propertyMatchSchema = z.object({
-  homeId: idSchema,
+  propertyId: idSchema,
   /** The canonical property page path of the match. */
   path: z.string(),
   address: z.string(),

@@ -58,7 +58,8 @@ function instant(value: Date | string): string {
   return new Date(value).toISOString();
 }
 
-export function homeIdOf(row: Pick<PropertyRecordDbRow, 'property_id' | 'unit_id'>): string {
+/** The home a row's listing is on: the unit id in a subdivided building, else the property id. */
+export function propertyIdOf(row: Pick<PropertyRecordDbRow, 'property_id' | 'unit_id'>): string {
   return row.unit_id ?? row.property_id;
 }
 
@@ -168,7 +169,7 @@ function square(latitude: number, longitude: number): string {
 /** Other active listings near the home: a square around its point, else its city. */
 async function nearbyOf(
   pool: ReadPool,
-  homeId: string,
+  propertyId: string,
   latest: PropertyRecordDbRow,
   detail: ListingDetail | null,
 ): Promise<ListingCardRow[]> {
@@ -187,7 +188,7 @@ async function nearbyOf(
       pageSize: String(NEARBY_LIMIT + 1),
     }),
   );
-  return envelope.results.filter((card) => card.homeId !== homeId).slice(0, NEARBY_LIMIT);
+  return envelope.results.filter((card) => card.propertyId !== propertyId).slice(0, NEARBY_LIMIT);
 }
 
 const WHOLE = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
@@ -233,15 +234,16 @@ export async function findHomePage(
   requestedId: string,
 ): Promise<PropertyPage | null> {
   // One casing per home, so each home has one canonical URL.
-  const homeId = requestedId.toLowerCase();
-  const rows = await findHomeRows(pool, homeId);
+  const propertyId = requestedId.toLowerCase();
+  const rows = await findHomeRows(pool, propertyId);
   const found = latestOf(rows);
   if (found === null) return null;
   // One listing that withheld the address masks it on the whole page. A page that showed another
   // listing's address would tie the withheld listing to it through the shared home id.
   const masked = rows.some((row) => row.address_street === null);
   const latest = masked ? { ...found, address_street: null, unit_number: null } : found;
-  const canonicalPath = propertyPagePath(pageAddress(latest), homeId);
+  // The canonical URL carries the most recent listing's id, per the #386 correction to #382.
+  const canonicalPath = propertyPagePath(pageAddress(latest), latest.id);
   // The reads are separate statements, so a sync can change the row between them. A listing that
   // left the search view in between renders as Off market, never with stale listing data.
   let detail = latest.listing_data_displayable ? await findListingById(pool, latest.id) : null;
@@ -262,12 +264,11 @@ export async function findHomePage(
   const record = toPropertyRecord(latest);
   const [history, nearby] = await Promise.all([
     historyOf(pool, rows, latest),
-    nearbyOf(pool, homeId, latest, detail),
+    nearbyOf(pool, propertyId, latest, detail),
   ]);
   return propertyPageSchema.parse({
-    homeId,
-    propertyId: latest.property_id,
-    unitId: latest.unit_id,
+    propertyId,
+    listingId: latest.id,
     slug: propertySlug(pageAddress(latest)),
     canonicalPath,
     marketStatus,
@@ -286,7 +287,7 @@ export async function findListingHomePage(
   listingId: string,
 ): Promise<PropertyPage | null> {
   const row = await findPropertyRecord(pool, listingId);
-  return row === null ? null : findHomePage(pool, homeIdOf(row));
+  return row === null ? null : findHomePage(pool, propertyIdOf(row));
 }
 
 /** Compared in slug form, so `O'Donnell` and `118-120` match the path that slugify built. */
@@ -347,7 +348,7 @@ export async function resolveAddress(
   });
   const best = new Map<string, PropertyRecordDbRow>();
   for (const row of atAddress(candidates, parsed)) {
-    const key = homeIdOf(row);
+    const key = propertyIdOf(row);
     const held = best.get(key);
     if (held === undefined || preferred(row, held) < 0) best.set(key, row);
   }
@@ -367,10 +368,11 @@ export type LookupResult =
 function toMatch(row: PropertyRecordDbRow): PropertyMatch | null {
   const record = toPropertyRecord(row);
   if (record.address === null) return null;
-  const homeId = homeIdOf(row);
+  // `resolveAddress` returns one row per home: its current listing, so `row.id` is that
+  // listing's id and doubles as the canonical URL's id.
   return {
-    homeId,
-    path: propertyPagePath(pageAddress(row), homeId),
+    propertyId: propertyIdOf(row),
+    path: propertyPagePath(pageAddress(row), row.id),
     address: record.address,
     city: row.city,
     state: row.state,

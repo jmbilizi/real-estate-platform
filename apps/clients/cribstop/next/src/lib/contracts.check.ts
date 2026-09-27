@@ -36,7 +36,7 @@ type Expect<T extends true> = T;
 type AssertNever<T extends never> = T;
 
 type ExpectedCardKeys =
-  | 'homeId'
+  | 'propertyId'
   | 'propertyPath'
   | 'id'
   | 'title'
