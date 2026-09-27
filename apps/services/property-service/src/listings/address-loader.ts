@@ -41,19 +41,24 @@ const REQUEST_PATH_TIMEOUT_MS = 3000;
 const odataString = (value: string): string => value.replace(/'/g, "''");
 
 /**
- * `startswith` takes the house number and the first street word only, so `Place` and `Pl` both
- * match. The caller compares the normalized street after mapping. Bright rejects `or`, so the
- * place is one clause: the ZIP when the path has one, else city and state.
+ * Matches the structured `StreetNumber` and the first word of `StreetName`, never
+ * `UnparsedAddress`: on production that field mixes case, abbreviates suffixes, and sometimes holds
+ * no street (`VA,ALEXANDRIA CITY`, probed 2026-09-26). `StreetName` excludes the suffix, and a
+ * slug cannot tell a multi-word name from its suffix, so only the first word is matched. The caller
+ * compares the normalized street after mapping. Bright rejects `or`, so the place is one clause:
+ * the ZIP when the path has one, else city and state.
  */
 export function buildAddressLookupUrl(serviceRoot: string, parsed: ParsedPropertyPath): string {
-  const firstWord = parsed.street.split(' ')[0] ?? '';
-  const prefix = `${parsed.houseNumber.toUpperCase()} ${titleCase(firstWord)}`;
+  const firstWord = (parsed.street.split(' ')[0] ?? '').toLowerCase();
   const place =
     parsed.zip !== null
       ? `PostalCode eq '${parsed.zip}'`
       : `City eq '${odataString(titleCase(parsed.city))}' and StateOrProvince eq '${parsed.state}'`;
+  const street =
+    `StreetNumber eq '${odataString(parsed.houseNumber.toUpperCase())}'` +
+    ` and startswith(tolower(StreetName),'${odataString(firstWord)}')`;
   const search = new URLSearchParams();
-  search.set('$filter', `${place} and startswith(UnparsedAddress,'${odataString(prefix)}')`);
+  search.set('$filter', `${place} and ${street}`);
   search.set('$select', BRIGHT_SYNC_SELECT.join(','));
   search.set('$top', String(MAX_RECORDS));
   return `${serviceRoot.replace(/\/+$/, '')}/BrightProperties?${search.toString()}`;
