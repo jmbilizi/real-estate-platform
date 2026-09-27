@@ -5,6 +5,8 @@ import type {
   ListingDetail,
   ListingsEnvelope,
   ListingsMeta,
+  MapBounds,
+  MapResponse,
   Media,
   OpenHouse,
   SearchRequest,
@@ -147,6 +149,30 @@ export async function searchListings(
 ): Promise<ListingsEnvelope> {
   const params = toSearchParams(query).toString();
   return getJson<ListingsEnvelope>(`/api/listings${params ? `?${params}` : ''}`, signal);
+}
+
+/**
+ * Pins or clusters for a map viewport (#377). Takes the list's filters; paging and sort are dropped
+ * by the proxy allowlist, so the map set is the search set limited to `bounds`.
+ */
+export async function getListingsMap(
+  query: ListingSearchQuery,
+  bounds: MapBounds,
+  zoom: number,
+  signal?: AbortSignal,
+): Promise<MapResponse> {
+  const params = toSearchParams(query);
+  // A zoomed-out Leaflet view reports longitudes past ±180. The contract accepts only real ones.
+  const clamp = (value: number, limit: number) => Math.max(-limit, Math.min(limit, value));
+  const edges = [
+    clamp(bounds.west, 180),
+    clamp(bounds.south, 90),
+    clamp(bounds.east, 180),
+    clamp(bounds.north, 90),
+  ];
+  params.set('bounds', edges.map((n) => n.toFixed(5)).join(','));
+  params.set('zoom', String(Math.round(zoom)));
+  return getJson<MapResponse>(`/api/listings/map?${params.toString()}`, signal);
 }
 
 export async function getListingsMeta(signal?: AbortSignal): Promise<ListingsMeta> {

@@ -15,7 +15,11 @@ jest.mock('react-leaflet', () => ({
 jest.mock('leaflet', () => ({ __esModule: true, default: {} }));
 jest.mock('leaflet.markercluster', () => ({}));
 
-import { getSampleBannerCopy, selectMappableListings } from './ListingsMapInner';
+import {
+  getSampleBannerCopy,
+  sampleBannerCopyFor,
+  selectMappableListings,
+} from './ListingsMapInner';
 import { aListingCardRow, aSuppressedAddressRow } from '@/test/fixtures';
 
 describe('selectMappableListings', () => {
@@ -87,5 +91,15 @@ describe('getSampleBannerCopy', () => {
 
     expect(copy).not.toContain('this map are illustrative');
     expect(copy).toBe('Some listings on this map are sample data — their prices are illustrative.');
+  });
+});
+
+describe('sampleBannerCopyFor (#377 viewport counts)', () => {
+  it('scopes the claim to the sample share of the viewport', () => {
+    expect(sampleBannerCopyFor(0, 40)).toBeNull();
+    expect(sampleBannerCopyFor(40, 40)).toBe(
+      getSampleBannerCopy([aListingCardRow({ isSample: true })]),
+    );
+    expect(sampleBannerCopyFor(3, 40)).toContain('Some listings');
   });
 });

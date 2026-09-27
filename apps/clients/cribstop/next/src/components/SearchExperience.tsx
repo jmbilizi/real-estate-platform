@@ -532,6 +532,8 @@ export default function SearchExperience({
               className="h-full w-full"
               searchCenter={searchCenter}
               searchPolygon={searchPolygon}
+              filters={requestFilters}
+              total={total}
               active={!deferred}
             />
           </div>

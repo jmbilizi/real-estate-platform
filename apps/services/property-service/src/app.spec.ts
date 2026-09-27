@@ -794,6 +794,7 @@ describe('GET /openapi.json', () => {
     expect(response.body.info.title).toBe('Property Service');
     expect(Object.keys(response.body.paths).sort()).toEqual([
       '/listings',
+      '/listings/map',
       '/listings/meta',
       '/listings/{id}',
       '/listings/{id}/inquiries',

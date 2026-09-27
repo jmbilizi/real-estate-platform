@@ -1,4 +1,8 @@
-import { buildListingsQuery, FORWARDABLE_LISTING_PARAMS } from './listings-query';
+import {
+  buildListingsQuery,
+  FORWARDABLE_LISTING_PARAMS,
+  FORWARDABLE_MAP_PARAMS,
+} from './listings-query';
 
 /**
  * The occupancy identifiers the removed "Who" panel used to collect (#34). They are asserted by
@@ -197,5 +201,22 @@ describe('listings gateway query allowlist', () => {
         /senior|adult|teen|child|infant|pet|occupan/i,
       );
     });
+  });
+});
+
+describe('map query allowlist (#377)', () => {
+  it('forwards the filters and viewport, never paging, sort or occupancy', () => {
+    const incoming = new URLSearchParams({
+      city: 'Washington',
+      state: 'DC',
+      bounds: '-77.12,38.79,-76.91,38.996',
+      zoom: '12',
+      page: '2',
+      pageSize: '20',
+      sort: 'newest',
+      seniors: '1',
+    });
+    const forwarded = new URLSearchParams(buildListingsQuery(incoming, FORWARDABLE_MAP_PARAMS));
+    expect([...forwarded.keys()].sort()).toEqual(['bounds', 'city', 'state', 'zoom']);
   });
 });
