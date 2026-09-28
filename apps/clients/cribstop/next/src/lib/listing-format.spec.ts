@@ -10,6 +10,7 @@ import {
   formatOpenHouseWhen,
   formatStreetAddress,
   hasMapCoordinates,
+  officeInitials,
   PRICE_WITHHELD_COPY,
 } from './listing-format';
 
@@ -245,5 +246,19 @@ describe('formatComingSoonBadgeShort (#424)', () => {
   it('shows "Coming soon" only, never a past date, when the feed lags behind', () => {
     const now = new Date('2026-10-15T12:00:00.000Z');
     expect(formatComingSoonBadgeShort('2026-10-14T00:00:00.000Z', now)).toBe('Coming soon');
+  });
+});
+
+describe('officeInitials (#433)', () => {
+  it('takes the first letter of the first two words', () => {
+    expect(officeInitials('Real Broker, LLC')).toBe('RB');
+  });
+
+  it('handles a single-word office name', () => {
+    expect(officeInitials('Compass')).toBe('C');
+  });
+
+  it('skips leading punctuation when picking a letter', () => {
+    expect(officeInitials('& Company Realty')).toBe('CR');
   });
 });

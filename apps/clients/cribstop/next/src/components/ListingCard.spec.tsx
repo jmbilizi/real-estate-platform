@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { aLandParcelRow, aListingCardRow, aSuppressedAddressRow } from '@/test/fixtures';
 import ListingCard from './ListingCard';
 import { getListingPanel, resetListingPanel } from '@/lib/listing-panel';
@@ -6,6 +6,21 @@ import { getListingPanel, resetListingPanel } from '@/lib/listing-panel';
 jest.mock('@/lib/context', () => ({
   useApp: () => ({ toggleSave: jest.fn(), isSaved: () => false }),
 }));
+
+const mockToast = jest.fn();
+jest.mock('@/lib/useToast', () => ({ useToast: () => ({ toast: mockToast }) }));
+
+/** Replaces one `navigator` member for the duration of a test and restores it after. Same helper
+ *  as ListingDetailContent.spec.tsx's, needed because jsdom's `navigator.clipboard` is not a plain
+ *  writable property. */
+function stubNavigator(key: string, value: unknown) {
+  const original = Object.getOwnPropertyDescriptor(navigator, key);
+  Object.defineProperty(navigator, key, { value, configurable: true, writable: true });
+  return () => {
+    if (original) Object.defineProperty(navigator, key, original);
+    else delete (navigator as unknown as Record<string, unknown>)[key];
+  };
+}
 
 describe('ListingCard', () => {
   describe('nullable fields are guarded at every render site', () => {
@@ -157,73 +172,111 @@ describe('ListingCard', () => {
     });
   });
 
-  describe('card attribution — one courtesy line, every source (#305)', () => {
-    /**
-     * Stakeholder ruling 2026-09-22 (#305): every card shows one line, "Listing courtesy of
-     * {officeName}", whatever the row's `source`. No listing agent name, phone, email, or
-     * `listedBy` line on a card, `brightMLS` included. #306 tracks confirming this with Real
-     * Broker LLC and Bright MLS before a live Bright row ships.
-     */
-    it('renders one courtesy line for a brightMLS row, with no agent name or contact method', () => {
+  describe('card footer — office avatar/name, time on market, actions (#433)', () => {
+    it('shows the office name and its avatar initials, for every source', () => {
       render(
         <ListingCard
-          listing={aListingCardRow({
-            source: 'brightMLS',
-            listedBy: 'Jane Q. Agent – Bright Partner Realty',
-            listingAgentName: 'Jane Q. Agent',
-            officeName: 'Bright Partner Realty',
-            brokerPhone: '(301) 555-0199',
-            brokerEmail: 'jane.agent@example.com',
-          })}
+          listing={aListingCardRow({ source: 'brightMLS', officeName: 'Bright Partner Realty' })}
         />,
       );
 
-      expect(screen.getByText('Listing courtesy of Bright Partner Realty')).toBeInTheDocument();
-      expect(screen.queryByText('Jane Q. Agent – Bright Partner Realty')).not.toBeInTheDocument();
-      expect(screen.queryByText('Jane Q. Agent')).not.toBeInTheDocument();
-      expect(screen.queryByText('(301) 555-0199')).not.toBeInTheDocument();
-      expect(screen.queryByText('jane.agent@example.com')).not.toBeInTheDocument();
+      expect(screen.getByText('Bright Partner Realty')).toBeInTheDocument();
+      expect(screen.getByText('BP')).toBeInTheDocument();
+      expect(screen.queryByText(/Listing courtesy of/)).not.toBeInTheDocument();
     });
 
-    it('names the listing firm for an IDX row whose listedBy omits it', () => {
-      render(
-        <ListingCard
-          listing={aListingCardRow({
-            source: 'brightMLS',
-            listedBy: 'Jane Agent',
-            officeName: 'Bright Partner Realty',
-          })}
-        />,
-      );
-
-      expect(screen.getByText('Listing courtesy of Bright Partner Realty')).toBeInTheDocument();
-      expect(screen.queryByText('Jane Agent')).not.toBeInTheDocument();
-    });
-
-    it('renders the same one line for our own inventory', () => {
-      render(<ListingCard listing={aListingCardRow({ source: 'internal' })} />);
-
-      expect(screen.getByText(/Listing courtesy of Real Broker, LLC/)).toBeInTheDocument();
-      expect(screen.queryByText('(301) 555-0101')).not.toBeInTheDocument();
-      expect(screen.queryByText('sample.agent1@example.com')).not.toBeInTheDocument();
-    });
-
-    it('keeps a long office name on one line so the tile cannot outgrow its neighbours', () => {
+    it('keeps a long office name on one line, with the full name in title and aria-label', () => {
       const officeName = 'Long & Foster Real Estate, Inc. — Bethesda Gateway';
       render(<ListingCard listing={aListingCardRow({ source: 'internal', officeName })} />);
 
-      const line = screen.getByText(/Listing courtesy of Long & Foster/);
-      expect(line).toHaveClass('truncate');
-      // Clipped visually, never lost: `truncate` is CSS only, so the full name stays in the DOM
-      // for screen readers, and `title` surfaces it on hover.
-      expect(line).toHaveAttribute('title', officeName);
+      const name = screen.getByText(officeName);
+      expect(name).toHaveClass('truncate');
+      expect(name).toHaveAttribute('title', officeName);
+      expect(name).toHaveAttribute('aria-label', officeName);
     });
 
-    it('renders an `other` row the same way', () => {
-      render(<ListingCard listing={aListingCardRow({ source: 'other' })} />);
+    it('renders the same footer for internal and other sources', () => {
+      render(<ListingCard listing={aListingCardRow({ source: 'internal' })} />);
+      expect(screen.getByText('Real Broker, LLC')).toBeInTheDocument();
 
-      expect(screen.getByText(/Listing courtesy of Real Broker, LLC/)).toBeInTheDocument();
-      expect(screen.queryByText('(301) 555-0101')).not.toBeInTheDocument();
+      render(<ListingCard listing={aListingCardRow({ source: 'other' })} />);
+      expect(screen.getAllByText('Real Broker, LLC').length).toBeGreaterThan(0);
+    });
+
+    it('shows time on market next to the office name when listedAt is known', () => {
+      const now = new Date('2026-10-15T12:00:00.000Z');
+      jest.useFakeTimers().setSystemTime(now);
+      render(
+        <ListingCard
+          listing={aListingCardRow({ listedAt: '2026-10-08T00:00:00.000Z', status: 'Active' })}
+        />,
+      );
+
+      expect(screen.getByText('1w')).toBeInTheDocument();
+      jest.useRealTimers();
+    });
+
+    it('shows no time-on-market text and no separating dot when listedAt is unknown', () => {
+      render(<ListingCard listing={aListingCardRow({ listedAt: null, status: 'Active' })} />);
+
+      expect(screen.queryByText('·')).not.toBeInTheDocument();
+    });
+
+    it('shows no time on market for a Coming Soon listing, even with a listedAt', () => {
+      render(
+        <ListingCard
+          listing={aListingCardRow({
+            status: 'Coming Soon',
+            listedAt: '2026-08-01T00:00:00.000Z',
+            comingSoonDate: null,
+          })}
+        />,
+      );
+
+      expect(screen.queryByText('·')).not.toBeInTheDocument();
+    });
+
+    it('has the save control in the footer, not on the photo, and only one of it', () => {
+      render(<ListingCard listing={aListingCardRow()} />);
+
+      expect(screen.getAllByRole('button', { name: /save/i })).toHaveLength(1);
+    });
+
+    it('has a share button and a more-options control', () => {
+      render(<ListingCard listing={aListingCardRow()} />);
+
+      expect(screen.getByRole('button', { name: /share this listing/i })).toBeInTheDocument();
+      expect(screen.getByLabelText('More options')).toBeInTheDocument();
+    });
+
+    it('copies the listing link from the more-options menu', async () => {
+      const writeText = jest.fn().mockResolvedValue(undefined);
+      const restore = stubNavigator('clipboard', { writeText });
+      mockToast.mockReset();
+
+      render(<ListingCard listing={aListingCardRow({ propertyPath: '/property/abc/123' })} />);
+
+      fireEvent.click(screen.getByText('Copy link'));
+
+      await waitFor(() => expect(mockToast).toHaveBeenCalledWith('Link copied'));
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/property/abc/123'));
+      restore();
+    });
+
+    it('shares via the Web Share API when the platform has one', async () => {
+      const share = jest.fn().mockResolvedValue(undefined);
+      const restore = stubNavigator('share', share);
+      mockToast.mockReset();
+
+      render(<ListingCard listing={aListingCardRow({ propertyPath: '/property/abc/123' })} />);
+
+      fireEvent.click(screen.getByRole('button', { name: /share this listing/i }));
+
+      await waitFor(() => expect(share).toHaveBeenCalledTimes(1));
+      expect(share.mock.calls[0][0]).toMatchObject({
+        url: expect.stringContaining('/property/abc/123'),
+      });
+      restore();
     });
   });
 

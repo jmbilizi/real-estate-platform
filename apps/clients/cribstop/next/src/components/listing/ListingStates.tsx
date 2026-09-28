@@ -94,9 +94,19 @@ export function ListingCardSkeleton() {
         <p className="mt-0.5 text-base">
           <Bar className="w-2/5" />
         </p>
-        {/* Attribution keeps its own tinted block: a container, so it takes the loaded surface. */}
-        <div className="mt-1 rounded-sm bg-surface-alt px-1.5 py-1 text-[13px]">
-          <Bar className="w-3/4" />
+        {/* #433. Mirrors the footer row: an avatar circle, a name bar, three action dots. */}
+        <div className="mt-1 flex h-6 items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className={`h-5 w-5 shrink-0 rounded-full ${FILL}`} />
+            <span className="w-16 text-[13px]">
+              <Bar />
+            </span>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className={`h-4 w-4 rounded-full ${FILL}`} />
+            <span className={`h-4 w-4 rounded-full ${FILL}`} />
+            <span className={`h-4 w-4 rounded-full ${FILL}`} />
+          </div>
         </div>
       </div>
     </div>
