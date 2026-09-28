@@ -2,6 +2,7 @@ import {
   buildListingsQuery,
   FORWARDABLE_LISTING_PARAMS,
   FORWARDABLE_MAP_PARAMS,
+  FORWARDABLE_NEIGHBORHOODS_PARAMS,
 } from './listings-query';
 
 /**
@@ -218,5 +219,31 @@ describe('map query allowlist (#377)', () => {
     });
     const forwarded = new URLSearchParams(buildListingsQuery(incoming, FORWARDABLE_MAP_PARAMS));
     expect([...forwarded.keys()].sort()).toEqual(['bounds', 'city', 'state', 'zoom']);
+  });
+});
+
+describe('neighborhoods query allowlist (#393)', () => {
+  it('forwards exactly the fields the wire contract defines', () => {
+    const incoming = new URLSearchParams({
+      state: 'DC',
+      city: 'Washington',
+      listingType: 'sale',
+      minCount: '5',
+      limit: '24',
+      slug: 'columbia-heights',
+      page: '2',
+      sort: 'newest',
+    });
+    const forwarded = new URLSearchParams(
+      buildListingsQuery(incoming, FORWARDABLE_NEIGHBORHOODS_PARAMS),
+    );
+    expect([...forwarded.keys()].sort()).toEqual([
+      'city',
+      'limit',
+      'listingType',
+      'minCount',
+      'slug',
+      'state',
+    ]);
   });
 });

@@ -8,6 +8,8 @@ import type {
   MapBounds,
   MapResponse,
   Media,
+  NeighborhoodsRequest,
+  NeighborhoodsResponse,
   OpenHouse,
   SearchRequest,
 } from '@cribstop/property-contracts';
@@ -177,6 +179,22 @@ export async function getListingsMap(
 
 export async function getListingsMeta(signal?: AbortSignal): Promise<ListingsMeta> {
   return getJson<ListingsMeta>('/api/listings/meta', signal);
+}
+
+/** Neighborhood counts for the home page's "Explore neighborhoods" row (#390, #393). */
+export async function getNeighborhoods(
+  query: Partial<NeighborhoodsRequest>,
+  signal?: AbortSignal,
+): Promise<NeighborhoodsResponse> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value === undefined || value === null || value === '') continue;
+    params.set(key, String(value));
+  }
+  return getJson<NeighborhoodsResponse>(
+    `/api/listings/neighborhoods${params.size ? `?${params}` : ''}`,
+    signal,
+  );
 }
 
 // ---------------------------------------------------------------------------------------------

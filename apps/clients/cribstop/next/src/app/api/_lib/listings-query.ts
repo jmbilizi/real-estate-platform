@@ -1,4 +1,8 @@
-import { mapRequestSchema, searchRequestSchema } from '@cribstop/property-contracts';
+import {
+  mapRequestSchema,
+  neighborhoodsRequestSchema,
+  searchRequestSchema,
+} from '@cribstop/property-contracts';
 
 /**
  * Pure query-parameter handling for the Property API proxy.
@@ -28,6 +32,11 @@ export const FORWARDABLE_LISTING_PARAMS: readonly string[] = Object.freeze(
 /** The map endpoint's allowlist (#377): the search filters without paging or sort, plus the viewport. */
 export const FORWARDABLE_MAP_PARAMS: readonly string[] = Object.freeze(
   Object.keys(mapRequestSchema.shape),
+);
+
+/** The neighborhoods endpoint's allowlist (#393), derived the same way. */
+export const FORWARDABLE_NEIGHBORHOODS_PARAMS: readonly string[] = Object.freeze(
+  Object.keys(neighborhoodsRequestSchema.shape),
 );
 
 /**

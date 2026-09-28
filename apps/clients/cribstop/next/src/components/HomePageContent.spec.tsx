@@ -1,11 +1,12 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { aListingCardRow } from '@/test/fixtures';
-import { getListingsMeta, searchListings } from '@/lib/api/listings';
+import { getListingsMeta, getNeighborhoods, searchListings } from '@/lib/api/listings';
 import HomePageContent from './HomePageContent';
 
 jest.mock('@/lib/api/listings', () => ({
   searchListings: jest.fn(),
   getListingsMeta: jest.fn(),
+  getNeighborhoods: jest.fn(),
 }));
 
 // HomePageContent itself does not read useApp()/listingType (#361, #392) — but ListingCard,
@@ -21,6 +22,20 @@ jest.mock('@/lib/context', () => ({
 
 const mockedSearchListings = searchListings as jest.Mock;
 const mockedGetListingsMeta = getListingsMeta as jest.Mock;
+const mockedGetNeighborhoods = getNeighborhoods as jest.Mock;
+
+function neighborhoodRow(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    name: 'Columbia Heights',
+    city: 'Washington',
+    state: 'DC',
+    slug: 'columbia-heights',
+    total: 300,
+    sale: 207,
+    rent: 93,
+    ...overrides,
+  };
+}
 
 function envelope(rows: ReturnType<typeof aListingCardRow>[], total = rows.length) {
   return {
@@ -48,11 +63,13 @@ describe('HomePageContent', () => {
       listingCount: 13,
     });
     mockedSearchListings.mockResolvedValue(envelope([aListingCardRow()]));
+    mockedGetNeighborhoods.mockResolvedValue({ results: [], total: 0 });
   });
 
   afterEach(() => {
     mockedSearchListings.mockReset();
     mockedGetListingsMeta.mockReset();
+    mockedGetNeighborhoods.mockReset();
     window.localStorage.clear();
   });
 
@@ -119,6 +136,80 @@ describe('HomePageContent', () => {
 
       await screen.findByText('What your budget buys');
       expect(screen.queryByText('Coming soon')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('explore neighborhoods (#393)', () => {
+    it('renders tiles from the mocked response', async () => {
+      mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
+
+      render(<HomePageContent />);
+
+      expect(await screen.findByText('Columbia Heights')).toBeInTheDocument();
+      expect(screen.getByText('Washington, DC')).toBeInTheDocument();
+      expect(screen.getByText('207 for sale · 93 for rent')).toBeInTheDocument();
+    });
+
+    it('requests each licensed state in order, then a state-less request only if still short', async () => {
+      mockedGetNeighborhoods.mockImplementation((query: { state?: string }) =>
+        Promise.resolve(
+          query.state
+            ? {
+                results: [neighborhoodRow({ state: query.state, name: `Place-${query.state}` })],
+                total: 1,
+              }
+            : { results: [], total: 0 },
+        ),
+      );
+
+      render(<HomePageContent />);
+
+      await screen.findByText('Place-MD');
+      const stateArgs = mockedGetNeighborhoods.mock.calls.map(([q]) => q.state);
+      // MD, DC, VA (licensed order), then one state-less request because 3 rows is still short of 8.
+      expect(stateArgs).toEqual(['MD', 'DC', 'VA', undefined]);
+    });
+
+    it('omits the zero count part on a tile', async () => {
+      mockedGetNeighborhoods.mockResolvedValue({
+        results: [neighborhoodRow({ name: 'Petworth', sale: 40, rent: 0 })],
+        total: 1,
+      });
+
+      render(<HomePageContent />);
+
+      expect(await screen.findByText('40 for sale')).toBeInTheDocument();
+      expect(screen.queryByText(/\d+ for rent/)).not.toBeInTheDocument();
+    });
+
+    it('links a tile to the neighborhood search path', async () => {
+      mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
+
+      render(<HomePageContent />);
+
+      const link = (await screen.findByText('Columbia Heights')).closest('a');
+      expect(link).toHaveAttribute(
+        'href',
+        '/washington-dc/columbia-heights-neighborhood/homes-for-sale',
+      );
+    });
+
+    it('hides the section when the response is empty', async () => {
+      mockedGetNeighborhoods.mockResolvedValue({ results: [], total: 0 });
+
+      render(<HomePageContent />);
+
+      await screen.findByText('What your budget buys');
+      expect(screen.queryByText('Explore neighborhoods')).not.toBeInTheDocument();
+    });
+
+    it('hides the section when the fetch fails', async () => {
+      mockedGetNeighborhoods.mockRejectedValue(new Error('down'));
+
+      render(<HomePageContent />);
+
+      await screen.findByText('What your budget buys');
+      expect(screen.queryByText('Explore neighborhoods')).not.toBeInTheDocument();
     });
   });
 
