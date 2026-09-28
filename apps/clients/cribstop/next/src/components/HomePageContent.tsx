@@ -6,7 +6,7 @@ import NeighborhoodRow, { type Neighborhood } from '@/components/NeighborhoodRow
 import { getListingsMeta, getNeighborhoods, searchListings } from '@/lib/api/listings';
 import type { ListingSearchQuery } from '@/lib/api/listings';
 import type { ListingCardRow, ListingsMeta } from '@/lib/types';
-import { searchTargetUrl } from '@/lib/search-place';
+import { addressCity, addressState, searchTargetUrl } from '@/lib/search-place';
 import { formatRelativeTime } from '@/lib/format';
 import Link from 'next/link';
 import { BRAND } from '@/lib/brand';
@@ -21,21 +21,26 @@ const CAROUSEL_PAGE_SIZE = 8;
 /**
  * The recent-search storage `CompactSearchBar` already writes (`recentSearches`). #398 reuses this
  * key rather than adding one: an entry now carries the listing type active at the time of that
- * search, so the newest entry says which side the visitor searched last.
+ * search, so the newest entry says which side the visitor searched last. One read/parse shared by
+ * `lastSearchedSide` and `lastSearchedPlace` (#416), so a corrupted-value fix or a stored-shape
+ * change lands once, not in two near-identical functions.
  */
-/** Only `'rent'` flips the order; a last search of `'sale'`, `'all'`, `'sold'`, or none at all
- *  all fall to the "otherwise sale first" branch `useSectionOrder` applies below. */
-function lastSearchedSide(): ListingSide | null {
+function latestRecentSearch(): any {
   if (typeof window === 'undefined') return null;
   try {
     const stored = window.localStorage.getItem('recentSearches');
     if (!stored) return null;
     const parsed = JSON.parse(stored);
-    const latest = Array.isArray(parsed) ? parsed[0] : null;
-    return latest?.listingType === 'rent' ? 'rent' : null;
+    return Array.isArray(parsed) ? (parsed[0] ?? null) : null;
   } catch {
     return null;
   }
+}
+
+/** Only `'rent'` flips the order; a last search of `'sale'`, `'all'`, `'sold'`, or none at all
+ *  all fall to the "otherwise sale first" branch `useSectionOrder` applies below. */
+function lastSearchedSide(): ListingSide | null {
+  return latestRecentSearch()?.listingType === 'rent' ? 'rent' : null;
 }
 
 /**
@@ -49,6 +54,26 @@ function useSectionOrder(): [ListingSide, ListingSide] {
     setRentFirst(lastSearchedSide() === 'rent');
   }, []);
   return rentFirst ? ['rent', 'sale'] : ['sale', 'rent'];
+}
+
+/** A place for the "{ in City, ST}" copy suffix, and for scoping the query it sits next to
+ *  (#416): a place-named count must be that place's own count, never a platform-wide one read
+ *  next to a place name it doesn't describe (PRD §6.3). `null` when the visitor has never
+ *  searched — never a guessed or IP-derived location. */
+function lastSearchedPlace(): { city: string; state: string } | null {
+  const address = latestRecentSearch()?.address ?? {};
+  const city = addressCity(address);
+  const state = addressState(address);
+  return city && state ? { city, state } : null;
+}
+
+/** Client-only, like `useSectionOrder`: server render always sees no place. */
+function useLastSearchedPlace(): { city: string; state: string } | null {
+  const [place, setPlace] = useState<{ city: string; state: string } | null>(null);
+  useEffect(() => {
+    setPlace(lastSearchedPlace());
+  }, []);
+  return place;
 }
 
 type CarouselState = {
@@ -207,7 +232,7 @@ function ExploreNeighborhoodsRow() {
 
   return (
     <NeighborhoodRow
-      title="Explore neighborhoods"
+      title="Pick your neighborhood"
       subtitle={`Neighborhoods across ${BRAND.licensedStates}`}
       neighborhoods={neighborhoods}
       loading={loading}
@@ -275,25 +300,51 @@ function PillButton({
   );
 }
 
+/** Per-side "coming soon" copy (#416): distinct title and subtitle template for sale vs rent,
+ *  short and share-worthy without an unsourced popularity claim (PRD §6.3). */
+const COMING_SOON_COPY: Record<
+  ListingSide,
+  { title: string; subtitle: (count: string, place: string) => string }
+> = {
+  sale: {
+    title: 'Dropping soon',
+    subtitle: (count, place) => `Sneak peek at ${count} homes for sale coming soon${place}`,
+  },
+  rent: {
+    title: 'Rentals about to drop',
+    subtitle: (count, place) => `${count} rentals coming soon${place}. See them first.`,
+  },
+};
+
 /** "Coming soon" (#392): listed early, showings not started. Hidden while empty and settled. */
 function ComingSoonRow({ side }: { side: ListingSide }) {
+  const place = useLastSearchedPlace();
+  // The query is scoped to the visitor's own last-searched place (#416), so `total` is always the
+  // count the "{ in City, ST}" copy claims — never a platform-wide count read next to a place name
+  // it doesn't describe (PRD §6.3: every claim backed by API data).
   const { listings, total, loading, failed, refetch } = useCarouselListings({
     status: ['Coming Soon'],
     sort: 'newest',
     listingType: side,
     pageSize: CAROUSEL_PAGE_SIZE,
+    city: place?.city,
+    state: place?.state,
   });
 
   const show = loading || total > 0 || failed;
   if (!show) return null;
 
+  const copy = COMING_SOON_COPY[side];
+  const placeSuffix = place ? ` in ${place.city}, ${place.state}` : '';
+
   return (
     <ListingRow
-      title="Coming soon"
-      subtitle={
-        loading ? undefined : `${total.toLocaleString()} listed early. Showings have not started.`
-      }
-      href={searchHref(side, { status: 'Coming Soon' })}
+      title={copy.title}
+      subtitle={loading ? undefined : copy.subtitle(total.toLocaleString(), placeSuffix)}
+      href={searchHref(side, {
+        status: 'Coming Soon',
+        ...(place ? { city: place.city, state: place.state } : {}),
+      })}
       listings={listings}
       loading={loading}
       failed={failed}
@@ -325,27 +376,42 @@ const RENT_BANDS: BudgetBand[] = [
   { label: '$4,000+', minPrice: 4_000 },
 ];
 
+/** "Under $300K" -> "under $300K": reads as a sentence fragment once folded into the title below.
+ *  Every other label ("$300K–$500K", "$1M+") already reads fine mid-sentence as-is. */
+function budgetPricePhrase(label: string): string {
+  return label.startsWith('Under ') ? `under ${label.slice('Under '.length)}` : label;
+}
+
 /**
- * One "What your budget buys" sub-row: chips for one fixed listing type, and the selected band's
- * cards. `bands[selected] ?? bands[0]` is a defensive clamp only — the sale row (5 bands) and the
- * rent row (4 bands) are each rendered with their own `key` in `BudgetSection`, so React never
- * reuses one's `selected` state for the other's shorter array.
+ * One budget sub-row: chips for one fixed listing type, and the selected band's cards. Its own
+ * title names the selected band ("What under $300K gets you") rather than a fixed "Homes for
+ * sale" (#416), so the heading tracks whichever chip is active.
+ *
+ * `bands[selected] ?? bands[0]` is a defensive clamp only — the sale row (5 bands) and the rent
+ * row (4 bands) are each rendered with their own `key` in `BudgetSection`, so React never reuses
+ * one's `selected` state for the other's shorter array.
  */
 function BudgetSubRow({ type, bands }: { type: 'sale' | 'rent'; bands: BudgetBand[] }) {
   const [selected, setSelected] = useState(0);
   const band = bands[selected] ?? bands[0];
+  const place = useLastSearchedPlace();
 
+  // City-scoped when a place is known (#416), so the "{N} homes" subtitle next to a title that
+  // names that city is never a platform-wide count (PRD §6.3: every claim backed by API data).
   const { listings, total, loading, failed, refetch } = useCarouselListings({
     listingType: type,
     minPrice: band.minPrice,
     maxPrice: band.maxPrice,
     sort: 'newest',
     pageSize: CAROUSEL_PAGE_SIZE,
+    city: place?.city,
+    state: place?.state,
   });
 
   // A real, empty result — distinct from "still loading" and from "the fetch failed". The chips
   // stay live so the visitor can pick another band without an empty scroller under them.
   const empty = !loading && !failed && total === 0;
+  const title = `What ${budgetPricePhrase(band.label)} gets you${place ? ` in ${place.city}` : ''}`;
 
   return (
     <div>
@@ -367,11 +433,12 @@ function BudgetSubRow({ type, bands }: { type: 'sale' | 'rent'; bands: BudgetBan
         </p>
       ) : (
         <ListingRow
-          title={type === 'sale' ? 'Homes for sale' : 'Homes for rent'}
+          title={title}
           subtitle={loading ? undefined : `${total.toLocaleString()} homes`}
           href={searchHref(type, {
             ...(band.minPrice ? { minPrice: String(band.minPrice) } : {}),
             ...(band.maxPrice ? { maxPrice: String(band.maxPrice) } : {}),
+            ...(place ? { city: place.city, state: place.state } : {}),
           })}
           listings={listings}
           loading={loading}
@@ -386,20 +453,20 @@ function BudgetSubRow({ type, bands }: { type: 'sale' | 'rent'; bands: BudgetBan
   );
 }
 
-/** "What your budget buys" (#392): both sub-rows, ordered by the visitor's last search (#398). */
+/**
+ * Budget sub-rows, ordered by the visitor's last search (#398). No section-level heading of its
+ * own (#416): each `BudgetSubRow` names its own band, so a fixed "What your budget buys" above
+ * them would only repeat the same idea at a second heading level. Left-aligned, full content
+ * width like every row above it — no `mx-auto`/`max-w-[1760px]` centering (#416).
+ */
 function BudgetSection({ order }: { order: [ListingSide, ListingSide] }) {
   const bands: Record<ListingSide, BudgetBand[]> = { sale: SALE_BANDS, rent: RENT_BANDS };
   return (
-    <section className="mx-auto mt-8 max-w-[1760px] px-6 sm:px-10 lg:px-20">
-      <h2 className="font-display text-xl font-bold tracking-tight sm:text-2xl">
-        What your budget buys
-      </h2>
-      <div className="mt-4 flex flex-col gap-6">
-        {order.map((side) => (
-          <BudgetSubRow key={side} type={side} bands={bands[side]} />
-        ))}
-      </div>
-    </section>
+    <div className="mt-8 flex flex-col gap-6 px-6 sm:px-10 lg:px-20">
+      {order.map((side) => (
+        <BudgetSubRow key={side} type={side} bands={bands[side]} />
+      ))}
+    </div>
   );
 }
 
@@ -409,7 +476,7 @@ function TrustBlock() {
   const lastUpdated = meta?.dataUpdatedAt != null ? formatRelativeTime(meta.dataUpdatedAt) : null;
 
   return (
-    <section className="mx-auto mt-10 max-w-[1760px] px-6 pb-10 sm:px-10 lg:px-20">
+    <section className="mt-10 px-6 pb-10 sm:px-10 lg:px-20">
       <div className="overflow-hidden rounded-xl bg-surface-alt text-ink border border-surface-border">
         <div className="grid gap-8 px-8 py-12 sm:grid-cols-[1.4fr_1fr] sm:items-center sm:px-12 sm:py-16 lg:px-16">
           <div>
@@ -417,7 +484,7 @@ function TrustBlock() {
               {BRAND.brokerageShort}
             </p>
             <h2 className="mt-3 font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
-              Brokered by {BRAND.brokerageShort}.
+              Every listing, brokered by {BRAND.brokerageShort}.
             </h2>
             <p className="mt-4 text-base leading-relaxed text-ink/80">
               {BRAND.siteName} lists homes for sale and rent, brokered by {BRAND.brokerageShort} and

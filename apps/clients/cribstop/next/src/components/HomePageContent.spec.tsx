@@ -103,14 +103,14 @@ describe('HomePageContent', () => {
 
     it('renders no selection control for intent', async () => {
       render(<HomePageContent />);
-      await screen.findByText('What your budget buys');
+      await screen.findByText('What under $300K gets you');
       expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
       expect(screen.queryByRole('radio')).not.toBeInTheDocument();
     });
   });
 
-  describe('coming soon row (#392)', () => {
-    it('renders the envelope total in the subtitle', async () => {
+  describe('coming soon row (#392, #416)', () => {
+    it('renders per-side titles and the envelope total in the subtitle', async () => {
       mockedSearchListings.mockImplementation((query: { status?: string[] }) => {
         if (query.status?.includes('Coming Soon')) {
           return Promise.resolve(envelope([aListingCardRow()], 3041));
@@ -120,10 +120,12 @@ describe('HomePageContent', () => {
 
       render(<HomePageContent />);
 
-      expect(await screen.findAllByText('Coming soon')).toHaveLength(2);
+      expect(await screen.findByText('Dropping soon')).toBeInTheDocument();
+      expect(screen.getByText('Rentals about to drop')).toBeInTheDocument();
       expect(
-        (await screen.findAllByText('3,041 listed early. Showings have not started.')).length,
-      ).toBeGreaterThan(0);
+        await screen.findByText('Sneak peek at 3,041 homes for sale coming soon'),
+      ).toBeInTheDocument();
+      expect(screen.getByText('3,041 rentals coming soon. See them first.')).toBeInTheDocument();
     });
 
     it('is hidden when the total is 0 and the fetch has settled', async () => {
@@ -134,8 +136,40 @@ describe('HomePageContent', () => {
 
       render(<HomePageContent />);
 
-      await screen.findByText('What your budget buys');
-      expect(screen.queryByText('Coming soon')).not.toBeInTheDocument();
+      await screen.findByText('What under $300K gets you');
+      expect(screen.queryByText('Dropping soon')).not.toBeInTheDocument();
+      expect(screen.queryByText('Rentals about to drop')).not.toBeInTheDocument();
+    });
+
+    it('scopes the query to the visitor\'s last-searched place and names it in the copy, so the count next to "in City, ST" is that city\'s own', async () => {
+      window.localStorage.setItem(
+        'recentSearches',
+        JSON.stringify([
+          {
+            display_name: 'Rockville, MD',
+            listingType: 'sale',
+            address: { city: 'Rockville', state_code: 'MD' },
+          },
+        ]),
+      );
+      mockedSearchListings.mockImplementation((query: { status?: string[]; city?: string }) => {
+        if (query.status?.includes('Coming Soon')) {
+          return Promise.resolve(envelope([aListingCardRow()], query.city ? 12 : 3041));
+        }
+        return Promise.resolve(envelope([aListingCardRow()]));
+      });
+
+      render(<HomePageContent />);
+
+      expect(
+        await screen.findByText('Sneak peek at 12 homes for sale coming soon in Rockville, MD'),
+      ).toBeInTheDocument();
+      await waitFor(() =>
+        expect(mockedSearchListings).toHaveBeenCalledWith(
+          expect.objectContaining({ city: 'Rockville', state: 'MD' }),
+          expect.anything(),
+        ),
+      );
     });
   });
 
@@ -199,8 +233,8 @@ describe('HomePageContent', () => {
 
       render(<HomePageContent />);
 
-      await screen.findByText('What your budget buys');
-      expect(screen.queryByText('Explore neighborhoods')).not.toBeInTheDocument();
+      await screen.findByText('What under $300K gets you');
+      expect(screen.queryByText('Pick your neighborhood')).not.toBeInTheDocument();
     });
 
     it('hides the section when the fetch fails', async () => {
@@ -208,12 +242,12 @@ describe('HomePageContent', () => {
 
       render(<HomePageContent />);
 
-      await screen.findByText('What your budget buys');
-      expect(screen.queryByText('Explore neighborhoods')).not.toBeInTheDocument();
+      await screen.findByText('What under $300K gets you');
+      expect(screen.queryByText('Pick your neighborhood')).not.toBeInTheDocument();
     });
   });
 
-  describe('what your budget buys (#392)', () => {
+  describe('what your budget buys (#392, #416)', () => {
     it('fetches only the selected chip, and changing it re-fetches with the new band', async () => {
       render(<HomePageContent />);
 
@@ -239,17 +273,24 @@ describe('HomePageContent', () => {
       );
     });
 
-    it('renders one sub-row per listing type', async () => {
+    it('renders one sub-row per listing type, each titled after its own default band', async () => {
       render(<HomePageContent />);
 
-      await screen.findByText('What your budget buys');
-      expect(screen.getByText('Homes for sale')).toBeInTheDocument();
-      expect(screen.getByText('Homes for rent')).toBeInTheDocument();
+      expect(await screen.findByText('What under $300K gets you')).toBeInTheDocument();
+      expect(screen.getByText('What under $1,500 gets you')).toBeInTheDocument();
+    });
+
+    it('re-titles a sub-row when its chip changes', async () => {
+      render(<HomePageContent />);
+
+      await screen.findByText('What under $300K gets you');
+      fireEvent.click(await screen.findByRole('button', { name: '$300K–$500K' }));
+      expect(await screen.findByText('What $300K–$500K gets you')).toBeInTheDocument();
     });
 
     it('uses the canonical selected-chip style, not a brand color', async () => {
       render(<HomePageContent />);
-      await screen.findByText('What your budget buys');
+      await screen.findByText('What under $300K gets you');
 
       const active = await screen.findByRole('button', { name: 'Under $300K' });
       expect(active.className).toContain('border-ink bg-ink text-white');
@@ -296,7 +337,7 @@ describe('HomePageContent', () => {
 
       await waitFor(() =>
         expect(
-          screen.getAllByText('7 listed early. Showings have not started.').length,
+          screen.getAllByText('Sneak peek at 7 homes for sale coming soon').length,
         ).toBeGreaterThan(0),
       );
     });
@@ -314,15 +355,15 @@ describe('HomePageContent', () => {
       await waitFor(() => expect(screen.getAllByText('Failed to load').length).toBeGreaterThan(0));
       expect(screen.getAllByRole('button', { name: 'Tap to retry' }).length).toBeGreaterThan(0);
       // The rest of the page is unaffected by the failed rows.
-      expect(await screen.findByText('What your budget buys')).toBeInTheDocument();
-      expect(screen.getByText('Homes for sale')).toBeInTheDocument();
+      expect(await screen.findByText('What under $300K gets you')).toBeInTheDocument();
+      expect(screen.getByText('What under $1,500 gets you')).toBeInTheDocument();
     });
   });
 
   describe('removed rows (#392)', () => {
     it('renders none of the retired carousels', async () => {
       render(<HomePageContent />);
-      await screen.findByText('What your budget buys');
+      await screen.findByText('What under $300K gets you');
 
       for (const title of [
         'Featured homes for sale',
@@ -342,16 +383,16 @@ describe('HomePageContent', () => {
   describe('compliance (#392)', () => {
     it('uses no banned Fair-Housing-adjacent word anywhere in the rendered body', async () => {
       render(<HomePageContent />);
-      await screen.findByText('What your budget buys');
+      await screen.findByText('What under $300K gets you');
 
       const banned =
-        /\b(popular|trending|best|hand-picked|featured|safe|family|young professionals|student|up-and-coming)\b/i;
+        /\b(popular|trending|best|hot|exclusive|selling fast|hand-picked|featured|safe|family|young professionals|student|up-and-coming)\b/i;
       expect(document.body.textContent).not.toMatch(banned);
     });
 
     it('removes the unsourced brokerage claims and keeps the block fact-only', async () => {
       render(<HomePageContent />);
-      await screen.findByText('What your budget buys');
+      await screen.findByText('What under $300K gets you');
 
       expect(
         screen.queryByText(/Trusted by buyers, sellers, and renters across the DMV/),
@@ -359,7 +400,7 @@ describe('HomePageContent', () => {
       expect(
         screen.queryByText(/one of the fastest-growing brokerages in the country/),
       ).not.toBeInTheDocument();
-      expect(screen.getByText(/Brokered by Real Broker LLC\./)).toBeInTheDocument();
+      expect(screen.getByText(/Every listing, brokered by Real Broker LLC\./)).toBeInTheDocument();
       expect(screen.getByText(/licensed in MD, DC, and VA/)).toBeInTheDocument();
     });
 
@@ -376,7 +417,7 @@ describe('HomePageContent', () => {
       });
 
       render(<HomePageContent />);
-      await screen.findByText('What your budget buys');
+      await screen.findByText('What under $300K gets you');
       expect(screen.queryByText('Updated')).not.toBeInTheDocument();
     });
   });
