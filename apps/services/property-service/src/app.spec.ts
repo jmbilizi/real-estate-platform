@@ -47,6 +47,7 @@ function createSearchPool(rows: unknown[] = [cardDbRowFixture()], total = 1): Fa
       return [
         {
           data_updated_at: new Date('2026-04-18T10:30:00.000Z'),
+          last_synced_at: new Date('2026-04-19T02:00:00.000Z'),
           sources: ['internal'],
           listing_count: total,
         },
@@ -508,6 +509,7 @@ describe('GET /listings/meta', () => {
 
     expect(response.body).toEqual({
       dataUpdatedAt: '2026-04-18T10:30:00.000Z',
+      lastSyncedAt: '2026-04-19T02:00:00.000Z',
       sources: ['internal'],
       listingCount: 12,
     });
@@ -528,11 +530,18 @@ describe('GET /listings/meta', () => {
   });
 
   it('returns null freshness rather than a fabricated timestamp when nothing is publishable', async () => {
-    const pool = createFakePool(() => [{ data_updated_at: null, sources: null, listing_count: 0 }]);
+    const pool = createFakePool(() => [
+      { data_updated_at: null, last_synced_at: null, sources: null, listing_count: 0 },
+    ]);
 
     const response = await request(createApp({ pool })).get('/listings/meta').expect(200);
 
-    expect(response.body).toEqual({ dataUpdatedAt: null, sources: [], listingCount: 0 });
+    expect(response.body).toEqual({
+      dataUpdatedAt: null,
+      lastSyncedAt: null,
+      sources: [],
+      listingCount: 0,
+    });
   });
 
   it('derives freshness from the view, so a suppressed listing cannot advance it', async () => {

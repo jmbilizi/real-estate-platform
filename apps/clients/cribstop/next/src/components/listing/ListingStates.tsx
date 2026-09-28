@@ -94,15 +94,14 @@ export function ListingCardSkeleton() {
         <p className="mt-0.5 text-base">
           <Bar className="w-2/5" />
         </p>
-        {/* #433. Mirrors the footer row: an avatar circle, a name bar, three action dots. */}
-        <div className="mt-1 flex h-6 items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <span className={`h-5 w-5 shrink-0 rounded-full ${FILL}`} />
-            <span className="w-16 text-[13px]">
-              <Bar />
-            </span>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
+        {/* #433/#438. Mirrors the footer row: one line, avatar circle, a name bar, three action
+            dots — the loaded row never wraps to a second line, so neither does this. */}
+        <div className="mt-1 flex items-center gap-1">
+          <span className={`h-4 w-4 shrink-0 rounded-full ${FILL}`} />
+          <span className="min-w-0 flex-1 text-[13px]">
+            <Bar />
+          </span>
+          <div className="flex shrink-0 items-center gap-1">
             <span className={`h-4 w-4 rounded-full ${FILL}`} />
             <span className={`h-4 w-4 rounded-full ${FILL}`} />
             <span className={`h-4 w-4 rounded-full ${FILL}`} />

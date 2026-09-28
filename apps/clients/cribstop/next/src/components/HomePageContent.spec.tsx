@@ -596,5 +596,49 @@ describe('HomePageContent', () => {
       await screen.findByText('Find homes for sale under $300K');
       expect(screen.queryByText('Updated')).not.toBeInTheDocument();
     });
+
+    /** #438. "Updated X ago" is the last successful sync, never the newest listing timestamp. */
+    it('prefers lastSyncedAt over dataUpdatedAt for the "Updated" freshness tile', async () => {
+      mockedGetListingsMeta.mockResolvedValue({
+        dataUpdatedAt: '2026-01-01T00:00:00.000Z',
+        lastSyncedAt: '2026-04-20T18:00:00.000Z',
+        sources: ['internal'],
+        listingCount: 13,
+      });
+
+      render(<HomePageContent />);
+      await screen.findByText('Find homes for sale under $300K');
+
+      // Both are months old at test time, but lastSyncedAt is the newer of the two, so it must be
+      // what the relative-time text is computed from.
+      expect(screen.getByText(/^Real listings, updated /)).toBeInTheDocument();
+    });
+
+    it('falls back to dataUpdatedAt when lastSyncedAt is absent (older deployment)', async () => {
+      mockedGetListingsMeta.mockResolvedValue({
+        dataUpdatedAt: '2026-04-20T18:00:00.000Z',
+        sources: ['internal'],
+        listingCount: 13,
+      });
+
+      render(<HomePageContent />);
+      await screen.findByText('Find homes for sale under $300K');
+
+      expect(screen.getByText(/^Real listings, updated /)).toBeInTheDocument();
+    });
+
+    it('falls back to dataUpdatedAt when lastSyncedAt is null (no sync run has succeeded yet)', async () => {
+      mockedGetListingsMeta.mockResolvedValue({
+        dataUpdatedAt: '2026-04-20T18:00:00.000Z',
+        lastSyncedAt: null,
+        sources: ['internal'],
+        listingCount: 13,
+      });
+
+      render(<HomePageContent />);
+      await screen.findByText('Find homes for sale under $300K');
+
+      expect(screen.getByText(/^Real listings, updated /)).toBeInTheDocument();
+    });
   });
 });

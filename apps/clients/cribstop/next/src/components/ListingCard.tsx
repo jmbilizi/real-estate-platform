@@ -153,7 +153,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
       role="link"
       tabIndex={0}
       aria-label={`View listing at ${formatCardAddress(listing)}`}
-      className="listing-card-root group block cursor-pointer rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2"
+      className="group block cursor-pointer rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2"
       onClick={openPanel}
       onKeyDown={(e) => {
         if (e.key !== 'Enter' && e.key !== ' ') return;
@@ -359,9 +359,14 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
         </p>
 
         {/*
-         * #433. The social-post-style footer, replacing the #305 "Listing courtesy of" line:
-         * office avatar + name (+ time on market) on the left, save/share/more on the right. The
-         * save control moved here from the photo — one control, not two.
+         * #433/#438. One footer row at every card width: office avatar + name + time on market,
+         * then save/share/more. This used to fork into a compact/full pair keyed on a CSS
+         * container query, dropping the name to `line-clamp-2` and folding Share into the "···"
+         * menu below 220px. The stakeholder ruled the row must never wrap to a second line and
+         * Share must stay its own control at every width, so there is one render now: the name
+         * (`truncate`, never `line-clamp-2`) absorbs all the truncation, and the three actions
+         * render at a size that always fits — 16px icons, `gap-1` — rather than growing at wider
+         * cards.
          *
          * NAR 7.58 / Bright MLS IDX still requires the listing firm's name, reasonably prominent,
          * in a typeface no smaller than the card's own median listing-data text (13/14px here).
@@ -369,183 +374,98 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
          * "Listing courtesy of" is fine (7.58 requires prominence and identification, not that
          * exact wording), and truncating the name with a `title`/`aria-label` fallback is the same
          * pattern the prior line already used. The office name is `text-[13px]`, at that floor.
-         *
-         * `officeName` truncates first (`min-w-0`/`truncate` on its own span) so a long firm name
-         * never pushes the actions off the card; the time-on-market text has `shrink-0` so it
-         * never truncates instead.
          */}
-        <div className="mt-1">
+        <div className="mt-1 flex items-center gap-1">
+          <span
+            aria-hidden="true"
+            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-ink-muted text-[7px] font-semibold text-white"
+          >
+            {officeInitials(listing.officeName)}
+          </span>
+          <span
+            className="min-w-0 flex-1 truncate text-[13px] text-ink-body"
+            title={listing.officeName}
+            aria-label={listing.officeName}
+          >
+            {listing.officeName}
+          </span>
+          {timeOnMarket !== null && (
+            <span className="shrink-0 text-[13px] text-ink-muted">
+              <span aria-hidden="true">·</span> {timeOnMarket}
+            </span>
+          )}
+
           {/*
-           * #433. Below 220px (see `.footer-compact`/`.footer-full` in globals.css) the full
-           * form's avatar + name + three action buttons has no room left for the name — measured
-           * against the rendered row, it truncated to 1-3 characters at the 151px home-carousel
-           * card. This form trades one action icon and a fixed avatar size for name legibility:
-           * `line-clamp-2` instead of `truncate` so the name wraps rather than clipping, a 16px
-           * avatar instead of 20px, and only heart + "···" — the share icon moves into the menu
-           * as its first item, alongside "Copy link". `items-start` keeps the avatar and the
-           * time-on-market text pinned to the name's first line even when the name wraps to a
-           * second line beneath them.
+           * #438. Save, share, more. Each icon is 16px with a `gap-1` (4px) between buttons, which
+           * puts adjacent button centres 20px apart — too tight for a 44px hit area per icon
+           * without overlapping its neighbour. `-inset-0.5` (2px a side) gives each button a 20px
+           * overlay, the largest square that touches its neighbour without overlapping it. That is
+           * smaller than the 44px target; the card's narrowest width (~151px, home carousel) cannot
+           * fit three 44px overlays side by side while the name keeps any legible width at all.
            */}
-          <div className="footer-compact items-start gap-0.5">
-            <span
-              aria-hidden="true"
-              className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-surface-alt text-[7px] font-semibold text-ink-body"
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleSave(listing.id);
+              }}
+              className="group relative flex h-4 w-4 items-center justify-center rounded-full transition-colors hover:bg-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
+              aria-label={saved ? 'Unsave' : 'Save'}
             >
-              {officeInitials(listing.officeName)}
-            </span>
-            <span
-              className="line-clamp-2 min-w-0 flex-1 text-[13px] text-ink-body"
-              title={listing.officeName}
-              aria-label={listing.officeName}
+              <span aria-hidden="true" className="absolute -inset-0.5" />
+              <Heart
+                size={16}
+                className={`transition-transform group-hover:scale-110 ${
+                  saved ? 'fill-brand stroke-brand' : 'fill-none stroke-ink-muted'
+                }`}
+              />
+            </button>
+
+            <button
+              type="button"
+              onClick={handleShare}
+              className="group relative flex h-4 w-4 items-center justify-center rounded-full transition-colors hover:bg-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
+              aria-label="Share this listing"
             >
-              {listing.officeName}
-            </span>
-            {timeOnMarket !== null && (
-              <span className="shrink-0 text-[13px] text-ink-muted">
-                <span aria-hidden="true">·</span> {timeOnMarket}
-              </span>
-            )}
+              <span aria-hidden="true" className="absolute -inset-0.5" />
+              <Share2
+                size={16}
+                className="stroke-ink-muted transition-transform group-hover:scale-110"
+              />
+            </button>
 
             {/*
-             * Smaller than the full form's 24px icon boxes: at this width every pixel not spent
-             * on the name is a pixel the stakeholder's ~14-character target does not reach. The
-             * 44px tap target is unaffected — it comes from the `-inset-2.5` overlay span, sized
-             * off the button's position rather than its own box.
+             * A native `<details>`/`<summary>` pair: focusable and keyboard-toggleable with no
+             * extra state. `onClick` on the wrapper, not each child, stops the card's own
+             * `onClick` (which opens the listing panel) from firing regardless of which part
+             * inside the menu was clicked.
+             *
+             * The menu carries only "Copy link" — "Hide this home" and "Report a problem" are not
+             * wired, because neither feature exists yet anywhere else in the app (#433).
              */}
-            <div className="flex shrink-0 items-center gap-0.5">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  toggleSave(listing.id);
-                }}
-                className="relative flex h-4 w-4 items-center justify-center"
-                aria-label={saved ? 'Unsave' : 'Save'}
+            <details className="relative" onClick={(e) => e.stopPropagation()}>
+              <summary
+                className="group relative flex h-4 w-4 cursor-pointer list-none items-center justify-center rounded-full transition-colors hover:bg-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink [&::-webkit-details-marker]:hidden"
+                aria-label="More options"
               >
-                <span aria-hidden="true" className="absolute -inset-2.5" />
-                <Heart
-                  size={14}
-                  className={saved ? 'fill-brand stroke-brand' : 'fill-none stroke-ink-muted'}
-                />
-              </button>
-
-              <details className="relative" onClick={(e) => e.stopPropagation()}>
-                <summary
-                  className="relative flex h-4 w-4 cursor-pointer list-none items-center justify-center [&::-webkit-details-marker]:hidden"
-                  aria-label="More options"
-                >
-                  <span aria-hidden="true" className="absolute -inset-2.5" />
-                  <MoreHorizontal size={14} className="stroke-ink-muted" />
-                </summary>
-                <div className="absolute right-0 z-20 mt-1 w-32 rounded-md border border-surface-border bg-white py-1 shadow-card">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      handleShare(e);
-                      e.currentTarget.closest('details')?.removeAttribute('open');
-                    }}
-                    className="block w-full px-3 py-1.5 text-left text-[13px] text-ink hover:bg-surface-alt"
-                  >
-                    Share
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCopyLink}
-                    className="block w-full px-3 py-1.5 text-left text-[13px] text-ink hover:bg-surface-alt"
-                  >
-                    Copy link
-                  </button>
-                </div>
-              </details>
-            </div>
-          </div>
-
-          {/*
-           * #433. From 220px up (see globals.css), the room reclaimed by the compact form above
-           * is no longer needed: the name truncates to one line and all three action icons show.
-           */}
-          <div className="footer-full h-6 items-center justify-between gap-1">
-            <div className="flex min-w-0 items-center gap-1">
-              <span
-                aria-hidden="true"
-                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-alt text-[9px] font-semibold text-ink-body"
-              >
-                {officeInitials(listing.officeName)}
-              </span>
-              <span
-                className="min-w-0 truncate text-[13px] text-ink-body"
-                title={listing.officeName}
-                aria-label={listing.officeName}
-              >
-                {listing.officeName}
-              </span>
-              {timeOnMarket !== null && (
-                <>
-                  <span aria-hidden="true" className="shrink-0 text-[13px] text-ink-muted">
-                    ·
-                  </span>
-                  <span className="shrink-0 text-[13px] text-ink-muted">{timeOnMarket}</span>
-                </>
-              )}
-            </div>
-
-            <div className="flex shrink-0 items-center gap-1">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  toggleSave(listing.id);
-                }}
-                className="relative flex h-6 w-6 items-center justify-center"
-                aria-label={saved ? 'Unsave' : 'Save'}
-              >
-                <span aria-hidden="true" className="absolute -inset-2.5" />
-                <Heart
+                <span aria-hidden="true" className="absolute -inset-0.5" />
+                <MoreHorizontal
                   size={16}
-                  className={saved ? 'fill-brand stroke-brand' : 'fill-none stroke-ink-muted'}
+                  className="stroke-ink-muted transition-transform group-hover:scale-110"
                 />
-              </button>
-
-              <button
-                type="button"
-                onClick={handleShare}
-                className="relative flex h-6 w-6 items-center justify-center"
-                aria-label="Share this listing"
-              >
-                <span aria-hidden="true" className="absolute -inset-2.5" />
-                <Share2 size={16} className="stroke-ink-muted" />
-              </button>
-
-              {/*
-               * A native `<details>`/`<summary>` pair: focusable and keyboard-toggleable with no
-               * extra state. `onClick` on the wrapper, not each child, stops the card's own
-               * `onClick` (which opens the listing panel) from firing regardless of which part
-               * inside the menu was clicked.
-               *
-               * The menu carries only "Copy link" — "Hide this home" and "Report a problem" are not
-               * wired, because neither feature exists yet anywhere else in the app (#433).
-               */}
-              <details className="relative" onClick={(e) => e.stopPropagation()}>
-                <summary
-                  className="relative flex h-6 w-6 cursor-pointer list-none items-center justify-center [&::-webkit-details-marker]:hidden"
-                  aria-label="More options"
+              </summary>
+              <div className="absolute right-0 z-20 mt-1 w-32 rounded-md border border-surface-border bg-white py-1 shadow-card">
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="block w-full px-3 py-1.5 text-left text-[13px] text-ink hover:bg-surface-alt"
                 >
-                  <span aria-hidden="true" className="absolute -inset-2.5" />
-                  <MoreHorizontal size={16} className="stroke-ink-muted" />
-                </summary>
-                <div className="absolute right-0 z-20 mt-1 w-32 rounded-md border border-surface-border bg-white py-1 shadow-card">
-                  <button
-                    type="button"
-                    onClick={handleCopyLink}
-                    className="block w-full px-3 py-1.5 text-left text-[13px] text-ink hover:bg-surface-alt"
-                  >
-                    Copy link
-                  </button>
-                </div>
-              </details>
-            </div>
+                  Copy link
+                </button>
+              </div>
+            </details>
           </div>
         </div>
       </div>

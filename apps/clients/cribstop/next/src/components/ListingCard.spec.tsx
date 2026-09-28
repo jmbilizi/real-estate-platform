@@ -172,43 +172,39 @@ describe('ListingCard', () => {
     });
   });
 
-  describe('card footer — office avatar/name, time on market, actions (#433)', () => {
-    // Both the compact (<220px card) and full (>=220px) forms render together — a container
-    // query, not a JS conditional, decides which one is visible, and jsdom does not evaluate
-    // container queries. So a test asserts both copies are present, the same way the Coming Soon
-    // badge's and the open-house pill's tests do elsewhere in this file.
-    it('shows the office name and its avatar initials, for every source, in both forms', () => {
+  describe('card footer — office avatar/name, time on market, actions (#433, #438)', () => {
+    // #438: one footer render at every card width — the compact/full container-query pair is
+    // gone, so every assertion here expects a single match.
+    it('shows the office name and its avatar initials, for every source', () => {
       render(
         <ListingCard
           listing={aListingCardRow({ source: 'brightMLS', officeName: 'Bright Partner Realty' })}
         />,
       );
 
-      expect(screen.getAllByText('Bright Partner Realty')).toHaveLength(2);
-      expect(screen.getAllByText('BP')).toHaveLength(2);
+      expect(screen.getByText('Bright Partner Realty')).toBeInTheDocument();
+      expect(screen.getByText('BP')).toBeInTheDocument();
       expect(screen.queryByText(/Listing courtesy of/)).not.toBeInTheDocument();
     });
 
-    it('truncates to one line in the full form; wraps up to two lines in the compact form', () => {
+    it('truncates the office name to one line, never wrapping, with a title/aria-label fallback', () => {
       const officeName = 'Long & Foster Real Estate, Inc. — Bethesda Gateway';
       render(<ListingCard listing={aListingCardRow({ source: 'internal', officeName })} />);
 
-      const [compactName, fullName] = screen.getAllByText(officeName);
-      expect(compactName).toHaveClass('line-clamp-2');
-      expect(fullName).toHaveClass('truncate');
-      for (const name of [compactName, fullName]) {
-        expect(name).toHaveAttribute('title', officeName);
-        expect(name).toHaveAttribute('aria-label', officeName);
-      }
+      const name = screen.getByText(officeName);
+      expect(name).toHaveClass('truncate');
+      expect(name).not.toHaveClass('line-clamp-2');
+      expect(name).toHaveAttribute('title', officeName);
+      expect(name).toHaveAttribute('aria-label', officeName);
     });
 
     it('renders the same footer for internal and other sources', () => {
       const { unmount } = render(<ListingCard listing={aListingCardRow({ source: 'internal' })} />);
-      expect(screen.getAllByText('Real Broker, LLC')).toHaveLength(2);
+      expect(screen.getByText('Real Broker, LLC')).toBeInTheDocument();
       unmount();
 
       render(<ListingCard listing={aListingCardRow({ source: 'other' })} />);
-      expect(screen.getAllByText('Real Broker, LLC')).toHaveLength(2);
+      expect(screen.getByText('Real Broker, LLC')).toBeInTheDocument();
     });
 
     it('shows time on market next to the office name when listedAt is known', () => {
@@ -220,9 +216,7 @@ describe('ListingCard', () => {
         />,
       );
 
-      // Both forms render (compact's dot+time share one span; full's are separate spans), and
-      // RTL's text matcher finds "1w" in both, so this asserts by count, not a single element.
-      expect(screen.getAllByText('1w').length).toBeGreaterThan(0);
+      expect(screen.getByText('1w')).toBeInTheDocument();
       jest.useRealTimers();
     });
 
@@ -246,21 +240,17 @@ describe('ListingCard', () => {
       expect(screen.queryByText('·')).not.toBeInTheDocument();
     });
 
-    it('has the save control in the footer, not on the photo — one per rendered form', () => {
+    it('has the save control in the footer, not on the photo', () => {
       render(<ListingCard listing={aListingCardRow()} />);
 
-      // Two in the DOM (compact form + full form), never on the photo. Real duplication would be
-      // a save control surviving on the photo as well as in the footer.
-      expect(screen.getAllByRole('button', { name: /save/i })).toHaveLength(2);
+      expect(screen.getByRole('button', { name: /save/i })).toBeInTheDocument();
     });
 
-    it('has a dedicated share button in the full form, and a more-options control in both', () => {
+    it('has a dedicated share button and a more-options control, at every width', () => {
       render(<ListingCard listing={aListingCardRow()} />);
 
-      // Only the full form has a standalone share icon; the compact form folds "Share" into the
-      // "···" menu instead, so this stays a single match.
       expect(screen.getByRole('button', { name: /share this listing/i })).toBeInTheDocument();
-      expect(screen.getAllByLabelText('More options')).toHaveLength(2);
+      expect(screen.getByLabelText('More options')).toBeInTheDocument();
     });
 
     it('copies the listing link from the more-options menu', async () => {
@@ -270,22 +260,10 @@ describe('ListingCard', () => {
 
       render(<ListingCard listing={aListingCardRow({ propertyPath: '/property/abc/123' })} />);
 
-      fireEvent.click(screen.getAllByText('Copy link')[0]);
+      fireEvent.click(screen.getByText('Copy link'));
 
       await waitFor(() => expect(mockToast).toHaveBeenCalledWith('Link copied'));
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/property/abc/123'));
-      restore();
-    });
-
-    it('shares from the compact form\'s "···" menu as well', async () => {
-      const share = jest.fn().mockResolvedValue(undefined);
-      const restore = stubNavigator('share', share);
-
-      render(<ListingCard listing={aListingCardRow({ propertyPath: '/property/abc/123' })} />);
-
-      fireEvent.click(screen.getByText('Share'));
-
-      await waitFor(() => expect(share).toHaveBeenCalledTimes(1));
       restore();
     });
 
@@ -645,11 +623,7 @@ describe('ListingCard', () => {
     it('does not open the panel when the save control inside it is pressed', () => {
       render(<ListingCard listing={aListingCardRow({ id: 'row-1' })} />);
 
-      // Both the compact and full forms render their own save button (#433); either must stop
-      // the card's own onClick.
-      for (const button of screen.getAllByRole('button', { name: /save/i })) {
-        fireEvent.click(button);
-      }
+      fireEvent.click(screen.getByRole('button', { name: /save/i }));
 
       expect(getListingPanel()).toBeNull();
     });

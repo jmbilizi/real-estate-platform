@@ -695,33 +695,8 @@ body {
 }
 
 /*
- * #433's footer row (office avatar/name/time on market, save/share/more) sizes itself off the
- * card too, same reasoning as `.listing-card-media` above — but the footer is a SIBLING of the
- * image, not a descendant of it, so it needs its own container ancestor. `ListingCard`'s root div
- * carries this class for that reason alone.
- *
- * At the ~151px home-carousel card (360px viewport), an avatar + name + time + three action
- * buttons has no room left for the name at all — measured, it truncated to 1-3 characters. Below
- * 220px the compact form drops the share icon into the "···" menu (as "Share", alongside "Copy
- * link") and lets the name wrap onto a second line instead of truncating, which is what buys back
- * enough width for a legible chunk of the name. 220px is the point the full form's three action
- * buttons plus a truncated single-line name stop competing for the same handful of pixels.
+ * #438: the footer row (office avatar/name/time on market, save/share/more) used to fork into a
+ * compact/full pair sized off its own container ancestor, dropping the name to two wrapped lines
+ * below 220px. It is one render at every width now (`ListingCard.tsx`), so no container query is
+ * needed for it.
  */
-.listing-card-root {
-  container-type: inline-size;
-}
-
-.footer-compact {
-  display: flex;
-}
-.footer-full {
-  display: none;
-}
-@container (min-width: 220px) {
-  .footer-compact {
-    display: none;
-  }
-  .footer-full {
-    display: flex;
-  }
-}

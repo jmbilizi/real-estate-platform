@@ -675,7 +675,12 @@ function BudgetSection({ rentFirst, region }: { rentFirst: boolean; region: Regi
  */
 function TrustBlock() {
   const meta = useListingsMeta();
-  const lastUpdated = meta?.dataUpdatedAt != null ? formatRelativeTime(meta.dataUpdatedAt) : null;
+  // #438. "Updated X ago" means the last successful MLS sync, not the newest feed timestamp among
+  // listings — a listing's own `dataUpdatedAt` can be older than the run that fetched it.
+  // `lastSyncedAt` is absent on an older deployment and `null` before any run has succeeded, so
+  // both fall back to `dataUpdatedAt` rather than hiding the tile.
+  const freshness = meta ? (meta.lastSyncedAt ?? meta.dataUpdatedAt) : null;
+  const lastUpdated = freshness != null ? formatRelativeTime(freshness) : null;
   const title = lastUpdated ? `Real listings, updated ${lastUpdated}` : 'Real, licensed listings';
 
   return (

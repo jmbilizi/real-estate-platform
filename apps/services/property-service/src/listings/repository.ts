@@ -245,7 +245,17 @@ export async function getListingsMeta(pool: ReadClient): Promise<ListingsMeta> {
   const result = await pool.query<ListingsMetaDbRow>(
     `SELECT max(v.last_updated)                        AS data_updated_at,
             array_agg(DISTINCT v.source ORDER BY v.source) AS sources,
-            count(*)::int                              AS listing_count
+            count(*)::int                              AS listing_count,
+            (
+              -- #438. The sync worker's own record of the last run it completed, not a listing
+              -- field: a listing's own \`last_updated\` can be older than the run that fetched it,
+              -- so "Updated X ago" must read this, never \`max(v.last_updated)\`.
+              SELECT r.finished_at
+              FROM bright_sync_runs r
+              WHERE r.status = 'succeeded'
+              ORDER BY r.finished_at DESC NULLS LAST
+              LIMIT 1
+            )                                          AS last_synced_at
      FROM listing_search_v v`,
   );
   // An aggregate-only SELECT always returns exactly one row, even over zero input rows.
