@@ -7,6 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const {
+  canonicalizePath,
   resolvePrimaryCheckoutFromCommonDir,
   resolvePrimaryCheckoutFromWorktreeList,
   resolvePrimaryCheckout,
@@ -17,6 +18,37 @@ const {
 function tempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
+
+// --- canonicalizePath (drive-letter casing fix, #440) --------------------------------------
+
+test('canonicalizePath returns the value from the injected realpath resolver', () => {
+  const fakeRealpath = (inputPath) => {
+    assert.equal(inputPath, 'c:/Src/real-estate-platform');
+    return 'C:\\Src\\real-estate-platform';
+  };
+  assert.equal(
+    canonicalizePath('c:/Src/real-estate-platform', fakeRealpath),
+    'C:\\Src\\real-estate-platform',
+  );
+});
+
+test('canonicalizePath falls back to the input path when the resolver throws', () => {
+  const fakeRealpath = () => {
+    throw new Error('ENOENT: no such file or directory');
+  };
+  assert.equal(canonicalizePath('/does/not/exist', fakeRealpath), '/does/not/exist');
+});
+
+test('canonicalizePath resolves two casings of a real directory to the same string', () => {
+  const dir = tempDir('cribstop-web-canon-');
+  try {
+    const otherCasing = dir.toUpperCase() === dir ? dir.toLowerCase() : dir.toUpperCase();
+    if (!fs.existsSync(otherCasing)) return; // case-sensitive filesystem: nothing to prove here
+    assert.equal(canonicalizePath(otherCasing), canonicalizePath(dir));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 // --- resolvePrimaryCheckoutFromCommonDir -----------------------------------------------------
 
