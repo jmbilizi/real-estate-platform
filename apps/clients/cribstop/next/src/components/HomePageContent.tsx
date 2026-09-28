@@ -484,7 +484,7 @@ function TrustBlock() {
               {BRAND.brokerageShort}
             </p>
             <h2 className="mt-3 font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
-              Every listing, brokered by {BRAND.brokerageShort}.
+              {BRAND.siteName}, brokered by {BRAND.brokerageShort}.
             </h2>
             <p className="mt-4 text-base leading-relaxed text-ink/80">
               {BRAND.siteName} lists homes for sale and rent, brokered by {BRAND.brokerageShort} and

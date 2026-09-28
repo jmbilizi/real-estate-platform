@@ -400,8 +400,15 @@ describe('HomePageContent', () => {
       expect(
         screen.queryByText(/one of the fastest-growing brokerages in the country/),
       ).not.toBeInTheDocument();
-      expect(screen.getByText(/Every listing, brokered by Real Broker LLC\./)).toBeInTheDocument();
+      expect(screen.getByText(/Cribstop, brokered by Real Broker LLC\./)).toBeInTheDocument();
       expect(screen.getByText(/licensed in MD, DC, and VA/)).toBeInTheDocument();
+    });
+
+    it('titles the trust block about Cribstop itself, never claiming every listing is brokered by Real Broker LLC (IDX policy 7.58)', async () => {
+      render(<HomePageContent />);
+      await screen.findByText('What under $300K gets you');
+
+      expect(screen.queryByText(/Every listing, brokered by/)).not.toBeInTheDocument();
     });
 
     it('shows an "Updated" freshness tile from dataUpdatedAt', async () => {
