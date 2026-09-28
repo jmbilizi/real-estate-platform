@@ -1,8 +1,9 @@
 'use client';
 import { useEffect, useState } from 'react';
+import type { NeighborhoodRow as NeighborhoodApiRow } from '@cribstop/property-contracts';
 import ListingRow from '@/components/ListingRow';
-import NeighborhoodRow from '@/components/NeighborhoodRow';
-import { getListingsMeta, searchListings } from '@/lib/api/listings';
+import NeighborhoodRow, { type Neighborhood } from '@/components/NeighborhoodRow';
+import { getListingsMeta, getNeighborhoods, searchListings } from '@/lib/api/listings';
 import type { ListingSearchQuery } from '@/lib/api/listings';
 import type { ListingCardRow, ListingsMeta } from '@/lib/types';
 import { searchTargetUrl } from '@/lib/search-place';
@@ -108,48 +109,111 @@ function useCarouselListings(query: ListingSearchQuery) {
   return { ...state, refetch };
 }
 
-const NEIGHBORHOODS = [
-  {
-    name: 'Penn Quarter',
-    city: 'Washington, DC',
-    img: 'https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=900&auto=format&fit=crop&q=75',
-  },
-  {
-    name: 'Federal Hill',
-    city: 'Baltimore, MD',
-    img: 'https://images.unsplash.com/photo-1449157291145-7efd050a4d0e?w=900&auto=format&fit=crop&q=75',
-  },
-  {
-    name: 'Old Town',
-    city: 'Alexandria, VA',
-    img: 'https://images.unsplash.com/photo-1486325212027-8081e485255e?w=900&auto=format&fit=crop&q=75',
-  },
-  {
-    name: 'Downtown Bethesda',
-    city: 'Bethesda, MD',
-    img: 'https://images.unsplash.com/photo-1460317442991-0ec209397118?w=900&auto=format&fit=crop&q=75',
-  },
-  {
-    name: 'Logan Circle',
-    city: 'Washington, DC',
-    img: 'https://images.unsplash.com/photo-1464983953574-0892a716854b?w=900&auto=format&fit=crop&q=75',
-  },
-  {
-    name: 'Fells Point',
-    city: 'Baltimore, MD',
-    img: 'https://images.unsplash.com/photo-1465101046530-73398c7f28ca?w=900&auto=format&fit=crop&q=75',
-  },
-  {
-    name: 'Del Ray',
-    city: 'Alexandria, VA',
-    img: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=900&auto=format&fit=crop&q=75',
-  },
-  {
-    name: 'Chevy Chase',
-    city: 'Bethesda, MD',
-    img: 'https://images.unsplash.com/photo-1460474647541-4edd0cd0c746?w=900&auto=format&fit=crop&q=75',
-  },
-];
+/** Tiles shown before the horizontal scroll takes over (#393). */
+const NEIGHBORHOODS_TARGET = 8;
+/** Per-request paging, matching the row's own display cap. */
+const NEIGHBORHOODS_PAGE_SIZE = 24;
+/** A neighborhood needs this many matching listings to be worth a tile (compliance: no fabricated
+ *  "up-and-coming" framing off a single listing). */
+const NEIGHBORHOODS_MIN_COUNT = 5;
+
+type NeighborhoodsState = {
+  neighborhoods: Neighborhood[];
+  loading: boolean;
+};
+
+/**
+ * Fetches "Explore neighborhoods" tiles: one request per licensed state, then — only if that has
+ * not already filled the row — one request with no state filter for whatever else the data holds.
+ *
+ * The per-state requests fire together, not one after another: each is independent, and the merge
+ * order comes from `BRAND.licensedStateCodes` itself, never from which response lands first. Within
+ * a state the API's own order applies (`total` desc), so this adds no ranking of its own.
+ */
+function useNeighborhoods(): NeighborhoodsState {
+  const [state, setState] = useState<NeighborhoodsState>({ neighborhoods: [], loading: true });
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let cancelled = false;
+
+    async function load() {
+      const seen = new Set<string>();
+      const merged: Neighborhood[] = [];
+
+      const add = (rows: NeighborhoodApiRow[]) => {
+        for (const row of rows) {
+          const key = `${row.slug}|${row.city}|${row.state}`.toLowerCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          merged.push({
+            name: row.name,
+            city: row.city,
+            state: row.state,
+            sale: row.sale,
+            rent: row.rent,
+          });
+        }
+      };
+
+      // `allSettled`, not `all`: one licensed state's request failing must not blank the others'
+      // already-good results. Order is the input order regardless of which settles first.
+      const settled = await Promise.allSettled(
+        BRAND.licensedStateCodes.map((code) =>
+          getNeighborhoods(
+            { state: code, limit: NEIGHBORHOODS_PAGE_SIZE, minCount: NEIGHBORHOODS_MIN_COUNT },
+            controller.signal,
+          ),
+        ),
+      );
+      for (const result of settled) {
+        if (result.status === 'fulfilled') add(result.value.results);
+      }
+
+      if (merged.length < NEIGHBORHOODS_TARGET) {
+        const licensed = new Set<string>(BRAND.licensedStateCodes);
+        try {
+          const rest = await getNeighborhoods(
+            { limit: NEIGHBORHOODS_PAGE_SIZE, minCount: NEIGHBORHOODS_MIN_COUNT },
+            controller.signal,
+          );
+          add(rest.results.filter((row) => !licensed.has(row.state)));
+        } catch {
+          // The row still shows whatever the licensed-state requests already collected.
+        }
+      }
+
+      if (!cancelled) setState({ neighborhoods: merged, loading: false });
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, []);
+
+  return state;
+}
+
+/**
+ * "Explore neighborhoods" (#393): replaces the fixed eight-name list and its stock photos with the
+ * real neighborhood counts from `GET /listings/neighborhoods` (#390). A plain geographic tile
+ * carries the same navigational value as the old photo card, with no popularity framing (PRD
+ * §6.3) and no place URL that 404s on a name Nominatim has never heard of (`lib/place-resolve.ts`).
+ */
+function ExploreNeighborhoodsRow() {
+  const { neighborhoods, loading } = useNeighborhoods();
+
+  return (
+    <NeighborhoodRow
+      title="Explore neighborhoods"
+      subtitle={`Neighborhoods across ${BRAND.licensedStates}`}
+      neighborhoods={neighborhoods}
+      loading={loading}
+    />
+  );
+}
 
 /**
  * The dataset's own freshness facts, for the trust block.
@@ -413,22 +477,7 @@ export default function HomePageContent() {
         <ComingSoonRow key={side} side={side} />
       ))}
 
-      {/*
-       * "Popular areas across the DMV" replaced: ranking areas by popularity edges toward
-       * area-desirability framing on a housing product, which is the shape a steering claim takes.
-       * A plain geographic statement carries the same navigational value with none of that.
-       *
-       * This row and its subtitle are explicitly out of scope for #392 (untouched by ticket
-       * decision) even though the subtitle names states by hand — a follow-up ticket replaces the
-       * whole row with data-driven neighborhoods (research doc §7).
-       */}
-      <NeighborhoodRow
-        title="Explore neighborhoods"
-        subtitle="Neighborhoods across Maryland, DC, and Virginia"
-        href="/homes-for-sale?type=all&group=neighborhoods"
-        neighborhoods={NEIGHBORHOODS}
-        max={6}
-      />
+      <ExploreNeighborhoodsRow />
 
       <BudgetSection order={order} />
 

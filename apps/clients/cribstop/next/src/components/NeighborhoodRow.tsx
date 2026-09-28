@@ -1,148 +1,94 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { searchPath } from '@cribstop/property-contracts';
 
-interface Neighborhood {
+/** One "Explore neighborhoods" tile (#393): name, place and counts, sourced from real data. */
+export interface Neighborhood {
   name: string;
   city: string;
-  img: string;
+  state: string;
+  /** Matching for-sale count. */
+  sale: number;
+  /** Matching for-rent count. */
+  rent: number;
 }
 
-/**
- * The same fill every other placeholder in the app is painted with — see the `FILL` constant in
- * `listing/ListingStates.tsx`, which documents why the colour and the animation travel together.
- * Imported by value rather than re-derived so this row cannot drift into a loading look of its own.
- */
-const FILL = 'bg-surface-soft skeleton-fill';
+/** The shared per-tile width breakpoints, for real tiles and their loading skeletons alike. */
+const TILE_WIDTH_CLASS =
+  'w-[calc((100%-1.25rem)/2)] sm:w-[calc((100%-2.5rem)/3)] md:w-[calc((100%-3.75rem)/4)] lg:w-[calc((100%-5rem)/5)] xl:w-[calc((100%-6.25rem)/6)] min-w-0';
 
-/**
- * Whether a photo has finished loading (or failed trying).
- *
- * `complete` is checked on mount as well as via the handlers, because a cached photo can finish
- * decoding before React attaches them — that tile would otherwise stay in its loading state
- * forever. The failure path settles too: a dead URL has to stop the sweep, or it animates for the
- * life of the page, which for eight hardcoded remote photos is a realistic way for this to rot.
- */
-function useImageSettled(ref: React.RefObject<HTMLImageElement | null>) {
-  const [settled, setSettled] = useState(false);
-
-  useLayoutEffect(() => {
-    if (ref.current?.complete) setSettled(true);
-  }, [ref]);
-
-  const settle = () => setSettled(true);
-  return { settled, onLoad: settle, onError: settle };
+/** "{sale} for sale · {rent} for rent" — a zero part is omitted (never a fabricated count). */
+function countsText(n: Neighborhood): string {
+  const parts: string[] = [];
+  if (n.sale > 0) parts.push(`${n.sale.toLocaleString()} for sale`);
+  if (n.rent > 0) parts.push(`${n.rent.toLocaleString()} for rent`);
+  return parts.join(' · ');
 }
 
-/**
- * One neighbourhood tile, and the placeholder it shows until its photo lands.
- *
- * These tiles are not data-loading — the list is a static constant — so what is missing on first
- * paint is the *photo*, a remote fetch. Two things about that make the tile a special case rather
- * than "a listing card with an image":
- *
- * **The caption lives on the photo, not under it.** It is white type over a `from-black/80`
- * gradient, so with no picture behind it the tile is white text on white. Anything painted in that
- * box during load is also *under* that gradient, which crushes `--skeleton-tint` to nothing in the
- * lower half — a placeholder there does not read as the same sweep as the carousels beside it even
- * though it is literally the same class.
- *
- * **So the whole tile is the placeholder, not just the image area.** Skeletoning the photo while
- * leaving the real caption and gradient drawn on top of it is the "half-alive card" failure
- * `ListingCardSkeleton` documents: half-real and half-grey reads as a broken render rather than as
- * a tile arriving. The same call was made deliberately on the detail panel, which stays uniformly
- * skeletal even though a card click already has the address and price in hand.
- *
- * A single block is the faithful shape here — the tile *is* a photo, with nothing beside it — which
- * is what the gallery tile placeholders in `ListingStates` are too. The photo stays mounted
- * underneath at `opacity-0` so it actually loads, then fades in with `content-resolved` rather than
- * snapping.
- */
 function NeighborhoodTile({ n }: { n: Neighborhood }) {
-  const ref = useRef<HTMLImageElement>(null);
-  const { settled, onLoad, onError } = useImageSettled(ref);
+  const href = searchPath(
+    { kind: 'neighborhood', name: n.name, city: n.city, state: n.state },
+    'homes-for-sale',
+  );
+  const counts = countsText(n);
 
   return (
     <Link
-      href={`/homes-for-sale?type=all&neighborhood=${encodeURIComponent(n.name)}`}
-      className="group relative flex-shrink-0 snap-start aspect-[4/5] overflow-hidden rounded-md w-[calc((100%-1.25rem)/2)] sm:w-[calc((100%-2.5rem)/3)] md:w-[calc((100%-3.75rem)/4)] lg:w-[calc((100%-5rem)/5)] xl:w-[calc((100%-6.25rem)/6)] min-w-0"
-      // The tile is a placeholder until the photo lands: it names a real destination, but there is
-      // nothing on it yet to say which one, so it is not a link anything should land on.
-      aria-hidden={settled ? undefined : true}
-      tabIndex={settled ? undefined : -1}
+      href={href}
+      className={`group flex-shrink-0 snap-start rounded-md border border-surface-border bg-white p-4 transition hover:shadow-card ${TILE_WIDTH_CLASS}`}
     >
-      {/* alt="" — the tile's own `<h3>` already names it (WCAG H67), and this photo is stock
-          imagery, not a photo of the named neighbourhood. */}
-      <img
-        ref={ref}
-        src={n.img}
-        alt=""
-        onLoad={onLoad}
-        onError={onError}
-        className={`absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-110 ${
-          settled ? 'content-resolved' : 'opacity-0'
-        }`}
-      />
-      {!settled && <span aria-hidden="true" className={`absolute inset-0 ${FILL}`} />}
-      {settled && (
-        <div className="content-resolved">
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-          <div className="absolute inset-x-0 bottom-0 p-5 text-white">
-            <h3 className="font-display text-xl font-bold">{n.name}</h3>
-            <p className="mt-0.5 text-sm text-white/85">{n.city}</p>
-            {/*
-             * No inventory count. These tiles used to render a hardcoded `count` as "24 homes",
-             * which was a fabricated fact (PRD §6.3) — and once the carousels beside it started
-             * coming from the real API, it was also verifiably wrong. A true per-neighbourhood
-             * count would need a search request per tile, which is not worth six more gateway
-             * calls on the busiest page, so the affordance states what it does instead of
-             * asserting a number.
-             */}
-            <p className="mt-3 inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-white/95">
-              Browse homes
-              <span aria-hidden>→</span>
-            </p>
-          </div>
-        </div>
-      )}
+      <h3 className="truncate font-display text-base font-bold text-ink group-hover:underline">
+        {n.name}
+      </h3>
+      <p className="mt-0.5 truncate text-sm text-ink-muted">
+        {n.city}, {n.state}
+      </p>
+      {/* Guaranteed non-empty: the row's own request requires at least one matching listing
+       *  (`minCount`), so `n.sale` and `n.rent` are never both zero. */}
+      <p className="mt-2 text-xs font-semibold text-ink-muted">{counts}</p>
     </Link>
   );
 }
 
-/** A stacked thumbnail on the "See all" tile. No caption over it, so the block is the whole story. */
-function StackedThumb({ src }: { src: string }) {
-  const ref = useRef<HTMLImageElement>(null);
-  const { settled, onLoad, onError } = useImageSettled(ref);
-
+/** Same shape as `NeighborhoodTile`, so the row never shifts height once real data lands. */
+function NeighborhoodTileSkeleton() {
   return (
-    <>
-      {!settled && <span aria-hidden="true" className={`absolute inset-0 ${FILL}`} />}
-      <img
-        ref={ref}
-        src={src}
-        alt=""
-        onLoad={onLoad}
-        onError={onError}
-        className={`h-full w-full object-cover ${settled ? 'content-resolved' : 'opacity-0'}`}
-      />
-    </>
+    <div
+      aria-hidden="true"
+      className={`flex-shrink-0 snap-start rounded-md border border-surface-border bg-white p-4 ${TILE_WIDTH_CLASS}`}
+    >
+      <div className="h-4 w-3/4 rounded bg-surface-soft skeleton-fill" />
+      <div className="mt-2 h-3 w-1/2 rounded bg-surface-soft skeleton-fill" />
+      <div className="mt-3 h-3 w-2/3 rounded bg-surface-soft skeleton-fill" />
+    </div>
   );
 }
 
 interface Props {
   title: string;
   subtitle?: string;
+  /** Present only when the row supports a "See all" link. Omitted here (#393): every tile scrolls
+   *  into view, with no separate results page to see all from. */
   href?: string;
   neighborhoods: Neighborhood[];
+  /** Renders this many skeleton tiles instead of `neighborhoods`. */
+  loading?: boolean;
+  /** Up to this many tiles render, all visible via horizontal scroll rather than a "See all" tile. */
   max?: number;
 }
 
-export default function NeighborhoodRow({ title, subtitle, href, neighborhoods, max = 4 }: Props) {
+export default function NeighborhoodRow({
+  title,
+  subtitle,
+  href,
+  neighborhoods,
+  loading = false,
+  max = 8,
+}: Props) {
   const scrollerRef = useRef<HTMLDivElement>(null);
-  // Show See all card only if neighborhoods.length > max
-  const showSeeAll = neighborhoods.length > max;
-  const visible = showSeeAll ? neighborhoods.slice(0, max) : neighborhoods;
+  const visible = neighborhoods.slice(0, max);
 
   const [atStart, setAtStart] = useState(true);
   const [atEnd, setAtEnd] = useState(false);
@@ -164,7 +110,7 @@ export default function NeighborhoodRow({ title, subtitle, href, neighborhoods, 
       el.removeEventListener('scroll', checkScroll);
       window.removeEventListener('resize', checkScroll);
     };
-  }, []);
+  }, [loading, visible.length]);
 
   const scroll = (dir: 'left' | 'right') => {
     const el = scrollerRef.current;
@@ -174,16 +120,18 @@ export default function NeighborhoodRow({ title, subtitle, href, neighborhoods, 
     setTimeout(checkScroll, 350);
   };
 
+  if (!loading && visible.length === 0) return null;
+
   return (
     <section className="px-6 pt-6 sm:px-10 lg:px-20">
       <div className="flex flex-col gap-1 pb-1">
         <div className="flex items-center gap-2 justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <h2 className="font-display text-xl font-bold tracking-tight sm:text-2xl">{title}</h2>
             {href && (
               <Link
                 href={href}
-                className="ml-1 flex h-11 w-11 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition hover:bg-surface-alt hover:shadow-card"
+                className="ml-1 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition hover:bg-surface-alt hover:shadow-card"
                 aria-label="See all"
               >
                 <svg
@@ -203,7 +151,7 @@ export default function NeighborhoodRow({ title, subtitle, href, neighborhoods, 
               type="button"
               onClick={() => scroll('left')}
               aria-label="Scroll left"
-              className={`flex h-11 w-11 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition hover:shadow-card ${atStart ? 'opacity-50 cursor-default' : 'hover:bg-surface-alt'}`}
+              className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition hover:shadow-card ${atStart ? 'opacity-50 cursor-default' : 'hover:bg-surface-alt'}`}
               disabled={atStart}
             >
               <svg
@@ -220,7 +168,7 @@ export default function NeighborhoodRow({ title, subtitle, href, neighborhoods, 
               type="button"
               onClick={() => scroll('right')}
               aria-label="Scroll right"
-              className={`flex h-11 w-11 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition hover:shadow-card ${atEnd ? 'opacity-50 cursor-default' : 'hover:bg-surface-alt'}`}
+              className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition hover:shadow-card ${atEnd ? 'opacity-50 cursor-default' : 'hover:bg-surface-alt'}`}
               disabled={atEnd}
             >
               <svg
@@ -241,52 +189,9 @@ export default function NeighborhoodRow({ title, subtitle, href, neighborhoods, 
         ref={scrollerRef}
         className="mt-4 flex snap-x snap-mandatory gap-5 overflow-x-auto pb-3 scrollbar-none"
       >
-        {visible.map((n) => (
-          <NeighborhoodTile key={n.name} n={n} />
-        ))}
-        {showSeeAll && (
-          <Link
-            key="see-all"
-            href={href!}
-            className="group flex flex-shrink-0 snap-start flex-col items-center justify-center gap-3 rounded-md border border-surface-border bg-surface-alt/40 p-6 text-center transition hover:bg-surface-alt hover:shadow-card [scroll-snap-stop:always] aspect-[4/5] w-[calc((100%-1.25rem)/2)] sm:w-[calc((100%-2.5rem)/3)] md:w-[calc((100%-3.75rem)/4)] lg:w-[calc((100%-5rem)/5)] xl:w-[calc((100%-6.25rem)/6)] min-w-0"
-          >
-            <div className="relative aspect-square w-[80px] mx-auto rounded-md overflow-visible flex items-center justify-center">
-              {/* Airbnb-style stacked preview: 3 images, visually overlapped, center stack */}
-              {[0, 1, 2].map((offset) => {
-                const card = visible[offset] || neighborhoods[offset];
-                const img = card?.img || '';
-                const base = 32;
-                const positions = [
-                  { z: 1, x: -base, y: 8, rot: -8 },
-                  { z: 2, x: 0, y: 0, rot: 0 },
-                  { z: 3, x: base, y: 8, rot: 8 },
-                ];
-                const pos = positions[offset];
-                return (
-                  <span
-                    key={offset}
-                    className="absolute rounded-md border-2 border-white shadow-card bg-white overflow-hidden"
-                    style={{
-                      left: '50%',
-                      top: '50%',
-                      width: '56px',
-                      height: '56px',
-                      zIndex: pos.z,
-                      transform: `translate(-50%, -50%) translate(${pos.x}px, ${pos.y}px) rotate(${pos.rot}deg)`,
-                    }}
-                  >
-                    {img && <StackedThumb src={img} />}
-                  </span>
-                );
-              })}
-            </div>
-            <div>
-              <p className="font-display text-base font-bold text-ink group-hover:underline">
-                See all
-              </p>
-            </div>
-          </Link>
-        )}
+        {loading
+          ? Array.from({ length: max }, (_, i) => <NeighborhoodTileSkeleton key={i} />)
+          : visible.map((n) => <NeighborhoodTile key={`${n.name}-${n.city}-${n.state}`} n={n} />)}
       </div>
     </section>
   );

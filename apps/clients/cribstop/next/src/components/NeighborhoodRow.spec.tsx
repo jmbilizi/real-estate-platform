@@ -1,9 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import NeighborhoodRow from './NeighborhoodRow';
+import { render, screen } from '@testing-library/react';
+import NeighborhoodRow, { type Neighborhood } from './NeighborhoodRow';
 
-const NEIGHBORHOODS = [
-  { name: 'Penn Quarter', city: 'Washington, DC', img: 'https://example.test/penn.jpg' },
-  { name: 'Federal Hill', city: 'Baltimore, MD', img: 'https://example.test/fed.jpg' },
+const NEIGHBORHOODS: Neighborhood[] = [
+  { name: 'Columbia Heights', city: 'Washington', state: 'DC', sale: 207, rent: 93 },
+  { name: 'Petworth', city: 'Washington', state: 'DC', sale: 40, rent: 0 },
 ];
 
 function renderRow(props: Partial<React.ComponentProps<typeof NeighborhoodRow>> = {}) {
@@ -12,84 +12,80 @@ function renderRow(props: Partial<React.ComponentProps<typeof NeighborhoodRow>> 
   );
 }
 
-/**
- * The tiles are not data-loading — the list is a constant — so the window this covers is the remote
- * photo fetch. The tile is a special case among the app's loading states because its caption sits
- * *on* the photo rather than under it, which is what both of these describe.
- */
-describe('NeighborhoodRow photo placeholders', () => {
-  it('paints a placeholder over every tile until its photo lands', () => {
-    const { container } = renderRow();
+describe('NeighborhoodRow (#393)', () => {
+  it('renders name, place and both counts', () => {
+    renderRow();
 
-    expect(container.querySelectorAll('.skeleton-fill')).toHaveLength(NEIGHBORHOODS.length);
+    expect(screen.getByText('Columbia Heights')).toBeInTheDocument();
+    expect(screen.getAllByText('Washington, DC').length).toBeGreaterThan(0);
+    expect(screen.getByText('207 for sale · 93 for rent')).toBeInTheDocument();
   });
 
-  /** Same token as the listing carousels above and below, so the page sweeps as one surface. */
-  it('uses the shared skeleton token rather than a local loading look', () => {
-    const { container } = renderRow();
+  it('omits the zero part of the counts, rather than showing "0 for rent"', () => {
+    renderRow();
 
-    expect(container.querySelector('.bg-surface-soft.skeleton-fill')).not.toBeNull();
+    expect(screen.getByText('40 for sale')).toBeInTheDocument();
+    expect(screen.queryByText(/0 for rent/)).not.toBeInTheDocument();
   });
 
-  /*
-   * The regression this guards is the "half-alive card" failure `ListingCardSkeleton` documents.
-   * Skeletoning only the image area left the real caption and its `from-black/80` gradient drawn on
-   * top of the placeholder: half-real and half-grey, with the gradient crushing the tint to nothing
-   * in the lower half so it did not even read as the same sweep as the cards beside it.
-   */
-  it('holds back the caption and its gradient, not just the photo', () => {
-    const { container } = renderRow();
+  it('links a tile to the neighborhood search path', () => {
+    renderRow();
 
-    expect(screen.queryByText('Penn Quarter')).toBeNull();
-    expect(screen.queryByText('Washington, DC')).toBeNull();
-    expect(screen.queryByText('Browse homes')).toBeNull();
-    expect(container.querySelector('.bg-gradient-to-t')).toBeNull();
+    const link = screen.getByText('Columbia Heights').closest('a');
+    expect(link).toHaveAttribute(
+      'href',
+      '/washington-dc/columbia-heights-neighborhood/homes-for-sale',
+    );
   });
 
-  it('fades the whole tile in once the photo arrives', () => {
+  it('shows no photo — text tiles only', () => {
     const { container } = renderRow();
-    // alt="" (WCAG H67 — the `<h3>` already names the tile), so the tile is found by DOM
-    // order rather than by accessible name.
-    const img = container.querySelectorAll('img')[0];
-
-    expect(img).toHaveClass('opacity-0');
-
-    fireEvent.load(img);
-
-    expect(img).toHaveClass('content-resolved');
-    expect(screen.getByText('Penn Quarter')).toBeInTheDocument();
-    expect(container.querySelectorAll('.skeleton-fill')).toHaveLength(NEIGHBORHOODS.length - 1);
+    expect(container.querySelector('img')).toBeNull();
   });
 
-  /** A dead URL must settle too — otherwise that one tile sweeps for the life of the page. */
-  it('stops the sweep when the photo fails to load', () => {
-    const { container } = renderRow();
+  it('caps visible tiles at max, all reachable by horizontal scroll rather than a "See all" tile', () => {
+    const many: Neighborhood[] = Array.from({ length: 12 }, (_, i) => ({
+      name: `Place ${i}`,
+      city: 'Washington',
+      state: 'DC',
+      sale: 10,
+      rent: 0,
+    }));
+    renderRow({ neighborhoods: many, max: 8 });
 
-    fireEvent.error(container.querySelectorAll('img')[0]);
-
-    expect(container.querySelectorAll('.skeleton-fill')).toHaveLength(NEIGHBORHOODS.length - 1);
+    expect(screen.getAllByRole('link').length).toBe(8);
+    expect(screen.queryByText('See all')).not.toBeInTheDocument();
   });
 
-  /** A tile with nothing drawn on it yet names no destination, so it is not a tab stop. */
-  it('keeps the placeholder tile out of the tab order until it resolves', () => {
-    const { container } = renderRow();
-    const img = container.querySelectorAll('img')[0];
-    const link = img.closest('a')!;
-
-    expect(link).toHaveAttribute('tabindex', '-1');
-    expect(link).toHaveAttribute('aria-hidden', 'true');
-
-    fireEvent.load(img);
-
-    expect(link).not.toHaveAttribute('tabindex');
-    expect(link).not.toHaveAttribute('aria-hidden');
+  it('renders no "See all" header link when href is omitted', () => {
+    renderRow();
+    expect(screen.queryByLabelText('See all')).not.toBeInTheDocument();
   });
 
-  /** The "See all" tile's stacked thumbnails are photos on the same page and get the same cover. */
-  it('covers the stacked thumbnails on the See all tile', () => {
-    const { container } = renderRow({ href: '/search', max: 1 });
+  it('keeps a passed "See all" header link and its arrow buttons at least 44px, never shrinking beside a long heading', () => {
+    renderRow({ href: '/homes-for-sale', title: 'Explore neighborhoods across the region' });
 
-    // One visible tile plus the three thumbnails stacked inside the "See all" card.
-    expect(container.querySelectorAll('.skeleton-fill').length).toBeGreaterThan(1);
+    const seeAll = screen.getByLabelText('See all');
+    expect(seeAll.className).toContain('flex-shrink-0');
+    expect(seeAll.className).toContain('h-11');
+    expect(seeAll.className).toContain('w-11');
+
+    for (const label of ['Scroll left', 'Scroll right']) {
+      const button = screen.getByLabelText(label);
+      expect(button.className).toContain('flex-shrink-0');
+      expect(button.className).toContain('h-11');
+      expect(button.className).toContain('w-11');
+    }
+  });
+
+  it('renders nothing when there are no neighborhoods and the fetch has settled', () => {
+    const { container } = renderRow({ neighborhoods: [] });
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('renders skeleton tiles, not an empty row, while loading', () => {
+    const { container } = renderRow({ neighborhoods: [], loading: true, max: 4 });
+    expect(container.querySelectorAll('.skeleton-fill').length).toBeGreaterThan(0);
+    expect(screen.getByText('Explore neighborhoods')).toBeInTheDocument();
   });
 });

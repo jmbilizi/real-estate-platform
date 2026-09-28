@@ -3,6 +3,12 @@ import type { Geocoder } from './place-resolve';
 import { searchRouteProps } from './search-route';
 
 jest.mock('@/app/api/_lib/nominatim-fetch', () => ({ proxyNominatim: jest.fn() }));
+// Neighborhood resolution tries our own data first (#393). These tests exercise the Nominatim
+// fallback path only, so the gateway call is stubbed to "no match" rather than hitting a real
+// network address.
+jest.mock('@/app/api/_lib/gateway', () => ({
+  fetchGateway: jest.fn(async () => ({ ok: false, json: async () => null })),
+}));
 
 const POLYGON = {
   type: 'Polygon',

@@ -9,6 +9,7 @@ import {
   SEARCH_PATH_SEGMENTS,
   searchPath,
   type SearchPlace,
+  slugify,
   streetLineOf,
 } from './address-slug';
 import { propertyPageSchema } from './property-page';
@@ -247,5 +248,29 @@ describe('searchPath / parseSearchPath (#350)', () => {
     expect(parseSearchPath(['alexandria-va', 'king-st', 'homes-for-sale'])?.place).toMatchObject({
       name: 'king st',
     });
+  });
+
+  /**
+   * #393: a Bright neighborhood name can carry punctuation and doubled spaces
+   * ("O'Fallon Park", "Foggy Bottom / West End"). `slugify` must fold a name to the same slug the
+   * path carries, and folding what `parseSearchPath` hands back must reproduce that same slug —
+   * otherwise our own data lookup, keyed on the slug, would miss a neighborhood whose path resolves
+   * to it.
+   */
+  it.each([
+    'Columbia Heights',
+    "O'Fallon Park",
+    'Foggy Bottom / West End',
+    'St.  Elmo   Village',
+    'Mount  Pleasant,  NW',
+  ])('keeps the slug stable through searchPath -> parseSearchPath for %j', (name) => {
+    const path = searchPath(
+      { kind: 'neighborhood', name, city: 'Washington', state: 'DC' },
+      'homes-for-sale',
+    );
+    const parsed = parseSearchPath(path.split('/'));
+    expect(parsed?.place?.kind).toBe('neighborhood');
+    const roundTripped = parsed?.place?.kind === 'neighborhood' ? parsed.place.name : '';
+    expect(slugify(roundTripped)).toBe(slugify(name));
   });
 });

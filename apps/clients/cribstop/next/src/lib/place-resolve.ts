@@ -1,9 +1,12 @@
 import {
   countyBaseName,
+  type NeighborhoodRow,
+  neighborhoodsResponseSchema,
   normalizeStreetLine,
   type SearchPlace,
   slugify,
 } from '@cribstop/property-contracts';
+import { fetchGateway } from '@/app/api/_lib/gateway';
 import { buildForwardUrl } from '@/app/api/_lib/nominatim';
 import { proxyNominatim } from '@/app/api/_lib/nominatim-fetch';
 import type { SearchFilters } from '@/lib/types';
@@ -35,13 +38,43 @@ export type PlaceResolution =
       /** Location filters only. The page adds the listing type. */
       readonly filters: SearchFilters;
       readonly label: string;
-      /** Seeds the search bar, so that a new search from it works without a new pick. */
-      readonly suggestion: SearchSuggestionValue;
+      /**
+       * Seeds the search bar, so that a new search from it works without a new pick.
+       *
+       * Omitted when a neighborhood resolves from our own data with no matching Nominatim hit
+       * (#393): there is no geocoded point to seed the bar with, and the filters and label already
+       * make the tile link work without one.
+       */
+      readonly suggestion?: SearchSuggestionValue;
     }
   | { readonly status: 'not-found' }
   | { readonly status: 'error' };
 
 const NEIGHBORHOOD_TYPES = ['suburb', 'neighbourhood', 'quarter'];
+
+/** One neighborhood match from `GET /listings/neighborhoods`, or `null` when the call failed. */
+export type NeighborhoodsLookup = (params: {
+  slug: string;
+  city: string;
+  state: string;
+}) => Promise<NeighborhoodRow[] | null>;
+
+/**
+ * Our own neighborhood data (#390), matched by slug within a city and state. Never throws: a
+ * network failure or a bad response reads as "no match", so the caller falls back to Nominatim
+ * rather than erroring the whole tile link.
+ */
+export const gatewayNeighborhoodsLookup: NeighborhoodsLookup = async ({ slug, city, state }) => {
+  const query = new URLSearchParams({ slug, city, state, limit: '5' });
+  const upstream = await fetchGateway(`/property/listings/neighborhoods?${query}`, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  }).catch(() => null);
+  if (!upstream || !upstream.ok) return null;
+  const body = await upstream.json().catch(() => null);
+  const parsed = neighborhoodsResponseSchema.safeParse(body);
+  return parsed.success ? parsed.data.results : null;
+};
 
 function boundaryOf(result: any): string | undefined {
   const geo = result?.geojson;
@@ -67,6 +100,7 @@ function sameSlug(a: string | undefined, b: string): boolean {
 export async function resolvePlace(
   place: SearchPlace,
   geocode: Geocoder = nominatimGeocoder,
+  lookupNeighborhoods: NeighborhoodsLookup = gatewayNeighborhoodsLookup,
 ): Promise<PlaceResolution> {
   const state = place.state;
   const inState = (result: any) => addressState(result?.address ?? {}) === state;
@@ -172,6 +206,37 @@ export async function resolvePlace(
         ? { street, state, boundary }
         : { street, city: cityHit?.name ?? city, state };
     return { status: 'found', filters, label, suggestion: suggestionOf(hit, label) };
+  }
+
+  // A neighborhood resolves against our own data first (#393): Bright subdivision names are
+  // frequent, but Nominatim (OpenStreetMap) knows only the ones that are also public
+  // neighborhoods, so it 404'd every subdivision name it had never heard of. One exact match here
+  // is enough to render results; Nominatim is then tried only for a boundary polygon, never as the
+  // sole source of a hit.
+  if (place.kind === 'neighborhood') {
+    const slug = slugify(place.name);
+    const ours = await lookupNeighborhoods({ slug, city: place.city, state });
+    if (ours && ours.length === 1) {
+      const match = ours[0] as NeighborhoodRow;
+      const label = placeLabel({ ...place, name: match.name, city: match.city });
+      const results = await lookup;
+      const hit = results?.find(
+        (r) =>
+          inState(r) &&
+          (NEIGHBORHOOD_TYPES.includes(r.type) || NEIGHBORHOOD_TYPES.includes(r.addresstype)) &&
+          (sameSlug(r.name, match.name) ||
+            NEIGHBORHOOD_TYPES.some((key) => sameSlug(r.address?.[key], match.name))),
+      );
+      const boundary = hit ? boundaryOf(hit) : undefined;
+      const filters: SearchFilters = boundary
+        ? { state, boundary }
+        : { neighborhood: match.name, city: match.city, state };
+      return hit
+        ? { status: 'found', filters, label, suggestion: suggestionOf(hit, label) }
+        : { status: 'found', filters, label };
+    }
+    // No single match in our data (none, or an ambiguous multiple) — fall through to the
+    // Nominatim-only resolution below, so a place our data does not know can still resolve.
   }
 
   const results = await lookup;
