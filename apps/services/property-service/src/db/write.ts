@@ -112,7 +112,7 @@ export async function upsertListing(
         days_on_market_display_allowed, days_on_market,
         broker_name, broker_phone, broker_email, office_name,
         office_broker_lead_phone, office_broker_lead_email, listing_agent_name,
-        is_sample, last_updated, original_list_price, listed_at)
+        is_sample, last_updated, original_list_price, listed_at, coming_soon_date)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
              $9, $10, $11, $12,
              $13, $14, $15,
@@ -125,7 +125,7 @@ export async function upsertListing(
              $41, $42,
              $43, $44, $45, $46,
              $47, $48, $49,
-             $50, $51, $52, $53)
+             $50, $51, $52, $53, $54)
      -- Re-ingesting the same feed record (source_system, source_listing_key) reuses the SAME id
      -- (resolved by the caller, see upsertListingBySourceKey), so this is the idempotent re-run
      -- path (#93): every column the INSERT list carries is also refreshed on conflict.
@@ -180,6 +180,8 @@ export async function upsertListing(
        -- #391. Refreshed, never frozen: MLSListDate marks the CURRENT marketing period, and a
        -- relist is a new "just listed" moment that should surface again.
        listed_at = EXCLUDED.listed_at,
+       -- #424. Refreshed like listed_at: a relist can re-enter Coming Soon with a new target date.
+       coming_soon_date = EXCLUDED.coming_soon_date,
        -- A record the feed maps again is live again (#338): a takedown is not permanent.
        deleted_at = NULL
      -- #391. xmax = 0 is Postgres' own "this row was just inserted, not updated" signal, cheaper
@@ -247,6 +249,7 @@ export async function upsertListing(
       // #391. A fresh row's own list price is its own baseline.
       row.list_price,
       row.listed_at,
+      row.coming_soon_date,
     ],
   );
 

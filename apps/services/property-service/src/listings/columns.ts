@@ -96,6 +96,8 @@ const CARD_COLUMNS = [
   'last_updated',
   // #391. Bright's MLSListDate, refreshed on every write — the current marketing period's start.
   'listed_at',
+  // #424. Bright's ExpectedOnMarketDate — the date a Coming Soon listing goes active.
+  'coming_soon_date',
   'listing_agent_name',
   'broker_name',
   'broker_phone',

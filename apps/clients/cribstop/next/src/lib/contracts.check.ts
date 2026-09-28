@@ -70,6 +70,7 @@ type ExpectedCardKeys =
   | 'closeDate'
   | 'lastUpdated'
   | 'listedAt'
+  | 'comingSoonDate'
   | 'listingAgentName'
   | 'brokerName'
   | 'brokerPhone'

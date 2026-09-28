@@ -50,6 +50,7 @@ export function aListingCardRow(overrides: Partial<ListingCardRow> = {}): Listin
     closeDate: null,
     lastUpdated: '2026-04-20T18:00:00.000Z',
     listedAt: null,
+    comingSoonDate: null,
     listingAgentName: 'Sample Agent 1',
     brokerName: 'Sample Agent 1',
     brokerPhone: '(301) 555-0101',

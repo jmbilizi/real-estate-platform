@@ -35,6 +35,7 @@ const row = {
   closeDate: null,
   lastUpdated: '2026-08-01T12:00:00.000Z',
   listedAt: null,
+  comingSoonDate: null,
   listingAgentName: null,
   brokerName: 'B',
   brokerPhone: '1',

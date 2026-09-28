@@ -140,6 +140,7 @@ describe('upsertListing column coverage for the suppression flags', () => {
     'days_on_market',
     'original_list_price',
     'listed_at',
+    'coming_soon_date',
   ])('names %s in the INSERT, so the caller-supplied value is not lost to a default', (column) => {
     expect(insertColumns()).toContain(column);
   });
@@ -267,6 +268,7 @@ describe('upsertListingBySourceKey', () => {
     is_sample: true,
     last_updated: '2026-09-18T00:00:00Z',
     listed_at: '2026-09-01T00:00:00Z',
+    coming_soon_date: null,
   };
 
   function createFakeClient(options: {

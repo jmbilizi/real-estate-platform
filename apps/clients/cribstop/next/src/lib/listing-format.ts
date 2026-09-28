@@ -320,3 +320,24 @@ export function formatOpenHouse(openHouse: OpenHouse): string {
 
   return `${day}, ${time(starts)}–${time(ends)}`;
 }
+
+/**
+ * #424. The Coming Soon card badge text — "Coming soon Oct 15", or "Coming soon" when
+ * `comingSoonDate` is null. `MMM d` (`Oct 15`), never a numeric date: the stakeholder rejected
+ * `10/15` for this badge specifically.
+ *
+ * Formatted in UTC, unlike the open-house dates above: the contract widens Bright's date-only
+ * `ExpectedOnMarketDate` to midnight UTC (there is no real time of day to place in a time zone), so
+ * formatting it in `PROPERTY_TIME_ZONE` would read back a day early for every US zone.
+ */
+export function formatComingSoonBadge(comingSoonDate: string | null): string {
+  if (comingSoonDate === null) {
+    return 'Coming soon';
+  }
+  const date = new Date(comingSoonDate).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+  return `Coming soon ${date}`;
+}

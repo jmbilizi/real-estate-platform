@@ -6,6 +6,7 @@ import { openListingPanel } from '@/lib/listing-panel';
 import {
   formatCardAddress,
   formatClosePrice,
+  formatComingSoonBadge,
   formatDwellingStats,
   formatListingPrice,
   formatLotSize,
@@ -41,6 +42,10 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
 
   const isSold = listing.listingType === 'sold' || listing.status === 'Sold';
   const isParcel = listing.propertyType === 'Land';
+
+  // #424. The stakeholder-approved status badge. A Coming Soon listing cannot also be Sold, so the
+  // two never compete for the same corner.
+  const isComingSoon = listing.status === 'Coming Soon';
 
   /**
    * A parcel has no dwelling to describe, so lot size replaces the bed/bath/sqft triplet — that is
@@ -139,7 +144,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
          * below the image, which was the only row those cards had and others did not, and it made
          * tiles in a grid different heights (#79a90aa).
          */}
-        {(marketingBadge || openHouse) && (
+        {(isComingSoon || marketingBadge || openHouse) && (
           <div
             /*
              * `inset-x-3`, not `left-3` alone: the children cap themselves with percentage widths,
@@ -153,6 +158,18 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
               isSold ? 'top-9' : 'top-3'
             }`}
           >
+            {isComingSoon && (
+              // #424. Leads the stack, so it never competes with the marketing pill or open
+              // house for the same row — the flex column pushes both down instead of overlapping.
+              <span className="max-w-[calc(100%-3.5rem)] truncate rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-ink shadow-card">
+                <span
+                  aria-hidden="true"
+                  className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-brand"
+                />
+                {formatComingSoonBadge(listing.comingSoonDate)}
+              </span>
+            )}
+
             {marketingBadge && (
               <span
                 // Only the top row shares the save control's band, so only it is capped short of
