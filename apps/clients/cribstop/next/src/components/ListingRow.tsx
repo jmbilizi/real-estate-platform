@@ -104,12 +104,15 @@ export default function ListingRow({
               // "See all" and drops which row it is.
               aria-label={`${title} — see all`}
               prefetch
-              className="group inline-flex min-h-11 min-w-11 items-center gap-1.5"
+              // Below `sm` (#429): the chip sits at the far right of the header row, not right
+              // beside the title — `flex w-full justify-between` spreads title and chip across
+              // the row. From `sm` up: back to the original inline pairing beside the title.
+              className="group flex min-h-11 min-w-11 w-full items-center justify-between gap-1.5 sm:inline-flex sm:w-auto sm:justify-normal"
             >
               <h2
                 className={
                   titleClassName ??
-                  'font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]'
+                  'min-w-0 truncate font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]'
                 }
               >
                 {title}
@@ -122,7 +125,8 @@ export default function ListingRow({
                   strokeWidth={2.5}
                   viewBox="0 0 24 24"
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  {/* Straight arrow (shaft + head), not a chevron (#429) — Airbnb's "see all". */}
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
                 </svg>
               </span>
             </Link>
