@@ -695,33 +695,67 @@ body {
 }
 
 /*
- * #433's footer row (office avatar/name/time on market, save/share/more) sizes itself off the
- * card too, same reasoning as `.listing-card-media` above — but the footer is a SIBLING of the
- * image, not a descendant of it, so it needs its own container ancestor. `ListingCard`'s root div
- * carries this class for that reason alone.
+ * #438: the footer row (office avatar/name/time on market, save/share/more) used to fork into a
+ * compact/full pair sized off its own container ancestor, dropping the name to two wrapped lines
+ * below 220px. It is one render at every width now (`ListingCard.tsx`).
  *
- * At the ~151px home-carousel card (360px viewport), an avatar + name + time + three action
- * buttons has no room left for the name at all — measured, it truncated to 1-3 characters. Below
- * 220px the compact form drops the share icon into the "···" menu (as "Share", alongside "Copy
- * link") and lets the name wrap onto a second line instead of truncating, which is what buys back
- * enough width for a legible chunk of the name. 220px is the point the full form's three action
- * buttons plus a truncated single-line name stop competing for the same handful of pixels.
+ * The compliance follow-up to #438 restores a single, narrower container query: below 200px the
+ * office name — a NAR 7.58 / Bright IDX prominence requirement — could shrink to 5-9 visible
+ * characters with all three action icons and time on market competing for the same width. Time
+ * on market is the least essential fact in the row, so it alone hides below 200px; the name's
+ * `min-w-[72px]` floor (`ListingCard.tsx`) then has enough reclaimed width for at least 10
+ * characters. `ListingCard`'s root div carries `.listing-card-root` so the footer, a descendant
+ * of it, can query the card's own width.
  */
 .listing-card-root {
   container-type: inline-size;
 }
 
-.footer-compact {
-  display: flex;
-}
-.footer-full {
+.listing-card-time-on-market {
   display: none;
 }
+@container (min-width: 200px) {
+  .listing-card-time-on-market {
+    display: inline;
+  }
+}
+
+/*
+ * #438. The Coming Soon pill (`ListingCard.tsx`) never wraps and never overflows: the full form
+ * ("Coming soon Oct 10") shows only where it measures as fitting at the tier's own font size,
+ * with the short form ("Soon · Oct 10") as the floor below that — the same idiom as the
+ * open-house pill's three forms above, and keyed off the CARD's width (`.listing-card-root`)
+ * rather than the viewport, because the card's width does not track the viewport either (see
+ * `.listing-card-media` above). A 215px carousel card at a 1440px viewport gets the short form
+ * for the same reason a 215px card at 390px does.
+ *
+ * 220px is where "Coming soon Oct 10" (measured at the 11px tier it uses from 220px up, against
+ * the pill's `max-w-full` — the card's width less the stack's 24px `inset-x-3` gutter) first has
+ * room; a 300px card has enough further room to read at 12px instead. Below 220px only the short
+ * form renders, at the smallest, 10px tier — it is the floor every supported card width fits.
+ */
+.listing-card-coming-soon-pill {
+  font-size: 10px;
+}
+.listing-card-coming-soon-full {
+  display: none;
+}
+.listing-card-coming-soon-short {
+  display: inline;
+}
 @container (min-width: 220px) {
-  .footer-compact {
+  .listing-card-coming-soon-pill {
+    font-size: 11px;
+  }
+  .listing-card-coming-soon-full {
+    display: inline;
+  }
+  .listing-card-coming-soon-short {
     display: none;
   }
-  .footer-full {
-    display: flex;
+}
+@container (min-width: 300px) {
+  .listing-card-coming-soon-pill {
+    font-size: 12px;
   }
 }

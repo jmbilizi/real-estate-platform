@@ -257,6 +257,9 @@ export interface ListingsMetaDbRow {
   data_updated_at: Date | null;
   sources: string[] | null;
   listing_count: number;
+  /** #438. `finished_at` of the latest succeeded `bright_sync_runs` row, or null before any run
+   *  has succeeded. */
+  last_synced_at: Date | null;
 }
 
 /**
@@ -269,6 +272,7 @@ export interface ListingsMetaDbRow {
 export function toListingsMeta(row: ListingsMetaDbRow): ListingsMeta {
   return listingsMetaSchema.parse({
     dataUpdatedAt: row.data_updated_at === null ? null : instant(row.data_updated_at),
+    lastSyncedAt: row.last_synced_at === null ? null : instant(row.last_synced_at),
     sources: row.sources ?? [],
     listingCount: row.listing_count,
   });

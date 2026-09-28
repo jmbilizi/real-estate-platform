@@ -220,7 +220,7 @@ export default function NeighborhoodRow({
       </div>
       <div
         ref={scrollerRef}
-        className="mt-4 flex snap-x snap-mandatory gap-5 overflow-x-auto pb-3 scrollbar-none"
+        className="mt-3 sm:mt-4 flex snap-x snap-mandatory gap-5 overflow-x-auto pb-3 scrollbar-none"
       >
         {loading
           ? Array.from({ length: max }, (_, i) => <NeighborhoodTileSkeleton key={i} />)

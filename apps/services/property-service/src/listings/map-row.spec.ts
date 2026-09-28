@@ -1,5 +1,5 @@
 import { cardDbRowFixture } from './test-fixtures';
-import { toListingCardRow, toListingDetail } from './map-row';
+import { toListingCardRow, toListingDetail, toListingsMeta } from './map-row';
 
 describe('NAR 7.58 contact-method floor (#344)', () => {
   it('serves a card with a phone and no email', () => {
@@ -99,6 +99,20 @@ describe('toListingDetail', () => {
         }),
       ),
     ).toThrow();
+  });
+});
+
+describe('toListingsMeta (#438)', () => {
+  const baseRow = { data_updated_at: null, sources: null, listing_count: 0 };
+
+  it('converts last_synced_at to the same ISO instant format as dataUpdatedAt', () => {
+    const meta = toListingsMeta({ ...baseRow, last_synced_at: new Date('2026-09-28T10:00:00Z') });
+    expect(meta.lastSyncedAt).toBe('2026-09-28T10:00:00.000Z');
+  });
+
+  it('reports lastSyncedAt as null when no sync run has succeeded yet', () => {
+    const meta = toListingsMeta({ ...baseRow, last_synced_at: null });
+    expect(meta.lastSyncedAt).toBeNull();
   });
 });
 

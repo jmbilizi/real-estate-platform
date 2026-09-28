@@ -202,7 +202,7 @@ export default function ListingRow({
         // `-mr-6 sm:mr-0`: the row's own left inset still lines the first card up under the
         // title, but the right edge bleeds past the section's padding to the screen edge below
         // `sm` — the cut-off next card is the "peek" (Airbnb mobile rows), not a rendering bug.
-        className="mt-4 flex snap-x snap-mandatory gap-3 sm:gap-5 overflow-x-auto pb-3 scrollbar-none -mr-6 sm:mr-0"
+        className="mt-3 sm:mt-4 flex snap-x snap-mandatory gap-3 sm:gap-5 overflow-x-auto pb-3 scrollbar-none -mr-6 sm:mr-0"
       >
         {loading &&
           Array.from({ length: max }, (_, i) => (

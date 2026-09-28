@@ -101,7 +101,7 @@ type ExpectedDetailKeys = 'property' | 'unit' | 'listing';
 export type _DetailKeysMissing = AssertNever<Exclude<ExpectedDetailKeys, keyof ListingDetail>>;
 export type _DetailKeysExtra = AssertNever<Exclude<keyof ListingDetail, ExpectedDetailKeys>>;
 
-type ExpectedMetaKeys = 'dataUpdatedAt' | 'sources' | 'listingCount';
+type ExpectedMetaKeys = 'dataUpdatedAt' | 'lastSyncedAt' | 'sources' | 'listingCount';
 
 export type _MetaKeysMissing = AssertNever<Exclude<ExpectedMetaKeys, keyof ListingsMeta>>;
 export type _MetaKeysExtra = AssertNever<Exclude<keyof ListingsMeta, ExpectedMetaKeys>>;
