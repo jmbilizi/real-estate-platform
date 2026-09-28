@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { NeighborhoodRow as NeighborhoodApiRow } from '@cribstop/property-contracts';
 import ListingRow from '@/components/ListingRow';
 import NeighborhoodRow, { type Neighborhood } from '@/components/NeighborhoodRow';
@@ -72,6 +72,32 @@ function useLastSearchedPlace(): { city: string; state: string } | null {
   return place;
 }
 
+/** A resolved visitor region (#363): city/state granularity only, never coordinates. */
+type Region = { city: string; state: string };
+
+type RegionState = { region: Region | null; loading: boolean };
+
+/**
+ * Fetches the visitor's IP region once per page load, through the Next.js proxy route
+ * (`/api/geo/region`), which already reduces the gateway's response to `{ city, state } | null` —
+ * a non-US region, a 204, or a failed lookup all arrive here as `null`. One fetch, shared by every
+ * row below that scopes itself to the region, rather than each row fetching its own.
+ */
+function useRegion(): RegionState {
+  const [state, setState] = useState<RegionState>({ region: null, loading: true });
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/geo/region', { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((region: Region | null) => setState({ region, loading: false }))
+      .catch(() => setState({ region: null, loading: false }));
+    return () => controller.abort();
+  }, []);
+
+  return state;
+}
+
 type CarouselState = {
   listings: ListingCardRow[];
   total: number;
@@ -87,7 +113,7 @@ type CarouselState = {
  * blocks or blanks the others — they render in parallel because each is an independent effect
  * fired on mount / whenever `query` changes, not a chain of awaits.
  */
-function useCarouselListings(query: ListingSearchQuery) {
+function useCarouselListings(query: ListingSearchQuery, skip = false, skipLoading = false) {
   const [state, setState] = useState<CarouselState>({
     listings: [],
     total: 0,
@@ -98,19 +124,33 @@ function useCarouselListings(query: ListingSearchQuery) {
   // Query objects are re-created on every render, so key the effect on their serialized form
   // rather than the object identity — otherwise it would re-fetch every render.
   const queryKey = JSON.stringify(query);
+  // A generation token, not the abort signal alone: a request this run's own cleanup aborted
+  // still lands its result if no later run has since started — only a run an actually newer one
+  // superseded skips its `setState`.
+  const generation = useRef(0);
 
   const refetch = () => setRetryKey((k) => k + 1);
 
   useEffect(() => {
+    const myGeneration = ++generation.current;
+
+    // No place to scope to (#363's near-you row, before the region resolves or once it
+    // resolves to none): never fires an unscoped, platform-wide request. `skipLoading` tells
+    // the two `skip` cases apart — still waiting on the region (show the skeleton) versus
+    // resolved with no region at all (settle empty so the row hides).
+    if (skip) {
+      setState({ listings: [], total: 0, loading: skipLoading, failed: false });
+      return undefined;
+    }
+
     const controller = new AbortController();
     setState({ listings: [], total: 0, loading: true, failed: false });
 
     searchListings(query, controller.signal)
       .then((envelope) => {
         // A superseded request (a chip pick that moved on before this one returned) must never
-        // overwrite the newer one's state, whether or not the environment actually cancelled the
-        // underlying fetch on `abort()`.
-        if (controller.signal.aborted) return;
+        // overwrite the newer one's state.
+        if (generation.current !== myGeneration) return;
         setState({
           listings: envelope.results,
           total: envelope.total,
@@ -119,13 +159,13 @@ function useCarouselListings(query: ListingSearchQuery) {
         });
       })
       .catch((err) => {
-        if (controller.signal.aborted) return;
+        if (generation.current !== myGeneration) return;
         if (err instanceof DOMException && err.name === 'AbortError') return;
         setState({ listings: [], total: 0, loading: false, failed: true });
       });
 
     return () => controller.abort();
-  }, [queryKey, retryKey]);
+  }, [queryKey, retryKey, skip, skipLoading]);
 
   return { ...state, refetch };
 }
@@ -144,19 +184,35 @@ type NeighborhoodsState = {
 };
 
 /**
- * Fetches "Explore neighborhoods" tiles: one request per licensed state, then — only if that has
- * not already filled the row — one request with no state filter for whatever else the data holds.
+ * Fetches "Explore neighborhoods" tiles: the visitor's own region first (city+state, then state
+ * alone), then one request per licensed state, then — only if that has not already filled the
+ * row — one request with no state filter for whatever else the data holds (#363, #393).
+ *
+ * Waits for the region fetch to settle (`regionLoading`) before firing anything, so this runs
+ * once per page load rather than once with no region and again once it resolves.
  *
  * The per-state requests fire together, not one after another: each is independent, and the merge
  * order comes from `BRAND.licensedStateCodes` itself, never from which response lands first. Within
  * a state the API's own order applies (`total` desc), so this adds no ranking of its own.
  */
-function useNeighborhoods(): NeighborhoodsState {
+function useNeighborhoods(region: Region | null, regionLoading: boolean): NeighborhoodsState {
   const [state, setState] = useState<NeighborhoodsState>({ neighborhoods: [], loading: true });
+  // A generation token, not a boolean: this run's result still lands if nothing newer has
+  // started, even past an incidental cleanup — only a run that a later one has actually
+  // superseded skips its `setState`.
+  const generation = useRef(0);
 
   useEffect(() => {
+    // Resets to loading on every entry into this branch, matching `useCarouselListings`'s skip
+    // branch — never leaves a stale `neighborhoods` list showing were this to re-enter loading
+    // after already resolving once.
+    if (regionLoading) {
+      setState({ neighborhoods: [], loading: true });
+      return undefined;
+    }
+
+    const myGeneration = ++generation.current;
     const controller = new AbortController();
-    let cancelled = false;
 
     async function load() {
       const seen = new Set<string>();
@@ -177,6 +233,34 @@ function useNeighborhoods(): NeighborhoodsState {
         }
       };
 
+      // The visitor's own region, city+state then state alone, ahead of every licensed-state
+      // request — so a visitor's own city and state render first even when their state isn't a
+      // licensed one.
+      if (region) {
+        const settledRegion = await Promise.allSettled([
+          getNeighborhoods(
+            {
+              city: region.city,
+              state: region.state,
+              limit: NEIGHBORHOODS_PAGE_SIZE,
+              minCount: NEIGHBORHOODS_MIN_COUNT,
+            },
+            controller.signal,
+          ),
+          getNeighborhoods(
+            {
+              state: region.state,
+              limit: NEIGHBORHOODS_PAGE_SIZE,
+              minCount: NEIGHBORHOODS_MIN_COUNT,
+            },
+            controller.signal,
+          ),
+        ]);
+        for (const result of settledRegion) {
+          if (result.status === 'fulfilled' && result.value) add(result.value.results);
+        }
+      }
+
       // `allSettled`, not `all`: one licensed state's request failing must not blank the others'
       // already-good results. Order is the input order regardless of which settles first.
       const settled = await Promise.allSettled(
@@ -188,7 +272,7 @@ function useNeighborhoods(): NeighborhoodsState {
         ),
       );
       for (const result of settled) {
-        if (result.status === 'fulfilled') add(result.value.results);
+        if (result.status === 'fulfilled' && result.value) add(result.value.results);
       }
 
       if (merged.length < NEIGHBORHOODS_TARGET) {
@@ -198,21 +282,18 @@ function useNeighborhoods(): NeighborhoodsState {
             { limit: NEIGHBORHOODS_PAGE_SIZE, minCount: NEIGHBORHOODS_MIN_COUNT },
             controller.signal,
           );
-          add(rest.results.filter((row) => !licensed.has(row.state)));
+          if (rest) add(rest.results.filter((row) => !licensed.has(row.state)));
         } catch {
           // The row still shows whatever the licensed-state requests already collected.
         }
       }
 
-      if (!cancelled) setState({ neighborhoods: merged, loading: false });
+      if (generation.current === myGeneration) setState({ neighborhoods: merged, loading: false });
     }
 
     load();
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, []);
+    return () => controller.abort();
+  }, [region, regionLoading]);
 
   return state;
 }
@@ -223,8 +304,14 @@ function useNeighborhoods(): NeighborhoodsState {
  * carries the same navigational value as the old photo card, with no popularity framing (PRD
  * §6.3) and no place URL that 404s on a name Nominatim has never heard of (`lib/place-resolve.ts`).
  */
-function ExploreNeighborhoodsRow() {
-  const { neighborhoods, loading } = useNeighborhoods();
+function ExploreNeighborhoodsRow({
+  region,
+  regionLoading,
+}: {
+  region: Region | null;
+  regionLoading: boolean;
+}) {
+  const { neighborhoods, loading } = useNeighborhoods(region, regionLoading);
 
   return (
     <NeighborhoodRow
@@ -321,6 +408,63 @@ function JustListedRow({ side }: { side: ListingSide }) {
       loading={loading}
       failed={failed}
       onRetry={refetch}
+      max={7}
+      sectionClassName="px-6 pt-3 sm:px-10 lg:px-20"
+    />
+  );
+}
+
+/** "Homes for sale near you" / "Rentals near you" (#363): the AGENTS.md title rule bans a
+ *  place named in a title from IP/geolocation, so the region scopes the query only — the title
+ *  never names the city. */
+const NEAR_YOU_TITLE: Record<ListingSide, string> = {
+  sale: 'Homes for sale near you',
+  rent: 'Rentals near you',
+};
+
+/** "Near you" (#363): the home page's first row. One stable component throughout — its query
+ *  goes from skipped to region-scoped in place, rather than swapping in a freshly-mounted child
+ *  once the region resolves. Hidden while the region is unknown or absent, and while it resolves
+ *  to a place with no matching listings — no fallback city, no error UI, no browser geolocation
+ *  prompt. */
+function NearYouRow({
+  side,
+  region,
+  regionLoading,
+}: {
+  side: ListingSide;
+  region: Region | null;
+  regionLoading: boolean;
+}) {
+  const { listings, total, loading } = useCarouselListings(
+    {
+      listingType: side,
+      city: region?.city,
+      state: region?.state,
+      sort: 'newest',
+      pageSize: CAROUSEL_PAGE_SIZE,
+    },
+    regionLoading || !region,
+    regionLoading,
+  );
+
+  // No error UI (#363): a failed fetch hides the row exactly like a real zero total, rather than
+  // showing a retry card scoped to a place the visitor never entered themselves.
+  if (!loading && total === 0) return null;
+
+  return (
+    <ListingRow
+      title={NEAR_YOU_TITLE[side]}
+      href={
+        region
+          ? searchTargetUrl(
+              { kind: 'place', place: { kind: 'city', city: region.city, state: region.state } },
+              side,
+            )
+          : undefined
+      }
+      listings={listings}
+      loading={loading}
       max={7}
       sectionClassName="px-6 pt-3 sm:px-10 lg:px-20"
     />
@@ -435,10 +579,19 @@ function budgetPricePhrase(label: string): string {
  * row (4 bands) are each rendered with their own `key` in `BudgetSection`, so React never reuses
  * one's `selected` state for the other's shorter array.
  */
-function BudgetSubRow({ type, bands }: { type: 'sale' | 'rent'; bands: BudgetBand[] }) {
+function BudgetSubRow({
+  type,
+  bands,
+  region,
+}: {
+  type: 'sale' | 'rent';
+  bands: BudgetBand[];
+  region: Region | null;
+}) {
   const [selected, setSelected] = useState(0);
   const band = bands[selected] ?? bands[0];
-  const place = useLastSearchedPlace();
+  // The visitor's own last search wins over the coarser IP region (#363) when both are known.
+  const place = useLastSearchedPlace() ?? region;
 
   // City-scoped when a place is known (#416), even with no subtitle to name it.
   const { listings, total, loading, failed, refetch } = useCarouselListings({
@@ -502,13 +655,13 @@ function BudgetSubRow({ type, bands }: { type: 'sale' | 'rent'; bands: BudgetBan
  * Left-aligned, full content width like every row above it — no `mx-auto`/`max-w-[1760px]`
  * centering (#416).
  */
-function BudgetSection({ rentFirst }: { rentFirst: boolean }) {
+function BudgetSection({ rentFirst, region }: { rentFirst: boolean; region: Region | null }) {
   const bands: Record<ListingSide, BudgetBand[]> = { sale: SALE_BANDS, rent: RENT_BANDS };
   const order: [ListingSide, ListingSide] = rentFirst ? ['rent', 'sale'] : ['sale', 'rent'];
   return (
     <div className="mt-8 flex flex-col gap-6 px-6 sm:px-10 lg:px-20">
       {order.map((side) => (
-        <BudgetSubRow key={side} type={side} bands={bands[side]} />
+        <BudgetSubRow key={side} type={side} bands={bands[side]} region={region} />
       ))}
     </div>
   );
@@ -586,15 +739,23 @@ function TrustBlock() {
 }
 
 /**
- * Row order (#394 stakeholder ruling): Just listed (sale), Coming soon (sale) and Price drops are
- * sale rows; "Rentals" is its own two-row cluster (just listed, then coming soon) that normally
- * follows Price drops. When the visitor's last search was rent, that cluster moves up to directly
- * follow the sale "Just listed" row — `useRentFirst` is the only thing that changes; nothing about
- * the rows themselves does.
+ * Row order (#394 stakeholder ruling, #363): "Near you" leads the body, sale then rent — the
+ * first row a visitor sees is scoped to their own region, not a platform-wide feed. Just listed
+ * (sale), Coming soon (sale) and Price drops are sale rows; "Rentals" is its own two-row cluster
+ * (just listed, then coming soon) that normally follows Price drops. When the visitor's last
+ * search was rent, both the "Near you" pair and the rentals cluster move up — `useRentFirst` is
+ * the only thing that changes; nothing about the rows themselves does.
  */
 export default function HomePageContent() {
   const rentFirst = useRentFirst();
+  const { region, loading: regionLoading } = useRegion();
 
+  const nearYouSale = (
+    <NearYouRow key="near-you-sale" side="sale" region={region} regionLoading={regionLoading} />
+  );
+  const nearYouRent = (
+    <NearYouRow key="near-you-rent" side="rent" region={region} regionLoading={regionLoading} />
+  );
   const justListedSale = <JustListedRow key="just-listed-sale" side="sale" />;
   const comingSoonSale = <ComingSoonRow key="coming-soon-sale" side="sale" />;
   const priceDrops = <PriceDropsRow key="price-drops" />;
@@ -602,16 +763,32 @@ export default function HomePageContent() {
   const comingSoonRent = <ComingSoonRow key="coming-soon-rent" side="rent" />;
 
   const rows = rentFirst
-    ? [justListedSale, justListedRent, comingSoonRent, comingSoonSale, priceDrops]
-    : [justListedSale, comingSoonSale, priceDrops, justListedRent, comingSoonRent];
+    ? [
+        nearYouRent,
+        nearYouSale,
+        justListedSale,
+        justListedRent,
+        comingSoonRent,
+        comingSoonSale,
+        priceDrops,
+      ]
+    : [
+        nearYouSale,
+        nearYouRent,
+        justListedSale,
+        comingSoonSale,
+        priceDrops,
+        justListedRent,
+        comingSoonRent,
+      ];
 
   return (
     <>
       {rows}
 
-      <BudgetSection rentFirst={rentFirst} />
+      <BudgetSection rentFirst={rentFirst} region={region} />
 
-      <ExploreNeighborhoodsRow />
+      <ExploreNeighborhoodsRow region={region} regionLoading={regionLoading} />
 
       <TrustBlock />
     </>
