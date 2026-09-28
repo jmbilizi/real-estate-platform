@@ -60,11 +60,22 @@ type Query = {
 
 /** Which row a query belongs to, by its distinguishing filter — never by call order, since order
  *  changes with `useRentFirst`. */
-function rowKind(q: Query): 'just-listed' | 'coming-soon' | 'price-drops' | 'budget' {
+function rowKind(q: Query): 'just-listed' | 'coming-soon' | 'price-drops' | 'budget' | 'near-you' {
   if (q.priceReduced) return 'price-drops';
   if (q.status?.includes('Coming Soon')) return 'coming-soon';
-  if (q.minPrice === undefined && q.maxPrice === undefined) return 'just-listed';
+  if (q.minPrice === undefined && q.maxPrice === undefined) {
+    return q.city ? 'near-you' : 'just-listed';
+  }
   return 'budget';
+}
+
+/** Mocks `/api/geo/region`, the one fetch `useRegion` makes. `null` (the default) matches every
+ *  existing test in this file: no region, so no "near you" row and no region-scoped query. */
+function mockRegionFetch(region: { city: string; state: string } | null = null) {
+  (global.fetch as jest.Mock).mockResolvedValue({
+    ok: true,
+    json: () => Promise.resolve(region),
+  });
 }
 
 describe('HomePageContent', () => {
@@ -76,12 +87,15 @@ describe('HomePageContent', () => {
     });
     mockedSearchListings.mockResolvedValue(envelope([aListingCardRow()]));
     mockedGetNeighborhoods.mockResolvedValue({ results: [], total: 0 });
+    global.fetch = jest.fn();
+    mockRegionFetch(null);
   });
 
   afterEach(() => {
     mockedSearchListings.mockReset();
     mockedGetListingsMeta.mockReset();
     mockedGetNeighborhoods.mockReset();
+    (global.fetch as jest.Mock).mockReset();
     window.localStorage.clear();
   });
 
@@ -162,6 +176,11 @@ describe('HomePageContent', () => {
       mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
       const { container } = render(<HomePageContent />);
       await screen.findByText('Newest homes for sale');
+      // No region resolved (default mock): waits out the near-you row's settling to empty,
+      // so this list of headings reflects the final layout, not a mid-settle snapshot.
+      await waitFor(() =>
+        expect(screen.queryByText('Homes for sale near you')).not.toBeInTheDocument(),
+      );
 
       const headings = Array.from(container.querySelectorAll('h2')).map((h) => h.textContent);
       expect(headings).toEqual([
@@ -186,6 +205,7 @@ describe('HomePageContent', () => {
 
       const { container } = render(<HomePageContent />);
       await screen.findByText('Newest homes for sale');
+      await waitFor(() => expect(screen.queryByText('Rentals near you')).not.toBeInTheDocument());
 
       const headings = Array.from(container.querySelectorAll('h2')).map((h) => h.textContent);
       expect(headings).toEqual([
@@ -240,6 +260,115 @@ describe('HomePageContent', () => {
     });
   });
 
+  describe('near you (#363)', () => {
+    it('renders no row without a resolved region', async () => {
+      render(<HomePageContent />);
+      await screen.findByText('Find homes for sale under $300K');
+
+      await waitFor(() => {
+        expect(screen.queryByText('Homes for sale near you')).not.toBeInTheDocument();
+        expect(screen.queryByText('Rentals near you')).not.toBeInTheDocument();
+      });
+    });
+
+    it('renders "Homes for sale near you" first, scoped to the resolved region', async () => {
+      mockRegionFetch({ city: 'Rockville', state: 'MD' });
+
+      render(<HomePageContent />);
+
+      await waitFor(() => expect(screen.getByText('Homes for sale near you')).toBeInTheDocument());
+      await waitFor(() =>
+        expect(mockedSearchListings).toHaveBeenCalledWith(
+          expect.objectContaining({ listingType: 'sale', city: 'Rockville', state: 'MD' }),
+          expect.anything(),
+        ),
+      );
+      await waitFor(() =>
+        expect(mockedSearchListings).toHaveBeenCalledWith(
+          expect.objectContaining({ listingType: 'rent', city: 'Rockville', state: 'MD' }),
+          expect.anything(),
+        ),
+      );
+
+      const link = screen.getByText('Homes for sale near you').closest('a');
+      expect(link).toHaveAttribute('href', '/rockville-md/homes-for-sale');
+    });
+
+    it('renders no row when the resolved region has no listings', async () => {
+      mockRegionFetch({ city: 'Rockville', state: 'MD' });
+      mockedSearchListings.mockImplementation((q: Query) => {
+        if (rowKind(q) === 'near-you') return Promise.resolve(envelope([], 0));
+        return Promise.resolve(envelope([aListingCardRow()]));
+      });
+
+      render(<HomePageContent />);
+      await screen.findByText('Find homes for sale under $300K');
+
+      await waitFor(() => {
+        expect(screen.queryByText('Homes for sale near you')).not.toBeInTheDocument();
+        expect(screen.queryByText('Rentals near you')).not.toBeInTheDocument();
+      });
+    });
+
+    // The route handler (`geo-region.spec.ts`) filters a non-US countryCode to `null`; the
+    // component only ever sees the already-filtered value, so a `null` region is the observable
+    // shape of that case at this layer.
+    it('renders no row when the region resolves to null (a non-US country, at the route)', async () => {
+      mockRegionFetch(null);
+      render(<HomePageContent />);
+      await screen.findByText('Find homes for sale under $300K');
+
+      await waitFor(() =>
+        expect(screen.queryByText('Homes for sale near you')).not.toBeInTheDocument(),
+      );
+    });
+
+    it('moves "Rentals near you" to the top when the last search was rent', async () => {
+      mockRegionFetch({ city: 'Rockville', state: 'MD' });
+      window.localStorage.setItem(
+        'recentSearches',
+        JSON.stringify([{ display_name: 'Rockville, MD', listingType: 'rent' }]),
+      );
+      mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
+
+      const { container } = render(<HomePageContent />);
+      await screen.findByText('Newest homes for sale');
+      await screen.findByText('Rentals near you');
+
+      const headings = Array.from(container.querySelectorAll('h2')).map((h) => h.textContent);
+      expect(headings.slice(0, 2)).toEqual(['Rentals near you', 'Homes for sale near you']);
+    });
+
+    it("adds the region to a budget sub-row's query when no place has been searched", async () => {
+      mockRegionFetch({ city: 'Rockville', state: 'MD' });
+
+      render(<HomePageContent />);
+
+      await waitFor(() =>
+        expect(mockedSearchListings).toHaveBeenCalledWith(
+          expect.objectContaining({ city: 'Rockville', state: 'MD', maxPrice: 300_000 }),
+          expect.anything(),
+        ),
+      );
+    });
+
+    it('adds the region to a neighborhoods request, ahead of the licensed-state requests', async () => {
+      mockRegionFetch({ city: 'Rockville', state: 'MD' });
+      mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
+
+      render(<HomePageContent />);
+      await screen.findByText('Columbia Heights');
+
+      const calls = mockedGetNeighborhoods.mock.calls.map(
+        ([q]) => q as { city?: string; state?: string },
+      );
+      expect(calls.slice(0, 2)).toEqual([
+        { city: 'Rockville', state: 'MD', limit: 24, minCount: 5 },
+        { state: 'MD', limit: 24, minCount: 5 },
+      ]);
+    });
+  });
+
   describe('explore neighborhoods (#393)', () => {
     it('renders tiles from the mocked response', async () => {
       mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
@@ -288,7 +417,9 @@ describe('HomePageContent', () => {
       render(<HomePageContent />);
 
       await screen.findByText('Find homes for sale under $300K');
-      expect(screen.queryByText('Find your neighborhood')).not.toBeInTheDocument();
+      await waitFor(() =>
+        expect(screen.queryByText('Find your neighborhood')).not.toBeInTheDocument(),
+      );
     });
   });
 
