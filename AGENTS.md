@@ -546,20 +546,21 @@ of running nx:reset and empty checks.
 
 ### Intelligent Language Detection
 
-Both hooks detect affected languages based on **file extensions of staged/changed files** — not what
-projects exist in the repo. A developer committing only `.tsx` files will never trigger Python or
-.NET setup.
+Both hooks pick a fast extension check first (staged/changed file names), then fall back to
+`nx show projects --affected --projects=tag:runtime:<language>` on a feature branch. The extension
+check only decides whether to skip a language's environment setup early — a developer committing
+only `.tsx` files never triggers Python or .NET setup. The `nx affected` fallback is project-aware:
+it marks a project affected by any file under its root, whatever the extension, so it already covers
+a JSON-only change inside a `.NET` or Python project. This is why the hooks needed no change for
+#443 — only PR CI's own `detect-languages` job had the extension-only bug, because it used
+`dorny/paths-filter` with no project-aware fallback.
 
 ```javascript
-// pre-commit.js: checks staged files
+// pre-commit.js: fast path, then project-aware fallback
 const staged = getStagedFiles(); // git diff --cached --name-only
 const hasPythonFiles = staged.some((f) => /\.(py|pyx|ipynb)$/.test(f));
-if (hasPythonFiles) {
-  setupPythonEnvironment();
-  checkPythonProjects(isAffected, base);
-} else {
-  log('No Python projects affected - skipping Python checks');
-}
+if (hasPythonFiles) return true;
+// Falls through to nx show projects --affected --projects=tag:runtime:python
 ```
 
 **Pattern**: Check file extensions of staged/changed files first, setup environment only if needed,
@@ -568,6 +569,13 @@ run checks conditionally. This means:
 - Python devs don't need .NET SDK installed
 - .NET devs don't need Python/UV installed
 - Node/Next.js devs only need Node.js
+
+**PR CI's own language detection** (`detect-languages` job, `.github/workflows/ci.yml`) derives its
+answer from the Nx project graph directly: `tools/ci/detect-languages.js` maps each changed file to
+its owning Nx project (by root) and reads that project's `runtime:*` tag, so a project match decides
+the language regardless of file extension. The extension rule applies only as a fallback, for files
+outside any Nx project (root config files, `tools/dotnet/**`, `tools/python/**`). Pure core in the
+same file, tested by `tools/ci/detect-languages.test.js`, run by `pnpm run tools:test`.
 
 ## Python Environment Management
 

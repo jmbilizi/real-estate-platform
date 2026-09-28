@@ -74,9 +74,9 @@ jobs:
     needs: setup-base
     runs-on: ubuntu-latest
     outputs:
-      node: ${{ steps.filter.outputs.node == 'true' || steps.run-all.outputs.run_all == 'true' }}
-      python: ${{ steps.filter.outputs.python == 'true' || steps.run-all.outputs.run_all == 'true' }}
-      dotnet: ${{ steps.filter.outputs.dotnet == 'true' || steps.run-all.outputs.run_all == 'true' }}
+      node: ${{ steps.detect.outputs.node == 'true' || steps.run-all.outputs.run_all == 'true' }}
+      python: ${{ steps.detect.outputs.python == 'true' || steps.run-all.outputs.run_all == 'true' }}
+      dotnet: ${{ steps.detect.outputs.dotnet == 'true' || steps.run-all.outputs.run_all == 'true' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -132,44 +132,13 @@ jobs:
             echo "✓ Comparing against last green: ${LAST_GREEN_SHA}"
           fi
 
-      - uses: dorny/paths-filter@v3
-        id: filter
+      # Maps changed files to Nx projects and reads each project's runtime:* tag, so a change to
+      # any file under a .NET or Python project runs that job — not only files with that runtime's
+      # extension (#443). Falls back to an extension rule only for files outside any Nx project.
+      - name: Detect languages (project-aware)
+        id: detect
         if: steps.run-all.outputs.run_all == 'false'
-        with:
-          base: ${{ steps.run-all.outputs.base_sha }}
-          ref: ${{ github.sha }}
-          filters: |
-            node:
-              - '**/*.ts'
-              - '**/*.tsx'
-              - '**/*.js'
-              - '**/*.jsx'
-              - '**/*.mjs'
-              - '**/*.cjs'
-              - '**/package.json'
-              - '**/tsconfig*.json'
-              - 'pnpm-lock.yaml'
-              - 'tools/node/**'
-            python:
-              - '**/*.py'
-              - '**/*.pyx'
-              - '**/*.pxd'
-              - '**/*.pyi'
-              - '**/*.ipynb'
-              - '**/pyproject.toml'
-              - 'uv.lock'
-              - 'tools/python/**'
-            dotnet:
-              - '**/*.cs'
-              - '**/*.vb'
-              - '**/*.csproj'
-              - '**/*.sln'
-              - '**/*.fsproj'
-              - '**/Directory.*.props'
-              - '**/Directory.*.targets'
-              - '**/nuget.config'
-              - '**/global.json'
-              - 'tools/dotnet/**'
+        run: node tools/ci/detect-languages.js --base="${{ steps.run-all.outputs.base_sha }}" --head="${{ github.sha }}"
 
   # Unit tests for the repo's own automation (tools/**/*.test.js): the GitHub Projects
   # issue-body splicer and the deploy-scope resolver that infra/deploy-control.yaml and the
