@@ -1732,7 +1732,7 @@ export default function CompactSearchBar({
       setSuggestions([]);
       setDateRange({ start: '', end: '', flexibility: 'exact' });
       setRangePickStep('start');
-      setSearchListingType('sale');
+      setSearchListingType('all');
       setActivePanel('where');
     };
 
