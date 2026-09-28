@@ -33,7 +33,7 @@ const initialState: SearchState = {
   searchMoveInDate: '',
   searchDateRange: { start: '', end: '', flexibility: 'exact' },
   searchPriceIdx: 0,
-  searchListingType: 'sale',
+  searchListingType: 'all',
 };
 
 const searchSlice = createSlice({

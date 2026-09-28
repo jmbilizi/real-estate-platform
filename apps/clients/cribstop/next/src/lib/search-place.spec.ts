@@ -78,10 +78,10 @@ describe('searchTargetFor + searchTargetUrl (#350)', () => {
     const loc = { type: 'city', name: 'Alexandria', address: ALEXANDRIA };
     expect(url('', loc, 'rent')).toBe('/alexandria-va/homes-for-rent');
     expect(url('', loc, 'all')).toBe('/alexandria-va/homes-for-sale?type=all');
-    // The search bar defaults to "For sale", so a default search has no `type` parameter.
+    // The search bar defaults to "All listings" until the visitor picks a type.
     const defaultType = searchReducer(undefined, { type: '@@init' }).searchListingType;
-    expect(defaultType).toBe('sale');
-    expect(url('', loc, defaultType)).toBe('/alexandria-va/homes-for-sale');
+    expect(defaultType).toBe('all');
+    expect(url('', loc, defaultType)).toBe('/alexandria-va/homes-for-sale?type=all');
     expect(listingTypeForPath('homes-for-rent', null)).toEqual({
       listingType: 'rent',
       override: null,
