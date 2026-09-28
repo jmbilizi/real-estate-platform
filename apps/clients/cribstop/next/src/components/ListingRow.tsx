@@ -95,7 +95,8 @@ export default function ListingRow({
           <div className="flex items-center gap-2">
             <h2
               className={
-                titleClassName ?? 'font-display text-xl font-bold tracking-tight sm:text-2xl'
+                titleClassName ??
+                'font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]'
               }
             >
               {title}
@@ -121,7 +122,9 @@ export default function ListingRow({
               </Link>
             )}
           </div>
-          <div className={`flex items-center gap-2 ${failed ? 'hidden' : ''}`}>
+          {/* Touch is the control below `sm` (Airbnb-style peeking rows); arrows return once there
+              is room for them to sit clear of the cards. */}
+          <div className={`items-center gap-2 ${failed ? 'hidden' : 'hidden sm:flex'}`}>
             <button
               type="button"
               onClick={() => scroll('left')}
@@ -163,7 +166,10 @@ export default function ListingRow({
 
       <div
         ref={scrollerRef}
-        className="mt-4 flex snap-x snap-mandatory gap-5 overflow-x-auto pb-3 scrollbar-none"
+        // `-mr-6 sm:mr-0`: the row's own left inset still lines the first card up under the
+        // title, but the right edge bleeds past the section's padding to the screen edge below
+        // `sm` — the cut-off next card is the "peek" (Airbnb mobile rows), not a rendering bug.
+        className="mt-4 flex snap-x snap-mandatory gap-5 overflow-x-auto pb-3 scrollbar-none -mr-6 sm:mr-0"
       >
         {loading &&
           Array.from({ length: max }, (_, i) => (

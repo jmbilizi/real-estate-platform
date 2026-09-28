@@ -65,7 +65,7 @@ function Bar({ className = '' }: { className?: string }) {
  * already imports this module, so the class lives on this side of that dependency.
  */
 export const CARD_WIDTH_CLASS =
-  'w-[calc((100%-1.25rem)/2)] flex-shrink-0 snap-start [scroll-snap-stop:always] sm:w-[calc((100%-2.5rem)/3)] md:w-[calc((100%-3.75rem)/4)] lg:w-[calc((100%-5rem)/5)] xl:w-[calc((100%-6.25rem)/6)] 2xl:w-[calc((100%-7.5rem)/7)]';
+  'w-[45%] flex-shrink-0 snap-start [scroll-snap-stop:always] sm:w-[calc((100%-2.5rem)/3)] md:w-[calc((100%-3.75rem)/4)] lg:w-[calc((100%-5rem)/5)] xl:w-[calc((100%-6.25rem)/6)] 2xl:w-[calc((100%-7.5rem)/7)]';
 
 /**
  * A card placeholder built on `ListingCard`'s own reserved slots.

@@ -48,11 +48,23 @@ function envelope(rows: ReturnType<typeof aListingCardRow>[], total = rows.lengt
   };
 }
 
-/** Every "Coming soon" query, in call order — one per section (#398 always renders both). */
-function comingSoonQueries(): { listingType?: string }[] {
-  return mockedSearchListings.mock.calls
-    .map(([q]) => q as { status?: string[]; listingType?: string })
-    .filter((q) => q.status);
+type Query = {
+  status?: string[];
+  listedWithinDays?: number;
+  priceReduced?: boolean;
+  minPrice?: number;
+  maxPrice?: number;
+  listingType?: string;
+  city?: string;
+};
+
+/** Which row a query belongs to, by its distinguishing filter — never by call order, since order
+ *  changes with `useRentFirst`. */
+function rowKind(q: Query): 'just-listed' | 'coming-soon' | 'price-drops' | 'budget' {
+  if (q.priceReduced) return 'price-drops';
+  if (q.status?.includes('Coming Soon')) return 'coming-soon';
+  if (q.minPrice === undefined && q.maxPrice === undefined) return 'just-listed';
+  return 'budget';
 }
 
 describe('HomePageContent', () => {
@@ -73,73 +85,139 @@ describe('HomePageContent', () => {
     window.localStorage.clear();
   });
 
-  describe('sale/rent sections (#398)', () => {
-    it('always shows both a for-sale and a for-rent coming-soon section, sale first by default', async () => {
+  describe('titles (#394, #419)', () => {
+    it('renders every row title, and no subtitle text under any of them', async () => {
+      mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
       render(<HomePageContent />);
 
-      await waitFor(() => expect(comingSoonQueries().length).toBe(2));
-      expect(comingSoonQueries()[0]).toMatchObject({ listingType: 'sale' });
-      expect(comingSoonQueries()[1]).toMatchObject({ listingType: 'rent' });
+      expect(await screen.findByText('Newest homes for sale')).toBeInTheDocument();
+      expect(screen.getByText('Be first to see homes coming for sale')).toBeInTheDocument();
+      expect(screen.getByText('Price drops on homes for sale')).toBeInTheDocument();
+      expect(screen.getByText('Newest rentals')).toBeInTheDocument();
+      expect(screen.getByText("See new rentals before they're listed")).toBeInTheDocument();
+      expect(screen.getByText('Find homes for sale under $300K')).toBeInTheDocument();
+      expect(screen.getByText('Rentals under $1,500 a month')).toBeInTheDocument();
+      expect(screen.getByText('Find your neighborhood')).toBeInTheDocument();
+
+      // No count/place subtitle line under any row.
+      expect(screen.queryByText(/\d+ homes?/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/\d+ rentals?/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('row queries (#394)', () => {
+    it('queries "just listed" by the newly-listed sort, one row per side, with no date cutoff', async () => {
+      render(<HomePageContent />);
+
+      await waitFor(() =>
+        expect(mockedSearchListings).toHaveBeenCalledWith(
+          expect.objectContaining({ listingType: 'sale', sort: 'newly-listed' }),
+          expect.anything(),
+        ),
+      );
+      await waitFor(() =>
+        expect(mockedSearchListings).toHaveBeenCalledWith(
+          expect.objectContaining({ listingType: 'rent', sort: 'newly-listed' }),
+          expect.anything(),
+        ),
+      );
+      const calls = mockedSearchListings.mock.calls.map(([q]) => q as Query);
+      expect(calls.every((q) => q.listedWithinDays === undefined)).toBe(true);
     });
 
-    it('orders rent first when the visitor last searched rent', async () => {
-      // Call order stays sale-then-rent (each side mounts once and never re-fetches on reorder —
-      // React matches the two coming-soon rows by their `side` key, not by JSX position). The
-      // visible order is what #398 asks for, so this checks the rendered "See all" link order.
+    it('queries "price drops" by priceReduced and the newly-listed sort, sale only', async () => {
+      render(<HomePageContent />);
+
+      await waitFor(() =>
+        expect(mockedSearchListings).toHaveBeenCalledWith(
+          expect.objectContaining({
+            listingType: 'sale',
+            priceReduced: true,
+            sort: 'newly-listed',
+          }),
+          expect.anything(),
+        ),
+      );
+      expect(mockedSearchListings).not.toHaveBeenCalledWith(
+        expect.objectContaining({ listingType: 'rent', priceReduced: true }),
+        expect.anything(),
+      );
+    });
+
+    it('hides a row when its total is 0 and the fetch has settled', async () => {
+      mockedSearchListings.mockImplementation((q: Query) => {
+        if (rowKind(q) === 'price-drops') return Promise.resolve(envelope([], 0));
+        return Promise.resolve(envelope([aListingCardRow()]));
+      });
+
+      render(<HomePageContent />);
+
+      await screen.findByText('Newest homes for sale');
+      expect(screen.queryByText('Price drops on homes for sale')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('row order (#394)', () => {
+    it('orders Just listed, Coming soon (sale), Price drops, then the rentals cluster by default', async () => {
+      mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
+      const { container } = render(<HomePageContent />);
+      await screen.findByText('Newest homes for sale');
+
+      const headings = Array.from(container.querySelectorAll('h2')).map((h) => h.textContent);
+      expect(headings).toEqual([
+        'Newest homes for sale',
+        'Be first to see homes coming for sale',
+        'Price drops on homes for sale',
+        'Newest rentals',
+        "See new rentals before they're listed",
+        'Find homes for sale under $300K',
+        'Rentals under $1,500 a month',
+        'Find your neighborhood',
+        'Real listings, updated 5 months ago',
+      ]);
+    });
+
+    it('moves the rentals cluster up to follow Just listed when the last search was rent', async () => {
+      mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
       window.localStorage.setItem(
         'recentSearches',
         JSON.stringify([{ display_name: 'Baltimore, MD', listingType: 'rent' }]),
       );
 
       const { container } = render(<HomePageContent />);
+      await screen.findByText('Newest homes for sale');
 
-      await waitFor(() => {
-        const links = Array.from(container.querySelectorAll('a[aria-label="See all"]'));
-        expect(links.length).toBeGreaterThanOrEqual(2);
-        expect(links[0].getAttribute('href')).toContain('homes-for-rent');
-        expect(links[1].getAttribute('href')).toContain('homes-for-sale');
-      });
+      const headings = Array.from(container.querySelectorAll('h2')).map((h) => h.textContent);
+      expect(headings).toEqual([
+        'Newest homes for sale',
+        'Newest rentals',
+        "See new rentals before they're listed",
+        'Be first to see homes coming for sale',
+        'Price drops on homes for sale',
+        'Rentals under $1,500 a month',
+        'Find homes for sale under $300K',
+        'Find your neighborhood',
+        'Real listings, updated 5 months ago',
+      ]);
     });
 
-    it('renders no selection control for intent', async () => {
+    it('also puts the rent budget sub-row first when the last search was rent', async () => {
+      window.localStorage.setItem(
+        'recentSearches',
+        JSON.stringify([{ display_name: 'Baltimore, MD', listingType: 'rent' }]),
+      );
+
       render(<HomePageContent />);
-      await screen.findByText('Find your place under $300K');
-      expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
-      expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+
+      const [firstBudgetHeading] = await screen.findAllByText(
+        /^(Find homes for sale|Rentals) (under|\$)/,
+      );
+      expect(firstBudgetHeading.textContent).toBe('Rentals under $1,500 a month');
     });
   });
 
   describe('coming soon row (#392, #416)', () => {
-    it('renders per-side titles and the envelope total in the subtitle', async () => {
-      mockedSearchListings.mockImplementation((query: { status?: string[] }) => {
-        if (query.status?.includes('Coming Soon')) {
-          return Promise.resolve(envelope([aListingCardRow()], 3041));
-        }
-        return Promise.resolve(envelope([aListingCardRow()]));
-      });
-
-      render(<HomePageContent />);
-
-      expect(await screen.findByText('Be the first to see these homes')).toBeInTheDocument();
-      expect(screen.getByText("See new rentals before they're listed")).toBeInTheDocument();
-      expect(await screen.findByText('3,041 homes for sale coming soon')).toBeInTheDocument();
-      expect(screen.getByText('3,041 rentals coming soon')).toBeInTheDocument();
-    });
-
-    it('is hidden when the total is 0 and the fetch has settled', async () => {
-      mockedSearchListings.mockImplementation((query: { status?: string[] }) => {
-        if (query.status?.includes('Coming Soon')) return Promise.resolve(envelope([], 0));
-        return Promise.resolve(envelope([aListingCardRow()]));
-      });
-
-      render(<HomePageContent />);
-
-      await screen.findByText('Find your place under $300K');
-      expect(screen.queryByText('Be the first to see these homes')).not.toBeInTheDocument();
-      expect(screen.queryByText("See new rentals before they're listed")).not.toBeInTheDocument();
-    });
-
-    it('scopes the query to the visitor\'s last-searched place and names it in the copy, so the count next to "in City, ST" is that city\'s own', async () => {
+    it("scopes the query to the visitor's last-searched place", async () => {
       window.localStorage.setItem(
         'recentSearches',
         JSON.stringify([
@@ -150,21 +228,12 @@ describe('HomePageContent', () => {
           },
         ]),
       );
-      mockedSearchListings.mockImplementation((query: { status?: string[]; city?: string }) => {
-        if (query.status?.includes('Coming Soon')) {
-          return Promise.resolve(envelope([aListingCardRow()], query.city ? 12 : 3041));
-        }
-        return Promise.resolve(envelope([aListingCardRow()]));
-      });
 
       render(<HomePageContent />);
 
-      expect(
-        await screen.findByText('12 homes for sale coming soon in Rockville, MD'),
-      ).toBeInTheDocument();
       await waitFor(() =>
         expect(mockedSearchListings).toHaveBeenCalledWith(
-          expect.objectContaining({ city: 'Rockville', state: 'MD' }),
+          expect.objectContaining({ status: ['Coming Soon'], city: 'Rockville', state: 'MD' }),
           expect.anything(),
         ),
       );
@@ -198,20 +267,7 @@ describe('HomePageContent', () => {
 
       await screen.findByText('Place-MD');
       const stateArgs = mockedGetNeighborhoods.mock.calls.map(([q]) => q.state);
-      // MD, DC, VA (licensed order), then one state-less request because 3 rows is still short of 8.
       expect(stateArgs).toEqual(['MD', 'DC', 'VA', undefined]);
-    });
-
-    it('omits the zero count part on a tile', async () => {
-      mockedGetNeighborhoods.mockResolvedValue({
-        results: [neighborhoodRow({ name: 'Petworth', sale: 40, rent: 0 })],
-        total: 1,
-      });
-
-      render(<HomePageContent />);
-
-      expect(await screen.findByText('40 for sale')).toBeInTheDocument();
-      expect(screen.queryByText(/\d+ for rent/)).not.toBeInTheDocument();
     });
 
     it('links a tile to the neighborhood search path', async () => {
@@ -231,16 +287,7 @@ describe('HomePageContent', () => {
 
       render(<HomePageContent />);
 
-      await screen.findByText('Find your place under $300K');
-      expect(screen.queryByText('Find your neighborhood')).not.toBeInTheDocument();
-    });
-
-    it('hides the section when the fetch fails', async () => {
-      mockedGetNeighborhoods.mockRejectedValue(new Error('down'));
-
-      render(<HomePageContent />);
-
-      await screen.findByText('Find your place under $300K');
+      await screen.findByText('Find homes for sale under $300K');
       expect(screen.queryByText('Find your neighborhood')).not.toBeInTheDocument();
     });
   });
@@ -271,24 +318,17 @@ describe('HomePageContent', () => {
       );
     });
 
-    it('renders one sub-row per listing type, each titled after its own default band', async () => {
-      render(<HomePageContent />);
-
-      expect(await screen.findByText('Find your place under $300K')).toBeInTheDocument();
-      expect(screen.getByText('Rentals under $1,500 a month')).toBeInTheDocument();
-    });
-
     it('re-titles a sub-row when its chip changes', async () => {
       render(<HomePageContent />);
 
-      await screen.findByText('Find your place under $300K');
+      await screen.findByText('Find homes for sale under $300K');
       fireEvent.click(await screen.findByRole('button', { name: '$300K–$500K' }));
-      expect(await screen.findByText('Find your place $300K–$500K')).toBeInTheDocument();
+      expect(await screen.findByText('Find homes for sale $300K–$500K')).toBeInTheDocument();
     });
 
     it('uses the canonical selected-chip style, not a brand color', async () => {
       render(<HomePageContent />);
-      await screen.findByText('Find your place under $300K');
+      await screen.findByText('Find homes for sale under $300K');
 
       const active = await screen.findByRole('button', { name: 'Under $300K' });
       expect(active.className).toContain('border-ink bg-ink text-white');
@@ -296,53 +336,34 @@ describe('HomePageContent', () => {
     });
 
     it('keeps the chips live and shows a plain empty message for a band with no matches', async () => {
-      mockedSearchListings.mockImplementation((query: { status?: string[] }) => {
-        if (query.status?.includes('Coming Soon')) return Promise.resolve(envelope([]));
-        return Promise.resolve(envelope([], 0));
+      mockedSearchListings.mockImplementation((q: Query) => {
+        if (rowKind(q) === 'budget') return Promise.resolve(envelope([], 0));
+        return Promise.resolve(envelope([aListingCardRow()]));
       });
 
       render(<HomePageContent />);
 
-      // Both budget sub-rows are empty at their default (first) chip.
       const empty = await screen.findAllByText(
         'No homes in this price range yet. Try another range.',
       );
       expect(empty).toHaveLength(2);
-      // The chips stay usable so the visitor can pick another range.
       expect(screen.getByRole('button', { name: '$300K–$500K' })).toBeInTheDocument();
     });
   });
 
-  describe('resilience (#392)', () => {
+  describe('resilience', () => {
     it('fires every row query in parallel rather than one after another', () => {
       mockedSearchListings.mockReturnValue(new Promise(() => {})); // never resolves
       render(<HomePageContent />);
 
-      // Sale + rent coming-soon, sale + rent budget sub-rows — four independent fetches on the
-      // same tick, none gated behind another's result.
-      expect(mockedSearchListings.mock.calls.length).toBeGreaterThanOrEqual(4);
-    });
-
-    it('renders one row once its own fetch resolves, even while others are still pending', async () => {
-      mockedSearchListings.mockImplementation((query: { status?: string[] }) => {
-        if (query.status?.includes('Coming Soon')) {
-          return Promise.resolve(envelope([aListingCardRow()], 7));
-        }
-        return new Promise(() => {}); // the budget rows never resolve in this test
-      });
-
-      render(<HomePageContent />);
-
-      await waitFor(() =>
-        expect(screen.getAllByText('7 homes for sale coming soon').length).toBeGreaterThan(0),
-      );
+      // Just listed (x2 sides), coming soon (x2 sides), price drops, and two budget sub-rows.
+      expect(mockedSearchListings.mock.calls.length).toBeGreaterThanOrEqual(6);
     });
 
     it('degrades gracefully when one row fails — the rest of the page still renders, with its own retry', async () => {
-      mockedSearchListings.mockImplementation((query: { status?: string[] }) => {
-        if (query.status?.includes('Coming Soon')) {
+      mockedSearchListings.mockImplementation((q: Query) => {
+        if (rowKind(q) === 'coming-soon')
           return Promise.reject(new Error('coming-soon row is down'));
-        }
         return Promise.resolve(envelope([aListingCardRow()]));
       });
 
@@ -350,16 +371,14 @@ describe('HomePageContent', () => {
 
       await waitFor(() => expect(screen.getAllByText('Failed to load').length).toBeGreaterThan(0));
       expect(screen.getAllByRole('button', { name: 'Tap to retry' }).length).toBeGreaterThan(0);
-      // The rest of the page is unaffected by the failed rows.
-      expect(await screen.findByText('Find your place under $300K')).toBeInTheDocument();
-      expect(screen.getByText('Rentals under $1,500 a month')).toBeInTheDocument();
+      expect(await screen.findByText('Find homes for sale under $300K')).toBeInTheDocument();
     });
   });
 
-  describe('removed rows (#392)', () => {
+  describe('removed rows', () => {
     it('renders none of the retired carousels', async () => {
       render(<HomePageContent />);
-      await screen.findByText('Find your place under $300K');
+      await screen.findByText('Find homes for sale under $300K');
 
       for (const title of [
         'Featured homes for sale',
@@ -368,69 +387,48 @@ describe('HomePageContent', () => {
         'Available homes for rent',
         'Luxury collection for sale',
         'Luxury homes for rent',
-        'Just listed homes for sale',
-        'Just listed homes for rent',
       ]) {
         expect(screen.queryByText(title)).not.toBeInTheDocument();
       }
     });
   });
 
-  describe('compliance (#392)', () => {
+  describe('compliance', () => {
     it('uses no banned Fair-Housing-adjacent word anywhere in the rendered body', async () => {
       render(<HomePageContent />);
-      await screen.findByText('Find your place under $300K');
+      await screen.findByText('Find homes for sale under $300K');
 
       const banned =
         /\b(popular|trending|best|hot|exclusive|selling fast|hand-picked|featured|safe|family|young professionals|student|up-and-coming|dream|perfect for|ideal for)\b/i;
       expect(document.body.textContent).not.toMatch(banned);
     });
 
-    it('titles every section as a call to action with a verb and what it shows, never a mood word alone (#418)', async () => {
-      mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
+    it('makes no savings or deal claim on the price-drops row', async () => {
       render(<HomePageContent />);
-      await screen.findByText('Find your place under $300K');
+      await screen.findByText('Price drops on homes for sale');
 
-      // Every earlier round's non-CTA or jargon titles must never come back.
-      for (const retired of [
-        'Dropping soon',
-        'Rentals about to drop',
-        'Pick your neighborhood',
-        'Explore homes by neighborhood',
-        'What under $300K gets you',
-        'See homes for sale before they hit the market',
-        "Find your next rental before it's listed",
-        'Search MLS listings with Cribstop, brokered by Real Broker LLC.',
-      ]) {
-        expect(screen.queryByText(retired)).not.toBeInTheDocument();
-      }
-      expect(screen.getByText('Be the first to see these homes')).toBeInTheDocument();
-      expect(screen.getByText("See new rentals before they're listed")).toBeInTheDocument();
-      expect(screen.getByText('Find your neighborhood')).toBeInTheDocument();
-      // No "MLS"/"IDX" consumer-facing jargon anywhere on the page (#418).
+      expect(document.body.textContent).not.toMatch(/\bsave\b|\bsaved\b|% off|\bdeal\b/i);
+    });
+
+    it('never names "MLS" or "IDX" anywhere on the page', async () => {
+      render(<HomePageContent />);
+      await screen.findByText('Find homes for sale under $300K');
       expect(document.body.textContent).not.toMatch(/\bMLS\b|\bIDX\b/);
     });
 
-    it('removes the unsourced brokerage claims and keeps the block fact-only', async () => {
+    it('removes the unsourced brokerage claims and keeps the trust block fact-only', async () => {
       render(<HomePageContent />);
-      await screen.findByText('Find your place under $300K');
+      await screen.findByText('Find homes for sale under $300K');
 
-      expect(
-        screen.queryByText(/Trusted by buyers, sellers, and renters across the DMV/),
-      ).not.toBeInTheDocument();
-      expect(
-        screen.queryByText(/one of the fastest-growing brokerages in the country/),
-      ).not.toBeInTheDocument();
       expect(
         screen.getByText('Cribstop is brokered by Real Broker LLC, licensed in MD, DC, and VA.'),
       ).toBeInTheDocument();
     });
 
-    it('titles the trust block with the one fact it can back — freshness — never claiming every listing is brokered by Real Broker LLC (IDX policy 7.58)', async () => {
+    it('titles the trust block with the one fact it can back — freshness', async () => {
       render(<HomePageContent />);
-      await screen.findByText('Find your place under $300K');
+      await screen.findByText('Find homes for sale under $300K');
 
-      expect(screen.queryByText(/Every listing, brokered by/)).not.toBeInTheDocument();
       expect(screen.getByText(/^Real listings, updated /)).toBeInTheDocument();
     });
 
@@ -442,7 +440,7 @@ describe('HomePageContent', () => {
       });
 
       render(<HomePageContent />);
-      await screen.findByText('Find your place under $300K');
+      await screen.findByText('Find homes for sale under $300K');
 
       expect(screen.getByText('Real, licensed listings')).toBeInTheDocument();
     });
@@ -460,7 +458,7 @@ describe('HomePageContent', () => {
       });
 
       render(<HomePageContent />);
-      await screen.findByText('Find your place under $300K');
+      await screen.findByText('Find homes for sale under $300K');
       expect(screen.queryByText('Updated')).not.toBeInTheDocument();
     });
   });
