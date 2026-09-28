@@ -79,14 +79,14 @@ function collectProjectFiles(absDir, depth, found) {
   }
 }
 
-/** Builds the projectName -> workspace-relative-root index. */
-function buildIndex() {
+/** Reads every project.json under apps/ and libs/, parsed and paired with its root. */
+function readAllManifests() {
   const manifests = [];
   for (const root of SEARCH_ROOTS) {
     collectProjectFiles(path.join(WORKSPACE_ROOT, root), 1, manifests);
   }
 
-  const index = new Map();
+  const parsedManifests = [];
   for (const manifest of manifests) {
     let parsed;
     try {
@@ -97,7 +97,20 @@ function buildIndex() {
     if (typeof parsed.name !== 'string' || !parsed.name) continue;
 
     const relative = path.relative(WORKSPACE_ROOT, path.dirname(manifest));
-    index.set(parsed.name, relative.split(path.sep).join('/'));
+    parsedManifests.push({
+      name: parsed.name,
+      root: relative.split(path.sep).join('/'),
+      tags: Array.isArray(parsed.tags) ? parsed.tags : [],
+    });
+  }
+  return parsedManifests;
+}
+
+/** Builds the projectName -> workspace-relative-root index. */
+function buildIndex() {
+  const index = new Map();
+  for (const project of readAllManifests()) {
+    index.set(project.name, project.root);
   }
   return index;
 }
@@ -117,4 +130,18 @@ function clearCache() {
   cachedIndex = null;
 }
 
-module.exports = { resolveProjectRoot, clearCache };
+/**
+ * Lists every Nx project under apps/ and libs/ with its root and tags, straight from
+ * `project.json` — the same source `nx show project --json` reads, without spawning Nx.
+ *
+ * Used by tools/ci/detect-languages.js to map a changed file to its project's `runtime:*` tag
+ * instead of a hand-kept extension list. Not cached: callers of this function run once per CI job,
+ * so the cost is one filesystem walk, not a per-file cost.
+ *
+ * @returns {Array<{name: string, root: string, tags: string[]}>}
+ */
+function listProjects() {
+  return readAllManifests();
+}
+
+module.exports = { resolveProjectRoot, listProjects, clearCache };
