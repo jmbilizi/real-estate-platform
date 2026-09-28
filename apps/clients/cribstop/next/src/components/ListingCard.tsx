@@ -44,7 +44,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
   const isSold = listing.listingType === 'sold' || listing.status === 'Sold';
   const isParcel = listing.propertyType === 'Land';
 
-  // #424. The stakeholder-approved status badge, rendered bottom-left of the photo (see below).
+  // #424. The stakeholder-approved status badge, leading the top-left stack (see below).
   const isComingSoon = listing.status === 'Coming Soon';
 
   /**
@@ -144,7 +144,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
          * below the image, which was the only row those cards had and others did not, and it made
          * tiles in a grid different heights (#79a90aa).
          */}
-        {(marketingBadge || openHouse) && (
+        {(isComingSoon || marketingBadge || openHouse) && (
           <div
             /*
              * `inset-x-3`, not `left-3` alone: the children cap themselves with percentage widths,
@@ -158,6 +158,36 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
               isSold ? 'top-9' : 'top-3'
             }`}
           >
+            {isComingSoon && (
+              /*
+               * #424. Leads the stack — the top row is the one that shares the save control's
+               * band, so this is also the one capped to `calc(100%-3.5rem)` (see the comment on
+               * the marketing pill below). The stakeholder moved this badge here from a
+               * bottom-left placement and asked for it to fit that cap without truncating, so it
+               * is smaller than the other two pills in this stack (10px below `sm`, 11px from `sm`
+               * up; `px-2 py-0.5`; a 6px dot) rather than sharing their 11px/`px-2 py-1`.
+               *
+               * Two forms, `whitespace-nowrap`, never `truncate` — same reasoning as the
+               * short/full split below: "Coming soon Oct 15" does not fit the ~71px this cap
+               * leaves at the 360px home-carousel card (measured against the rendered pill), so
+               * below `sm` the shorter "Soon · Oct 15" renders instead. From `sm` up every card
+               * this component renders on (search grid, home row, favourites) has room for the
+               * full form.
+               */
+              <span className="inline-flex max-w-[calc(100%-3.5rem)] items-center gap-1 whitespace-nowrap rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-ink shadow-card sm:text-[11px]">
+                <span
+                  aria-hidden="true"
+                  className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-brand"
+                />
+                <span className="sm:hidden">
+                  {formatComingSoonBadgeShort(listing.comingSoonDate)}
+                </span>
+                <span className="hidden sm:inline">
+                  {formatComingSoonBadge(listing.comingSoonDate)}
+                </span>
+              </span>
+            )}
+
             {marketingBadge && (
               <span
                 // Only the top row shares the save control's band, so only it is capped short of
@@ -214,38 +244,6 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
                 <span className="open-house-date">{formatOpenHouseDate(openHouse)}</span>
               </span>
             )}
-          </div>
-        )}
-
-        {isComingSoon && (
-          /*
-           * #424. Bottom-left corner, deliberately away from the top-left stack and the save
-           * heart, not stacked with either — Zillow's own status-label placement. That distance
-           * is what buys this badge its whole width to work with: `inset-x-3` (the photo's own
-           * side gutters, not the top stack's `calc(100%-3.5rem)` save-control reservation) is
-           * its entire budget, and `whitespace-nowrap` means it never gets an ellipsis. The badge
-           * must fit inside that budget outright, so the content shrinks instead: two forms, full
-           * and short, and only one is ever visible.
-           *
-           * Below `sm` — the mobile width `ListingRow`'s home carousel renders at (`~42%` of the
-           * viewport, `CARD_WIDTH_CLASS`) — "Coming soon Oct 15" overflows that card's ~127px of
-           * usable width at 360px; measured against the rendered pill, not guessed. "Soon · Oct
-           * 15" is the same fact in the room available. From `sm` up the card is wide enough for
-           * the full form everywhere it renders (search grid, favourites, home row).
-           */
-          <div className="absolute inset-x-3 bottom-3">
-            <span className="inline-flex max-w-full items-center gap-1 whitespace-nowrap rounded-full bg-white px-1.5 py-0.5 text-[11px] font-semibold text-ink shadow-card sm:text-xs">
-              <span
-                aria-hidden="true"
-                className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-brand"
-              />
-              <span className="sm:hidden">
-                {formatComingSoonBadgeShort(listing.comingSoonDate)}
-              </span>
-              <span className="hidden sm:inline">
-                {formatComingSoonBadge(listing.comingSoonDate)}
-              </span>
-            </span>
           </div>
         )}
 
