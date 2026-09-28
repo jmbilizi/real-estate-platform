@@ -153,7 +153,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
       role="link"
       tabIndex={0}
       aria-label={`View listing at ${formatCardAddress(listing)}`}
-      className="group block cursor-pointer rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2"
+      className="listing-card-root group block cursor-pointer rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2"
       onClick={openPanel}
       onKeyDown={(e) => {
         if (e.key !== 'Enter' && e.key !== ' ') return;
@@ -207,29 +207,33 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
           >
             {isComingSoon && (
               /*
-               * #424. Leads the stack — the top row is the one that shares the save control's
-               * band, so this is also the one capped to `calc(100%-3.5rem)` (see the comment on
-               * the marketing pill below). The stakeholder moved this badge here from a
-               * bottom-left placement and asked for it to fit that cap without truncating, so it
-               * is smaller than the other two pills in this stack (10px below `sm`, 11px from `sm`
-               * up; `px-2 py-0.5`; a 6px dot) rather than sharing their 11px/`px-2 py-1`.
+               * #424/#438. Leads the stack. `max-w-full` (not a fixed or percentage cap): the
+               * pill is `inline-flex`, sized to its own content, and this only stops it from
+               * exceeding the stack's own definite width (from `inset-x-3` above) — nothing
+               * clips it. It used to be capped at `calc(100%-3.5rem)`, reserved for a save
+               * control that lived on the image; the control moved into the footer in #433 and
+               * the reservation was never removed, so `whitespace-nowrap` text past that cap
+               * spilled out past the pill's own background instead of the pill growing to hold
+               * it (#438 stakeholder screenshot).
                *
-               * Two forms, `whitespace-nowrap`, never `truncate` — same reasoning as the
-               * short/full split below: "Coming soon Oct 15" does not fit the ~71px this cap
-               * leaves at the 360px home-carousel card (measured against the rendered pill), so
-               * below `sm` the shorter "Soon · Oct 15" renders instead. From `sm` up every card
-               * this component renders on (search grid, home row, favourites) has room for the
-               * full form.
+               * Two forms, `whitespace-nowrap`, never `truncate` or wrapped: "Coming soon Oct 15"
+               * still does not fit every card this component renders on (search grid, home row,
+               * favourites) even at `max-w-full`, so the shorter "Soon · Oct 15" is the floor at
+               * the narrowest widths. The font size and the full/short cutoff both key off the
+               * card's own width — `.listing-card-coming-soon-*` in globals.css, on a container
+               * query off `.listing-card-root` — because the card's width does not track the
+               * viewport (see the note on `.listing-card-media` above). Same idiom as the
+               * open-house pill's three forms below.
                */
-              <span className="inline-flex max-w-[calc(100%-3.5rem)] items-center gap-1 whitespace-nowrap rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-ink shadow-card sm:text-[11px]">
+              <span className="listing-card-coming-soon-pill inline-flex max-w-full items-center gap-1 whitespace-nowrap rounded-full bg-white px-2 py-0.5 font-semibold text-ink shadow-card">
                 <span
                   aria-hidden="true"
                   className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-brand"
                 />
-                <span className="sm:hidden">
+                <span className="listing-card-coming-soon-short">
                   {formatComingSoonBadgeShort(listing.comingSoonDate)}
                 </span>
-                <span className="hidden sm:inline">
+                <span className="listing-card-coming-soon-full">
                   {formatComingSoonBadge(listing.comingSoonDate)}
                 </span>
               </span>
@@ -374,23 +378,34 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
          * "Listing courtesy of" is fine (7.58 requires prominence and identification, not that
          * exact wording), and truncating the name with a `title`/`aria-label` fallback is the same
          * pattern the prior line already used. The office name is `text-[13px]`, at that floor.
+         *
+         * #438 compliance follow-up: at the ~151px home-carousel card, the name could shrink to
+         * 5-9 visible characters — not "reasonably prominent". Two changes claw the width back
+         * without giving up the three action icons the stakeholder asked to keep at every width:
+         * `min-w-[72px]` floors the name so it cannot be crushed further, and time on market —
+         * the least essential fact in this row — hides below 200px (`.listing-card-time-on-market`
+         * in globals.css, queried off `.listing-card-root`). The avatar-to-name gap also tightens
+         * to `gap-0.5` (2px) to reclaim a little more. See `ListingCard.spec.tsx`'s "footer name
+         * width budget" test for the arithmetic this is sized against.
          */}
         <div className="mt-1 flex items-center gap-1">
-          <span
-            aria-hidden="true"
-            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-ink-muted text-[7px] font-semibold text-white"
-          >
-            {officeInitials(listing.officeName)}
-          </span>
-          <span
-            className="min-w-0 flex-1 truncate text-[13px] text-ink-body"
-            title={listing.officeName}
-            aria-label={listing.officeName}
-          >
-            {listing.officeName}
-          </span>
+          <div className="flex min-w-0 flex-1 items-center gap-0.5">
+            <span
+              aria-hidden="true"
+              className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-ink-muted text-[7px] font-semibold text-white"
+            >
+              {officeInitials(listing.officeName)}
+            </span>
+            <span
+              className="min-w-[72px] flex-1 truncate text-[13px] text-ink-body"
+              title={listing.officeName}
+              aria-label={listing.officeName}
+            >
+              {listing.officeName}
+            </span>
+          </div>
           {timeOnMarket !== null && (
-            <span className="shrink-0 text-[13px] text-ink-muted">
+            <span className="listing-card-time-on-market shrink-0 text-[13px] text-ink-muted">
               <span aria-hidden="true">·</span> {timeOnMarket}
             </span>
           )}
