@@ -126,18 +126,28 @@ export default function NeighborhoodRow({
     <section className="px-6 pt-6 sm:px-10 lg:px-20">
       <div className="flex flex-col gap-1 pb-1">
         <div className="flex items-center gap-2 justify-between">
-          <div className="flex min-w-0 items-center gap-2">
-            <h2 className="font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]">
-              {title}
-            </h2>
-            {href && (
-              <Link
-                href={href}
-                className="ml-1 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition hover:bg-surface-alt hover:shadow-card"
-                aria-label="See all"
-              >
+          {/* Title and chip are one link (#423): the visible chip is ~32px, `min-h-11` keeps the
+              whole link's tap target at least 44px tall. */}
+          {href ? (
+            <Link
+              href={href}
+              // `aria-label` replaces a link's whole accessible name (its own text content
+              // included), so it must repeat the title — otherwise a screen reader announces only
+              // "See all" and drops which row it is.
+              aria-label={`${title} — see all`}
+              // `min-w-0`, not `min-w-11`: this link's title can genuinely be long
+              // ("Explore neighborhoods across the region") and needs `truncate` to work, which
+              // needs a flex ancestor allowed to shrink past its content width. The 44px floor
+              // holds anyway in practice — the chip alone is 32px, so title text plus its gap
+              // always pushes the link past 44px.
+              className="group inline-flex min-h-11 min-w-0 items-center gap-1.5"
+            >
+              <h2 className="truncate font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]">
+                {title}
+              </h2>
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-soft text-ink transition group-hover:bg-surface-border">
                 <svg
-                  className="h-4 w-4"
+                  className="h-3.5 w-3.5"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth={2.5}
@@ -145,43 +155,57 @@ export default function NeighborhoodRow({
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                 </svg>
-              </Link>
-            )}
-          </div>
+              </span>
+            </Link>
+          ) : (
+            <h2 className="truncate font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]">
+              {title}
+            </h2>
+          )}
+          {/* Each button's tap target stays 44px (the visible circle is the inner 32px span) even
+              though the circle itself shrank (#423). */}
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => scroll('left')}
               aria-label="Scroll left"
-              className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition hover:shadow-card ${atStart ? 'opacity-50 cursor-default' : 'hover:bg-surface-alt'}`}
               disabled={atStart}
+              className={`flex h-11 w-11 flex-shrink-0 items-center justify-center ${atStart ? 'cursor-not-allowed opacity-50' : ''}`}
             >
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2.5}
-                viewBox="0 0 24 24"
+              <span
+                className={`flex h-8 w-8 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition ${atStart ? '' : 'hover:bg-surface-alt'}`}
               >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
+                <svg
+                  className="h-3.5 w-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+              </span>
             </button>
             <button
               type="button"
               onClick={() => scroll('right')}
               aria-label="Scroll right"
-              className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition hover:shadow-card ${atEnd ? 'opacity-50 cursor-default' : 'hover:bg-surface-alt'}`}
               disabled={atEnd}
+              className={`flex h-11 w-11 flex-shrink-0 items-center justify-center ${atEnd ? 'cursor-not-allowed opacity-50' : ''}`}
             >
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2.5}
-                viewBox="0 0 24 24"
+              <span
+                className={`flex h-8 w-8 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition ${atEnd ? '' : 'hover:bg-surface-alt'}`}
               >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
+                <svg
+                  className="h-3.5 w-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </span>
             </button>
           </div>
         </div>

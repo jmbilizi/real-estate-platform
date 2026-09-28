@@ -73,6 +73,10 @@ pnpm exec nx lint cribstop-next        # Also: test, type-check
 - **Mobile first (stakeholder rule, 2026-09-27).** Verify every new or changed UI at 360px and
   390px, before a PR. Check: no sideways body scroll, tap targets at least 44px, text stays readable
   with no clipping, and any card row scrolls horizontally by touch.
+  - A tap target's 44px hit area does not have to match its visual size (#423). A small visual
+    control — a ~32px icon chip or circle — can sit inside a larger invisible hit area (padding, or
+    a `min-h-11`/`min-w-11` wrapper) so the control reads lighter without shrinking below 44px of
+    actually-tappable space.
 - All listing/marketing microcopy must be Fair-Housing compliant and attribute Real Broker, LLC
   (most prominent brand per Bright MLS rule).
 - Follow existing component patterns and Tailwind config; no new dependencies unless clearly

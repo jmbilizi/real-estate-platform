@@ -59,16 +59,25 @@ describe('NeighborhoodRow (#393)', () => {
 
   it('renders no "See all" header link when href is omitted', () => {
     renderRow();
-    expect(screen.queryByLabelText('See all')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/see all/i)).not.toBeInTheDocument();
   });
 
-  it('keeps a passed "See all" header link and its arrow buttons at least 44px, never shrinking beside a long heading', () => {
+  it('names the row in its own accessible name, not just "See all" (#423)', () => {
+    renderRow({ href: '/homes-for-sale', title: 'Explore neighborhoods' });
+    expect(screen.getByLabelText('Explore neighborhoods — see all')).toBeInTheDocument();
+  });
+
+  it('keeps the "See all" link and arrow buttons at a 44px tap target, with a ~32px visual chip that never shrinks beside a long heading (#423)', () => {
     renderRow({ href: '/homes-for-sale', title: 'Explore neighborhoods across the region' });
 
-    const seeAll = screen.getByLabelText('See all');
-    expect(seeAll.className).toContain('flex-shrink-0');
-    expect(seeAll.className).toContain('h-11');
-    expect(seeAll.className).toContain('w-11');
+    // The whole title + chip is one link (#423): the link itself is at least 44px tall, and its
+    // icon chip — the visible ~32px circle — never shrinks regardless of heading length.
+    const seeAll = screen.getByLabelText(/see all/i);
+    expect(seeAll.className).toContain('min-h-11');
+    const chip = seeAll.querySelector('svg')?.parentElement;
+    expect(chip?.className).toContain('shrink-0');
+    expect(chip?.className).toContain('h-8');
+    expect(chip?.className).toContain('w-8');
 
     for (const label of ['Scroll left', 'Scroll right']) {
       const button = screen.getByLabelText(label);
