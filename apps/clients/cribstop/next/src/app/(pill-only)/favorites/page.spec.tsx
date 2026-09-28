@@ -23,6 +23,10 @@ jest.mock('@/lib/context', () => ({
   }),
 }));
 
+// #433: ListingCard's footer share/copy-link controls call useToast(), which needs a
+// react-redux Provider absent from these tests.
+jest.mock('@/lib/useToast', () => ({ useToast: () => ({ toast: jest.fn() }) }));
+
 const mockedGetListing = getListing as jest.Mock;
 
 describe('FavoritesPage', () => {

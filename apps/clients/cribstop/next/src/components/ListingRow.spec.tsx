@@ -6,6 +6,10 @@ jest.mock('@/lib/context', () => ({
   useApp: () => ({ toggleSave: jest.fn(), isSaved: () => false }),
 }));
 
+// #433: ListingCard's footer share/copy-link controls call useToast(), which needs a
+// react-redux Provider absent from these tests.
+jest.mock('@/lib/useToast', () => ({ useToast: () => ({ toast: jest.fn() }) }));
+
 describe('ListingRow', () => {
   it('renders a card per listing row', () => {
     const rows = [
@@ -15,9 +19,10 @@ describe('ListingRow', () => {
 
     render(<ListingRow title="Featured" listings={rows} />);
 
-    // Both cards render their office attribution, a reliable per-card marker. Fixture rows are
-    // `internal`, so this is the reduced form — see ListingAttribution.
-    expect(screen.getAllByText(/Listing courtesy of Real Broker, LLC/)).toHaveLength(2);
+    // Both cards render their office attribution, a reliable per-card marker (#433). Each
+    // ListingCard renders two copies of its footer (compact + full form, toggled by a container
+    // query jsdom does not evaluate), so two cards produce four matches.
+    expect(screen.getAllByText('Real Broker, LLC')).toHaveLength(4);
   });
 
   it('renders `max` skeleton placeholders instead of cards when loading, even if listings is non-empty', () => {

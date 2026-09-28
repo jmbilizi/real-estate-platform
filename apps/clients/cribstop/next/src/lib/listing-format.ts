@@ -370,3 +370,21 @@ export function formatComingSoonBadgeShort(
   const date = comingSoonActiveDate(comingSoonDate, now);
   return date === null ? 'Coming soon' : `Soon · ${date}`;
 }
+
+/**
+ * #433. The office avatar's initials — the first letter of each of the first two words in
+ * `officeName`. "Real Broker, LLC" -> "RB", a one-word name -> its single initial. Never empty:
+ * `officeName` is a required, non-blank field on every row this renders for.
+ */
+export function officeInitials(officeName: string): string {
+  const initials = officeName
+    .trim()
+    .split(/\s+/)
+    .map((word) => word.replace(/[^\p{L}\p{N}]/gu, ''))
+    .filter((word) => word.length > 0)
+    .slice(0, 2)
+    .map((word) => word.charAt(0))
+    .join('')
+    .toUpperCase();
+  return initials || officeName.charAt(0).toUpperCase();
+}

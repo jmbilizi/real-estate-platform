@@ -60,6 +60,36 @@ export function formatRelativeTime(iso: string, now: number = Date.now()): strin
   return `${months} month${months === 1 ? '' : 's'} ago`;
 }
 
+/**
+ * #433. Time on market, short bucketed form: "today", "1d"–"6d", "1w"–"4w", "1mo"–"11mo", "1y"+.
+ * `null` when `listedAt` is unknown — the caller renders no separating dot and no text, not a
+ * placeholder.
+ *
+ * Days-based buckets, not calendar-accurate months: this is a glanced-at freshness cue on a photo
+ * card, not an audited figure, and a flat 30-day month keeps every bucket a simple, monotonic
+ * function of elapsed days. `now` is injectable for tests; defaults to the real clock.
+ */
+export function formatTimeOnMarket(
+  listedAt: string | null,
+  now: number = Date.now(),
+): string | null {
+  if (listedAt === null) {
+    return null;
+  }
+  const listedAtMs = new Date(listedAt).getTime();
+  // An unparseable string reads the same as unknown: no dot, no text, not a garbage bucket.
+  if (Number.isNaN(listedAtMs)) {
+    return null;
+  }
+  const days = Math.floor((now - listedAtMs) / 86_400_000);
+  if (days <= 0) return 'today';
+  if (days < 7) return `${days}d`;
+  if (days < 30) return `${Math.floor(days / 7)}w`;
+  const months = Math.floor(days / 30);
+  if (months <= 11) return `${months}mo`;
+  return `${Math.max(1, Math.floor(days / 365))}y`;
+}
+
 export function formatDateTime(iso: string): string {
   try {
     return new Date(iso).toLocaleString('en-US', {

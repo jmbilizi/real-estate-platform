@@ -1,8 +1,12 @@
 'use client';
 
+import { Heart, MoreHorizontal, Share2 } from 'lucide-react';
 import type { ListingCardRow } from '@/lib/types';
 import { useApp } from '@/lib/context';
 import { openListingPanel } from '@/lib/listing-panel';
+import { copyToClipboard } from '@/lib/clipboard';
+import { formatTimeOnMarket } from '@/lib/format';
+import { buildListingShare, listingShareUrl } from '@/lib/listing-share';
 import {
   formatCardAddress,
   formatClosePrice,
@@ -14,13 +18,15 @@ import {
   formatOpenHouseBadge,
   formatOpenHouseDate,
   formatOpenHouseTimeAndDate,
+  officeInitials,
 } from '@/lib/listing-format';
-import ListingAttribution from '@/components/listing/ListingAttribution';
+import { useToast } from '@/lib/useToast';
 import ListingImage from '@/components/listing/ListingImage';
 import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges';
 
 export default function ListingCard({ listing }: { listing: ListingCardRow }) {
   const { toggleSave, isSaved } = useApp();
+  const { toast } = useToast();
   const saved = isSaved(listing.id);
 
   /**
@@ -46,6 +52,47 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
 
   // #424. The stakeholder-approved status badge, leading the top-left stack (see below).
   const isComingSoon = listing.status === 'Coming Soon';
+
+  /**
+   * #433. "OfficeName · 2d" in the footer row — omitted entirely (not even the separating dot)
+   * when there is no `listedAt` to show, or when the listing is Coming Soon: its own badge already
+   * carries the date, and this line would otherwise show a stale "time on market" for a listing
+   * that has not gone active yet.
+   */
+  const timeOnMarket = isComingSoon ? null : formatTimeOnMarket(listing.listedAt);
+
+  /**
+   * #433. Share this listing: the Web Share API on a device that has one, the clipboard (with a
+   * toast) everywhere else. Same handler `ListingDetailContent` uses, reused here rather than
+   * reimplemented, so the shared text/disclosures have one source (`lib/listing-share`).
+   */
+  async function handleShare(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const url = listingShareUrl(listing.propertyPath, window.location.origin);
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share(buildListingShare(listing, url));
+        return;
+      } catch (err) {
+        // A dismissed share sheet is a choice, not a failure — see ListingDetailContent's own
+        // handler for why only this one error name is swallowed.
+        if ((err as { name?: string } | null)?.name === 'AbortError') return;
+      }
+    }
+    if (await copyToClipboard(url)) toast('Link copied');
+    else toast('We could not copy the link.', 'error');
+  }
+
+  /** #433. The "···" menu's one item: a direct copy, no share-sheet attempt. */
+  async function handleCopyLink(e: React.MouseEvent<HTMLButtonElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.closest('details')?.removeAttribute('open');
+    const url = listingShareUrl(listing.propertyPath, window.location.origin);
+    if (await copyToClipboard(url)) toast('Link copied');
+    else toast('We could not copy the link.', 'error');
+  }
 
   /**
    * A parcel has no dwelling to describe, so lot size replaces the bed/bath/sqft triplet — that is
@@ -106,7 +153,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
       role="link"
       tabIndex={0}
       aria-label={`View listing at ${formatCardAddress(listing)}`}
-      className="group block cursor-pointer rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2"
+      className="listing-card-root group block cursor-pointer rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2"
       onClick={openPanel}
       onKeyDown={(e) => {
         if (e.key !== 'Enter' && e.key !== ' ') return;
@@ -190,9 +237,9 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
 
             {marketingBadge && (
               <span
-                // Only the top row shares the save control's band, so only it is capped short of
-                // `right-3`. 3.5rem of this container is the save control's 44px tap target plus
-                // its gutter (right-3 inset + 44px width = 56px = 3.5rem).
+                // #433 moved the save control off the photo into the footer row below, but the
+                // cap stays: it is a general truncation margin now, kept at its old 3.5rem value
+                // rather than widened without a reason to.
                 className="max-w-[calc(100%-3.5rem)] truncate rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-ink shadow-card"
               >
                 {marketingBadge}
@@ -246,28 +293,6 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
             )}
           </div>
         )}
-
-        <button
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            toggleSave(listing.id);
-          }}
-          className={`absolute right-3 flex h-11 w-11 items-center justify-center transition hover:scale-110 ${isSold ? 'top-9' : 'top-3'}`}
-          aria-label={saved ? 'Unsave' : 'Save'}
-        >
-          <svg
-            className={`h-5 w-5 drop-shadow ${saved ? 'fill-brand stroke-white' : 'fill-black/40 stroke-white'}`}
-            viewBox="0 0 24 24"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-            />
-          </svg>
-        </button>
       </div>
 
       {/*
@@ -281,7 +306,8 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
        * - the stats line (absent for a parcel with unknown lot size, or an all-null dwelling) —
        *   `h-[18px]`, which is `caption-sm`'s line box; a slot sized for the old 12px text would
        *   clip the 13px it now holds
-       * - attribution, one line for every row regardless of `source` (see `ListingAttribution`)
+       * - the footer row (office avatar/name, time on market, save/share/more) — one row, always
+       *   present (see #433 below)
        *
        * The open-house date row is gone entirely — it moved onto the image badge, and it was the
        * row that only some cards had.
@@ -333,18 +359,195 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
         </p>
 
         {/*
-         * #305: one line, "Listing courtesy of {officeName}", for every `source`. See
-         * `ListingAttribution`'s header for the stakeholder ruling and the open compliance
-         * question tracked in #306. `compact` has no effect at this density — it only bounds the
-         * full IDX block — and is left wired so switching to `density="full"` later, if #306
-         * requires it, needs no prop change here.
+         * #433. The social-post-style footer, replacing the #305 "Listing courtesy of" line:
+         * office avatar + name (+ time on market) on the left, save/share/more on the right. The
+         * save control moved here from the photo — one control, not two.
+         *
+         * NAR 7.58 / Bright MLS IDX still requires the listing firm's name, reasonably prominent,
+         * in a typeface no smaller than the card's own median listing-data text (13/14px here).
+         * `cribstop-compliance-reviewer` ruled on this row for #433: dropping the literal phrase
+         * "Listing courtesy of" is fine (7.58 requires prominence and identification, not that
+         * exact wording), and truncating the name with a `title`/`aria-label` fallback is the same
+         * pattern the prior line already used. The office name is `text-[13px]`, at that floor.
+         *
+         * `officeName` truncates first (`min-w-0`/`truncate` on its own span) so a long firm name
+         * never pushes the actions off the card; the time-on-market text has `shrink-0` so it
+         * never truncates instead.
          */}
-        <ListingAttribution
-          attribution={listing}
-          source={listing.source}
-          compact
-          className="mt-1 rounded-sm bg-surface-alt px-1.5 py-1"
-        />
+        <div className="mt-1">
+          {/*
+           * #433. Below 220px (see `.footer-compact`/`.footer-full` in globals.css) the full
+           * form's avatar + name + three action buttons has no room left for the name — measured
+           * against the rendered row, it truncated to 1-3 characters at the 151px home-carousel
+           * card. This form trades one action icon and a fixed avatar size for name legibility:
+           * `line-clamp-2` instead of `truncate` so the name wraps rather than clipping, a 16px
+           * avatar instead of 20px, and only heart + "···" — the share icon moves into the menu
+           * as its first item, alongside "Copy link". `items-start` keeps the avatar and the
+           * time-on-market text pinned to the name's first line even when the name wraps to a
+           * second line beneath them.
+           */}
+          <div className="footer-compact items-start gap-0.5">
+            <span
+              aria-hidden="true"
+              className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-surface-alt text-[7px] font-semibold text-ink-body"
+            >
+              {officeInitials(listing.officeName)}
+            </span>
+            <span
+              className="line-clamp-2 min-w-0 flex-1 text-[13px] text-ink-body"
+              title={listing.officeName}
+              aria-label={listing.officeName}
+            >
+              {listing.officeName}
+            </span>
+            {timeOnMarket !== null && (
+              <span className="shrink-0 text-[13px] text-ink-muted">
+                <span aria-hidden="true">·</span> {timeOnMarket}
+              </span>
+            )}
+
+            {/*
+             * Smaller than the full form's 24px icon boxes: at this width every pixel not spent
+             * on the name is a pixel the stakeholder's ~14-character target does not reach. The
+             * 44px tap target is unaffected — it comes from the `-inset-2.5` overlay span, sized
+             * off the button's position rather than its own box.
+             */}
+            <div className="flex shrink-0 items-center gap-0.5">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  toggleSave(listing.id);
+                }}
+                className="relative flex h-4 w-4 items-center justify-center"
+                aria-label={saved ? 'Unsave' : 'Save'}
+              >
+                <span aria-hidden="true" className="absolute -inset-2.5" />
+                <Heart
+                  size={14}
+                  className={saved ? 'fill-brand stroke-brand' : 'fill-none stroke-ink-muted'}
+                />
+              </button>
+
+              <details className="relative" onClick={(e) => e.stopPropagation()}>
+                <summary
+                  className="relative flex h-4 w-4 cursor-pointer list-none items-center justify-center [&::-webkit-details-marker]:hidden"
+                  aria-label="More options"
+                >
+                  <span aria-hidden="true" className="absolute -inset-2.5" />
+                  <MoreHorizontal size={14} className="stroke-ink-muted" />
+                </summary>
+                <div className="absolute right-0 z-20 mt-1 w-32 rounded-md border border-surface-border bg-white py-1 shadow-card">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      handleShare(e);
+                      e.currentTarget.closest('details')?.removeAttribute('open');
+                    }}
+                    className="block w-full px-3 py-1.5 text-left text-[13px] text-ink hover:bg-surface-alt"
+                  >
+                    Share
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCopyLink}
+                    className="block w-full px-3 py-1.5 text-left text-[13px] text-ink hover:bg-surface-alt"
+                  >
+                    Copy link
+                  </button>
+                </div>
+              </details>
+            </div>
+          </div>
+
+          {/*
+           * #433. From 220px up (see globals.css), the room reclaimed by the compact form above
+           * is no longer needed: the name truncates to one line and all three action icons show.
+           */}
+          <div className="footer-full h-6 items-center justify-between gap-1">
+            <div className="flex min-w-0 items-center gap-1">
+              <span
+                aria-hidden="true"
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-alt text-[9px] font-semibold text-ink-body"
+              >
+                {officeInitials(listing.officeName)}
+              </span>
+              <span
+                className="min-w-0 truncate text-[13px] text-ink-body"
+                title={listing.officeName}
+                aria-label={listing.officeName}
+              >
+                {listing.officeName}
+              </span>
+              {timeOnMarket !== null && (
+                <>
+                  <span aria-hidden="true" className="shrink-0 text-[13px] text-ink-muted">
+                    ·
+                  </span>
+                  <span className="shrink-0 text-[13px] text-ink-muted">{timeOnMarket}</span>
+                </>
+              )}
+            </div>
+
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  toggleSave(listing.id);
+                }}
+                className="relative flex h-6 w-6 items-center justify-center"
+                aria-label={saved ? 'Unsave' : 'Save'}
+              >
+                <span aria-hidden="true" className="absolute -inset-2.5" />
+                <Heart
+                  size={16}
+                  className={saved ? 'fill-brand stroke-brand' : 'fill-none stroke-ink-muted'}
+                />
+              </button>
+
+              <button
+                type="button"
+                onClick={handleShare}
+                className="relative flex h-6 w-6 items-center justify-center"
+                aria-label="Share this listing"
+              >
+                <span aria-hidden="true" className="absolute -inset-2.5" />
+                <Share2 size={16} className="stroke-ink-muted" />
+              </button>
+
+              {/*
+               * A native `<details>`/`<summary>` pair: focusable and keyboard-toggleable with no
+               * extra state. `onClick` on the wrapper, not each child, stops the card's own
+               * `onClick` (which opens the listing panel) from firing regardless of which part
+               * inside the menu was clicked.
+               *
+               * The menu carries only "Copy link" — "Hide this home" and "Report a problem" are not
+               * wired, because neither feature exists yet anywhere else in the app (#433).
+               */}
+              <details className="relative" onClick={(e) => e.stopPropagation()}>
+                <summary
+                  className="relative flex h-6 w-6 cursor-pointer list-none items-center justify-center [&::-webkit-details-marker]:hidden"
+                  aria-label="More options"
+                >
+                  <span aria-hidden="true" className="absolute -inset-2.5" />
+                  <MoreHorizontal size={16} className="stroke-ink-muted" />
+                </summary>
+                <div className="absolute right-0 z-20 mt-1 w-32 rounded-md border border-surface-border bg-white py-1 shadow-card">
+                  <button
+                    type="button"
+                    onClick={handleCopyLink}
+                    className="block w-full px-3 py-1.5 text-left text-[13px] text-ink hover:bg-surface-alt"
+                  >
+                    Copy link
+                  </button>
+                </div>
+              </details>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
