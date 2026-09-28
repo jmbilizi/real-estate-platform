@@ -653,7 +653,7 @@ describe('ListingCard', () => {
       expect(screen.getAllByText('Coming soon')).toHaveLength(2);
     });
 
-    it('never truncates the badge text — no ellipsis class on the pill', () => {
+    it('never truncates the badge text, and stays within the save-heart width reservation', () => {
       render(
         <ListingCard
           listing={aListingCardRow({
@@ -667,6 +667,8 @@ describe('ListingCard', () => {
       const pill = screen.getByText('Coming soon Oct 15').parentElement;
       expect(pill).toHaveClass('whitespace-nowrap');
       expect(pill).not.toHaveClass('truncate');
+      // Same cap as the marketing/open-house pills it now shares the top-left stack with.
+      expect(pill).toHaveClass('max-w-[calc(100%-3.5rem)]');
     });
 
     it('does not show the badge for a non-Coming-Soon listing', () => {

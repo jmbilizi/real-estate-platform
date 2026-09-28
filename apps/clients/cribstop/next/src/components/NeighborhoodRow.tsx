@@ -139,10 +139,12 @@ export default function NeighborhoodRow({
               // ("Explore neighborhoods across the region") and needs `truncate` to work, which
               // needs a flex ancestor allowed to shrink past its content width. The 44px floor
               // holds anyway in practice — the chip alone is 32px, so title text plus its gap
-              // always pushes the link past 44px.
-              className="group inline-flex min-h-11 min-w-0 items-center gap-1.5"
+              // always pushes the link past 44px. Below `sm` (#429): `flex w-full justify-between`
+              // spreads title and chip across the row instead of pairing them; from `sm` up, back
+              // to the original inline pairing beside the title.
+              className="group flex min-h-11 min-w-0 w-full items-center justify-between gap-1.5 sm:inline-flex sm:w-auto sm:justify-normal"
             >
-              <h2 className="truncate font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]">
+              <h2 className="min-w-0 truncate font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]">
                 {title}
               </h2>
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-soft text-ink transition group-hover:bg-surface-border">
@@ -153,7 +155,8 @@ export default function NeighborhoodRow({
                   strokeWidth={2.5}
                   viewBox="0 0 24 24"
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  {/* Straight arrow (shaft + head), not a chevron (#429) — Airbnb's "see all". */}
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
                 </svg>
               </span>
             </Link>
