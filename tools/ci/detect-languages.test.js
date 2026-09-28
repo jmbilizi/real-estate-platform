@@ -55,6 +55,13 @@ test('a file with no matching project and no fallback match runs nothing', () =>
   assert.deepEqual(result, { node: false, python: false, dotnet: false });
 });
 
+test('a project with no runtime tag yet falls back to the extension rule', () => {
+  // A project just generated, before `pnpm run nx:reset` adds its runtime:* tag (#443 follow-up).
+  const untagged = [{ root: 'apps/services/new-service', tags: [] }];
+  const result = detectLanguages(['apps/services/new-service/src/index.ts'], untagged);
+  assert.deepEqual(result, { node: true, python: false, dotnet: false });
+});
+
 test('longest-prefix match picks the nested project, not a shorter sibling root', () => {
   const nested = [
     { root: 'apps/clients/cribstop', tags: ['runtime:unassigned'] },

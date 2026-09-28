@@ -99,13 +99,17 @@ function detectLanguages(changedFiles, projects) {
 
   for (const file of changedFiles) {
     const project = projectForFile(file, projects);
-    if (project) {
-      const runtime = runtimeOf(project);
-      if (runtime) result[runtime] = true;
-      continue; // A project owns this file — its tag decides, extension fallback does not apply.
+    const runtime = project ? runtimeOf(project) : null;
+    if (runtime) {
+      result[runtime] = true;
+      continue; // The project's tag decided — extension fallback does not apply.
     }
-    for (const runtime of Object.keys(result)) {
-      if (matchesFallback(file, runtime)) result[runtime] = true;
+    // No project owns this file, or it owns one whose runtime tag is missing/unrecognized (for
+    // example a project just generated, before `pnpm run nx:reset` adds its runtime:* tag).
+    // Falling back to the extension rule here, rather than skipping, keeps that case from
+    // reproducing #443 under a different trigger.
+    for (const fallbackRuntime of Object.keys(result)) {
+      if (matchesFallback(file, fallbackRuntime)) result[fallbackRuntime] = true;
     }
   }
 
