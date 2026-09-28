@@ -18,6 +18,14 @@
  *
  * When the app directory already has its own `.env.local`, this changes nothing: Next.js loads it
  * as it always has.
+ *
+ * Casing fix (#440): an agent worktree's shell can start with `c:` or `C:`. Windows paths are
+ * case-insensitive but not case-preserving, so the two casings resolve to the same directory but
+ * are different strings. Node's module cache keys on the string, not the real path, so a `cwd`
+ * with the wrong casing makes webpack load a second copy of Next and React and crash every route
+ * with `invariant expected app router to be mounted`. Fix: canonicalize the workspace root with
+ * `fs.realpathSync.native` before starting anything, `chdir` into it, and spawn Next with that
+ * canonical path as both `cwd` and `NX_WORKSPACE_ROOT_PATH`, so every module resolves one casing.
  */
 
 const { spawnSync } = require('child_process');
@@ -27,6 +35,20 @@ const { parsePorcelain } = require('./worktree-reclaim');
 
 const workspaceRoot = path.resolve(__dirname, '../..');
 const APP_ENV_LOCAL_RELATIVE = path.join('apps', 'clients', 'cribstop', 'next', '.env.local');
+
+/**
+ * Resolves a path to its OS-canonical casing, so a worktree opened from a `c:` shell and one
+ * opened from a `C:` shell produce the identical string. Falls back to the input path on any
+ * failure (e.g. the path does not exist yet) rather than throwing.
+ */
+function canonicalizePath(inputPath, realpathNative = fs.realpathSync.native) {
+  try {
+    return realpathNative(inputPath);
+  } catch (error) {
+    console.error(`[cribstop:web] Failed to canonicalize ${inputPath} — ${error.message}`);
+    return inputPath;
+  }
+}
 
 /** Run `git`, returning trimmed stdout, or null on any failure. Never throws. */
 function runGit(args, cwd) {
@@ -119,13 +141,21 @@ function loadPrimaryEnvLocal(cwd) {
 }
 
 function main() {
-  loadPrimaryEnvLocal(workspaceRoot);
+  const canonicalWorkspaceRoot = canonicalizePath(workspaceRoot);
+  if (canonicalWorkspaceRoot !== workspaceRoot) {
+    console.info(
+      `[cribstop:web] Canonicalized workspace root casing: ${workspaceRoot} -> ${canonicalWorkspaceRoot}`,
+    );
+  }
+  process.chdir(canonicalWorkspaceRoot);
+
+  loadPrimaryEnvLocal(canonicalWorkspaceRoot);
 
   const result = spawnSync('pnpm', ['exec', 'nx', 'serve', 'cribstop-next'], {
-    cwd: workspaceRoot,
+    cwd: canonicalWorkspaceRoot,
     stdio: 'inherit',
     shell: true,
-    env: process.env,
+    env: { ...process.env, NX_WORKSPACE_ROOT_PATH: canonicalWorkspaceRoot },
   });
 
   process.exit(result.status ?? 1);
@@ -136,6 +166,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  canonicalizePath,
   resolvePrimaryCheckoutFromCommonDir,
   resolvePrimaryCheckoutFromWorktreeList,
   resolvePrimaryCheckout,

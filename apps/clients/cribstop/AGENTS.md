@@ -121,6 +121,10 @@ pnpm exec nx lint cribstop-next        # Also: test, type-check
     its `.env.local` into the process with `process.loadEnvFile()` (#413) — the same pattern
     `tools/infra/run-skaffold.js` uses for the root `.env`. Agents never read, print, or copy the
     file; the launcher logs only the loaded key names.
+  - The launcher also canonicalizes the workspace root casing with `fs.realpathSync.native` before
+    it starts Next (#440). A shell cwd of `c:\...` and `C:\...` resolve to the same directory but
+    are different strings, so an uncanonicalized cwd makes webpack load two copies of Next and React
+    and crash every route with `invariant expected app router to be mounted`.
 - **Home page section copy (stakeholder rule, 2026-09-27, #394/#416/#418).** Applies to every home
   page row (`HomePageContent.tsx` and any row it adds):
   - No subtitle by default. The title alone must say what the row shows.
