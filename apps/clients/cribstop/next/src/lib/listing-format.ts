@@ -322,36 +322,51 @@ export function formatOpenHouse(openHouse: OpenHouse): string {
 }
 
 /**
- * #424. The Coming Soon card badge text — "Coming soon Oct 15", or "Coming soon" when
- * `comingSoonDate` is null. `MMM d` (`Oct 15`), never a numeric date: the stakeholder rejected
- * `10/15` for this badge specifically.
+ * #424. The active date for the Coming Soon badge, `MMM d` (`Oct 15`) — never a numeric date, the
+ * stakeholder rejected `10/15` for this badge specifically. `null` means the badge shows no date:
+ * the feed carried none, or a stale sync left a date already in the past (the listing going active
+ * is not something the badge should state as still upcoming).
  *
  * Formatted in UTC, unlike the open-house dates above: the contract widens Bright's date-only
  * `ExpectedOnMarketDate` to midnight UTC (there is no real time of day to place in a time zone), so
- * formatting it in `PROPERTY_TIME_ZONE` would read back a day early for every US zone.
- *
- * A stale feed can carry a `comingSoonDate` already in the past — the sync has not caught up with
- * the listing going active, or beyond. The badge never states a past date as an upcoming one, so a
- * date before today falls back to the no-date form, same as a null date. `now` is injectable for
- * tests; defaults to the real clock.
+ * formatting it in `PROPERTY_TIME_ZONE` would read back a day early for every US zone — "today" is
+ * read in UTC for the same reason. `now` is injectable for tests; defaults to the real clock.
+ */
+function comingSoonActiveDate(comingSoonDate: string | null, now: Date): string | null {
+  if (comingSoonDate === null) {
+    return null;
+  }
+  const todayUtcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const date = new Date(comingSoonDate);
+  if (date.getTime() < todayUtcMidnight) {
+    return null;
+  }
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
+/**
+ * The full badge text — "Coming soon Oct 15", or "Coming soon" alone when there is no date to
+ * show. Used from `sm` up, where every card ("ListingCard" renders on the search grid, the home
+ * carousels, favourites, and nearby homes) has room for it.
  */
 export function formatComingSoonBadge(
   comingSoonDate: string | null,
   now: Date = new Date(),
 ): string {
-  if (comingSoonDate === null || isPastDate(comingSoonDate, now)) {
-    return 'Coming soon';
-  }
-  const date = new Date(comingSoonDate).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  });
-  return `Coming soon ${date}`;
+  const date = comingSoonActiveDate(comingSoonDate, now);
+  return date === null ? 'Coming soon' : `Coming soon ${date}`;
 }
 
-/** `comingSoonDate` is a UTC calendar date (see above), so "today" is also read in UTC. */
-function isPastDate(comingSoonDate: string, now: Date): boolean {
-  const todayUtcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  return new Date(comingSoonDate).getTime() < todayUtcMidnight;
+/**
+ * The compact form — "Soon · Oct 15" — for below `sm`. `ListingRow`'s home carousel renders at
+ * `~42%` of the viewport (`CARD_WIDTH_CLASS`), which is only ~127px of usable width inside the
+ * photo's gutters at a 360px viewport; "Coming soon Oct 15" measures wider than that at 11px, and
+ * this badge never truncates or wraps. Same no-date fallback as the full form.
+ */
+export function formatComingSoonBadgeShort(
+  comingSoonDate: string | null,
+  now: Date = new Date(),
+): string {
+  const date = comingSoonActiveDate(comingSoonDate, now);
+  return date === null ? 'Coming soon' : `Soon · ${date}`;
 }

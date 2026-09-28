@@ -573,7 +573,11 @@ describe('ListingCard', () => {
   });
 
   describe('the Coming Soon status badge (#424)', () => {
-    it('shows the badge with the active date in "MMM d" format for a Coming Soon listing', () => {
+    // Both the full and compact forms render together — a CSS breakpoint (`sm:hidden` /
+    // `hidden sm:inline`), not a JS conditional, decides which one is visible at a given card
+    // width, and jsdom does not evaluate stylesheet media queries. So a test asserts both forms
+    // are present rather than picking one, the same way the open-house badge's tests do.
+    it('shows both the full and compact form with the active date in "MMM d" format', () => {
       render(
         <ListingCard
           listing={aListingCardRow({
@@ -584,15 +588,32 @@ describe('ListingCard', () => {
       );
 
       expect(screen.getByText('Coming soon Oct 15')).toBeInTheDocument();
+      expect(screen.getByText('Soon · Oct 15')).toBeInTheDocument();
       expect(screen.queryByText(/10\/15/)).not.toBeInTheDocument();
     });
 
-    it('shows "Coming soon" with no date fallback when the active date is unknown', () => {
+    it('shows "Coming soon" with no date fallback, in both forms, when the active date is unknown', () => {
       render(
         <ListingCard listing={aListingCardRow({ status: 'Coming Soon', comingSoonDate: null })} />,
       );
 
-      expect(screen.getByText('Coming soon')).toBeInTheDocument();
+      expect(screen.getAllByText('Coming soon')).toHaveLength(2);
+    });
+
+    it('never truncates the badge text — no ellipsis class on the pill', () => {
+      render(
+        <ListingCard
+          listing={aListingCardRow({
+            status: 'Coming Soon',
+            comingSoonDate: '2026-10-15T00:00:00.000Z',
+          })}
+        />,
+      );
+
+      // The text sits in the inner form-switch span; its parent is the pill itself.
+      const pill = screen.getByText('Coming soon Oct 15').parentElement;
+      expect(pill).toHaveClass('whitespace-nowrap');
+      expect(pill).not.toHaveClass('truncate');
     });
 
     it('does not show the badge for a non-Coming-Soon listing', () => {
@@ -606,6 +627,7 @@ describe('ListingCard', () => {
       );
 
       expect(screen.queryByText(/Coming soon/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Soon ·/)).not.toBeInTheDocument();
     });
   });
 });
