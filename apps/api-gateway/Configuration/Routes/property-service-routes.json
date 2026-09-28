@@ -148,7 +148,7 @@
       "QoSOptions": {
         "Timeout": 5000,
         "MinimumThroughput": 5,
-        "SamplingDuration": 30000,
+        "SamplingDuration": 45000,
         "BreakDuration": 5000
       }
     },
@@ -198,7 +198,7 @@
       "QoSOptions": {
         "Timeout": 5000,
         "MinimumThroughput": 5,
-        "SamplingDuration": 30000,
+        "SamplingDuration": 45000,
         "BreakDuration": 5000
       }
     },
