@@ -103,7 +103,7 @@ describe('HomePageContent', () => {
 
     it('renders no selection control for intent', async () => {
       render(<HomePageContent />);
-      await screen.findByText('What under $300K gets you');
+      await screen.findByText('Find your place under $300K');
       expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
       expect(screen.queryByRole('radio')).not.toBeInTheDocument();
     });
@@ -120,12 +120,10 @@ describe('HomePageContent', () => {
 
       render(<HomePageContent />);
 
-      expect(await screen.findByText('Dropping soon')).toBeInTheDocument();
-      expect(screen.getByText('Rentals about to drop')).toBeInTheDocument();
-      expect(
-        await screen.findByText('Sneak peek at 3,041 homes for sale coming soon'),
-      ).toBeInTheDocument();
-      expect(screen.getByText('3,041 rentals coming soon. See them first.')).toBeInTheDocument();
+      expect(await screen.findByText('Be the first to see these homes')).toBeInTheDocument();
+      expect(screen.getByText("See new rentals before they're listed")).toBeInTheDocument();
+      expect(await screen.findByText('3,041 homes for sale coming soon')).toBeInTheDocument();
+      expect(screen.getByText('3,041 rentals coming soon')).toBeInTheDocument();
     });
 
     it('is hidden when the total is 0 and the fetch has settled', async () => {
@@ -136,9 +134,9 @@ describe('HomePageContent', () => {
 
       render(<HomePageContent />);
 
-      await screen.findByText('What under $300K gets you');
-      expect(screen.queryByText('Dropping soon')).not.toBeInTheDocument();
-      expect(screen.queryByText('Rentals about to drop')).not.toBeInTheDocument();
+      await screen.findByText('Find your place under $300K');
+      expect(screen.queryByText('Be the first to see these homes')).not.toBeInTheDocument();
+      expect(screen.queryByText("See new rentals before they're listed")).not.toBeInTheDocument();
     });
 
     it('scopes the query to the visitor\'s last-searched place and names it in the copy, so the count next to "in City, ST" is that city\'s own', async () => {
@@ -162,7 +160,7 @@ describe('HomePageContent', () => {
       render(<HomePageContent />);
 
       expect(
-        await screen.findByText('Sneak peek at 12 homes for sale coming soon in Rockville, MD'),
+        await screen.findByText('12 homes for sale coming soon in Rockville, MD'),
       ).toBeInTheDocument();
       await waitFor(() =>
         expect(mockedSearchListings).toHaveBeenCalledWith(
@@ -233,8 +231,8 @@ describe('HomePageContent', () => {
 
       render(<HomePageContent />);
 
-      await screen.findByText('What under $300K gets you');
-      expect(screen.queryByText('Pick your neighborhood')).not.toBeInTheDocument();
+      await screen.findByText('Find your place under $300K');
+      expect(screen.queryByText('Find your neighborhood')).not.toBeInTheDocument();
     });
 
     it('hides the section when the fetch fails', async () => {
@@ -242,8 +240,8 @@ describe('HomePageContent', () => {
 
       render(<HomePageContent />);
 
-      await screen.findByText('What under $300K gets you');
-      expect(screen.queryByText('Pick your neighborhood')).not.toBeInTheDocument();
+      await screen.findByText('Find your place under $300K');
+      expect(screen.queryByText('Find your neighborhood')).not.toBeInTheDocument();
     });
   });
 
@@ -276,21 +274,21 @@ describe('HomePageContent', () => {
     it('renders one sub-row per listing type, each titled after its own default band', async () => {
       render(<HomePageContent />);
 
-      expect(await screen.findByText('What under $300K gets you')).toBeInTheDocument();
-      expect(screen.getByText('What under $1,500 gets you')).toBeInTheDocument();
+      expect(await screen.findByText('Find your place under $300K')).toBeInTheDocument();
+      expect(screen.getByText('Rentals under $1,500 a month')).toBeInTheDocument();
     });
 
     it('re-titles a sub-row when its chip changes', async () => {
       render(<HomePageContent />);
 
-      await screen.findByText('What under $300K gets you');
+      await screen.findByText('Find your place under $300K');
       fireEvent.click(await screen.findByRole('button', { name: '$300K–$500K' }));
-      expect(await screen.findByText('What $300K–$500K gets you')).toBeInTheDocument();
+      expect(await screen.findByText('Find your place $300K–$500K')).toBeInTheDocument();
     });
 
     it('uses the canonical selected-chip style, not a brand color', async () => {
       render(<HomePageContent />);
-      await screen.findByText('What under $300K gets you');
+      await screen.findByText('Find your place under $300K');
 
       const active = await screen.findByRole('button', { name: 'Under $300K' });
       expect(active.className).toContain('border-ink bg-ink text-white');
@@ -336,9 +334,7 @@ describe('HomePageContent', () => {
       render(<HomePageContent />);
 
       await waitFor(() =>
-        expect(
-          screen.getAllByText('Sneak peek at 7 homes for sale coming soon').length,
-        ).toBeGreaterThan(0),
+        expect(screen.getAllByText('7 homes for sale coming soon').length).toBeGreaterThan(0),
       );
     });
 
@@ -355,15 +351,15 @@ describe('HomePageContent', () => {
       await waitFor(() => expect(screen.getAllByText('Failed to load').length).toBeGreaterThan(0));
       expect(screen.getAllByRole('button', { name: 'Tap to retry' }).length).toBeGreaterThan(0);
       // The rest of the page is unaffected by the failed rows.
-      expect(await screen.findByText('What under $300K gets you')).toBeInTheDocument();
-      expect(screen.getByText('What under $1,500 gets you')).toBeInTheDocument();
+      expect(await screen.findByText('Find your place under $300K')).toBeInTheDocument();
+      expect(screen.getByText('Rentals under $1,500 a month')).toBeInTheDocument();
     });
   });
 
   describe('removed rows (#392)', () => {
     it('renders none of the retired carousels', async () => {
       render(<HomePageContent />);
-      await screen.findByText('What under $300K gets you');
+      await screen.findByText('Find your place under $300K');
 
       for (const title of [
         'Featured homes for sale',
@@ -383,16 +379,41 @@ describe('HomePageContent', () => {
   describe('compliance (#392)', () => {
     it('uses no banned Fair-Housing-adjacent word anywhere in the rendered body', async () => {
       render(<HomePageContent />);
-      await screen.findByText('What under $300K gets you');
+      await screen.findByText('Find your place under $300K');
 
       const banned =
-        /\b(popular|trending|best|hot|exclusive|selling fast|hand-picked|featured|safe|family|young professionals|student|up-and-coming)\b/i;
+        /\b(popular|trending|best|hot|exclusive|selling fast|hand-picked|featured|safe|family|young professionals|student|up-and-coming|dream|perfect for|ideal for)\b/i;
       expect(document.body.textContent).not.toMatch(banned);
+    });
+
+    it('titles every section as a call to action with a verb and what it shows, never a mood word alone (#418)', async () => {
+      mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
+      render(<HomePageContent />);
+      await screen.findByText('Find your place under $300K');
+
+      // Every earlier round's non-CTA or jargon titles must never come back.
+      for (const retired of [
+        'Dropping soon',
+        'Rentals about to drop',
+        'Pick your neighborhood',
+        'Explore homes by neighborhood',
+        'What under $300K gets you',
+        'See homes for sale before they hit the market',
+        "Find your next rental before it's listed",
+        'Search MLS listings with Cribstop, brokered by Real Broker LLC.',
+      ]) {
+        expect(screen.queryByText(retired)).not.toBeInTheDocument();
+      }
+      expect(screen.getByText('Be the first to see these homes')).toBeInTheDocument();
+      expect(screen.getByText("See new rentals before they're listed")).toBeInTheDocument();
+      expect(screen.getByText('Find your neighborhood')).toBeInTheDocument();
+      // No "MLS"/"IDX" consumer-facing jargon anywhere on the page (#418).
+      expect(document.body.textContent).not.toMatch(/\bMLS\b|\bIDX\b/);
     });
 
     it('removes the unsourced brokerage claims and keeps the block fact-only', async () => {
       render(<HomePageContent />);
-      await screen.findByText('What under $300K gets you');
+      await screen.findByText('Find your place under $300K');
 
       expect(
         screen.queryByText(/Trusted by buyers, sellers, and renters across the DMV/),
@@ -400,8 +421,30 @@ describe('HomePageContent', () => {
       expect(
         screen.queryByText(/one of the fastest-growing brokerages in the country/),
       ).not.toBeInTheDocument();
-      expect(screen.getByText(/Every listing, brokered by Real Broker LLC\./)).toBeInTheDocument();
-      expect(screen.getByText(/licensed in MD, DC, and VA/)).toBeInTheDocument();
+      expect(
+        screen.getByText('Cribstop is brokered by Real Broker LLC, licensed in MD, DC, and VA.'),
+      ).toBeInTheDocument();
+    });
+
+    it('titles the trust block with the one fact it can back — freshness — never claiming every listing is brokered by Real Broker LLC (IDX policy 7.58)', async () => {
+      render(<HomePageContent />);
+      await screen.findByText('Find your place under $300K');
+
+      expect(screen.queryByText(/Every listing, brokered by/)).not.toBeInTheDocument();
+      expect(screen.getByText(/^Real listings, updated /)).toBeInTheDocument();
+    });
+
+    it('falls back to a plain, fact-backed trust-block title when freshness is not known yet', async () => {
+      mockedGetListingsMeta.mockResolvedValue({
+        dataUpdatedAt: null,
+        sources: ['internal'],
+        listingCount: 13,
+      });
+
+      render(<HomePageContent />);
+      await screen.findByText('Find your place under $300K');
+
+      expect(screen.getByText('Real, licensed listings')).toBeInTheDocument();
     });
 
     it('shows an "Updated" freshness tile from dataUpdatedAt', async () => {
@@ -417,7 +460,7 @@ describe('HomePageContent', () => {
       });
 
       render(<HomePageContent />);
-      await screen.findByText('What under $300K gets you');
+      await screen.findByText('Find your place under $300K');
       expect(screen.queryByText('Updated')).not.toBeInTheDocument();
     });
   });
