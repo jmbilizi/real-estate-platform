@@ -18,6 +18,13 @@
  * An explicit override (workflow_dispatch's own `before_sha` input) always wins and skips the
  * lookup entirely, so a manual dispatch keeps deciding its own base.
  *
+ * The lookup is restricted to `workflow_dispatch` runs, which is exactly how CI triggers a real
+ * build/deploy (`gh workflow run`). This excludes a `workflow_call` dry run — e.g. `validate-images`
+ * calling build-push-images.yml with `push: false` on every PR — from ever counting as "the last
+ * thing actually shipped". A manual `workflow_dispatch` run with `push: false` against the tracked
+ * branch is not filtered out (the run event looks identical); that is a deliberate, rare action, and
+ * its effect self-corrects on the next real push rather than causing a lasting silent miss.
+ *
  * Usage:
  *   node tools/ci/last-success-base.js --workflow=build-push-images.yml --branch=dev --repo=owner/repo
  *   node tools/ci/last-success-base.js --workflow=build-push-images.yml --branch=dev --explicit-before=<sha>
@@ -43,28 +50,40 @@ function parseArgs(argv) {
 }
 
 /**
+ * Builds the `gh run list` argument vector. Pulled out as its own pure function so the filter
+ * flags — `--status success` and, notably, `--event workflow_dispatch` (see module header on why
+ * this excludes a `workflow_call` dry run) — stay covered by a test that never touches a real
+ * `gh` binary.
+ */
+function ghRunListArgs(workflow, branch, repo) {
+  const args = [
+    'run',
+    'list',
+    '--workflow',
+    workflow,
+    '--branch',
+    branch,
+    '--status',
+    'success',
+    '--event',
+    'workflow_dispatch',
+    '--json',
+    'headSha',
+    '-L',
+    '1',
+  ];
+  if (repo) args.push('--repo', repo);
+  return args;
+}
+
+/**
  * Looks up the headSha of the most recent successful run of `workflow` on `branch`. Null on any
  * failure. `repo` is passed through to `gh run list --repo`, matching every other `gh` call in
  * this repo's workflows, rather than relying on `gh` inferring it from the git remote.
  */
 function lastSuccessfulRunSha(workflow, branch, repo) {
   try {
-    const args = [
-      'run',
-      'list',
-      '--workflow',
-      workflow,
-      '--branch',
-      branch,
-      '--status',
-      'success',
-      '--json',
-      'headSha',
-      '-L',
-      '1',
-    ];
-    if (repo) args.push('--repo', repo);
-    const out = execFileSync('gh', args, { encoding: 'utf8' });
+    const out = execFileSync('gh', ghRunListArgs(workflow, branch, repo), { encoding: 'utf8' });
     const rows = JSON.parse(out);
     return rows[0] && rows[0].headSha ? rows[0].headSha : null;
   } catch {
@@ -128,4 +147,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { resolveBase, parseArgs };
+module.exports = { resolveBase, parseArgs, ghRunListArgs };

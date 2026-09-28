@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { resolveBase, parseArgs } = require('./last-success-base');
+const { resolveBase, parseArgs, ghRunListArgs } = require('./last-success-base');
 
 test('#446: explicit override wins and skips the lookup entirely', () => {
   const findLastSuccess = () => {
@@ -86,6 +86,38 @@ test('#446: parseArgs defaults head to HEAD, repo and explicitBefore to empty', 
     repo: '',
     explicitBefore: '',
   });
+});
+
+test('#446: ghRunListArgs filters to a successful workflow_dispatch run, excluding a workflow_call dry run', () => {
+  const args = ghRunListArgs('build-push-images.yml', 'dev', '');
+  assert.deepEqual(args, [
+    'run',
+    'list',
+    '--workflow',
+    'build-push-images.yml',
+    '--branch',
+    'dev',
+    '--status',
+    'success',
+    '--event',
+    'workflow_dispatch',
+    '--json',
+    'headSha',
+    '-L',
+    '1',
+  ]);
+});
+
+test('#446: ghRunListArgs appends --repo only when one is given', () => {
+  const withoutRepo = ghRunListArgs('deploy-k8s-resources.yml', 'dev', '');
+  assert.ok(!withoutRepo.includes('--repo'));
+
+  const withRepo = ghRunListArgs(
+    'deploy-k8s-resources.yml',
+    'dev',
+    'jmbilizi/real-estate-platform',
+  );
+  assert.deepEqual(withRepo.slice(-2), ['--repo', 'jmbilizi/real-estate-platform']);
 });
 
 test('#446: resolveBase passes repo through to the run lookup', () => {
