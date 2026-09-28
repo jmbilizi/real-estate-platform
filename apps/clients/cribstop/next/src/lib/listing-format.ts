@@ -329,9 +329,17 @@ export function formatOpenHouse(openHouse: OpenHouse): string {
  * Formatted in UTC, unlike the open-house dates above: the contract widens Bright's date-only
  * `ExpectedOnMarketDate` to midnight UTC (there is no real time of day to place in a time zone), so
  * formatting it in `PROPERTY_TIME_ZONE` would read back a day early for every US zone.
+ *
+ * A stale feed can carry a `comingSoonDate` already in the past — the sync has not caught up with
+ * the listing going active, or beyond. The badge never states a past date as an upcoming one, so a
+ * date before today falls back to the no-date form, same as a null date. `now` is injectable for
+ * tests; defaults to the real clock.
  */
-export function formatComingSoonBadge(comingSoonDate: string | null): string {
-  if (comingSoonDate === null) {
+export function formatComingSoonBadge(
+  comingSoonDate: string | null,
+  now: Date = new Date(),
+): string {
+  if (comingSoonDate === null || isPastDate(comingSoonDate, now)) {
     return 'Coming soon';
   }
   const date = new Date(comingSoonDate).toLocaleDateString('en-US', {
@@ -340,4 +348,10 @@ export function formatComingSoonBadge(comingSoonDate: string | null): string {
     timeZone: 'UTC',
   });
   return `Coming soon ${date}`;
+}
+
+/** `comingSoonDate` is a UTC calendar date (see above), so "today" is also read in UTC. */
+function isPastDate(comingSoonDate: string, now: Date): boolean {
+  const todayUtcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return new Date(comingSoonDate).getTime() < todayUtcMidnight;
 }
