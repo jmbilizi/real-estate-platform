@@ -7,6 +7,7 @@ const {
   parseMigrationFile,
   findMigrationOrderViolations,
   formatViolation,
+  resolvePushBaseRef,
 } = require('./migration-order');
 
 const DIR = 'apps/services/property-service/migrations';
@@ -64,6 +65,33 @@ test('findMigrationOrderViolations ignores a brand-new migrations directory', ()
   const violations = findMigrationOrderViolations(addedFiles, []);
 
   assert.deepEqual(violations, []);
+});
+
+// #399's PR check ran against origin/dev before #396 merged 038/039. It saw no conflict.
+// #396 then merged and moved dev's tip. #399 merged next, unchanged, straight into the moved
+// base. Only a push-time check catches that: compare what the push added against the branch's
+// own state right before the push.
+test('resolvePushBaseRef uses github.event.before when this checkout knows it', () => {
+  const before = 'a'.repeat(40);
+  const ref = resolvePushBaseRef(before, (sha) => sha === before);
+  assert.equal(ref, before);
+});
+
+test('resolvePushBaseRef falls back to HEAD^ on the all-zero SHA (first push of a new branch)', () => {
+  const zeroSha = '0'.repeat(40);
+  const ref = resolvePushBaseRef(zeroSha, () => true);
+  assert.equal(ref, 'HEAD^');
+});
+
+test('resolvePushBaseRef falls back to HEAD^ when before is empty', () => {
+  const ref = resolvePushBaseRef('', () => true);
+  assert.equal(ref, 'HEAD^');
+});
+
+test('resolvePushBaseRef falls back to HEAD^ when this checkout does not have the commit', () => {
+  const before = 'b'.repeat(40);
+  const ref = resolvePushBaseRef(before, () => false);
+  assert.equal(ref, 'HEAD^');
 });
 
 test('findMigrationOrderViolations keeps directories independent', () => {

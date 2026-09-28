@@ -79,12 +79,36 @@ function formatViolation(v) {
   );
 }
 
+// The all-zero SHA GitHub sends as `github.event.before` on the first push of a new branch —
+// there is no prior commit to diff against.
+const ZERO_SHA = '0000000000000000000000000000000000000000';
+
+/**
+ * Picks the ref that push mode diffs and lists against.
+ *
+ * Prefer `github.event.before`, the branch's previous tip. Fall back to `HEAD^`, the pushed
+ * commit's first parent, when `before` is missing or unknown to this checkout. `ci.yml`'s
+ * `detect-infra-changes` job uses the same fallback. A first push, a force-push, or a shallow
+ * checkout can all leave `before` unusable.
+ *
+ * @param {string} beforeSha `github.event.before`, or '' if unset
+ * @param {(sha: string) => boolean} isKnownCommit checks the SHA exists in this checkout
+ * @returns {string} a ref usable with `git diff`/`git ls-tree`
+ */
+function resolvePushBaseRef(beforeSha, isKnownCommit) {
+  if (beforeSha && beforeSha !== ZERO_SHA && isKnownCommit(beforeSha)) {
+    return beforeSha;
+  }
+  return 'HEAD^';
+}
+
 module.exports = {
   MIGRATION_FILE_RE,
   parseMigrationFile,
   highestPrefixByDir,
   findMigrationOrderViolations,
   formatViolation,
+  resolvePushBaseRef,
 };
 
 if (require.main === module) {
@@ -95,16 +119,44 @@ if (require.main === module) {
     return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
   }
 
-  const base = arg('base', process.env.GITHUB_BASE_REF || 'dev');
-  const baseRef = base.startsWith('origin/') ? base : `origin/${base}`;
-
   function git(args) {
     return execFileSync('git', args, { encoding: 'utf-8' });
   }
 
+  function isKnownCommit(sha) {
+    try {
+      git(['cat-file', '-e', sha]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // PR mode (default): base is the PR's remote target branch. Its history can diverge from HEAD,
+  // so the three-dot diff is deliberate: it compares against the common ancestor, not the base's
+  // current tip.
+  //
+  // Push mode: base is the branch's own prior commit, always a direct ancestor of HEAD. The
+  // two-dot diff compares the two trees directly. This matters when the branch's history was
+  // rewritten: a three-dot diff would then read from an old common ancestor, while `ls-tree`
+  // would read the newer `before` tree — two different points in history, producing a false
+  // violation on a migration that already shipped.
+  const mode = arg('mode', 'pr');
+  let baseRef;
+  let diffSpec;
+  if (mode === 'push') {
+    const before = arg('before', process.env.GITHUB_EVENT_BEFORE || '');
+    baseRef = resolvePushBaseRef(before, isKnownCommit);
+    diffSpec = `${baseRef}..HEAD`;
+  } else {
+    const base = arg('base', process.env.GITHUB_BASE_REF || 'dev');
+    baseRef = base.startsWith('origin/') ? base : `origin/${base}`;
+    diffSpec = `${baseRef}...HEAD`;
+  }
+
   let addedFiles;
   try {
-    const raw = git(['diff', '--name-status', '--diff-filter=A', `${baseRef}...HEAD`]);
+    const raw = git(['diff', '--name-status', '--diff-filter=A', diffSpec]);
     addedFiles = raw
       .split('\n')
       .filter(Boolean)

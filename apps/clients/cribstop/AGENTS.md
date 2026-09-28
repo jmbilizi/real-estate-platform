@@ -111,3 +111,9 @@ pnpm exec nx lint cribstop-next        # Also: test, type-check
   Both keys are server-only: `.env.local.example` documents them with placeholders. Do not deploy
   local services or sync MLS for a frontend-only change. Reserve `pnpm run skaffold:services` and
   the local cluster for backend or contract changes.
+  - **In an agent worktree, just run `pnpm run cribstop:web`.** A worktree has no `.env.local` of
+    its own, and a permission hook blocks agents from reading or copying it. The
+    `tools/dev/cribstop-web.js` launcher behind that script resolves the primary checkout and loads
+    its `.env.local` into the process with `process.loadEnvFile()` (#413) — the same pattern
+    `tools/infra/run-skaffold.js` uses for the root `.env`. Agents never read, print, or copy the
+    file; the launcher logs only the loaded key names.

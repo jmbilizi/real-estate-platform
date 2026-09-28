@@ -207,11 +207,18 @@ jobs:
         run: pnpm run tools:test
 
       # #405: a node-pg-migrate migration numbered at or below one already merged crashes the
-      # migrate initContainer (#399). Runs only on PRs, where a base branch exists to compare
-      # against; a direct push to a protected branch has nothing to diff and is not gated here.
-      - name: Check migration order (node-pg-migrate)
+      # migrate initContainer (#399). PR mode diffs against the PR's target branch.
+      - name: Check migration order (node-pg-migrate) — PR
         if: github.event_name == 'pull_request'
-        run: node tools/validation/migration-order.js --base "origin/${{ github.base_ref }}"
+        run: node tools/validation/migration-order.js --mode pr --base "origin/${{ github.base_ref }}"
+
+      # #399's own PR check passed. Its CI run diffed against dev before the conflicting
+      # migration merged. The PR check alone cannot see a base that moves after that run.
+      # Push mode re-checks at merge time. It diffs what this push added against the branch's
+      # own state right before the push. This still fails CI before deploy starts.
+      - name: Check migration order (node-pg-migrate) — push
+        if: github.event_name == 'push'
+        run: node tools/validation/migration-order.js --mode push --before "${{ github.event.before }}"
 
   node:
     needs: [setup-base, detect-languages]
