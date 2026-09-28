@@ -750,6 +750,10 @@ jobs:
       needs.detect-infra-changes.outputs.images-changed == 'true'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history: needed to verify the resolved base is an ancestor of HEAD
+
       - name: Determine environment from branch
         id: env
         run: |
@@ -762,18 +766,48 @@ jobs:
             echo "environment=dev" >> $GITHUB_OUTPUT
           fi
 
+      # A push whose CI fails never reaches this job (it needs quality checks to pass first),
+      # so `github.event.before` — the failed push's own final commit — is not a safe diff base:
+      # it makes the next green push look at only its own commits, and the failed push's changes
+      # never build (#446). The base is instead the last commit build-push-images.yml actually
+      # built successfully on this branch. See tools/ci/last-success-base.js.
+      - name: Resolve last successful build base
+        id: base
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BASE=$(node tools/ci/last-success-base.js \
+            --workflow=build-push-images.yml \
+            --branch=${{ needs.detect-infra-changes.outputs.branch }} \
+            --head=${{ github.sha }} \
+            --repo=${{ github.repository }})
+          echo "base=$BASE" >> $GITHUB_OUTPUT
+
       - name: Trigger image build
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           echo "🐳 Triggering container image build for ${{ steps.env.outputs.environment }} environment..."
 
-          gh workflow run build-push-images.yml \
-            --repo ${{ github.repository }} \
-            --ref ${{ github.ref }} \
-            --field environment=${{ steps.env.outputs.environment }} \
-            --field projects=affected \
-            --field push=true
+          BASE="${{ steps.base.outputs.base }}"
+          if [ -n "$BASE" ]; then
+            echo "📍 Affected base: $BASE"
+            gh workflow run build-push-images.yml \
+              --repo ${{ github.repository }} \
+              --ref ${{ github.ref }} \
+              --field environment=${{ steps.env.outputs.environment }} \
+              --field projects=affected \
+              --field push=true \
+              --field before_sha="$BASE"
+          else
+            echo "⚠️  No safe base found - building ALL container-build projects"
+            gh workflow run build-push-images.yml \
+              --repo ${{ github.repository }} \
+              --ref ${{ github.ref }} \
+              --field environment=${{ steps.env.outputs.environment }} \
+              --field projects=all \
+              --field push=true
+          fi
           echo "✅ Image build workflow triggered"
 
   # Trigger deploy workflow if ONLY deploy resources changed (not images)
@@ -790,27 +824,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0 # Full history: needed to diff against, and verify ancestry of, the resolved base
 
       - name: Install yq
         run: |
           sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
           sudo chmod +x /usr/local/bin/yq
 
+      # Same gap as the image build trigger (#446): this job never runs for a push whose CI
+      # failed, so `github.event.before` is that failed push's own commit and misses its changes
+      # once the next push goes green. The base is instead the last commit deploy-k8s-resources.yml
+      # actually deployed successfully on this branch. See tools/ci/last-success-base.js.
+      - name: Resolve last successful deploy base
+        id: base
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BASE=$(node tools/ci/last-success-base.js \
+            --workflow=deploy-k8s-resources.yml \
+            --branch=${{ needs.detect-infra-changes.outputs.branch }} \
+            --head=${{ github.sha }} \
+            --repo=${{ github.repository }})
+          echo "base=$BASE" >> $GITHUB_OUTPUT
+
       - name: Detect changed services
         id: detect-services
         shell: bash
         run: |
-          # Get changed files
-          if git rev-parse HEAD^ >/dev/null 2>&1; then
-            FILES=$(git diff --name-only HEAD^ HEAD)
-          else
-            FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
-          fi
-
-          echo "Changed files:"
-          echo "$FILES"
-
           # Determine environment from branch
           BRANCH="${{ needs.detect-infra-changes.outputs.branch }}"
           if [ "$BRANCH" = "main" ]; then
@@ -822,6 +862,21 @@ jobs:
           fi
 
           echo "Target environment: $ENV"
+
+          BASE="${{ steps.base.outputs.base }}"
+          if [ -z "$BASE" ]; then
+            echo "⚠️  No safe base found - deploying ALL services"
+            echo "deploy_strategy=all" >> $GITHUB_OUTPUT
+            echo "services=all" >> $GITHUB_OUTPUT
+            echo "environment=$ENV" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "📍 Diff base: $BASE"
+          FILES=$(git diff --name-only "$BASE" "${{ github.sha }}")
+
+          echo "Changed files:"
+          echo "$FILES"
 
           # Load smart-deployment-config.yaml configuration
           CONFIG_FILE="infra/smart-deployment-config.yaml"
