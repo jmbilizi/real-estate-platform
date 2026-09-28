@@ -117,3 +117,19 @@ pnpm exec nx lint cribstop-next        # Also: test, type-check
     its `.env.local` into the process with `process.loadEnvFile()` (#413) — the same pattern
     `tools/infra/run-skaffold.js` uses for the root `.env`. Agents never read, print, or copy the
     file; the launcher logs only the loaded key names.
+- **Home page section copy (stakeholder rule, 2026-09-27, #416/#418).** Applies to every home page
+  row (`HomePageContent.tsx` and any row it adds, including #363 Near you and #394 New this week /
+  Price cuts):
+  - A section title is a call to action: 3 to 7 words, a verb (See, Find, Explore, Search, Tour)
+    plus what it shows. Facts — count, status, price band, place — go in the subtitle, never the
+    title.
+  - Every count and place comes from the API or the visitor's own last search. Never invent one, and
+    never derive one from IP/geolocation.
+  - Banned in titles and subtitles: "trending", "popular", "best", "hot", "exclusive", "selling
+    fast", "first dibs", "priority access", "before anyone else", "dream", "perfect for", "ideal
+    for", any demographic/audience/family word, "safe", and any savings or affordability claim.
+  - The "Coming Soon" status word always stays visible on a Coming Soon row.
+  - Never say "MLS" or "IDX" in consumer-facing copy — trade jargon, not a term a visitor uses.
+  - A trust-block or brokerage claim states a fact about Cribstop or Real Broker LLC, never about
+    the listings: the listings come from Bright MLS via IDX and belong to many brokerages, each
+    already attributed on its own card (NAR IDX policy 7.58).

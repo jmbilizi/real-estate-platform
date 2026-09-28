@@ -232,7 +232,7 @@ function ExploreNeighborhoodsRow() {
 
   return (
     <NeighborhoodRow
-      title="Pick your neighborhood"
+      title="Find your neighborhood"
       subtitle={`Neighborhoods across ${BRAND.licensedStates}`}
       neighborhoods={neighborhoods}
       loading={loading}
@@ -300,19 +300,24 @@ function PillButton({
   );
 }
 
-/** Per-side "coming soon" copy (#416): distinct title and subtitle template for sale vs rent,
- *  short and share-worthy without an unsourced popularity claim (PRD §6.3). */
+/**
+ * Per-side "coming soon" copy (#416, #418): a short, concrete call to action — the good feeling
+ * of being first, without claiming exclusivity the product doesn't have. "Be the first to see"
+ * means "before the general market listing", never "before other visitors": Coming Soon listings
+ * are public to every visitor (PRD §6.3, no unbacked claim). Facts (count, place) live in the
+ * subtitle, never the title.
+ */
 const COMING_SOON_COPY: Record<
   ListingSide,
   { title: string; subtitle: (count: string, place: string) => string }
 > = {
   sale: {
-    title: 'Dropping soon',
-    subtitle: (count, place) => `Sneak peek at ${count} homes for sale coming soon${place}`,
+    title: 'Be the first to see these homes',
+    subtitle: (count, place) => `${count} homes for sale coming soon${place}`,
   },
   rent: {
-    title: 'Rentals about to drop',
-    subtitle: (count, place) => `${count} rentals coming soon${place}. See them first.`,
+    title: "See new rentals before they're listed",
+    subtitle: (count, place) => `${count} rentals coming soon${place}`,
   },
 };
 
@@ -384,8 +389,8 @@ function budgetPricePhrase(label: string): string {
 
 /**
  * One budget sub-row: chips for one fixed listing type, and the selected band's cards. Its own
- * title names the selected band ("What under $300K gets you") rather than a fixed "Homes for
- * sale" (#416), so the heading tracks whichever chip is active.
+ * title is short and concrete ("Find your place under $300K", "Rentals under $1,500 a month");
+ * facts (count, place) live in the subtitle, never the title (#416/#418 stakeholder correction).
  *
  * `bands[selected] ?? bands[0]` is a defensive clamp only — the sale row (5 bands) and the rent
  * row (4 bands) are each rendered with their own `key` in `BudgetSection`, so React never reuses
@@ -396,8 +401,8 @@ function BudgetSubRow({ type, bands }: { type: 'sale' | 'rent'; bands: BudgetBan
   const band = bands[selected] ?? bands[0];
   const place = useLastSearchedPlace();
 
-  // City-scoped when a place is known (#416), so the "{N} homes" subtitle next to a title that
-  // names that city is never a platform-wide count (PRD §6.3: every claim backed by API data).
+  // City-scoped when a place is known (#416), so the "{N} homes{ in City}" subtitle next to a
+  // place name is never a platform-wide count (PRD §6.3: every claim backed by API data).
   const { listings, total, loading, failed, refetch } = useCarouselListings({
     listingType: type,
     minPrice: band.minPrice,
@@ -411,7 +416,10 @@ function BudgetSubRow({ type, bands }: { type: 'sale' | 'rent'; bands: BudgetBan
   // A real, empty result — distinct from "still loading" and from "the fetch failed". The chips
   // stay live so the visitor can pick another band without an empty scroller under them.
   const empty = !loading && !failed && total === 0;
-  const title = `What ${budgetPricePhrase(band.label)} gets you${place ? ` in ${place.city}` : ''}`;
+  const priceText = budgetPricePhrase(band.label);
+  const cityPart = place ? ` in ${place.city}` : '';
+  const title = type === 'sale' ? `Find your place ${priceText}` : `Rentals ${priceText} a month`;
+  const subtitleNoun = type === 'sale' ? 'homes for sale' : 'rentals';
 
   return (
     <div>
@@ -434,7 +442,7 @@ function BudgetSubRow({ type, bands }: { type: 'sale' | 'rent'; bands: BudgetBan
       ) : (
         <ListingRow
           title={title}
-          subtitle={loading ? undefined : `${total.toLocaleString()} homes`}
+          subtitle={loading ? undefined : `${total.toLocaleString()} ${subtitleNoun}${cityPart}`}
           href={searchHref(type, {
             ...(band.minPrice ? { minPrice: String(band.minPrice) } : {}),
             ...(band.maxPrice ? { maxPrice: String(band.maxPrice) } : {}),
@@ -470,10 +478,16 @@ function BudgetSection({ order }: { order: [ListingSide, ListingSide] }) {
   );
 }
 
-/** The brokerage trust block (#392): facts only — no unsourced claims (PRD §6.3). */
+/**
+ * The brokerage trust block (#392): facts only — no unsourced claims (PRD §6.3). The title states
+ * the one fact `lastUpdated` backs; it never names "MLS" or "IDX" (#418: consumer-facing jargon).
+ * When freshness isn't known yet, the title falls back to a plain claim it can still back, rather
+ * than a fabricated time.
+ */
 function TrustBlock() {
   const meta = useListingsMeta();
   const lastUpdated = meta?.dataUpdatedAt != null ? formatRelativeTime(meta.dataUpdatedAt) : null;
+  const title = lastUpdated ? `Real listings, updated ${lastUpdated}` : 'Real, licensed listings';
 
   return (
     <section className="mt-10 px-6 pb-10 sm:px-10 lg:px-20">
@@ -484,11 +498,11 @@ function TrustBlock() {
               {BRAND.brokerageShort}
             </p>
             <h2 className="mt-3 font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
-              {BRAND.siteName}, brokered by {BRAND.brokerageShort}.
+              {title}
             </h2>
             <p className="mt-4 text-base leading-relaxed text-ink/80">
-              {BRAND.siteName} lists homes for sale and rent, brokered by {BRAND.brokerageShort} and
-              licensed in {BRAND.licensedStates}.
+              {BRAND.siteName} is brokered by {BRAND.brokerageShort}, licensed in{' '}
+              {BRAND.licensedStates}.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link
