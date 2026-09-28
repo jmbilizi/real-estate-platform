@@ -21,21 +21,26 @@ const CAROUSEL_PAGE_SIZE = 8;
 /**
  * The recent-search storage `CompactSearchBar` already writes (`recentSearches`). #398 reuses this
  * key rather than adding one: an entry now carries the listing type active at the time of that
- * search, so the newest entry says which side the visitor searched last.
+ * search, so the newest entry says which side the visitor searched last. One read/parse shared by
+ * `lastSearchedSide` and `lastSearchedPlace` (#416), so a corrupted-value fix or a stored-shape
+ * change lands once, not in two near-identical functions.
  */
-/** Only `'rent'` flips the order; a last search of `'sale'`, `'all'`, `'sold'`, or none at all
- *  all fall to the "otherwise sale first" branch `useSectionOrder` applies below. */
-function lastSearchedSide(): ListingSide | null {
+function latestRecentSearch(): any {
   if (typeof window === 'undefined') return null;
   try {
     const stored = window.localStorage.getItem('recentSearches');
     if (!stored) return null;
     const parsed = JSON.parse(stored);
-    const latest = Array.isArray(parsed) ? parsed[0] : null;
-    return latest?.listingType === 'rent' ? 'rent' : null;
+    return Array.isArray(parsed) ? (parsed[0] ?? null) : null;
   } catch {
     return null;
   }
+}
+
+/** Only `'rent'` flips the order; a last search of `'sale'`, `'all'`, `'sold'`, or none at all
+ *  all fall to the "otherwise sale first" branch `useSectionOrder` applies below. */
+function lastSearchedSide(): ListingSide | null {
+  return latestRecentSearch()?.listingType === 'rent' ? 'rent' : null;
 }
 
 /**
@@ -51,23 +56,15 @@ function useSectionOrder(): [ListingSide, ListingSide] {
   return rentFirst ? ['rent', 'sale'] : ['sale', 'rent'];
 }
 
-/** A place name for the "{ in City, ST}" copy suffix (#416). Reads the same stored entry as
- *  `lastSearchedSide`, so a visitor who has never searched sees the plain, place-free copy —
- *  never a guessed or IP-derived location (PRD §6.3). */
+/** A place for the "{ in City, ST}" copy suffix, and for scoping the query it sits next to
+ *  (#416): a place-named count must be that place's own count, never a platform-wide one read
+ *  next to a place name it doesn't describe (PRD §6.3). `null` when the visitor has never
+ *  searched — never a guessed or IP-derived location. */
 function lastSearchedPlace(): { city: string; state: string } | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const stored = window.localStorage.getItem('recentSearches');
-    if (!stored) return null;
-    const parsed = JSON.parse(stored);
-    const latest = Array.isArray(parsed) ? parsed[0] : null;
-    const address = latest?.address ?? {};
-    const city = addressCity(address);
-    const state = addressState(address);
-    return city && state ? { city, state } : null;
-  } catch {
-    return null;
-  }
+  const address = latestRecentSearch()?.address ?? {};
+  const city = addressCity(address);
+  const state = addressState(address);
+  return city && state ? { city, state } : null;
 }
 
 /** Client-only, like `useSectionOrder`: server render always sees no place. */
@@ -321,13 +318,18 @@ const COMING_SOON_COPY: Record<
 
 /** "Coming soon" (#392): listed early, showings not started. Hidden while empty and settled. */
 function ComingSoonRow({ side }: { side: ListingSide }) {
+  const place = useLastSearchedPlace();
+  // The query is scoped to the visitor's own last-searched place (#416), so `total` is always the
+  // count the "{ in City, ST}" copy claims — never a platform-wide count read next to a place name
+  // it doesn't describe (PRD §6.3: every claim backed by API data).
   const { listings, total, loading, failed, refetch } = useCarouselListings({
     status: ['Coming Soon'],
     sort: 'newest',
     listingType: side,
     pageSize: CAROUSEL_PAGE_SIZE,
+    city: place?.city,
+    state: place?.state,
   });
-  const place = useLastSearchedPlace();
 
   const show = loading || total > 0 || failed;
   if (!show) return null;
@@ -339,7 +341,10 @@ function ComingSoonRow({ side }: { side: ListingSide }) {
     <ListingRow
       title={copy.title}
       subtitle={loading ? undefined : copy.subtitle(total.toLocaleString(), placeSuffix)}
-      href={searchHref(side, { status: 'Coming Soon' })}
+      href={searchHref(side, {
+        status: 'Coming Soon',
+        ...(place ? { city: place.city, state: place.state } : {}),
+      })}
       listings={listings}
       loading={loading}
       failed={failed}
@@ -391,12 +396,16 @@ function BudgetSubRow({ type, bands }: { type: 'sale' | 'rent'; bands: BudgetBan
   const band = bands[selected] ?? bands[0];
   const place = useLastSearchedPlace();
 
+  // City-scoped when a place is known (#416), so the "{N} homes" subtitle next to a title that
+  // names that city is never a platform-wide count (PRD §6.3: every claim backed by API data).
   const { listings, total, loading, failed, refetch } = useCarouselListings({
     listingType: type,
     minPrice: band.minPrice,
     maxPrice: band.maxPrice,
     sort: 'newest',
     pageSize: CAROUSEL_PAGE_SIZE,
+    city: place?.city,
+    state: place?.state,
   });
 
   // A real, empty result — distinct from "still loading" and from "the fetch failed". The chips
@@ -429,6 +438,7 @@ function BudgetSubRow({ type, bands }: { type: 'sale' | 'rent'; bands: BudgetBan
           href={searchHref(type, {
             ...(band.minPrice ? { minPrice: String(band.minPrice) } : {}),
             ...(band.maxPrice ? { maxPrice: String(band.maxPrice) } : {}),
+            ...(place ? { city: place.city, state: place.state } : {}),
           })}
           listings={listings}
           loading={loading}

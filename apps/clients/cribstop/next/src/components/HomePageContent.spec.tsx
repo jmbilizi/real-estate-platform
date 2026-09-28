@@ -140,6 +140,37 @@ describe('HomePageContent', () => {
       expect(screen.queryByText('Dropping soon')).not.toBeInTheDocument();
       expect(screen.queryByText('Rentals about to drop')).not.toBeInTheDocument();
     });
+
+    it('scopes the query to the visitor\'s last-searched place and names it in the copy, so the count next to "in City, ST" is that city\'s own', async () => {
+      window.localStorage.setItem(
+        'recentSearches',
+        JSON.stringify([
+          {
+            display_name: 'Rockville, MD',
+            listingType: 'sale',
+            address: { city: 'Rockville', state_code: 'MD' },
+          },
+        ]),
+      );
+      mockedSearchListings.mockImplementation((query: { status?: string[]; city?: string }) => {
+        if (query.status?.includes('Coming Soon')) {
+          return Promise.resolve(envelope([aListingCardRow()], query.city ? 12 : 3041));
+        }
+        return Promise.resolve(envelope([aListingCardRow()]));
+      });
+
+      render(<HomePageContent />);
+
+      expect(
+        await screen.findByText('Sneak peek at 12 homes for sale coming soon in Rockville, MD'),
+      ).toBeInTheDocument();
+      await waitFor(() =>
+        expect(mockedSearchListings).toHaveBeenCalledWith(
+          expect.objectContaining({ city: 'Rockville', state: 'MD' }),
+          expect.anything(),
+        ),
+      );
+    });
   });
 
   describe('explore neighborhoods (#393)', () => {
