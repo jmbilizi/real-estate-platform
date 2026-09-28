@@ -92,7 +92,41 @@ export default function ListingRow({
     <section className={sectionClassName ?? 'px-6 pt-6 sm:px-10 lg:px-20'}>
       <div className="flex flex-col gap-1 pb-1">
         <div className="flex items-center gap-2 justify-between">
-          <div className="flex items-center gap-2">
+          {/* Hidden while failed: "See all" links into a search page backed by the request that
+              just failed, and the scroll arrows would be framing a single retry card. Title and
+              chip are one link (#423) — the visual chip is ~32px, but `min-h-11` keeps the whole
+              link's tap target at least 44px tall even though it never grows past 32px on screen. */}
+          {href && !failed ? (
+            <Link
+              href={href}
+              // `aria-label` replaces a link's whole accessible name (its own text content
+              // included), so it must repeat the title — otherwise a screen reader announces only
+              // "See all" and drops which row it is.
+              aria-label={`${title} — see all`}
+              prefetch
+              className="group inline-flex min-h-11 min-w-11 items-center gap-1.5"
+            >
+              <h2
+                className={
+                  titleClassName ??
+                  'font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]'
+                }
+              >
+                {title}
+              </h2>
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-soft text-ink transition group-hover:bg-surface-border">
+                <svg
+                  className="h-3.5 w-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </span>
+            </Link>
+          ) : (
             <h2
               className={
                 titleClassName ??
@@ -101,17 +135,45 @@ export default function ListingRow({
             >
               {title}
             </h2>
-            {/* Hidden while failed: "See all" links into a search page backed by the request that
-                just failed, and the scroll arrows would be framing a single retry card. */}
-            {href && !failed && (
-              <Link
-                href={href}
-                className="ml-1 flex h-11 w-11 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition hover:bg-surface-alt hover:shadow-card"
-                aria-label="See all"
-                prefetch
+          )}
+          {/* Touch is the control below `sm` (Airbnb-style peeking rows); arrows return once there
+              is room for them to sit clear of the cards. Each button's own tap target stays 44px
+              (the visible circle is the inner 32px span) even though the circle itself shrank
+              (#423). */}
+          <div className={`items-center gap-2 ${failed ? 'hidden' : 'hidden sm:flex'}`}>
+            <button
+              type="button"
+              onClick={() => scroll('left')}
+              aria-label="Scroll left"
+              disabled={atStart}
+              className={`flex h-11 w-11 items-center justify-center ${atStart ? 'cursor-not-allowed opacity-50' : ''}`}
+            >
+              <span
+                className={`flex h-8 w-8 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition ${atStart ? '' : 'hover:bg-surface-alt'}`}
               >
                 <svg
-                  className="h-4 w-4"
+                  className="h-3.5 w-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => scroll('right')}
+              aria-label="Scroll right"
+              disabled={atEnd}
+              className={`flex h-11 w-11 items-center justify-center ${atEnd ? 'cursor-not-allowed opacity-50' : ''}`}
+            >
+              <span
+                className={`flex h-8 w-8 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition ${atEnd ? '' : 'hover:bg-surface-alt'}`}
+              >
+                <svg
+                  className="h-3.5 w-3.5"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth={2.5}
@@ -119,45 +181,7 @@ export default function ListingRow({
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                 </svg>
-              </Link>
-            )}
-          </div>
-          {/* Touch is the control below `sm` (Airbnb-style peeking rows); arrows return once there
-              is room for them to sit clear of the cards. */}
-          <div className={`items-center gap-2 ${failed ? 'hidden' : 'hidden sm:flex'}`}>
-            <button
-              type="button"
-              onClick={() => scroll('left')}
-              aria-label="Scroll left"
-              className={`flex h-11 w-11 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition hover:shadow-card ${atStart ? 'opacity-50 cursor-default' : 'hover:bg-surface-alt'}`}
-              disabled={atStart}
-            >
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2.5}
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={() => scroll('right')}
-              aria-label="Scroll right"
-              className={`flex h-11 w-11 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition hover:shadow-card ${atEnd ? 'opacity-50 cursor-default' : 'hover:bg-surface-alt'}`}
-              disabled={atEnd}
-            >
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2.5}
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
+              </span>
             </button>
           </div>
         </div>
