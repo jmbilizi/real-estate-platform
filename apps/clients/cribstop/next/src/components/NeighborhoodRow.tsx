@@ -135,19 +135,23 @@ export default function NeighborhoodRow({
               // included), so it must repeat the title — otherwise a screen reader announces only
               // "See all" and drops which row it is.
               aria-label={`${title} — see all`}
-              // `min-w-0`, not `min-w-11`: this link's title can genuinely be long
-              // ("Explore neighborhoods across the region") and needs `truncate` to work, which
-              // needs a flex ancestor allowed to shrink past its content width. The 44px floor
-              // holds anyway in practice — the chip alone is 32px, so title text plus its gap
-              // always pushes the link past 44px. Below `sm` (#429): `flex w-full justify-between`
-              // spreads title and chip across the row instead of pairing them; from `sm` up, back
-              // to the original inline pairing beside the title.
-              className="group flex min-h-11 min-w-0 w-full items-center justify-between gap-1.5 sm:inline-flex sm:w-auto sm:justify-normal"
+              // `min-w-0`: this link's title can genuinely be long ("Explore neighborhoods across
+              // the region") and needs `line-clamp-2` to work, which needs a flex ancestor allowed
+              // to shrink past its content width. The 44px floor holds anyway in practice — the
+              // chip alone is 32px, so title text plus its gap always pushes the link past 44px.
+              // Below `sm` (#429): `flex w-full justify-between` spreads title and chip across the
+              // row instead of pairing them; from `sm` up, back to the original inline pairing
+              // beside the title. `items-start`, not `items-center` (#432): the title now wraps to
+              // 2 lines rather than truncating, so centering on the whole block would float the
+              // chip below the first line.
+              className="group flex min-h-11 min-w-0 w-full items-start justify-between gap-1.5 sm:inline-flex sm:w-auto sm:justify-normal"
             >
-              <h2 className="min-w-0 truncate font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]">
+              <h2 className="min-w-0 line-clamp-2 font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]">
                 {title}
               </h2>
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-soft text-ink transition group-hover:bg-surface-border">
+              {/* `mt-0.5` centers the chip on the first line's height rather than the container's
+                  top edge, now that the title can run to a second line (#432). */}
+              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-soft text-ink transition group-hover:bg-surface-border">
                 <svg
                   className="h-3.5 w-3.5"
                   fill="none"
