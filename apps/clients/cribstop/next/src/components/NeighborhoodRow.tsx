@@ -127,7 +127,9 @@ export default function NeighborhoodRow({
       <div className="flex flex-col gap-1 pb-1">
         <div className="flex items-center gap-2 justify-between">
           <div className="flex min-w-0 items-center gap-2">
-            <h2 className="font-display text-xl font-bold tracking-tight sm:text-2xl">{title}</h2>
+            <h2 className="font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]">
+              {title}
+            </h2>
             {href && (
               <Link
                 href={href}
