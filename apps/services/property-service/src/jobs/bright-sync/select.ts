@@ -19,6 +19,10 @@ export const BRIGHT_SYNC_SELECT: readonly string[] = Object.freeze([
   // `OriginalEntryTimestamp` are declared in `$metadata` but are null on every sampled record
   // (production feed, 2026-09-27) — `MLSListDate` is the field this MLS actually populates.
   'MLSListDate',
+  // #424. The date a Coming Soon record goes active — 100% filled on 200 sampled Coming Soon
+  // records (production feed, 2026-09-28). `MLSListDate` above is the date the record ENTERED
+  // Coming Soon, not the date it goes active; this is the field that answers that question.
+  'ExpectedOnMarketDate',
   'DaysOnMarket',
   'UnparsedAddress',
   'StreetNumber',

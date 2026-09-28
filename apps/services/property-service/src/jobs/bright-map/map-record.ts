@@ -71,6 +71,12 @@ export interface MappedListingInput {
   readonly lastUpdated: string;
   /** #391. `MLSListDate`, widened to an instant (midnight UTC). Null when the feed omits it. */
   readonly listedAt: string | null;
+  /**
+   * #424. `ExpectedOnMarketDate`, widened to an instant. The date a Coming Soon listing goes
+   * active — distinct from `listedAt` above, which is the date it ENTERED Coming Soon. Null when
+   * the feed omits it or the listing is not Coming Soon.
+   */
+  readonly comingSoonDate: string | null;
   /** #391. `DaysOnMarket` — the current marketing period, not the lifetime total. */
   readonly daysOnMarket: number | null;
 }
@@ -334,6 +340,7 @@ export function mapBrightPropertyRecord(
       isSample,
       lastUpdated,
       listedAt: toDateInstant(payload.MLSListDate),
+      comingSoonDate: toDateInstant(payload.ExpectedOnMarketDate),
       daysOnMarket: daysOnMarket.value,
     },
   };

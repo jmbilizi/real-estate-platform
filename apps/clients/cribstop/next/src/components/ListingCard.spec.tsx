@@ -571,4 +571,41 @@ describe('ListingCard', () => {
       expect(getListingPanel()).toBeNull();
     });
   });
+
+  describe('the Coming Soon status badge (#424)', () => {
+    it('shows the badge with the active date in "MMM d" format for a Coming Soon listing', () => {
+      render(
+        <ListingCard
+          listing={aListingCardRow({
+            status: 'Coming Soon',
+            comingSoonDate: '2026-10-15T00:00:00.000Z',
+          })}
+        />,
+      );
+
+      expect(screen.getByText('Coming soon Oct 15')).toBeInTheDocument();
+      expect(screen.queryByText(/10\/15/)).not.toBeInTheDocument();
+    });
+
+    it('shows "Coming soon" with no date fallback when the active date is unknown', () => {
+      render(
+        <ListingCard listing={aListingCardRow({ status: 'Coming Soon', comingSoonDate: null })} />,
+      );
+
+      expect(screen.getByText('Coming soon')).toBeInTheDocument();
+    });
+
+    it('does not show the badge for a non-Coming-Soon listing', () => {
+      render(
+        <ListingCard
+          listing={aListingCardRow({
+            status: 'Active',
+            comingSoonDate: '2026-10-15T00:00:00.000Z',
+          })}
+        />,
+      );
+
+      expect(screen.queryByText(/Coming soon/)).not.toBeInTheDocument();
+    });
+  });
 });

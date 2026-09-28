@@ -54,6 +54,7 @@ export interface ListingCardDbRow {
   close_date: string | null;
   last_updated: Date;
   listed_at: Date | null;
+  coming_soon_date: Date | null;
   listing_agent_name: string | null;
   broker_name: string;
   broker_phone: string;
@@ -189,6 +190,7 @@ function commonFields(row: ListingCardDbRow): Record<string, unknown> {
     closeDate: row.close_date,
     lastUpdated: instant(row.last_updated),
     listedAt: row.listed_at === null ? null : instant(row.listed_at),
+    comingSoonDate: row.coming_soon_date === null ? null : instant(row.coming_soon_date),
     listingAgentName: row.listing_agent_name,
     brokerName: row.broker_name,
     brokerPhone: row.broker_phone,

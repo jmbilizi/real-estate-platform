@@ -311,6 +311,21 @@ describe('mapBrightPropertyRecord', () => {
       expect(result.listing.listedAt).toBeNull();
     });
 
+    it('widens ExpectedOnMarketDate to midnight UTC (#424)', () => {
+      const result = mapBrightPropertyRecord(
+        { ...BASE_PAYLOAD, ExpectedOnMarketDate: '2026-11-01' },
+        ctx(),
+      );
+      if (result.kind !== 'mapped') throw new Error('expected mapped');
+      expect(result.listing.comingSoonDate).toBe('2026-11-01T00:00:00.000Z');
+    });
+
+    it('is null when the feed carries no ExpectedOnMarketDate (#424)', () => {
+      const result = mapBrightPropertyRecord(BASE_PAYLOAD, ctx());
+      if (result.kind !== 'mapped') throw new Error('expected mapped');
+      expect(result.listing.comingSoonDate).toBeNull();
+    });
+
     it('maps DaysOnMarket through', () => {
       const result = mapBrightPropertyRecord({ ...BASE_PAYLOAD, DaysOnMarket: 12 }, ctx());
       if (result.kind !== 'mapped') throw new Error('expected mapped');

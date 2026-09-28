@@ -1,5 +1,6 @@
 import {
   formatClosePrice,
+  formatComingSoonBadge,
   formatDwellingStats,
   formatListingLocation,
   formatListingPrice,
@@ -208,5 +209,25 @@ describe('formatOpenHouseWhen', () => {
         remarks: null,
       }),
     ).toBe('Sat, Sep 5 · 8–10pm');
+  });
+});
+
+describe('formatComingSoonBadge (#424)', () => {
+  it('formats the active date as "MMM d", never a numeric date', () => {
+    expect(formatComingSoonBadge('2026-10-15T00:00:00.000Z')).toBe('Coming soon Oct 15');
+  });
+
+  it('shows "Coming soon" only, with no date fallback, when the date is null', () => {
+    expect(formatComingSoonBadge(null)).toBe('Coming soon');
+  });
+
+  it('shows "Coming soon" only, never a past date, when the feed lags behind', () => {
+    const now = new Date('2026-10-15T12:00:00.000Z');
+    expect(formatComingSoonBadge('2026-10-14T00:00:00.000Z', now)).toBe('Coming soon');
+  });
+
+  it('still shows the date when it lands on today (UTC)', () => {
+    const now = new Date('2026-10-15T23:00:00.000Z');
+    expect(formatComingSoonBadge('2026-10-15T00:00:00.000Z', now)).toBe('Coming soon Oct 15');
   });
 });
