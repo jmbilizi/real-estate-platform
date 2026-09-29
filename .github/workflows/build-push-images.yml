@@ -163,8 +163,14 @@ jobs:
           # Check if workflow files changed (global trigger - build all services)
           # Note: CI triggers this workflow via workflow_dispatch (gh workflow run).
           if [ "${{ github.event_name }}" = "workflow_call" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "push" ]; then
-            # Get changed files to detect workflow changes
-            if git rev-parse HEAD^ >/dev/null 2>&1; then
+            # Get changed files to detect workflow changes.
+            # Prefer before_sha (CI resolves it to the last commit this workflow actually built
+            # successfully — see tools/ci/last-success-base.js) so a failed push that touched
+            # these workflow files is not missed by the next green push (#446). HEAD^ only
+            # covers this run's single latest commit and is the manual-dispatch fallback.
+            if [ -n "${{ inputs.before_sha }}" ] && git cat-file -e "${{ inputs.before_sha }}" 2>/dev/null; then
+              FILES=$(git diff --name-only ${{ inputs.before_sha }} ${{ github.sha }})
+            elif git rev-parse HEAD^ >/dev/null 2>&1; then
               FILES=$(git diff --name-only HEAD^ HEAD)
             else
               FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
