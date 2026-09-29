@@ -15,9 +15,6 @@
  * HEAD before trusting it — a rewritten branch or a stale/cross-branch run must not produce a
  * bogus diff range.
  *
- * An explicit override (workflow_dispatch's own `before_sha` input) always wins and skips the
- * lookup entirely, so a manual dispatch keeps deciding its own base.
- *
  * The lookup is restricted to `workflow_dispatch` runs, which is exactly how CI triggers a real
  * build/deploy (`gh workflow run`). This excludes a `workflow_call` dry run — e.g. `validate-images`
  * calling build-push-images.yml with `push: false` on every PR — from ever counting as "the last
@@ -25,9 +22,12 @@
  * branch is not filtered out (the run event looks identical); that is a deliberate, rare action, and
  * its effect self-corrects on the next real push rather than causing a lasting silent miss.
  *
+ * This script only resolves a base for CI's own push-triggered dispatch of build-push-images.yml /
+ * deploy-k8s-resources.yml. Each of those workflows keeps its own separate `before_sha` input for a
+ * human's manual workflow_dispatch override — unrelated to and untouched by this script.
+ *
  * Usage:
  *   node tools/ci/last-success-base.js --workflow=build-push-images.yml --branch=dev --repo=owner/repo
- *   node tools/ci/last-success-base.js --workflow=build-push-images.yml --branch=dev --explicit-before=<sha>
  *
  * Prints the resolved base SHA to stdout (empty when none is safe to use — the caller must then
  * fall back to building/deploying everything, per the module contract below). Always exits 0;
@@ -37,14 +37,12 @@
 const { execFileSync } = require('node:child_process');
 
 function parseArgs(argv) {
-  const args = { workflow: '', branch: '', head: 'HEAD', explicitBefore: '', repo: '' };
+  const args = { workflow: '', branch: '', head: 'HEAD', repo: '' };
   for (const arg of argv) {
     if (arg.startsWith('--workflow=')) args.workflow = arg.slice('--workflow='.length);
     else if (arg.startsWith('--branch=')) args.branch = arg.slice('--branch='.length);
     else if (arg.startsWith('--head=')) args.head = arg.slice('--head='.length);
     else if (arg.startsWith('--repo=')) args.repo = arg.slice('--repo='.length);
-    else if (arg.startsWith('--explicit-before='))
-      args.explicitBefore = arg.slice('--explicit-before='.length);
   }
   return args;
 }
@@ -106,18 +104,7 @@ function isAncestor(sha, head) {
  * `git`. Returns `{ base, reason }`; `base` is `''` when the caller should fall back to
  * building/deploying everything instead of trusting a diff.
  */
-function resolveBase({
-  workflow,
-  branch,
-  head,
-  repo,
-  explicitBefore,
-  findLastSuccess,
-  checkAncestor,
-}) {
-  if (explicitBefore) {
-    return { base: explicitBefore, reason: 'explicit override' };
-  }
+function resolveBase({ workflow, branch, head, repo, findLastSuccess, checkAncestor }) {
   const candidate = findLastSuccess(workflow, branch, repo);
   if (!candidate) {
     return { base: '', reason: `no successful ${workflow} run found on ${branch}` };
@@ -135,7 +122,6 @@ function main() {
     branch: args.branch,
     head: args.head,
     repo: args.repo,
-    explicitBefore: args.explicitBefore,
     findLastSuccess: lastSuccessfulRunSha,
     checkAncestor: isAncestor,
   });
