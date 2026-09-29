@@ -372,40 +372,25 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
                 e.stopPropagation();
                 toggleSave(listing.id);
               }}
-              className="group/save relative flex h-4 w-4 items-center justify-center rounded-full transition-colors hover:bg-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
+              className="relative flex h-4 w-4 items-center justify-center rounded-full text-ink-muted transition-colors hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
               aria-label={saved ? 'Unsave' : 'Save'}
             >
               <span aria-hidden="true" className="absolute -inset-0.5" />
               <Heart
                 size={16}
-                className={`transition-transform group-hover/save:scale-110 ${
-                  saved ? 'fill-brand stroke-brand' : 'fill-none stroke-ink-muted'
-                }`}
+                className={saved ? 'fill-brand stroke-brand' : 'fill-none stroke-current'}
               />
             </button>
 
-            {/*
-             * Each action button below carries its own **named** group (`group/save`,
-             * `group/share`, and `ListingCardMenu`'s own `group/more`) rather than the bare
-             * `group` these once used. The card root also carries a bare `group` class
-             * (currently unused by any `group-hover`), and Tailwind's `group-hover:` matches
-             * *any* ancestor with class `group` being hovered — not only the nearest one. With a
-             * bare `group` on every button, hovering one button also counted as hovering the
-             * card's own `group`, which every sibling button's icon was also a descendant of, so
-             * all three icons scaled up together. Naming each button's group scopes the match to
-             * that specific button.
-             */}
+            {/* Hover changes the icon color only (`hover:text-ink`), so no group variant is needed. */}
             <button
               type="button"
               onClick={handleShare}
-              className="group/share relative flex h-4 w-4 items-center justify-center rounded-full transition-colors hover:bg-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
+              className="relative flex h-4 w-4 items-center justify-center rounded-full text-ink-muted transition-colors hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
               aria-label="Share this listing"
             >
               <span aria-hidden="true" className="absolute -inset-0.5" />
-              <Share2
-                size={16}
-                className="stroke-ink-muted transition-transform group-hover/share:scale-110"
-              />
+              <Share2 size={16} className="stroke-current" />
             </button>
 
             {/*

@@ -337,41 +337,28 @@ describe('ListingCard', () => {
     });
 
     /**
-     * #458 bug fix: hovering one action button used to animate all three, because their icons'
-     * `group-hover:` matched the card root's own bare `group` — any ancestor named `group` being
-     * hovered satisfies `group-hover:`, not only the nearest one, so hovering the card anywhere
-     * (including over a sibling button) hovered every button's icon at once. Each button now
-     * carries its own named group (`group/save`, `group/share`, `group/more`) with a matching
-     * `group-hover/*:scale-110`, which scopes the match to that specific button. jsdom applies no
-     * stylesheet and cannot simulate real `:hover`, so this pins the classes the scoping depends
-     * on rather than the resulting animation.
+     * #464. Hover changes the icon color only. Each button reacts to its own `hover:`, with no
+     * background, ring or scale. jsdom cannot simulate real `:hover`, so this pins the classes.
      */
-    it('scopes each action icon’s hover animation to its own button, not the card or its siblings', () => {
+    it('changes only the icon color on hover, per button', () => {
       render(<ListingCard listing={aListingCardRow()} />);
 
-      const saveButton = screen.getByRole('button', { name: /save/i });
-      const shareButton = screen.getByRole('button', { name: /share this listing/i });
-      const moreButton = screen.getByLabelText('More options');
+      const buttons = [
+        screen.getByRole('button', { name: /save/i }),
+        screen.getByRole('button', { name: /share this listing/i }),
+        screen.getByLabelText('More options'),
+      ];
 
-      expect(saveButton.className).toContain('group/save');
-      expect(shareButton.className).toContain('group/share');
-      expect(moreButton.className).toContain('group/more');
-
-      // None of the three carries the old bare `group` class, which is what let the card root's
-      // own `group` stand in for any one of them.
-      for (const button of [saveButton, shareButton, moreButton]) {
-        expect(button.className.split(/\s+/)).not.toContain('group');
+      for (const button of buttons) {
+        const classes = button.className.split(/\s+/);
+        expect(classes).toContain('hover:text-ink');
+        expect(classes).toContain('text-ink-muted');
+        expect(classes).toContain('focus-visible:outline');
+        expect(button.className).not.toMatch(/hover:bg-|hover:ring|scale-|group/);
+        expect(button.querySelector('svg')?.getAttribute('class')).not.toMatch(
+          /scale-|group-hover/,
+        );
       }
-
-      expect(saveButton.querySelector('svg')?.getAttribute('class')).toContain(
-        'group-hover/save:scale-110',
-      );
-      expect(shareButton.querySelector('svg')?.getAttribute('class')).toContain(
-        'group-hover/share:scale-110',
-      );
-      expect(moreButton.querySelector('svg')?.getAttribute('class')).toContain(
-        'group-hover/more:scale-110',
-      );
     });
   });
 
