@@ -97,7 +97,8 @@ export function ListingCardSkeleton() {
         {/* #433/#438. Mirrors the footer row: one line, avatar circle, a name bar, three action
             dots — the loaded row never wraps to a second line, so neither does this. */}
         <div className="mt-1 flex items-center gap-1">
-          <span className={`h-4 w-4 shrink-0 rounded-full ${FILL}`} />
+          {/* #452. Matches the loaded avatar's 17px — one px up from the 16px icon row. */}
+          <span className={`h-[17px] w-[17px] shrink-0 rounded-full ${FILL}`} />
           <span className="min-w-0 flex-1 text-[13px]">
             <Bar />
           </span>

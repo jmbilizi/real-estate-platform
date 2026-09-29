@@ -1,6 +1,7 @@
 'use client';
 
-import { Heart, MoreHorizontal, Share2 } from 'lucide-react';
+import { Copy, Heart, Share2 } from 'lucide-react';
+import ListingCardMenu from '@/components/ListingCardMenu';
 import type { ListingCardRow } from '@/lib/types';
 import { useApp } from '@/lib/context';
 import { openListingPanel } from '@/lib/listing-panel';
@@ -84,11 +85,11 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
     else toast('We could not copy the link.', 'error');
   }
 
-  /** #433. The "···" menu's one item: a direct copy, no share-sheet attempt. */
+  /** #433/#452. The more-options menu's one item: a direct copy, no share-sheet attempt. Closing
+   *  the menu itself is `ListingCardMenu`'s job, not this handler's. */
   async function handleCopyLink(e: React.MouseEvent<HTMLButtonElement>) {
     e.preventDefault();
     e.stopPropagation();
-    e.currentTarget.closest('details')?.removeAttribute('open');
     const url = listingShareUrl(listing.propertyPath, window.location.origin);
     if (await copyToClipboard(url)) toast('Link copied');
     else toast('We could not copy the link.', 'error');
@@ -390,9 +391,12 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
          */}
         <div className="mt-1 flex items-center gap-1">
           <div className="flex min-w-0 flex-1 items-center gap-0.5">
+            {/* #452. One step up from the icon row's 16px — 17px is the smallest change that
+                still reads as deliberate, and the initials at 7px keep clear headroom at 17px, so
+                the type size does not need to grow with it. */}
             <span
               aria-hidden="true"
-              className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-ink-muted text-[7px] font-semibold text-white"
+              className="flex h-[17px] w-[17px] shrink-0 items-center justify-center rounded-full bg-ink-muted text-[7px] font-semibold text-white"
             >
               {officeInitials(listing.officeName)}
             </span>
@@ -452,35 +456,16 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
             </button>
 
             {/*
-             * A native `<details>`/`<summary>` pair: focusable and keyboard-toggleable with no
-             * extra state. `onClick` on the wrapper, not each child, stops the card's own
-             * `onClick` (which opens the listing panel) from firing regardless of which part
-             * inside the menu was clicked.
+             * #452. Portaled to `document.body` so the card's own `overflow-hidden`, the
+             * carousel scroller's `overflow-x-auto` (`ListingRow.tsx`) and the search grid never
+             * clip or hide it — see `ListingCardMenu` for the positioning, focus and ARIA detail.
              *
              * The menu carries only "Copy link" — "Hide this home" and "Report a problem" are not
              * wired, because neither feature exists yet anywhere else in the app (#433).
              */}
-            <details className="relative" onClick={(e) => e.stopPropagation()}>
-              <summary
-                className="group relative flex h-4 w-4 cursor-pointer list-none items-center justify-center rounded-full transition-colors hover:bg-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink [&::-webkit-details-marker]:hidden"
-                aria-label="More options"
-              >
-                <span aria-hidden="true" className="absolute -inset-0.5" />
-                <MoreHorizontal
-                  size={16}
-                  className="stroke-ink-muted transition-transform group-hover:scale-110"
-                />
-              </summary>
-              <div className="absolute right-0 z-20 mt-1 w-32 rounded-md border border-surface-border bg-white py-1 shadow-card">
-                <button
-                  type="button"
-                  onClick={handleCopyLink}
-                  className="block w-full px-3 py-1.5 text-left text-[13px] text-ink hover:bg-surface-alt"
-                >
-                  Copy link
-                </button>
-              </div>
-            </details>
+            <ListingCardMenu
+              items={[{ label: 'Copy link', icon: Copy, onSelect: handleCopyLink }]}
+            />
           </div>
         </div>
       </div>
