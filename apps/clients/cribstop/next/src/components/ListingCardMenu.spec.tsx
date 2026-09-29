@@ -17,6 +17,16 @@ describe('ListingCardMenu (#452)', () => {
     expect(screen.getByLabelText('More options')).toBeInTheDocument();
   });
 
+  it('sizes the trigger to the dots column, so the row gap spaces it like save and share (#467)', () => {
+    renderMenu();
+    const trigger = screen.getByLabelText('More options');
+    const glyph = trigger.querySelector('svg');
+
+    expect(trigger).toHaveClass('w-1');
+    expect(glyph).toHaveAttribute('width', '4');
+    expect(glyph).toHaveAttribute('viewBox', '8 0 6 24');
+  });
+
   it('opens the menu on trigger click, with correct ARIA', () => {
     renderMenu();
     const trigger = screen.getByLabelText('More options');
