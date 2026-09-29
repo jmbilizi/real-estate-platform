@@ -82,31 +82,35 @@ export function ListingCardSkeleton() {
     // says what the element IS survives changes to how it looks.
     <div aria-hidden="true" data-skeleton-card>
       <div className={`aspect-[4/3] overflow-hidden rounded-md ${FILL}`} />
-      {/* Mirrors ListingCard: pt-1.5, no label row (it renders only when a label applies, and a
-          loading card has none), and the address line in the 13px/18px system face. */}
+      {/* #458. Mirrors ListingCard: pt-1.5, no label row (it renders only when a label applies,
+          and a loading card has none). Order: price + three action dots, facts, address,
+          attribution (avatar + name bar). */}
       <div className="pt-1.5">
-        <h3 className="truncate font-system text-[13px] font-medium leading-[18px]">
-          <Bar className="w-3/5" />
-        </h3>
-        <p className="h-[18px] text-[13px] leading-[18px]">
+        {/* Price line, with the save/share/more dots beside it — the loaded row never wraps to a
+            second line, so neither does this. */}
+        <div className="flex items-center gap-1">
+          <p className="min-w-0 flex-1 text-base">
+            <Bar className="w-2/5" />
+          </p>
+          <div className="flex shrink-0 items-center gap-1">
+            <span className={`h-4 w-4 rounded-full ${FILL}`} />
+            <span className={`h-4 w-4 rounded-full ${FILL}`} />
+            <span className={`h-4 w-4 rounded-full ${FILL}`} />
+          </div>
+        </div>
+        <p className="mt-0.5 h-[18px] text-[13px] leading-[18px]">
           <Bar className="w-4/5" />
         </p>
-        <p className="mt-0.5 text-base">
-          <Bar className="w-2/5" />
-        </p>
-        {/* #433/#438. Mirrors the footer row: one line, avatar circle, a name bar, three action
-            dots — the loaded row never wraps to a second line, so neither does this. */}
+        <h3 className="mt-0.5 truncate font-system text-[13px] font-normal leading-[18px]">
+          <Bar className="w-3/5" />
+        </h3>
+        {/* #433/#438/#458. Attribution row: avatar circle, a name bar. */}
         <div className="mt-1 flex items-center gap-1">
           {/* #452. Matches the loaded avatar's 17px — one px up from the 16px icon row. */}
           <span className={`h-[17px] w-[17px] shrink-0 rounded-full ${FILL}`} />
           <span className="min-w-0 flex-1 text-[13px]">
             <Bar />
           </span>
-          <div className="flex shrink-0 items-center gap-1">
-            <span className={`h-4 w-4 rounded-full ${FILL}`} />
-            <span className={`h-4 w-4 rounded-full ${FILL}`} />
-            <span className={`h-4 w-4 rounded-full ${FILL}`} />
-          </div>
         </div>
       </div>
     </div>

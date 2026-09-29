@@ -311,8 +311,8 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
        * - the stats line (absent for a parcel with unknown lot size, or an all-null dwelling) —
        *   `h-[18px]`, which is `caption-sm`'s line box; a slot sized for the old 12px text would
        *   clip the 13px it now holds
-       * - the footer row (office avatar/name, time on market, save/share/more) — one row, always
-       *   present (see #433 below)
+       * - the attribution row (office avatar/name, time on market) — one row, always present
+       *   (see #433/#458 below). Save/share/more live on the price line instead (#458).
        *
        * The open-house date row is gone entirely — it moved onto the image badge, and it was the
        * row that only some cards had.
@@ -336,42 +336,109 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
           </div>
         )}
 
-        {/* The property address in the platform UI face: small, medium weight, tight tracking. */}
-        <h3 className="truncate font-system text-[13px] font-medium leading-[18px] tracking-[-0.01em] text-ink">
-          {formatCardAddress(listing)}
-        </h3>
+        {/*
+         * #458. Price leads the body, with save/share/more beside it on the same line.
+         * `title-md` (16px/600) on the figure, `body-md` (16/400) on the qualifiers. Was 14/600,
+         * which the scale does not pair — and it left the price no louder than the title.
+         *
+         * #438. Save, share, more. Each icon is 16px with a `gap-1` (4px) between buttons, which
+         * puts adjacent button centres 20px apart — too tight for a 44px hit area per icon
+         * without overlapping its neighbour. `-inset-0.5` (2px a side) gives each button a 20px
+         * overlay, the largest square that touches its neighbour without overlapping it. That is
+         * smaller than the 44px target; the card's narrowest width (~151px, home carousel) cannot
+         * fit three 44px overlays side by side while the price keeps any legible width at all.
+         */}
+        <div className="flex items-center gap-1">
+          <p className="min-w-0 flex-1 truncate text-base text-ink">
+            {soldLine ? (
+              <span className="font-semibold">{soldLine}</span>
+            ) : (
+              <>
+                <span className={price.isWithheld ? 'text-ink-body' : 'font-semibold'}>
+                  {price.text.split('/')[0]}
+                </span>
+                {!price.isWithheld && listing.listingType === 'rent' && (
+                  <span className="text-ink-muted"> /month</span>
+                )}
+              </>
+            )}
+          </p>
 
-        {/* Reserved whether or not there are stats to show, so the price never shifts up a row. */}
-        <p className="h-[18px] truncate text-[13px] leading-[18px] text-ink-muted">
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleSave(listing.id);
+              }}
+              className="group/save relative flex h-4 w-4 items-center justify-center rounded-full transition-colors hover:bg-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
+              aria-label={saved ? 'Unsave' : 'Save'}
+            >
+              <span aria-hidden="true" className="absolute -inset-0.5" />
+              <Heart
+                size={16}
+                className={`transition-transform group-hover/save:scale-110 ${
+                  saved ? 'fill-brand stroke-brand' : 'fill-none stroke-ink-muted'
+                }`}
+              />
+            </button>
+
+            {/*
+             * Each action button below carries its own **named** group (`group/save`,
+             * `group/share`, and `ListingCardMenu`'s own `group/more`) rather than the bare
+             * `group` these once used. The card root also carries a bare `group` class
+             * (currently unused by any `group-hover`), and Tailwind's `group-hover:` matches
+             * *any* ancestor with class `group` being hovered — not only the nearest one. With a
+             * bare `group` on every button, hovering one button also counted as hovering the
+             * card's own `group`, which every sibling button's icon was also a descendant of, so
+             * all three icons scaled up together. Naming each button's group scopes the match to
+             * that specific button.
+             */}
+            <button
+              type="button"
+              onClick={handleShare}
+              className="group/share relative flex h-4 w-4 items-center justify-center rounded-full transition-colors hover:bg-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
+              aria-label="Share this listing"
+            >
+              <span aria-hidden="true" className="absolute -inset-0.5" />
+              <Share2
+                size={16}
+                className="stroke-ink-muted transition-transform group-hover/share:scale-110"
+              />
+            </button>
+
+            {/*
+             * #452. Portaled to `document.body` so the card's own `overflow-hidden`, the
+             * carousel scroller's `overflow-x-auto` (`ListingRow.tsx`) and the search grid never
+             * clip or hide it — see `ListingCardMenu` for the positioning, focus and ARIA detail.
+             *
+             * The menu carries only "Copy link" — "Hide this home" and "Report a problem" are not
+             * wired, because neither feature exists yet anywhere else in the app (#433).
+             */}
+            <ListingCardMenu
+              items={[{ label: 'Copy link', icon: Copy, onSelect: handleCopyLink }]}
+            />
+          </div>
+        </div>
+
+        {/* Reserved whether or not there are stats to show, so the address never shifts up a row. */}
+        <p className="mt-0.5 h-[18px] truncate text-[13px] leading-[18px] text-ink-muted">
           {statsLine ?? ' '}
         </p>
 
-        {/* `title-md` (16px/600) on the figure, `body-md` (16/400) on the qualifiers. Was 14/600,
-            which the scale does not pair — and it left the price no louder than the title. */}
-        <p className="mt-0.5 truncate text-base text-ink">
-          {soldLine ? (
-            <span className="font-semibold">{soldLine}</span>
-          ) : (
-            <>
-              <span className={price.isWithheld ? 'text-ink-body' : 'font-semibold'}>
-                {price.text.split('/')[0]}
-              </span>
-              {!price.isWithheld && listing.listingType === 'rent' && (
-                <span className="text-ink-muted"> /month</span>
-              )}
-            </>
-          )}
-        </p>
+        {/* #458. The property address is secondary now that price leads: normal weight, the same
+            13px/18px system face and `ink-body` color tier as the attribution row below it. */}
+        <h3 className="mt-0.5 truncate font-system text-[13px] font-normal leading-[18px] tracking-[-0.01em] text-ink-body">
+          {formatCardAddress(listing)}
+        </h3>
 
         {/*
-         * #433/#438. One footer row at every card width: office avatar + name + time on market,
-         * then save/share/more. This used to fork into a compact/full pair keyed on a CSS
-         * container query, dropping the name to `line-clamp-2` and folding Share into the "···"
-         * menu below 220px. The stakeholder ruled the row must never wrap to a second line and
-         * Share must stay its own control at every width, so there is one render now: the name
-         * (`truncate`, never `line-clamp-2`) absorbs all the truncation, and the three actions
-         * render at a size that always fits — 16px icons, `gap-1` — rather than growing at wider
-         * cards.
+         * #433/#438/#458. Attribution row: office avatar + name on the left, time on market on
+         * the far right. Actions moved onto the price line above (#458). This used to fork into a
+         * compact/full pair keyed on a CSS container query, dropping the name to `line-clamp-2`.
+         * The stakeholder ruled the row must never wrap to a second line, so there is one render
+         * now: the name (`truncate`, never `line-clamp-2`) absorbs all the truncation.
          *
          * NAR 7.58 / Bright MLS IDX still requires the listing firm's name, reasonably prominent,
          * in a typeface no smaller than the card's own median listing-data text (13/14px here).
@@ -381,13 +448,11 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
          * pattern the prior line already used. The office name is `text-[13px]`, at that floor.
          *
          * #438 compliance follow-up: at the ~151px home-carousel card, the name could shrink to
-         * 5-9 visible characters — not "reasonably prominent". Two changes claw the width back
-         * without giving up the three action icons the stakeholder asked to keep at every width:
-         * `min-w-[72px]` floors the name so it cannot be crushed further, and time on market —
-         * the least essential fact in this row — hides below 200px (`.listing-card-time-on-market`
-         * in globals.css, queried off `.listing-card-root`). The avatar-to-name gap also tightens
-         * to `gap-0.5` (2px) to reclaim a little more. See `ListingCard.spec.tsx`'s "footer name
-         * width budget" test for the arithmetic this is sized against.
+         * 5-9 visible characters — not "reasonably prominent". `min-w-[72px]` floors the name so
+         * it cannot be crushed further, and time on market — the least essential fact in this row
+         * — hides below 200px (`.listing-card-time-on-market` in globals.css, queried off
+         * `.listing-card-root`). See `ListingCard.spec.tsx`'s "footer name width budget" test for
+         * the arithmetic this is sized against.
          */}
         <div className="mt-1 flex items-center gap-1">
           <div className="flex min-w-0 flex-1 items-center gap-0.5">
@@ -413,60 +478,6 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
               <span aria-hidden="true">·</span> {timeOnMarket}
             </span>
           )}
-
-          {/*
-           * #438. Save, share, more. Each icon is 16px with a `gap-1` (4px) between buttons, which
-           * puts adjacent button centres 20px apart — too tight for a 44px hit area per icon
-           * without overlapping its neighbour. `-inset-0.5` (2px a side) gives each button a 20px
-           * overlay, the largest square that touches its neighbour without overlapping it. That is
-           * smaller than the 44px target; the card's narrowest width (~151px, home carousel) cannot
-           * fit three 44px overlays side by side while the name keeps any legible width at all.
-           */}
-          <div className="flex shrink-0 items-center gap-1">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                toggleSave(listing.id);
-              }}
-              className="group relative flex h-4 w-4 items-center justify-center rounded-full transition-colors hover:bg-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
-              aria-label={saved ? 'Unsave' : 'Save'}
-            >
-              <span aria-hidden="true" className="absolute -inset-0.5" />
-              <Heart
-                size={16}
-                className={`transition-transform group-hover:scale-110 ${
-                  saved ? 'fill-brand stroke-brand' : 'fill-none stroke-ink-muted'
-                }`}
-              />
-            </button>
-
-            <button
-              type="button"
-              onClick={handleShare}
-              className="group relative flex h-4 w-4 items-center justify-center rounded-full transition-colors hover:bg-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
-              aria-label="Share this listing"
-            >
-              <span aria-hidden="true" className="absolute -inset-0.5" />
-              <Share2
-                size={16}
-                className="stroke-ink-muted transition-transform group-hover:scale-110"
-              />
-            </button>
-
-            {/*
-             * #452. Portaled to `document.body` so the card's own `overflow-hidden`, the
-             * carousel scroller's `overflow-x-auto` (`ListingRow.tsx`) and the search grid never
-             * clip or hide it — see `ListingCardMenu` for the positioning, focus and ARIA detail.
-             *
-             * The menu carries only "Copy link" — "Hide this home" and "Report a problem" are not
-             * wired, because neither feature exists yet anywhere else in the app (#433).
-             */}
-            <ListingCardMenu
-              items={[{ label: 'Copy link', icon: Copy, onSelect: handleCopyLink }]}
-            />
-          </div>
         </div>
       </div>
     </div>

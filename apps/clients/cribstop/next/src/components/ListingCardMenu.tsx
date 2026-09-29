@@ -155,15 +155,22 @@ export default function ListingCardMenu({
           e.stopPropagation();
           setOpen((v) => !v);
         }}
-        className="group relative flex h-4 w-4 items-center justify-center rounded-full transition-colors hover:bg-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
+        className="group/more relative flex h-4 w-4 items-center justify-center rounded-full transition-colors hover:bg-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
         aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}
       >
+        {/*
+         * Named group (`group/more`), not the bare `group` this used: the card root
+         * (`ListingCard.tsx`) also carries a bare `group`, and Tailwind's `group-hover:` matches
+         * any ancestor with class `group`, not only the nearest one — so hovering the save or
+         * share button next to this trigger also counted as hovering the card's `group` and
+         * scaled this icon too. See `ListingCard.tsx`'s save/share buttons for the same fix.
+         */}
         <span aria-hidden="true" className="absolute -inset-0.5" />
         <MoreVertical
           size={16}
-          className="stroke-ink-muted transition-transform group-hover:scale-110"
+          className="stroke-ink-muted transition-transform group-hover/more:scale-110"
         />
       </button>
       {open &&
