@@ -230,7 +230,7 @@ describe('ListingCard', () => {
      */
     it('footer name width budget: reserves at least 10 characters at the ~151px home-carousel card', () => {
       const CARD_WIDTH = 151; // narrowest card, per the home-carousel comments elsewhere in this file
-      const AVATAR = 16; // h-4 w-4
+      const AVATAR = 17; // #452: one px up from the 16px icon row
       const AVATAR_NAME_GAP = 2; // gap-0.5, between the avatar and the name
       const NAME_ACTIONS_GAP = 4; // gap-1, between the name and the action cluster
       const ACTION_ICON = 16; // each of heart/share/more
@@ -310,6 +310,8 @@ describe('ListingCard', () => {
 
       render(<ListingCard listing={aListingCardRow({ propertyPath: '/property/abc/123' })} />);
 
+      // The menu is portaled and renders nothing until opened (#452).
+      fireEvent.click(screen.getByLabelText('More options'));
       fireEvent.click(screen.getByText('Copy link'));
 
       await waitFor(() => expect(mockToast).toHaveBeenCalledWith('Link copied'));
