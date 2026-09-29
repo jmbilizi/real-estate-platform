@@ -257,6 +257,7 @@ export interface ListingDetailView {
   lastUpdated: string;
   listedAt: string | null;
   comingSoonDate: string | null;
+  listedAtPrecise: string | null;
   description: string | null;
   media: Media[];
   openHouses: OpenHouse[];
@@ -340,6 +341,7 @@ export function toListingDetailView(detail: ListingDetail): ListingDetailView {
     lastUpdated: listing.lastUpdated,
     listedAt: listing.listedAt,
     comingSoonDate: listing.comingSoonDate,
+    listedAtPrecise: listing.listedAtPrecise,
     description: listing.description,
     media: listing.media,
     openHouses: listing.openHouses,

@@ -23,6 +23,8 @@ export const BRIGHT_SYNC_SELECT: readonly string[] = Object.freeze([
   // records (production feed, 2026-09-28). `MLSListDate` above is the date the record ENTERED
   // Coming Soon, not the date it goes active; this is the field that answers that question.
   'ExpectedOnMarketDate',
+  // #459. Only a same-day, non-midnight value is a list time. See `derivePreciseListedAt`.
+  'StatusChangeTimestamp',
   'DaysOnMarket',
   'UnparsedAddress',
   'StreetNumber',

@@ -77,6 +77,8 @@ export interface MappedListingInput {
    * the feed omits it or the listing is not Coming Soon.
    */
   readonly comingSoonDate: string | null;
+  /** #459. `StatusChangeTimestamp` as an ISO instant. Null when absent or unparseable. */
+  readonly statusChangedAt: string | null;
   /** #391. `DaysOnMarket` — the current marketing period, not the lifetime total. */
   readonly daysOnMarket: number | null;
 }
@@ -182,6 +184,15 @@ function toDateInstant(value: unknown): string | null {
   const date = toDateOnly(value);
   const parsed = date === null ? null : parseCalendarDate(date);
   return parsed === null ? null : parsed.toISOString();
+}
+
+/** #459. `StatusChangeTimestamp` is `Edm.DateTimeOffset`. Null when blank or unparseable. */
+function toTimestampInstant(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return null;
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
 function reject(listingKey: string | null, reason: RejectReason): RejectedRecord {
@@ -341,6 +352,7 @@ export function mapBrightPropertyRecord(
       lastUpdated,
       listedAt: toDateInstant(payload.MLSListDate),
       comingSoonDate: toDateInstant(payload.ExpectedOnMarketDate),
+      statusChangedAt: toTimestampInstant(payload.StatusChangeTimestamp),
       daysOnMarket: daysOnMarket.value,
     },
   };

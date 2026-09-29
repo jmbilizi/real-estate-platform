@@ -61,6 +61,25 @@ export function formatRelativeTime(iso: string, now: number = Date.now()): strin
 }
 
 /**
+ * #459. "N min" under an hour, "N hr" under 24 hours, from the server-proven list instant.
+ * `null` when there is no instant, it is unparseable, or it is 24 hours old or more, so the caller
+ * falls back to the day buckets. Never derived from a date-only value.
+ */
+function formatPreciseTimeOnMarket(listedAtPrecise: string | null, now: number): string | null {
+  if (listedAtPrecise === null) {
+    return null;
+  }
+  const preciseMs = new Date(listedAtPrecise).getTime();
+  if (Number.isNaN(preciseMs)) {
+    return null;
+  }
+  const minutes = Math.max(1, Math.floor((now - preciseMs) / 60_000));
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  return hours < 24 ? `${hours} hr` : null;
+}
+
+/**
  * #433. Time on market, short bucketed form: "today", "1d"–"6d", "1w"–"4w", "1mo"–"11mo", "1y"+.
  * `null` when `listedAt` is unknown — the caller renders no separating dot and no text, not a
  * placeholder.
@@ -72,7 +91,12 @@ export function formatRelativeTime(iso: string, now: number = Date.now()): strin
 export function formatTimeOnMarket(
   listedAt: string | null,
   now: number = Date.now(),
+  listedAtPrecise: string | null = null,
 ): string | null {
+  const precise = formatPreciseTimeOnMarket(listedAtPrecise, now);
+  if (precise !== null) {
+    return precise;
+  }
   if (listedAt === null) {
     return null;
   }

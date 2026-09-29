@@ -64,6 +64,9 @@ export const listingCardSchema = z
     // #424. The date a Coming Soon listing goes active. Null when the feed carries none, or the
     // listing is not Coming Soon. Drives the card's status badge only.
     comingSoonDate: z.iso.datetime().nullable(),
+    // #459. The instant the listing was listed, only when the feed proves it: the status change is
+    // on the list date and is not a date-only midnight. Null otherwise. Never a guess.
+    listedAtPrecise: z.iso.datetime().nullable(),
   })
   .extend(attributionSchema.shape);
 
