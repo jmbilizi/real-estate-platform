@@ -25,8 +25,27 @@
  * cannot collide with anything here — the search bar's own dropdown panels, the gallery lightbox
  * inside a dialog, the map's controls and overlays. Those live in their component's own stacking
  * context and are its business alone.
+ *
+ * That containment has to be real, not assumed (#453). A scoped z-index only stays scoped if some
+ * ancestor actually establishes a stacking context — `position: fixed`/`absolute` with an explicit
+ * `z-index` (every fixed surface above), or `isolation: isolate` plus an explicit `z-index` for a
+ * surface that has to stay in normal document flow (`CompactSearchBar`'s in-page 'large' mode).
+ * Skip that and the "scoped" z-index has nothing to be scoped within, so it falls back to whatever
+ * real stacking context happens to exist further up the tree and can end up compared against page
+ * content it was never meant to meet.
  */
 export const Z_LAYERS = {
+  /**
+   * `CompactSearchBar`'s in-page ('large') layout — still in normal document flow, not docked.
+   * Below `chrome`, on purpose (#453): `ScrollSentinel`'s scroll listener is rAF-throttled, so for
+   * up to a frame the in-flow bar can scroll past the sticky header's bottom edge before the swap
+   * to the fixed, docked `searchBar` layer fires. Giving this layer `searchBar`'s own z-index
+   * (above `chrome`) made the bar paint over the header during exactly that frame — regressing the
+   * z-index-escape fix below into a header-occlusion bug. This value only has to beat ordinary,
+   * non-positioned page content (the carousel rows this layer exists to stay above); it does not
+   * need to, and must not, beat the header.
+   */
+  searchBarInPage: 10,
   /** Click-away catcher behind the expanded search bar — just under the chrome it dismisses. */
   navBackdrop: 49,
   /** The sticky site header. */

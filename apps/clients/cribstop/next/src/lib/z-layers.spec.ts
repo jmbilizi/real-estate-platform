@@ -20,6 +20,8 @@ describe('Z_LAYERS', () => {
    * page underneath. `Modal` sat at 50 against the docked bar's 55.
    */
   it.each([
+    ['searchBarInPage', 'navBackdrop'],
+    ['searchBarInPage', 'chrome'],
     ['navBackdrop', 'chrome'],
     ['chrome', 'searchBar'],
     ['searchBar', 'searchBarMorphGhost'],
@@ -29,6 +31,17 @@ describe('Z_LAYERS', () => {
     ['slidePanel', 'toast'],
   ] as const)('keeps %s below %s', (below, above) => {
     expect(Z_LAYERS[below]).toBeLessThan(Z_LAYERS[above]);
+  });
+
+  /**
+   * The in-flow search bar (#453's own regression) must stay below `chrome`: unlike `searchBar`,
+   * it is not docked, so it can still be on screen scrolled up against the sticky header for up to
+   * a frame before `ScrollSentinel`'s rAF-throttled swap takes it out of flow. Given `searchBar`'s
+   * own z-index there, that frame painted the in-page bar over the header.
+   */
+  it('keeps the in-flow search bar below chrome, unlike the docked one', () => {
+    expect(Z_LAYERS.searchBarInPage).toBeLessThan(Z_LAYERS.chrome);
+    expect(Z_LAYERS.searchBar).toBeGreaterThan(Z_LAYERS.chrome);
   });
 
   it('puts dialogs above every page-chrome layer, which is the invariant that regressed', () => {
