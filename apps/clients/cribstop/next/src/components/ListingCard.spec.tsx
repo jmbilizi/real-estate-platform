@@ -172,9 +172,10 @@ describe('ListingCard', () => {
     });
   });
 
-  describe('card footer — office avatar/name, time on market, actions (#433, #438)', () => {
-    // #438: one footer render at every card width — the compact/full container-query pair is
-    // gone, so every assertion here expects a single match.
+  describe('attribution row — office avatar/name, time on market (#433, #438, #458)', () => {
+    // #438: one row render at every card width — the compact/full container-query pair is gone,
+    // so every assertion here expects a single match. #458 moved save/share/more off this row and
+    // onto the price line — see the "price line" describe block below for those.
     it('shows the office name and its avatar initials, for every source', () => {
       render(
         <ListingCard
@@ -224,23 +225,21 @@ describe('ListingCard', () => {
      * width. jsdom does not compute layout or evaluate `@container` queries, so a rendered-pixel
      * assertion is not possible here — this pins the same pixel budget the CSS in globals.css and
      * the `min-w-[72px]`/`gap-0.5` classes in ListingCard.tsx are sized against, as a regression
-     * guard: if the icon count, icon size, or a gap grows without updating this test, the name's
-     * width floor is falling below the 10-character target described to
+     * guard: if the avatar size or its gap to the name grows without updating this test, the
+     * name's width floor is falling below the 10-character target described to
      * `cribstop-compliance-reviewer` for #438.
+     *
+     * #458 moved save/share/more off this row onto the price line, so the name no longer
+     * competes with an action cluster here — only the avatar and its gap count against the
+     * budget. Time on market is hidden below 200px (`.listing-card-time-on-market`), so it does
+     * not count against the budget at this width either.
      */
-    it('footer name width budget: reserves at least 10 characters at the ~151px home-carousel card', () => {
+    it('attribution row name width budget: reserves at least 10 characters at the ~151px home-carousel card', () => {
       const CARD_WIDTH = 151; // narrowest card, per the home-carousel comments elsewhere in this file
       const AVATAR = 17; // #452: one px up from the 16px icon row
       const AVATAR_NAME_GAP = 2; // gap-0.5, between the avatar and the name
-      const NAME_ACTIONS_GAP = 4; // gap-1, between the name and the action cluster
-      const ACTION_ICON = 16; // each of heart/share/more
-      const ACTION_ICON_GAP = 4; // gap-1, two gaps among three icons
-      const actionsCluster = ACTION_ICON * 3 + ACTION_ICON_GAP * 2;
 
-      // Time on market is hidden below 200px (`.listing-card-time-on-market`), so it and its two
-      // gaps do not count against the budget at this width.
-      const nameBudgetPx =
-        CARD_WIDTH - AVATAR - AVATAR_NAME_GAP - NAME_ACTIONS_GAP - actionsCluster;
+      const nameBudgetPx = CARD_WIDTH - AVATAR - AVATAR_NAME_GAP;
       expect(nameBudgetPx).toBeGreaterThanOrEqual(72); // matches min-w-[72px]
 
       const AVERAGE_CHAR_WIDTH_PX = 7; // measured for the row's 13px Manrope/system body text
@@ -248,7 +247,7 @@ describe('ListingCard', () => {
       expect(visibleCharacters).toBeGreaterThanOrEqual(10);
     });
 
-    it('renders the same footer for internal and other sources', () => {
+    it('renders the same attribution row for internal and other sources', () => {
       const { unmount } = render(<ListingCard listing={aListingCardRow({ source: 'internal' })} />);
       expect(screen.getByText('Real Broker, LLC')).toBeInTheDocument();
       unmount();
@@ -289,8 +288,10 @@ describe('ListingCard', () => {
 
       expect(screen.queryByText('·')).not.toBeInTheDocument();
     });
+  });
 
-    it('has the save control in the footer, not on the photo', () => {
+  describe('price line — price, save/share/more (#458)', () => {
+    it('has the save control on the price line, not on the photo', () => {
       render(<ListingCard listing={aListingCardRow()} />);
 
       expect(screen.getByRole('button', { name: /save/i })).toBeInTheDocument();
@@ -333,6 +334,44 @@ describe('ListingCard', () => {
         url: expect.stringContaining('/property/abc/123'),
       });
       restore();
+    });
+
+    /**
+     * #458 bug fix: hovering one action button used to animate all three, because their icons'
+     * `group-hover:` matched the card root's own bare `group` — any ancestor named `group` being
+     * hovered satisfies `group-hover:`, not only the nearest one, so hovering the card anywhere
+     * (including over a sibling button) hovered every button's icon at once. Each button now
+     * carries its own named group (`group/save`, `group/share`, `group/more`) with a matching
+     * `group-hover/*:scale-110`, which scopes the match to that specific button. jsdom applies no
+     * stylesheet and cannot simulate real `:hover`, so this pins the classes the scoping depends
+     * on rather than the resulting animation.
+     */
+    it('scopes each action icon’s hover animation to its own button, not the card or its siblings', () => {
+      render(<ListingCard listing={aListingCardRow()} />);
+
+      const saveButton = screen.getByRole('button', { name: /save/i });
+      const shareButton = screen.getByRole('button', { name: /share this listing/i });
+      const moreButton = screen.getByLabelText('More options');
+
+      expect(saveButton.className).toContain('group/save');
+      expect(shareButton.className).toContain('group/share');
+      expect(moreButton.className).toContain('group/more');
+
+      // None of the three carries the old bare `group` class, which is what let the card root's
+      // own `group` stand in for any one of them.
+      for (const button of [saveButton, shareButton, moreButton]) {
+        expect(button.className.split(/\s+/)).not.toContain('group');
+      }
+
+      expect(saveButton.querySelector('svg')?.getAttribute('class')).toContain(
+        'group-hover/save:scale-110',
+      );
+      expect(shareButton.querySelector('svg')?.getAttribute('class')).toContain(
+        'group-hover/share:scale-110',
+      );
+      expect(moreButton.querySelector('svg')?.getAttribute('class')).toContain(
+        'group-hover/more:scale-110',
+      );
     });
   });
 
@@ -497,6 +536,78 @@ describe('ListingCard', () => {
    * Uniform tile height in a grid. The variable rows each keep a reserved box, so a parcel, a sold
    * row, a withheld-price row and an open-house row all occupy the same number of rows.
    */
+  describe('body line order (#458)', () => {
+    /**
+     * The info block's direct children, top to bottom: an optional label row, then price, stats,
+     * address, attribution — read structurally rather than by text, so the test fails if a future
+     * change reorders the rows even when every row's own content still renders correctly.
+     */
+    function infoRows(container: HTMLElement): Element[] {
+      const info = container.querySelector('.pt-1\\.5');
+      return [...(info?.children ?? [])];
+    }
+
+    it('orders price, then facts, then address, then the attribution row — no label row', () => {
+      const { container } = render(
+        <ListingCard listing={aListingCardRow({ isSample: false, sponsored: false })} />,
+      );
+      const rows = infoRows(container);
+
+      expect(rows).toHaveLength(4);
+      const [price, facts, address, attribution] = rows;
+      expect(price.textContent).toContain('$');
+      expect(facts.textContent).toMatch(/\bbd\b/);
+      expect(address.textContent).toBe('100 Test St, Bethesda, MD 20814');
+      expect(attribution.textContent).toContain('Real Broker');
+    });
+
+    it('keeps the label row first when a disclosure label applies, ahead of price', () => {
+      const { container } = render(<ListingCard listing={aListingCardRow({ isSample: true })} />);
+      const rows = infoRows(container);
+
+      expect(rows).toHaveLength(5);
+      expect(rows[0].textContent).toMatch(/sample data/i);
+      expect(rows[1].textContent).toContain('$');
+    });
+
+    it('puts save/share/more on the price line, not the attribution row', () => {
+      const { container } = render(<ListingCard listing={aListingCardRow()} />);
+      const rows = infoRows(container);
+      const priceRow = rows.find((r) => r.textContent?.includes('$'));
+      const attributionRow = rows[rows.length - 1];
+
+      expect(priceRow?.querySelector('button[aria-label="Save"]')).toBeTruthy();
+      expect(attributionRow.querySelector('button[aria-label="Save"]')).toBeNull();
+    });
+
+    it('keeps the office name on the left and time on market on the right of the attribution row', () => {
+      render(
+        <ListingCard
+          listing={aListingCardRow({ listedAt: '2026-10-08T00:00:00.000Z', status: 'Active' })}
+        />,
+      );
+
+      const officeName = screen.getByText('Real Broker, LLC');
+      const timeOnMarket = document.querySelector('.listing-card-time-on-market');
+      const attributionRow = officeName.closest('.mt-1');
+
+      expect(attributionRow).toContainElement(timeOnMarket as HTMLElement);
+      // Office name's wrapper comes before the time-on-market span among the row's children.
+      const children = [...(attributionRow?.children ?? [])];
+      const officeWrapperIndex = children.findIndex((c) => c.contains(officeName));
+      const timeOnMarketIndex = children.findIndex((c) => c === timeOnMarket);
+      expect(officeWrapperIndex).toBeLessThan(timeOnMarketIndex);
+    });
+
+    it('keeps the address at normal weight, not bold', () => {
+      render(<ListingCard listing={aListingCardRow()} />);
+      const address = screen.getByText('100 Test St, Bethesda, MD 20814');
+
+      expect(address).toHaveClass('font-normal');
+      expect(address.className).not.toMatch(/font-(medium|semibold|bold)\b/);
+    });
+  });
+
   describe('grid uniformity', () => {
     /**
      * Scoped to the info block, not a bare `.h-5`.
@@ -563,9 +674,9 @@ describe('ListingCard', () => {
 
       const infoRowCounts = rows.map((row) => {
         const { container, unmount } = render(<ListingCard listing={row} />);
-        // The info block's direct children are the reserved slots: label row, title, stats, price,
-        // attribution. Every card must have the same number of them.
-        const info = container.querySelector('.pt-2');
+        // The info block's direct children are the reserved slots: label row, price, stats,
+        // address, attribution (#458 order). Every card must have the same number of them.
+        const info = container.querySelector('.pt-1\\.5');
         const count = info?.children.length ?? 0;
         unmount();
         return count;
@@ -578,7 +689,7 @@ describe('ListingCard', () => {
      * The invariant most likely to be broken by a future change to the image overlays, asserted
      * structurally because jsdom computes no layout.
      *
-     * A card's height is the image (fixed `aspect-square`) plus the info block. Nothing an overlay
+     * A card's height is the image (fixed `aspect-[4/3]`) plus the info block. Nothing an overlay
      * does may add to either — every badge is absolutely positioned inside the image, so it is out
      * of flow and contributes no height. This has been got wrong once already: the open-house
      * date/time began as a text row below the image and made open-house tiles taller than their
@@ -600,14 +711,14 @@ describe('ListingCard', () => {
       );
 
       const shape = (c: HTMLElement) => {
-        const image = c.querySelector('.aspect-square');
+        const image = c.querySelector('.listing-card-media');
         const inFlowOverlays = [...(image?.children ?? [])].filter(
           (el) => !el.className.includes('absolute'),
         );
         return {
           // The image's only in-flow child is the photo itself, however many badges are stacked.
           inFlowChildrenOfImage: inFlowOverlays.length,
-          infoRows: c.querySelector('.pt-2')?.children.length ?? 0,
+          infoRows: c.querySelector('.pt-1\\.5')?.children.length ?? 0,
         };
       };
 
