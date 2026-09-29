@@ -76,6 +76,37 @@ describe('ListingCardMenu (#452)', () => {
     expect(trigger).toHaveFocus();
   });
 
+  it('closes on Tab, since focus is about to leave it with no trap to catch it', () => {
+    renderMenu();
+    fireEvent.click(screen.getByLabelText('More options'));
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'Tab' });
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  it('wraps ArrowUp to the last item even when nothing in the menu has focus yet', () => {
+    // Two items: with only one, `(current - 1 + len) % len` happens to still resolve to index
+    // 0 for `current === -1` and the regression this pins would go uncaught.
+    render(
+      <ListingCardMenu
+        items={[
+          { label: 'Copy link', icon: Copy, onSelect: jest.fn() },
+          { label: 'Second', icon: Copy, onSelect: jest.fn() },
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText('More options'));
+    const last = screen.getByRole('menuitem', { name: 'Second' });
+    (document.activeElement as HTMLElement)?.blur();
+    expect(document.activeElement).not.toBe(last);
+
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'ArrowUp' });
+
+    expect(last).toHaveFocus();
+  });
+
   it('closes on scroll', () => {
     renderMenu();
     fireEvent.click(screen.getByLabelText('More options'));

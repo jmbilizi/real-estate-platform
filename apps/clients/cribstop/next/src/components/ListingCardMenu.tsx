@@ -85,6 +85,10 @@ export default function ListingCardMenu({
     }
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') closeAndReturnFocus();
+      // Tab moves focus out of the menu (there is no focus trap here — every item carries
+      // `tabIndex={-1}` and is reached only by arrow keys), so without this the panel stayed
+      // visible, floating, with focus already gone from it.
+      if (e.key === 'Tab') close();
     }
     function handleScrollOrResize() {
       close();
@@ -128,7 +132,10 @@ export default function ListingCardMenu({
       focusItem((current + 1) % els.length);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      focusItem((current - 1 + els.length) % els.length);
+      // `current === -1` (nothing in the menu has focus, e.g. focus was moved
+      // programmatically) must wrap to the last item, matching Home/End below — the plain
+      // modulo form lands one item short of that for a negative `current`.
+      focusItem(current <= 0 ? els.length - 1 : current - 1);
     } else if (e.key === 'Home') {
       e.preventDefault();
       focusItem(0);
