@@ -194,7 +194,9 @@ function commonFields(row: ListingCardDbRow): Record<string, unknown> {
     lastUpdated: instant(row.last_updated),
     listedAt: row.listed_at === null ? null : instant(row.listed_at),
     comingSoonDate: row.coming_soon_date === null ? null : instant(row.coming_soon_date),
-    listedAtPrecise: derivePreciseListedAt(row.listed_at, row.status_changed_at),
+    // #459. Only an Active listing: a later same-day flip (Pending, Under Contract) rewrites the timestamp.
+    listedAtPrecise:
+      row.status === 'Active' ? derivePreciseListedAt(row.listed_at, row.status_changed_at) : null,
     listingAgentName: row.listing_agent_name,
     brokerName: row.broker_name,
     brokerPhone: row.broker_phone,

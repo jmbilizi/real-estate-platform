@@ -145,6 +145,17 @@ describe('listedAtPrecise (#459)', () => {
     expect(row.listedAtPrecise).toBe('2026-09-22T04:16:22.000Z');
   });
 
+  it('serves null when the listing is no longer Active', () => {
+    const row = toListingCardRow(
+      cardDbRowFixture({
+        status: 'Pending',
+        listed_at: new Date('2026-09-22T00:00:00.000Z'),
+        status_changed_at: new Date('2026-09-22T19:00:00.000Z'),
+      }),
+    );
+    expect(row.listedAtPrecise).toBeNull();
+  });
+
   it('serves null for a later status change, and when there is no status change', () => {
     const later = toListingCardRow(
       cardDbRowFixture({
