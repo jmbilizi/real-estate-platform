@@ -267,6 +267,17 @@ const isMorphPair = (a: DockMode, b: DockMode) => a !== b && (a === 'large') !==
 // reserve safe-area-inset-top (#400 follow-up). Their offsets stay bare numbers
 // so they track the header instead of drifting from it; only overlays that own
 // their own space, like the mobileSheetMode sheet below, add the inset.
+/**
+ * The in-page layer sits on the motion wrapper, not only on the inner section. Framer's layout
+ * animation sets a `transform` on the wrapper while a panel opens, and a transform makes a
+ * z-auto stacking context. That context traps the section's z-index, so later page content
+ * painted over the open panel until the animation ended.
+ */
+const DOCK_LARGE_STYLE: React.CSSProperties = {
+  position: 'relative',
+  zIndex: Z_LAYERS.searchBarInPage,
+};
+
 const DOCK_STYLE: Record<'pill' | 'expanded', React.CSSProperties> = {
   pill: {
     position: 'fixed',
@@ -2806,7 +2817,7 @@ export default function CompactSearchBar({
       ref={dockRef}
       layout={framerLayout}
       transition={DOCK_TRANSITION}
-      style={mode === 'large' ? undefined : DOCK_STYLE[mode]}
+      style={mode === 'large' ? DOCK_LARGE_STYLE : DOCK_STYLE[mode]}
       className={`hidden md:block ${mode === 'large' ? DOCK_LARGE_CLASS : ''}`}
       data-search-bar-dock={mode}
     >
