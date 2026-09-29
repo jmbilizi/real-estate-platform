@@ -20,6 +20,7 @@ on:
           - backfill
           - reconcile
           - audit
+          - field-probe
 
 permissions:
   contents: read
@@ -115,16 +116,134 @@ jobs:
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # ── field-probe: read-only, uses the worker pod's own Bright credential, no admin token ──
+      - name: Field probe — RESO on-market timestamp candidates (#459)
+        if: inputs.action == 'field-probe'
+        run: |
+          cat > /tmp/probe.js <<'PROBE_EOF'
+          // Read-only field-fill probe. Never writes, never logs credentials or full bodies.
+          // Duplicates the minimal token+query shape already confirmed in bright-client.ts /
+          // resources.ts rather than importing the built worker, so this has zero blast radius
+          // on the running sync job.
+          const FEEDS = {
+            test: {
+              tokenEndpoint: 'https://okta.tst.brightmls.com/oauth2/default/v1/token',
+              serviceRoot: 'https://bright-reso.tst.brightmls.com/RESO/OData/bright',
+            },
+            production: {
+              tokenEndpoint: 'https://okta.brightmls.com/oauth2/default/v1/token',
+              serviceRoot: 'https://bright-reso.brightmls.com/RESO/OData/bright',
+            },
+          };
+
+          async function main() {
+            const tier = (process.env.BRIGHT_MLS_ENV || '').trim();
+            const clientId = (process.env.BRIGHT_MLS_CLIENT_ID || '').trim();
+            const clientSecret = (process.env.BRIGHT_MLS_CLIENT_SECRET || '').trim();
+            if (tier !== 'test' && tier !== 'production') {
+              console.log(`BRIGHT_MLS_ENV is not a recognised tier (got: ${tier || '<empty>'})`);
+              process.exit(1);
+            }
+            if (!clientId || !clientSecret || clientId === 'StrongBase64Password') {
+              console.log('Bright credentials not configured in this environment.');
+              process.exit(1);
+            }
+            const { tokenEndpoint, serviceRoot } = FEEDS[tier];
+            console.log(`Feed tier: ${tier}`);
+
+            const tokenRes = await fetch(tokenEndpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: new URLSearchParams({
+                grant_type: 'client_credentials',
+                client_id: clientId,
+                client_secret: clientSecret,
+              }).toString(),
+            });
+            if (!tokenRes.ok) {
+              console.log(`Token request failed: HTTP ${tokenRes.status}`);
+              process.exit(1);
+            }
+            const { access_token: token } = await tokenRes.json();
+
+            const fields = [
+              'ListingKey',
+              'StandardStatus',
+              'MLSListDate',
+              'OnMarketTimestamp',
+              'StatusChangeTimestamp',
+              'MajorChangeTimestamp',
+              'ModificationTimestamp',
+            ];
+            const select = fields.join(',');
+            const url =
+              `${serviceRoot}/BrightProperties?$select=${select}` +
+              `&$filter=StandardStatus eq 'Active'&$orderby=ModificationTimestamp desc&$top=200`;
+
+            const pageRes = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+            if (!pageRes.ok) {
+              const body = await pageRes.text();
+              console.log(`Page request failed: HTTP ${pageRes.status} — ${body.slice(0, 300)}`);
+              process.exit(1);
+            }
+            const page = await pageRes.json();
+            const records = page.value || [];
+            console.log(`Sampled ${records.length} Active records (ordered by ModificationTimestamp desc).`);
+
+            const fillCounts = Object.fromEntries(fields.map((f) => [f, 0]));
+            const sample = [];
+            for (const rec of records) {
+              for (const f of fields) {
+                if (rec[f] !== null && rec[f] !== undefined && rec[f] !== '') {
+                  fillCounts[f] += 1;
+                }
+              }
+              if (sample.length < 5) {
+                sample.push({
+                  ListingKey: rec.ListingKey,
+                  MLSListDate: rec.MLSListDate,
+                  OnMarketTimestamp: rec.OnMarketTimestamp,
+                  StatusChangeTimestamp: rec.StatusChangeTimestamp,
+                  MajorChangeTimestamp: rec.MajorChangeTimestamp,
+                });
+              }
+            }
+
+            console.log('\nFill rate over the sample:');
+            for (const f of fields) {
+              const pct = records.length ? ((fillCounts[f] / records.length) * 100).toFixed(1) : '0.0';
+              console.log(`  ${f}: ${fillCounts[f]}/${records.length} (${pct}%)`);
+            }
+
+            console.log('\nFirst 5 records (key fields only):');
+            for (const rec of sample) {
+              console.log(JSON.stringify(rec));
+            }
+          }
+
+          main().catch((err) => {
+            console.log(`Probe failed: ${err && err.message ? err.message : String(err)}`);
+            process.exit(1);
+          });
+          PROBE_EOF
+          {
+            echo "## Bright field probe: on-market timestamp candidates"
+            echo ""
+            echo '```'
+            kubectl exec -i deployment/bright-sync-worker -n default -- node < /tmp/probe.js
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
       # ── backfill / reconcile / audit: call the admin endpoint on property-service ───────
       - name: Mask admin token
-        if: inputs.action != 'report'
+        if: contains(fromJSON('["backfill","reconcile","audit"]'), inputs.action)
         run: |
           TOKEN=$(kubectl get secret bright-mls-secret -n default -o jsonpath='{.data.BRIGHT_ADMIN_TOKEN}' | base64 -d)
           echo "::add-mask::$TOKEN"
           echo "BRIGHT_ADMIN_TOKEN=$TOKEN" >> "$GITHUB_ENV"
 
       - name: Port-forward to property-service
-        if: inputs.action != 'report'
+        if: contains(fromJSON('["backfill","reconcile","audit"]'), inputs.action)
         run: |
           kubectl port-forward svc/property-service-svc 3002:3002 -n default &
           echo "PF_PID=$!" >> "$GITHUB_ENV"
@@ -134,7 +253,7 @@ jobs:
           done
 
       - name: Trigger Bright sync run
-        if: inputs.action != 'report'
+        if: contains(fromJSON('["backfill","reconcile","audit"]'), inputs.action)
         run: |
           MODE="${{ inputs.action }}"
           RESPONSE=$(curl -sS -w '\n%{http_code}' -X POST http://localhost:3002/admin/bright/sync \
@@ -157,6 +276,6 @@ jobs:
           fi
 
       - name: Stop port-forward
-        if: always() && inputs.action != 'report'
+        if: always() && contains(fromJSON('["backfill","reconcile","audit"]'), inputs.action)
         run: |
           [ -n "$PF_PID" ] && kill "$PF_PID" 2>/dev/null || true
