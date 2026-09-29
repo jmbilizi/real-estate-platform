@@ -90,12 +90,19 @@ export default function ListingRow({
 
   return (
     <section className={sectionClassName ?? 'px-6 pt-6 sm:px-10 lg:px-20'}>
-      <div className="flex flex-col gap-1 pb-1">
+      {/* `gap-1.5`, not `gap-1` (#447): the title/chip link's `before:-bottom-1.5` hit area reaches
+          6px below its own box, so a smaller gap here would let that invisible hit area cover the
+          top of `subtitle`'s text. */}
+      <div className="flex flex-col gap-1.5 pb-1">
         <div className="flex items-center gap-2 justify-between">
           {/* Hidden while failed: "See all" links into a search page backed by the request that
               just failed, and the scroll arrows would be framing a single retry card. Title and
-              chip are one link (#423) — the visual chip is ~32px, but `min-h-11` keeps the whole
-              link's tap target at least 44px tall even though it never grows past 32px on screen. */}
+              chip are one link (#423) — the visual chip is ~32px. The tap target still reaches
+              44px (#447), but via the `before:` pseudo element below rather than `min-h-11`: a
+              layout-height floor left ~16px of dead space under a 28px title, blowing out the gap
+              to the carousel below. The pseudo element extends the hit area 6px past each edge
+              (32px + 6 + 6 = 44px) without adding box height, since an absolutely-positioned
+              pseudo never contributes to its parent's layout size. */}
           {href && !failed ? (
             <Link
               href={href}
@@ -110,7 +117,7 @@ export default function ListingRow({
               // `items-start`, not `items-center` (#432): a title now wraps to 2 lines rather than
               // truncating (every title must keep its "for sale"/"rentals" word), and centering on
               // the whole 2-line block would float the chip below the first line.
-              className="group flex min-h-11 min-w-11 w-full items-start justify-between gap-1.5 sm:inline-flex sm:w-auto sm:justify-normal"
+              className="group relative flex min-h-8 min-w-11 w-full items-start justify-between gap-1.5 before:absolute before:-top-1.5 before:-bottom-1.5 before:inset-x-0 before:content-[''] sm:inline-flex sm:w-auto sm:justify-normal"
             >
               <h2
                 className={
@@ -120,9 +127,12 @@ export default function ListingRow({
               >
                 {title}
               </h2>
-              {/* `mt-0.5` centers the chip on the first line's height rather than the container's
-                  top edge, now that the title can run to a second line (#432). */}
-              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-soft text-ink transition group-hover:bg-surface-border">
+              {/* `relative top-0.5` centers the chip on the first line's height rather than the
+                  container's top edge, now that the title can run to a second line (#432) — a
+                  relative offset shifts the paint only, not the layout box, so it cannot add to
+                  the header's own height the way a `margin-top` did and blow out the gap to the
+                  carousel below (#447). */}
+              <span className="relative top-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-soft text-ink transition group-hover:bg-surface-border">
                 <svg
                   className="h-3.5 w-3.5"
                   fill="none"
@@ -146,16 +156,21 @@ export default function ListingRow({
             </h2>
           )}
           {/* Touch is the control below `sm` (Airbnb-style peeking rows); arrows return once there
-              is room for them to sit clear of the cards. Each button's own tap target stays 44px
-              (the visible circle is the inner 32px span) even though the circle itself shrank
-              (#423). */}
-          <div className={`items-center gap-2 ${failed ? 'hidden' : 'hidden sm:flex'}`}>
+              is room for them to sit clear of the cards. The visible circle is 32px. Each
+              button's tap target stays 44px through the same `before:` hit-area technique as the
+              title link above (#447), not a `h-11` box. A `h-11` box would make this row 44px
+              tall next to the title's 32px. */}
+          {/* `gap-3`, not `gap-2` (#447): each button's `before:-inset-1.5` hit area reaches 6px
+              past its own visible edge. Anything less than 12px between the two visible circles
+              lets their hit areas overlap. A tap in that sliver could then register on the wrong
+              button. */}
+          <div className={`items-center gap-3 ${failed ? 'hidden' : 'hidden sm:flex'}`}>
             <button
               type="button"
               onClick={() => scroll('left')}
               aria-label="Scroll left"
               disabled={atStart}
-              className={`flex h-11 w-11 items-center justify-center ${atStart ? 'cursor-not-allowed opacity-50' : ''}`}
+              className={`relative flex h-8 w-8 items-center justify-center before:absolute before:-inset-1.5 before:content-[''] ${atStart ? 'cursor-not-allowed opacity-50' : ''}`}
             >
               <span
                 className={`flex h-8 w-8 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition ${atStart ? '' : 'hover:bg-surface-alt'}`}
@@ -176,7 +191,7 @@ export default function ListingRow({
               onClick={() => scroll('right')}
               aria-label="Scroll right"
               disabled={atEnd}
-              className={`flex h-11 w-11 items-center justify-center ${atEnd ? 'cursor-not-allowed opacity-50' : ''}`}
+              className={`relative flex h-8 w-8 items-center justify-center before:absolute before:-inset-1.5 before:content-[''] ${atEnd ? 'cursor-not-allowed opacity-50' : ''}`}
             >
               <span
                 className={`flex h-8 w-8 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition ${atEnd ? '' : 'hover:bg-surface-alt'}`}
@@ -202,7 +217,10 @@ export default function ListingRow({
         // `-mr-6 sm:mr-0`: the row's own left inset still lines the first card up under the
         // title, but the right edge bleeds past the section's padding to the screen edge below
         // `sm` — the cut-off next card is the "peek" (Airbnb mobile rows), not a rendering bug.
-        className="mt-3 sm:mt-4 flex snap-x snap-mandatory gap-3 sm:gap-5 overflow-x-auto pb-3 scrollbar-none -mr-6 sm:mr-0"
+        // `mt-3` at every breakpoint (#447): with the header's layout height now equal to its
+        // content (see the `before:` hit-area comment above), this margin is the whole gap to the
+        // carousel, landing at ~16-20px measured from the title's own text bottom.
+        className="mt-3 flex snap-x snap-mandatory gap-3 sm:gap-5 overflow-x-auto pb-3 scrollbar-none -mr-6 sm:mr-0"
       >
         {loading &&
           Array.from({ length: max }, (_, i) => (

@@ -47,6 +47,46 @@ describe('Footer', () => {
     expect(screen.getByText(/Data last updated/).textContent).toMatch(/ET|EDT|EST/);
   });
 
+  it('prefers lastSyncedAt over dataUpdatedAt for the "Data last updated" line', async () => {
+    mockedGetListingsMeta.mockResolvedValue({
+      dataUpdatedAt: '2026-01-01T00:00:00.000Z',
+      lastSyncedAt: '2026-04-20T18:00:00.000Z',
+      sources: ['brightMLS'],
+      listingCount: 5,
+    });
+
+    render(<Footer />);
+
+    // Both are months old at test time, but lastSyncedAt is the newer of the two, so it must be
+    // the one shown — "last updated" means the last successful sync, not the newest listing.
+    await waitFor(() => expect(screen.getByText(/April 20, 2026/)).toBeInTheDocument());
+  });
+
+  it('falls back to dataUpdatedAt when lastSyncedAt is absent (older deployment)', async () => {
+    mockedGetListingsMeta.mockResolvedValue({
+      dataUpdatedAt: '2026-04-20T18:00:00.000Z',
+      sources: ['brightMLS'],
+      listingCount: 5,
+    });
+
+    render(<Footer />);
+
+    await waitFor(() => expect(screen.getByText(/April 20, 2026/)).toBeInTheDocument());
+  });
+
+  it('falls back to dataUpdatedAt when lastSyncedAt is null (no sync run has succeeded yet)', async () => {
+    mockedGetListingsMeta.mockResolvedValue({
+      dataUpdatedAt: '2026-04-20T18:00:00.000Z',
+      lastSyncedAt: null,
+      sources: ['brightMLS'],
+      listingCount: 5,
+    });
+
+    render(<Footer />);
+
+    await waitFor(() => expect(screen.getByText(/April 20, 2026/)).toBeInTheDocument());
+  });
+
   it('renders no Bright disclosure block when the dataset has no Bright-sourced row', async () => {
     mockedGetListingsMeta.mockResolvedValue({
       dataUpdatedAt: '2026-04-20T18:00:00.000Z',

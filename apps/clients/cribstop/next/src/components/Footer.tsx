@@ -25,12 +25,16 @@ export default function Footer() {
     return () => controller.abort();
   }, []);
 
-  // `dataUpdatedAt === null` (no publishable listings yet, or the fetch never resolved) omits
-  // this line entirely. It must never fall back to the current time — that would be a
-  // fabricated fact on a compliance disclosure (PRD §6.3).
+  // "Data last updated" means the last successful MLS sync, not the newest listing timestamp
+  // (#447) — `lastSyncedAt` is absent on an older deployment and `null` before any run has
+  // succeeded, so both fall back to `dataUpdatedAt` rather than hiding the line. Either way, a
+  // null result (no publishable listings yet, or the fetch never resolved) omits this line
+  // entirely. It must never fall back to the current time — that would be a fabricated fact on a
+  // compliance disclosure (PRD §6.3).
+  const freshness = meta ? (meta.lastSyncedAt ?? meta.dataUpdatedAt) : null;
   const lastUpdatedFormatted =
-    meta?.dataUpdatedAt != null
-      ? new Date(meta.dataUpdatedAt).toLocaleString('en-US', {
+    freshness != null
+      ? new Date(freshness).toLocaleString('en-US', {
           // Shared with the per-listing provenance line so the two "Data last updated" sentences
           // on a page can never disagree about the day.
           timeZone: PROPERTY_TIME_ZONE,

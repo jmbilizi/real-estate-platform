@@ -67,13 +67,17 @@ describe('NeighborhoodRow (#393)', () => {
     expect(screen.getByLabelText('Explore neighborhoods — see all')).toBeInTheDocument();
   });
 
-  it('keeps the "See all" link and arrow buttons at a 44px tap target, with a ~32px visual chip that never shrinks beside a long heading (#423)', () => {
+  it('keeps the "See all" link and arrow buttons at a 44px tap target via a hit-area pseudo element, with a ~32px visual box that never shrinks beside a long heading (#423, #447)', () => {
     renderRow({ href: '/homes-for-sale', title: 'Explore neighborhoods across the region' });
 
-    // The whole title + chip is one link (#423): the link itself is at least 44px tall, and its
-    // icon chip — the visible ~32px circle — never shrinks regardless of heading length.
+    // The whole title + chip is one link (#423): its own box is only as tall as its content
+    // (`min-h-8`, matching the chip), but a `before:` pseudo element extends the tap target to
+    // 44px without adding layout height (#447) — a `min-h-11` box left dead space under the
+    // title that blew out the gap to the carousel below.
     const seeAll = screen.getByLabelText(/see all/i);
-    expect(seeAll.className).toContain('min-h-11');
+    expect(seeAll.className).toContain('min-h-8');
+    expect(seeAll.className).toContain('before:-top-1.5');
+    expect(seeAll.className).toContain('before:-bottom-1.5');
     const chip = seeAll.querySelector('svg')?.parentElement;
     expect(chip?.className).toContain('shrink-0');
     expect(chip?.className).toContain('h-8');
@@ -82,8 +86,9 @@ describe('NeighborhoodRow (#393)', () => {
     for (const label of ['Scroll left', 'Scroll right']) {
       const button = screen.getByLabelText(label);
       expect(button.className).toContain('flex-shrink-0');
-      expect(button.className).toContain('h-11');
-      expect(button.className).toContain('w-11');
+      expect(button.className).toContain('h-8');
+      expect(button.className).toContain('w-8');
+      expect(button.className).toContain('before:-inset-1.5');
     }
   });
 
