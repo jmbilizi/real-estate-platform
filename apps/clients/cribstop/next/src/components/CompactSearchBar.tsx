@@ -2531,8 +2531,37 @@ export default function CompactSearchBar({
     // dock element itself (DOCK_LARGE_CLASS), so every box from the dock down
     // to the pill coincides and the shape animation has nothing oversized to
     // grow from.
+    //
+    // `isolate` + an explicit `zIndex` on this outer section (#453): in
+    // 'pill'/'expanded' mode the dock itself is `position: fixed` with an
+    // explicit `zIndex` (DOCK_STYLE), which already creates a stacking context
+    // that contains the field panels below — z-layers.ts's "the search bar's
+    // own dropdown panels... live in their component's own stacking context" is
+    // true there. In 'large' mode the dock stays in normal flow with no
+    // position/z-index of its own (DOCK_LARGE_CLASS), and every ancestor down to
+    // the panel is a plain `position: relative` with no z-index — none of them
+    // create a stacking context, so the panel's own `z-[200]`
+    // (renderWherePanel/renderWhatPanel) had no local context to be ranked
+    // within. It happened to still paint above the page's own content, because
+    // that content stayed non-positioned — but nothing pinned that down, so a
+    // later style change to any row/card wrapper (adding `position: relative`
+    // for an unrelated reason, e.g. a next/image `fill` container) could put it
+    // in the same stacking bucket as this "scoped" z-[200] panel with no
+    // documented ordering between them. `isolate` gives this section its own
+    // stacking context the same way `position: fixed` already does for the
+    // other two modes.
+    //
+    // The explicit z-index is `Z_LAYERS.searchBarInPage`, NOT `searchBar`
+    // (that layer is for the docked/fixed pill, above `chrome`) — this section
+    // is still in normal flow alongside the sticky header, and `ScrollSentinel`'s
+    // rAF-throttled scroll listener can leave it scrolled up to the header's
+    // bottom edge for up to a frame before the swap to the fixed layout fires.
+    // `searchBar`'s z-index sits above `chrome`, so using it here made the
+    // in-flow bar paint over the header during that frame. `searchBarInPage`
+    // only has to beat ordinary page content, and deliberately stays below
+    // `chrome` so it never contests the header.
     content = (
-      <section className="relative">
+      <section className="relative isolate" style={{ zIndex: Z_LAYERS.searchBarInPage }}>
         <div className="relative">
           <div ref={panelRef} className="relative w-full">
             {/* -- 4-slot pill ------------------------------------------------- */}
