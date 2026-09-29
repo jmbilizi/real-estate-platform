@@ -1,4 +1,8 @@
 import '@testing-library/jest-dom';
+import { configure } from '@testing-library/react';
+
+// #449. The 1000 ms default fails `findBy*`/`waitFor` on a loaded CI runner.
+configure({ asyncUtilTimeout: 5000 });
 
 /**
  * `next/navigation` has no router context outside the App Router runtime. Tests that assert
