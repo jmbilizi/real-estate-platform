@@ -158,6 +158,9 @@ export interface ListingRow {
   /** #424. Bright's `ExpectedOnMarketDate`. The date a Coming Soon listing goes active. Null for
    *  every other status, or when the feed omits it. Drives the card badge only. */
   coming_soon_date: string | null;
+  /** #459. Bright's `StatusChangeTimestamp`, raw. Refreshed on every write. Not a list time on its
+   *  own: `derivePreciseListedAt` decides when it is one. */
+  status_changed_at: string | null;
   // Attribution
   broker_name: string;
   // '' means Bright supplied no office phone (#344) — the column stays NOT NULL.

@@ -419,6 +419,7 @@ function buildFixtureListingRow(input: {
     last_updated: new Date().toISOString(),
     listed_at: null,
     coming_soon_date: null,
+    status_changed_at: null,
   };
 }
 

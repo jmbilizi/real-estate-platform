@@ -71,6 +71,7 @@ type ExpectedCardKeys =
   | 'lastUpdated'
   | 'listedAt'
   | 'comingSoonDate'
+  | 'listedAtPrecise'
   | 'listingAgentName'
   | 'brokerName'
   | 'brokerPhone'

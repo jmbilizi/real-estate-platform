@@ -285,6 +285,7 @@ export async function mapBrightPayloads(
       days_on_market: listing.daysOnMarket,
       listed_at: listing.listedAt,
       coming_soon_date: listing.comingSoonDate,
+      status_changed_at: listing.statusChangedAt,
       broker_name: listing.attribution.brokerName,
       broker_phone: listing.attribution.brokerPhone,
       broker_email: listing.attribution.brokerEmail,

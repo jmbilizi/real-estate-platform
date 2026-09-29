@@ -7,6 +7,7 @@ import { useApp } from '@/lib/context';
 import { openListingPanel } from '@/lib/listing-panel';
 import { copyToClipboard } from '@/lib/clipboard';
 import { formatTimeOnMarket } from '@/lib/format';
+import { useMinuteClock } from '@/lib/useMinuteClock';
 import { buildListingShare, listingShareUrl } from '@/lib/listing-share';
 import {
   formatCardAddress,
@@ -60,7 +61,15 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
    * carries the date, and this line would otherwise show a stale "time on market" for a listing
    * that has not gone active yet.
    */
-  const timeOnMarket = isComingSoon ? null : formatTimeOnMarket(listing.listedAt);
+  // #459. The shared minute clock is null until hydration ends, so the first render is the day bucket.
+  const minuteNow = useMinuteClock(!isComingSoon && listing.listedAtPrecise !== null);
+  const timeOnMarket = isComingSoon
+    ? null
+    : formatTimeOnMarket(
+        listing.listedAt,
+        minuteNow ?? Date.now(),
+        minuteNow === null ? null : listing.listedAtPrecise,
+      );
 
   /**
    * #433. Share this listing: the Web Share API on a device that has one, the clipboard (with a

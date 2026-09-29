@@ -326,6 +326,23 @@ describe('mapBrightPropertyRecord', () => {
       expect(result.listing.comingSoonDate).toBeNull();
     });
 
+    it('maps StatusChangeTimestamp to an ISO instant (#459)', () => {
+      const result = mapBrightPropertyRecord(
+        { ...BASE_PAYLOAD, StatusChangeTimestamp: '2026-09-22T04:16:22Z' },
+        ctx(),
+      );
+      if (result.kind !== 'mapped') throw new Error('expected mapped');
+      expect(result.listing.statusChangedAt).toBe('2026-09-22T04:16:22.000Z');
+    });
+
+    it('is null when StatusChangeTimestamp is absent or unparseable (#459)', () => {
+      const absent = mapBrightPropertyRecord(BASE_PAYLOAD, ctx());
+      const bad = mapBrightPropertyRecord({ ...BASE_PAYLOAD, StatusChangeTimestamp: 'x' }, ctx());
+      if (absent.kind !== 'mapped' || bad.kind !== 'mapped') throw new Error('expected mapped');
+      expect(absent.listing.statusChangedAt).toBeNull();
+      expect(bad.listing.statusChangedAt).toBeNull();
+    });
+
     it('maps DaysOnMarket through', () => {
       const result = mapBrightPropertyRecord({ ...BASE_PAYLOAD, DaysOnMarket: 12 }, ctx());
       if (result.kind !== 'mapped') throw new Error('expected mapped');

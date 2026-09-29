@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { aLandParcelRow, aListingCardRow, aSuppressedAddressRow } from '@/test/fixtures';
 import ListingCard from './ListingCard';
 import { getListingPanel, resetListingPanel } from '@/lib/listing-panel';
@@ -266,6 +266,26 @@ describe('ListingCard', () => {
       );
 
       expect(screen.getByText('1w')).toBeInTheDocument();
+      jest.useRealTimers();
+    });
+
+    it('shows minutes for a precise list instant and refreshes each minute (#459)', () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-10-15T12:00:00.000Z'));
+      render(
+        <ListingCard
+          listing={aListingCardRow({
+            listedAt: '2026-10-15T00:00:00.000Z',
+            listedAtPrecise: '2026-10-15T11:55:00.000Z',
+            status: 'Active',
+          })}
+        />,
+      );
+
+      expect(screen.getByText('5 min')).toBeInTheDocument();
+      act(() => {
+        jest.advanceTimersByTime(60_000);
+      });
+      expect(screen.getByText('6 min')).toBeInTheDocument();
       jest.useRealTimers();
     });
 

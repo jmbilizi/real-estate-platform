@@ -10,6 +10,8 @@ import {
   streetLineOf,
 } from '@cribstop/property-contracts';
 
+import { derivePreciseListedAt } from './listed-at-precise';
+
 /**
  * Database row -> wire shape. Every mapper ends in the contract's own `.parse()`, deliberately.
  *
@@ -55,6 +57,7 @@ export interface ListingCardDbRow {
   last_updated: Date;
   listed_at: Date | null;
   coming_soon_date: Date | null;
+  status_changed_at: Date | null;
   listing_agent_name: string | null;
   broker_name: string;
   broker_phone: string;
@@ -191,6 +194,7 @@ function commonFields(row: ListingCardDbRow): Record<string, unknown> {
     lastUpdated: instant(row.last_updated),
     listedAt: row.listed_at === null ? null : instant(row.listed_at),
     comingSoonDate: row.coming_soon_date === null ? null : instant(row.coming_soon_date),
+    listedAtPrecise: derivePreciseListedAt(row.listed_at, row.status_changed_at),
     listingAgentName: row.listing_agent_name,
     brokerName: row.broker_name,
     brokerPhone: row.broker_phone,

@@ -98,6 +98,7 @@ const CARD_COLUMNS = [
   'listed_at',
   // #424. Bright's ExpectedOnMarketDate — the date a Coming Soon listing goes active.
   'coming_soon_date',
+  'status_changed_at',
   'listing_agent_name',
   'broker_name',
   'broker_phone',
