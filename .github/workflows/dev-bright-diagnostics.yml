@@ -180,7 +180,10 @@ jobs:
               `${serviceRoot}/BrightProperties?$select=${select}` +
               `&$filter=StandardStatus eq 'Active'&$orderby=ModificationTimestamp desc&$top=200`;
 
-            const pageRes = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+            // Bright answers XML unless the request asks for JSON (bright-client.ts does the same).
+            const pageRes = await fetch(url, {
+              headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+            });
             if (!pageRes.ok) {
               const body = await pageRes.text();
               console.log(`Page request failed: HTTP ${pageRes.status} — ${body.slice(0, 300)}`);
