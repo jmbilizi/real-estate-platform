@@ -155,22 +155,25 @@ export default function ListingCardMenu({
           e.stopPropagation();
           setOpen((v) => !v);
         }}
-        className="group/more relative flex h-4 w-4 items-center justify-center rounded-full transition-colors hover:bg-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
+        className="relative flex h-4 w-4 items-center justify-center rounded-full text-ink-muted transition-colors hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
         aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}
       >
         {/*
-         * Named group (`group/more`), not the bare `group` this used: the card root
-         * (`ListingCard.tsx`) also carries a bare `group`, and Tailwind's `group-hover:` matches
-         * any ancestor with class `group`, not only the nearest one — so hovering the save or
-         * share button next to this trigger also counted as hovering the card's `group` and
-         * scaled this icon too. See `ListingCard.tsx`'s save/share buttons for the same fix.
+         * #464. Hit area: 44px tall, flush with the button's right edge so it never overflows
+         * the card. Width stays near 16px because the share button sits 4px away.
          */}
-        <span aria-hidden="true" className="absolute -inset-0.5" />
+        <span aria-hidden="true" className="absolute -inset-y-3.5 -left-0.5 right-0" />
+        {/*
+         * The viewBox crops the empty space right of the three dots (stroke included). `xMaxYMid` pins them to
+         * the button's right edge, so the glyph aligns with the card content edge.
+         */}
         <MoreVertical
           size={16}
-          className="stroke-ink-muted transition-transform group-hover/more:scale-110"
+          viewBox="-2 0 16 24"
+          preserveAspectRatio="xMaxYMid meet"
+          className="stroke-current"
         />
       </button>
       {open &&
