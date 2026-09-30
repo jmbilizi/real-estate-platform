@@ -613,10 +613,7 @@ export default function ListingDetailContent({
             {/* `title-md` (16px/600). Was 18px/800 — the last `extrabold` on the page, and the
                 system defines no 800 weight at any size. */}
             <p className="text-base font-semibold leading-tight text-ink">
-              {closePriceText ?? priceDisplay.text.split('/')[0]}
-              {!priceDisplay.isWithheld && listing.listingType === 'rent' && (
-                <span className="text-xs font-normal text-ink-muted">/mo</span>
-              )}
+              {closePriceText ?? priceDisplay.text}
             </p>
           </div>
           <div className="flex shrink-0 gap-2">
