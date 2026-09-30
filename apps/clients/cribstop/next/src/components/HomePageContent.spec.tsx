@@ -500,6 +500,18 @@ describe('HomePageContent', () => {
       }
     });
 
+    it('links "See all" with the row sort, floor and home types', async () => {
+      render(<HomePageContent />);
+
+      const link = (await screen.findByText('Cheapest homes for sale')).closest('a')!;
+      const href = link.getAttribute('href')!;
+      expect(href).toContain('sort=price-asc');
+      expect(href).toContain('minPrice=5000');
+      expect(href).toContain('propertyType=');
+      expect(href).not.toContain('Land');
+      expect(href).not.toContain('maxPrice');
+    });
+
     it('excludes land from the homes row only', async () => {
       render(<HomePageContent />);
       await screen.findByText('Cheapest rentals');

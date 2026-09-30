@@ -603,7 +603,13 @@ function PriceSortRow({ side, region }: { side: ListingSide; region: Region | nu
   return (
     <ListingRow
       title={PRICE_SORT_TITLE[side][sort]}
-      href={searchHref(side, { sort, ...(place ? { city: place.city, state: place.state } : {}) })}
+      // "See all" carries the same floor and types, so the search page matches the row.
+      href={searchHref(side, {
+        sort,
+        minPrice: String(PRICE_FLOOR[side]),
+        ...(side === 'sale' ? { propertyType: SALE_HOME_TYPES.join(',') } : {}),
+        ...(place ? { city: place.city, state: place.state } : {}),
+      })}
       listings={listings}
       loading={loading}
       failed={failed}
