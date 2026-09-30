@@ -566,7 +566,7 @@ function PriceSortToggle({
             type="button"
             aria-pressed={active}
             onClick={() => onChange(option.value)}
-            className={`inline-flex h-5 items-center justify-center whitespace-nowrap rounded-full px-2 text-[11px] font-semibold leading-none transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 ${
+            className={`relative inline-flex h-5 items-center justify-center whitespace-nowrap rounded-full px-2 text-[11px] font-semibold leading-none transition before:absolute before:-inset-y-3 before:inset-x-0 before:content-['']  focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 ${
               active ? 'bg-ink text-white' : 'text-ink hover:bg-surface-alt'
             }`}
           >
