@@ -230,6 +230,7 @@ function useNeighborhoods(region: Region | null, regionLoading: boolean): Neighb
             state: row.state,
             sale: row.sale,
             rent: row.rent,
+            previewPhotos: row.previewPhotos,
           });
         }
       };
