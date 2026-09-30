@@ -443,14 +443,14 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
          * pattern the prior line already used. The office name is `text-[13px]`, at that floor.
          *
          * #470. Two separate slots. The office slot (avatar + name) takes at most 85% of the row
-         * and truncates inside it. The time slot keeps the rest, right-aligned, and truncates
-         * with an ellipsis. With no time value the office slot may use the full row. At the
-         * 154px home-carousel card the 85% cap leaves about 112px for the name, which is more
-         * than 10 characters. See `ListingCard.spec.tsx`'s "name width budget" test.
+         * and truncates first. The time slot is `shrink-0`, takes the width its text needs,
+         * right-aligned, and never truncates. With no time value the office slot may use the full
+         * row. The name keeps at least 10 visible characters on the 141px carousel card. See
+         * `ListingCard.spec.tsx`'s "name width budget" test.
          */}
         <div className="mt-1 flex items-center gap-1">
           <div
-            className={`listing-card-office-slot flex min-w-0 items-center gap-0.5 ${timeOnMarket !== null ? 'max-w-[85%]' : 'max-w-full'}`}
+            className={`listing-card-office-slot flex min-w-0 flex-1 items-center gap-0.5 ${timeOnMarket !== null ? 'max-w-[85%]' : 'max-w-full'}`}
           >
             {/* #452. One step up from the icon row's 16px — 17px is the smallest change that
                 still reads as deliberate, and the initials at 7px keep clear headroom at 17px, so
@@ -470,7 +470,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
             </span>
           </div>
           {timeOnMarket !== null && (
-            <span className="listing-card-time-on-market min-w-0 flex-1 truncate text-right text-[13px] text-ink-muted">
+            <span className="listing-card-time-on-market ml-auto shrink-0 whitespace-nowrap text-right text-[13px] text-ink-muted">
               {timeOnMarket}
             </span>
           )}

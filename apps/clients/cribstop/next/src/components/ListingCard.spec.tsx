@@ -200,7 +200,7 @@ describe('ListingCard', () => {
       expect(name).toHaveAttribute('aria-label', officeName);
     });
 
-    it('splits the footer into an office slot capped at 85% and a truncating time slot (#470)', () => {
+    it('splits the footer into an office slot capped at 85% and a never-truncating time slot (#470)', () => {
       render(
         <ListingCard
           listing={aListingCardRow({
@@ -217,7 +217,8 @@ describe('ListingCard', () => {
 
       const timeOnMarket = document.querySelector('.listing-card-time-on-market');
       expect(timeOnMarket).not.toBeNull();
-      expect(timeOnMarket).toHaveClass('min-w-0', 'flex-1', 'truncate', 'text-right');
+      expect(timeOnMarket).toHaveClass('shrink-0', 'whitespace-nowrap', 'text-right');
+      expect(timeOnMarket).not.toHaveClass('truncate');
       // Time on market shows at every width: no hide class and no container query.
       expect(timeOnMarket).not.toHaveClass('hidden');
     });
@@ -237,12 +238,15 @@ describe('ListingCard', () => {
      * width. jsdom does not compute layout, so this pins the pixel budget the `max-w-[85%]` cap
      * and `gap-0.5` in ListingCard.tsx are sized against. Measured in a browser for #470.
      */
-    it('attribution row name width budget: reserves at least 10 characters at the 154px home-carousel card', () => {
-      const CARD_WIDTH = 154; // narrowest card: home carousel on a 360px phone
+    it('attribution row name width budget: reserves at least 10 characters at the 141px home-carousel card', () => {
+      const CARD_WIDTH = 141; // narrowest card: home carousel on a 360px phone
+      const TIME_WIDTH = 42; // "12 min", the widest usual time value; the time slot never shrinks
+      const ROW_GAP = 4; // gap-1, between the office slot and the time slot
       const AVATAR = 17; // #452: one px up from the 16px icon row
       const AVATAR_NAME_GAP = 2; // gap-0.5, between the avatar and the name
 
-      const nameBudgetPx = Math.floor(CARD_WIDTH * 0.85) - AVATAR - AVATAR_NAME_GAP;
+      const officeSlotPx = Math.min(CARD_WIDTH * 0.85, CARD_WIDTH - TIME_WIDTH - ROW_GAP);
+      const nameBudgetPx = Math.floor(officeSlotPx) - AVATAR - AVATAR_NAME_GAP;
       expect(nameBudgetPx).toBeGreaterThanOrEqual(70);
 
       const AVERAGE_CHAR_WIDTH_PX = 7; // measured for the row's 13px Manrope/system body text
@@ -962,8 +966,8 @@ describe('ListingCardSkeleton footer (#470)', () => {
     const time = container.querySelector('[data-skeleton-time-slot]');
     expect(office).not.toBeNull();
     expect(time).not.toBeNull();
-    expect(office).toHaveClass('basis-[85%]');
-    expect(time).toHaveClass('justify-end');
+    expect(office).toHaveClass('max-w-[85%]');
+    expect(time).toHaveClass('shrink-0', 'justify-end');
     // Avatar circle and name bar sit in the office slot, the time bar in the time slot.
     expect(office?.querySelectorAll('span').length).toBeGreaterThanOrEqual(2);
     expect(time?.contains(office as Element)).toBe(false);

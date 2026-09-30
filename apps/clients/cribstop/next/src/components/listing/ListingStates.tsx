@@ -111,7 +111,7 @@ export function ListingCardSkeleton() {
         <div className="mt-1 flex items-center gap-1">
           <div
             data-skeleton-office-slot
-            className="flex min-w-0 shrink basis-[85%] items-center gap-0.5"
+            className="flex min-w-0 max-w-[85%] flex-1 items-center gap-0.5"
           >
             {/* #452. Matches the loaded avatar's 17px — one px up from the 16px icon row. */}
             <span className={`h-[17px] w-[17px] shrink-0 rounded-full ${FILL}`} />
@@ -119,8 +119,8 @@ export function ListingCardSkeleton() {
               <Bar />
             </span>
           </div>
-          <span data-skeleton-time-slot className="flex min-w-0 flex-1 justify-end text-[13px]">
-            <Bar className="w-8" />
+          <span data-skeleton-time-slot className="ml-auto flex shrink-0 justify-end text-[13px]">
+            <Bar className="w-11" />
           </span>
         </div>
       </div>

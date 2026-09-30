@@ -699,8 +699,8 @@ body {
  * compact/full pair sized off its own container ancestor, dropping the name to two wrapped lines
  * below 220px. It is one render at every width now (`ListingCard.tsx`).
  *
- * #470. The office slot (name: NAR 7.58 / Bright IDX prominence) is capped at 85% of the row.
- * The time slot keeps the rest, so time on market shows at every width and truncates if needed.
+ * #470. The office slot (name: NAR 7.58 / Bright IDX prominence) is capped at 85% of the row and
+ * truncates first. The time slot is `shrink-0` and never truncates.
  * `ListingCard`'s root div carries `.listing-card-root` so descendants can query the card width.
  */
 .listing-card-root {
