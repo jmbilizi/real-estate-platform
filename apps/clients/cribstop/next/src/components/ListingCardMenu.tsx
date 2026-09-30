@@ -162,9 +162,9 @@ export default function ListingCardMenu({
       >
         {/*
          * #464. Hit area: 44px tall, flush with the button's right edge so it never overflows
-         * the card, and ending where the share button's hit area starts.
+         * the card. It reaches 4px left, which stays clear of the share hit area at the row's 8px minimum gap.
          */}
-        <span aria-hidden="true" className="absolute -inset-y-3.5 -left-0.5 right-0" />
+        <span aria-hidden="true" className="absolute -inset-y-3.5 -left-1 right-0" />
         {/*
          * #467. The viewBox keeps only the dots' column plus the 1.33px side margin the heart and
          * share glyphs have, so the row gap alone spaces all three icons equally. The right edge
