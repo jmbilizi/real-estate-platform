@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { searchPath } from '@cribstop/property-contracts';
+import { type NeighborhoodPreviewPhoto, searchPath } from '@cribstop/property-contracts';
+import NeighborhoodPhotoStack, { STACK_HEIGHT_PX } from '@/components/NeighborhoodPhotoStack';
 
 /** One "Explore neighborhoods" tile (#393): name, place and counts, sourced from real data. */
 export interface Neighborhood {
@@ -13,6 +14,8 @@ export interface Neighborhood {
   sale: number;
   /** Matching for-rent count. */
   rent: number;
+  /** Live listing photos from the tile's own search results (#486), 0 to 5. */
+  previewPhotos?: NeighborhoodPreviewPhoto[];
 }
 
 /** The shared per-tile width breakpoints, for real tiles and their loading skeletons alike. */
@@ -39,6 +42,7 @@ function NeighborhoodTile({ n }: { n: Neighborhood }) {
       href={href}
       className={`group flex-shrink-0 snap-start rounded-md border border-surface-border bg-white p-4 transition hover:shadow-card ${TILE_WIDTH_CLASS}`}
     >
+      <NeighborhoodPhotoStack photos={n.previewPhotos ?? []} />
       <h3 className="truncate font-display text-base font-bold text-ink group-hover:underline">
         {n.name}
       </h3>
@@ -59,6 +63,10 @@ function NeighborhoodTileSkeleton() {
       aria-hidden="true"
       className={`flex-shrink-0 snap-start rounded-md border border-surface-border bg-white p-4 ${TILE_WIDTH_CLASS}`}
     >
+      <div
+        className="mb-3 w-full rounded bg-surface-soft skeleton-fill"
+        style={{ height: STACK_HEIGHT_PX }}
+      />
       <div className="h-4 w-3/4 rounded bg-surface-soft skeleton-fill" />
       <div className="mt-2 h-3 w-1/2 rounded bg-surface-soft skeleton-fill" />
       <div className="mt-3 h-3 w-2/3 rounded bg-surface-soft skeleton-fill" />
