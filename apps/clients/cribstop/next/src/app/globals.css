@@ -699,20 +699,12 @@ body {
  * compact/full pair sized off its own container ancestor, dropping the name to two wrapped lines
  * below 220px. It is one render at every width now (`ListingCard.tsx`).
  *
- * The compliance follow-up to #438 restores a single, narrower container query: below 200px the
- * office name — a NAR 7.58 / Bright IDX prominence requirement — could shrink to 5-9 visible
- * characters with all three action icons and time on market competing for the same width. Time
- * on market is the least essential fact in the row, so it alone hides below 200px; the name's
- * `min-w-[72px]` floor (`ListingCard.tsx`) then has enough reclaimed width for at least 10
- * characters. `ListingCard`'s root div carries `.listing-card-root` so the footer, a descendant
- * of it, can query the card's own width.
+ * #470. The office slot (name: NAR 7.58 / Bright IDX prominence) is capped at 85% of the row.
+ * The time slot keeps the rest, so time on market shows at every width and truncates if needed.
+ * `ListingCard`'s root div carries `.listing-card-root` so descendants can query the card width.
  */
 .listing-card-root {
   container-type: inline-size;
-}
-
-.listing-card-time-on-market {
-  display: none;
 }
 
 /*
@@ -721,11 +713,6 @@ body {
  */
 .listing-card-actions {
   gap: clamp(8px, 5cqi, 14px);
-}
-@container (min-width: 200px) {
-  .listing-card-time-on-market {
-    display: inline;
-  }
 }
 
 /*

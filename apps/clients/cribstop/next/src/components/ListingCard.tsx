@@ -442,15 +442,16 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
          * exact wording), and truncating the name with a `title`/`aria-label` fallback is the same
          * pattern the prior line already used. The office name is `text-[13px]`, at that floor.
          *
-         * #438 compliance follow-up: at the ~151px home-carousel card, the name could shrink to
-         * 5-9 visible characters — not "reasonably prominent". `min-w-[72px]` floors the name so
-         * it cannot be crushed further, and time on market — the least essential fact in this row
-         * — hides below 200px (`.listing-card-time-on-market` in globals.css, queried off
-         * `.listing-card-root`). See `ListingCard.spec.tsx`'s "footer name width budget" test for
-         * the arithmetic this is sized against.
+         * #470. Two separate slots. The office slot (avatar + name) takes at most 85% of the row
+         * and truncates inside it. The time slot keeps the rest, right-aligned, and truncates
+         * with an ellipsis. With no time value the office slot may use the full row. At the
+         * 154px home-carousel card the 85% cap leaves about 112px for the name, which is more
+         * than 10 characters. See `ListingCard.spec.tsx`'s "name width budget" test.
          */}
         <div className="mt-1 flex items-center gap-1">
-          <div className="flex min-w-0 flex-1 items-center gap-0.5">
+          <div
+            className={`listing-card-office-slot flex min-w-0 items-center gap-0.5 ${timeOnMarket !== null ? 'max-w-[85%]' : 'max-w-full'}`}
+          >
             {/* #452. One step up from the icon row's 16px — 17px is the smallest change that
                 still reads as deliberate, and the initials at 7px keep clear headroom at 17px, so
                 the type size does not need to grow with it. */}
@@ -461,7 +462,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
               {officeInitials(listing.officeName)}
             </span>
             <span
-              className="min-w-[72px] flex-1 truncate text-[13px] text-ink-body"
+              className="min-w-0 flex-1 truncate text-[13px] text-ink-body"
               title={listing.officeName}
               aria-label={listing.officeName}
             >
@@ -469,7 +470,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
             </span>
           </div>
           {timeOnMarket !== null && (
-            <span className="listing-card-time-on-market shrink-0 text-[13px] text-ink-muted">
+            <span className="listing-card-time-on-market min-w-0 flex-1 truncate text-right text-[13px] text-ink-muted">
               {timeOnMarket}
             </span>
           )}
