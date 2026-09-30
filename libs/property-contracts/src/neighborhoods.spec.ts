@@ -1,4 +1,8 @@
-import { neighborhoodsRequestSchema, neighborhoodsResponseSchema } from './neighborhoods';
+import {
+  neighborhoodRowSchema,
+  neighborhoodsRequestSchema,
+  neighborhoodsResponseSchema,
+} from './neighborhoods';
 
 describe('neighborhoodsRequestSchema', () => {
   it('defaults listingType, minCount and limit when omitted', () => {
@@ -53,5 +57,39 @@ describe('neighborhoodsResponseSchema', () => {
     };
     const parsed = neighborhoodsResponseSchema.parse({ results: [row], total: 1 });
     expect(parsed.results[0]).toEqual(row);
+  });
+
+  describe('previewPhotos (#486)', () => {
+    const base = {
+      name: 'Fishtown',
+      city: 'Philadelphia',
+      state: 'PA',
+      slug: 'fishtown',
+      total: 42,
+      sale: 30,
+      rent: 12,
+    };
+    const photo = (n: number) => ({ url: 'https://cdn.example/' + n + '.jpg', listingId: 'l' + n });
+
+    it.each([0, 1, 3, 5])('accepts %i photos', (count) => {
+      const previewPhotos = Array.from({ length: count }, (_, i) => photo(i));
+      expect(neighborhoodRowSchema.safeParse({ ...base, previewPhotos }).success).toBe(true);
+    });
+
+    it('accepts an absent field', () => {
+      expect(neighborhoodRowSchema.safeParse(base).success).toBe(true);
+    });
+
+    it('rejects more than 5 photos', () => {
+      const previewPhotos = Array.from({ length: 6 }, (_, i) => photo(i));
+      expect(neighborhoodRowSchema.safeParse({ ...base, previewPhotos }).success).toBe(false);
+    });
+
+    it('rejects a photo without a listingId', () => {
+      expect(
+        neighborhoodRowSchema.safeParse({ ...base, previewPhotos: [{ url: 'https://x/y.jpg' }] })
+          .success,
+      ).toBe(false);
+    });
   });
 });
