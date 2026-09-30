@@ -40,6 +40,15 @@ describe('toOpenApiDocument', () => {
     ]);
   });
 
+  it('publishes the place bound and format on the neighborhoods endpoint (#488)', () => {
+    const place = doc.paths['/listings/neighborhoods'].get.parameters.find(
+      (p: { name: string }) => p.name === 'place',
+    );
+    const json = JSON.stringify(place.schema);
+    expect(json).toContain('"maxItems":25');
+    expect(json).toContain('[A-Za-z]{2}');
+  });
+
   it('emits an OpenAPI 3.0 document with no server base path to prefix the paths', () => {
     expect(doc.openapi).toMatch(/^3\.0\./);
     expect(doc.servers).toBeUndefined();

@@ -183,7 +183,8 @@ export async function getListingsMeta(signal?: AbortSignal): Promise<ListingsMet
 
 /** Neighborhood counts for the home page's "Explore neighborhoods" row (#390, #393). */
 export async function getNeighborhoods(
-  query: Partial<NeighborhoodsRequest>,
+  // `place` (#488) is a parsed list here; the helper cannot serialize it. The #363 follow-up adds it.
+  query: Partial<Omit<NeighborhoodsRequest, 'place'>>,
   signal?: AbortSignal,
 ): Promise<NeighborhoodsResponse> {
   const params = new URLSearchParams();

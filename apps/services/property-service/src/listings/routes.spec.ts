@@ -88,6 +88,42 @@ describe('GET /listings/neighborhoods', () => {
     expect(response.status).toBe(400);
   });
 
+  it('passes a repeated place list to one query as two bound arrays (#488)', async () => {
+    const query = jest.fn(() => Promise.resolve({ rows: [] }));
+    const pool = { query, connect: () => Promise.resolve({ query, release: () => undefined }) };
+    const response = await request(createApp({ pool: pool as unknown as ReadPool })).get(
+      '/listings/neighborhoods?place=Bethesda,md&place=Chevy%20Chase,DC',
+    );
+
+    expect(response.status).toBe(200);
+    expect(query).toHaveBeenCalledTimes(1);
+    const calls = query.mock.calls as unknown as [string, unknown[]][];
+    expect(calls[0]?.[0]).toContain('unnest($7::text[], $8::text[])');
+    expect(calls[0]?.[1]).toHaveLength(8);
+    expect(calls[0]?.[1].slice(6)).toEqual([
+      ['MD', 'DC'],
+      ['Bethesda', 'Chevy Chase'],
+    ]);
+  });
+
+  it('rejects place with city, naming both parameters (#488)', async () => {
+    const response = await request(createApp({ pool: neighborhoodsPool([]) }))
+      .get('/listings/neighborhoods')
+      .query({ place: 'Bethesda,MD', city: 'Bethesda' });
+
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(response.body)).toMatch(/place, city/);
+  });
+
+  it('rejects 26 places with 400 (#488)', async () => {
+    const places = Array.from({ length: 26 }, (_v, i) => `place=City${i},MD`).join('&');
+    const response = await request(createApp({ pool: neighborhoodsPool([]) })).get(
+      `/listings/neighborhoods?${places}`,
+    );
+
+    expect(response.status).toBe(400);
+  });
+
   it('rejects listingType=sold, which this endpoint does not accept', async () => {
     const response = await request(createApp({ pool: neighborhoodsPool([]) }))
       .get('/listings/neighborhoods')

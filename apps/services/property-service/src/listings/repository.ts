@@ -316,6 +316,29 @@ export async function getNeighborhoods(
   pool: ReadClient,
   request: NeighborhoodsRequest,
 ): Promise<NeighborhoodsResponse> {
+  // #488. One statement for any list size: the pairs arrive as two bound arrays and join through
+  // unnest. The clause and `$7`/`$8` exist only for a `place` request. Keep them the last
+  // parameters. Other requests keep their plan. Measured: 1 place equals the city+state plan.
+  const places = request.place ?? [];
+  const placeFilterSql =
+    places.length > 0
+      ? `AND (lower(l.state), lower(l.city)) IN (
+           SELECT lower(p.state), lower(p.city) FROM unnest($7::text[], $8::text[]) AS p(state, city))`
+      : '';
+  const params: unknown[] = [
+    request.listingType,
+    request.state ?? null,
+    request.city ?? null,
+    request.minCount,
+    request.slug ?? null,
+    request.limit,
+  ];
+  if (places.length > 0) {
+    params.push(
+      places.map((p) => p.state),
+      places.map((p) => p.city),
+    );
+  }
   const result = await pool.query<NeighborhoodDbRow>(
     `WITH grouped AS (
        SELECT
@@ -333,6 +356,7 @@ export async function getNeighborhoods(
          AND lower(l.neighborhood) <> lower(l.city)
          AND ($2::text IS NULL OR lower(l.state) = lower($2))
          AND ($3::text IS NULL OR lower(l.city) = lower($3))
+         ${placeFilterSql}
        -- Ordered lower(state) first to match idx_listings_neighborhood_group's key order
        -- (columns.ts's doc comment on that index explains why): a state-scoped request then reads
        -- one contiguous index slice and needs no separate Sort before GroupAggregate.
@@ -377,14 +401,7 @@ export async function getNeighborhoods(
            ) c
        ) pp ON true
       ORDER BY page.total DESC, page.name ASC, page.city ASC`,
-    [
-      request.listingType,
-      request.state ?? null,
-      request.city ?? null,
-      request.minCount,
-      request.slug ?? null,
-      request.limit,
-    ],
+    params,
   );
 
   return neighborhoodsResponseSchema.parse({
