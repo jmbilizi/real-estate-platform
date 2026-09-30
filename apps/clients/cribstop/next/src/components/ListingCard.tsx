@@ -20,7 +20,8 @@ import {
   formatOpenHouseBadge,
   formatOpenHouseDate,
   formatOpenHouseTimeAndDate,
-  officeInitials,
+  officeAvatarTone,
+  officeInitial,
 } from '@/lib/listing-format';
 import { useToast } from '@/lib/useToast';
 import ListingImage from '@/components/listing/ListingImage';
@@ -450,14 +451,12 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
           <div
             className={`listing-card-office-slot flex min-w-0 flex-1 items-center gap-0.5 ${timeOnMarket !== null ? 'max-w-[85%]' : 'max-w-full'}`}
           >
-            {/* #452. One step up from the icon row's 16px — 17px is the smallest change that
-                still reads as deliberate, and the initials at 7px keep clear headroom at 17px, so
-                the type size does not need to grow with it. */}
+            {/* #452. 17px, one step up from the icon row's 16px. At 18px the office name lost a character. */}
             <span
               aria-hidden="true"
-              className="flex h-[17px] w-[17px] shrink-0 items-center justify-center rounded-full bg-ink-muted text-[7px] font-semibold text-white"
+              className={`flex h-[17px] w-[17px] shrink-0 items-center justify-center rounded-full text-[10px] font-semibold leading-none text-white ${officeAvatarTone(officeInitial(listing.officeName))}`}
             >
-              {officeInitials(listing.officeName)}
+              {officeInitial(listing.officeName)}
             </span>
             <span
               className="min-w-0 flex-1 truncate text-[13px] text-ink-body"

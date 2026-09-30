@@ -113,7 +113,7 @@ export function ListingCardSkeleton() {
             data-skeleton-office-slot
             className="flex min-w-0 max-w-[85%] flex-1 items-center gap-0.5"
           >
-            {/* #452. Matches the loaded avatar's 17px — one px up from the 16px icon row. */}
+            {/* #452. Matches the loaded 17px avatar. */}
             <span className={`h-[17px] w-[17px] shrink-0 rounded-full ${FILL}`} />
             <span className="min-w-0 flex-1 text-[13px]">
               <Bar />

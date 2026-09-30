@@ -182,7 +182,7 @@ describe('ListingCard', () => {
     // #438: one row render at every card width — the compact/full container-query pair is gone,
     // so every assertion here expects a single match. #458 moved save/share/more off this row and
     // onto the price line — see the "price line" describe block below for those.
-    it('shows the office name and its avatar initials, for every source', () => {
+    it('shows the office name and a one-letter avatar in its letter tone, for every source', () => {
       render(
         <ListingCard
           listing={aListingCardRow({ source: 'brightMLS', officeName: 'Bright Partner Realty' })}
@@ -190,7 +190,7 @@ describe('ListingCard', () => {
       );
 
       expect(screen.getByText('Bright Partner Realty')).toBeInTheDocument();
-      expect(screen.getByText('BP')).toBeInTheDocument();
+      expect(screen.getByText('B')).toHaveClass('bg-avatar-2');
       expect(screen.queryByText(/Listing courtesy of/)).not.toBeInTheDocument();
     });
 

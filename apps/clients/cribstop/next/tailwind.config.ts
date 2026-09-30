@@ -83,6 +83,18 @@ const config: Config = {
           muted: '#6a6a6a',
           subtle: '#929292',
         },
+        // Office avatar tones, one per letter group (`officeAvatarTone`). Muted so a row of cards
+        // stays calm, and each passes 4.5:1 with white text. No coral: it is reserved for CTAs.
+        avatar: {
+          1: '#4A6FA5',
+          2: '#2F7D78',
+          3: '#4B7F52',
+          4: '#8A6D3B',
+          5: '#7B5A8C',
+          6: '#5A5F9E',
+          7: '#9A5B45',
+          8: '#5F6B7A',
+        },
         // Surfaces (DESIGN.md `canvas`/`surface-soft`/`surface-strong`) — `alt`/`soft`/`border`
         // key names kept as-is (widely referenced) with values corrected to spec.
         surface: {
