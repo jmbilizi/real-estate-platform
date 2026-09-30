@@ -10,7 +10,8 @@ import {
   formatOpenHouseWhen,
   formatStreetAddress,
   hasMapCoordinates,
-  officeInitials,
+  officeAvatarTone,
+  officeInitial,
   PRICE_WITHHELD_COPY,
 } from './listing-format';
 
@@ -249,16 +250,31 @@ describe('formatComingSoonBadgeShort (#424)', () => {
   });
 });
 
-describe('officeInitials (#433)', () => {
-  it('takes the first letter of the first two words', () => {
-    expect(officeInitials('Real Broker, LLC')).toBe('RB');
-  });
-
-  it('handles a single-word office name', () => {
-    expect(officeInitials('Compass')).toBe('C');
+describe('officeInitial (#433)', () => {
+  it('takes only the first letter', () => {
+    expect(officeInitial('Real Broker, LLC')).toBe('R');
+    expect(officeInitial('compass')).toBe('C');
   });
 
   it('skips leading punctuation when picking a letter', () => {
-    expect(officeInitials('& Company Realty')).toBe('CR');
+    expect(officeInitial('& Company Realty')).toBe('C');
+  });
+});
+
+describe('officeAvatarTone', () => {
+  it('gives every office with the same first letter the same tone', () => {
+    expect(officeAvatarTone('R')).toBe(officeAvatarTone('r'));
+  });
+
+  it('cycles A-Z through the eight tones', () => {
+    expect(officeAvatarTone('A')).toBe('bg-avatar-1');
+    expect(officeAvatarTone('H')).toBe('bg-avatar-8');
+    expect(officeAvatarTone('I')).toBe('bg-avatar-1');
+    expect(officeAvatarTone('Z')).toBe('bg-avatar-2');
+  });
+
+  it('gives a digit or non-Latin letter the neutral tone', () => {
+    expect(officeAvatarTone('1')).toBe('bg-avatar-8');
+    expect(officeAvatarTone('É')).toBe('bg-avatar-8');
   });
 });

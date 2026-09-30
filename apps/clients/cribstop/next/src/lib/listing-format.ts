@@ -372,19 +372,33 @@ export function formatComingSoonBadgeShort(
 }
 
 /**
- * #433. The office avatar's initials — the first letter of each of the first two words in
- * `officeName`. "Real Broker, LLC" -> "RB", a one-word name -> its single initial. Never empty:
- * `officeName` is a required, non-blank field on every row this renders for.
+ * #433. The office avatar's letter: the first letter or digit of `officeName`, upper-cased.
+ * "Real Broker, LLC" -> "R", "& Company Realty" -> "C". Never empty: `officeName` is a required,
+ * non-blank field on every row this renders for.
  */
-export function officeInitials(officeName: string): string {
-  const initials = officeName
-    .trim()
-    .split(/\s+/)
-    .map((word) => word.replace(/[^\p{L}\p{N}]/gu, ''))
-    .filter((word) => word.length > 0)
-    .slice(0, 2)
-    .map((word) => word.charAt(0))
-    .join('')
-    .toUpperCase();
-  return initials || officeName.charAt(0).toUpperCase();
+export function officeInitial(officeName: string): string {
+  const match = officeName.match(/[\p{L}\p{N}]/u);
+  return (match ? match[0] : officeName.trim().charAt(0)).toUpperCase();
+}
+
+/** Literal class names, so Tailwind finds them in the source. */
+const AVATAR_TONES = [
+  'bg-avatar-1',
+  'bg-avatar-2',
+  'bg-avatar-3',
+  'bg-avatar-4',
+  'bg-avatar-5',
+  'bg-avatar-6',
+  'bg-avatar-7',
+  'bg-avatar-8',
+] as const;
+
+/**
+ * The office avatar's background, fixed per letter like Google's account avatars: every office
+ * that starts with "R" gets the same tone. A-Z cycle through the eight tones. Anything else (a
+ * digit, a non-Latin letter) gets the neutral last tone.
+ */
+export function officeAvatarTone(initial: string): string {
+  const index = initial.toUpperCase().charCodeAt(0) - 65;
+  return index >= 0 && index < 26 ? AVATAR_TONES[index % AVATAR_TONES.length] : AVATAR_TONES[7];
 }
