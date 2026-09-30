@@ -289,10 +289,12 @@ describe('ListingCard', () => {
       jest.useRealTimers();
     });
 
-    it('shows no time-on-market text and no separating dot when listedAt is unknown', () => {
-      render(<ListingCard listing={aListingCardRow({ listedAt: null, status: 'Active' })} />);
+    it('shows no time-on-market text when listedAt is unknown', () => {
+      const { container } = render(
+        <ListingCard listing={aListingCardRow({ listedAt: null, status: 'Active' })} />,
+      );
 
-      expect(screen.queryByText('·')).not.toBeInTheDocument();
+      expect(container.querySelector('.listing-card-time-on-market')).toBeNull();
     });
 
     it('shows no time on market for a Coming Soon listing, even with a listedAt', () => {
@@ -306,7 +308,19 @@ describe('ListingCard', () => {
         />,
       );
 
-      expect(screen.queryByText('·')).not.toBeInTheDocument();
+      expect(document.querySelector('.listing-card-time-on-market')).toBeNull();
+    });
+
+    it('shows time on market without a separating dot (#467)', () => {
+      const { container } = render(
+        <ListingCard
+          listing={aListingCardRow({ listedAt: '2026-08-01T00:00:00.000Z', status: 'Active' })}
+        />,
+      );
+
+      const time = container.querySelector('.listing-card-time-on-market');
+      expect(time).not.toBeNull();
+      expect(time?.textContent).not.toContain('·');
     });
   });
 

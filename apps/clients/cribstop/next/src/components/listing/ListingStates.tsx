@@ -80,7 +80,8 @@ export function ListingCardSkeleton() {
     // as the `data-skeleton-section` markers in `ListingDetailSkeleton` below. Tests counted these
     // by their animation class instead, which broke the moment the animation changed; a marker that
     // says what the element IS survives changes to how it looks.
-    <div aria-hidden="true" data-skeleton-card>
+    // `listing-card-root` gives the action placeholders the same container width the card gap reads.
+    <div aria-hidden="true" data-skeleton-card className="listing-card-root">
       <div className={`aspect-[4/3] overflow-hidden rounded-md ${FILL}`} />
       {/* #458. Mirrors ListingCard: pt-1.5, no label row (it renders only when a label applies,
           and a loading card has none). Order: price + three action dots, facts, address,
@@ -92,10 +93,11 @@ export function ListingCardSkeleton() {
           <p className="min-w-0 flex-1 text-base">
             <Bar className="w-2/5" />
           </p>
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="listing-card-actions flex shrink-0 items-center">
             <span className={`h-4 w-4 rounded-full ${FILL}`} />
             <span className={`h-4 w-4 rounded-full ${FILL}`} />
-            <span className={`h-4 w-4 rounded-full ${FILL}`} />
+            {/* #467. The more button is 4px wide on the card. */}
+            <span className={`h-4 w-1 rounded-full ${FILL}`} />
           </div>
         </div>
         <p className="mt-0.5 h-[18px] text-[13px] leading-[18px]">

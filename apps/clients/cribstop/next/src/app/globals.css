@@ -714,6 +714,14 @@ body {
 .listing-card-time-on-market {
   display: none;
 }
+
+/*
+ * #467. One gap between save, share and more, scaled to the card width: 8px on a 154px phone
+ * carousel card, up to 14px on a wide grid card. `cqi` reads `.listing-card-root`.
+ */
+.listing-card-actions {
+  gap: clamp(8px, 5cqi, 14px);
+}
 @container (min-width: 200px) {
   .listing-card-time-on-market {
     display: inline;

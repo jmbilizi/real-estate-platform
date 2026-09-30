@@ -56,7 +56,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
   const isComingSoon = listing.status === 'Coming Soon';
 
   /**
-   * #433. "OfficeName · 2d" in the footer row — omitted entirely (not even the separating dot)
+   * #433. Time on market at the right end of the footer row — omitted entirely
    * when there is no `listedAt` to show, or when the listing is Coming Soon: its own badge already
    * carries the date, and this line would otherwise show a stale "time on market" for a listing
    * that has not gone active yet.
@@ -373,7 +373,8 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
             )}
           </p>
 
-          <div className="flex shrink-0 items-center gap-1">
+          {/* #467. `.listing-card-actions` (globals.css) sets one gap for all three buttons, scaled to the card width. */}
+          <div className="listing-card-actions flex shrink-0 items-center">
             <button
               type="button"
               onClick={(e) => {
@@ -469,7 +470,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
           </div>
           {timeOnMarket !== null && (
             <span className="listing-card-time-on-market shrink-0 text-[13px] text-ink-muted">
-              <span aria-hidden="true">·</span> {timeOnMarket}
+              {timeOnMarket}
             </span>
           )}
         </div>
