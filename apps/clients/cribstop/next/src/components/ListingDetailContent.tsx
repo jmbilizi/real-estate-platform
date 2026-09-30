@@ -614,10 +614,10 @@ export default function ListingDetailContent({
                 system defines no 800 weight at any size. */}
             <p className="text-base font-semibold leading-tight text-ink">
               {closePriceText ?? priceDisplay.text.split('/')[0]}
+              {!priceDisplay.isWithheld && listing.listingType === 'rent' && (
+                <span className="text-xs font-normal text-ink-muted">/mo</span>
+              )}
             </p>
-            {!priceDisplay.isWithheld && listing.listingType === 'rent' && (
-              <p className="text-xs text-ink-muted">/month</p>
-            )}
           </div>
           <div className="flex shrink-0 gap-2">
             <button className="btn-secondary py-2 text-sm">Message</button>
