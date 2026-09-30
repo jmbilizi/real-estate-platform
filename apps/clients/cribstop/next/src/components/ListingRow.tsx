@@ -30,7 +30,7 @@ interface Props {
   failed?: boolean;
   /** Callback for retry action when failed. */
   onRetry?: () => void;
-  /** Control placed beside the title, outside the title link. Wraps under the title on a phone. */
+  /** Control between the title and the see-all chip, on the title's first line (#484). */
   headerExtra?: ReactNode;
 }
 
@@ -106,72 +106,126 @@ export default function ListingRow({
               to the carousel below. The pseudo element extends the hit area 6px past each edge
               (32px + 6 + 6 = 44px) without adding box height, since an absolutely-positioned
               pseudo never contributes to its parent's layout size. */}
-          {/* With `headerExtra` the title, chip and control never wrap: the title truncates. */}
-          <div
-            className={
-              headerExtra
-                ? 'flex min-w-0 flex-1 items-center gap-2'
-                : 'flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2'
-            }
-          >
-            {href && !failed ? (
-              <Link
-                href={href}
-                // `aria-label` replaces a link's whole accessible name (its own text content
-                // included), so it must repeat the title — otherwise a screen reader announces only
-                // "See all" and drops which row it is.
-                aria-label={`${title} — see all`}
-                prefetch
-                // Below `sm` (#429): the chip sits at the far right of the header row, not right
-                // beside the title — `flex w-full justify-between` spreads title and chip across
-                // the row. From `sm` up: back to the original inline pairing beside the title.
-                // `items-start`, not `items-center` (#432): a title now wraps to 2 lines rather than
-                // truncating (every title must keep its "for sale"/"rentals" word), and centering on
-                // the whole 2-line block would float the chip below the first line.
-                className={`group relative min-h-8 min-w-11 gap-1.5 before:absolute before:-top-1.5 before:-bottom-1.5 before:inset-x-0 before:content-[''] ${
-                  headerExtra
-                    ? 'inline-flex min-w-0 items-center'
-                    : 'flex w-full items-start justify-between sm:inline-flex sm:w-auto sm:justify-normal'
-                }`}
-              >
+          {headerExtra ? (
+            /* #484. Title, then the control, then the chip. The chip is its own link here, so the
+               control can sit between them. Below `sm` the chip moves to the far right, as on every
+               other row. The title wraps to 2 lines rather than truncating (#432). The control and
+               chip stay centered on its first line (the `h-7` boxes match the title line height). */
+            <div className="flex min-w-0 flex-1 items-start gap-2">
+              {href && !failed ? (
+                <Link
+                  href={href}
+                  aria-label={`${title} — see all`}
+                  prefetch
+                  className="relative min-w-0 before:absolute before:-top-1.5 before:-bottom-1.5 before:inset-x-0 before:content-['']"
+                >
+                  <h2
+                    className={
+                      titleClassName ??
+                      'line-clamp-2 font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]'
+                    }
+                  >
+                    {title}
+                  </h2>
+                </Link>
+              ) : (
                 <h2
                   className={
                     titleClassName ??
-                    'min-w-0 line-clamp-2 font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]'
+                    'line-clamp-2 min-w-0 font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]'
                   }
                 >
                   {title}
                 </h2>
-                {/* `relative top-0.5` centers the chip on the first line's height rather than the
+              )}
+              <div className="flex h-7 shrink-0 items-center">{headerExtra}</div>
+              {href && !failed && (
+                // A duplicate of the title link for pointer users only: the title link above
+                // already carries the accessible "see all" name and the tab stop.
+                <Link
+                  href={href}
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  className="group relative ml-auto flex h-7 w-11 shrink-0 items-center justify-center before:absolute before:-top-2 before:-bottom-2 before:inset-x-0 before:content-[''] sm:ml-0"
+                >
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-soft text-ink transition group-hover:bg-surface-border">
+                    <svg
+                      className="h-3.5 w-3.5"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2.5}
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M5 12h14M12 5l7 7-7 7"
+                      />
+                    </svg>
+                  </span>
+                </Link>
+              )}
+            </div>
+          ) : (
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2">
+              {href && !failed ? (
+                <Link
+                  href={href}
+                  // `aria-label` replaces a link's whole accessible name (its own text content
+                  // included), so it must repeat the title — otherwise a screen reader announces only
+                  // "See all" and drops which row it is.
+                  aria-label={`${title} — see all`}
+                  prefetch
+                  // Below `sm` (#429): the chip sits at the far right of the header row, not right
+                  // beside the title — `flex w-full justify-between` spreads title and chip across
+                  // the row. From `sm` up: back to the original inline pairing beside the title.
+                  // `items-start`, not `items-center` (#432): a title now wraps to 2 lines rather than
+                  // truncating (every title must keep its "for sale"/"rentals" word), and centering on
+                  // the whole 2-line block would float the chip below the first line.
+                  className="group relative flex min-h-8 min-w-11 w-full items-start justify-between gap-1.5 before:absolute before:-top-1.5 before:-bottom-1.5 before:inset-x-0 before:content-[''] sm:inline-flex sm:w-auto sm:justify-normal"
+                >
+                  <h2
+                    className={
+                      titleClassName ??
+                      'min-w-0 line-clamp-2 font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]'
+                    }
+                  >
+                    {title}
+                  </h2>
+                  {/* `relative top-0.5` centers the chip on the first line's height rather than the
                   container's top edge, now that the title can run to a second line (#432) — a
                   relative offset shifts the paint only, not the layout box, so it cannot add to
                   the header's own height the way a `margin-top` did and blow out the gap to the
                   carousel below (#447). */}
-                <span className="relative top-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-soft text-ink transition group-hover:bg-surface-border">
-                  <svg
-                    className="h-3.5 w-3.5"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2.5}
-                    viewBox="0 0 24 24"
-                  >
-                    {/* Straight arrow (shaft + head), not a chevron (#429) — Airbnb's "see all". */}
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
-                  </svg>
-                </span>
-              </Link>
-            ) : (
-              <h2
-                className={
-                  titleClassName ??
-                  'font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]'
-                }
-              >
-                {title}
-              </h2>
-            )}
-            {headerExtra}
-          </div>
+                  <span className="relative top-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-soft text-ink transition group-hover:bg-surface-border">
+                    <svg
+                      className="h-3.5 w-3.5"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2.5}
+                      viewBox="0 0 24 24"
+                    >
+                      {/* Straight arrow (shaft + head), not a chevron (#429) — Airbnb's "see all". */}
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M5 12h14M12 5l7 7-7 7"
+                      />
+                    </svg>
+                  </span>
+                </Link>
+              ) : (
+                <h2
+                  className={
+                    titleClassName ??
+                    'font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]'
+                  }
+                >
+                  {title}
+                </h2>
+              )}
+            </div>
+          )}
           {/* Touch is the control below `sm` (Airbnb-style peeking rows); arrows return once there
               is room for them to sit clear of the cards. The visible circle is 32px. Each
               button's tap target stays 44px through the same `before:` hit-area technique as the

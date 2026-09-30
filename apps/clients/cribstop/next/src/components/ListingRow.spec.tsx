@@ -92,4 +92,29 @@ describe('ListingRow', () => {
       expect(screen.getByLabelText('Scroll right')).not.toBeDisabled();
     });
   });
+
+  describe('headerExtra (#484)', () => {
+    it('puts the control between the title and the see-all chip, chip right-aligned on a phone', () => {
+      render(
+        <ListingRow
+          title="Cheapest rentals"
+          href="/search"
+          listings={[aListingCardRow()]}
+          headerExtra={<button type="button">Lowest</button>}
+        />,
+      );
+
+      const title = screen.getByLabelText('Cheapest rentals — see all');
+      const control = screen.getByRole('button', { name: 'Lowest' });
+      const chip = title.parentElement!.lastElementChild as HTMLElement;
+
+      expect(
+        title.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(control.compareDocumentPosition(chip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(chip).toHaveAttribute('href', '/search');
+      expect(chip).toHaveAttribute('tabindex', '-1');
+      expect(chip).toHaveClass('ml-auto', 'sm:ml-0');
+    });
+  });
 });
