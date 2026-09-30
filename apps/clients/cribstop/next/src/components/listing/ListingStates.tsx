@@ -106,12 +106,21 @@ export function ListingCardSkeleton() {
         <h3 className="mt-0.5 truncate font-system text-[13px] font-normal leading-[18px]">
           <Bar className="w-3/5" />
         </h3>
-        {/* #433/#438/#458. Attribution row: avatar circle, a name bar. */}
+        {/* #433/#438/#458/#470. Attribution row, two slots. Left: avatar circle + name bar within
+            85%. Right: a short time bar, right-aligned. */}
         <div className="mt-1 flex items-center gap-1">
-          {/* #452. Matches the loaded avatar's 17px — one px up from the 16px icon row. */}
-          <span className={`h-[17px] w-[17px] shrink-0 rounded-full ${FILL}`} />
-          <span className="min-w-0 flex-1 text-[13px]">
-            <Bar />
+          <div
+            data-skeleton-office-slot
+            className="flex min-w-0 max-w-[85%] flex-1 items-center gap-0.5"
+          >
+            {/* #452. Matches the loaded avatar's 17px — one px up from the 16px icon row. */}
+            <span className={`h-[17px] w-[17px] shrink-0 rounded-full ${FILL}`} />
+            <span className="min-w-0 flex-1 text-[13px]">
+              <Bar />
+            </span>
+          </div>
+          <span data-skeleton-time-slot className="ml-auto flex shrink-0 justify-end text-[13px]">
+            <Bar className="w-11" />
           </span>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { aLandParcelRow, aListingCardRow, aSuppressedAddressRow } from '@/test/fixtures';
 import ListingCard from './ListingCard';
+import { ListingCardSkeleton } from './listing/ListingStates';
 import { getListingPanel, resetListingPanel } from '@/lib/listing-panel';
 
 jest.mock('@/lib/context', () => ({
@@ -204,7 +205,7 @@ describe('ListingCard', () => {
       expect(name).toHaveAttribute('aria-label', officeName);
     });
 
-    it('floors the office name width and hides time on market below 200px (#438 compliance follow-up)', () => {
+    it('splits the footer into an office slot capped at 85% and a never-truncating time slot (#470)', () => {
       render(
         <ListingCard
           listing={aListingCardRow({
@@ -216,36 +217,42 @@ describe('ListingCard', () => {
       );
 
       const name = screen.getByText('Acme Realty');
-      expect(name).toHaveClass('min-w-[72px]');
+      expect(name).toHaveClass('min-w-0', 'flex-1', 'truncate');
+      expect(name.closest('.listing-card-office-slot')).toHaveClass('max-w-[85%]');
 
       const timeOnMarket = document.querySelector('.listing-card-time-on-market');
-      // jsdom does not evaluate the `@container` query in globals.css that shows this above
-      // 200px, so this pins the class the query keys off rather than the resulting visibility —
-      // see the "footer name width budget" test below for the arithmetic this class protects.
       expect(timeOnMarket).not.toBeNull();
+      expect(timeOnMarket).toHaveClass('shrink-0', 'whitespace-nowrap', 'text-right');
+      expect(timeOnMarket).not.toHaveClass('truncate');
+      // Time on market shows at every width: no hide class and no container query.
+      expect(timeOnMarket).not.toHaveClass('hidden');
+    });
+
+    it('lets the office slot use the full row when there is no time on market (#470)', () => {
+      render(
+        <ListingCard listing={aListingCardRow({ officeName: 'Acme Realty', listedAt: null })} />,
+      );
+
+      const slot = screen.getByText('Acme Realty').closest('.listing-card-office-slot');
+      expect(slot).toHaveClass('max-w-full');
+      expect(slot).not.toHaveClass('max-w-[85%]');
     });
 
     /**
      * NAR 7.58 / Bright IDX requires the office name stay "reasonably prominent" at every card
-     * width. jsdom does not compute layout or evaluate `@container` queries, so a rendered-pixel
-     * assertion is not possible here — this pins the same pixel budget the CSS in globals.css and
-     * the `min-w-[72px]`/`gap-0.5` classes in ListingCard.tsx are sized against, as a regression
-     * guard: if the avatar size or its gap to the name grows without updating this test, the
-     * name's width floor is falling below the 10-character target described to
-     * `cribstop-compliance-reviewer` for #438.
-     *
-     * #458 moved save/share/more off this row onto the price line, so the name no longer
-     * competes with an action cluster here — only the avatar and its gap count against the
-     * budget. Time on market is hidden below 200px (`.listing-card-time-on-market`), so it does
-     * not count against the budget at this width either.
+     * width. jsdom does not compute layout, so this pins the pixel budget the `max-w-[85%]` cap
+     * and `gap-0.5` in ListingCard.tsx are sized against. Measured in a browser for #470.
      */
-    it('attribution row name width budget: reserves at least 10 characters at the ~151px home-carousel card', () => {
-      const CARD_WIDTH = 151; // narrowest card, per the home-carousel comments elsewhere in this file
+    it('attribution row name width budget: reserves at least 10 characters at the 141px home-carousel card', () => {
+      const CARD_WIDTH = 141; // narrowest card: home carousel on a 360px phone
+      const TIME_WIDTH = 42; // "12 min", the widest usual time value; the time slot never shrinks
+      const ROW_GAP = 4; // gap-1, between the office slot and the time slot
       const AVATAR = 17; // #452: one px up from the 16px icon row
       const AVATAR_NAME_GAP = 2; // gap-0.5, between the avatar and the name
 
-      const nameBudgetPx = CARD_WIDTH - AVATAR - AVATAR_NAME_GAP;
-      expect(nameBudgetPx).toBeGreaterThanOrEqual(72); // matches min-w-[72px]
+      const officeSlotPx = Math.min(CARD_WIDTH * 0.85, CARD_WIDTH - TIME_WIDTH - ROW_GAP);
+      const nameBudgetPx = Math.floor(officeSlotPx) - AVATAR - AVATAR_NAME_GAP;
+      expect(nameBudgetPx).toBeGreaterThanOrEqual(70);
 
       const AVERAGE_CHAR_WIDTH_PX = 7; // measured for the row's 13px Manrope/system body text
       const visibleCharacters = Math.floor(nameBudgetPx / AVERAGE_CHAR_WIDTH_PX);
@@ -953,5 +960,21 @@ describe('ListingCard', () => {
       const fullTextPx = 'Coming soon Oct 10'.length * AVG_CHAR_WIDTH_PX[12];
       expect(pillTextBudgetPx(300)).toBeGreaterThanOrEqual(fullTextPx);
     });
+  });
+});
+
+describe('ListingCardSkeleton footer (#470)', () => {
+  it('has separate office and time placeholders matching the loaded slots', () => {
+    const { container } = render(<ListingCardSkeleton />);
+
+    const office = container.querySelector('[data-skeleton-office-slot]');
+    const time = container.querySelector('[data-skeleton-time-slot]');
+    expect(office).not.toBeNull();
+    expect(time).not.toBeNull();
+    expect(office).toHaveClass('max-w-[85%]');
+    expect(time).toHaveClass('shrink-0', 'justify-end');
+    // Avatar circle and name bar sit in the office slot, the time bar in the time slot.
+    expect(office?.querySelectorAll('span').length).toBeGreaterThanOrEqual(2);
+    expect(time?.contains(office as Element)).toBe(false);
   });
 });
