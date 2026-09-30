@@ -5,7 +5,12 @@ import { stateCode } from './search-request';
  * `GET /listings/neighborhoods` (#390): counts of publishable listings grouped by neighborhood, for
  * the home page's "Explore neighborhoods" row. No ranking, no descriptive word — counts only, so
  * this never becomes a second, unreviewed `featured` mechanism.
+ *
+ * #486: each row may carry `previewPhotos`, read live from the sale listings the tile links to.
+ * They are not ranking or featuring. Row order stays count based.
  */
+
+export const NEIGHBORHOOD_PREVIEW_PHOTOS_MAX = 5;
 
 export const NEIGHBORHOODS_LISTING_TYPES = ['sale', 'rent'] as const;
 
@@ -66,6 +71,13 @@ export const neighborhoodsRequestSchema = z.strictObject({
 
 export type NeighborhoodsRequest = z.infer<typeof neighborhoodsRequestSchema>;
 
+export const neighborhoodPreviewPhotoSchema = z.object({
+  url: z.string().describe('The listing’s primary photo URL.'),
+  listingId: z.string().describe('The listing the photo belongs to.'),
+});
+
+export type NeighborhoodPreviewPhoto = z.infer<typeof neighborhoodPreviewPhotoSchema>;
+
 export const neighborhoodRowSchema = z.object({
   name: z.string(),
   city: z.string(),
@@ -74,6 +86,14 @@ export const neighborhoodRowSchema = z.object({
   total: z.number().int().nonnegative(),
   sale: z.number().int().nonnegative(),
   rent: z.number().int().nonnegative(),
+  previewPhotos: z
+    .array(neighborhoodPreviewPhotoSchema)
+    .max(NEIGHBORHOOD_PREVIEW_PHOTOS_MAX)
+    .optional()
+    .describe(
+      `Up to ${NEIGHBORHOOD_PREVIEW_PHOTOS_MAX} primary photos, one per listing, from the sale ` +
+        'listings the tile links to. Newest listed first. Absent when no listing qualifies.',
+    ),
 });
 
 export type NeighborhoodRow = z.infer<typeof neighborhoodRowSchema>;

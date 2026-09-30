@@ -147,6 +147,7 @@ describe('getNeighborhoods', () => {
         sale: 30,
         rent: 12,
         group_total: 7,
+        preview_photos: [],
       },
     ];
     const { client } = fakeClient(rows);
@@ -175,6 +176,87 @@ describe('getNeighborhoods', () => {
     const result = await getNeighborhoods(client, baseNeighborhoodsRequest);
 
     expect(result).toEqual({ results: [], total: 0 });
+  });
+
+  describe('previewPhotos (#486)', () => {
+    const row = (previewPhotos: { url: string; listingId: string }[]) => ({
+      name: 'FISHTOWN',
+      city: 'Philadelphia',
+      state: 'PA',
+      total: 6,
+      sale: 6,
+      rent: 0,
+      group_total: 1,
+      preview_photos: previewPhotos,
+    });
+    const photos = (count: number) =>
+      Array.from({ length: count }, (_, i) => ({
+        url: `https://cdn.example/${i}.jpg`,
+        listingId: `listing-${i}`,
+      }));
+
+    it.each([0, 1, 3, 5])('maps %i qualifying photos', async (count) => {
+      const { client } = fakeClient([row(photos(count))]);
+
+      const result = await getNeighborhoods(client, baseNeighborhoodsRequest);
+
+      if (count === 0) {
+        expect(result.results[0]?.previewPhotos).toBeUndefined();
+      } else {
+        expect(result.results[0]?.previewPhotos).toEqual(photos(count));
+      }
+    });
+
+    it('never passes more than 5 photos: the contract rejects a sixth', async () => {
+      const { client } = fakeClient([row(photos(6))]);
+
+      await expect(getNeighborhoods(client, baseNeighborhoodsRequest)).rejects.toThrow();
+    });
+
+    it('applies the photo lookup after the page LIMIT, to sale listings only', async () => {
+      const { client, captured } = fakeClient();
+
+      await getNeighborhoods(client, baseNeighborhoodsRequest);
+
+      const text = captured[0]?.text ?? '';
+      expect(text.indexOf('LIMIT $6')).toBeGreaterThan(-1);
+      expect(text.indexOf('LIMIT $6')).toBeLessThan(text.indexOf('LEFT JOIN LATERAL'));
+      expect(text).toContain("pl.listing_type = 'sale'");
+      expect(text).toContain('LIMIT 5');
+    });
+
+    it('gates photos on the same visibility and media rules as search', async () => {
+      const { client, captured } = fakeClient();
+
+      await getNeighborhoods(client, baseNeighborhoodsRequest);
+
+      const text = captured[0]?.text ?? '';
+      expect(text).toContain('pl.deleted_at IS NULL');
+      expect(text).toContain('pl.internet_display_allowed');
+      expect(text).toContain("(pl.consumer_status <> 'Sold' OR pl.close_date IS NOT NULL)");
+      expect(text).toContain('(pl.media_display_allowed OR m.retained_when_suppressed)');
+      expect(text).toContain('ORDER BY m.is_primary DESC, m.sort_order, m.id');
+    });
+
+    it('orders photos newest listed first, listing id as the tie-break', async () => {
+      const { client, captured } = fakeClient();
+
+      await getNeighborhoods(client, baseNeighborhoodsRequest);
+
+      expect(captured[0]?.text).toContain('ORDER BY pl.listed_at DESC NULLS LAST, pl.id DESC');
+    });
+
+    it.each(['all', 'sale', 'rent'] as const)(
+      'leaves the photo filter sale-only for listingType=%s',
+      async (listingType) => {
+        const { client, captured } = fakeClient();
+
+        await getNeighborhoods(client, { ...baseNeighborhoodsRequest, listingType });
+
+        expect(captured[0]?.text).toContain("pl.listing_type = 'sale'");
+        expect(captured[0]?.values[0]).toBe(listingType);
+      },
+    );
   });
 });
 

@@ -2,6 +2,7 @@ import {
   type ListingDetail,
   type ListingsEnvelope,
   type ListingsMeta,
+  NEIGHBORHOOD_PREVIEW_PHOTOS_MAX,
   type NeighborhoodsRequest,
   type NeighborhoodsResponse,
   neighborhoodsResponseSchema,
@@ -71,7 +72,9 @@ export interface ReadPool extends ReadClient {
  * `is_primary` — and none at all when no row is marked. That "none at all" is the fail-closed case
  * a media pass that has not run yet must land in, never an arbitrary photo.
  */
-const MEDIA_VISIBLE = '(v.media_display_allowed OR m.retained_when_suppressed)';
+const mediaVisibleSql = (listingAlias: string): string =>
+  `(${listingAlias}.media_display_allowed OR m.retained_when_suppressed)`;
+const MEDIA_VISIBLE = mediaVisibleSql('v');
 
 /**
  * The soonest-first primary image when media is not suppressed: `is_primary` wins; failing that
@@ -81,12 +84,14 @@ const MEDIA_VISIBLE = '(v.media_display_allowed OR m.retained_when_suppressed)';
  * `idx_listing_media_one_retained`), so `is_primary`/`sort_order` are never consulted to choose
  * among candidates in that case.
  */
+const PRIMARY_MEDIA_ORDER = 'm.is_primary DESC, m.sort_order, m.id';
+
 const PRIMARY_MEDIA_JOIN = `
     LEFT JOIN LATERAL (
       SELECT m.source_url AS primary_media_url, m.alt_text AS primary_media_alt_text
       FROM listing_media m
       WHERE m.listing_id = v.id AND m.source_url IS NOT NULL AND ${MEDIA_VISIBLE}
-      ORDER BY m.is_primary DESC, m.sort_order, m.id
+      ORDER BY ${PRIMARY_MEDIA_ORDER}
       LIMIT 1
     ) pm ON true`;
 
@@ -275,6 +280,7 @@ interface NeighborhoodDbRow {
   sale: number;
   rent: number;
   group_total: number;
+  preview_photos: { url: string; listingId: string }[];
 }
 
 /**
@@ -331,13 +337,46 @@ export async function getNeighborhoods(
        -- (columns.ts's doc comment on that index explains why): a state-scoped request then reads
        -- one contiguous index slice and needs no separate Sort before GroupAggregate.
        GROUP BY lower(l.state), lower(l.neighborhood), lower(l.city)
+     ),
+     page AS (
+       SELECT *, count(*) OVER ()::int AS group_total
+         FROM grouped
+        WHERE total >= $4
+          AND ($5::text IS NULL OR ${neighborhoodSlugSql('name')} = $5)
+        ORDER BY total DESC, name ASC, city ASC
+        LIMIT $6
      )
-     SELECT *, count(*) OVER ()::int AS group_total
-       FROM grouped
-      WHERE total >= $4
-        AND ($5::text IS NULL OR ${neighborhoodSlugSql('name')} = $5)
-      ORDER BY total DESC, name ASC, city ASC
-      LIMIT $6`,
+     -- #486. Preview photos join AFTER the page LIMIT: the lookup runs once per returned row and
+     -- the aggregate above keeps its index-only scan. The filters equal the tile's link target
+     -- (homes-for-sale in this neighborhood). The inner join drops a listing with no visible photo.
+     SELECT page.*, pp.preview_photos
+       FROM page
+       LEFT JOIN LATERAL (
+         SELECT coalesce(
+                  jsonb_agg(jsonb_build_object('url', c.url, 'listingId', c.id)
+                            ORDER BY c.listed_at DESC NULLS LAST, c.id DESC),
+                  '[]'::jsonb) AS preview_photos
+           FROM (
+             SELECT pl.id, pl.listed_at, pm.url
+               FROM listings pl
+               JOIN LATERAL (
+                 SELECT m.source_url AS url
+                   FROM listing_media m
+                  WHERE m.listing_id = pl.id AND m.source_url IS NOT NULL
+                    AND ${mediaVisibleSql('pl')}
+                  ORDER BY ${PRIMARY_MEDIA_ORDER}
+                  LIMIT 1
+               ) pm ON true
+              WHERE ${LISTING_VISIBILITY_SQL.replace(/\bl\./g, 'pl.')}
+                AND pl.listing_type = 'sale'
+                AND lower(pl.state) = lower(page.state)
+                AND lower(pl.neighborhood) = lower(page.name)
+                AND lower(pl.city) = lower(page.city)
+              ORDER BY pl.listed_at DESC NULLS LAST, pl.id DESC
+              LIMIT ${NEIGHBORHOOD_PREVIEW_PHOTOS_MAX}
+           ) c
+       ) pp ON true
+      ORDER BY page.total DESC, page.name ASC, page.city ASC`,
     [
       request.listingType,
       request.state ?? null,
@@ -357,6 +396,7 @@ export async function getNeighborhoods(
       total: row.total,
       sale: row.sale,
       rent: row.rent,
+      ...(row.preview_photos.length > 0 ? { previewPhotos: row.preview_photos } : {}),
     })),
     total: result.rows[0]?.group_total ?? 0,
   });
