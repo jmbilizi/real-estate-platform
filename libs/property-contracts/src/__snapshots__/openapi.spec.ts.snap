@@ -2173,6 +2173,29 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
         "parameters": [
           {
             "in": "query",
+            "name": "place",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^\\s*[^,\\s][^,]*,\\s*[A-Za-z]{2}\\s*$",
+                  "type": "string",
+                },
+                {
+                  "items": {
+                    "pattern": "^\\s*[^,\\s][^,]*,\\s*[A-Za-z]{2}\\s*$",
+                    "type": "string",
+                  },
+                  "maxItems": 25,
+                  "minItems": 1,
+                  "type": "array",
+                },
+              ],
+              "description": "Repeatable \`City, ST\` (example \`?place=Bethesda,MD&place=Chevy Chase,DC\`), 1 to 25 items, no duplicates (case-insensitive). City match is case-insensitive, state match is exact. Cannot combine with \`city\` or \`state\`.",
+            },
+          },
+          {
+            "in": "query",
             "name": "state",
             "required": false,
             "schema": {
@@ -2186,7 +2209,7 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
             "name": "city",
             "required": false,
             "schema": {
-              "description": "Case-insensitive exact match against the neighborhood’s city.",
+              "description": "Case-insensitive exact match against the neighborhood’s city. Cannot combine with \`place\`.",
               "type": "string",
             },
           },

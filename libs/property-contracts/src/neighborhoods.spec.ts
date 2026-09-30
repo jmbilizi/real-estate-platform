@@ -39,6 +39,78 @@ describe('neighborhoodsRequestSchema', () => {
   });
 });
 
+describe('neighborhoodsRequestSchema place (#488)', () => {
+  const parse = (query: Record<string, unknown>) => neighborhoodsRequestSchema.safeParse(query);
+
+  it('parses one occurrence as a one-item list and normalizes case', () => {
+    const parsed = neighborhoodsRequestSchema.parse({ place: 'Bethesda, md' });
+    expect(parsed.place).toEqual([{ city: 'Bethesda', state: 'MD' }]);
+  });
+
+  it('parses repeated places, keeping the comma inside each item', () => {
+    const parsed = neighborhoodsRequestSchema.parse({
+      place: ['Bethesda,MD', 'Chevy Chase,DC'],
+    });
+    expect(parsed.place).toEqual([
+      { city: 'Bethesda', state: 'MD' },
+      { city: 'Chevy Chase', state: 'DC' },
+    ]);
+  });
+
+  it('combines with slug, listingType, minCount and limit', () => {
+    const parsed = neighborhoodsRequestSchema.parse({
+      place: 'Bethesda,MD',
+      slug: 'x',
+      listingType: 'sale',
+      minCount: '2',
+      limit: '5',
+    });
+    expect(parsed).toMatchObject({ listingType: 'sale', minCount: 2, limit: 5, slug: 'x' });
+  });
+
+  it.each([
+    ['no state', 'Bethesda'],
+    ['bad state', 'Bethesda,MDD'],
+    ['digit state', 'Bethesda,M1'],
+    ['empty city', ',MD'],
+    ['blank city', '  ,MD'],
+    ['empty item', ''],
+  ])('rejects a malformed item: %s', (_name, place) => {
+    expect(parse({ place }).success).toBe(false);
+  });
+
+  it('rejects an empty list and an empty item in a list', () => {
+    expect(parse({ place: [] }).success).toBe(false);
+    expect(parse({ place: ['Bethesda,MD', ''] }).success).toBe(false);
+  });
+
+  it('rejects a case-insensitive duplicate', () => {
+    expect(parse({ place: ['Bethesda,MD', 'BETHESDA, md'] }).success).toBe(false);
+  });
+
+  it('accepts the same city in two states', () => {
+    expect(parse({ place: ['Chevy Chase,MD', 'Chevy Chase,DC'] }).success).toBe(true);
+  });
+
+  it('accepts 25 items and rejects 26', () => {
+    const list = (n: number) => Array.from({ length: n }, (_v, i) => `City ${i},MD`);
+    expect(parse({ place: list(25) }).success).toBe(true);
+    expect(parse({ place: list(26) }).success).toBe(false);
+  });
+
+  it.each([['city'], ['state']])('rejects place with %s and names both', (other) => {
+    const result = parse({ place: 'Bethesda,MD', [other]: other === 'state' ? 'MD' : 'Bethesda' });
+    expect(result.success).toBe(false);
+    const paths = result.error?.issues.map((issue) => issue.path[0]);
+    expect(paths).toEqual(expect.arrayContaining(['place', other]));
+    expect(result.error?.issues[0]?.message).toContain(other);
+  });
+
+  it('still accepts city and state without place', () => {
+    expect(parse({ city: 'Bethesda', state: 'MD' }).success).toBe(true);
+  });
+});
+
 describe('neighborhoodsResponseSchema', () => {
   it('parses an empty result set', () => {
     const parsed = neighborhoodsResponseSchema.parse({ results: [], total: 0 });
