@@ -44,6 +44,11 @@ describe('Z_LAYERS', () => {
     expect(Z_LAYERS.searchBar).toBeGreaterThan(Z_LAYERS.chrome);
   });
 
+  /** #480. The search page's results column (`SearchExperience`, `relative z-10`) follows the bar. */
+  it('keeps the in-flow search bar above the search results column', () => {
+    expect(Z_LAYERS.searchBarInPage).toBeGreaterThan(10);
+  });
+
   it('puts dialogs above every page-chrome layer, which is the invariant that regressed', () => {
     const chrome = [
       Z_LAYERS.navBackdrop,
