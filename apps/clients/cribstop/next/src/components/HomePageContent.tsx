@@ -556,7 +556,7 @@ function PriceSortToggle({
     <div
       role="group"
       aria-label="Sort by price"
-      className="inline-flex shrink-0 rounded-full border border-surface-border bg-white p-0.5"
+      className="inline-flex shrink-0 whitespace-nowrap rounded-full border border-surface-border bg-white p-px"
     >
       {PRICE_SORT_OPTIONS.map((option) => {
         const active = option.value === value;
@@ -566,7 +566,7 @@ function PriceSortToggle({
             type="button"
             aria-pressed={active}
             onClick={() => onChange(option.value)}
-            className={`inline-flex min-h-8 items-center justify-center rounded-full px-3 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 ${
+            className={`relative inline-flex h-5 items-center justify-center whitespace-nowrap rounded-full px-2 text-[11px] font-semibold leading-none transition before:absolute before:-inset-y-3 before:inset-x-0 before:content-['']  focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 ${
               active ? 'bg-ink text-white' : 'text-ink hover:bg-surface-alt'
             }`}
           >
@@ -616,6 +616,7 @@ function PriceSortRow({ side, region }: { side: ListingSide; region: Region | nu
       onRetry={refetch}
       max={7}
       sectionClassName="px-6 pt-3 sm:px-10 lg:px-20"
+      titleClassName="min-w-0 truncate font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]"
       headerExtra={<PriceSortToggle value={sort} onChange={setSort} />}
     />
   );

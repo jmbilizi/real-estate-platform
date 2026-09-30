@@ -106,7 +106,14 @@ export default function ListingRow({
               to the carousel below. The pseudo element extends the hit area 6px past each edge
               (32px + 6 + 6 = 44px) without adding box height, since an absolutely-positioned
               pseudo never contributes to its parent's layout size. */}
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2">
+          {/* With `headerExtra` the title, chip and control never wrap: the title truncates. */}
+          <div
+            className={
+              headerExtra
+                ? 'flex min-w-0 flex-1 items-center gap-2'
+                : 'flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2'
+            }
+          >
             {href && !failed ? (
               <Link
                 href={href}
@@ -121,7 +128,11 @@ export default function ListingRow({
                 // `items-start`, not `items-center` (#432): a title now wraps to 2 lines rather than
                 // truncating (every title must keep its "for sale"/"rentals" word), and centering on
                 // the whole 2-line block would float the chip below the first line.
-                className="group relative flex min-h-8 min-w-11 w-full items-start justify-between gap-1.5 before:absolute before:-top-1.5 before:-bottom-1.5 before:inset-x-0 before:content-[''] sm:inline-flex sm:w-auto sm:justify-normal"
+                className={`group relative min-h-8 min-w-11 gap-1.5 before:absolute before:-top-1.5 before:-bottom-1.5 before:inset-x-0 before:content-[''] ${
+                  headerExtra
+                    ? 'inline-flex min-w-0 items-center'
+                    : 'flex w-full items-start justify-between sm:inline-flex sm:w-auto sm:justify-normal'
+                }`}
               >
                 <h2
                   className={
