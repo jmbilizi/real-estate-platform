@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { PROPERTY_TYPES } from '@cribstop/property-contracts';
 import type { NeighborhoodRow as NeighborhoodApiRow } from '@cribstop/property-contracts';
 import ListingRow from '@/components/ListingRow';
 import NeighborhoodRow, { type Neighborhood } from '@/components/NeighborhoodRow';
@@ -359,29 +360,6 @@ function searchHref(side: ListingSide, params: Record<string, string>): string {
   );
 }
 
-/**
- * A pill-shaped toggle button, used by the budget chips. Active state matches the app's one
- * canonical selected-chip style (`FilterModalContent`'s Home Type / Amenities chips): black fill,
- * not a brand color — #398 found the previous `brand-900` fill read as an off-theme dark red.
- */
-function PillButton({
-  active,
-  className = '',
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { active: boolean }) {
-  return (
-    <button
-      type="button"
-      className={`inline-flex min-h-11 items-center justify-center rounded-full border px-4 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 ${
-        active
-          ? 'border-ink bg-ink text-white'
-          : 'border-surface-border bg-white text-ink hover:bg-surface-alt'
-      } ${className}`}
-      {...props}
-    />
-  );
-}
-
 /** "Newest homes for sale" / "Newest rentals" (#394): a true list date, not
  *  `ModificationTimestamp`. Sorts by `newly-listed` with no date cutoff, so the row always fills.
  *  Hidden while empty and settled. No subtitle: the title states what the row shows on its own. */
@@ -543,127 +521,103 @@ function PriceDropsRow() {
   );
 }
 
-interface BudgetBand {
-  label: string;
-  minPrice?: number;
-  maxPrice?: number;
-}
+type PriceSort = 'price-asc' | 'price-desc';
 
-const SALE_BANDS: BudgetBand[] = [
-  { label: 'Under $300K', maxPrice: 300_000 },
-  { label: '$300K–$500K', minPrice: 300_000, maxPrice: 500_000 },
-  { label: '$500K–$750K', minPrice: 500_000, maxPrice: 750_000 },
-  { label: '$750K–$1M', minPrice: 750_000, maxPrice: 1_000_000 },
-  { label: '$1M+', minPrice: 1_000_000 },
+/** Titles describe price only (Fair Housing). "Cheapest"/"Priciest" name the sort, never a place. */
+const PRICE_SORT_TITLE: Record<ListingSide, Record<PriceSort, string>> = {
+  sale: { 'price-asc': 'Cheapest homes for sale', 'price-desc': 'Priciest homes for sale' },
+  rent: { 'price-asc': 'Cheapest rentals', 'price-desc': 'Priciest rentals' },
+};
+
+const PRICE_SORT_OPTIONS: { value: PriceSort; label: string }[] = [
+  { value: 'price-asc', label: 'Lowest' },
+  { value: 'price-desc', label: 'Highest' },
 ];
 
-const RENT_BANDS: BudgetBand[] = [
-  { label: 'Under $1,500', maxPrice: 1_500 },
-  { label: '$1,500–$2,500', minPrice: 1_500, maxPrice: 2_500 },
-  { label: '$2,500–$4,000', minPrice: 2_500, maxPrice: 4_000 },
-  { label: '$4,000+', minPrice: 4_000 },
-];
+/** Data-quality floors, not budget caps. The feed holds placeholder prices (sale $500, rent $0)
+ *  that would head the low-to-high rows. Real low prices sit above these (#478). */
+const PRICE_FLOOR: Record<ListingSide, number> = { sale: 5_000, rent: 200 };
 
-/** "Under $300K" -> "under $300K": reads as a sentence fragment once folded into the title below.
- *  Every other label ("$300K–$500K", "$1M+") already reads fine mid-sentence as-is. */
-function budgetPricePhrase(label: string): string {
-  return label.startsWith('Under ') ? `under ${label.slice('Under '.length)}` : label;
-}
+/** The sale row shows homes, not lots: `Land` at $999 headed the low-to-high row. */
+const SALE_HOME_TYPES = PROPERTY_TYPES.filter((type) => type !== 'Land');
 
 /**
- * One budget sub-row: chips for one fixed listing type, and the selected band's cards. Its own
- * title is short and concrete ("Find homes for sale under $300K", "Rentals under $1,500 a month");
- * no subtitle (#394 stakeholder correction) — the title already says everything the row shows.
- *
- * `bands[selected] ?? bands[0]` is a defensive clamp only — the sale row (5 bands) and the rent
- * row (4 bands) are each rendered with their own `key` in `BudgetSection`, so React never reuses
- * one's `selected` state for the other's shorter array.
+ * Two-segment pill beside a row title. The active segment uses the app's one selected-chip style
+ * (`FilterModalContent`'s Home Type chips): black fill, not a brand color (#398).
  */
-function BudgetSubRow({
-  type,
-  bands,
-  region,
+function PriceSortToggle({
+  value,
+  onChange,
 }: {
-  type: 'sale' | 'rent';
-  bands: BudgetBand[];
-  region: Region | null;
+  value: PriceSort;
+  onChange: (sort: PriceSort) => void;
 }) {
-  const [selected, setSelected] = useState(0);
-  const band = bands[selected] ?? bands[0];
-  // The visitor's own last search wins over the coarser IP region (#363) when both are known.
-  const place = useLastSearchedPlace() ?? region;
-
-  // City-scoped when a place is known (#416), even with no subtitle to name it.
-  const { listings, total, loading, failed, refetch } = useCarouselListings({
-    listingType: type,
-    minPrice: band.minPrice,
-    maxPrice: band.maxPrice,
-    sort: 'newest',
-    pageSize: CAROUSEL_PAGE_SIZE,
-    city: place?.city,
-    state: place?.state,
-  });
-
-  // A real, empty result — distinct from "still loading" and from "the fetch failed". The chips
-  // stay live so the visitor can pick another band without an empty scroller under them.
-  const empty = !loading && !failed && total === 0;
-  const priceText = budgetPricePhrase(band.label);
-  const title =
-    type === 'sale' ? `Find homes for sale ${priceText}` : `Rentals ${priceText} a month`;
-
   return (
-    <div>
-      <div className="flex flex-wrap gap-2">
-        {bands.map((b, i) => (
-          <PillButton
-            key={b.label}
-            active={i === selected}
-            aria-pressed={i === selected}
-            onClick={() => setSelected(i)}
+    <div
+      role="group"
+      aria-label="Sort by price"
+      className="inline-flex shrink-0 rounded-full border border-surface-border bg-white p-0.5"
+    >
+      {PRICE_SORT_OPTIONS.map((option) => {
+        const active = option.value === value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onChange(option.value)}
+            className={`inline-flex min-h-8 items-center justify-center rounded-full px-3 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 ${
+              active ? 'bg-ink text-white' : 'text-ink hover:bg-surface-alt'
+            }`}
           >
-            {b.label}
-          </PillButton>
-        ))}
-      </div>
-      {empty ? (
-        <p className="mt-4 text-sm text-ink-muted">
-          No homes in this price range yet. Try another range.
-        </p>
-      ) : (
-        <ListingRow
-          title={title}
-          href={searchHref(type, {
-            ...(band.minPrice ? { minPrice: String(band.minPrice) } : {}),
-            ...(band.maxPrice ? { maxPrice: String(band.maxPrice) } : {}),
-            ...(place ? { city: place.city, state: place.state } : {}),
-          })}
-          listings={listings}
-          loading={loading}
-          failed={failed}
-          onRetry={refetch}
-          max={7}
-          sectionClassName="pt-2"
-        />
-      )}
+            {option.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
 
 /**
- * Budget sub-rows. No section-level heading of its own (#416): each `BudgetSubRow` names its own
- * band, so a fixed heading above them would only repeat the same idea at a second heading level.
- * Left-aligned, full content width like every row above it — no `mx-auto`/`max-w-[1760px]`
- * centering (#416).
+ * "Cheapest homes for sale" / "Priciest rentals" (#478): a pure price sort with no price cap, so
+ * the row never empties because of one. The toggle re-queries this one carousel. A seller-withheld
+ * price sorts last in both directions and the floor drops it, so it never shows. Scoped to the
+ * visitor's last searched place, else the IP region, like the other rows.
  */
-function BudgetSection({ rentFirst, region }: { rentFirst: boolean; region: Region | null }) {
-  const bands: Record<ListingSide, BudgetBand[]> = { sale: SALE_BANDS, rent: RENT_BANDS };
-  const order: [ListingSide, ListingSide] = rentFirst ? ['rent', 'sale'] : ['sale', 'rent'];
+function PriceSortRow({ side, region }: { side: ListingSide; region: Region | null }) {
+  const [sort, setSort] = useState<PriceSort>('price-asc');
+  const place = useLastSearchedPlace() ?? region;
+
+  const { listings, total, loading, failed, refetch } = useCarouselListings({
+    listingType: side,
+    sort,
+    minPrice: PRICE_FLOOR[side],
+    ...(side === 'sale' ? { propertyType: SALE_HOME_TYPES } : {}),
+    pageSize: CAROUSEL_PAGE_SIZE,
+    city: place?.city,
+    state: place?.state,
+  });
+
+  if (!loading && !failed && total === 0) return null;
+
   return (
-    <div className="mt-8 flex flex-col gap-6 px-6 sm:px-10 lg:px-20">
-      {order.map((side) => (
-        <BudgetSubRow key={side} type={side} bands={bands[side]} region={region} />
-      ))}
-    </div>
+    <ListingRow
+      title={PRICE_SORT_TITLE[side][sort]}
+      // "See all" carries the same floor and types, so the search page matches the row.
+      href={searchHref(side, {
+        sort,
+        minPrice: String(PRICE_FLOOR[side]),
+        ...(side === 'sale' ? { propertyType: SALE_HOME_TYPES.join(',') } : {}),
+        ...(place ? { city: place.city, state: place.state } : {}),
+      })}
+      listings={listings}
+      loading={loading}
+      failed={failed}
+      onRetry={refetch}
+      max={7}
+      sectionClassName="px-6 pt-3 sm:px-10 lg:px-20"
+      headerExtra={<PriceSortToggle value={sort} onChange={setSort} />}
+    />
   );
 }
 
@@ -767,6 +721,10 @@ export default function HomePageContent() {
   const justListedRent = <JustListedRow key="just-listed-rent" side="rent" />;
   const comingSoonRent = <ComingSoonRow key="coming-soon-rent" side="rent" />;
 
+  const priceSortRows = (rentFirst ? (['rent', 'sale'] as const) : (['sale', 'rent'] as const)).map(
+    (side) => <PriceSortRow key={side} side={side} region={region} />,
+  );
+
   const rows = rentFirst
     ? [
         nearYouRent,
@@ -791,7 +749,7 @@ export default function HomePageContent() {
     <>
       {rows}
 
-      <BudgetSection rentFirst={rentFirst} region={region} />
+      {priceSortRows}
 
       <ExploreNeighborhoodsRow region={region} regionLoading={regionLoading} />
 

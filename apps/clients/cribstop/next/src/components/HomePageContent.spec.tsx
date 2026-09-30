@@ -58,19 +58,21 @@ type Query = {
   priceReduced?: boolean;
   minPrice?: number;
   maxPrice?: number;
+  sort?: string;
+  propertyType?: string[];
   listingType?: string;
   city?: string;
 };
 
 /** Which row a query belongs to, by its distinguishing filter — never by call order, since order
  *  changes with `useRentFirst`. */
-function rowKind(q: Query): 'just-listed' | 'coming-soon' | 'price-drops' | 'budget' | 'near-you' {
+function rowKind(
+  q: Query,
+): 'just-listed' | 'coming-soon' | 'price-drops' | 'price-sort' | 'near-you' {
+  if (q.sort === 'price-asc' || q.sort === 'price-desc') return 'price-sort';
   if (q.priceReduced) return 'price-drops';
   if (q.status?.includes('Coming Soon')) return 'coming-soon';
-  if (q.minPrice === undefined && q.maxPrice === undefined) {
-    return q.city ? 'near-you' : 'just-listed';
-  }
-  return 'budget';
+  return q.city ? 'near-you' : 'just-listed';
 }
 
 /** Mocks `/api/geo/region`, the one fetch `useRegion` makes. `null` (the default) matches every
@@ -113,8 +115,8 @@ describe('HomePageContent', () => {
       expect(screen.getByText('Price drops on homes for sale')).toBeInTheDocument();
       expect(screen.getByText('Newest rentals')).toBeInTheDocument();
       expect(screen.getByText("See new rentals before they're listed")).toBeInTheDocument();
-      expect(screen.getByText('Find homes for sale under $300K')).toBeInTheDocument();
-      expect(screen.getByText('Rentals under $1,500 a month')).toBeInTheDocument();
+      expect(screen.getByText('Cheapest homes for sale')).toBeInTheDocument();
+      expect(screen.getByText('Cheapest rentals')).toBeInTheDocument();
       expect(screen.getByText('Find your neighborhood')).toBeInTheDocument();
 
       // No count/place subtitle line under any row.
@@ -193,8 +195,8 @@ describe('HomePageContent', () => {
         'Price drops on homes for sale',
         'Newest rentals',
         "See new rentals before they're listed",
-        'Find homes for sale under $300K',
-        'Rentals under $1,500 a month',
+        'Cheapest homes for sale',
+        'Cheapest rentals',
         'Find your neighborhood',
         'Real listings, updated 5 months ago',
       ]);
@@ -218,14 +220,14 @@ describe('HomePageContent', () => {
         "See new rentals before they're listed",
         'Be first to see homes coming for sale',
         'Price drops on homes for sale',
-        'Rentals under $1,500 a month',
-        'Find homes for sale under $300K',
+        'Cheapest rentals',
+        'Cheapest homes for sale',
         'Find your neighborhood',
         'Real listings, updated 5 months ago',
       ]);
     });
 
-    it('also puts the rent budget sub-row first when the last search was rent', async () => {
+    it('also puts the rent price-sort row first when the last search was rent', async () => {
       window.localStorage.setItem(
         'recentSearches',
         JSON.stringify([{ display_name: 'Baltimore, MD', listingType: 'rent' }]),
@@ -233,10 +235,8 @@ describe('HomePageContent', () => {
 
       render(<HomePageContent />);
 
-      const [firstBudgetHeading] = await screen.findAllByText(
-        /^(Find homes for sale|Rentals) (under|\$)/,
-      );
-      expect(firstBudgetHeading.textContent).toBe('Rentals under $1,500 a month');
+      const [firstHeading] = await screen.findAllByText(/^Cheapest /);
+      expect(firstHeading.textContent).toBe('Cheapest rentals');
     });
   });
 
@@ -267,7 +267,7 @@ describe('HomePageContent', () => {
   describe('near you (#363)', () => {
     it('renders no row without a resolved region', async () => {
       render(<HomePageContent />);
-      await screen.findByText('Find homes for sale under $300K');
+      await screen.findByText('Cheapest homes for sale');
 
       await waitFor(() => {
         expect(screen.queryByText('Homes for sale near you')).not.toBeInTheDocument();
@@ -306,7 +306,7 @@ describe('HomePageContent', () => {
       });
 
       render(<HomePageContent />);
-      await screen.findByText('Find homes for sale under $300K');
+      await screen.findByText('Cheapest homes for sale');
 
       await waitFor(() => {
         expect(screen.queryByText('Homes for sale near you')).not.toBeInTheDocument();
@@ -320,7 +320,7 @@ describe('HomePageContent', () => {
     it('renders no row when the region resolves to null (a non-US country, at the route)', async () => {
       mockRegionFetch(null);
       render(<HomePageContent />);
-      await screen.findByText('Find homes for sale under $300K');
+      await screen.findByText('Cheapest homes for sale');
 
       await waitFor(() =>
         expect(screen.queryByText('Homes for sale near you')).not.toBeInTheDocument(),
@@ -343,14 +343,14 @@ describe('HomePageContent', () => {
       expect(headings.slice(0, 2)).toEqual(['Rentals near you', 'Homes for sale near you']);
     });
 
-    it("adds the region to a budget sub-row's query when no place has been searched", async () => {
+    it("adds the region to a price-sort row's query when no place has been searched", async () => {
       mockRegionFetch({ city: 'Rockville', state: 'MD' });
 
       render(<HomePageContent />);
 
       await waitFor(() =>
         expect(mockedSearchListings).toHaveBeenCalledWith(
-          expect.objectContaining({ city: 'Rockville', state: 'MD', maxPrice: 300_000 }),
+          expect.objectContaining({ city: 'Rockville', state: 'MD', sort: 'price-asc' }),
           expect.anything(),
         ),
       );
@@ -420,69 +420,132 @@ describe('HomePageContent', () => {
 
       render(<HomePageContent />);
 
-      await screen.findByText('Find homes for sale under $300K');
+      await screen.findByText('Cheapest homes for sale');
       await waitFor(() =>
         expect(screen.queryByText('Find your neighborhood')).not.toBeInTheDocument(),
       );
     });
   });
 
-  describe('what your budget buys (#392, #416)', () => {
-    it('fetches only the selected chip, and changing it re-fetches with the new band', async () => {
+  describe('cheapest / priciest rows (#478)', () => {
+    const priceCalls = (listingType: string) =>
+      mockedSearchListings.mock.calls
+        .map(([q]) => q as Query)
+        .filter((q) => rowKind(q) === 'price-sort' && q.listingType === listingType);
+
+    it('titles each row by its sort, defaulting to lowest first', async () => {
       render(<HomePageContent />);
 
-      await waitFor(() =>
-        expect(mockedSearchListings).toHaveBeenCalledWith(
-          expect.objectContaining({ listingType: 'sale', maxPrice: 300_000 }),
-          expect.anything(),
-        ),
-      );
-      expect(mockedSearchListings).not.toHaveBeenCalledWith(
-        expect.objectContaining({ listingType: 'sale', minPrice: 300_000, maxPrice: 500_000 }),
-        expect.anything(),
-      );
+      expect(await screen.findByText('Cheapest homes for sale')).toBeInTheDocument();
+      expect(screen.getByText('Cheapest rentals')).toBeInTheDocument();
+      expect(screen.queryByText('Priciest homes for sale')).not.toBeInTheDocument();
+      expect(priceCalls('sale')[0].sort).toBe('price-asc');
+      expect(priceCalls('rent')[0].sort).toBe('price-asc');
+    });
+
+    it('flips one row to the high-to-low sort and title, and leaves the other row alone', async () => {
+      render(<HomePageContent />);
+      await screen.findByText('Cheapest homes for sale');
+
+      const [saleGroup] = screen.getAllByRole('group', { name: 'Sort by price' });
+      const highest = saleGroup.querySelector('button:nth-of-type(2)') as HTMLButtonElement;
+      const lowest = saleGroup.querySelector('button:nth-of-type(1)') as HTMLButtonElement;
+      expect(lowest).toHaveAttribute('aria-pressed', 'true');
+      expect(highest).toHaveAttribute('aria-pressed', 'false');
 
       mockedSearchListings.mockClear();
-      fireEvent.click(await screen.findByRole('button', { name: '$300K–$500K' }));
+      fireEvent.click(highest);
 
-      await waitFor(() =>
-        expect(mockedSearchListings).toHaveBeenCalledWith(
-          expect.objectContaining({ listingType: 'sale', minPrice: 300_000, maxPrice: 500_000 }),
-          expect.anything(),
-        ),
-      );
+      expect(await screen.findByText('Priciest homes for sale')).toBeInTheDocument();
+      expect(screen.getByText('Cheapest rentals')).toBeInTheDocument();
+      expect(highest).toHaveAttribute('aria-pressed', 'true');
+      expect(lowest).toHaveAttribute('aria-pressed', 'false');
+      await waitFor(() => expect(priceCalls('sale').at(-1)?.sort).toBe('price-desc'));
+      expect(priceCalls('rent')).toHaveLength(0);
     });
 
-    it('re-titles a sub-row when its chip changes', async () => {
+    it('labels each toggle as a group with two pressed-state buttons', async () => {
       render(<HomePageContent />);
+      await screen.findByText('Cheapest rentals');
 
-      await screen.findByText('Find homes for sale under $300K');
-      fireEvent.click(await screen.findByRole('button', { name: '$300K–$500K' }));
-      expect(await screen.findByText('Find homes for sale $300K–$500K')).toBeInTheDocument();
+      const groups = screen.getAllByRole('group', { name: 'Sort by price' });
+      expect(groups).toHaveLength(2);
+      for (const group of groups) {
+        expect(Array.from(group.querySelectorAll('button')).map((b) => b.textContent)).toEqual([
+          'Lowest',
+          'Highest',
+        ]);
+      }
     });
 
-    it('uses the canonical selected-chip style, not a brand color', async () => {
+    it('uses the canonical selected-pill style, not a brand color', async () => {
       render(<HomePageContent />);
-      await screen.findByText('Find homes for sale under $300K');
+      await screen.findByText('Cheapest rentals');
 
-      const active = await screen.findByRole('button', { name: 'Under $300K' });
-      expect(active.className).toContain('border-ink bg-ink text-white');
+      const [group] = screen.getAllByRole('group', { name: 'Sort by price' });
+      const active = group.querySelector('[aria-pressed="true"]') as HTMLElement;
+      expect(active.className).toContain('bg-ink text-white');
       expect(active.className).not.toContain('brand-900');
     });
 
-    it('keeps the chips live and shows a plain empty message for a band with no matches', async () => {
-      mockedSearchListings.mockImplementation((q: Query) => {
-        if (rowKind(q) === 'budget') return Promise.resolve(envelope([], 0));
-        return Promise.resolve(envelope([aListingCardRow()]));
-      });
+    it('sends no price cap, only a data-quality floor that also drops a withheld price', async () => {
+      render(<HomePageContent />);
+      await screen.findByText('Cheapest rentals');
 
+      for (const side of ['sale', 'rent']) {
+        for (const q of priceCalls(side)) {
+          expect(q).not.toHaveProperty('maxPrice');
+          expect(q.minPrice).toBeGreaterThan(0);
+        }
+      }
+    });
+
+    it('links "See all" with the row sort, floor and home types', async () => {
       render(<HomePageContent />);
 
-      const empty = await screen.findAllByText(
-        'No homes in this price range yet. Try another range.',
+      const link = (await screen.findByText('Cheapest homes for sale')).closest('a')!;
+      const href = link.getAttribute('href')!;
+      expect(href).toContain('sort=price-asc');
+      expect(href).toContain('minPrice=5000');
+      expect(href).toContain('propertyType=');
+      expect(href).not.toContain('Land');
+      expect(href).not.toContain('maxPrice');
+    });
+
+    it('excludes land from the homes row only', async () => {
+      render(<HomePageContent />);
+      await screen.findByText('Cheapest rentals');
+
+      const [sale] = priceCalls('sale');
+      expect(sale.propertyType).toContain('Single Family');
+      expect(sale.propertyType).not.toContain('Land');
+      expect(priceCalls('rent')[0]).not.toHaveProperty('propertyType');
+    });
+
+    it('shows the row skeleton cards while a toggle refetches', async () => {
+      render(<HomePageContent />);
+      await screen.findByText('Cheapest homes for sale');
+
+      mockedSearchListings.mockImplementation(() => new Promise(() => {}));
+      const [saleGroup] = screen.getAllByRole('group', { name: 'Sort by price' });
+      fireEvent.click(saleGroup.querySelector('button:nth-of-type(2)') as HTMLButtonElement);
+
+      const row = (await screen.findByText('Priciest homes for sale')).closest('section')!;
+      await waitFor(() =>
+        expect(row.querySelectorAll('[data-skeleton-card]').length).toBeGreaterThan(0),
       );
-      expect(empty).toHaveLength(2);
-      expect(screen.getByRole('button', { name: '$300K–$500K' })).toBeInTheDocument();
+    });
+
+    it('hides a row whose settled result is empty', async () => {
+      mockedSearchListings.mockImplementation((q: Query) =>
+        Promise.resolve(
+          rowKind(q) === 'price-sort' ? envelope([], 0) : envelope([aListingCardRow()]),
+        ),
+      );
+      render(<HomePageContent />);
+
+      await screen.findByText('Newest homes for sale');
+      await waitFor(() => expect(screen.queryByText('Cheapest rentals')).not.toBeInTheDocument());
     });
   });
 
@@ -491,7 +554,7 @@ describe('HomePageContent', () => {
       mockedSearchListings.mockReturnValue(new Promise(() => {})); // never resolves
       render(<HomePageContent />);
 
-      // Just listed (x2 sides), coming soon (x2 sides), price drops, and two budget sub-rows.
+      // Just listed (x2 sides), coming soon (x2 sides), price drops, and two price-sort rows.
       expect(mockedSearchListings.mock.calls.length).toBeGreaterThanOrEqual(6);
     });
 
@@ -506,14 +569,14 @@ describe('HomePageContent', () => {
 
       await waitFor(() => expect(screen.getAllByText('Failed to load').length).toBeGreaterThan(0));
       expect(screen.getAllByRole('button', { name: 'Tap to retry' }).length).toBeGreaterThan(0);
-      expect(await screen.findByText('Find homes for sale under $300K')).toBeInTheDocument();
+      expect(await screen.findByText('Cheapest homes for sale')).toBeInTheDocument();
     });
   });
 
   describe('removed rows', () => {
     it('renders none of the retired carousels', async () => {
       render(<HomePageContent />);
-      await screen.findByText('Find homes for sale under $300K');
+      await screen.findByText('Cheapest homes for sale');
 
       for (const title of [
         'Featured homes for sale',
@@ -531,7 +594,7 @@ describe('HomePageContent', () => {
   describe('compliance', () => {
     it('uses no banned Fair-Housing-adjacent word anywhere in the rendered body', async () => {
       render(<HomePageContent />);
-      await screen.findByText('Find homes for sale under $300K');
+      await screen.findByText('Cheapest homes for sale');
 
       const banned =
         /\b(popular|trending|best|hot|exclusive|selling fast|hand-picked|featured|safe|family|young professionals|student|up-and-coming|dream|perfect for|ideal for)\b/i;
@@ -547,13 +610,13 @@ describe('HomePageContent', () => {
 
     it('never names "MLS" or "IDX" anywhere on the page', async () => {
       render(<HomePageContent />);
-      await screen.findByText('Find homes for sale under $300K');
+      await screen.findByText('Cheapest homes for sale');
       expect(document.body.textContent).not.toMatch(/\bMLS\b|\bIDX\b/);
     });
 
     it('removes the unsourced brokerage claims and keeps the trust block fact-only', async () => {
       render(<HomePageContent />);
-      await screen.findByText('Find homes for sale under $300K');
+      await screen.findByText('Cheapest homes for sale');
 
       expect(
         screen.getByText('Cribstop is brokered by Real Broker LLC, licensed in MD, DC, and VA.'),
@@ -562,7 +625,7 @@ describe('HomePageContent', () => {
 
     it('titles the trust block with the one fact it can back — freshness', async () => {
       render(<HomePageContent />);
-      await screen.findByText('Find homes for sale under $300K');
+      await screen.findByText('Cheapest homes for sale');
 
       expect(screen.getByText(/^Real listings, updated /)).toBeInTheDocument();
     });
@@ -575,7 +638,7 @@ describe('HomePageContent', () => {
       });
 
       render(<HomePageContent />);
-      await screen.findByText('Find homes for sale under $300K');
+      await screen.findByText('Cheapest homes for sale');
 
       expect(screen.getByText('Real, licensed listings')).toBeInTheDocument();
     });
@@ -593,7 +656,7 @@ describe('HomePageContent', () => {
       });
 
       render(<HomePageContent />);
-      await screen.findByText('Find homes for sale under $300K');
+      await screen.findByText('Cheapest homes for sale');
       expect(screen.queryByText('Updated')).not.toBeInTheDocument();
     });
 
@@ -607,7 +670,7 @@ describe('HomePageContent', () => {
       });
 
       render(<HomePageContent />);
-      await screen.findByText('Find homes for sale under $300K');
+      await screen.findByText('Cheapest homes for sale');
 
       // Both are months old at test time, but lastSyncedAt is the newer of the two, so it must be
       // what the relative-time text is computed from.
@@ -622,7 +685,7 @@ describe('HomePageContent', () => {
       });
 
       render(<HomePageContent />);
-      await screen.findByText('Find homes for sale under $300K');
+      await screen.findByText('Cheapest homes for sale');
 
       expect(screen.getByText(/^Real listings, updated /)).toBeInTheDocument();
     });
@@ -636,7 +699,7 @@ describe('HomePageContent', () => {
       });
 
       render(<HomePageContent />);
-      await screen.findByText('Find homes for sale under $300K');
+      await screen.findByText('Cheapest homes for sale');
 
       expect(screen.getByText(/^Real listings, updated /)).toBeInTheDocument();
     });
