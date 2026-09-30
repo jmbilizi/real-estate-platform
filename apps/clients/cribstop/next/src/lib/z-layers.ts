@@ -41,11 +41,11 @@ export const Z_LAYERS = {
    * up to a frame the in-flow bar can scroll past the sticky header's bottom edge before the swap
    * to the fixed, docked `searchBar` layer fires. Giving this layer `searchBar`'s own z-index
    * (above `chrome`) made the bar paint over the header during exactly that frame — regressing the
-   * z-index-escape fix below into a header-occlusion bug. This value only has to beat ordinary,
-   * non-positioned page content (the carousel rows this layer exists to stay above); it does not
-   * need to, and must not, beat the header.
+   * z-index-escape fix below into a header-occlusion bug. It must stay below the header, and above
+   * positioned page content: the search page's results column is `z-10` and comes later in the
+   * DOM, so at 10 it won the tie and painted Filters/Sort over the open panel (#480).
    */
-  searchBarInPage: 10,
+  searchBarInPage: 40,
   /** Click-away catcher behind the expanded search bar — just under the chrome it dismisses. */
   navBackdrop: 49,
   /** The sticky site header. */
