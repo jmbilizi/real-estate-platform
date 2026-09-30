@@ -363,12 +363,10 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
               <span className="font-semibold">{soldLine}</span>
             ) : (
               <>
+                {/* #471. A rent price is "$3,100/mo" from formatPrice, in one style. */}
                 <span className={price.isWithheld ? 'text-ink-body' : 'font-semibold'}>
-                  {price.text.split('/')[0]}
+                  {price.text}
                 </span>
-                {!price.isWithheld && listing.listingType === 'rent' && (
-                  <span className="text-ink-muted">/mo</span>
-                )}
               </>
             )}
           </p>
