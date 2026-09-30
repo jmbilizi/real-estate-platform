@@ -90,9 +90,14 @@ describe('ListingCard', () => {
       expect(screen.queryByText(/\$0/)).not.toBeInTheDocument();
     });
 
-    it('does not append /month to a withheld rent price', () => {
+    it('shows a rent price as $N/mo, with no space before the slash', () => {
+      render(<ListingCard listing={aListingCardRow({ price: 3100, listingType: 'rent' })} />);
+      expect(screen.getByText('/mo').parentElement).toHaveTextContent(/^\$3,100\/mo$/);
+    });
+
+    it('does not append /mo to a withheld rent price', () => {
       render(<ListingCard listing={aListingCardRow({ price: null, listingType: 'rent' })} />);
-      expect(screen.queryByText('/month')).not.toBeInTheDocument();
+      expect(screen.queryByText('/mo')).not.toBeInTheDocument();
     });
   });
 

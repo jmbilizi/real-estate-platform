@@ -367,7 +367,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
                   {price.text.split('/')[0]}
                 </span>
                 {!price.isWithheld && listing.listingType === 'rent' && (
-                  <span className="text-ink-muted"> /month</span>
+                  <span className="text-ink-muted">/mo</span>
                 )}
               </>
             )}
