@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
 import type { ListingSearchQuery } from '@/lib/api/listings';
 import type { ListingCardRow } from '@/lib/types';
+import type { NeighborhoodBounds, NeighborhoodMarkers } from './ListingsMapInner';
 import { MAP_PANEL_CLASS } from './map-panel';
 
 interface Props {
@@ -18,6 +19,10 @@ interface Props {
   filters?: ListingSearchQuery;
   /** The list's `total`. */
   total?: number;
+  /** Grouped view (#503): one marker per neighborhood replaces the listing pins and clusters. */
+  neighborhoods?: NeighborhoodMarkers;
+  /** Fit the map here (a drilled-down neighborhood). */
+  focusBounds?: NeighborhoodBounds | null;
   /**
    * Whether the map may start loading, as opposed to being deliberately held on its placeholder.
    *

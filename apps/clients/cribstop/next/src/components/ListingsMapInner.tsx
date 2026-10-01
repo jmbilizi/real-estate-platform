@@ -9,7 +9,15 @@ import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { createRoot, type Root } from 'react-dom/client';
-import type { MapCluster, MapPin, MapResponse } from '@cribstop/property-contracts';
+import type {
+  MapCluster,
+  MapPin,
+  MapResponse,
+  NeighborhoodRow,
+} from '@cribstop/property-contracts';
+import NeighborhoodMapLayer, {
+  selectMappableNeighborhoods,
+} from '@/components/NeighborhoodMapLayer';
 import type { ListingCardRow } from '@/lib/types';
 import { getListingsMap, type ListingSearchQuery } from '@/lib/api/listings';
 import { openListingPanel } from '@/lib/listing-panel';
@@ -503,7 +511,10 @@ function FitView({
   geojson,
   coords,
   center,
+  bounds: focus,
 }: {
+  /** A drilled-down neighborhood's bounds (#503). Wins over everything below. */
+  bounds?: NeighborhoodBounds | null;
   geojson: object | null;
   /** Pin coordinates only — rows without them never contribute a fabricated centroid to the fit. */
   coords: [number, number][];
@@ -511,6 +522,13 @@ function FitView({
 }) {
   const map = useMap();
   useEffect(() => {
+    if (focus) {
+      const bounds = L.latLngBounds([focus.south, focus.west], [focus.north, focus.east]);
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [32, 32], maxZoom: 16, animate: true });
+        return;
+      }
+    }
     if (geojson) {
       // Fit exactly to the searched boundary with a small pad so the stroke isn't clipped
       const layer = L.geoJSON(geojson as Parameters<typeof L.geoJSON>[0]);
@@ -532,7 +550,7 @@ function FitView({
       // Last resort: just pan to the geocoded point
       map.setView(center, 13, { animate: true });
     }
-  }, [geojson, coords, center]);
+  }, [geojson, coords, center, focus]);
   return null;
 }
 
@@ -580,6 +598,20 @@ interface Props {
   filters?: ListingSearchQuery;
   /** The list's `total`, the one count for the search. */
   total?: number;
+  /** Grouped view (#503): one marker per neighborhood replaces the listing pins and clusters. */
+  neighborhoods?: NeighborhoodMarkers;
+  /** Fit the map here (a drilled-down neighborhood). */
+  focusBounds?: NeighborhoodBounds | null;
+}
+
+export type NeighborhoodBounds = NonNullable<NeighborhoodRow['bounds']>;
+
+export interface NeighborhoodMarkers {
+  rows: readonly NeighborhoodRow[];
+  activeKey: string | null;
+  onActive: (key: string | null) => void;
+  onSelect: (row: NeighborhoodRow) => void;
+  onTapPreview?: (key: string) => void;
 }
 
 export default function ListingsMapInner({
@@ -591,7 +623,18 @@ export default function ListingsMapInner({
   searchPolygon,
   filters,
   total,
+  neighborhoods,
+  focusBounds,
 }: Props) {
+  const grouped = neighborhoods !== undefined;
+  const groupMarkers = useMemo(
+    () => selectMappableNeighborhoods(neighborhoods?.rows ?? []),
+    [neighborhoods?.rows],
+  );
+  const groupCoords = useMemo<[number, number][]>(
+    () => groupMarkers.map((r) => [r.centroid.lat, r.centroid.lng]),
+    [groupMarkers],
+  );
   // Keep the module-level callback up to date so MarkerPopup popups
   // (rendered in separate React roots) can open the listing modal.
   useEffect(() => {
@@ -642,13 +685,14 @@ export default function ListingsMapInner({
 
   const center = useMemo<[number, number]>(() => {
     if (searchCenter) return searchCenter;
-    if (pinCoords.length) {
-      const lat = pinCoords.reduce((s, [lat]) => s + lat, 0) / pinCoords.length;
-      const lng = pinCoords.reduce((s, [, lng]) => s + lng, 0) / pinCoords.length;
+    const coords = grouped ? groupCoords : pinCoords;
+    if (coords.length) {
+      const lat = coords.reduce((s, [lat]) => s + lat, 0) / coords.length;
+      const lng = coords.reduce((s, [, lng]) => s + lng, 0) / coords.length;
       return [lat, lng];
     }
     return [38.9072, -77.0369];
-  }, [searchCenter, pinCoords]);
+  }, [searchCenter, pinCoords, grouped, groupCoords]);
 
   const [scrollActive, setScrollActive] = useState(false);
   const { failed: tilesFailed, onTileError } = useTileFailure();
@@ -688,18 +732,35 @@ export default function ListingsMapInner({
         <CustomMapControls />
         <ClickToActivateScroll onChange={setScrollActive} />
         {/* Fit view to boundary, then pinned listings, then center — in priority order */}
-        <FitView geojson={searchPolygon ?? null} coords={pinCoords} center={searchCenter ?? null} />
+        <FitView
+          geojson={searchPolygon ?? null}
+          coords={grouped ? groupCoords : pinCoords}
+          center={searchCenter ?? null}
+          bounds={grouped ? null : focusBounds}
+        />
         {/* Searched area boundary outline */}
         <BoundaryLayer geojson={searchPolygon ?? null} />
-        {filters && <ViewportQuery filters={filters} onResult={setViewport} />}
-        {viewport?.kind === 'clusters' && <ServerClusters clusters={viewport.clusters} />}
-        <ClusteredMarkers
-          pins={mapPins}
-          rowsById={rowsById}
-          activeId={activeId ?? null}
-          savedIds={savedIds}
-          onMarkerHover={onMarkerHover}
-        />
+        {grouped ? (
+          <NeighborhoodMapLayer
+            rows={groupMarkers}
+            activeKey={neighborhoods.activeKey}
+            onActive={neighborhoods.onActive}
+            onSelect={neighborhoods.onSelect}
+            onTapPreview={neighborhoods.onTapPreview}
+          />
+        ) : (
+          <>
+            {filters && <ViewportQuery filters={filters} onResult={setViewport} />}
+            {viewport?.kind === 'clusters' && <ServerClusters clusters={viewport.clusters} />}
+            <ClusteredMarkers
+              pins={mapPins}
+              rowsById={rowsById}
+              activeId={activeId ?? null}
+              savedIds={savedIds}
+              onMarkerHover={onMarkerHover}
+            />
+          </>
+        )}
       </MapContainer>
       {/*
        * The map itself is a listing display surface: a price pin and a cluster count are the row
@@ -717,18 +778,18 @@ export default function ListingsMapInner({
             Map imagery is temporarily unavailable. Pin locations and prices below are unaffected.
           </div>
         )}
-        {sampleBannerCopy && (
+        {!grouped && sampleBannerCopy && (
           <div className="rounded-2xl bg-ink/85 px-3 py-1.5 text-center text-[11px] font-semibold text-white shadow-card backdrop-blur">
             {sampleBannerCopy}
           </div>
         )}
-        {hiddenPinCount > 0 && (
+        {!grouped && hiddenPinCount > 0 && (
           <div className="rounded-2xl bg-surface/95 px-3 py-1.5 text-center text-[11px] font-medium text-ink-muted shadow-card backdrop-blur">
             Some sellers have chosen not to display their home’s location, so those homes appear in
             your results but not as pins on this map.
           </div>
         )}
-        {viewportNote && (
+        {!grouped && viewportNote && (
           <div className="rounded-2xl bg-surface/95 px-3 py-1.5 text-center text-[11px] font-medium text-ink-muted shadow-card backdrop-blur">
             {viewportNote}
           </div>
