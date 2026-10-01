@@ -292,6 +292,27 @@ describe('mapBrightPropertyRecord', () => {
     expect(first).toEqual(second);
   });
 
+  describe('coordinates (#512)', () => {
+    const coords = (extra: Record<string, unknown>) => {
+      const result = mapBrightPropertyRecord({ ...BASE_PAYLOAD, ...extra }, ctx());
+      if (result.kind !== 'mapped') throw new Error('expected mapped');
+      return [result.property.latitude, result.property.longitude];
+    };
+
+    it('keeps a valid point', () => {
+      expect(coords({ Latitude: 38.93, Longitude: -77.03 })).toEqual([38.93, -77.03]);
+    });
+
+    it.each([
+      ['zero latitude', { Latitude: 0, Longitude: -77.03 }],
+      ['zero longitude', { Latitude: 38.93, Longitude: 0 }],
+      ['out of range', { Latitude: 138.93, Longitude: -277.03 }],
+      ['non numeric', { Latitude: '38.93', Longitude: null }],
+    ])('stores null for %s', (_name, extra) => {
+      expect(coords(extra).some((v) => v === null)).toBe(true);
+    });
+  });
+
   describe('MLSListDate and DaysOnMarket (#391)', () => {
     it('widens MLSListDate to midnight UTC', () => {
       const result = mapBrightPropertyRecord({ ...BASE_PAYLOAD, MLSListDate: '2026-07-04' }, ctx());

@@ -130,6 +130,15 @@ function toNumber(value: unknown): number | null {
 }
 
 /**
+ * #512. A coordinate is null when the feed sends 0 (its value for "unknown") or a value outside
+ * WGS84. A stored 0,0 point stretched the neighborhood bounds to the Atlantic.
+ */
+function toCoordinate(value: unknown, limit: number): number | null {
+  const n = toNumber(value);
+  return n === null || n === 0 || Math.abs(n) > limit ? null : n;
+}
+
+/**
  * `properties.lot_sqft` is `integer`, but Bright's `LotSizeSquareFeet` is `Edm.Double` (#207) — a lot
  * converted from acres routinely carries a fractional value (e.g. `127195.2`). Postgres rejects that
  * text verbatim against an integer column, which crashed the whole mapping pass rather than
@@ -323,8 +332,8 @@ export function mapBrightPropertyRecord(
       state,
       zip5: zip,
       address_key: addressKey,
-      latitude: toNumber(payload.Latitude),
-      longitude: toNumber(payload.Longitude),
+      latitude: toCoordinate(payload.Latitude, 90),
+      longitude: toCoordinate(payload.Longitude, 180),
       // #390: write-time cleanup, not just blank-check. `SubdivisionName` is mostly a "not on
       // file" placeholder (however misspelled) or a raw feed value with stray quoting/whitespace.
       neighborhood: normalizeNeighborhood(nonBlank(payload.SubdivisionName)),

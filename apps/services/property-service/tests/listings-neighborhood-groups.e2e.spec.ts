@@ -16,6 +16,7 @@ const RUN = Date.now().toString(36);
 const CITY_A = `E2E Groups A ${RUN}`;
 const CITY_B = `E2E Groups B ${RUN}`;
 const CITY_C = `E2E Groups C ${RUN}`;
+const CITY_D = `E2E Groups D ${RUN}`;
 const SAME_NAME = 'Shared Hood';
 
 let seq = 0;
@@ -76,10 +77,10 @@ const place = (city: string) => `city=${encodeURIComponent(city)}&state=MD`;
 beforeAll(async () => {
   assertFixturesEnabled();
   await seed([
-    // CITY_A "Shared Hood": three allowed points (median lat 11) and one masked point at lat 50.
+    // CITY_A "Shared Hood": three allowed points (median lat 10.1) and one masked point at lat 50.
     { city: CITY_A, hood: SAME_NAME, lat: 10, lng: -80 },
-    { city: CITY_A, hood: SAME_NAME, lat: 11, lng: -79, beds: 4 },
-    { city: CITY_A, hood: SAME_NAME, lat: 12, lng: -78 },
+    { city: CITY_A, hood: SAME_NAME, lat: 10.1, lng: -79.9, beds: 4 },
+    { city: CITY_A, hood: SAME_NAME, lat: 10.2, lng: -79.8 },
     { city: CITY_A, hood: SAME_NAME, lat: 50, lng: -10, addressAllowed: false },
     // CITY_B holds the same neighborhood name at another place.
     { city: CITY_B, hood: SAME_NAME, lat: 30, lng: -70 },
@@ -88,12 +89,20 @@ beforeAll(async () => {
     { city: CITY_C, hood: 'Zed Hood', lat: 20, lng: -50 },
     { city: CITY_C, hood: 'Zed Hood', lat: 21, lng: -50 },
     { city: CITY_C, hood: 'Zed Hood', lat: 22, lng: -50 },
+    // CITY_D (#512): four real points, one 0,0 point, one 0-longitude point and one far outlier.
+    { city: CITY_D, hood: 'Stray Hood', lat: 38.9, lng: -77.03 },
+    { city: CITY_D, hood: 'Stray Hood', lat: 38.91, lng: -77.02 },
+    { city: CITY_D, hood: 'Stray Hood', lat: 38.92, lng: -77.01 },
+    { city: CITY_D, hood: 'Stray Hood', lat: 38.93, lng: -77 },
+    { city: CITY_D, hood: 'Stray Hood', lat: 0, lng: 0 },
+    { city: CITY_D, hood: 'Stray Hood', lat: 38.95, lng: 0 },
+    { city: CITY_D, hood: 'Stray Hood', lat: 39.27, lng: -77.01 },
   ]);
 });
 
 afterAll(async () => {
   const pool = getPool();
-  const cities = [CITY_A, CITY_B, CITY_C];
+  const cities = [CITY_A, CITY_B, CITY_C, CITY_D];
   await pool.query('DELETE FROM listings WHERE is_sample AND city = ANY($1)', [cities]);
   await pool.query('DELETE FROM properties WHERE is_sample AND city = ANY($1)', [cities]);
   await closePool();
@@ -117,8 +126,16 @@ describe('centroid and bounds (#501)', () => {
   it('never lets a masked address move the centroid or the bounds', async () => {
     const [row] = (await groups(place(CITY_A))).results;
     expect(row?.total).toBe(4);
-    expect(row?.centroid).toEqual({ lat: 11, lng: -79 });
-    expect(row?.bounds).toEqual({ south: 10, west: -80, north: 12, east: -78 });
+    expect(row?.centroid).toEqual({ lat: 10.1, lng: -79.9 });
+    expect(row?.bounds).toEqual({ south: 10, west: -80, north: 10.2, east: -79.8 });
+  });
+
+  it('ignores 0 coordinates and one far outlier in the bounds (#512)', async () => {
+    const [row] = (await groups(place(CITY_D))).results;
+    expect(row?.total).toBe(7);
+    expect(row?.bounds).toEqual({ south: 38.9, west: -77.03, north: 38.93, east: -77 });
+    expect(row?.centroid?.lat).toBeCloseTo(38.92, 3);
+    expect(row?.centroid?.lng).toBeCloseTo(-77.01, 3);
   });
 
   it('answers null centroid and bounds for a group with no allowed listing', async () => {
@@ -135,7 +152,7 @@ describe('search filters (#501)', () => {
     const body = await groups(`${place(CITY_A)}&beds=4`);
     expect(body.results).toHaveLength(1);
     expect(body.results[0]?.total).toBe(1);
-    expect(body.results[0]?.centroid).toEqual({ lat: 11, lng: -79 });
+    expect(body.results[0]?.centroid).toEqual({ lat: 10.1, lng: -79.9 });
   });
 
   it('returns the neighborhood set of the matching GET /listings search', async () => {

@@ -1290,6 +1290,13 @@ export async function removeComplianceFixtures(pool: FixturesPool): Promise<void
           '(SELECT id FROM properties WHERE community_id = $1)',
         [communityId],
       );
+      // The inquiries e2e leaves rows that restrict the listing delete.
+      await client.query(
+        'DELETE FROM listing_inquiries WHERE listing_id IN ' +
+          '(SELECT id FROM listings WHERE property_id IN ' +
+          '(SELECT id FROM properties WHERE community_id = $1))',
+        [communityId],
+      );
       await client.query(
         'DELETE FROM listings WHERE property_id IN ' +
           '(SELECT id FROM properties WHERE community_id = $1)',

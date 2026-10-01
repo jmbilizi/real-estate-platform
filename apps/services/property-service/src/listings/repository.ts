@@ -307,6 +307,15 @@ const NEIGHBORHOOD_ORDER_SQL: Record<NeighborhoodsRequest['order'], string> = {
   name: 'k_name ASC, k_state ASC, k_city ASC',
 };
 
+/** #512. A valid point: not null, not on the 0 axes (an unknown coordinate arrives as 0), inside WGS84. */
+const VALID_COORDINATE_SQL = `v.latitude IS NOT NULL AND v.longitude IS NOT NULL
+    AND v.latitude <> 0 AND v.longitude <> 0
+    AND abs(v.latitude) <= 90 AND abs(v.longitude) <= 180`;
+
+/** #512. A neighborhood never spans this far (about 28 km). A fixed window stays robust in small
+ *  groups, where a percentile interpolates toward the outlier. */
+const NEIGHBORHOOD_OUTLIER_DEGREES = 0.25;
+
 /**
  * `GET /listings/neighborhoods` (#390, #501): the neighborhoods of the listings that
  * `GET /listings` returns for the same filters, grouped by `(lower(state), lower(neighborhood),
@@ -363,13 +372,13 @@ export async function getNeighborhoods(
       LISTING_VISIBILITY_SQL.replace(/\bl\./g, 'v.'),
       ...scopeConditions(matched, bind, LISTINGS_SCOPE_COLUMNS),
     ].join('\n         AND ');
-    geoSql = 'v.address_display_allowed AND v.latitude IS NOT NULL AND v.longitude IS NOT NULL';
+    geoSql = `v.address_display_allowed AND ${VALID_COORDINATE_SQL}`;
   } else {
     const built = buildSearchQuery(matched);
     params.push(...built.params);
     sourceSql = 'listing_search_v v';
     filterSql = built.where;
-    geoSql = 'v.latitude IS NOT NULL AND v.longitude IS NOT NULL';
+    geoSql = VALID_COORDINATE_SQL;
   }
 
   // #488. The pairs arrive as two bound arrays and join through unnest.
@@ -393,6 +402,9 @@ export async function getNeighborhoods(
          AND ${neighborhoodNotNoiseSql('v.neighborhood')}
          AND lower(v.neighborhood) <> lower(v.city)
          ${placeFilterSql}`;
+
+  const inlierSql = `abs(pts.la - med.lat) <= ${NEIGHBORHOOD_OUTLIER_DEGREES}
+                  AND abs(pts.ln - med.lng) <= ${NEIGHBORHOOD_OUTLIER_DEGREES}`;
 
   const result = await pool.query<NeighborhoodDbRow>(
     `WITH grouped AS (
@@ -436,15 +448,27 @@ export async function getNeighborhoods(
        FROM totals
        LEFT JOIN page ON true
        LEFT JOIN LATERAL (
-         SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY v.latitude)::float8  AS lat,
-                percentile_cont(0.5) WITHIN GROUP (ORDER BY v.longitude)::float8 AS lng,
-                min(v.latitude)::float8 AS south, min(v.longitude)::float8 AS west,
-                max(v.latitude)::float8 AS north, max(v.longitude)::float8 AS east
-           FROM ${sourceSql}
-          WHERE ${filterSql}
-            AND ${typeFilter}
-            AND ${geoSql}
-            AND ${inGroup}
+         WITH pts AS (
+           SELECT v.latitude::float8 AS la, v.longitude::float8 AS ln
+             FROM ${sourceSql}
+            WHERE ${filterSql}
+              AND ${typeFilter}
+              AND ${geoSql}
+              AND ${inGroup}
+         ),
+         med AS (
+           SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY la) AS lat,
+                  percentile_cont(0.5) WITHIN GROUP (ORDER BY ln) AS lng
+             FROM pts
+         )
+         -- #512. Bounds span only the points near the median (see NEIGHBORHOOD_OUTLIER_DEGREES).
+         SELECT med.lat, med.lng,
+                min(pts.la) FILTER (WHERE ${inlierSql}) AS south,
+                min(pts.ln) FILTER (WHERE ${inlierSql}) AS west,
+                max(pts.la) FILTER (WHERE ${inlierSql}) AS north,
+                max(pts.ln) FILTER (WHERE ${inlierSql}) AS east
+           FROM med LEFT JOIN pts ON true
+          GROUP BY med.lat, med.lng
        ) geo ON true
        LEFT JOIN LATERAL (
          SELECT coalesce(
