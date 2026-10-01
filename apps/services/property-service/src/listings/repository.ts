@@ -24,7 +24,12 @@ import {
   PROPERTY_RECORD_SELECT,
 } from './columns';
 import { resolvedSearchRequest } from './on-demand';
-import { buildSearchQuery, isScopeOnlyRequest, scopeConditions } from './search-query';
+import {
+  buildSearchQuery,
+  isScopeOnlyRequest,
+  LISTINGS_SCOPE_COLUMNS,
+  scopeConditions,
+} from './search-query';
 import { visibleListingTypesFor } from './sold-gate';
 import {
   type ListingCardDbRow,
@@ -353,16 +358,10 @@ export async function getNeighborhoods(
   let filterSql: string;
   let geoSql: string;
   if (direct) {
-    const columns = {
-      listingType: 'v.listing_type',
-      status: 'v.consumer_status',
-      city: 'v.city',
-      state: 'v.state',
-    };
     sourceSql = 'listings v';
     filterSql = [
       LISTING_VISIBILITY_SQL.replace(/\bl\./g, 'v.'),
-      ...scopeConditions(matched, bind, columns),
+      ...scopeConditions(matched, bind, LISTINGS_SCOPE_COLUMNS),
     ].join('\n         AND ');
     geoSql = 'v.address_display_allowed AND v.latitude IS NOT NULL AND v.longitude IS NOT NULL';
   } else {

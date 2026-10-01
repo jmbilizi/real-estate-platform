@@ -15,8 +15,10 @@ exports.shorthands = undefined;
 exports.up = (pgm) => {
   pgm.noTransaction();
 
+  // A failed earlier build leaves an INVALID index of this name. IF NOT EXISTS would skip it.
+  pgm.sql('DROP INDEX CONCURRENTLY IF EXISTS idx_listings_neighborhood_group_status');
   pgm.sql(`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_listings_neighborhood_group_status
+    CREATE INDEX CONCURRENTLY idx_listings_neighborhood_group_status
       ON listings (lower(state), lower(neighborhood), lower(city))
       INCLUDE (state, neighborhood, city, listing_type, consumer_status)
       WHERE deleted_at IS NULL

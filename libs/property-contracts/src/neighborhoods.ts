@@ -109,7 +109,7 @@ export const neighborhoodsRequestSchema = searchRequestSchema
       .default('count')
       .describe(
         '`count` (default): listing count descending. `name`: name ascending. Ties break by name, ' +
-          'then by `key`. No other order exists.',
+          'then by state, then by city. No other order exists.',
       ),
     slug: z
       .string()

@@ -45,6 +45,14 @@ export const VIEW_SCOPE_COLUMNS: ScopeColumns = {
   state: 'v.state',
 };
 
+/** The same columns on `listings`, where the status column is `consumer_status`. */
+export const LISTINGS_SCOPE_COLUMNS: ScopeColumns = {
+  listingType: 'v.listing_type',
+  status: 'v.consumer_status',
+  city: 'v.city',
+  state: 'v.state',
+};
+
 type Bind = (value: unknown) => string;
 
 export function listingTypeCondition(

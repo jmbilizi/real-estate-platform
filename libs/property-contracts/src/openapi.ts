@@ -225,14 +225,15 @@ export function toOpenApiDocument() {
           operationId: 'getNeighborhoods',
           summary: 'Neighborhood groups',
           description:
-            'Publishable listings grouped by neighborhood. Accepts the `GET /listings` filters, ' +
-            'so the groups are the neighborhoods of the listings that search returns. Counts, ' +
-            'photos, a centroid and bounds only — no ranking, no descriptive word. ' +
-            '`key` (`state|city|name`, lower case) is the identity. Centroid and bounds use only ' +
-            'listings whose address display is allowed. `minCount` defaults to 3. Send ' +
-            '`minCount=1` to get every group the search matches. Page with `limit` and `offset`. `name` is title case, built from the most frequent raw feed ' +
-            'variant in the group. `slug` matches the property page’s slug rules. `total` in ' +
-            'the response is the exact count of matching neighborhoods, never clamped to `limit`.',
+            'Publishable listings grouped by neighborhood. The request takes the `GET /listings` ' +
+            'filters. The groups are the neighborhoods of the listings that search returns. A row ' +
+            'has counts, photos, a centroid and bounds. It has no ranking and no descriptive ' +
+            'word. `key` is the identity. The centroid and bounds use only listings with address ' +
+            'display allowed. `minCount` defaults to 3. Send `minCount=1` for every group. Page ' +
+            'with `limit` and `offset`. `name` is title case, built from the most frequent raw ' +
+            'feed variant in the group. `slug` matches the property page’s slug rules. `total` ' +
+            'in the response is the exact count of matching neighborhoods, never clamped to ' +
+            '`limit`.',
           parameters: searchParameters(neighborhoodsRequestSchema),
           responses: {
             '200': {
