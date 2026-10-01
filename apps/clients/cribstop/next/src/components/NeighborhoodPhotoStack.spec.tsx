@@ -20,31 +20,39 @@ function renderTile(count: number) {
 const srcs = (c: HTMLElement) =>
   Array.from(c.querySelectorAll('img')).map((i) => i.getAttribute('src'));
 
-describe('NeighborhoodPhotoStack on NeighborhoodRow (#487)', () => {
-  it('keeps the text tile with 0 photos', () => {
+describe('NeighborhoodPhotoStack on NeighborhoodRow (#487, #492)', () => {
+  it('reserves a placeholder of the same size with 0 photos', () => {
     const { container } = renderTile(0);
+    const placeholder = screen.getByTestId('neighborhood-photo-placeholder');
     expect(container.querySelector('img')).toBeNull();
-    expect(screen.queryByTestId('neighborhood-photo-stack')).toBeNull();
+    expect(placeholder).toHaveAttribute('aria-hidden', 'true');
+    expect(placeholder.textContent).toBe('');
+    expect(placeholder.className).toContain('aspect-[10/7]');
     expect(screen.getByText('Petworth')).toBeInTheDocument();
   });
 
-  it('keeps the text tile when the field is absent', () => {
+  it('reserves the placeholder when the field is absent', () => {
     const n = { ...tile(0), previewPhotos: undefined };
     const { container } = render(<NeighborhoodRow title="t" neighborhoods={[n]} />);
     expect(container.querySelector('img')).toBeNull();
+    expect(screen.getByTestId('neighborhood-photo-placeholder')).toBeInTheDocument();
   });
 
-  it.each([1, 2])('renders %i photo(s) in the smaller stack', (count) => {
+  it.each([1, 2, 3])('renders %i photo(s) with the same photo-area class', (count) => {
     const { container } = renderTile(count);
-    const imgs = container.querySelectorAll('img');
-    expect(imgs).toHaveLength(count);
-    expect(imgs[0]).toHaveAttribute('width', '56');
+    expect(container.querySelectorAll('img')).toHaveLength(count);
+    expect(screen.getByTestId('neighborhood-photo-stack').className).toContain('aspect-[10/7]');
   });
 
-  it('renders the first 3 photos in API order at the larger size', () => {
+  it('sizes photos as a percent of the stack width, not in pixels', () => {
+    const { container } = renderTile(3);
+    const frame = container.querySelector('img')!.parentElement!;
+    expect(frame.style.width).toBe('50%');
+  });
+
+  it('renders the first 3 photos in API order', () => {
     const { container } = renderTile(3);
     expect(srcs(container)).toEqual(photos(3).map((p) => p.url));
-    expect(container.querySelector('img')).toHaveAttribute('width', '64');
   });
 
   it('shows only 3 of 5 photos', () => {
@@ -52,17 +60,12 @@ describe('NeighborhoodPhotoStack on NeighborhoodRow (#487)', () => {
     expect(srcs(container)).toEqual(photos(3).map((p) => p.url));
   });
 
-  it('uses empty alt, lazy loading and adds no second link', () => {
+  it('uses empty alt and lazy loading', () => {
     const { container } = renderTile(3);
     container.querySelectorAll('img').forEach((img) => {
       expect(img).toHaveAttribute('alt', '');
       expect(img).toHaveAttribute('loading', 'lazy');
     });
-    expect(screen.getAllByRole('link')).toHaveLength(1);
-    expect(screen.getByRole('link')).toHaveAttribute(
-      'href',
-      '/washington-dc/petworth-neighborhood/homes-for-sale',
-    );
   });
 
   it('replaces a failed photo with the next unused one', () => {
@@ -71,17 +74,17 @@ describe('NeighborhoodPhotoStack on NeighborhoodRow (#487)', () => {
     expect(srcs(container)).toEqual([0, 2, 3].map((i) => photos(5)[i].url));
   });
 
-  it('drops to the smaller stack when no replacement remains', () => {
+  it('drops to a 2-photo stack when no replacement remains', () => {
     const { container } = renderTile(3);
     fireEvent.error(container.querySelectorAll('img')[0]);
     expect(srcs(container)).toEqual([photos(3)[1].url, photos(3)[2].url]);
-    expect(container.querySelector('img')).toHaveAttribute('width', '56');
+    expect(container.querySelector('img')!.parentElement!.style.width).toBe('52%');
   });
 
-  it('falls back to the text tile when every photo fails', () => {
+  it('falls back to the placeholder when every photo fails', () => {
     const { container } = renderTile(1);
     fireEvent.error(container.querySelector('img')!);
     expect(container.querySelector('img')).toBeNull();
-    expect(screen.getByText('Petworth')).toBeInTheDocument();
+    expect(screen.getByTestId('neighborhood-photo-placeholder')).toBeInTheDocument();
   });
 });

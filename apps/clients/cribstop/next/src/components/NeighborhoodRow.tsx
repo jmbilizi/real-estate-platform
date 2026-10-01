@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { type NeighborhoodPreviewPhoto, searchPath } from '@cribstop/property-contracts';
-import NeighborhoodPhotoStack, { STACK_HEIGHT_PX } from '@/components/NeighborhoodPhotoStack';
+import NeighborhoodPhotoStack, { PHOTO_AREA_CLASS } from '@/components/NeighborhoodPhotoStack';
+import { searchTargetUrl } from '@/lib/search-place';
 
 /** One "Explore neighborhoods" tile (#393): name, place and counts, sourced from real data. */
 export interface Neighborhood {
@@ -22,54 +23,77 @@ export interface Neighborhood {
 const TILE_WIDTH_CLASS =
   'w-[calc((100%-1.25rem)/2)] sm:w-[calc((100%-2.5rem)/3)] md:w-[calc((100%-3.75rem)/4)] lg:w-[calc((100%-5rem)/5)] xl:w-[calc((100%-6.25rem)/6)] min-w-0';
 
-/** "{sale} for sale · {rent} for rent" — a zero part is omitted (never a fabricated count). */
-function countsText(n: Neighborhood): string {
-  const parts: string[] = [];
-  if (n.sale > 0) parts.push(`${n.sale.toLocaleString()} for sale`);
-  if (n.rent > 0) parts.push(`${n.rent.toLocaleString()} for rent`);
-  return parts.join(' · ');
-}
+const COUNT_LINK_CLASS =
+  'flex min-h-11 flex-1 items-center justify-center rounded px-1 text-center text-xs font-semibold leading-tight text-ink-muted hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink';
 
+/**
+ * Tile (#492). The main link is the name, stretched over the whole tile by a pseudo-element. The
+ * count links are siblings above it (`z-10`), never nested inside it. Each count link is
+ * `min-h-11` and takes its own half of the row, so the two hit areas never overlap.
+ */
 function NeighborhoodTile({ n }: { n: Neighborhood }) {
-  const href = searchPath(
-    { kind: 'neighborhood', name: n.name, city: n.city, state: n.state },
-    'homes-for-sale',
-  );
-  const counts = countsText(n);
+  const place = { kind: 'neighborhood', name: n.name, city: n.city, state: n.state } as const;
+  const href = searchTargetUrl({ kind: 'place', place }, 'all');
 
   return (
-    <Link
-      href={href}
-      className={`group flex-shrink-0 snap-start rounded-md border border-surface-border bg-white p-4 transition hover:shadow-card ${TILE_WIDTH_CLASS}`}
+    <div
+      className={`group relative flex flex-shrink-0 snap-start flex-col items-center rounded-md border border-surface-border bg-white p-3 text-center transition hover:shadow-card ${TILE_WIDTH_CLASS}`}
     >
       <NeighborhoodPhotoStack photos={n.previewPhotos ?? []} />
-      <h3 className="truncate font-display text-base font-bold text-ink group-hover:underline">
-        {n.name}
+      <h3 className="w-full truncate font-display text-base font-bold leading-6 text-ink">
+        <Link
+          href={href}
+          className="after:absolute after:inset-0 after:rounded-md after:content-[''] group-hover:underline focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ink"
+        >
+          {n.name}
+        </Link>
       </h3>
-      <p className="mt-0.5 truncate text-sm text-ink-muted">
+      <p className="w-full truncate text-sm leading-5 text-ink-muted">
         {n.city}, {n.state}
       </p>
-      {/* Guaranteed non-empty: the row's own request requires at least one matching listing
-       *  (`minCount`), so `n.sale` and `n.rent` are never both zero. */}
-      <p className="mt-2 text-xs font-semibold text-ink-muted">{counts}</p>
-    </Link>
+      {/* A zero count renders nothing. The row's request needs at least one matching listing
+       *  (`minCount`), so a tile never has two zero counts. */}
+      <div className="relative z-10 mt-1 flex w-full">
+        {n.sale > 0 && (
+          <Link
+            href={searchPath(place, 'homes-for-sale')}
+            aria-label={`${n.sale.toLocaleString()} for sale in ${n.name}`}
+            className={COUNT_LINK_CLASS}
+          >
+            {n.sale.toLocaleString()} for sale
+          </Link>
+        )}
+        {n.rent > 0 && (
+          <Link
+            href={searchPath(place, 'homes-for-rent')}
+            aria-label={`${n.rent.toLocaleString()} for rent in ${n.name}`}
+            className={COUNT_LINK_CLASS}
+          >
+            {n.rent.toLocaleString()} for rent
+          </Link>
+        )}
+      </div>
+    </div>
   );
 }
 
-/** Same shape as `NeighborhoodTile`, so the row never shifts height once real data lands. */
+/** Same box structure as `NeighborhoodTile`, so the row never shifts height once data lands. */
 function NeighborhoodTileSkeleton() {
   return (
     <div
       aria-hidden="true"
-      className={`flex-shrink-0 snap-start rounded-md border border-surface-border bg-white p-4 ${TILE_WIDTH_CLASS}`}
+      className={`flex flex-shrink-0 snap-start flex-col items-center rounded-md border border-surface-border bg-white p-3 ${TILE_WIDTH_CLASS}`}
     >
-      <div
-        className="mb-3 w-full rounded bg-surface-soft skeleton-fill"
-        style={{ height: STACK_HEIGHT_PX }}
-      />
-      <div className="h-4 w-3/4 rounded bg-surface-soft skeleton-fill" />
-      <div className="mt-2 h-3 w-1/2 rounded bg-surface-soft skeleton-fill" />
-      <div className="mt-3 h-3 w-2/3 rounded bg-surface-soft skeleton-fill" />
+      <div className={`${PHOTO_AREA_CLASS} rounded bg-surface-soft skeleton-fill`} />
+      <div className="flex h-6 w-full items-center justify-center">
+        <div className="h-4 w-3/4 rounded bg-surface-soft skeleton-fill" />
+      </div>
+      <div className="flex h-5 w-full items-center justify-center">
+        <div className="h-3 w-1/2 rounded bg-surface-soft skeleton-fill" />
+      </div>
+      <div className="mt-1 flex min-h-11 w-full items-center justify-center">
+        <div className="h-3 w-2/3 rounded bg-surface-soft skeleton-fill" />
+      </div>
     </div>
   );
 }

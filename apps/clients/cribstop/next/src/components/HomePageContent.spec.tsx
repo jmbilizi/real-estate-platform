@@ -381,7 +381,8 @@ describe('HomePageContent', () => {
 
       expect(await screen.findByText('Columbia Heights')).toBeInTheDocument();
       expect(screen.getByText('Washington, DC')).toBeInTheDocument();
-      expect(screen.getByText('207 for sale · 93 for rent')).toBeInTheDocument();
+      expect(screen.getByText('207 for sale')).toBeInTheDocument();
+      expect(screen.getByText('93 for rent')).toBeInTheDocument();
     });
 
     it('requests each licensed state in order, then a state-less request only if still short', async () => {
@@ -403,7 +404,7 @@ describe('HomePageContent', () => {
       expect(stateArgs).toEqual(['MD', 'DC', 'VA', undefined]);
     });
 
-    it('links a tile to the neighborhood search path', async () => {
+    it('links a tile to the all-types neighborhood search (#492)', async () => {
       mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
 
       render(<HomePageContent />);
@@ -411,7 +412,7 @@ describe('HomePageContent', () => {
       const link = (await screen.findByText('Columbia Heights')).closest('a');
       expect(link).toHaveAttribute(
         'href',
-        '/washington-dc/columbia-heights-neighborhood/homes-for-sale',
+        '/washington-dc/columbia-heights-neighborhood/homes-for-sale?type=all',
       );
     });
 
