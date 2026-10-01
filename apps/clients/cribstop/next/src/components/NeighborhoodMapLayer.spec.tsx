@@ -7,7 +7,15 @@ interface FakeMarker {
   fire: (e: string) => void;
 }
 const created: FakeMarker[] = [];
-const mockMap = { on: jest.fn(), off: jest.fn(), removeLayer: jest.fn() };
+const mockMap = {
+  on: jest.fn(),
+  off: jest.fn(),
+  removeLayer: jest.fn(),
+  latLngToContainerPoint: (ll: [number, number]) => ({
+    x: (ll[1] + 77) * 10000,
+    y: (ll[0] - 38) * 10000,
+  }),
+};
 
 jest.mock('react-leaflet', () => ({ useMap: () => mockMap }));
 jest.mock('leaflet', () => ({
@@ -18,7 +26,8 @@ jest.mock('leaflet', () => ({
     marker: (latlng: [number, number], options: { title?: string }) => {
       const handlers: Record<string, Handler[]> = {};
       const el = document.createElement('div');
-      el.innerHTML = '<span><span></span></span>';
+      el.innerHTML =
+        (options as { icon?: { html: string } }).icon?.html ?? '<span><span></span></span>';
       const m = {
         latlng,
         options,
@@ -39,6 +48,7 @@ jest.mock('leaflet', () => ({
 
 import { render } from '@testing-library/react';
 import NeighborhoodMapLayer, {
+  layoutNeighborhoodMarkers,
   neighborhoodMarkerLabel,
   selectMappableNeighborhoods,
 } from './NeighborhoodMapLayer';
@@ -76,6 +86,48 @@ describe('selectMappableNeighborhoods', () => {
   });
 });
 
+describe('layoutNeighborhoodMarkers', () => {
+  const item = (key: string, total: number, x: number, y: number) => ({
+    key,
+    name: key,
+    total,
+    x,
+    y,
+  });
+
+  it('keeps every marker full when none overlap', () => {
+    const modes = layoutNeighborhoodMarkers([item('a', 5, 0, 0), item('b', 9, 500, 500)], false);
+    expect([...modes.values()]).toEqual(['full', 'full']);
+  });
+
+  it('keeps the higher count full and shrinks the overlapping lower count', () => {
+    const modes = layoutNeighborhoodMarkers([item('low', 5, 10, 0), item('high', 90, 0, 0)], false);
+    expect(modes.get('high')).toBe('full');
+    expect(modes.get('low')).not.toBe('full');
+  });
+
+  it('falls back to a dot when even a bubble would overlap', () => {
+    const modes = layoutNeighborhoodMarkers(
+      [item('a', 30, 0, 0), item('b', 20, 1, 0), item('c', 10, 2, 0)],
+      false,
+    );
+    expect(modes.get('a')).toBe('full');
+    expect(modes.get('c')).toBe('dot');
+  });
+
+  it('orders by count, so the result does not depend on input order', () => {
+    const a = layoutNeighborhoodMarkers([item('x', 5, 0, 0), item('y', 50, 5, 0)], false);
+    const b = layoutNeighborhoodMarkers([item('y', 50, 5, 0), item('x', 5, 0, 0)], false);
+    expect(a.get('y')).toBe(b.get('y'));
+    expect(a.get('x')).toBe(b.get('x'));
+  });
+
+  it('starts at the count bubble in compact mode', () => {
+    const modes = layoutNeighborhoodMarkers([item('a', 5, 0, 0), item('b', 9, 500, 500)], true);
+    expect([...modes.values()]).toEqual(['bubble', 'bubble']);
+  });
+});
+
 describe('neighborhoodMarkerLabel', () => {
   it('shows the name and the count only', () => {
     expect(neighborhoodMarkerLabel('Shaw', 42)).toBe('Shaw · 42');
@@ -101,6 +153,37 @@ describe('NeighborhoodMapLayer', () => {
     setup();
     expect(created).toHaveLength(1);
     expect(created[0].latlng).toEqual([38.91, -77.02]);
+  });
+
+  const pillText = () =>
+    (created[0].el.firstElementChild!.firstElementChild as HTMLElement).textContent;
+
+  it('draws the name and count from sm up', () => {
+    setup();
+    expect(pillText()).toBe('Shaw · 42');
+  });
+
+  it('draws a count bubble with no name below sm, and the name when highlighted', () => {
+    const width = window.innerWidth;
+    window.innerWidth = 360;
+    try {
+      const props = { onActive: jest.fn(), onSelect: jest.fn() };
+      const { rerender } = render(<NeighborhoodMapLayer rows={rows} activeKey={null} {...props} />);
+      expect(pillText()).toBe('42');
+      rerender(<NeighborhoodMapLayer rows={rows} activeKey={rows[0].key} {...props} />);
+      expect(pillText()).toBe('Shaw · 42');
+      rerender(<NeighborhoodMapLayer rows={rows} activeKey={null} {...props} />);
+      expect(pillText()).toBe('42');
+    } finally {
+      window.innerWidth = width;
+    }
+  });
+
+  it('keeps the 44px tap box in every mode', () => {
+    setup();
+    const box = created[0].el.firstElementChild as HTMLElement;
+    expect(box.style.width).toBe('44px');
+    expect(box.style.height).toBe('44px');
   });
 
   it('reports the key on hover and clears it on mouseout', () => {
