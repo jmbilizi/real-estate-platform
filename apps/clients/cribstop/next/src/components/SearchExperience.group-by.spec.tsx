@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { getNeighborhoodGroups, searchListings } from '@/lib/api/listings';
 import SearchExperience from './SearchExperience';
 
@@ -17,9 +17,24 @@ jest.mock('@/lib/api/listings', () => ({
   },
 }));
 
+interface MapProps {
+  neighborhoods?: {
+    rows: Array<{ key: string }>;
+    activeKey: string | null;
+    onActive: (key: string | null) => void;
+    onSelect: (row: unknown) => void;
+  };
+  focusBounds: unknown;
+}
+// Named `mock*` so the module factory below may read it.
+const mockMapProps: { current: MapProps | null } = { current: null };
+
 jest.mock('@/components/ListingsMap', () => ({
   __esModule: true,
-  default: () => <div data-testid="map" />,
+  default: (props: unknown) => {
+    mockMapProps.current = props as MapProps;
+    return <div data-testid="map" />;
+  },
 }));
 jest.mock('@/components/CompactSearchBar', () => ({
   __esModule: true,
@@ -250,6 +265,67 @@ describe('Group by neighborhood (#502)', () => {
     render(<SearchExperience initialQuery="q=Bethesda&groupBy=neighborhood" />);
     fireEvent.click(await screen.findByRole('button', { name: /try again/i }));
     expect(await screen.findByTestId('neighborhood-group-grid')).toBeTruthy();
+  });
+
+  it('gives the map the page of groups, and no markers outside the grouped view (#503)', async () => {
+    render(<SearchExperience initialQuery="q=Bethesda" />);
+    await waitFor(() => expect(mockMapProps.current).not.toBeNull());
+    expect(mockMapProps.current?.neighborhoods).toBeUndefined();
+
+    choose('group-by-control', 'Neighborhood');
+    await screen.findByTestId('neighborhood-group-grid');
+    await waitFor(() => expect(mockMapProps.current?.neighborhoods?.rows).toHaveLength(2));
+    expect(mockMapProps.current?.neighborhoods?.rows.map((r) => r.key)).toEqual([
+      'md|bethesda|chevy chase',
+      'md|bethesda|kensington',
+    ]);
+  });
+
+  it('links a card and its marker by key on hover and focus (#503)', async () => {
+    render(<SearchExperience initialQuery="q=Bethesda&groupBy=neighborhood" />);
+    await screen.findByTestId('neighborhood-group-grid');
+    const key = 'md|bethesda|chevy chase';
+    const card = () => document.querySelector(`[data-neighborhood-key="${key}"]`) as HTMLElement;
+
+    fireEvent.mouseEnter(card());
+    expect(mockMapProps.current?.neighborhoods?.activeKey).toBe(key);
+    expect(card().dataset.active).toBe('true');
+    fireEvent.mouseLeave(card());
+    expect(mockMapProps.current?.neighborhoods?.activeKey).toBeNull();
+
+    // A marker hover reaches the card.
+    act(() => mockMapProps.current?.neighborhoods?.onActive('md|bethesda|kensington'));
+    expect(
+      (document.querySelector('[data-neighborhood-key="md|bethesda|kensington"]') as HTMLElement)
+        .dataset.active,
+    ).toBe('true');
+  });
+
+  it('drills down from a marker like a card, and fits the map to the bounds (#503)', async () => {
+    const bounds = { south: 38.9, west: -77.1, north: 39, east: -77 };
+    mockedGroups.mockResolvedValue({
+      results: [{ ...row('Chevy Chase'), centroid: { lat: 38.95, lng: -77.05 }, bounds }],
+      total: 1,
+    });
+    render(<SearchExperience initialQuery="q=Bethesda&beds=2&groupBy=neighborhood" />);
+    await screen.findByTestId('neighborhood-group-grid');
+    await waitFor(() => expect(mockMapProps.current?.neighborhoods?.rows).toHaveLength(1));
+
+    act(() =>
+      mockMapProps.current?.neighborhoods?.onSelect(mockMapProps.current?.neighborhoods?.rows[0]),
+    );
+
+    expect(currentParams().has('groupBy')).toBe(false);
+    expect(currentParams().get('neighborhood')).toBe('Chevy Chase');
+    expect(currentParams().get('city')).toBe('Bethesda');
+    expect(currentParams().get('state')).toBe('MD');
+    expect(currentParams().get('beds')).toBe('2');
+    expect(currentParams().get('groupFrom')).not.toBeNull();
+    expect(mockMapProps.current?.neighborhoods).toBeUndefined();
+    expect(mockMapProps.current?.focusBounds).toEqual(bounds);
+
+    fireEvent.click(screen.getByTestId('back-to-neighborhoods'));
+    expect(mockMapProps.current?.focusBounds).toBeNull();
   });
 
   it('pages the groups by offset', async () => {

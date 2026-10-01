@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ListingCard from '@/components/ListingCard';
 import ListingsMap from '@/components/ListingsMap';
+import type { NeighborhoodBounds } from '@/components/ListingsMapInner';
 import { useApp } from '@/lib/context';
 import { listingIdFromPath } from '@/lib/listing-panel';
 
@@ -35,6 +36,7 @@ import {
   scopeToken,
   writeGroupState,
 } from '@/lib/group-by';
+import { usableFitBounds } from '@/lib/neighborhoods';
 import { ListingErrorState, ListingGridSkeleton } from '@/components/listing/ListingStates';
 
 export interface SearchExperienceProps {
@@ -332,6 +334,16 @@ export default function SearchExperience({
     parseGroupState(new URLSearchParams(initialQuery)),
   );
 
+  /** The card or marker the pointer or focus is on, by `NeighborhoodRow.key` (#503). */
+  const [activeGroupKey, setActiveGroupKey] = useState<string | null>(null);
+  /** Where the map fits after a drill-down (#503). Null when the row has no bounds. */
+  const [focus, setFocus] = useState<{
+    name: string;
+    city?: string;
+    state?: string;
+    bounds: NeighborhoodBounds;
+  } | null>(null);
+
   // Filter, sort and pagination are all enforced server-side now; the page holds only the
   // request. `total` and `pageCount` come from the response envelope rather than from the length
   // of the current page — which is the whole point of paging server-side.
@@ -407,7 +419,7 @@ export default function SearchExperience({
   const grouped = group.groupBy === 'neighborhood';
 
   // In the grouped view `page` pages the neighborhood cards. The listing search still runs, on page
-  // 1, because the map reads it. The map is unchanged in the grouped view until #503.
+  // 1, because the filter modal reads its total. The map shows one marker per card (#503).
   const { results, total, pageCount, pageSize, status, error, errorCode, retry } = useListingSearch(
     requestFilters,
     grouped ? 1 : page,
@@ -540,6 +552,9 @@ export default function SearchExperience({
       window.location.assign(drillHref(row, listingType));
       return;
     }
+    const fit = usableFitBounds(row);
+    setFocus(fit ? { name: row.name, city: row.city, state: row.state, bounds: fit } : null);
+    setActiveGroupKey(null);
     commitView(drillDownFilters(filters, row, listingType), {
       ...group,
       groupBy: undefined,
@@ -559,6 +574,7 @@ export default function SearchExperience({
     : undefined;
 
   const backToGroups = () => {
+    setFocus(null);
     const backFilters = backToGroupFilters(filters, group.from);
     const backGroup: GroupState = { ...group, groupBy: 'neighborhood', from: undefined };
     // A count link may have moved the search to the other path. Return to the path it left.
@@ -604,6 +620,14 @@ export default function SearchExperience({
       );
     }
     return `${path}${qs ? `?${qs}` : ''}`;
+  };
+
+  /** Touch: a first tap on a marker brings its card into view. */
+  const scrollToGroupCard = (key: string) => {
+    const card = Array.from(document.querySelectorAll<HTMLElement>('[data-neighborhood-key]')).find(
+      (el) => el.dataset.neighborhoodKey === key,
+    );
+    card?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   };
 
   const groupPageCount = Math.ceil(groups.total / GROUP_PAGE_SIZE);
@@ -652,6 +676,26 @@ export default function SearchExperience({
               searchPolygon={searchPolygon}
               filters={requestFilters}
               total={total}
+              neighborhoods={
+                grouped
+                  ? {
+                      rows: groups.rows,
+                      activeKey: activeGroupKey,
+                      onActive: setActiveGroupKey,
+                      onSelect: drillInto,
+                      onTapPreview: scrollToGroupCard,
+                    }
+                  : undefined
+              }
+              focusBounds={
+                !grouped &&
+                focus &&
+                filters.neighborhood === focus.name &&
+                filters.city === focus.city &&
+                filters.state === focus.state
+                  ? focus.bounds
+                  : null
+              }
               active={!deferred}
             />
           </div>
@@ -815,6 +859,8 @@ export default function SearchExperience({
                     rows={groups.rows}
                     hrefFor={drillHref}
                     onSelect={drillInto}
+                    activeKey={activeGroupKey}
+                    onActive={setActiveGroupKey}
                   />
                   <ResultsPager page={page} pageCount={reachableGroupPages} onPage={pushPage} />
                   {groupPageCount > reachableGroupPages && (

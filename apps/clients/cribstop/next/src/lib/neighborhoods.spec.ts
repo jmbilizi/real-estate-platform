@@ -5,6 +5,7 @@ import {
   neighborhoodsMetadata,
   parseNeighborhoodsScope,
   scopeStates,
+  usableFitBounds,
 } from './neighborhoods';
 
 function row(overrides: Partial<NeighborhoodRow> = {}): NeighborhoodRow {
@@ -106,5 +107,24 @@ describe('neighborhoodsMetadata', () => {
         /best|top|\$|price|cheap|popular|rank/i,
       );
     }
+  });
+});
+
+describe('usableFitBounds (#503)', () => {
+  const centroid = { lat: 38.93, lng: -77.03 };
+  const good = { south: 38.92, west: -77.04, north: 38.95, east: -77.01 };
+
+  it('keeps bounds that hold the centroid', () => {
+    expect(usableFitBounds(row({ centroid, bounds: good }))).toEqual(good);
+  });
+  it('rejects null bounds', () => {
+    expect(usableFitBounds(row({ centroid, bounds: null }))).toBeNull();
+  });
+  it('rejects bounds stretched to 0,0 by a stray coordinate', () => {
+    expect(usableFitBounds(row({ centroid, bounds: { ...good, south: 0, east: 0 } }))).toBeNull();
+  });
+  it('rejects bounds that miss their centroid or span too wide', () => {
+    expect(usableFitBounds(row({ centroid: { lat: 39.5, lng: -77.03 }, bounds: good }))).toBeNull();
+    expect(usableFitBounds(row({ centroid, bounds: { ...good, north: 40.5 } }))).toBeNull();
   });
 });

@@ -25,11 +25,16 @@ export default function NeighborhoodGroupGrid({
   rows,
   hrefFor,
   onSelect,
+  activeKey = null,
+  onActive,
 }: {
   rows: readonly NeighborhoodRow[];
   /** The listings link for a row, used for new-tab and copy-link. */
   hrefFor: (row: NeighborhoodRow, listingType?: 'sale' | 'rent') => string;
   onSelect: (row: NeighborhoodRow, listingType?: 'sale' | 'rent') => void;
+  /** The key of the card or marker the pointer or focus is on (#503). */
+  activeKey?: string | null;
+  onActive?: (key: string | null) => void;
 }) {
   return (
     <div className={GROUP_GRID_CLASS} data-testid="neighborhood-group-grid">
@@ -40,6 +45,7 @@ export default function NeighborhoodGroupGrid({
           grid
           hrefFor={(type) => hrefFor(row, type)}
           onSelect={(type) => onSelect(row, type)}
+          sync={onActive && { key: row.key, active: activeKey === row.key, onActive }}
         />
       ))}
     </div>
