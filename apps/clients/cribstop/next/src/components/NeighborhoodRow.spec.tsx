@@ -199,7 +199,7 @@ describe('NeighborhoodRow (#393)', () => {
 
   it('names the row in its own accessible name, not just "See all" (#423)', () => {
     renderRow({ href: '/homes-for-sale', title: 'Explore neighborhoods' });
-    expect(screen.getByLabelText('Explore neighborhoods — see all')).toBeInTheDocument();
+    expect(screen.getAllByLabelText('Explore neighborhoods — see all')[0]).toBeInTheDocument();
   });
 
   it('keeps the "See all" link and arrow buttons at a 44px tap target via a hit-area pseudo element, with a ~32px visual box that never shrinks beside a long heading (#423, #447)', () => {
@@ -209,7 +209,7 @@ describe('NeighborhoodRow (#393)', () => {
     // (`min-h-8`, matching the chip), but a `before:` pseudo element extends the tap target to
     // 44px without adding layout height (#447) — a `min-h-11` box left dead space under the
     // title that blew out the gap to the carousel below.
-    const seeAll = screen.getByLabelText(/see all/i);
+    const seeAll = screen.getAllByLabelText(/see all/i)[0];
     expect(seeAll.className).toContain('min-h-8');
     expect(seeAll.className).toContain('before:-top-1.5');
     expect(seeAll.className).toContain('before:-bottom-1.5');

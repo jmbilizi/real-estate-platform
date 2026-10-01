@@ -422,7 +422,7 @@ describe('HomePageContent', () => {
       render(<HomePageContent />);
 
       await screen.findByText('Columbia Heights');
-      expect(screen.getByLabelText('Find your neighborhood — see all')).toHaveAttribute(
+      expect(screen.getAllByLabelText('Find your neighborhood — see all')[0]).toHaveAttribute(
         'href',
         '/neighborhoods',
       );
@@ -440,7 +440,7 @@ describe('HomePageContent', () => {
 
       await screen.findByText('Columbia Heights');
       const href = '/neighborhoods?state=MD&city=Rockville';
-      expect(screen.getByLabelText('Find your neighborhood — see all')).toHaveAttribute(
+      expect(screen.getAllByLabelText('Find your neighborhood — see all')[0]).toHaveAttribute(
         'href',
         href,
       );
