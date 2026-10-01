@@ -117,7 +117,7 @@ describe('HomePageContent', () => {
       expect(screen.getByText("See new rentals before they're listed")).toBeInTheDocument();
       expect(screen.getByText('Cheapest homes for sale')).toBeInTheDocument();
       expect(screen.getByText('Cheapest rentals')).toBeInTheDocument();
-      expect(screen.getByText('Find your neighborhood')).toBeInTheDocument();
+      expect(screen.getByText('Explore neighborhoods')).toBeInTheDocument();
 
       // No count/place subtitle line under any row.
       expect(screen.queryByText(/\d+ homes?/)).not.toBeInTheDocument();
@@ -197,7 +197,7 @@ describe('HomePageContent', () => {
         "See new rentals before they're listed",
         'Cheapest homes for sale',
         'Cheapest rentals',
-        'Find your neighborhood',
+        'Explore neighborhoods',
         'Real listings, updated 5 months ago',
       ]);
     });
@@ -222,7 +222,7 @@ describe('HomePageContent', () => {
         'Price drops on homes for sale',
         'Cheapest rentals',
         'Cheapest homes for sale',
-        'Find your neighborhood',
+        'Explore neighborhoods',
         'Real listings, updated 5 months ago',
       ]);
     });
@@ -422,7 +422,7 @@ describe('HomePageContent', () => {
       render(<HomePageContent />);
 
       await screen.findByText('Columbia Heights');
-      expect(screen.getAllByLabelText('Find your neighborhood — see all')[0]).toHaveAttribute(
+      expect(screen.getAllByLabelText('Explore neighborhoods — see all')[0]).toHaveAttribute(
         'href',
         '/neighborhoods',
       );
@@ -440,7 +440,7 @@ describe('HomePageContent', () => {
 
       await screen.findByText('Columbia Heights');
       const href = '/neighborhoods?state=MD&city=Rockville';
-      expect(screen.getAllByLabelText('Find your neighborhood — see all')[0]).toHaveAttribute(
+      expect(screen.getAllByLabelText('Explore neighborhoods — see all')[0]).toHaveAttribute(
         'href',
         href,
       );
@@ -454,7 +454,7 @@ describe('HomePageContent', () => {
 
       await screen.findByText('Cheapest homes for sale');
       await waitFor(() =>
-        expect(screen.queryByText('Find your neighborhood')).not.toBeInTheDocument(),
+        expect(screen.queryByText('Explore neighborhoods')).not.toBeInTheDocument(),
       );
       expect(screen.queryByTestId('neighborhood-see-all-tile')).not.toBeInTheDocument();
     });

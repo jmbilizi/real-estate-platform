@@ -304,7 +304,7 @@ function ExploreNeighborhoodsRow({
 
   return (
     <NeighborhoodRow
-      title="Find your neighborhood"
+      title="Explore neighborhoods"
       href={neighborhoodsHref(region)}
       neighborhoods={neighborhoods}
       loading={loading}
