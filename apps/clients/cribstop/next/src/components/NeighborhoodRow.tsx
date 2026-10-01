@@ -1,5 +1,6 @@
 'use client';
 
+import type { MouseEvent } from 'react';
 import Link from 'next/link';
 import { type NeighborhoodPreviewPhoto, searchPath } from '@cribstop/property-contracts';
 import {
@@ -36,9 +37,29 @@ const COUNT_LINK_CLASS =
  * count links are siblings above it (`z-10`), never nested inside it. Each count link is
  * `min-h-11` and takes its own half of the row, so the two hit areas never overlap.
  */
-export function NeighborhoodTile({ n, grid = false }: { n: Neighborhood; grid?: boolean }) {
+export function NeighborhoodTile({
+  n,
+  grid = false,
+  hrefFor,
+  onSelect,
+}: {
+  n: Neighborhood;
+  grid?: boolean;
+  /** Replaces the target of the name link (no type) and of each count link (#502). */
+  hrefFor?: (listingType?: 'sale' | 'rent') => string;
+  /** Runs on a plain click of those links, in place of the navigation (#502). */
+  onSelect?: (listingType?: 'sale' | 'rent') => void;
+}) {
   const place = { kind: 'neighborhood', name: n.name, city: n.city, state: n.state } as const;
-  const href = searchTargetUrl({ kind: 'place', place }, 'all');
+  const href = hrefFor ? hrefFor() : searchTargetUrl({ kind: 'place', place }, 'all');
+  const onClickFor = (listingType?: 'sale' | 'rent') =>
+    onSelect
+      ? (e: MouseEvent) => {
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+          e.preventDefault();
+          onSelect(listingType);
+        }
+      : undefined;
 
   return (
     <div
@@ -48,6 +69,7 @@ export function NeighborhoodTile({ n, grid = false }: { n: Neighborhood; grid?: 
       <h3 className="w-full truncate font-display text-base font-bold leading-6 text-ink">
         <Link
           href={href}
+          onClick={onClickFor()}
           className="after:absolute after:inset-0 after:rounded-md after:content-[''] group-hover:underline focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ink"
         >
           {n.name}
@@ -61,7 +83,8 @@ export function NeighborhoodTile({ n, grid = false }: { n: Neighborhood; grid?: 
       <div className="relative z-10 mt-1 flex w-full">
         {n.sale > 0 && (
           <Link
-            href={searchPath(place, 'homes-for-sale')}
+            href={hrefFor ? hrefFor('sale') : searchPath(place, 'homes-for-sale')}
+            onClick={onClickFor('sale')}
             aria-label={`${n.sale.toLocaleString()} for sale in ${n.name}`}
             className={COUNT_LINK_CLASS}
           >
@@ -70,7 +93,8 @@ export function NeighborhoodTile({ n, grid = false }: { n: Neighborhood; grid?: 
         )}
         {n.rent > 0 && (
           <Link
-            href={searchPath(place, 'homes-for-rent')}
+            href={hrefFor ? hrefFor('rent') : searchPath(place, 'homes-for-rent')}
+            onClick={onClickFor('rent')}
             aria-label={`${n.rent.toLocaleString()} for rent in ${n.name}`}
             className={COUNT_LINK_CLASS}
           >
