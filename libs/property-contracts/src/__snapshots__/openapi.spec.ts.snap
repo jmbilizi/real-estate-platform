@@ -1095,7 +1095,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                   "type": "string",
                 },
                 "previewPhotos": {
-                  "description": "Up to 5 primary photos, one per listing, from the sale listings the tile links to. Newest listed first. Absent when no listing qualifies.",
+                  "description": "Up to 5 primary photos, one per listing, from the listings the row counts (sale, rent or both, per listingType). Newest listed first. Absent when no listing qualifies.",
                   "items": {
                     "additionalProperties": false,
                     "properties": {

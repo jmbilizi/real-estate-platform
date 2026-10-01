@@ -158,9 +158,17 @@ describe('previewPhotos count', () => {
   });
 });
 
-describe('previewPhotos only come from the sale listings the tile links to', () => {
-  it('gives a rent-only neighborhood no photos', async () => {
-    const { slug } = await seedHood('rentonly', [
+describe('previewPhotos come from the sale and rent listings the tile links to (#494)', () => {
+  it('gives a sale-only neighborhood its sale photos', async () => {
+    const { slug, ids } = await seedHood('saleonly', [{ listedDaysAgo: 1 }, { listedDaysAgo: 2 }]);
+
+    const row = await fetchRow(slug);
+
+    expect((row?.previewPhotos ?? []).map((p) => p.listingId)).toEqual(ids);
+  });
+
+  it('gives a rent-only neighborhood photos', async () => {
+    const { slug, ids } = await seedHood('rentonly', [
       { offerKind: 'rent', listedDaysAgo: 1 },
       { offerKind: 'rent', listedDaysAgo: 2 },
     ]);
@@ -168,21 +176,28 @@ describe('previewPhotos only come from the sale listings the tile links to', () 
     const row = await fetchRow(slug);
 
     expect(row?.rent).toBe(2);
-    expect(row?.previewPhotos).toBeUndefined();
+    expect((row?.previewPhotos ?? []).map((p) => p.listingId)).toEqual(ids);
   });
 
-  it('skips a rent listing in a mixed neighborhood', async () => {
-    const { slug, ids } = await seedHood('mixed', [
-      { offerKind: 'rent', listedDaysAgo: 1 },
-      { listedDaysAgo: 2 },
-    ]);
+  it('mixes sale and rent photos newest first and caps them at 5', async () => {
+    const { slug, ids } = await seedHood(
+      'mixed',
+      Array.from({ length: 7 }, (_, i) => ({
+        offerKind: i % 2 === 0 ? ('rent' as const) : ('sale' as const),
+        listedDaysAgo: i + 1,
+      })),
+    );
 
     const row = await fetchRow(slug);
 
-    expect((row?.previewPhotos ?? []).map((p) => p.listingId)).toEqual([ids[1]]);
+    expect((row?.previewPhotos ?? []).map((p) => p.listingId)).toEqual(ids.slice(0, 5));
   });
 
-  it.each(['all', 'sale', 'rent'])('returns the same photos for listingType=%s', async (type) => {
+  it.each([
+    ['all', [0, 1]],
+    ['sale', [0]],
+    ['rent', [1]],
+  ] as const)('listingType=%s limits photos to the listings the row counts', async (type, idx) => {
     const { slug, ids } = await seedHood(`type${type}`, [
       { listedDaysAgo: 1 },
       { offerKind: 'rent', listedDaysAgo: 2 },
@@ -190,7 +205,7 @@ describe('previewPhotos only come from the sale listings the tile links to', () 
 
     const row = await fetchRow(slug, { listingType: type });
 
-    expect((row?.previewPhotos ?? []).map((p) => p.listingId)).toEqual([ids[0]]);
+    expect((row?.previewPhotos ?? []).map((p) => p.listingId)).toEqual(idx.map((i) => ids[i]));
   });
 });
 
