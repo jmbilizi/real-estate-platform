@@ -337,7 +337,12 @@ export default function SearchExperience({
   /** The card or marker the pointer or focus is on, by `NeighborhoodRow.key` (#503). */
   const [activeGroupKey, setActiveGroupKey] = useState<string | null>(null);
   /** Where the map fits after a drill-down (#503). Null when the row has no bounds. */
-  const [focusBounds, setFocusBounds] = useState<NeighborhoodBounds | null>(null);
+  const [focus, setFocus] = useState<{
+    name: string;
+    city?: string;
+    state?: string;
+    bounds: NeighborhoodBounds;
+  } | null>(null);
 
   // Filter, sort and pagination are all enforced server-side now; the page holds only the
   // request. `total` and `pageCount` come from the response envelope rather than from the length
@@ -547,7 +552,8 @@ export default function SearchExperience({
       window.location.assign(drillHref(row, listingType));
       return;
     }
-    setFocusBounds(usableFitBounds(row));
+    const fit = usableFitBounds(row);
+    setFocus(fit ? { name: row.name, city: row.city, state: row.state, bounds: fit } : null);
     setActiveGroupKey(null);
     commitView(drillDownFilters(filters, row, listingType), {
       ...group,
@@ -568,7 +574,7 @@ export default function SearchExperience({
     : undefined;
 
   const backToGroups = () => {
-    setFocusBounds(null);
+    setFocus(null);
     const backFilters = backToGroupFilters(filters, group.from);
     const backGroup: GroupState = { ...group, groupBy: 'neighborhood', from: undefined };
     // A count link may have moved the search to the other path. Return to the path it left.
@@ -681,7 +687,15 @@ export default function SearchExperience({
                     }
                   : undefined
               }
-              focusBounds={!grouped && filters.neighborhood ? focusBounds : null}
+              focusBounds={
+                !grouped &&
+                focus &&
+                filters.neighborhood === focus.name &&
+                filters.city === focus.city &&
+                filters.state === focus.state
+                  ? focus.bounds
+                  : null
+              }
               active={!deferred}
             />
           </div>
