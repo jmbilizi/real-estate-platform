@@ -59,6 +59,10 @@ export async function loadNeighborhoodSections(
     ...states.map((state) => fetchRows({ state })),
   ]);
 
+  for (const result of [cityResult, ...stateResults]) {
+    if (result?.status === 'rejected') console.error('neighborhoods request failed', result.reason);
+  }
+
   const seen = new Set<string>();
   const sections: NeighborhoodsSection[] = [];
 
