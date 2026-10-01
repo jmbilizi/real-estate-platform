@@ -6,7 +6,7 @@ import { stateCode } from './search-request';
  * the home page's "Explore neighborhoods" row. No ranking, no descriptive word — counts only, so
  * this never becomes a second, unreviewed `featured` mechanism.
  *
- * #486: each row may carry `previewPhotos`, read live from the sale listings the tile links to.
+ * #486: each row may carry `previewPhotos`, read live from the listings the row counts (sale, rent or both).
  * They are not ranking or featuring. Row order stays count based.
  */
 
@@ -150,8 +150,8 @@ export const neighborhoodRowSchema = z.object({
     .max(NEIGHBORHOOD_PREVIEW_PHOTOS_MAX)
     .optional()
     .describe(
-      `Up to ${NEIGHBORHOOD_PREVIEW_PHOTOS_MAX} primary photos, one per listing, from the sale ` +
-        'listings the tile links to. Newest listed first. Absent when no listing qualifies.',
+      `Up to ${NEIGHBORHOOD_PREVIEW_PHOTOS_MAX} primary photos, one per listing, from the listings the row ` +
+        'counts (sale, rent or both, per listingType). Newest listed first. Absent when no listing qualifies.',
     ),
 });
 
