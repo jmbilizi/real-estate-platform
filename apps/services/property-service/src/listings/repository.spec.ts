@@ -356,13 +356,22 @@ describe('getNeighborhoods', () => {
       await getNeighborhoods(client, baseNeighborhoodsRequest);
 
       const text = captured[0]?.text ?? '';
-      const geo = text.slice(
-        text.indexOf('percentile_cont(0.5) WITHIN GROUP (ORDER BY v.latitude)'),
-      );
-      expect(geo).toContain('percentile_cont(0.5) WITHIN GROUP (ORDER BY v.longitude)');
-      expect(geo.slice(0, geo.indexOf('LEFT JOIN LATERAL'))).toContain(
-        'v.address_display_allowed AND v.latitude IS NOT NULL AND v.longitude IS NOT NULL',
-      );
+      const geo = text.slice(text.indexOf('WITH pts AS'));
+      expect(geo).toContain('percentile_cont(0.5) WITHIN GROUP (ORDER BY ln)');
+      expect(geo.slice(0, geo.indexOf('med AS'))).toContain('v.address_display_allowed AND');
+    });
+
+    it('excludes null, zero and out-of-range coordinates, and bounds only points near the median (#512)', async () => {
+      const { client, captured } = fakeClient();
+
+      await getNeighborhoods(client, baseNeighborhoodsRequest);
+
+      const text = captured[0]?.text ?? '';
+      expect(text).toContain('v.latitude <> 0 AND v.longitude <> 0');
+      expect(text).toContain('abs(v.latitude) <= 90 AND abs(v.longitude) <= 180');
+      expect(text).toContain('abs(pts.la - med.lat) <= 0.25');
+      expect(text).toContain('abs(pts.ln - med.lng) <= 0.25');
+      expect(text).not.toMatch(/(min|max)[(]v[.]latitude[)]/);
     });
 
     it('reads only the view masked coordinates on the view path, never the unmasked flag column', async () => {
@@ -371,7 +380,7 @@ describe('getNeighborhoods', () => {
       await getNeighborhoods(client, { ...baseNeighborhoodsRequest, beds: 2 });
 
       const text = captured[0]?.text ?? '';
-      expect(text).toContain('v.latitude IS NOT NULL AND v.longitude IS NOT NULL');
+      expect(text).toContain('v.latitude <> 0 AND v.longitude <> 0');
       expect(text).not.toContain('address_display_allowed');
     });
 
