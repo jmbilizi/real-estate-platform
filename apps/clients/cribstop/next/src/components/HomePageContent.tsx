@@ -11,7 +11,11 @@ import { addressCity, addressState, searchTargetUrl } from '@/lib/search-place';
 import { formatRelativeTime } from '@/lib/format';
 import Link from 'next/link';
 import { BRAND } from '@/lib/brand';
-import { addNeighborhoodRows, NEIGHBORHOODS_MIN_COUNT } from '@/lib/neighborhoods';
+import {
+  addNeighborhoodRows,
+  NEIGHBORHOODS_MIN_COUNT,
+  neighborhoodsHref,
+} from '@/lib/neighborhoods';
 
 /** The one distinction this page ever browses by. Never `'all'`/`'sold'` — #398 always shows both
  *  sale and rent, each as its own section. */
@@ -301,6 +305,7 @@ function ExploreNeighborhoodsRow({
   return (
     <NeighborhoodRow
       title="Find your neighborhood"
+      href={neighborhoodsHref(region)}
       neighborhoods={neighborhoods}
       loading={loading}
     />

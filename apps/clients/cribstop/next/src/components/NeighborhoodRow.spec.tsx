@@ -100,7 +100,85 @@ describe('NeighborhoodRow (#393)', () => {
     expect(screen.getAllByTestId('neighborhood-photo-placeholder')).toHaveLength(2);
   });
 
-  it('caps visible tiles at max, all reachable by horizontal scroll rather than a "See all" tile', () => {
+  describe('trailing "See all" tile (#495)', () => {
+    const photo = (id: string) => ({ url: `https://img.example/${id}.jpg`, listingId: id });
+    const WITH_PHOTOS: Neighborhood[] = [
+      { ...NEIGHBORHOODS[0], previewPhotos: [photo('a1'), photo('a2')] },
+      { ...NEIGHBORHOODS[1], previewPhotos: [photo('b1')] },
+    ];
+
+    it('renders after the last tile, as one link to the chip href', () => {
+      renderRow({ href: '/neighborhoods?state=DC', neighborhoods: WITH_PHOTOS });
+
+      const tile = screen.getByTestId('neighborhood-see-all-tile');
+      expect(tile.tagName).toBe('A');
+      expect(tile).toHaveAttribute('href', '/neighborhoods?state=DC');
+      expect(tile).toHaveTextContent('See all');
+      expect(tile.className).toContain('min-h-11');
+      expect(tile.className).toContain('items-center');
+      expect(tile.className).toContain('text-center');
+      const petworth = screen.getByRole('link', { name: 'Petworth' }).closest('div')!;
+      expect(
+        petworth.compareDocumentPosition(tile) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(tile.nextElementSibling).toBeNull();
+    });
+
+    it('uses the same width classes as a neighborhood tile', () => {
+      renderRow({ href: '/neighborhoods', neighborhoods: WITH_PHOTOS });
+
+      const tile = screen.getByTestId('neighborhood-see-all-tile');
+      const other = screen.getByRole('link', { name: 'Petworth' }).closest('div')!;
+      const widths = (el: Element) =>
+        el.className.split(' ').filter((c) => /^(sm:|md:|lg:|xl:)?w-/.test(c));
+      expect(widths(tile).length).toBeGreaterThan(0);
+      expect(widths(tile)).toEqual(widths(other));
+    });
+
+    it('draws photos only from the previewPhotos of tiles in the row', () => {
+      const { container } = renderRow({ href: '/neighborhoods', neighborhoods: WITH_PHOTOS });
+
+      const tile = screen.getByTestId('neighborhood-see-all-tile');
+      const urls = Array.from(tile.querySelectorAll('img')).map((i) => i.getAttribute('src'));
+      const allowed = WITH_PHOTOS.flatMap((n) => n.previewPhotos!.map((p) => p.url));
+      expect(urls.length).toBe(3);
+      for (const u of urls) expect(allowed).toContain(u);
+      // One photo per tile comes first.
+      expect(urls.slice(0, 2)).toEqual([allowed[0], allowed[2]]);
+      expect(container.querySelectorAll('a a')).toHaveLength(0);
+    });
+
+    it('is text only when no tile has a photo', () => {
+      renderRow({ href: '/neighborhoods' });
+
+      const tile = screen.getByTestId('neighborhood-see-all-tile');
+      expect(tile.querySelector('img')).toBeNull();
+      expect(tile).toHaveTextContent('See all');
+    });
+
+    it('does not render without href', () => {
+      renderRow({ neighborhoods: WITH_PHOTOS });
+      expect(screen.queryByTestId('neighborhood-see-all-tile')).not.toBeInTheDocument();
+    });
+
+    it('does not render when the row is hidden', () => {
+      const { container } = renderRow({ href: '/neighborhoods', neighborhoods: [] });
+      expect(container).toBeEmptyDOMElement();
+    });
+
+    it('is replaced by one extra skeleton tile while loading', () => {
+      const { container } = renderRow({
+        href: '/neighborhoods',
+        neighborhoods: [],
+        loading: true,
+        max: 4,
+      });
+      expect(screen.queryByTestId('neighborhood-see-all-tile')).not.toBeInTheDocument();
+      expect(container.querySelectorAll('[aria-hidden="true"].flex-col')).toHaveLength(5);
+    });
+  });
+
+  it('caps visible tiles at max with no "See all" tile when href is omitted', () => {
     const many: Neighborhood[] = Array.from({ length: 12 }, (_, i) => ({
       name: `Place ${i}`,
       city: 'Washington',
