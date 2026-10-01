@@ -16,6 +16,7 @@ export function selectMappableNeighborhoods(
 
 const NAME_MAX = 18;
 const HIT = 44;
+const TAP_DEDUPE_MS = 500;
 
 /** "Shaw · 42". The count only. Long names are cut, and the full name stays in the aria label. */
 export function neighborhoodMarkerLabel(name: string, total: number): string {
@@ -74,6 +75,7 @@ export default function NeighborhoodMapLayer({
 }) {
   const map = useMap();
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
+  const previewedAt = useRef(0);
   const activeRef = useRef(activeKey);
   activeRef.current = activeKey;
   const cb = useRef({ onActive, onSelect, onTapPreview });
@@ -97,14 +99,24 @@ export default function NeighborhoodMapLayer({
       });
       marker.on('add', () => {
         const el = marker.getElement();
-        el?.addEventListener('focus', () => cb.current.onActive(row.key));
+        // A tap focuses the element too. Only keyboard focus links the card, or a first tap
+        // would already count as the second.
+        el?.addEventListener('focus', () => {
+          if (el.matches(':focus-visible')) cb.current.onActive(row.key);
+        });
         el?.addEventListener('blur', () => cb.current.onActive(null));
       });
       marker.on('click', () => {
-        if (isCoarsePointer() && activeRef.current !== row.key) {
-          cb.current.onActive(row.key);
-          cb.current.onTapPreview?.(row.key);
-          return;
+        if (isCoarsePointer()) {
+          // Leaflet can dispatch one touch tap as two clicks. The second must not drill.
+          const now = Date.now();
+          if (now - previewedAt.current < TAP_DEDUPE_MS) return;
+          if (activeRef.current !== row.key) {
+            previewedAt.current = now;
+            cb.current.onActive(row.key);
+            cb.current.onTapPreview?.(row.key);
+            return;
+          }
         }
         cb.current.onSelect(row);
       });

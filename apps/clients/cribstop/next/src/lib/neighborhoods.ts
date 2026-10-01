@@ -103,3 +103,27 @@ export function neighborhoodsMetadata(scope: NeighborhoodsScope, origin: string 
     alternates: { canonical: origin === null ? path : `${origin}${path}` },
   };
 }
+
+/** The widest span, in degrees, a neighborhood's bounds may have to drive a map fit (#503). */
+const MAX_FIT_SPAN_DEGREES = 1;
+
+/**
+ * The row's bounds if they can drive a map fit, else null. The service can return bounds that a
+ * stray 0 coordinate stretched to 0,0. The licensed states lie far from 0,0, so a zero edge, a box
+ * that misses its own centroid, or a box wider than a neighborhood is not a fit target. The map
+ * then keeps its listing-driven fit.
+ */
+export function usableFitBounds(
+  row: NeighborhoodApiRow,
+): NonNullable<NeighborhoodApiRow['bounds']> | null {
+  const { bounds: b, centroid: c } = row;
+  if (!b) return null;
+  const edges = [b.south, b.west, b.north, b.east];
+  if (!edges.every(Number.isFinite) || edges.some((e) => e === 0)) return null;
+  if (b.south >= b.north || b.west >= b.east) return null;
+  if (b.north - b.south > MAX_FIT_SPAN_DEGREES || b.east - b.west > MAX_FIT_SPAN_DEGREES) {
+    return null;
+  }
+  if (c && (c.lat < b.south || c.lat > b.north || c.lng < b.west || c.lng > b.east)) return null;
+  return b;
+}

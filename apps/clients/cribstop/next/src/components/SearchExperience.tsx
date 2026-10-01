@@ -36,6 +36,7 @@ import {
   scopeToken,
   writeGroupState,
 } from '@/lib/group-by';
+import { usableFitBounds } from '@/lib/neighborhoods';
 import { ListingErrorState, ListingGridSkeleton } from '@/components/listing/ListingStates';
 
 export interface SearchExperienceProps {
@@ -546,7 +547,7 @@ export default function SearchExperience({
       window.location.assign(drillHref(row, listingType));
       return;
     }
-    setFocusBounds(row.bounds);
+    setFocusBounds(usableFitBounds(row));
     setActiveGroupKey(null);
     commitView(drillDownFilters(filters, row, listingType), {
       ...group,
