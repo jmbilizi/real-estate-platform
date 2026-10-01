@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { type MouseEvent, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { type NeighborhoodPreviewPhoto, searchPath } from '@cribstop/property-contracts';
 import NeighborhoodPhotoStack, { PHOTO_AREA_CLASS } from '@/components/NeighborhoodPhotoStack';
@@ -38,18 +38,26 @@ const COUNT_LINK_CLASS =
 export function NeighborhoodTile({
   n,
   grid = false,
-  href: hrefOverride,
+  hrefFor,
   onSelect,
 }: {
   n: Neighborhood;
   grid?: boolean;
-  /** Replaces the name link's target (#502). The count links keep their own targets. */
-  href?: string;
-  /** Runs on a plain click of the name link, in place of the navigation (#502). */
-  onSelect?: () => void;
+  /** Replaces the target of the name link (no type) and of each count link (#502). */
+  hrefFor?: (listingType?: 'sale' | 'rent') => string;
+  /** Runs on a plain click of those links, in place of the navigation (#502). */
+  onSelect?: (listingType?: 'sale' | 'rent') => void;
 }) {
   const place = { kind: 'neighborhood', name: n.name, city: n.city, state: n.state } as const;
-  const href = hrefOverride ?? searchTargetUrl({ kind: 'place', place }, 'all');
+  const href = hrefFor ? hrefFor() : searchTargetUrl({ kind: 'place', place }, 'all');
+  const onClickFor = (listingType?: 'sale' | 'rent') =>
+    onSelect
+      ? (e: MouseEvent) => {
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+          e.preventDefault();
+          onSelect(listingType);
+        }
+      : undefined;
 
   return (
     <div
@@ -59,15 +67,7 @@ export function NeighborhoodTile({
       <h3 className="w-full truncate font-display text-base font-bold leading-6 text-ink">
         <Link
           href={href}
-          onClick={
-            onSelect
-              ? (e) => {
-                  if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
-                  e.preventDefault();
-                  onSelect();
-                }
-              : undefined
-          }
+          onClick={onClickFor()}
           className="after:absolute after:inset-0 after:rounded-md after:content-[''] group-hover:underline focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ink"
         >
           {n.name}
@@ -81,7 +81,8 @@ export function NeighborhoodTile({
       <div className="relative z-10 mt-1 flex w-full">
         {n.sale > 0 && (
           <Link
-            href={searchPath(place, 'homes-for-sale')}
+            href={hrefFor ? hrefFor('sale') : searchPath(place, 'homes-for-sale')}
+            onClick={onClickFor('sale')}
             aria-label={`${n.sale.toLocaleString()} for sale in ${n.name}`}
             className={COUNT_LINK_CLASS}
           >
@@ -90,7 +91,8 @@ export function NeighborhoodTile({
         )}
         {n.rent > 0 && (
           <Link
-            href={searchPath(place, 'homes-for-rent')}
+            href={hrefFor ? hrefFor('rent') : searchPath(place, 'homes-for-rent')}
+            onClick={onClickFor('rent')}
             aria-label={`${n.rent.toLocaleString()} for rent in ${n.name}`}
             className={COUNT_LINK_CLASS}
           >

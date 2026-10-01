@@ -46,6 +46,32 @@ describe('group requests and drill-down (#502)', () => {
     ).toEqual({ beds: 2, query: 'MD', neighborhood: 'A', city: 'B', state: 'MD' });
   });
 
+  it('restores the recorded city and state, including an empty one', () => {
+    const drilled = { neighborhood: 'A', city: 'B', state: 'DC' };
+    expect(backToGroupFilters(drilled, '|MD')).toEqual({ state: 'MD' });
+    expect(backToGroupFilters(drilled, 'X|MD')).toEqual({ city: 'X', state: 'MD' });
+    expect(backToGroupFilters(drilled, '|')).toEqual({});
+  });
+
+  it('carries the scope in groupFrom only while drilled in', () => {
+    const drilled = writeGroupState(new URLSearchParams(), {
+      groupBy: undefined,
+      order: 'count',
+      from: '|MD',
+    });
+    expect(drilled.toString()).toBe('groupFrom=%7CMD');
+    expect(parseGroupState(drilled).from).toBe('|MD');
+    expect(
+      writeGroupState(drilled, { groupBy: 'neighborhood', order: 'count', from: '|MD' }).toString(),
+    ).toBe('groupBy=neighborhood');
+  });
+
+  it('sets the listing type on a count drill-down', () => {
+    expect(drillDownFilters({}, { name: 'A', city: 'B', state: 'MD' }, 'rent').listingType).toBe(
+      'rent',
+    );
+  });
+
   it('goes back by clearing the neighborhood, and the place when a scope remains', () => {
     expect(
       backToGroupFilters({ query: 'MD', neighborhood: 'A', city: 'B', state: 'MD', beds: 2 }),

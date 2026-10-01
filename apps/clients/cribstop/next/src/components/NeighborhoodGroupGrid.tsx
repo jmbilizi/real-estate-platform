@@ -28,8 +28,8 @@ export default function NeighborhoodGroupGrid({
 }: {
   rows: readonly NeighborhoodRow[];
   /** The listings link for a row, used for new-tab and copy-link. */
-  hrefFor: (row: NeighborhoodRow) => string;
-  onSelect: (row: NeighborhoodRow) => void;
+  hrefFor: (row: NeighborhoodRow, listingType?: 'sale' | 'rent') => string;
+  onSelect: (row: NeighborhoodRow, listingType?: 'sale' | 'rent') => void;
 }) {
   return (
     <div className={GROUP_GRID_CLASS} data-testid="neighborhood-group-grid">
@@ -38,8 +38,8 @@ export default function NeighborhoodGroupGrid({
           key={row.key}
           n={toNeighborhood(row)}
           grid
-          href={hrefFor(row)}
-          onSelect={() => onSelect(row)}
+          hrefFor={(type) => hrefFor(row, type)}
+          onSelect={(type) => onSelect(row, type)}
         />
       ))}
     </div>

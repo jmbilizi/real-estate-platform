@@ -32,6 +32,7 @@ import {
   type GroupOrder,
   type GroupState,
   parseGroupState,
+  scopeToken,
   writeGroupState,
 } from '@/lib/group-by';
 import { ListingErrorState, ListingGridSkeleton } from '@/components/listing/ListingStates';
@@ -533,19 +534,27 @@ export default function SearchExperience({
   };
 
   /** Shows one neighborhood's listings: group-by off, the neighborhood on, scoped by city and state. */
-  const drillInto = (row: NeighborhoodRow) =>
-    commitView(drillDownFilters(filters, row), { ...group, groupBy: undefined });
+  const drillInto = (row: NeighborhoodRow, listingType?: 'sale' | 'rent') =>
+    commitView(drillDownFilters(filters, row, listingType), {
+      ...group,
+      groupBy: undefined,
+      from: scopeToken(filters),
+    });
 
   const backToGroups = () =>
-    commitView(backToGroupFilters(filters), { ...group, groupBy: 'neighborhood' });
+    commitView(backToGroupFilters(filters, group.from), {
+      ...group,
+      groupBy: 'neighborhood',
+      from: undefined,
+    });
 
   /** The URL a card opens, for a new tab or a copied link. A plain click runs `drillInto`. */
-  const drillHref = (row: NeighborhoodRow) => {
+  const drillHref = (row: NeighborhoodRow, listingType?: 'sale' | 'rent') => {
     const base = new URLSearchParams(
       typeof window === 'undefined' ? initialQuery : window.location.search,
     );
-    const params = filtersToSearchParams(drillDownFilters(filters, row), base);
-    writeGroupState(params, { ...group, groupBy: undefined });
+    const params = filtersToSearchParams(drillDownFilters(filters, row, listingType), base);
+    writeGroupState(params, { ...group, groupBy: undefined, from: scopeToken(filters) });
     new URLSearchParams(place?.query).forEach((value, key) => params.set(key, value));
     const qs = params.toString();
     const path = typeof window === 'undefined' ? '' : window.location.pathname;
@@ -677,9 +686,15 @@ export default function SearchExperience({
                 value={group.groupBy ?? 'none'}
                 options={GROUP_BY_OPTIONS}
                 icon={GROUP_ICON}
-                onChange={(v) =>
-                  commitView(filters, { ...group, groupBy: v === 'none' ? undefined : v })
-                }
+                onChange={(v) => {
+                  if (v === 'neighborhood' && filters.neighborhood) backToGroups();
+                  else
+                    commitView(filters, {
+                      ...group,
+                      groupBy: v === 'none' ? undefined : v,
+                      from: undefined,
+                    });
+                }}
               />
               {grouped ? (
                 <ToolbarSelect<GroupOrder>
