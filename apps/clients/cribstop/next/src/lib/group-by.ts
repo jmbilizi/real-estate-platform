@@ -36,9 +36,10 @@ export function writeGroupState(params: URLSearchParams, state: GroupState): URL
   params.delete(GROUP_ORDER_PARAM);
   params.delete(GROUP_FROM_PARAM);
   if (!state.groupBy && state.from !== undefined) params.set(GROUP_FROM_PARAM, state.from);
-  if (state.groupBy) {
-    params.set(GROUP_BY_PARAM, state.groupBy);
-    if (state.order === 'name') params.set(GROUP_ORDER_PARAM, 'name');
+  if (state.groupBy) params.set(GROUP_BY_PARAM, state.groupBy);
+  // Kept while drilled in, so the way back returns to the same order.
+  if ((state.groupBy || state.from !== undefined) && state.order === 'name') {
+    params.set(GROUP_ORDER_PARAM, 'name');
   }
   return params;
 }
@@ -72,9 +73,13 @@ export function drillDownFilters(
   return listingType ? { ...next, listingType } : next;
 }
 
-/** The `from` value for a drill-down: the city and state the grouped view had. */
-export function scopeToken(filters: SearchFilters): string {
-  return `${filters.city ?? ''}|${filters.state ?? ''}`;
+/**
+ * The `from` value for a drill-down: the city and state the grouped view had. On a search path it
+ * also holds the listing type the path showed, so the way back can return to that path.
+ */
+export function scopeToken(filters: SearchFilters, pathType?: string): string {
+  const scope = `${filters.city ?? ''}|${filters.state ?? ''}`;
+  return pathType ? `${scope}|${pathType}` : scope;
 }
 
 /**
@@ -86,9 +91,7 @@ export function backToGroupFilters(filters: SearchFilters, from?: string): Searc
   const next = { ...filters };
   delete next.neighborhood;
   if (from !== undefined) {
-    const at = from.indexOf('|');
-    const city = from.slice(0, at);
-    const state = from.slice(at + 1);
+    const [city = '', state = ''] = from.split('|');
     if (city) next.city = city;
     else delete next.city;
     if (state) next.state = state;

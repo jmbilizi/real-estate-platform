@@ -543,7 +543,7 @@ export default function SearchExperience({
     commitView(drillDownFilters(filters, row, listingType), {
       ...group,
       groupBy: undefined,
-      from: scopeToken(filters),
+      from: scopeToken(filters, pathType),
     });
   };
 
@@ -551,12 +551,35 @@ export default function SearchExperience({
     typeof window !== 'undefined' &&
     /^\/homes-for-(sale|rent)(\/|$)/.test(window.location.pathname);
 
-  const backToGroups = () =>
-    commitView(backToGroupFilters(filters, group.from), {
-      ...group,
-      groupBy: 'neighborhood',
-      from: undefined,
-    });
+  /** The listing type the current search path shows, or undefined off a search path. */
+  const pathType = place
+    ? /(^|&)type=all(&|$)/.test(place.query ?? '')
+      ? 'all'
+      : (place.filters.listingType ?? 'all')
+    : undefined;
+
+  const backToGroups = () => {
+    const backFilters = backToGroupFilters(filters, group.from);
+    const backGroup: GroupState = { ...group, groupBy: 'neighborhood', from: undefined };
+    // A count link may have moved the search to the other path. Return to the path it left.
+    const origType = group.from?.split('|')[2];
+    if (place && origType && origType !== pathType && pathHoldsType()) {
+      const params = filtersToSearchParams(
+        backFilters,
+        new URLSearchParams(window.location.search),
+      );
+      writeGroupState(params, backGroup);
+      params.delete('type');
+      if (origType === 'all') params.set('type', 'all');
+      const path = window.location.pathname.replace(
+        /^\/homes-for-(sale|rent)/,
+        `/homes-for-${origType === 'rent' ? 'rent' : 'sale'}`,
+      );
+      window.location.assign(`${path}?${params.toString()}`);
+      return;
+    }
+    commitView(backFilters, backGroup);
+  };
 
   /** The URL a card opens, for a new tab or a copied link. A plain click runs `drillInto`. */
   const drillHref = (row: NeighborhoodRow, listingType?: 'sale' | 'rent') => {
@@ -565,7 +588,7 @@ export default function SearchExperience({
     );
     const swapPath = Boolean(place && listingType && pathHoldsType());
     const params = filtersToSearchParams(drillDownFilters(filters, row, listingType), base);
-    writeGroupState(params, { ...group, groupBy: undefined, from: scopeToken(filters) });
+    writeGroupState(params, { ...group, groupBy: undefined, from: scopeToken(filters, pathType) });
     if (swapPath) {
       // The new path implies the type, and a `type` override would undo it.
       params.delete('type');

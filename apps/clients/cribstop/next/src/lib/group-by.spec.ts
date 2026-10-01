@@ -3,6 +3,7 @@ import {
   drillDownFilters,
   groupRequestQuery,
   parseGroupState,
+  scopeToken,
   writeGroupState,
 } from './group-by';
 
@@ -22,6 +23,13 @@ describe('group state in the URL (#502)', () => {
       order: 'name',
     });
     expect(params.toString()).toBe('');
+    expect(
+      writeGroupState(new URLSearchParams(), {
+        groupBy: undefined,
+        order: 'name',
+        from: '|',
+      }).toString(),
+    ).toBe('groupFrom=%7C&groupOrder=name');
     expect(parseGroupState(new URLSearchParams('groupBy=price&groupOrder=x'))).toEqual({
       groupBy: undefined,
       order: 'count',
@@ -64,6 +72,15 @@ describe('group requests and drill-down (#502)', () => {
     expect(
       writeGroupState(drilled, { groupBy: 'neighborhood', order: 'count', from: '|MD' }).toString(),
     ).toBe('groupBy=neighborhood');
+  });
+
+  it('records the search path type in the token and ignores it for the filters', () => {
+    expect(scopeToken({ city: 'B', state: 'MD' }, 'all')).toBe('B|MD|all');
+    expect(scopeToken({})).toBe('|');
+    expect(backToGroupFilters({ neighborhood: 'A', city: 'X', state: 'DC' }, 'B|MD|all')).toEqual({
+      city: 'B',
+      state: 'MD',
+    });
   });
 
   it('sets the listing type on a count drill-down', () => {

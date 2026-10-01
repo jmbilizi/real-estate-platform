@@ -1,8 +1,14 @@
 'use client';
 
-import { type MouseEvent, useEffect, useRef, useState } from 'react';
+import type { MouseEvent } from 'react';
 import Link from 'next/link';
 import { type NeighborhoodPreviewPhoto, searchPath } from '@cribstop/property-contracts';
+import {
+  CAROUSEL_ITEM_CLASS,
+  CAROUSEL_SCROLLER_CLASS,
+  CarouselArrows,
+  useCarouselScroll,
+} from '@/components/CarouselShell';
 import NeighborhoodPhotoStack, { PHOTO_AREA_CLASS } from '@/components/NeighborhoodPhotoStack';
 import { searchTargetUrl } from '@/lib/search-place';
 
@@ -19,13 +25,9 @@ export interface Neighborhood {
   previewPhotos?: NeighborhoodPreviewPhoto[];
 }
 
-/** The shared per-tile width breakpoints, for real tiles and their loading skeletons alike. */
-const TILE_WIDTH_CLASS =
-  'w-[calc((100%-1.25rem)/2)] sm:w-[calc((100%-2.5rem)/3)] md:w-[calc((100%-3.75rem)/4)] lg:w-[calc((100%-5rem)/5)] xl:w-[calc((100%-6.25rem)/6)] min-w-0';
-
 /** In a grid (#493) the cell sets the width, so the tile fills it. */
 const GRID_TILE_CLASS = 'w-full min-w-0';
-const ROW_TILE_CLASS = `flex-shrink-0 snap-start ${TILE_WIDTH_CLASS}`;
+const ROW_TILE_CLASS = `${CAROUSEL_ITEM_CLASS} min-w-0`;
 
 const COUNT_LINK_CLASS =
   'flex min-h-11 flex-1 items-center justify-center whitespace-nowrap rounded px-0 text-center text-[11px] font-semibold sm:text-xs leading-tight text-ink-muted hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink';
@@ -195,38 +197,8 @@ export default function NeighborhoodRow({
   loading = false,
   max = 8,
 }: Props) {
-  const scrollerRef = useRef<HTMLDivElement>(null);
   const visible = neighborhoods.slice(0, max);
-
-  const [atStart, setAtStart] = useState(true);
-  const [atEnd, setAtEnd] = useState(false);
-
-  const checkScroll = () => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    setAtStart(el.scrollLeft <= 2);
-    setAtEnd(el.scrollLeft + el.clientWidth >= el.scrollWidth - 2);
-  };
-
-  useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    checkScroll();
-    el.addEventListener('scroll', checkScroll);
-    window.addEventListener('resize', checkScroll);
-    return () => {
-      el.removeEventListener('scroll', checkScroll);
-      window.removeEventListener('resize', checkScroll);
-    };
-  }, [loading, visible.length]);
-
-  const scroll = (dir: 'left' | 'right') => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    const amount = el.clientWidth * 0.85;
-    el.scrollBy({ left: dir === 'left' ? -amount : amount, behavior: 'smooth' });
-    setTimeout(checkScroll, 350);
-  };
+  const { scrollerRef, atStart, atEnd, scroll } = useCarouselScroll([loading, visible.length]);
 
   if (!loading && visible.length === 0) return null;
 
@@ -286,66 +258,11 @@ export default function NeighborhoodRow({
               {title}
             </h2>
           )}
-          {/* The visible circle is 32px. Each button's tap target stays 44px through the same
-              `before:` hit-area technique as the title link above (#447), not a `h-11` box. A
-              `h-11` box would make this row 44px tall next to the title's 32px.
-              `gap-3`, not `gap-2`: each button's `before:-inset-1.5` hit area reaches 6px past its
-              own visible edge. Anything less than 12px between the two circles lets their hit
-              areas overlap. */}
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => scroll('left')}
-              aria-label="Scroll left"
-              disabled={atStart}
-              className={`relative flex h-8 w-8 flex-shrink-0 items-center justify-center before:absolute before:-inset-1.5 before:content-[''] ${atStart ? 'cursor-not-allowed opacity-50' : ''}`}
-            >
-              <span
-                className={`flex h-8 w-8 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition ${atStart ? '' : 'hover:bg-surface-alt'}`}
-              >
-                <svg
-                  className="h-3.5 w-3.5"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2.5}
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                </svg>
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => scroll('right')}
-              aria-label="Scroll right"
-              disabled={atEnd}
-              className={`relative flex h-8 w-8 flex-shrink-0 items-center justify-center before:absolute before:-inset-1.5 before:content-[''] ${atEnd ? 'cursor-not-allowed opacity-50' : ''}`}
-            >
-              <span
-                className={`flex h-8 w-8 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition ${atEnd ? '' : 'hover:bg-surface-alt'}`}
-              >
-                <svg
-                  className="h-3.5 w-3.5"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2.5}
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-              </span>
-            </button>
-          </div>
+          <CarouselArrows atStart={atStart} atEnd={atEnd} onScroll={scroll} />
         </div>
         {subtitle && <p className="text-sm text-ink-muted">{subtitle}</p>}
       </div>
-      <div
-        ref={scrollerRef}
-        // `mt-3` at every breakpoint (#447): with the header's layout height now equal to its
-        // content (see the `before:` hit-area comment above), this margin is the whole gap to the
-        // tiles, landing at ~16-20px measured from the title's own text bottom.
-        className="mt-3 flex snap-x snap-mandatory gap-5 overflow-x-auto pb-3 scrollbar-none"
-      >
+      <div ref={scrollerRef} className={CAROUSEL_SCROLLER_CLASS}>
         {loading ? (
           // With `href`, one more skeleton stands in for the "See all" tile.
           Array.from({ length: href ? max + 1 : max }, (_, i) => (
