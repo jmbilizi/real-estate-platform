@@ -1,8 +1,14 @@
 'use client';
 
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import ListingCard from './ListingCard';
+import {
+  CAROUSEL_ITEM_CLASS,
+  CAROUSEL_SCROLLER_CLASS,
+  CarouselArrows,
+  useCarouselScroll,
+} from '@/components/CarouselShell';
 import { CARD_WIDTH_CLASS, ListingCardSkeleton } from '@/components/listing/ListingStates';
 import { EmptyStateCard } from '@/components/EmptyState';
 import type { ListingCardRow } from '@/lib/types';
@@ -49,47 +55,10 @@ export default function ListingRow({
   onRetry,
   headerExtra,
 }: Props) {
-  const scrollerRef = useRef<HTMLDivElement>(null);
   // Show max+1 cards so See all is always after scroll
   const showSeeAll = !loading && listings.length > max;
   const visible = showSeeAll ? listings.slice(0, max + 1) : listings;
-
-  const [atStart, setAtStart] = useState(true);
-  const [atEnd, setAtEnd] = useState(false);
-
-  // Check scroll position to enable/disable buttons
-  const checkScroll = () => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    setAtStart(el.scrollLeft <= 2); // allow for rounding
-    setAtEnd(el.scrollLeft + el.clientWidth >= el.scrollWidth - 2);
-  };
-
-  // Re-checks on `loading`/`visible.length`, not just on mount: `checkScroll` first runs while
-  // the loading skeleton (a fixed `max` cards) is still in the DOM. If that skeleton happens to
-  // fit the viewport, `atEnd` latches `true`, and once the real, often-wider content replaces it,
-  // nothing re-measures — a row that now overflows can be left with "Scroll right" disabled and
-  // no way for the user to un-stick it (#292).
-  useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    checkScroll();
-    el.addEventListener('scroll', checkScroll);
-    window.addEventListener('resize', checkScroll);
-    return () => {
-      el.removeEventListener('scroll', checkScroll);
-      window.removeEventListener('resize', checkScroll);
-    };
-  }, [loading, visible.length]);
-
-  const scroll = (dir: 'left' | 'right') => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    const amount = el.clientWidth * 0.85;
-    el.scrollBy({ left: dir === 'left' ? -amount : amount, behavior: 'smooth' });
-    // Wait for scroll to finish, then check
-    setTimeout(checkScroll, 350);
-  };
+  const { scrollerRef, atStart, atEnd, scroll } = useCarouselScroll([loading, visible.length]);
 
   return (
     <section className={sectionClassName ?? 'px-6 pt-6 sm:px-10 lg:px-20'}>
@@ -226,73 +195,12 @@ export default function ListingRow({
               )}
             </div>
           )}
-          {/* Touch is the control below `sm` (Airbnb-style peeking rows); arrows return once there
-              is room for them to sit clear of the cards. The visible circle is 32px. Each
-              button's tap target stays 44px through the same `before:` hit-area technique as the
-              title link above (#447), not a `h-11` box. A `h-11` box would make this row 44px
-              tall next to the title's 32px. */}
-          {/* `gap-3`, not `gap-2` (#447): each button's `before:-inset-1.5` hit area reaches 6px
-              past its own visible edge. Anything less than 12px between the two visible circles
-              lets their hit areas overlap. A tap in that sliver could then register on the wrong
-              button. */}
-          <div className={`items-center gap-3 ${failed ? 'hidden' : 'hidden sm:flex'}`}>
-            <button
-              type="button"
-              onClick={() => scroll('left')}
-              aria-label="Scroll left"
-              disabled={atStart}
-              className={`relative flex h-8 w-8 items-center justify-center before:absolute before:-inset-1.5 before:content-[''] ${atStart ? 'cursor-not-allowed opacity-50' : ''}`}
-            >
-              <span
-                className={`flex h-8 w-8 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition ${atStart ? '' : 'hover:bg-surface-alt'}`}
-              >
-                <svg
-                  className="h-3.5 w-3.5"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2.5}
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                </svg>
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => scroll('right')}
-              aria-label="Scroll right"
-              disabled={atEnd}
-              className={`relative flex h-8 w-8 items-center justify-center before:absolute before:-inset-1.5 before:content-[''] ${atEnd ? 'cursor-not-allowed opacity-50' : ''}`}
-            >
-              <span
-                className={`flex h-8 w-8 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition ${atEnd ? '' : 'hover:bg-surface-alt'}`}
-              >
-                <svg
-                  className="h-3.5 w-3.5"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2.5}
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-              </span>
-            </button>
-          </div>
+          <CarouselArrows atStart={atStart} atEnd={atEnd} onScroll={scroll} hidden={failed} />
         </div>
         {subtitle && <p className="text-sm text-ink-muted">{subtitle}</p>}
       </div>
 
-      <div
-        ref={scrollerRef}
-        // `-mr-6 sm:mr-0`: the row's own left inset still lines the first card up under the
-        // title, but the right edge bleeds past the section's padding to the screen edge below
-        // `sm` — the cut-off next card is the "peek" (Airbnb mobile rows), not a rendering bug.
-        // `mt-3` at every breakpoint (#447): with the header's layout height now equal to its
-        // content (see the `before:` hit-area comment above), this margin is the whole gap to the
-        // carousel, landing at ~16-20px measured from the title's own text bottom.
-        className="mt-3 flex snap-x snap-mandatory gap-3 sm:gap-5 overflow-x-auto pb-3 scrollbar-none -mr-6 sm:mr-0"
-      >
+      <div ref={scrollerRef} className={CAROUSEL_SCROLLER_CLASS}>
         {loading &&
           Array.from({ length: max }, (_, i) => (
             <div key={i} className={CARD_WIDTH_CLASS}>
@@ -308,7 +216,7 @@ export default function ListingRow({
                 <Link
                   key="see-all"
                   href={href!}
-                  className="group flex w-[calc((100%-1.25rem)/2)] flex-shrink-0 snap-start flex-col items-center justify-center gap-3 rounded-md border border-surface-border bg-surface-alt/40 p-6 text-center transition hover:bg-surface-alt hover:shadow-card [scroll-snap-stop:always] sm:w-[calc((100%-2.5rem)/3)] md:w-[calc((100%-3.75rem)/4)] lg:w-[calc((100%-5rem)/5)] xl:w-[calc((100%-6.25rem)/6)] 2xl:w-[calc((100%-7.5rem)/7)]"
+                  className={`group flex flex-col items-center justify-center gap-3 rounded-md border border-surface-border bg-surface-alt/40 p-6 text-center transition hover:bg-surface-alt hover:shadow-card ${CAROUSEL_ITEM_CLASS}`}
                   prefetch
                 >
                   <div className="relative aspect-square w-[80px] mx-auto rounded-md overflow-visible flex items-center justify-center">

@@ -7,6 +7,7 @@
  * fetch-failure state anywhere. Both are now real states on every listing surface.
  */
 
+import { CAROUSEL_ITEM_CLASS } from '@/components/CarouselShell';
 import type { ListingCardRow } from '@/lib/types';
 
 /**
@@ -64,8 +65,7 @@ function Bar({ className = '' }: { className?: string }) {
  * similar-homes panel measured 468px against the loaded 391px and shrank on load. `ListingRow`
  * already imports this module, so the class lives on this side of that dependency.
  */
-export const CARD_WIDTH_CLASS =
-  'w-[42%] flex-shrink-0 snap-start [scroll-snap-stop:always] sm:w-[calc((100%-2.5rem)/3)] md:w-[calc((100%-3.75rem)/4)] lg:w-[calc((100%-5rem)/5)] xl:w-[calc((100%-6.25rem)/6)] 2xl:w-[calc((100%-7.5rem)/7)]';
+export const CARD_WIDTH_CLASS = CAROUSEL_ITEM_CLASS;
 
 /**
  * A card placeholder built on `ListingCard`'s own reserved slots.
