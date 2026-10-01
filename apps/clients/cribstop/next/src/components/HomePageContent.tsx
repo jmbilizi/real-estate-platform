@@ -11,6 +11,7 @@ import { addressCity, addressState, searchTargetUrl } from '@/lib/search-place';
 import { formatRelativeTime } from '@/lib/format';
 import Link from 'next/link';
 import { BRAND } from '@/lib/brand';
+import { addNeighborhoodRows, NEIGHBORHOODS_MIN_COUNT } from '@/lib/neighborhoods';
 
 /** The one distinction this page ever browses by. Never `'all'`/`'sold'` — #398 always shows both
  *  sale and rent, each as its own section. */
@@ -175,10 +176,6 @@ function useCarouselListings(query: ListingSearchQuery, skip = false, skipLoadin
 const NEIGHBORHOODS_TARGET = 8;
 /** Per-request paging, matching the row's own display cap. */
 const NEIGHBORHOODS_PAGE_SIZE = 24;
-/** A neighborhood needs this many matching listings to be worth a tile (compliance: no fabricated
- *  "up-and-coming" framing off a single listing). */
-const NEIGHBORHOODS_MIN_COUNT = 5;
-
 type NeighborhoodsState = {
   neighborhoods: Neighborhood[];
   loading: boolean;
@@ -219,21 +216,7 @@ function useNeighborhoods(region: Region | null, regionLoading: boolean): Neighb
       const seen = new Set<string>();
       const merged: Neighborhood[] = [];
 
-      const add = (rows: NeighborhoodApiRow[]) => {
-        for (const row of rows) {
-          const key = `${row.slug}|${row.city}|${row.state}`.toLowerCase();
-          if (seen.has(key)) continue;
-          seen.add(key);
-          merged.push({
-            name: row.name,
-            city: row.city,
-            state: row.state,
-            sale: row.sale,
-            rent: row.rent,
-            previewPhotos: row.previewPhotos,
-          });
-        }
-      };
+      const add = (rows: NeighborhoodApiRow[]) => addNeighborhoodRows(rows, seen, merged);
 
       // The visitor's own region, city+state then state alone, ahead of every licensed-state
       // request — so a visitor's own city and state render first even when their state isn't a

@@ -23,6 +23,10 @@ export interface Neighborhood {
 const TILE_WIDTH_CLASS =
   'w-[calc((100%-1.25rem)/2)] sm:w-[calc((100%-2.5rem)/3)] md:w-[calc((100%-3.75rem)/4)] lg:w-[calc((100%-5rem)/5)] xl:w-[calc((100%-6.25rem)/6)] min-w-0';
 
+/** In a grid (#493) the cell sets the width, so the tile fills it. */
+const GRID_TILE_CLASS = 'w-full min-w-0';
+const ROW_TILE_CLASS = `flex-shrink-0 snap-start ${TILE_WIDTH_CLASS}`;
+
 const COUNT_LINK_CLASS =
   'flex min-h-11 flex-1 items-center justify-center rounded px-1 text-center text-xs font-semibold leading-tight text-ink-muted hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink';
 
@@ -31,13 +35,13 @@ const COUNT_LINK_CLASS =
  * count links are siblings above it (`z-10`), never nested inside it. Each count link is
  * `min-h-11` and takes its own half of the row, so the two hit areas never overlap.
  */
-function NeighborhoodTile({ n }: { n: Neighborhood }) {
+export function NeighborhoodTile({ n, grid = false }: { n: Neighborhood; grid?: boolean }) {
   const place = { kind: 'neighborhood', name: n.name, city: n.city, state: n.state } as const;
   const href = searchTargetUrl({ kind: 'place', place }, 'all');
 
   return (
     <div
-      className={`group relative flex flex-shrink-0 snap-start flex-col items-center rounded-md border border-surface-border bg-white p-3 text-center transition hover:shadow-card ${TILE_WIDTH_CLASS}`}
+      className={`group relative flex flex-col items-center rounded-md border border-surface-border bg-white p-3 text-center transition hover:shadow-card ${grid ? GRID_TILE_CLASS : ROW_TILE_CLASS}`}
     >
       <NeighborhoodPhotoStack photos={n.previewPhotos ?? []} />
       <h3 className="w-full truncate font-display text-base font-bold leading-6 text-ink">
@@ -78,11 +82,11 @@ function NeighborhoodTile({ n }: { n: Neighborhood }) {
 }
 
 /** Same box structure as `NeighborhoodTile`, so the row never shifts height once data lands. */
-function NeighborhoodTileSkeleton() {
+export function NeighborhoodTileSkeleton({ grid = false }: { grid?: boolean }) {
   return (
     <div
       aria-hidden="true"
-      className={`flex flex-shrink-0 snap-start flex-col items-center rounded-md border border-surface-border bg-white p-3 ${TILE_WIDTH_CLASS}`}
+      className={`flex flex-col items-center rounded-md border border-surface-border bg-white p-3 ${grid ? GRID_TILE_CLASS : ROW_TILE_CLASS}`}
     >
       <div className={`${PHOTO_AREA_CLASS} rounded bg-surface-soft skeleton-fill`} />
       <div className="flex h-6 w-full items-center justify-center">
