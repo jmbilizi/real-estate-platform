@@ -18,29 +18,86 @@ describe('NeighborhoodRow (#393)', () => {
 
     expect(screen.getByText('Columbia Heights')).toBeInTheDocument();
     expect(screen.getAllByText('Washington, DC').length).toBeGreaterThan(0);
-    expect(screen.getByText('207 for sale · 93 for rent')).toBeInTheDocument();
+    expect(screen.getByText('207 for sale')).toBeInTheDocument();
+    expect(screen.getByText('93 for rent')).toBeInTheDocument();
   });
 
-  it('omits the zero part of the counts, rather than showing "0 for rent"', () => {
+  it('omits a zero count: no link and no text, rather than "0 for rent"', () => {
     renderRow();
 
     expect(screen.getByText('40 for sale')).toBeInTheDocument();
     expect(screen.queryByText(/0 for rent/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/for rent in Petworth/)).not.toBeInTheDocument();
   });
 
-  it('links a tile to the neighborhood search path', () => {
+  it('links the tile main link to the all-types neighborhood search (#492)', () => {
     renderRow();
 
-    const link = screen.getByText('Columbia Heights').closest('a');
+    const link = screen.getByRole('link', { name: 'Columbia Heights' });
     expect(link).toHaveAttribute(
       'href',
-      '/washington-dc/columbia-heights-neighborhood/homes-for-sale',
+      '/washington-dc/columbia-heights-neighborhood/homes-for-sale?type=all',
     );
   });
 
-  it('shows no photo — text tiles only', () => {
+  it('links each count to its own search, with the place in the accessible name', () => {
+    renderRow();
+
+    expect(screen.getByRole('link', { name: '207 for sale in Columbia Heights' })).toHaveAttribute(
+      'href',
+      '/washington-dc/columbia-heights-neighborhood/homes-for-sale',
+    );
+    expect(screen.getByRole('link', { name: '93 for rent in Columbia Heights' })).toHaveAttribute(
+      'href',
+      '/washington-dc/columbia-heights-neighborhood/homes-for-rent',
+    );
+  });
+
+  it('puts sale before rent and gives each count a 44px hit area', () => {
+    renderRow();
+
+    const sale = screen.getByRole('link', { name: '207 for sale in Columbia Heights' });
+    const rent = screen.getByRole('link', { name: '93 for rent in Columbia Heights' });
+    expect(sale.compareDocumentPosition(rent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    for (const l of [sale, rent]) {
+      expect(l.className).toContain('min-h-11');
+      expect(l.className).toContain('flex-1');
+    }
+  });
+
+  it('renders a single non-zero count as a link', () => {
+    renderRow();
+
+    expect(screen.getAllByRole('link', { name: /in Petworth/ })).toHaveLength(1);
+    expect(screen.getByRole('link', { name: '40 for sale in Petworth' })).toBeInTheDocument();
+  });
+
+  it('renders a rent-only tile with a rent link and no sale link', () => {
+    renderRow({
+      neighborhoods: [{ name: 'Shaw', city: 'Washington', state: 'DC', sale: 0, rent: 12 }],
+    });
+    expect(screen.getByRole('link', { name: '12 for rent in Shaw' })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/for sale in Shaw/)).not.toBeInTheDocument();
+  });
+
+  it('never nests an anchor inside an anchor', () => {
+    const { container } = renderRow();
+    expect(container.querySelectorAll('a a')).toHaveLength(0);
+    expect(screen.getAllByRole('link')).toHaveLength(5);
+  });
+
+  it('centres the tile content and truncates a long name', () => {
+    renderRow();
+    const heading = screen.getByRole('heading', { name: 'Columbia Heights' });
+    expect(heading.className).toContain('truncate');
+    expect(heading.parentElement!.className).toContain('text-center');
+    expect(heading.parentElement!.className).toContain('items-center');
+  });
+
+  it('reserves a photo placeholder on a tile with no photo', () => {
     const { container } = renderRow();
     expect(container.querySelector('img')).toBeNull();
+    expect(screen.getAllByTestId('neighborhood-photo-placeholder')).toHaveLength(2);
   });
 
   it('caps visible tiles at max, all reachable by horizontal scroll rather than a "See all" tile', () => {
@@ -53,7 +110,7 @@ describe('NeighborhoodRow (#393)', () => {
     }));
     renderRow({ neighborhoods: many, max: 8 });
 
-    expect(screen.getAllByRole('link').length).toBe(8);
+    expect(screen.getAllByRole('link', { name: /^Place \d+$/ }).length).toBe(8);
     expect(screen.queryByText('See all')).not.toBeInTheDocument();
   });
 
@@ -100,6 +157,8 @@ describe('NeighborhoodRow (#393)', () => {
   it('renders skeleton tiles, not an empty row, while loading', () => {
     const { container } = renderRow({ neighborhoods: [], loading: true, max: 4 });
     expect(container.querySelectorAll('.skeleton-fill').length).toBeGreaterThan(0);
+    // Same photo area as a real tile, so the row height holds (#492).
+    expect(container.querySelector('.aspect-\\[10\\/7\\]')).not.toBeNull();
     expect(screen.getByText('Explore neighborhoods')).toBeInTheDocument();
   });
 });
