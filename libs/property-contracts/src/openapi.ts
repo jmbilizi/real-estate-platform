@@ -223,10 +223,14 @@ export function toOpenApiDocument() {
       '/listings/neighborhoods': {
         get: {
           operationId: 'getNeighborhoods',
-          summary: 'Neighborhood counts',
+          summary: 'Neighborhood groups',
           description:
-            'Publishable listings grouped by neighborhood. Counts only — no ranking, no ' +
-            'descriptive word. `name` is title case, built from the most frequent raw feed ' +
+            'Publishable listings grouped by neighborhood. Accepts the `GET /listings` filters, ' +
+            'so the groups are the neighborhoods of the listings that search returns. Counts, ' +
+            'photos, a centroid and bounds only — no ranking, no descriptive word. ' +
+            '`key` (`state|city|name`, lower case) is the identity. Centroid and bounds use only ' +
+            'listings whose address display is allowed. `minCount` defaults to 3. Send ' +
+            '`minCount=1` to get every group the search matches. Page with `limit` and `offset`. `name` is title case, built from the most frequent raw feed ' +
             'variant in the group. `slug` matches the property page’s slug rules. `total` in ' +
             'the response is the exact count of matching neighborhoods, never clamped to `limit`.',
           parameters: searchParameters(neighborhoodsRequestSchema),

@@ -1,27 +1,56 @@
 import {
+  neighborhoodKey,
   neighborhoodRowSchema,
   neighborhoodsRequestSchema,
   neighborhoodsResponseSchema,
 } from './neighborhoods';
 
 describe('neighborhoodsRequestSchema', () => {
-  it('defaults listingType, minCount and limit when omitted', () => {
+  it('defaults listingType, minCount, limit, offset and order when omitted', () => {
     const parsed = neighborhoodsRequestSchema.parse({});
-    expect(parsed).toEqual({ listingType: 'all', minCount: 3, limit: 24 });
+    expect(parsed).toMatchObject({
+      listingType: 'all',
+      minCount: 3,
+      limit: 24,
+      offset: 0,
+      order: 'count',
+    });
   });
 
-  it('accepts sale and rent, rejects sold', () => {
+  it('accepts the search listing types', () => {
     expect(neighborhoodsRequestSchema.safeParse({ listingType: 'sale' }).success).toBe(true);
     expect(neighborhoodsRequestSchema.safeParse({ listingType: 'rent' }).success).toBe(true);
-    expect(neighborhoodsRequestSchema.safeParse({ listingType: 'sold' }).success).toBe(false);
+    expect(neighborhoodsRequestSchema.safeParse({ listingType: 'sold' }).success).toBe(true);
   });
 
   it('rejects a state code that is not two letters', () => {
     expect(neighborhoodsRequestSchema.safeParse({ state: 'MDD' }).success).toBe(false);
   });
 
-  it('rejects an unknown query parameter', () => {
-    expect(neighborhoodsRequestSchema.safeParse({ neighborhood: 'Fishtown' }).success).toBe(false);
+  it('rejects an unknown query parameter, and paging that belongs to the listing search', () => {
+    expect(neighborhoodsRequestSchema.safeParse({ nope: '1' }).success).toBe(false);
+    expect(neighborhoodsRequestSchema.safeParse({ page: '2' }).success).toBe(false);
+    expect(neighborhoodsRequestSchema.safeParse({ sort: 'newest' }).success).toBe(false);
+  });
+
+  it('accepts the search filter set and a city-scoped neighborhood (#501)', () => {
+    const parsed = neighborhoodsRequestSchema.parse({
+      minPrice: '300000',
+      beds: '2',
+      propertyType: 'Condo',
+      neighborhood: 'Fishtown',
+      city: 'Philadelphia',
+      state: 'PA',
+    });
+    expect(parsed).toMatchObject({ minPrice: 300000, beds: 2, neighborhood: 'Fishtown' });
+  });
+
+  it('bounds offset to 0..10000 and accepts only the two orders', () => {
+    expect(neighborhoodsRequestSchema.safeParse({ offset: '10000' }).success).toBe(true);
+    expect(neighborhoodsRequestSchema.safeParse({ offset: '10001' }).success).toBe(false);
+    expect(neighborhoodsRequestSchema.safeParse({ offset: '-1' }).success).toBe(false);
+    expect(neighborhoodsRequestSchema.safeParse({ order: 'name' }).success).toBe(true);
+    expect(neighborhoodsRequestSchema.safeParse({ order: 'rank' }).success).toBe(false);
   });
 
   it('bounds minCount to 1..1000 and limit to 1..100', () => {
@@ -119,6 +148,9 @@ describe('neighborhoodsResponseSchema', () => {
 
   it('parses a row with only counts and identity, no ranking field', () => {
     const row = {
+      key: 'pa|philadelphia|fishtown',
+      centroid: { lat: 39.97, lng: -75.13 },
+      bounds: { south: 39.96, west: -75.14, north: 39.98, east: -75.12 },
       name: 'Fishtown',
       city: 'Philadelphia',
       state: 'PA',
@@ -133,6 +165,9 @@ describe('neighborhoodsResponseSchema', () => {
 
   describe('previewPhotos (#486)', () => {
     const base = {
+      key: 'pa|philadelphia|fishtown',
+      centroid: null,
+      bounds: null,
       name: 'Fishtown',
       city: 'Philadelphia',
       state: 'PA',
@@ -163,5 +198,25 @@ describe('neighborhoodsResponseSchema', () => {
           .success,
       ).toBe(false);
     });
+  });
+});
+
+describe('neighborhoodKey (#501)', () => {
+  it('joins state, city and name in lower case', () => {
+    expect(neighborhoodKey({ state: 'PA', city: 'Philadelphia', name: 'FISHTOWN' })).toBe(
+      'pa|philadelphia|fishtown',
+    );
+  });
+
+  it('keeps the same name in two cities apart', () => {
+    const a = neighborhoodKey({ state: 'MD', city: 'Bethesda', name: 'Downtown' });
+    const b = neighborhoodKey({ state: 'MD', city: 'Rockville', name: 'Downtown' });
+    expect(a).not.toBe(b);
+  });
+
+  it('escapes the separator and the escape character', () => {
+    const key = neighborhoodKey({ state: 'md', city: 'a|b', name: '100%|x' });
+    expect(key).toBe('md|a%7Cb|100%25%7Cx');
+    expect(key.split('|')).toHaveLength(3);
   });
 });

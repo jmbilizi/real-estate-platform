@@ -1,4 +1,7 @@
-import type { NeighborhoodsRequest } from '@cribstop/property-contracts';
+import {
+  type NeighborhoodsRequest,
+  neighborhoodsRequestSchema,
+} from '@cribstop/property-contracts';
 import {
   getListingAttributes,
   getNeighborhoods,
@@ -7,11 +10,7 @@ import {
   type ReadClient,
 } from './repository';
 
-const baseNeighborhoodsRequest: NeighborhoodsRequest = {
-  listingType: 'all',
-  minCount: 3,
-  limit: 24,
-};
+const baseNeighborhoodsRequest: NeighborhoodsRequest = neighborhoodsRequestSchema.parse({});
 
 /**
  * `getListingAttributes()`/`getPropertyAttributes()` (#128) push the address-suppression decision
@@ -95,100 +94,299 @@ describe('getPropertyAttributes', () => {
   });
 });
 
-/** #390. `getNeighborhoods()` binds the query's shape; the aggregate's actual filtering needs a
- *  real Postgres and is out of this project's DB-free unit-test scope (matching every other test
- *  in this file). */
+/** #390, #501. `getNeighborhoods()` binds the query's shape. The aggregate's actual filtering runs in
+ *  `tests/listings-neighborhood-groups.e2e.spec.ts` against a real Postgres. */
 describe('getNeighborhoods', () => {
-  it("reads listings directly (not listing_search_v) with the view's own visibility predicate, grouped and excluding name == city", async () => {
-    const { client, captured } = fakeClient();
-
-    await getNeighborhoods(client, baseNeighborhoodsRequest);
-
-    const [query] = captured;
-    expect(query?.text).toContain('FROM listings l');
-    expect(query?.text).not.toContain('listing_search_v');
-    expect(query?.text).toContain('l.deleted_at IS NULL');
-    expect(query?.text).toContain('l.internet_display_allowed');
-    expect(query?.text).toContain('GROUP BY lower(l.state), lower(l.neighborhood), lower(l.city)');
-    expect(query?.text).toContain('lower(l.neighborhood) <> lower(l.city)');
+  const dbRow = (overrides: Record<string, unknown> = {}) => ({
+    group_total: 7,
+    name: 'FISHTOWN',
+    city: 'Philadelphia',
+    state: 'PA',
+    k_name: 'fishtown',
+    k_city: 'philadelphia',
+    k_state: 'pa',
+    total: 42,
+    sale: 30,
+    rent: 12,
+    geo_lat: null,
+    geo_lng: null,
+    geo_south: null,
+    geo_west: null,
+    geo_north: null,
+    geo_east: null,
+    preview_photos: [],
+    ...overrides,
   });
 
-  it('applies the shared noise gate defensively, not a second copy of the rule', async () => {
-    const { client, captured } = fakeClient();
+  describe('source', () => {
+    it("reads listings directly, with the view's visibility predicate, for a scope-only request", async () => {
+      const { client, captured } = fakeClient();
 
-    await getNeighborhoods(client, baseNeighborhoodsRequest);
+      await getNeighborhoods(client, baseNeighborhoodsRequest);
 
-    expect(captured[0]?.text).toContain("l.neighborhood !~* '^NONE\\y'");
-  });
-
-  it('binds listingType, state, city, minCount, slug and limit in that order', async () => {
-    const { client, captured } = fakeClient();
-
-    await getNeighborhoods(client, {
-      ...baseNeighborhoodsRequest,
-      listingType: 'sale',
-      state: 'MD',
-      city: 'Frederick',
-      minCount: 5,
-      slug: 'downtown',
-      limit: 10,
+      const text = captured[0]?.text ?? '';
+      expect(text).toContain('FROM listings v');
+      expect(text).not.toContain('listing_search_v');
+      expect(text).toContain('v.deleted_at IS NULL');
+      expect(text).toContain('v.internet_display_allowed');
+      expect(text).toContain('v.consumer_status = ANY(');
+      expect(text).toContain('GROUP BY lower(v.state), lower(v.neighborhood), lower(v.city)');
+      expect(text).toContain('lower(v.neighborhood) <> lower(v.city)');
+      expect(text).toContain("v.neighborhood !~* '^NONE\\y'");
     });
 
-    expect(captured[0]?.values).toEqual(['sale', 'MD', 'Frederick', 5, 'downtown', 10]);
+    it('reads listing_search_v through the shared filter builder when another filter is set', async () => {
+      const { client, captured } = fakeClient();
+
+      await getNeighborhoods(client, { ...baseNeighborhoodsRequest, minPrice: 300000, beds: 2 });
+
+      const text = captured[0]?.text ?? '';
+      expect(text).toContain('FROM listing_search_v v');
+      expect(text).not.toContain('FROM listings v');
+      expect(text).toContain('v.price >= ');
+      expect(text).toContain('v.beds >= ');
+      expect(captured[0]?.values).toEqual(expect.arrayContaining([300000, 2]));
+    });
+
+    it.each([
+      ['neighborhood', { neighborhood: 'Fishtown' }],
+      ['query', { query: 'loft' }],
+      ['boolean', { waterfront: true }],
+      ['amenities', { amenities: ['Waterfront'] as const }],
+    ])('selects the view for the %s filter', async (_name, extra) => {
+      const { client, captured } = fakeClient();
+
+      await getNeighborhoods(client, { ...baseNeighborhoodsRequest, ...extra } as never);
+
+      expect(captured[0]?.text).toContain('FROM listing_search_v v');
+    });
+
+    it('keeps the direct source when only empty or false filters are set', async () => {
+      const { client, captured } = fakeClient();
+
+      await getNeighborhoods(client, {
+        ...baseNeighborhoodsRequest,
+        propertyType: [],
+        openHouse: false,
+      });
+
+      expect(captured[0]?.text).toContain('FROM listings v');
+    });
   });
 
-  it('title-cases name, derives slug, and echoes the window count as the envelope total', async () => {
-    const rows = [
-      {
-        name: 'FISHTOWN',
-        city: 'Philadelphia',
-        state: 'PA',
-        total: 42,
-        sale: 30,
-        rent: 12,
-        group_total: 7,
-        preview_photos: [],
+  describe('binds', () => {
+    it('binds scope, type filter, minCount, slug, limit and offset in that order', async () => {
+      const { client, captured } = fakeClient();
+
+      await getNeighborhoods(client, {
+        ...baseNeighborhoodsRequest,
+        state: 'MD',
+        city: 'Frederick',
+        minCount: 5,
+        slug: 'downtown',
+        limit: 10,
+        offset: 20,
+      });
+
+      expect(captured[0]?.values).toEqual([
+        ['sale', 'rent'],
+        ['Active', 'Coming Soon'],
+        'Frederick',
+        'MD',
+        ['sale', 'rent'],
+        5,
+        'downtown',
+        10,
+        20,
+      ]);
+    });
+
+    it.each(['sale', 'rent'] as const)(
+      'keeps both types in the WHERE and filters only the count for listingType=%s',
+      async (listingType) => {
+        const { client, captured } = fakeClient();
+
+        await getNeighborhoods(client, { ...baseNeighborhoodsRequest, listingType });
+
+        const values = captured[0]?.values ?? [];
+        expect(values[0]).toEqual(['sale', 'rent']);
+        expect(values).toContainEqual([listingType]);
       },
-    ];
-    const { client } = fakeClient(rows);
+    );
 
-    const result = await getNeighborhoods(client, baseNeighborhoodsRequest);
+    it('binds the place pairs as two arrays', async () => {
+      const { client, captured } = fakeClient();
 
-    expect(result).toEqual({
-      results: [
-        {
-          name: 'Fishtown',
-          city: 'Philadelphia',
-          state: 'PA',
-          slug: 'fishtown',
-          total: 42,
-          sale: 30,
-          rent: 12,
-        },
-      ],
-      total: 7,
+      await getNeighborhoods(client, {
+        ...baseNeighborhoodsRequest,
+        place: [
+          { city: 'Bethesda', state: 'MD' },
+          { city: 'Arlington', state: 'VA' },
+        ],
+      });
+
+      expect(captured[0]?.text).toContain('unnest(');
+      expect(captured[0]?.values).toEqual(
+        expect.arrayContaining([
+          ['MD', 'VA'],
+          ['Bethesda', 'Arlington'],
+        ]),
+      );
     });
   });
 
-  it('answers an empty result set with total 0', async () => {
-    const { client } = fakeClient([]);
+  describe('order and paging', () => {
+    it('orders by count, then name, then key', async () => {
+      const { client, captured } = fakeClient();
 
-    const result = await getNeighborhoods(client, baseNeighborhoodsRequest);
+      await getNeighborhoods(client, baseNeighborhoodsRequest);
 
-    expect(result).toEqual({ results: [], total: 0 });
+      expect(captured[0]?.text).toContain(
+        'row_number() OVER (ORDER BY total DESC, k_name ASC, k_state ASC, k_city ASC)',
+      );
+    });
+
+    it('orders by name, then key', async () => {
+      const { client, captured } = fakeClient();
+
+      await getNeighborhoods(client, { ...baseNeighborhoodsRequest, order: 'name' });
+
+      expect(captured[0]?.text).toContain(
+        'row_number() OVER (ORDER BY k_name ASC, k_state ASC, k_city ASC)',
+      );
+    });
+
+    it('computes the exact total outside the page, so an offset past the end keeps it', async () => {
+      const { client, captured } = fakeClient();
+
+      await getNeighborhoods(client, baseNeighborhoodsRequest);
+
+      const text = captured[0]?.text ?? '';
+      expect(text).toContain('totals AS (SELECT count(*)::int AS group_total FROM matching)');
+      expect(text.indexOf('totals AS')).toBeLessThan(text.indexOf('OFFSET'));
+    });
+
+    it('answers an offset past the end with no rows and the exact total', async () => {
+      const { client } = fakeClient([dbRow({ name: null, total: null })]);
+
+      const result = await getNeighborhoods(client, { ...baseNeighborhoodsRequest, offset: 500 });
+
+      expect(result).toEqual({ results: [], total: 7 });
+    });
+
+    it('answers an empty result set with total 0', async () => {
+      const { client } = fakeClient([]);
+
+      expect(await getNeighborhoods(client, baseNeighborhoodsRequest)).toEqual({
+        results: [],
+        total: 0,
+      });
+    });
+  });
+
+  describe('row mapping', () => {
+    it('title-cases name, derives slug and key, and echoes the exact group total', async () => {
+      const { client } = fakeClient([dbRow()]);
+
+      const result = await getNeighborhoods(client, baseNeighborhoodsRequest);
+
+      expect(result).toEqual({
+        results: [
+          {
+            key: 'pa|philadelphia|fishtown',
+            name: 'Fishtown',
+            city: 'Philadelphia',
+            state: 'PA',
+            slug: 'fishtown',
+            total: 42,
+            sale: 30,
+            rent: 12,
+            centroid: null,
+            bounds: null,
+          },
+        ],
+        total: 7,
+      });
+    });
+
+    it('gives two cities with the same neighborhood name different keys', async () => {
+      const { client } = fakeClient([
+        dbRow({ name: 'Downtown', city: 'Bethesda', k_name: 'downtown', k_city: 'bethesda' }),
+        dbRow({ name: 'Downtown', city: 'Rockville', k_name: 'downtown', k_city: 'rockville' }),
+      ]);
+
+      const result = await getNeighborhoods(client, baseNeighborhoodsRequest);
+
+      const keys = result.results.map((r) => r.key);
+      expect(new Set(keys).size).toBe(2);
+      expect(result.results.map((r) => r.slug)).toEqual(['downtown', 'downtown']);
+    });
+
+    it('maps centroid and bounds, and leaves both null when no listing allows its address', async () => {
+      const { client } = fakeClient([
+        dbRow({
+          geo_lat: 39.97,
+          geo_lng: -75.13,
+          geo_south: 39.96,
+          geo_west: -75.14,
+          geo_north: 39.98,
+          geo_east: -75.12,
+        }),
+        dbRow({ name: 'KENSINGTON', k_name: 'kensington' }),
+      ]);
+
+      const result = await getNeighborhoods(client, baseNeighborhoodsRequest);
+
+      expect(result.results[0]?.centroid).toEqual({ lat: 39.97, lng: -75.13 });
+      expect(result.results[0]?.bounds).toEqual({
+        south: 39.96,
+        west: -75.14,
+        north: 39.98,
+        east: -75.12,
+      });
+      expect(result.results[1]?.centroid).toBeNull();
+      expect(result.results[1]?.bounds).toBeNull();
+    });
+  });
+
+  describe('masked addresses (#501)', () => {
+    it('reads the median of coordinates with address display allowed only, on the direct path', async () => {
+      const { client, captured } = fakeClient();
+
+      await getNeighborhoods(client, baseNeighborhoodsRequest);
+
+      const text = captured[0]?.text ?? '';
+      const geo = text.slice(
+        text.indexOf('percentile_cont(0.5) WITHIN GROUP (ORDER BY v.latitude)'),
+      );
+      expect(geo).toContain('percentile_cont(0.5) WITHIN GROUP (ORDER BY v.longitude)');
+      expect(geo.slice(0, geo.indexOf('LEFT JOIN LATERAL'))).toContain(
+        'v.address_display_allowed AND v.latitude IS NOT NULL AND v.longitude IS NOT NULL',
+      );
+    });
+
+    it('reads only the view masked coordinates on the view path, never the unmasked flag column', async () => {
+      const { client, captured } = fakeClient();
+
+      await getNeighborhoods(client, { ...baseNeighborhoodsRequest, beds: 2 });
+
+      const text = captured[0]?.text ?? '';
+      expect(text).toContain('v.latitude IS NOT NULL AND v.longitude IS NOT NULL');
+      expect(text).not.toContain('address_display_allowed');
+    });
+
+    it('reads centroid and bounds only for the groups of the page', async () => {
+      const { client, captured } = fakeClient();
+
+      await getNeighborhoods(client, baseNeighborhoodsRequest);
+
+      const text = captured[0]?.text ?? '';
+      expect(text.indexOf('LIMIT $')).toBeLessThan(text.indexOf('percentile_cont'));
+      expect(text).toContain('lower(v.neighborhood) = page.k_name');
+    });
   });
 
   describe('previewPhotos (#486)', () => {
-    const row = (previewPhotos: { url: string; listingId: string }[]) => ({
-      name: 'FISHTOWN',
-      city: 'Philadelphia',
-      state: 'PA',
-      total: 6,
-      sale: 6,
-      rent: 0,
-      group_total: 1,
-      preview_photos: previewPhotos,
-    });
     const photos = (count: number) =>
       Array.from({ length: count }, (_, i) => ({
         url: `https://cdn.example/${i}.jpg`,
@@ -196,7 +394,7 @@ describe('getNeighborhoods', () => {
       }));
 
     it.each([0, 1, 3, 5])('maps %i qualifying photos', async (count) => {
-      const { client } = fakeClient([row(photos(count))]);
+      const { client } = fakeClient([dbRow({ preview_photos: photos(count) })]);
 
       const result = await getNeighborhoods(client, baseNeighborhoodsRequest);
 
@@ -208,60 +406,34 @@ describe('getNeighborhoods', () => {
     });
 
     it('never passes more than 5 photos: the contract rejects a sixth', async () => {
-      const { client } = fakeClient([row(photos(6))]);
+      const { client } = fakeClient([dbRow({ preview_photos: photos(6) })]);
 
       await expect(getNeighborhoods(client, baseNeighborhoodsRequest)).rejects.toThrow();
     });
 
-    it('applies the photo lookup after the page LIMIT, to the listing types the row counts', async () => {
+    it('applies the photo lookup after the page LIMIT, to the requested listing type', async () => {
       const { client, captured } = fakeClient();
 
       await getNeighborhoods(client, baseNeighborhoodsRequest);
 
       const text = captured[0]?.text ?? '';
-      expect(text.indexOf('LIMIT $6')).toBeGreaterThan(-1);
-      expect(text.indexOf('LIMIT $6')).toBeLessThan(text.indexOf('LEFT JOIN LATERAL'));
-      expect(text).toContain("($1::text = 'all' OR pl.listing_type = $1)");
-      expect(text).not.toContain("pl.listing_type = 'sale'");
+      expect(text.indexOf('LIMIT $')).toBeLessThan(text.indexOf("jsonb_build_object('url'"));
       expect(text).toContain('LIMIT 5');
     });
 
-    it('gates photos on the same visibility and media rules as search', async () => {
+    it('gates photos on the same media rules as search, over the same filters', async () => {
       const { client, captured } = fakeClient();
 
       await getNeighborhoods(client, baseNeighborhoodsRequest);
 
       const text = captured[0]?.text ?? '';
-      expect(text).toContain('pl.deleted_at IS NULL');
-      expect(text).toContain('pl.internet_display_allowed');
-      expect(text).toContain("(pl.consumer_status <> 'Sold' OR pl.close_date IS NOT NULL)");
-      expect(text).toContain('(pl.media_display_allowed OR m.retained_when_suppressed)');
+      expect(text).toContain('(v.media_display_allowed OR m.retained_when_suppressed)');
       expect(text).toContain('ORDER BY m.is_primary DESC, m.sort_order, m.id');
+      expect(text).toContain('ORDER BY v.listed_at DESC NULLS LAST, v.id DESC');
     });
-
-    it('orders photos newest listed first, listing id as the tie-break', async () => {
-      const { client, captured } = fakeClient();
-
-      await getNeighborhoods(client, baseNeighborhoodsRequest);
-
-      expect(captured[0]?.text).toContain('ORDER BY pl.listed_at DESC NULLS LAST, pl.id DESC');
-    });
-
-    it.each(['all', 'sale', 'rent'] as const)(
-      'binds listingType=%s as the photo type filter',
-      async (listingType) => {
-        const { client, captured } = fakeClient();
-
-        await getNeighborhoods(client, { ...baseNeighborhoodsRequest, listingType });
-
-        expect(captured[0]?.text).toContain("($1::text = 'all' OR pl.listing_type = $1)");
-        expect(captured[0]?.values[0]).toBe(listingType);
-      },
-    );
   });
 });
 
-/** The daily key reconciliation's local read (#331). */
 describe('listBrightListingIdentities', () => {
   it('reads listings directly, not listing_search_v, and excludes soft-deleted rows', async () => {
     const { client, captured } = fakeClient();

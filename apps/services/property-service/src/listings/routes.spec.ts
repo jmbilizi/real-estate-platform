@@ -83,9 +83,41 @@ describe('GET /listings/neighborhoods', () => {
   it('rejects an unknown query parameter with 400', async () => {
     const response = await request(createApp({ pool: neighborhoodsPool([]) }))
       .get('/listings/neighborhoods')
-      .query({ neighborhood: 'Fishtown' });
+      .query({ nope: 'Fishtown' });
 
     expect(response.status).toBe(400);
+  });
+
+  it('rejects the listing search paging parameters (#501)', async () => {
+    const response = await request(createApp({ pool: neighborhoodsPool([]) }))
+      .get('/listings/neighborhoods')
+      .query({ page: '2' });
+
+    expect(response.status).toBe(400);
+  });
+
+  it('accepts the search filters and group paging (#501)', async () => {
+    const response = await request(createApp({ pool: neighborhoodsPool([]) }))
+      .get('/listings/neighborhoods')
+      .query({
+        neighborhood: 'Fishtown',
+        city: 'Philadelphia',
+        state: 'PA',
+        minPrice: '300000',
+        minCount: '1',
+        limit: '10',
+        offset: '20',
+        order: 'name',
+      });
+
+    expect(response.status).toBe(200);
+  });
+
+  it('rejects an unknown order and an offset past the window (#501)', async () => {
+    const app = createApp({ pool: neighborhoodsPool([]) });
+
+    expect((await request(app).get('/listings/neighborhoods?order=rank')).status).toBe(400);
+    expect((await request(app).get('/listings/neighborhoods?offset=10001')).status).toBe(400);
   });
 
   it('passes a repeated place list to one query as two bound arrays (#488)', async () => {
@@ -98,12 +130,13 @@ describe('GET /listings/neighborhoods', () => {
     expect(response.status).toBe(200);
     expect(query).toHaveBeenCalledTimes(1);
     const calls = query.mock.calls as unknown as [string, unknown[]][];
-    expect(calls[0]?.[0]).toContain('unnest($7::text[], $8::text[])');
-    expect(calls[0]?.[1]).toHaveLength(8);
-    expect(calls[0]?.[1].slice(6)).toEqual([
-      ['MD', 'DC'],
-      ['Bethesda', 'Chevy Chase'],
-    ]);
+    expect(calls[0]?.[0]).toContain('unnest(');
+    expect(calls[0]?.[1]).toEqual(
+      expect.arrayContaining([
+        ['MD', 'DC'],
+        ['Bethesda', 'Chevy Chase'],
+      ]),
+    );
   });
 
   it('rejects place with city, naming both parameters (#488)', async () => {
@@ -124,11 +157,11 @@ describe('GET /listings/neighborhoods', () => {
     expect(response.status).toBe(400);
   });
 
-  it('rejects listingType=sold, which this endpoint does not accept', async () => {
+  it('accepts listingType=sold, like the search (#501)', async () => {
     const response = await request(createApp({ pool: neighborhoodsPool([]) }))
       .get('/listings/neighborhoods')
       .query({ listingType: 'sold' });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(200);
   });
 });

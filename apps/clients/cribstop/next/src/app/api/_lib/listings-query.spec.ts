@@ -246,4 +246,33 @@ describe('neighborhoods query allowlist (#393)', () => {
       'state',
     ]);
   });
+
+  it('forwards the search filters, offset and order, never paging or sort (#501)', () => {
+    const incoming = new URLSearchParams({
+      neighborhood: 'Fishtown',
+      city: 'Philadelphia',
+      state: 'PA',
+      minPrice: '300000',
+      beds: '2',
+      minCount: '1',
+      offset: '24',
+      order: 'name',
+      page: '2',
+      pageSize: '10',
+      sort: 'newest',
+    });
+    const forwarded = new URLSearchParams(
+      buildListingsQuery(incoming, FORWARDABLE_NEIGHBORHOODS_PARAMS),
+    );
+    expect([...forwarded.keys()].sort()).toEqual([
+      'beds',
+      'city',
+      'minCount',
+      'minPrice',
+      'neighborhood',
+      'offset',
+      'order',
+      'state',
+    ]);
+  });
 });
