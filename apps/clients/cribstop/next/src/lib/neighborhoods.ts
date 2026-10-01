@@ -74,6 +74,14 @@ export function scopeStates(scope: NeighborhoodsScope): readonly string[] {
   return scope.kind === 'all' ? BRAND.licensedStateCodes : [scope.state];
 }
 
+/** The `/neighborhoods` link for a row scope (#495). No region means the all-states page. */
+export function neighborhoodsHref(region: { city: string; state: string } | null): string {
+  if (!region?.state) return '/neighborhoods';
+  const params = new URLSearchParams({ state: region.state });
+  if (region.city) params.set('city', region.city);
+  return `/neighborhoods?${params.toString()}`;
+}
+
 /** Title and description carry no price, ranking or "best" language. Canonical drops `city`. */
 export function neighborhoodsMetadata(scope: NeighborhoodsScope, origin: string | null): Metadata {
   let title: string;

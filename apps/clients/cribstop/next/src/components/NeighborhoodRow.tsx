@@ -81,6 +81,55 @@ export function NeighborhoodTile({ n, grid = false }: { n: Neighborhood; grid?: 
   );
 }
 
+/** Most photos the "See all" tile may draw from. The stack shows 3, the rest replace failed loads. */
+const SEE_ALL_PHOTO_POOL = 5;
+
+/**
+ * Photos for the "See all" tile (#495): one per tile first, then the extras. Every photo comes
+ * from a tile already in the row, so each is a listing in a target the row links to.
+ */
+export function seeAllPhotos(neighborhoods: Neighborhood[]): NeighborhoodPreviewPhoto[] {
+  const lists = neighborhoods.map((n) => n.previewPhotos ?? []);
+  const ordered = [...lists.map((l) => l[0]), ...lists.flatMap((l) => l.slice(1))];
+  const seen = new Set<string>();
+  const photos: NeighborhoodPreviewPhoto[] = [];
+  for (const photo of ordered) {
+    if (!photo || seen.has(photo.url)) continue;
+    seen.add(photo.url);
+    photos.push(photo);
+    if (photos.length === SEE_ALL_PHOTO_POOL) break;
+  }
+  return photos;
+}
+
+/**
+ * Trailing tile (#495). Same box and width as `NeighborhoodTile`. The whole tile is one link. With
+ * no photo the stack shows its placeholder.
+ */
+export function SeeAllTile({
+  href,
+  photos,
+  title,
+}: {
+  href: string;
+  photos: NeighborhoodPreviewPhoto[];
+  title: string;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-label={`${title} — see all`}
+      data-testid="neighborhood-see-all-tile"
+      className={`group flex min-h-11 flex-col items-center rounded-md border border-surface-border bg-surface-alt/40 px-2 py-3 sm:px-3 text-center transition hover:bg-surface-alt hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink [scroll-snap-stop:always] ${ROW_TILE_CLASS}`}
+    >
+      <NeighborhoodPhotoStack photos={photos} />
+      <span className="w-full truncate font-display text-base font-bold leading-6 text-ink group-hover:underline">
+        See all
+      </span>
+    </Link>
+  );
+}
+
 /** Same box structure as `NeighborhoodTile`, so the row never shifts height once data lands. */
 export function NeighborhoodTileSkeleton({ grid = false }: { grid?: boolean }) {
   return (
@@ -105,13 +154,13 @@ export function NeighborhoodTileSkeleton({ grid = false }: { grid?: boolean }) {
 interface Props {
   title: string;
   subtitle?: string;
-  /** Present only when the row supports a "See all" link. Omitted here (#393): every tile scrolls
-   *  into view, with no separate results page to see all from. */
+  /** Present only when the row supports a "See all" link. Adds the header chip and, after the last
+   *  tile, a "See all" tile (#495). */
   href?: string;
   neighborhoods: Neighborhood[];
   /** Renders this many skeleton tiles instead of `neighborhoods`. */
   loading?: boolean;
-  /** Up to this many tiles render, all visible via horizontal scroll rather than a "See all" tile. */
+  /** Up to this many neighborhood tiles render. With `href`, a "See all" tile follows the last one. */
   max?: number;
 }
 
@@ -274,9 +323,19 @@ export default function NeighborhoodRow({
         // tiles, landing at ~16-20px measured from the title's own text bottom.
         className="mt-3 flex snap-x snap-mandatory gap-5 overflow-x-auto pb-3 scrollbar-none"
       >
-        {loading
-          ? Array.from({ length: max }, (_, i) => <NeighborhoodTileSkeleton key={i} />)
-          : visible.map((n) => <NeighborhoodTile key={`${n.name}-${n.city}-${n.state}`} n={n} />)}
+        {loading ? (
+          // With `href`, one more skeleton stands in for the "See all" tile.
+          Array.from({ length: href ? max + 1 : max }, (_, i) => (
+            <NeighborhoodTileSkeleton key={i} />
+          ))
+        ) : (
+          <>
+            {visible.map((n) => (
+              <NeighborhoodTile key={`${n.name}-${n.city}-${n.state}`} n={n} />
+            ))}
+            {href && <SeeAllTile href={href} photos={seeAllPhotos(visible)} title={title} />}
+          </>
+        )}
       </div>
     </section>
   );

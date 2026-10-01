@@ -416,6 +416,37 @@ describe('HomePageContent', () => {
       );
     });
 
+    it('links the chip and trailing tile to /neighborhoods with no region (#495)', async () => {
+      mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
+
+      render(<HomePageContent />);
+
+      await screen.findByText('Columbia Heights');
+      expect(screen.getAllByLabelText('Find your neighborhood — see all')[0]).toHaveAttribute(
+        'href',
+        '/neighborhoods',
+      );
+      expect(screen.getByTestId('neighborhood-see-all-tile')).toHaveAttribute(
+        'href',
+        '/neighborhoods',
+      );
+    });
+
+    it('scopes the chip and trailing tile to the region (#495)', async () => {
+      mockRegionFetch({ city: 'Rockville', state: 'MD' });
+      mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
+
+      render(<HomePageContent />);
+
+      await screen.findByText('Columbia Heights');
+      const href = '/neighborhoods?state=MD&city=Rockville';
+      expect(screen.getAllByLabelText('Find your neighborhood — see all')[0]).toHaveAttribute(
+        'href',
+        href,
+      );
+      expect(screen.getByTestId('neighborhood-see-all-tile')).toHaveAttribute('href', href);
+    });
+
     it('hides the section when the response is empty', async () => {
       mockedGetNeighborhoods.mockResolvedValue({ results: [], total: 0 });
 
@@ -425,6 +456,7 @@ describe('HomePageContent', () => {
       await waitFor(() =>
         expect(screen.queryByText('Find your neighborhood')).not.toBeInTheDocument(),
       );
+      expect(screen.queryByTestId('neighborhood-see-all-tile')).not.toBeInTheDocument();
     });
   });
 
