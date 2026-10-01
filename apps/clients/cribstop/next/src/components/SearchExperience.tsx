@@ -534,12 +534,22 @@ export default function SearchExperience({
   };
 
   /** Shows one neighborhood's listings: group-by off, the neighborhood on, scoped by city and state. */
-  const drillInto = (row: NeighborhoodRow, listingType?: 'sale' | 'rent') =>
+  const drillInto = (row: NeighborhoodRow, listingType?: 'sale' | 'rent') => {
+    // On a search path the path owns the listing type, so a count link changes the path.
+    if (place && listingType && pathHoldsType()) {
+      window.location.assign(drillHref(row, listingType));
+      return;
+    }
     commitView(drillDownFilters(filters, row, listingType), {
       ...group,
       groupBy: undefined,
       from: scopeToken(filters),
     });
+  };
+
+  const pathHoldsType = () =>
+    typeof window !== 'undefined' &&
+    /^\/homes-for-(sale|rent)(\/|$)/.test(window.location.pathname);
 
   const backToGroups = () =>
     commitView(backToGroupFilters(filters, group.from), {
@@ -553,11 +563,23 @@ export default function SearchExperience({
     const base = new URLSearchParams(
       typeof window === 'undefined' ? initialQuery : window.location.search,
     );
+    const swapPath = Boolean(place && listingType && pathHoldsType());
     const params = filtersToSearchParams(drillDownFilters(filters, row, listingType), base);
     writeGroupState(params, { ...group, groupBy: undefined, from: scopeToken(filters) });
-    new URLSearchParams(place?.query).forEach((value, key) => params.set(key, value));
+    if (swapPath) {
+      // The new path implies the type, and a `type` override would undo it.
+      params.delete('type');
+    } else {
+      new URLSearchParams(place?.query).forEach((value, key) => params.set(key, value));
+    }
     const qs = params.toString();
-    const path = typeof window === 'undefined' ? '' : window.location.pathname;
+    let path = typeof window === 'undefined' ? '' : window.location.pathname;
+    if (swapPath) {
+      path = path.replace(
+        /^\/homes-for-(sale|rent)/,
+        `/homes-for-${listingType === 'rent' ? 'rent' : 'sale'}`,
+      );
+    }
     return `${path}${qs ? `?${qs}` : ''}`;
   };
 

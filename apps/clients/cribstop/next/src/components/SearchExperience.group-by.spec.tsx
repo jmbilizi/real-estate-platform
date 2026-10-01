@@ -200,6 +200,22 @@ describe('Group by neighborhood (#502)', () => {
     );
   });
 
+  it('moves to the other search path for a count link on a search path', async () => {
+    window.history.replaceState(null, '', '/homes-for-sale?q=Bethesda&groupBy=neighborhood');
+    render(
+      <SearchExperience
+        initialQuery="q=Bethesda&groupBy=neighborhood"
+        place={{ filters: { listingType: 'sale' }, label: '', query: '' }}
+      />,
+    );
+    const rent = (await screen.findAllByRole('link', { name: /for rent in Chevy Chase/ }))[0];
+    const href = rent.getAttribute('href') ?? '';
+    expect(href.startsWith('/homes-for-rent?')).toBe(true);
+    expect(href).toContain('neighborhood=Chevy+Chase');
+    expect(href).not.toContain('type=');
+    expect(href).not.toContain('groupBy');
+  });
+
   it('drills down from the rent count with listing type rent', async () => {
     render(<SearchExperience initialQuery="q=Bethesda&groupBy=neighborhood" />);
     fireEvent.click((await screen.findAllByRole('link', { name: /for rent in Kensington/ }))[0]);
