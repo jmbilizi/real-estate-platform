@@ -371,7 +371,7 @@ describe('getNeighborhoods', () => {
       expect(text).toContain('abs(v.latitude) <= 90 AND abs(v.longitude) <= 180');
       expect(text).toContain('abs(pts.la - med.lat) <= 0.25');
       expect(text).toContain('abs(pts.ln - med.lng) <= 0.25');
-      expect(text).not.toMatch(/min(v.latitude)|max(v.latitude)/);
+      expect(text).not.toMatch(/(min|max)(v.latitude)/);
     });
 
     it('reads only the view masked coordinates on the view path, never the unmasked flag column', async () => {
