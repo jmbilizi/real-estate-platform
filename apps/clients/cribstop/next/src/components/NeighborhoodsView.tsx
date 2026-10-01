@@ -9,19 +9,19 @@ export const NEIGHBORHOODS_GRID_CLASS =
 
 const PAGE_CLASS = 'mx-auto max-w-[1760px] px-6 py-8 sm:px-10 lg:px-20';
 
+const HEADING_CLASS = 'font-display text-2xl font-semibold tracking-tight sm:text-3xl';
+
 export function NeighborhoodsHeading() {
-  return (
-    <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
-      Neighborhoods
-    </h1>
-  );
+  return <h1 className={HEADING_CLASS}>Neighborhoods</h1>;
 }
 
 /** Same grid and tile skeletons the page streams in behind. */
 export function NeighborhoodsSkeleton({ count = 12 }: { count?: number }) {
   return (
     <div className={PAGE_CLASS} aria-busy="true">
-      <NeighborhoodsHeading />
+      <p aria-hidden="true" className={HEADING_CLASS}>
+        Neighborhoods
+      </p>
       <div className={`mt-6 ${NEIGHBORHOODS_GRID_CLASS}`}>
         {Array.from({ length: count }, (_, i) => (
           <NeighborhoodTileSkeleton key={i} grid />

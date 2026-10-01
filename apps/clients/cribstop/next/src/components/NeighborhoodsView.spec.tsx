@@ -29,8 +29,25 @@ describe('NeighborhoodsView', () => {
     );
   });
 
+  it('keeps each count on one line with 3-digit counts on both sides', () => {
+    const sections = [
+      {
+        ...section(false),
+        neighborhoods: [{ name: 'Canton', city: 'Baltimore', state: 'MD', sale: 109, rent: 141 }],
+      },
+    ];
+    render(<NeighborhoodsView sections={sections} />);
+    expect(screen.getByText('109 for sale').className).toContain('whitespace-nowrap');
+    expect(screen.getByText('141 for rent').className).toContain('whitespace-nowrap');
+  });
+
+  it('renders no h1 in the skeleton, so the streamed page has one', () => {
+    render(<NeighborhoodsSkeleton count={1} />);
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+  });
+
   it('renders skeleton tiles in the same grid', () => {
     const { container } = render(<NeighborhoodsSkeleton count={4} />);
-    expect(container.querySelectorAll('[aria-hidden="true"]')).toHaveLength(4);
+    expect(container.querySelectorAll('div[aria-hidden="true"]')).toHaveLength(4);
   });
 });

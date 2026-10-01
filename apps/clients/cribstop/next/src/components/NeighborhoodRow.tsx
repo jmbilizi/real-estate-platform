@@ -28,7 +28,7 @@ const GRID_TILE_CLASS = 'w-full min-w-0';
 const ROW_TILE_CLASS = `flex-shrink-0 snap-start ${TILE_WIDTH_CLASS}`;
 
 const COUNT_LINK_CLASS =
-  'flex min-h-11 flex-1 items-center justify-center rounded px-1 text-center text-xs font-semibold leading-tight text-ink-muted hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink';
+  'flex min-h-11 flex-1 items-center justify-center whitespace-nowrap rounded px-0 text-center text-[11px] font-semibold sm:text-xs leading-tight text-ink-muted hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink';
 
 /**
  * Tile (#492). The main link is the name, stretched over the whole tile by a pseudo-element. The
@@ -41,7 +41,7 @@ export function NeighborhoodTile({ n, grid = false }: { n: Neighborhood; grid?: 
 
   return (
     <div
-      className={`group relative flex flex-col items-center rounded-md border border-surface-border bg-white p-3 text-center transition hover:shadow-card ${grid ? GRID_TILE_CLASS : ROW_TILE_CLASS}`}
+      className={`group relative flex flex-col items-center rounded-md border border-surface-border bg-white px-2 py-3 sm:px-3 text-center transition hover:shadow-card ${grid ? GRID_TILE_CLASS : ROW_TILE_CLASS}`}
     >
       <NeighborhoodPhotoStack photos={n.previewPhotos ?? []} />
       <h3 className="w-full truncate font-display text-base font-bold leading-6 text-ink">
@@ -86,7 +86,7 @@ export function NeighborhoodTileSkeleton({ grid = false }: { grid?: boolean }) {
   return (
     <div
       aria-hidden="true"
-      className={`flex flex-col items-center rounded-md border border-surface-border bg-white p-3 ${grid ? GRID_TILE_CLASS : ROW_TILE_CLASS}`}
+      className={`flex flex-col items-center rounded-md border border-surface-border bg-white px-2 py-3 sm:px-3 ${grid ? GRID_TILE_CLASS : ROW_TILE_CLASS}`}
     >
       <div className={`${PHOTO_AREA_CLASS} rounded bg-surface-soft skeleton-fill`} />
       <div className="flex h-6 w-full items-center justify-center">
