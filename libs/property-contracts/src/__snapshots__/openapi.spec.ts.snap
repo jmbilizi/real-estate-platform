@@ -1088,7 +1088,55 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "items": {
               "additionalProperties": false,
               "properties": {
+                "bounds": {
+                  "additionalProperties": false,
+                  "description": "Extent of the same listings as \`centroid\`. \`null\` when \`centroid\` is \`null\`.",
+                  "nullable": true,
+                  "properties": {
+                    "east": {
+                      "type": "number",
+                    },
+                    "north": {
+                      "type": "number",
+                    },
+                    "south": {
+                      "type": "number",
+                    },
+                    "west": {
+                      "type": "number",
+                    },
+                  },
+                  "required": [
+                    "south",
+                    "west",
+                    "north",
+                    "east",
+                  ],
+                  "type": "object",
+                },
+                "centroid": {
+                  "additionalProperties": false,
+                  "description": "Median latitude and median longitude of the matching listings whose address display is allowed. \`null\` when no matching listing allows it.",
+                  "nullable": true,
+                  "properties": {
+                    "lat": {
+                      "type": "number",
+                    },
+                    "lng": {
+                      "type": "number",
+                    },
+                  },
+                  "required": [
+                    "lat",
+                    "lng",
+                  ],
+                  "type": "object",
+                },
                 "city": {
+                  "type": "string",
+                },
+                "key": {
+                  "description": "Stable identity: \`state|city|name\`, lower case. \`%\` is written \`%25\` and \`|\` is written \`%7C\` inside a part. Use it for identity. The slug is display only.",
                   "type": "string",
                 },
                 "name": {
@@ -1140,6 +1188,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 },
               },
               "required": [
+                "key",
                 "name",
                 "city",
                 "state",
@@ -1147,6 +1196,8 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "total",
                 "sale",
                 "rent",
+                "centroid",
+                "bounds",
               ],
               "type": "object",
             },
@@ -2168,9 +2219,270 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
     },
     "/listings/neighborhoods": {
       "get": {
-        "description": "Publishable listings grouped by neighborhood. Counts only — no ranking, no descriptive word. \`name\` is title case, built from the most frequent raw feed variant in the group. \`slug\` matches the property page’s slug rules. \`total\` in the response is the exact count of matching neighborhoods, never clamped to \`limit\`.",
+        "description": "Publishable listings grouped by neighborhood. The request takes the \`GET /listings\` filters. The groups are the neighborhoods of the listings that search returns. A row has counts, photos, a centroid and bounds. It has no ranking and no descriptive word. \`key\` is the identity. The centroid and bounds use only listings with address display allowed. \`minCount\` defaults to 3. Send \`minCount=1\` for every group. Page with \`limit\` and \`offset\`. \`name\` is title case, built from the most frequent raw feed variant in the group. \`slug\` matches the property page’s slug rules. \`total\` in the response is the exact count of matching neighborhoods, never clamped to \`limit\`.",
         "operationId": "getNeighborhoods",
         "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "zip",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "street",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "city",
+            "required": false,
+            "schema": {
+              "description": "Case-insensitive EXACT match, not substring — a place name, not a search term. ANDed with every other filter, including \`query\`. Mirrors \`neighborhood\`: a substring match would make \`Ken\` match \`Kensington\`.",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "description": "Two-letter state code, case-insensitive exact match (e.g. \`MD\`). ANDed with every other filter, including \`query\` — no parameter suppresses another. Full state names are the client’s job to normalize before sending this parameter.",
+              "pattern": "^[A-Za-z]{2}$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "listingType",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "sale",
+                "rent",
+                "sold",
+                "all",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "propertyType",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                },
+                {
+                  "items": {
+                    "type": "string",
+                  },
+                  "type": "array",
+                },
+              ],
+              "description": "Comma-separated or repeated values: Single Family, Condo, Townhome, Multi-Family, Loft, Land, New Construction, Manufactured/Mobile. 'all' means every type.",
+            },
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                },
+                {
+                  "items": {
+                    "type": "string",
+                  },
+                  "type": "array",
+                },
+              ],
+              "description": "Comma-separated or repeated values from the closed set: Active, Coming Soon, Pending. Default when omitted or empty: Active, Coming Soon. 'Pending' means "Under Contract" to consumers. It covers both the Active Under Contract and Pending MLS statuses. Sold is not a value here. No sold listing publishes in search yet.",
+            },
+          },
+          {
+            "in": "query",
+            "name": "minPrice",
+            "required": false,
+            "schema": {
+              "description": "Whole number. A listing with a seller-suppressed price never matches this filter, because it has no price to compare.",
+              "pattern": "^\\d+$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "maxPrice",
+            "required": false,
+            "schema": {
+              "description": "Whole number. A listing with a seller-suppressed price never matches this filter, because it has no price to compare.",
+              "pattern": "^\\d+$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "beds",
+            "required": false,
+            "schema": {
+              "pattern": "^\\d+$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "baths",
+            "required": false,
+            "schema": {
+              "pattern": "^\\d+(\\.5)?$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "minSqft",
+            "required": false,
+            "schema": {
+              "pattern": "^\\d+$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "neighborhood",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "county",
+            "required": false,
+            "schema": {
+              "description": "A 5-digit county FIPS code, matched exactly (case-insensitive) against county_fips. ANDed with every other filter. A caller without a FIPS code should send \`boundary\` instead — this and \`boundary\` should not both be sent for the same conceptual place.",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "boundary",
+            "required": false,
+            "schema": {
+              "description": "GeoJSON Polygon or MultiPolygon, as a JSON string, simplified client-side. ANDs with \`neighborhood\` when both are sent. Capped at 500 points and 20000 characters.",
+              "maxLength": 20000,
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "openHouse",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "newConstruction",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "waterfront",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "petFriendly",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "amenities",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                },
+                {
+                  "items": {
+                    "type": "string",
+                  },
+                  "type": "array",
+                },
+              ],
+              "description": "Comma-separated or repeated values from the closed set: Pool, Garage, Gym, Elevator, Balcony, Fireplace, Washer/Dryer, Pet Friendly, Waterfront, Office, Rooftop, Garden, Smart Home, Solar, EV Charging.",
+            },
+            "style": "form",
+          },
+          {
+            "in": "query",
+            "name": "listedWithinDays",
+            "required": false,
+            "schema": {
+              "description": "Whole number, 1 to 30. Matches a listing whose listed_at is within this many days of now. A listing with no listed_at (the feed carried no list date) never matches.",
+              "pattern": "^([1-9]|[12][0-9]|30)$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "priceReduced",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
+          },
           {
             "in": "query",
             "name": "place",
@@ -2196,40 +2508,6 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
           },
           {
             "in": "query",
-            "name": "state",
-            "required": false,
-            "schema": {
-              "description": "Two-letter state code, case-insensitive exact match (e.g. \`MD\`). ANDed with every other filter, including \`query\` — no parameter suppresses another. Full state names are the client’s job to normalize before sending this parameter.",
-              "pattern": "^[A-Za-z]{2}$",
-              "type": "string",
-            },
-          },
-          {
-            "in": "query",
-            "name": "city",
-            "required": false,
-            "schema": {
-              "description": "Case-insensitive exact match against the neighborhood’s city. Cannot combine with \`place\`.",
-              "type": "string",
-            },
-          },
-          {
-            "in": "query",
-            "name": "listingType",
-            "required": false,
-            "schema": {
-              "default": "all",
-              "description": "\`sale\`, \`rent\` or \`all\` (default). Each returned row’s \`total\` counts only this type; \`sale\` and \`rent\` are always both reported regardless of this filter.",
-              "enum": [
-                "sale",
-                "rent",
-                "all",
-              ],
-              "type": "string",
-            },
-          },
-          {
-            "in": "query",
             "name": "minCount",
             "required": false,
             "schema": {
@@ -2245,6 +2523,30 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
             "schema": {
               "description": "Whole number from 1 to 100. Default 24.",
               "pattern": "^([1-9][0-9]?|100)$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "description": "Whole number from 0 to 10000. Default 0. Skips this many groups in the order given by \`order\`. \`total\` stays the exact group count.",
+              "pattern": "^\\d{1,5}$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "default": "count",
+              "description": "\`count\` (default): listing count descending. \`name\`: name ascending. Ties break by name, then by state, then by city. No other order exists.",
+              "enum": [
+                "count",
+                "name",
+              ],
               "type": "string",
             },
           },
@@ -2290,7 +2592,7 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
             "description": "Unexpected server error. The body carries no detail by design.",
           },
         },
-        "summary": "Neighborhood counts",
+        "summary": "Neighborhood groups",
       },
     },
     "/listings/{id}": {

@@ -6,6 +6,9 @@ const mockedFetch = fetchGateway as jest.Mock;
 
 function row(i: number, state: string, city = 'City') {
   return {
+    key: `${state}|${city}|n${i}`.toLowerCase(),
+    centroid: null,
+    bounds: null,
     name: `N${i}`,
     city,
     state,

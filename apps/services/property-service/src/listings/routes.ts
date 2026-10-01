@@ -247,7 +247,7 @@ export function createListingsRouter(
         return;
       }
       const envelope = await getNeighborhoods(pool, parsed.value);
-      // Same cache policy as /listings/meta: a cheap aggregate over an indexed view, safe for the
+      // Same cache policy as /listings/meta: an aggregate read from an index or the search view, safe for the
       // shared cache to hold far longer than the browser does.
       res.set('Cache-Control', META_CACHE_CONTROL).status(200).json(envelope);
     }),

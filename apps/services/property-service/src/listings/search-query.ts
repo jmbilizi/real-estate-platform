@@ -26,6 +26,110 @@ export interface SearchQueryPlan {
 }
 
 /**
+ * The columns the scope filters (listing type, status, city, state) read. The same four conditions
+ * run on `listing_search_v` here and on `listings` in the neighborhoods aggregate (#501), so both
+ * read one definition. A column named here must exist, under that name, on the table the caller
+ * queries.
+ */
+export interface ScopeColumns {
+  readonly listingType: string;
+  readonly status: string;
+  readonly city: string;
+  readonly state: string;
+}
+
+export const VIEW_SCOPE_COLUMNS: ScopeColumns = {
+  listingType: 'v.listing_type',
+  status: 'v.status',
+  city: 'v.city',
+  state: 'v.state',
+};
+
+/** The same columns on `listings`, where the status column is `consumer_status`. */
+export const LISTINGS_SCOPE_COLUMNS: ScopeColumns = {
+  listingType: 'v.listing_type',
+  status: 'v.consumer_status',
+  city: 'v.city',
+  state: 'v.state',
+};
+
+type Bind = (value: unknown) => string;
+
+export function listingTypeCondition(
+  request: SearchRequest,
+  bind: Bind,
+  columns: ScopeColumns,
+): string {
+  return `${columns.listingType} = ANY(${bind([...visibleListingTypesFor(request.listingType)])})`;
+}
+
+/** `null` when the request has no status filter or the sold-tab rule below skips it. */
+export function buildStatusCondition(
+  request: SearchRequest,
+  bind: Bind,
+  columns: ScopeColumns,
+): string | null {
+  if (request.status.length === 0) {
+    return null;
+  }
+  const skipForUnnarrowedSold =
+    request.listingType === 'sold' && isDefaultStatusFilter(request.status);
+  return skipForUnnarrowedSold ? null : `${columns.status} = ANY(${bind([...request.status])})`;
+}
+
+export function cityStateConditions(
+  request: SearchRequest,
+  bind: Bind,
+  columns: ScopeColumns,
+): string[] {
+  const conditions: string[] = [];
+  if (request.city) {
+    conditions.push(`lower(${columns.city}) = lower(${bind(request.city)})`);
+  }
+  if (request.state) {
+    conditions.push(`lower(${columns.state}) = lower(${bind(request.state)})`);
+  }
+  return conditions;
+}
+
+/** Listing type, status, city and state, in the order `buildSearchQuery` applies them. */
+export function scopeConditions(
+  request: SearchRequest,
+  bind: Bind,
+  columns: ScopeColumns,
+): string[] {
+  const typeCondition = listingTypeCondition(request, bind, columns);
+  const statusCondition = buildStatusCondition(request, bind, columns);
+  return [
+    typeCondition,
+    ...(statusCondition ? [statusCondition] : []),
+    ...cityStateConditions(request, bind, columns),
+  ];
+}
+
+const SEARCH_ONLY_KEYS = new Set(['sort', 'page', 'pageSize']);
+const SCOPE_KEYS = new Set(['listingType', 'status', 'city', 'state']);
+
+/**
+ * Whether `request` carries no filter beyond the scope filters. A neighborhoods request that does
+ * can run on `listings` without the view's joins. Any other key with a value (a new filter
+ * included) answers `false`, which selects the view, the always correct path.
+ */
+export function isScopeOnlyRequest(request: SearchRequest): boolean {
+  return Object.entries(request).every(([key, value]) => {
+    if (SCOPE_KEYS.has(key) || SEARCH_ONLY_KEYS.has(key)) {
+      return true;
+    }
+    return (
+      value === undefined ||
+      value === null ||
+      value === false ||
+      (Array.isArray(value) && value.length === 0)
+    );
+  });
+}
+
+/**
  * Validated request -> `{ where, params, orderBy }`. One `if` per filter, one `bind()` per
  * placeholder. `where` defaults to `'TRUE'` when nothing is filtered (in practice the listing-type
  * condition below is always present, so that branch is a safety net rather than a reachable case).
@@ -46,9 +150,7 @@ export function buildSearchQuery(request: SearchRequest): {
   // THE sold gate decides which listing types are visible (sold-gate.ts); this file only ever
   // binds its output, so tightening sold visibility is one edit there, never a second copy here.
   // `all` -> ['sale', 'rent'] (excludes sold); anything else -> that one type.
-  conditions.push(
-    `v.listing_type = ANY(${bind([...visibleListingTypesFor(request.listingType)])})`,
-  );
+  conditions.push(listingTypeCondition(request, bind, VIEW_SCOPE_COLUMNS));
 
   if (request.propertyType.length > 0) {
     conditions.push(`v.property_type = ANY(${bind([...request.propertyType])})`);
@@ -70,12 +172,9 @@ export function buildSearchQuery(request: SearchRequest): {
   // request — Active/Coming Soon/Pending asked for on top of Sold — and must still apply, which
   // correctly zeroes that specific combination rather than silently dropping the filter (the same
   // rule `query`/`zip`/`street` follow above: never drop a filter the caller actually asked for).
-  if (request.status.length > 0) {
-    const skipForUnnarrowedSold =
-      request.listingType === 'sold' && isDefaultStatusFilter(request.status);
-    if (!skipForUnnarrowedSold) {
-      conditions.push(`v.status = ANY(${bind([...request.status])})`);
-    }
+  const statusCondition = buildStatusCondition(request, bind, VIEW_SCOPE_COLUMNS);
+  if (statusCondition) {
+    conditions.push(statusCondition);
   }
 
   // `zip` is exact-or-prefix (today's `l.zip === zip || l.zip.startsWith(zip)`). `starts_with`
@@ -98,12 +197,7 @@ export function buildSearchQuery(request: SearchRequest): {
   // become a confirmation oracle for a withheld street address (#48 context). Indexed by migration
   // 023 (`idx_listings_city_lower`/`idx_listings_state_lower`) — the plain `idx_listings_city_state_zip`
   // btree cannot serve an expression predicate, same reasoning as `idx_listings_neighborhood_lower`.
-  if (request.city) {
-    conditions.push(`lower(v.city) = lower(${bind(request.city)})`);
-  }
-  if (request.state) {
-    conditions.push(`lower(v.state) = lower(${bind(request.state)})`);
-  }
+  conditions.push(...cityStateConditions(request, bind, VIEW_SCOPE_COLUMNS));
 
   // Free-text search: title, address (masked), city, neighborhood, zip — never `description`,
   // which is third-party MLS remarks carrying a moderation state; making it searchable would be

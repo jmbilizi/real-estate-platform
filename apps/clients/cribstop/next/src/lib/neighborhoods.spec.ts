@@ -9,6 +9,9 @@ import {
 
 function row(overrides: Partial<NeighborhoodRow> = {}): NeighborhoodRow {
   return {
+    key: 'dc|washington|columbia heights',
+    centroid: null,
+    bounds: null,
     name: 'Columbia Heights',
     city: 'Washington',
     state: 'DC',

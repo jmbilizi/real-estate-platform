@@ -3,10 +3,12 @@ import {
   type ListingsEnvelope,
   type ListingsMeta,
   NEIGHBORHOOD_PREVIEW_PHOTOS_MAX,
+  neighborhoodKey,
   type NeighborhoodsRequest,
   type NeighborhoodsResponse,
   neighborhoodsResponseSchema,
   NOT_FOUND_BODY,
+  PAGE_SIZE_DEFAULT,
   resultOffsetFor,
   type SearchRequest,
   slugify,
@@ -21,7 +23,14 @@ import {
   LISTING_VISIBILITY_SQL,
   PROPERTY_RECORD_SELECT,
 } from './columns';
-import { buildSearchQuery } from './search-query';
+import { resolvedSearchRequest } from './on-demand';
+import {
+  buildSearchQuery,
+  isScopeOnlyRequest,
+  LISTINGS_SCOPE_COLUMNS,
+  scopeConditions,
+} from './search-query';
+import { visibleListingTypesFor } from './sold-gate';
 import {
   type ListingCardDbRow,
   type ListingsMetaDbRow,
@@ -273,147 +282,224 @@ export async function getListingsMeta(pool: ReadClient): Promise<ListingsMeta> {
 
 /** One group row from the neighborhoods aggregate, before the app-code display transform below. */
 interface NeighborhoodDbRow {
-  name: string;
+  group_total: number;
+  /** All columns below are null on the one row returned for an empty page. */
+  name: string | null;
   city: string;
   state: string;
+  k_name: string;
+  k_city: string;
+  k_state: string;
   total: number;
   sale: number;
   rent: number;
-  group_total: number;
+  geo_lat: number | null;
+  geo_lng: number | null;
+  geo_south: number | null;
+  geo_west: number | null;
+  geo_north: number | null;
+  geo_east: number | null;
   preview_photos: { url: string; listingId: string }[];
 }
 
+const NEIGHBORHOOD_ORDER_SQL: Record<NeighborhoodsRequest['order'], string> = {
+  count: 'total DESC, k_name ASC, k_state ASC, k_city ASC',
+  name: 'k_name ASC, k_state ASC, k_city ASC',
+};
+
 /**
- * `GET /listings/neighborhoods` (#390): publishable listings grouped by
- * `(lower(neighborhood), lower(city), state)`.
+ * `GET /listings/neighborhoods` (#390, #501): the neighborhoods of the listings that
+ * `GET /listings` returns for the same filters, grouped by `(lower(state), lower(neighborhood),
+ * lower(city))`.
  *
- * Reads `listings` directly with `LISTING_VISIBILITY_SQL` (`columns.ts`) rather than
- * `listing_search_v` the way every other endpoint in this file does — see that constant's doc
- * comment for why: the view's INNER JOIN to `properties` and LATERAL open-house join measured at
- * 1-3 seconds for a populous state against the real dataset, because they run for every candidate
- * row to produce columns this aggregate never selects. `listing-search-view.spec.ts` guards the
- * duplicate predicate against drift.
+ * Two sources, one result. A request with no filter beyond listing type, status, city, state and
+ * `place` reads `listings` directly with `LISTING_VISIBILITY_SQL` (`columns.ts`): the view's
+ * joins measured 1-3 seconds for a populous state. Any other filter reads `listing_search_v`
+ * through `buildSearchQuery`, the one filter builder. Both use the scope conditions of
+ * `search-query.ts`, so the group set is the search's group set on either path.
  *
- * A single query in two parts: the `grouped` CTE computes the aggregate (one row per
- * neighborhood), the outer SELECT applies `minCount`/`slug` and the window `count(*) OVER ()` for
- * the envelope's exact `total` — computed over the CTE's post-`HAVING`-equivalent rows, so it is
- * never inflated by a group `LIMIT` later discards.
+ * `listingType` `sale` or `rent` filters `total` only. The WHERE keeps both types so `sale` and
+ * `rent` stay reported. `minCount` applies to `total`.
  *
- * `mode() WITHIN GROUP` picks the group's most frequent RAW variant for both `name` and `city` —
- * "FISHTOWN" wins over "Fishtown" if it is the more common feed spelling. `name` is title-cased,
- * and `slug` is derived, only in the app-code mapping below; the raw variant is what a caller
- * would see if this changed to select it directly, which is deliberately never exposed.
+ * `mode() WITHIN GROUP` picks the group's most frequent RAW variant for `name`, `city` and `state`.
+ * `name` is title-cased and `slug` is derived in the app code below. `key` comes from the lower
+ * case group columns, never from the display variant.
  *
- * `neighborhoodNotNoiseSql()` is a defensive second gate: write-time normalization
- * (`db/neighborhood-normalize.ts`) already NULLs a noise value before it reaches this table, so in
- * the ordinary case this excludes nothing beyond a plain `IS NOT NULL` — the belt to that
- * suspenders is the module the two share, never a second definition of "noise".
- *
- * `lower(l.state) = lower($n)` and `lower(l.city) = lower($n)` follow `search-query.ts`'s own
- * convention for these two filters, rather than assuming the caller sent upper case.
+ * The centroid and bounds come from a per-row lateral over the page's groups only, so the count
+ * aggregate stays an index-only scan. They read only coordinates with address display allowed:
+ * `listing_search_v` masks `latitude` and `longitude` on that flag, and the direct path tests the
+ * flag itself. A masked row is in no centroid and no bounds.
  */
 export async function getNeighborhoods(
   pool: ReadClient,
   request: NeighborhoodsRequest,
 ): Promise<NeighborhoodsResponse> {
-  // #488. One statement for any list size: the pairs arrive as two bound arrays and join through
-  // unnest. The clause and `$7`/`$8` exist only for a `place` request. Keep them the last
-  // parameters. Other requests keep their plan. Measured: 1 place equals the city+state plan.
-  const places = request.place ?? [];
+  const { place, minCount, limit, offset, order, slug, ...filters } = request;
+  const search = resolvedSearchRequest({
+    ...filters,
+    sort: 'recommended',
+    page: 1,
+    pageSize: PAGE_SIZE_DEFAULT,
+  });
+  const requestedTypes = [...visibleListingTypesFor(search.listingType)];
+  const matched: SearchRequest =
+    search.listingType === 'sale' || search.listingType === 'rent'
+      ? { ...search, listingType: 'all' }
+      : search;
+
+  // The view path takes its params from the shared builder. The direct path starts empty.
+  const direct = isScopeOnlyRequest(matched);
+  const params: unknown[] = [];
+  const bind = (value: unknown): string => {
+    params.push(value);
+    return `$${params.length}`;
+  };
+  let sourceSql: string;
+  let filterSql: string;
+  let geoSql: string;
+  if (direct) {
+    sourceSql = 'listings v';
+    filterSql = [
+      LISTING_VISIBILITY_SQL.replace(/\bl\./g, 'v.'),
+      ...scopeConditions(matched, bind, LISTINGS_SCOPE_COLUMNS),
+    ].join('\n         AND ');
+    geoSql = 'v.address_display_allowed AND v.latitude IS NOT NULL AND v.longitude IS NOT NULL';
+  } else {
+    const built = buildSearchQuery(matched);
+    params.push(...built.params);
+    sourceSql = 'listing_search_v v';
+    filterSql = built.where;
+    geoSql = 'v.latitude IS NOT NULL AND v.longitude IS NOT NULL';
+  }
+
+  // #488. The pairs arrive as two bound arrays and join through unnest.
+  const places = place ?? [];
   const placeFilterSql =
     places.length > 0
-      ? `AND (lower(l.state), lower(l.city)) IN (
-           SELECT lower(p.state), lower(p.city) FROM unnest($7::text[], $8::text[]) AS p(state, city))`
+      ? `AND (lower(v.state), lower(v.city)) IN (
+           SELECT lower(p.state), lower(p.city)
+             FROM unnest(${bind(places.map((p) => p.state))}::text[],
+                         ${bind(places.map((p) => p.city))}::text[]) AS p(state, city))`
       : '';
-  const params: unknown[] = [
-    request.listingType,
-    request.state ?? null,
-    request.city ?? null,
-    request.minCount,
-    request.slug ?? null,
-    request.limit,
-  ];
-  if (places.length > 0) {
-    params.push(
-      places.map((p) => p.state),
-      places.map((p) => p.city),
-    );
-  }
+  const typeFilter = `v.listing_type = ANY(${bind(requestedTypes)})`;
+  const minCountParam = bind(minCount);
+  const slugParam = bind(slug ?? null);
+  const limitParam = bind(limit);
+  const offsetParam = bind(offset);
+  const inGroup = `lower(v.state) = page.k_state
+                AND lower(v.neighborhood) = page.k_name
+                AND lower(v.city) = page.k_city`;
+  const groupFilter = `${filterSql}
+         AND ${neighborhoodNotNoiseSql('v.neighborhood')}
+         AND lower(v.neighborhood) <> lower(v.city)
+         ${placeFilterSql}`;
+
   const result = await pool.query<NeighborhoodDbRow>(
     `WITH grouped AS (
        SELECT
-         mode() WITHIN GROUP (ORDER BY l.neighborhood)                          AS name,
-         mode() WITHIN GROUP (ORDER BY l.city)                                  AS city,
-         -- mode(), not a bare l.state: GROUP BY below groups on lower(l.state), so a raw column
-         -- select needs an aggregate. Also picks the most common raw case, same as name/city.
-         mode() WITHIN GROUP (ORDER BY l.state)                                 AS state,
-         count(*) FILTER (WHERE $1::text = 'all' OR l.listing_type = $1)::int  AS total,
-         count(*) FILTER (WHERE l.listing_type = 'sale')::int                  AS sale,
-         count(*) FILTER (WHERE l.listing_type = 'rent')::int                  AS rent
-       FROM listings l
-       WHERE ${LISTING_VISIBILITY_SQL}
-         AND ${neighborhoodNotNoiseSql('l.neighborhood')}
-         AND lower(l.neighborhood) <> lower(l.city)
-         AND ($2::text IS NULL OR lower(l.state) = lower($2))
-         AND ($3::text IS NULL OR lower(l.city) = lower($3))
-         ${placeFilterSql}
-       -- Ordered lower(state) first to match idx_listings_neighborhood_group's key order
-       -- (columns.ts's doc comment on that index explains why): a state-scoped request then reads
-       -- one contiguous index slice and needs no separate Sort before GroupAggregate.
-       GROUP BY lower(l.state), lower(l.neighborhood), lower(l.city)
+         mode() WITHIN GROUP (ORDER BY v.neighborhood)                        AS name,
+         mode() WITHIN GROUP (ORDER BY v.city)                                AS city,
+         -- mode(), not a bare v.state: GROUP BY below groups on lower(v.state).
+         mode() WITHIN GROUP (ORDER BY v.state)                               AS state,
+         lower(v.state)                                                       AS k_state,
+         lower(v.city)                                                        AS k_city,
+         lower(v.neighborhood)                                                AS k_name,
+         count(*) FILTER (WHERE ${typeFilter})::int                           AS total,
+         count(*) FILTER (WHERE v.listing_type = 'sale')::int                 AS sale,
+         count(*) FILTER (WHERE v.listing_type = 'rent')::int                 AS rent
+       FROM ${sourceSql}
+       WHERE ${groupFilter}
+       -- Ordered lower(state) first to match idx_listings_neighborhood_group_status's key order.
+       GROUP BY lower(v.state), lower(v.neighborhood), lower(v.city)
      ),
+     matching AS (
+       SELECT * FROM grouped
+        WHERE total >= ${minCountParam}
+          AND (${slugParam}::text IS NULL OR ${neighborhoodSlugSql('name')} = ${slugParam})
+     ),
+     totals AS (SELECT count(*)::int AS group_total FROM matching),
      page AS (
-       SELECT *, count(*) OVER ()::int AS group_total
-         FROM grouped
-        WHERE total >= $4
-          AND ($5::text IS NULL OR ${neighborhoodSlugSql('name')} = $5)
-        ORDER BY total DESC, name ASC, city ASC
-        LIMIT $6
+       SELECT *, row_number() OVER (ORDER BY ${NEIGHBORHOOD_ORDER_SQL[order]}) AS rn
+         FROM matching
+        ORDER BY rn
+        LIMIT ${limitParam} OFFSET ${offsetParam}
      )
-     -- #486. Preview photos join AFTER the page LIMIT: the lookup runs once per returned row and
-     -- the aggregate above keeps its index-only scan. The filters equal the tile's link target
-     -- (sale and rent listings in this neighborhood, #494). A listingType request limits the photos
-     -- to the type the row counts. The inner join drops a listing with no visible photo.
-     SELECT page.*, pp.preview_photos
-       FROM page
+     -- #486, #501. Centroid, bounds and photos join AFTER the page LIMIT: each lookup runs once per
+     -- returned group, and the aggregate above keeps its index-only scan. Both read the matching
+     -- listings of the requested type only. An empty page still returns one row, which carries
+     -- group_total (an offset past the end keeps the exact total).
+     SELECT totals.group_total, page.name, page.city, page.state,
+            page.k_name, page.k_city, page.k_state, page.total, page.sale, page.rent,
+            geo.lat AS geo_lat, geo.lng AS geo_lng, geo.south AS geo_south, geo.west AS geo_west,
+            geo.north AS geo_north, geo.east AS geo_east,
+            coalesce(pp.preview_photos, '[]'::jsonb) AS preview_photos
+       FROM totals
+       LEFT JOIN page ON true
+       LEFT JOIN LATERAL (
+         SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY v.latitude)::float8  AS lat,
+                percentile_cont(0.5) WITHIN GROUP (ORDER BY v.longitude)::float8 AS lng,
+                min(v.latitude)::float8 AS south, min(v.longitude)::float8 AS west,
+                max(v.latitude)::float8 AS north, max(v.longitude)::float8 AS east
+           FROM ${sourceSql}
+          WHERE ${filterSql}
+            AND ${typeFilter}
+            AND ${geoSql}
+            AND ${inGroup}
+       ) geo ON true
        LEFT JOIN LATERAL (
          SELECT coalesce(
                   jsonb_agg(jsonb_build_object('url', c.url, 'listingId', c.id)
                             ORDER BY c.listed_at DESC NULLS LAST, c.id DESC),
                   '[]'::jsonb) AS preview_photos
            FROM (
-             SELECT pl.id, pl.listed_at, pm.url
-               FROM listings pl
+             SELECT v.id, v.listed_at, pm.url
+               FROM ${sourceSql}
                JOIN LATERAL (
                  SELECT m.source_url AS url
                    FROM listing_media m
-                  WHERE m.listing_id = pl.id AND m.source_url IS NOT NULL
-                    AND ${mediaVisibleSql('pl')}
+                  WHERE m.listing_id = v.id AND m.source_url IS NOT NULL
+                    AND ${mediaVisibleSql('v')}
                   ORDER BY ${PRIMARY_MEDIA_ORDER}
                   LIMIT 1
                ) pm ON true
-              WHERE ${LISTING_VISIBILITY_SQL.replace(/\bl\./g, 'pl.')}
-                AND ($1::text = 'all' OR pl.listing_type = $1)
-                AND lower(pl.state) = lower(page.state)
-                AND lower(pl.neighborhood) = lower(page.name)
-                AND lower(pl.city) = lower(page.city)
-              ORDER BY pl.listed_at DESC NULLS LAST, pl.id DESC
+              WHERE ${filterSql}
+                AND ${typeFilter}
+                AND ${inGroup}
+              ORDER BY v.listed_at DESC NULLS LAST, v.id DESC
               LIMIT ${NEIGHBORHOOD_PREVIEW_PHOTOS_MAX}
            ) c
        ) pp ON true
-      ORDER BY page.total DESC, page.name ASC, page.city ASC`,
+      ORDER BY page.rn`,
     params,
   );
 
+  const rows = result.rows.filter((row) => row.name !== null);
   return neighborhoodsResponseSchema.parse({
-    results: result.rows.map((row) => ({
-      name: titleCase(row.name),
+    results: rows.map((row) => ({
+      key: neighborhoodKey({ state: row.k_state, city: row.k_city, name: row.k_name }),
+      name: titleCase(row.name as string),
       city: row.city,
       state: row.state,
-      slug: slugify(row.name),
+      slug: slugify(row.name as string),
       total: row.total,
       sale: row.sale,
       rent: row.rent,
+      centroid:
+        row.geo_lat === null || row.geo_lng === null
+          ? null
+          : { lat: row.geo_lat, lng: row.geo_lng },
+      bounds:
+        row.geo_south === null ||
+        row.geo_west === null ||
+        row.geo_north === null ||
+        row.geo_east === null
+          ? null
+          : {
+              south: row.geo_south,
+              west: row.geo_west,
+              north: row.geo_north,
+              east: row.geo_east,
+            },
       ...(row.preview_photos.length > 0 ? { previewPhotos: row.preview_photos } : {}),
     })),
     total: result.rows[0]?.group_total ?? 0,
