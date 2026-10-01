@@ -26,7 +26,7 @@ export interface Neighborhood {
 
 /** In a grid (#493) the cell sets the width, so the tile fills it. */
 const GRID_TILE_CLASS = 'w-full min-w-0';
-const ROW_TILE_CLASS = CAROUSEL_ITEM_CLASS;
+const ROW_TILE_CLASS = `${CAROUSEL_ITEM_CLASS} min-w-0`;
 
 const COUNT_LINK_CLASS =
   'flex min-h-11 flex-1 items-center justify-center whitespace-nowrap rounded px-0 text-center text-[11px] font-semibold sm:text-xs leading-tight text-ink-muted hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink';
