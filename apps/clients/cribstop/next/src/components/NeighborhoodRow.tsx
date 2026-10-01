@@ -35,9 +35,21 @@ const COUNT_LINK_CLASS =
  * count links are siblings above it (`z-10`), never nested inside it. Each count link is
  * `min-h-11` and takes its own half of the row, so the two hit areas never overlap.
  */
-export function NeighborhoodTile({ n, grid = false }: { n: Neighborhood; grid?: boolean }) {
+export function NeighborhoodTile({
+  n,
+  grid = false,
+  href: hrefOverride,
+  onSelect,
+}: {
+  n: Neighborhood;
+  grid?: boolean;
+  /** Replaces the name link's target (#502). The count links keep their own targets. */
+  href?: string;
+  /** Runs on a plain click of the name link, in place of the navigation (#502). */
+  onSelect?: () => void;
+}) {
   const place = { kind: 'neighborhood', name: n.name, city: n.city, state: n.state } as const;
-  const href = searchTargetUrl({ kind: 'place', place }, 'all');
+  const href = hrefOverride ?? searchTargetUrl({ kind: 'place', place }, 'all');
 
   return (
     <div
@@ -47,6 +59,15 @@ export function NeighborhoodTile({ n, grid = false }: { n: Neighborhood; grid?: 
       <h3 className="w-full truncate font-display text-base font-bold leading-6 text-ink">
         <Link
           href={href}
+          onClick={
+            onSelect
+              ? (e) => {
+                  if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                  e.preventDefault();
+                  onSelect();
+                }
+              : undefined
+          }
           className="after:absolute after:inset-0 after:rounded-md after:content-[''] group-hover:underline focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ink"
         >
           {n.name}

@@ -9,6 +9,11 @@ import { listingIdFromPath } from '@/lib/listing-panel';
 import type { SearchFilters } from '@/lib/types';
 import type { SearchSuggestionValue } from '@/lib/store/types';
 import SortDropdown from '@/components/SortDropdown';
+import ToolbarSelect from '@/components/ToolbarSelect';
+import ResultsPager from '@/components/ResultsPager';
+import NeighborhoodGroupGrid, {
+  NeighborhoodGroupGridSkeleton,
+} from '@/components/NeighborhoodGroupGrid';
 import FilterModal, { countActiveFilters } from '@/components/FilterModal';
 import {
   applyLandInterlock,
@@ -16,8 +21,19 @@ import {
   parseFiltersFromSearchParams,
   parsePageFromSearchParams,
 } from '@/lib/listing-filters';
-import { maxReachablePage } from '@cribstop/property-contracts';
+import { maxReachablePage, type NeighborhoodRow } from '@cribstop/property-contracts';
 import { useListingSearch } from '@/lib/useListingSearch';
+import { useNeighborhoodGroups } from '@/lib/useNeighborhoodGroups';
+import {
+  backToGroupFilters,
+  drillDownFilters,
+  GROUP_PAGE_SIZE,
+  type GroupBy,
+  type GroupOrder,
+  type GroupState,
+  parseGroupState,
+  writeGroupState,
+} from '@/lib/group-by';
 import { ListingErrorState, ListingGridSkeleton } from '@/components/listing/ListingStates';
 
 export interface SearchExperienceProps {
@@ -310,6 +326,11 @@ export default function SearchExperience({
   // Filter modal open state
   const [filterOpen, setFilterOpen] = useState(false);
 
+  /** "Group by" and the group order (#502). URL state, but not a filter and never counted as one. */
+  const [group, setGroup] = useState<GroupState>(() =>
+    parseGroupState(new URLSearchParams(initialQuery)),
+  );
+
   // Filter, sort and pagination are all enforced server-side now; the page holds only the
   // request. `total` and `pageCount` come from the response envelope rather than from the length
   // of the current page — which is the whole point of paging server-side.
@@ -364,6 +385,7 @@ export default function SearchExperience({
     const parsedFilters = parseQueryFilters(params, place);
     setFilters(parsedFilters);
     setPage(parsePageFromSearchParams(params));
+    setGroup(parseGroupState(params));
     // Keeps the search bar's "What" summary equal to the listing type the results apply, so that a
     // new search from the bar does not drop it (#243 review).
     setSearchListingType((place ? place.filters.listingType : parsedFilters.listingType) ?? 'all');
@@ -381,11 +403,17 @@ export default function SearchExperience({
     window.history.pushState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
   };
 
+  const grouped = group.groupBy === 'neighborhood';
+
+  // In the grouped view `page` pages the neighborhood cards. The listing search still runs, on page
+  // 1, because the map reads it. The map is unchanged in the grouped view until #503.
   const { results, total, pageCount, pageSize, status, error, errorCode, retry } = useListingSearch(
     requestFilters,
-    page,
+    grouped ? 1 : page,
     !deferred,
   );
+
+  const groups = useNeighborhoodGroups(requestFilters, page, group.order, grouped && !deferred);
 
   const isLoading = status === 'loading';
   const isError = status === 'error';
@@ -493,6 +521,42 @@ export default function SearchExperience({
     applyFilters({ query, zip, street, city, state, neighborhood, boundary, sort });
   };
 
+  /** Commits a filter set and a group state together: state, URL and paging (#502). */
+  const commitView = (nextFilters: SearchFilters, nextGroup: GroupState) => {
+    const committed = applyLandInterlock(nextFilters);
+    setFilters(committed);
+    setGroup(nextGroup);
+    setPage(1);
+    if (!ownsUrl) return; // not our URL to write — see `ownsUrl`
+    const params = filtersToSearchParams(committed, new URLSearchParams(window.location.search));
+    writeUrl(writeGroupState(params, nextGroup));
+  };
+
+  /** Shows one neighborhood's listings: group-by off, the neighborhood on, scoped by city and state. */
+  const drillInto = (row: NeighborhoodRow) =>
+    commitView(drillDownFilters(filters, row), { ...group, groupBy: undefined });
+
+  const backToGroups = () =>
+    commitView(backToGroupFilters(filters), { ...group, groupBy: 'neighborhood' });
+
+  /** The URL a card opens, for a new tab or a copied link. A plain click runs `drillInto`. */
+  const drillHref = (row: NeighborhoodRow) => {
+    const base = new URLSearchParams(
+      typeof window === 'undefined' ? initialQuery : window.location.search,
+    );
+    const params = filtersToSearchParams(drillDownFilters(filters, row), base);
+    writeGroupState(params, { ...group, groupBy: undefined });
+    new URLSearchParams(place?.query).forEach((value, key) => params.set(key, value));
+    const qs = params.toString();
+    const path = typeof window === 'undefined' ? '' : window.location.pathname;
+    return `${path}${qs ? `?${qs}` : ''}`;
+  };
+
+  const groupPageCount = Math.ceil(groups.total / GROUP_PAGE_SIZE);
+  const reachableGroupPages = Math.min(groupPageCount, maxReachablePage(GROUP_PAGE_SIZE));
+  const isGroupsLoading = groups.status === 'loading';
+  const isGroupsError = groups.status === 'error';
+
   return (
     <div className="flex flex-col">
       {/* Filter modal — mounted only while open, so its draft is seeded from the applied filters
@@ -556,12 +620,17 @@ export default function SearchExperience({
           </div>
 
           {/* Slim sticky bar */}
-          <div className="search-results-bar sticky top-[65px] z-20 bg-white flex items-center justify-between gap-3 px-5 py-2 md:px-0 border-b border-surface-border mb-6">
+          <div className="search-results-bar sticky top-[65px] z-20 bg-white flex flex-wrap items-center justify-between gap-x-3 px-5 py-2 md:px-0 border-b border-surface-border mb-6">
             <p className="text-sm text-ink-muted" aria-live="polite">
-              {isLoading ? (
+              {(grouped ? isGroupsLoading : isLoading) ? (
                 <span className="inline-block h-4 w-24 animate-pulse rounded-xs bg-surface-soft align-middle" />
-              ) : isError ? (
+              ) : (grouped ? isGroupsError : isError) ? (
                 <span className="text-ink">Results unavailable</span>
+              ) : grouped ? (
+                <>
+                  <span className="font-semibold text-ink">{groups.total.toLocaleString()}</span>{' '}
+                  {groups.total === 1 ? 'neighborhood' : 'neighborhoods'}
+                </>
               ) : (
                 <>
                   <span className="font-semibold text-ink">{total.toLocaleString()}</span>{' '}
@@ -569,7 +638,7 @@ export default function SearchExperience({
                 </>
               )}
             </p>
-            <div className="flex items-center gap-4 relative">
+            <div className="flex flex-wrap items-center justify-end gap-x-4 relative">
               <button
                 onClick={() => setFilterOpen(true)}
                 className="min-h-11 bg-transparent px-2 py-0.5 text-sm font-semibold transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 cursor-pointer text-ink flex items-center gap-1.5"
@@ -601,24 +670,103 @@ export default function SearchExperience({
                   </span>
                 )}
               </button>
-              <SortDropdown
-                value={filters.sort || 'recommended'}
-                onChange={(v) => {
-                  if (!v) return;
-                  setFilters((prev) => ({ ...prev, sort: v }));
-                  setPage(1);
-                  if (!ownsUrl) return; // not our URL to write — see `ownsUrl`
-                  const params = new URLSearchParams(window.location.search);
-                  params.set('sort', String(v));
-                  params.delete('page');
-                  writeUrl(params);
-                }}
+              <ToolbarSelect<GroupBy | 'none'>
+                label="Group by"
+                prefix="Group by:"
+                testId="group-by-control"
+                value={group.groupBy ?? 'none'}
+                options={GROUP_BY_OPTIONS}
+                icon={GROUP_ICON}
+                onChange={(v) =>
+                  commitView(filters, { ...group, groupBy: v === 'none' ? undefined : v })
+                }
               />
+              {grouped ? (
+                <ToolbarSelect<GroupOrder>
+                  label="Order neighborhoods by"
+                  testId="group-order-control"
+                  value={group.order}
+                  options={GROUP_ORDER_OPTIONS}
+                  icon={ORDER_ICON}
+                  onChange={(order) => {
+                    setGroup((prev) => ({ ...prev, order }));
+                    setPage(1);
+                    if (!ownsUrl) return; // not our URL to write — see `ownsUrl`
+                    const params = new URLSearchParams(window.location.search);
+                    params.delete('page');
+                    writeUrl(writeGroupState(params, { ...group, order }));
+                  }}
+                />
+              ) : (
+                <SortDropdown
+                  value={filters.sort || 'recommended'}
+                  onChange={(v) => {
+                    if (!v) return;
+                    setFilters((prev) => ({ ...prev, sort: v }));
+                    setPage(1);
+                    if (!ownsUrl) return; // not our URL to write — see `ownsUrl`
+                    const params = new URLSearchParams(window.location.search);
+                    params.set('sort', String(v));
+                    params.delete('page');
+                    writeUrl(params);
+                  }}
+                />
+              )}
             </div>
           </div>
 
           <div className="px-5 pb-10 md:px-0 md:pb-0">
-            {isLoading ? (
+            {!grouped && filters.neighborhood && (
+              <button
+                type="button"
+                data-testid="back-to-neighborhoods"
+                onClick={backToGroups}
+                className="mb-4 inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              >
+                <span aria-hidden="true">&larr;</span>
+                All neighborhoods
+              </button>
+            )}
+            {grouped ? (
+              isGroupsLoading ? (
+                <NeighborhoodGroupGridSkeleton />
+              ) : isGroupsError ? (
+                <ListingErrorState
+                  message={
+                    groups.error ?? 'We could not load neighborhoods just now. Please try again.'
+                  }
+                  onRetry={groups.retry}
+                />
+              ) : groups.rows.length === 0 ? (
+                <div
+                  role="status"
+                  data-testid="neighborhood-group-empty"
+                  className="rounded-3xl border border-dashed border-surface-border bg-surface-alt/60 px-4 py-16 text-center"
+                >
+                  <p className="font-display text-xl font-bold">No neighborhoods match</p>
+                  <p className="mt-1 text-sm text-ink-muted">
+                    Your search ran and found no neighborhoods for these filters. Try removing a
+                    filter or choose Group by: None to see the homes.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <NeighborhoodGroupGrid
+                    rows={groups.rows}
+                    hrefFor={drillHref}
+                    onSelect={drillInto}
+                  />
+                  <ResultsPager page={page} pageCount={reachableGroupPages} onPage={pushPage} />
+                  {groupPageCount > reachableGroupPages && (
+                    <p className="mt-4 text-center text-xs text-ink-muted" role="status">
+                      Showing the first {(reachableGroupPages * GROUP_PAGE_SIZE).toLocaleString()}{' '}
+                      of {groups.total.toLocaleString()} neighborhoods. Narrow your filters to see
+                      more.
+                    </p>
+                  )}
+                </>
+              )
+            ) : isLoading ? (
               <ListingGridSkeleton count={6} />
             ) : isError ? (
               /*
@@ -654,48 +802,7 @@ export default function SearchExperience({
                     </div>
                   ))}
                 </div>
-                {reachablePageCount > 1 && (
-                  <div className="flex justify-center mt-10">
-                    <nav className="inline-flex items-center gap-1 rounded-full bg-white/90 px-4 py-2 shadow-lg border border-surface-border">
-                      <button
-                        className="px-3 py-1.5 rounded-full font-semibold text-ink-muted hover:text-ink disabled:opacity-40"
-                        onClick={() => pushPage(Math.max(1, page - 1))}
-                        disabled={page === 1}
-                        aria-label="Previous page"
-                      >
-                        &lt;
-                      </button>
-                      {Array.from({ length: reachablePageCount }, (_, i) => i + 1).map((p) =>
-                        p === 1 || p === reachablePageCount || Math.abs(p - page) <= 2 ? (
-                          <button
-                            key={p}
-                            className={`px-3 py-1.5 rounded-full font-semibold transition ${
-                              p === page
-                                ? 'bg-ink text-white shadow'
-                                : 'text-ink-muted hover:text-ink'
-                            }`}
-                            onClick={() => pushPage(p)}
-                            aria-current={p === page ? 'page' : undefined}
-                          >
-                            {p}
-                          </button>
-                        ) : (p === page - 3 || p === page + 3) && reachablePageCount > 7 ? (
-                          <span key={p} className="px-2 text-ink-muted">
-                            …
-                          </span>
-                        ) : null,
-                      )}
-                      <button
-                        className="px-3 py-1.5 rounded-full font-semibold text-ink-muted hover:text-ink disabled:opacity-40"
-                        onClick={() => pushPage(Math.min(reachablePageCount, page + 1))}
-                        disabled={page === reachablePageCount}
-                        aria-label="Next page"
-                      >
-                        &gt;
-                      </button>
-                    </nav>
-                  </div>
-                )}
+                <ResultsPager page={page} pageCount={reachablePageCount} onPage={pushPage} />
                 {isPagerCapped && (
                   <p className="mt-4 text-center text-xs text-ink-muted" role="status">
                     Showing the first {reachableResultCount.toLocaleString()} of{' '}
@@ -710,6 +817,42 @@ export default function SearchExperience({
     </div>
   );
 }
+
+const GROUP_BY_OPTIONS: { value: GroupBy | 'none'; label: string }[] = [
+  { value: 'none', label: 'None' },
+  { value: 'neighborhood', label: 'Neighborhood' },
+];
+
+const GROUP_ORDER_OPTIONS: { value: GroupOrder; label: string }[] = [
+  { value: 'count', label: 'Most homes' },
+  { value: 'name', label: 'Name A-Z' },
+];
+
+const ICON_PROPS = {
+  width: 18,
+  height: 20,
+  fill: 'none',
+  viewBox: '0 0 24 24',
+  stroke: 'currentColor',
+  strokeWidth: 1.5,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+} as const;
+
+const GROUP_ICON = (
+  <svg {...ICON_PROPS}>
+    <rect x="3" y="3" width="7" height="7" />
+    <rect x="14" y="3" width="7" height="7" />
+    <rect x="3" y="14" width="7" height="7" />
+    <rect x="14" y="14" width="7" height="7" />
+  </svg>
+);
+
+const ORDER_ICON = (
+  <svg {...ICON_PROPS}>
+    <path d="M4 6h16M4 12h10M4 18h6" />
+  </svg>
+);
 
 function EmptyState({
   activeFilterCount,

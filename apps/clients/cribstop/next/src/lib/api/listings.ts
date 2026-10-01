@@ -198,6 +198,22 @@ export async function getNeighborhoods(
   );
 }
 
+/**
+ * One page of neighborhood groups for a search (#502). Takes the search filters. The caller sets
+ * `minCount`, `limit`, `offset` and `order`. Array filters go out as repeated parameters.
+ */
+export async function getNeighborhoodGroups(
+  query: ListingSearchQuery &
+    Partial<Pick<NeighborhoodsRequest, 'minCount' | 'limit' | 'offset' | 'order'>>,
+  signal?: AbortSignal,
+): Promise<NeighborhoodsResponse> {
+  const params = toSearchParams(query).toString();
+  return getJson<NeighborhoodsResponse>(
+    `/api/listings/neighborhoods${params ? `?${params}` : ''}`,
+    signal,
+  );
+}
+
 // ---------------------------------------------------------------------------------------------
 // Detail mapping layer
 // ---------------------------------------------------------------------------------------------
