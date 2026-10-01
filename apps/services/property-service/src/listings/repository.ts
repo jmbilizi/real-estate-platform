@@ -372,7 +372,8 @@ export async function getNeighborhoods(
      )
      -- #486. Preview photos join AFTER the page LIMIT: the lookup runs once per returned row and
      -- the aggregate above keeps its index-only scan. The filters equal the tile's link target
-     -- (homes-for-sale in this neighborhood). The inner join drops a listing with no visible photo.
+     -- (sale and rent listings in this neighborhood, #494). A listingType request limits the photos
+     -- to the type the row counts. The inner join drops a listing with no visible photo.
      SELECT page.*, pp.preview_photos
        FROM page
        LEFT JOIN LATERAL (
@@ -392,7 +393,7 @@ export async function getNeighborhoods(
                   LIMIT 1
                ) pm ON true
               WHERE ${LISTING_VISIBILITY_SQL.replace(/\bl\./g, 'pl.')}
-                AND pl.listing_type = 'sale'
+                AND ($1::text = 'all' OR pl.listing_type = $1)
                 AND lower(pl.state) = lower(page.state)
                 AND lower(pl.neighborhood) = lower(page.name)
                 AND lower(pl.city) = lower(page.city)

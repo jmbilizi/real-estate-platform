@@ -213,7 +213,7 @@ describe('getNeighborhoods', () => {
       await expect(getNeighborhoods(client, baseNeighborhoodsRequest)).rejects.toThrow();
     });
 
-    it('applies the photo lookup after the page LIMIT, to sale listings only', async () => {
+    it('applies the photo lookup after the page LIMIT, to the listing types the row counts', async () => {
       const { client, captured } = fakeClient();
 
       await getNeighborhoods(client, baseNeighborhoodsRequest);
@@ -221,7 +221,8 @@ describe('getNeighborhoods', () => {
       const text = captured[0]?.text ?? '';
       expect(text.indexOf('LIMIT $6')).toBeGreaterThan(-1);
       expect(text.indexOf('LIMIT $6')).toBeLessThan(text.indexOf('LEFT JOIN LATERAL'));
-      expect(text).toContain("pl.listing_type = 'sale'");
+      expect(text).toContain("($1::text = 'all' OR pl.listing_type = $1)");
+      expect(text).not.toContain("pl.listing_type = 'sale'");
       expect(text).toContain('LIMIT 5');
     });
 
@@ -247,13 +248,13 @@ describe('getNeighborhoods', () => {
     });
 
     it.each(['all', 'sale', 'rent'] as const)(
-      'leaves the photo filter sale-only for listingType=%s',
+      'binds listingType=%s as the photo type filter',
       async (listingType) => {
         const { client, captured } = fakeClient();
 
         await getNeighborhoods(client, { ...baseNeighborhoodsRequest, listingType });
 
-        expect(captured[0]?.text).toContain("pl.listing_type = 'sale'");
+        expect(captured[0]?.text).toContain("($1::text = 'all' OR pl.listing_type = $1)");
         expect(captured[0]?.values[0]).toBe(listingType);
       },
     );
