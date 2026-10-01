@@ -1,6 +1,6 @@
 import {
-  neighborhoodsResponseSchema,
   type NeighborhoodRow as NeighborhoodApiRow,
+  neighborhoodsResponseSchema,
 } from '@cribstop/property-contracts';
 import { fetchGateway } from '@/app/api/_lib/gateway';
 import type { Neighborhood } from '@/components/NeighborhoodRow';
@@ -8,9 +8,9 @@ import {
   addNeighborhoodRows,
   NEIGHBORHOODS_MIN_COUNT,
   NEIGHBORHOODS_PAGE_LIMIT,
+  type NeighborhoodsScope,
   scopeStates,
   stateName,
-  type NeighborhoodsScope,
 } from '@/lib/neighborhoods';
 
 /**
