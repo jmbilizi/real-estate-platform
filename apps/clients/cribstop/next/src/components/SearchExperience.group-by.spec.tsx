@@ -128,17 +128,17 @@ describe('Group by neighborhood (#502)', () => {
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     const groupBy = screen.getByTestId('group-by-control');
     const sort = screen.getByTestId('sort-control');
-    expect(groupBy.getAttribute('aria-label')).toBe('Group by, current: None');
+    expect(groupBy.getAttribute('aria-label')).toBe('Group, current: None');
     expect(sort.getAttribute('aria-label')).toBe('Sort, current: Recommended');
     // The button text is the fixed label, never the choice.
-    expect(groupBy.textContent).toBe('Group by');
+    expect(groupBy.textContent).toBe('Group');
     expect(sort.textContent).toBe('Sort');
 
     choose('group-by-control', 'Neighborhood');
     await screen.findByTestId('neighborhood-group-grid');
-    expect(screen.getByTestId('group-by-control').textContent).toBe('Group by');
+    expect(screen.getByTestId('group-by-control').textContent).toBe('Group');
     expect(screen.getByTestId('group-by-control').getAttribute('aria-label')).toBe(
-      'Group by, current: Neighborhood',
+      'Group, current: Neighborhood',
     );
     // Grouped view: the order control is the Sort button.
     const order = screen.getByTestId('group-order-control');
@@ -265,6 +265,54 @@ describe('Group by neighborhood (#502)', () => {
     expect(currentParams().get('groupBy')).toBe('neighborhood');
     expect(currentParams().get('city')).toBe('Bethesda');
     expect(currentParams().has('neighborhood')).toBe(false);
+  });
+
+  it('puts the back arrow and a truncated, titled name in the results bar (#523)', async () => {
+    const longName = 'Friendship Heights Village Center and Environs of Chevy Chase';
+    render(
+      <SearchExperience
+        initialQuery={`city=Bethesda&state=MD&neighborhood=${encodeURIComponent(longName)}&groupFrom=Bethesda%7CMD`}
+      />,
+    );
+    const back = await screen.findByTestId('back-to-neighborhoods');
+    expect(back.getAttribute('aria-label')).toBe('Back to all neighborhoods');
+    expect(back.className).toContain('h-11');
+    expect(back.className).toContain('w-11');
+    expect(back.className).toContain('hover:bg-surface-soft');
+    expect(screen.queryByText('All neighborhoods')).toBeNull();
+
+    const name = screen.getByTestId('drilled-neighborhood-name');
+    expect(name.textContent).toBe(longName);
+    expect(name.getAttribute('title')).toBe(longName);
+    expect(name.className).toContain('truncate');
+    expect(name.className).toContain('min-w-0');
+    expect(back.closest('.search-results-bar')?.contains(name)).toBe(true);
+
+    fireEvent.click(back);
+    expect(currentParams().get('groupBy')).toBe('neighborhood');
+    expect(screen.queryByTestId('drilled-neighborhood-name')).toBeNull();
+  });
+
+  it('shows no arrow and no name outside a drill-down (#523)', async () => {
+    render(<SearchExperience initialQuery="q=Bethesda&groupBy=neighborhood" />);
+    await screen.findByTestId('neighborhood-group-grid');
+    expect(screen.queryByTestId('back-to-neighborhoods')).toBeNull();
+    expect(screen.queryByTestId('drilled-neighborhood-name')).toBeNull();
+  });
+
+  it('gives Filters, Group and Sort one shared button class (#523)', async () => {
+    render(<SearchExperience initialQuery="q=Bethesda" />);
+    await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
+    const classes = [
+      screen.getByLabelText('Open filters'),
+      screen.getByTestId('group-by-control'),
+      screen.getByTestId('sort-control'),
+    ].map((el) => el.className);
+    expect(classes[1]).toBe(classes[0]);
+    expect(classes[2]).toBe(classes[0]);
+    expect(classes[0]).toContain('hover:bg-surface-soft');
+    expect(classes[0]).toContain('rounded-lg');
+    expect(classes[0]).toContain('focus-visible:ring-2');
   });
 
   it('drills down from the sale and rent counts with the listing type set', async () => {
