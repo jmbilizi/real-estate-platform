@@ -39,10 +39,13 @@ export default function NeighborhoodCard({
   hrefFor,
   onSelect,
   sync,
+  highlighted = false,
 }: {
   n: Neighborhood;
   /** Links the card to its map marker (#503). Hover and focus on the card report its key. */
-  sync?: { key: string; active: boolean; onActive: (key: string | null) => void };
+  sync?: { key: string; onActive: (key: string | null) => void };
+  /** The map marker is the active one (#540). Hover on the card never sets this. */
+  highlighted?: boolean;
   /** Replaces the target of the name link (no type) and of each count link (#502). */
   hrefFor?: (listingType?: 'sale' | 'rent') => string;
   /** Runs on a plain click of those links, in place of the navigation (#502). */
@@ -62,12 +65,12 @@ export default function NeighborhoodCard({
   return (
     <div
       data-neighborhood-key={sync?.key}
-      data-active={sync?.active ? 'true' : undefined}
+      data-active={highlighted ? 'true' : undefined}
       onMouseEnter={sync && (() => sync.onActive(sync.key))}
       onMouseLeave={sync && (() => sync.onActive(null))}
       onFocus={sync && (() => sync.onActive(sync.key))}
       onBlur={sync && (() => sync.onActive(null))}
-      className={`group relative flex flex-col items-center rounded-md border bg-white px-2 py-3 text-center sm:px-3 ${CARD_BOX_CLASS} ${CARD_HOVER_CLASS} ${sync?.active ? CARD_ACTIVE_CLASS : 'border-surface-border'}`}
+      className={`group relative flex flex-col items-center rounded-md border bg-white px-2 py-3 text-center sm:px-3 ${CARD_BOX_CLASS} ${CARD_HOVER_CLASS} ${highlighted ? CARD_ACTIVE_CLASS : 'border-surface-border'}`}
     >
       <NeighborhoodPhotoStack photos={n.previewPhotos ?? []} />
       <h3 className="w-full truncate font-display text-base font-bold leading-6 text-ink">
