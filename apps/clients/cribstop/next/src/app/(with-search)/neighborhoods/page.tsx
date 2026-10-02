@@ -1,28 +1,14 @@
-import type { Metadata } from 'next';
-import NeighborhoodsView from '@/components/NeighborhoodsView';
-import ScrollSentinel from '@/components/ScrollSentinel';
-import { loadNeighborhoodSections } from '@/lib/api/neighborhoods-server';
-import { neighborhoodsMetadata, parseNeighborhoodsScope } from '@/lib/neighborhoods';
-import { publishableOrigin } from '@/lib/publishable-origin';
+import { permanentRedirect } from 'next/navigation';
+import { groupedSearchHref, parseNeighborhoodsScope } from '@/lib/neighborhoods';
 
 /**
- * `/neighborhoods` (#493): every neighborhood by state, as server-rendered HTML. The scope comes
- * from the URL only (`?state=XX`, `?state=XX&city=Name`). A static route, so `[city]` never sees it.
+ * Old standalone page (#493). The grouped search replaced it (#504), so this URL sends a 308 to
+ * that view with the same `state` and `city`. A `state` that is not licensed gives the default scope.
  */
-
-type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> };
-
-export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
-  return neighborhoodsMetadata(parseNeighborhoodsScope(await searchParams), publishableOrigin());
-}
-
-export default async function NeighborhoodsPage({ searchParams }: Props) {
-  const scope = parseNeighborhoodsScope(await searchParams);
-  const sections = await loadNeighborhoodSections(scope);
-  return (
-    <>
-      <ScrollSentinel />
-      <NeighborhoodsView sections={sections} />
-    </>
-  );
+export default async function NeighborhoodsRedirect({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  permanentRedirect(groupedSearchHref(parseNeighborhoodsScope(await searchParams)));
 }

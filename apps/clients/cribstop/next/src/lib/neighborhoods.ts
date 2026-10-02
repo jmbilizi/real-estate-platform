@@ -1,26 +1,14 @@
-import type { Metadata } from 'next';
 import type { NeighborhoodRow as NeighborhoodApiRow } from '@cribstop/property-contracts';
 import type { Neighborhood } from '@/components/NeighborhoodRow';
 import { BRAND } from '@/lib/brand';
+import { GROUP_BY_PARAM } from '@/lib/group-by';
+import { searchTargetUrl } from '@/lib/search-place';
 
 /** A neighborhood needs this many matching listings to be worth a tile (compliance: no fabricated
  *  "up-and-coming" framing off a single listing). */
 export const NEIGHBORHOODS_MIN_COUNT = 5;
 
-/** The API maximum for one request. A state that returns this many may have more. */
-export const NEIGHBORHOODS_PAGE_LIMIT = 100;
-
-const STATE_NAMES: Record<string, string> = {
-  MD: 'Maryland',
-  DC: 'Washington, DC',
-  VA: 'Virginia',
-};
-
-export function stateName(code: string): string {
-  return STATE_NAMES[code] ?? code;
-}
-
-/** The row-to-tile mapping, shared by the home page row and the `/neighborhoods` page. */
+/** The row-to-tile mapping, shared by the home page row and the grouped search. */
 export function toNeighborhood(row: NeighborhoodApiRow): Neighborhood {
   return {
     name: row.name,
@@ -69,39 +57,28 @@ export function parseNeighborhoodsScope(
   return city ? { kind: 'city', state: raw, city } : { kind: 'state', state: raw };
 }
 
-/** The states a scope lists, in order. */
-export function scopeStates(scope: NeighborhoodsScope): readonly string[] {
-  return scope.kind === 'all' ? BRAND.licensedStateCodes : [scope.state];
-}
-
-/** The `/neighborhoods` link for a row scope (#495). No region means the all-states page. */
-export function neighborhoodsHref(region: { city: string; state: string } | null): string {
-  if (!region?.state) return '/neighborhoods';
-  const params = new URLSearchParams({ state: region.state });
-  if (region.city) params.set('city', region.city);
-  return `/neighborhoods?${params.toString()}`;
-}
-
-/** Title and description carry no price, ranking or "best" language. Canonical drops `city`. */
-export function neighborhoodsMetadata(scope: NeighborhoodsScope, origin: string | null): Metadata {
-  let title: string;
-  let description: string;
-  if (scope.kind === 'all') {
-    title = `Neighborhoods in ${BRAND.licensedStates} · ${BRAND.brokerage}`;
-    description = `Browse neighborhoods in ${BRAND.licensedStates} and see the homes for sale and for rent in each. Brokered by ${BRAND.brokerage}.`;
-  } else if (scope.kind === 'state') {
-    title = `Neighborhoods in ${stateName(scope.state)} · ${BRAND.brokerage}`;
-    description = `Browse neighborhoods in ${stateName(scope.state)} and see the homes for sale and for rent in each. Brokered by ${BRAND.brokerage}.`;
-  } else {
-    title = `Neighborhoods in ${scope.city}, ${scope.state} · ${BRAND.brokerage}`;
-    description = `Browse neighborhoods in ${scope.city}, ${scope.state}, then the rest of ${stateName(scope.state)}, and see the homes for sale and for rent in each. Brokered by ${BRAND.brokerage}.`;
+/**
+ * The grouped search for a region (#504). It uses the same builder as the homes-for-sale See all.
+ * A city scope is a city place path, a state scope keeps `state` in the query, and no region is
+ * the default scope. `type=all` keeps both the sale and the rent counts a tile shows.
+ */
+export function groupedSearchHref(scope: NeighborhoodsScope): string {
+  const extra = new URLSearchParams({ [GROUP_BY_PARAM]: 'neighborhood' });
+  if (scope.kind === 'city') {
+    return searchTargetUrl(
+      { kind: 'place', place: { kind: 'city', city: scope.city, state: scope.state } },
+      'all',
+      extra,
+    );
   }
-  const path = scope.kind === 'all' ? '/neighborhoods' : `/neighborhoods?state=${scope.state}`;
-  return {
-    title,
-    description,
-    alternates: { canonical: origin === null ? path : `${origin}${path}` },
-  };
+  const params = new URLSearchParams();
+  if (scope.kind === 'state') params.set('state', scope.state);
+  return searchTargetUrl({ kind: 'area', params }, 'all', extra);
+}
+
+/** The home page row's link. No region, or a region with no state, gives the default scope. */
+export function neighborhoodsHref(region: { city: string; state: string } | null): string {
+  return groupedSearchHref(parseNeighborhoodsScope({ state: region?.state, city: region?.city }));
 }
 
 /** The widest span, in degrees, a neighborhood's bounds may have to drive a map fit (#503). */
