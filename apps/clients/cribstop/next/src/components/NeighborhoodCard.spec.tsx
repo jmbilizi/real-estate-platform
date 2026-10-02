@@ -87,7 +87,7 @@ describe('NeighborhoodCard (#534)', () => {
         n={N}
         hrefFor={(t) => `/x/${t ?? 'all'}`}
         onSelect={onSelect}
-        sync={{ key: 'k', active: true, onActive: jest.fn() }}
+        sync={{ key: 'k', onActive: jest.fn() }}
       />,
     );
     const link = screen.getByLabelText(/for sale in/);
@@ -100,11 +100,12 @@ describe('NeighborhoodCard (#534)', () => {
 
   it('reports hover to the map link', () => {
     const onActive = jest.fn();
-    const { container } = render(
-      <NeighborhoodCard n={N} sync={{ key: 'k', active: false, onActive }} />,
-    );
+    const { container } = render(<NeighborhoodCard n={N} sync={{ key: 'k', onActive }} />);
     fireEvent.mouseEnter(container.firstElementChild!);
     expect(onActive).toHaveBeenCalledWith('k');
+    // Hover alone never highlights the card (#540).
+    expect(container.firstElementChild).not.toHaveAttribute('data-active');
+    expect(container.firstElementChild).toHaveClass('border-surface-border');
   });
 
   it('has a skeleton with the same photo area and box', () => {

@@ -29,6 +29,7 @@ export default function NeighborhoodGroupGrid({
   hrefFor,
   onSelect,
   activeKey = null,
+  activeSource = null,
   onActive,
 }: {
   rows: readonly NeighborhoodRow[];
@@ -37,6 +38,8 @@ export default function NeighborhoodGroupGrid({
   onSelect: (row: NeighborhoodRow, listingType?: 'sale' | 'rent') => void;
   /** The key of the card or marker the pointer or focus is on (#503). */
   activeKey?: string | null;
+  /** Where the active state came from. Only a map marker highlights its card (#540). */
+  activeSource?: 'card' | 'map' | null;
   onActive?: (key: string | null) => void;
 }) {
   return (
@@ -47,7 +50,8 @@ export default function NeighborhoodGroupGrid({
           n={toNeighborhood(row)}
           hrefFor={(type) => hrefFor(row, type)}
           onSelect={(type) => onSelect(row, type)}
-          sync={onActive && { key: row.key, active: activeKey === row.key, onActive }}
+          sync={onActive && { key: row.key, onActive }}
+          highlighted={activeKey === row.key && activeSource === 'map'}
         />
       ))}
     </div>

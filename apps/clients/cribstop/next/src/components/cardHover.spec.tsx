@@ -31,7 +31,13 @@ describe('shared card hover (#526)', () => {
     const { container, rerender } = render(<NeighborhoodCard n={n} />);
     expect(hasHover(container.firstElementChild)).toBe(true);
 
-    rerender(<NeighborhoodCard n={n} sync={{ key: 'k', active: true, onActive: jest.fn() }} />);
+    const homeClass = (container.firstElementChild as HTMLElement).className;
+
+    // Synced but not highlighted (card hover in search): the home card classes exactly (#540).
+    rerender(<NeighborhoodCard n={n} sync={{ key: 'k', onActive: jest.fn() }} />);
+    expect((container.firstElementChild as HTMLElement).className).toBe(homeClass);
+
+    rerender(<NeighborhoodCard n={n} sync={{ key: 'k', onActive: jest.fn() }} highlighted />);
     const card = container.querySelector('[data-active="true"]');
     expect(hasHover(card)).toBe(true);
     for (const c of CARD_ACTIVE_CLASS.split(' ')) expect(card).toHaveClass(c);

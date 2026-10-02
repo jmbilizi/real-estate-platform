@@ -486,16 +486,22 @@ describe('Group by neighborhood (#502)', () => {
 
     fireEvent.mouseEnter(card());
     expect(mockMapProps.current?.neighborhoods?.activeKey).toBe(key);
-    expect(card().dataset.active).toBe('true');
+    // Card hover highlights the marker only. The card keeps the home page hover (#540).
+    expect(card().dataset.active).toBeUndefined();
+    expect(card()).toHaveClass('border-surface-border');
     fireEvent.mouseLeave(card());
     expect(mockMapProps.current?.neighborhoods?.activeKey).toBeNull();
 
-    // A marker hover reaches the card.
+    // A marker hover highlights the card (#540).
     act(() => mockMapProps.current?.neighborhoods?.onActive('md|bethesda|kensington'));
-    expect(
-      (document.querySelector('[data-neighborhood-key="md|bethesda|kensington"]') as HTMLElement)
-        .dataset.active,
-    ).toBe('true');
+    const other = document.querySelector(
+      '[data-neighborhood-key="md|bethesda|kensington"]',
+    ) as HTMLElement;
+    expect(other.dataset.active).toBe('true');
+    expect(other).not.toHaveClass('border-surface-border');
+    // Card hover after a marker hover drops the highlight.
+    fireEvent.mouseEnter(other);
+    expect(other.dataset.active).toBeUndefined();
   });
 
   it('drills down from a marker like a card, and fits the map to the bounds (#503)', async () => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ListingCard from '@/components/ListingCard';
 import ListingsMap from '@/components/ListingsMap';
@@ -356,6 +356,15 @@ export default function SearchExperience({
 
   /** The card or marker the pointer or focus is on, by `NeighborhoodRow.key` (#503). */
   const [activeGroupKey, setActiveGroupKey] = useState<string | null>(null);
+  const [activeGroupSource, setActiveGroupSource] = useState<'card' | 'map'>('card');
+  const activateFromCard = useCallback((next: string | null) => {
+    setActiveGroupSource('card');
+    setActiveGroupKey(next);
+  }, []);
+  const activateFromMap = useCallback((next: string | null) => {
+    setActiveGroupSource('map');
+    setActiveGroupKey(next);
+  }, []);
   /** Where the map fits after a drill-down (#503). Null when the row has no bounds. */
   const [focus, setFocus] = useState<{
     name: string;
@@ -676,7 +685,7 @@ export default function SearchExperience({
                   ? {
                       rows: groups.rows,
                       activeKey: activeGroupKey,
-                      onActive: setActiveGroupKey,
+                      onActive: activateFromMap,
                       onSelect: drillInto,
                       onTapPreview: scrollToGroupCard,
                     }
@@ -892,7 +901,8 @@ export default function SearchExperience({
                     hrefFor={drillHref}
                     onSelect={drillInto}
                     activeKey={activeGroupKey}
-                    onActive={setActiveGroupKey}
+                    activeSource={activeGroupSource}
+                    onActive={activateFromCard}
                   />
                   <ResultsPager page={page} pageCount={reachableGroupPages} onPage={pushPage} />
                   {groupPageCount > reachableGroupPages && (
