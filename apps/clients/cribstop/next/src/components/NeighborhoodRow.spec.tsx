@@ -108,11 +108,17 @@ describe('NeighborhoodRow (#393)', () => {
     ];
 
     it('renders after the last tile, as one link to the chip href', () => {
-      renderRow({ href: '/neighborhoods?state=DC', neighborhoods: WITH_PHOTOS });
+      renderRow({
+        href: '/homes-for-sale?state=DC&type=all&groupBy=neighborhood',
+        neighborhoods: WITH_PHOTOS,
+      });
 
       const tile = screen.getByTestId('neighborhood-see-all-tile');
       expect(tile.tagName).toBe('A');
-      expect(tile).toHaveAttribute('href', '/neighborhoods?state=DC');
+      expect(tile).toHaveAttribute(
+        'href',
+        '/homes-for-sale?state=DC&type=all&groupBy=neighborhood',
+      );
       expect(tile).toHaveTextContent('See all');
       expect(tile.className).toContain('min-h-11');
       expect(tile.className).toContain('items-center');
@@ -125,7 +131,10 @@ describe('NeighborhoodRow (#393)', () => {
     });
 
     it('uses the same width classes as a neighborhood tile', () => {
-      renderRow({ href: '/neighborhoods', neighborhoods: WITH_PHOTOS });
+      renderRow({
+        href: '/homes-for-sale?type=all&groupBy=neighborhood',
+        neighborhoods: WITH_PHOTOS,
+      });
 
       const tile = screen.getByTestId('neighborhood-see-all-tile');
       const other = screen.getByRole('link', { name: 'Petworth' }).closest('div')!;
@@ -136,7 +145,10 @@ describe('NeighborhoodRow (#393)', () => {
     });
 
     it('draws photos only from the previewPhotos of tiles in the row', () => {
-      const { container } = renderRow({ href: '/neighborhoods', neighborhoods: WITH_PHOTOS });
+      const { container } = renderRow({
+        href: '/homes-for-sale?type=all&groupBy=neighborhood',
+        neighborhoods: WITH_PHOTOS,
+      });
 
       const tile = screen.getByTestId('neighborhood-see-all-tile');
       const urls = Array.from(tile.querySelectorAll('img')).map((i) => i.getAttribute('src'));
@@ -149,7 +161,7 @@ describe('NeighborhoodRow (#393)', () => {
     });
 
     it('is text only when no tile has a photo', () => {
-      renderRow({ href: '/neighborhoods' });
+      renderRow({ href: '/homes-for-sale?type=all&groupBy=neighborhood' });
 
       const tile = screen.getByTestId('neighborhood-see-all-tile');
       expect(tile.querySelector('img')).toBeNull();
@@ -162,13 +174,16 @@ describe('NeighborhoodRow (#393)', () => {
     });
 
     it('does not render when the row is hidden', () => {
-      const { container } = renderRow({ href: '/neighborhoods', neighborhoods: [] });
+      const { container } = renderRow({
+        href: '/homes-for-sale?type=all&groupBy=neighborhood',
+        neighborhoods: [],
+      });
       expect(container).toBeEmptyDOMElement();
     });
 
     it('is replaced by one extra skeleton tile while loading', () => {
       const { container } = renderRow({
-        href: '/neighborhoods',
+        href: '/homes-for-sale?type=all&groupBy=neighborhood',
         neighborhoods: [],
         loading: true,
         max: 4,

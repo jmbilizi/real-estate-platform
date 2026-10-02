@@ -2,9 +2,9 @@ import type { NeighborhoodRow } from '@cribstop/property-contracts';
 import type { Neighborhood } from '@/components/NeighborhoodRow';
 import {
   addNeighborhoodRows,
-  neighborhoodsMetadata,
+  groupedSearchHref,
+  neighborhoodsHref,
   parseNeighborhoodsScope,
-  scopeStates,
   usableFitBounds,
 } from './neighborhoods';
 
@@ -53,10 +53,27 @@ describe('parseNeighborhoodsScope', () => {
   });
 });
 
-describe('scopeStates', () => {
-  it('lists the licensed states in brand order for all', () => {
-    expect(scopeStates({ kind: 'all' })).toEqual(['MD', 'DC', 'VA']);
-    expect(scopeStates({ kind: 'state', state: 'DC' })).toEqual(['DC']);
+describe('groupedSearchHref (#504)', () => {
+  it('uses the default scope with no region', () => {
+    expect(groupedSearchHref({ kind: 'all' })).toBe(
+      '/homes-for-sale?type=all&groupBy=neighborhood',
+    );
+    expect(neighborhoodsHref(null)).toBe('/homes-for-sale?type=all&groupBy=neighborhood');
+  });
+  it('keeps a state scope', () => {
+    expect(groupedSearchHref({ kind: 'state', state: 'MD' })).toBe(
+      '/homes-for-sale?state=MD&type=all&groupBy=neighborhood',
+    );
+  });
+  it('keeps a city scope as the city place path', () => {
+    expect(neighborhoodsHref({ city: 'Rockville', state: 'MD' })).toBe(
+      '/rockville-md/homes-for-sale?type=all&groupBy=neighborhood',
+    );
+  });
+  it('treats a region with no state as the default scope', () => {
+    expect(neighborhoodsHref({ city: 'Rockville', state: '' })).toBe(
+      '/homes-for-sale?type=all&groupBy=neighborhood',
+    );
   });
 });
 
@@ -73,40 +90,6 @@ describe('addNeighborhoodRows', () => {
     const merged: Neighborhood[] = [];
     addNeighborhoodRows([row(), row({ city: 'Arlington', state: 'VA' })], new Set(), merged);
     expect(merged).toHaveLength(2);
-  });
-});
-
-describe('neighborhoodsMetadata', () => {
-  it('gives each scope a unique title and description', () => {
-    const all = neighborhoodsMetadata({ kind: 'all' }, null);
-    const state = neighborhoodsMetadata({ kind: 'state', state: 'MD' }, null);
-    const city = neighborhoodsMetadata({ kind: 'city', state: 'MD', city: 'Bethesda' }, null);
-    expect(new Set([all.title, state.title, city.title]).size).toBe(3);
-    expect(new Set([all.description, state.description, city.description]).size).toBe(3);
-  });
-
-  it('sets the canonical without the city, on the origin when there is one', () => {
-    expect(neighborhoodsMetadata({ kind: 'all' }, null).alternates?.canonical).toBe(
-      '/neighborhoods',
-    );
-    expect(
-      neighborhoodsMetadata({ kind: 'city', state: 'MD', city: 'Bethesda' }, 'https://x.test')
-        .alternates?.canonical,
-    ).toBe('https://x.test/neighborhoods?state=MD');
-  });
-
-  it('is indexable and uses no price, ranking or best language', () => {
-    for (const scope of [
-      { kind: 'all' },
-      { kind: 'state', state: 'VA' },
-      { kind: 'city', state: 'VA', city: 'Arlington' },
-    ] as const) {
-      const meta = neighborhoodsMetadata(scope, null);
-      expect(meta.robots).toBeUndefined();
-      expect(`${meta.title} ${meta.description}`).not.toMatch(
-        /best|top|\$|price|cheap|popular|rank/i,
-      );
-    }
   });
 });
 

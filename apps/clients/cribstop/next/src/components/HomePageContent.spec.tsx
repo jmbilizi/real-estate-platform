@@ -416,7 +416,7 @@ describe('HomePageContent', () => {
       );
     });
 
-    it('links the chip and trailing tile to /neighborhoods with no region (#495)', async () => {
+    it('links the chip and trailing tile to the grouped search with no region (#504)', async () => {
       mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
 
       render(<HomePageContent />);
@@ -424,22 +424,22 @@ describe('HomePageContent', () => {
       await screen.findByText('Columbia Heights');
       expect(screen.getAllByLabelText('Explore neighborhoods — see all')[0]).toHaveAttribute(
         'href',
-        '/neighborhoods',
+        '/homes-for-sale?type=all&groupBy=neighborhood',
       );
       expect(screen.getByTestId('neighborhood-see-all-tile')).toHaveAttribute(
         'href',
-        '/neighborhoods',
+        '/homes-for-sale?type=all&groupBy=neighborhood',
       );
     });
 
-    it('scopes the chip and trailing tile to the region (#495)', async () => {
+    it('scopes the chip and trailing tile to the region (#504)', async () => {
       mockRegionFetch({ city: 'Rockville', state: 'MD' });
       mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
 
       render(<HomePageContent />);
 
       await screen.findByText('Columbia Heights');
-      const href = '/neighborhoods?state=MD&city=Rockville';
+      const href = '/rockville-md/homes-for-sale?type=all&groupBy=neighborhood';
       expect(screen.getAllByLabelText('Explore neighborhoods — see all')[0]).toHaveAttribute(
         'href',
         href,
