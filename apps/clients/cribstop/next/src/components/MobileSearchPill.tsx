@@ -3,6 +3,7 @@
 import { useLayoutEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useApp } from '@/lib/context';
+import { LISTING_TYPE_SUMMARY_LABELS } from '@/lib/listing-type-labels';
 import { SkeletonBar } from './Skeleton';
 import { parseSearchPath } from '@cribstop/property-contracts';
 
@@ -14,7 +15,8 @@ import { parseSearchPath } from '@cribstop/property-contracts';
  * The caller is responsible for the outer container / positioning wrapper.
  */
 export default function MobileSearchPill() {
-  const { searchLocation, listingType, activeTab, searchDateRange, setMobileSearchOpen } = useApp();
+  const { searchLocation, searchListingType, activeTab, searchDateRange, setMobileSearchOpen } =
+    useApp();
   const pathname = usePathname();
 
   const [hydrated, setHydrated] = useState(false);
@@ -31,7 +33,7 @@ export default function MobileSearchPill() {
     if (activeTab === 'services') return 'Find services';
     if (activeTab === 'connect') return 'Explore connect';
     const parts: string[] = [];
-    parts.push(listingType === 'rent' ? 'For Rent' : 'For Sale');
+    parts.push(LISTING_TYPE_SUMMARY_LABELS[searchListingType]);
     const { start, end, flexibility } = searchDateRange;
     if (start) {
       const mo = [

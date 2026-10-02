@@ -10,10 +10,10 @@ jest.mock('next/navigation', () => ({
 const mockUseApp = jest.fn();
 jest.mock('@/lib/context', () => ({ useApp: () => mockUseApp() }));
 
-function appValue(searchLocation = '') {
+function appValue(searchLocation = '', searchListingType = 'sale') {
   return {
     searchLocation,
-    listingType: 'sale',
+    searchListingType,
     activeTab: 'homes',
     searchDateRange: { start: null, end: null },
     setMobileSearchOpen: jest.fn(),
@@ -55,6 +55,19 @@ describe('MobileSearchPill after hydration', () => {
     const { getByText } = render(<MobileSearchPill />);
 
     expect(getByText('Start your search')).toBeInTheDocument();
+  });
+
+  // #519: the pill names the listing type the results apply, including the `type=all` override.
+  it.each([
+    ['sale', 'For Sale · Any dates'],
+    ['rent', 'For Rent · Any dates'],
+    ['all', 'All listings · Any dates'],
+    ['sold', 'Sold · Any dates'],
+  ])('shows the %s listing type', (searchListingType, text) => {
+    mockUseApp.mockReturnValue(appValue('Ashburn, VA', searchListingType));
+    const { getByText } = render(<MobileSearchPill />);
+
+    expect(getByText(text)).toBeInTheDocument();
   });
 
   it('renders the location pill once a location is set', () => {

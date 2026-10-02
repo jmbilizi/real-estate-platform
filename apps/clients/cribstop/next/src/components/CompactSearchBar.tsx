@@ -13,6 +13,7 @@ import { searchableSuggestions, searchTargetFor, searchTargetUrl } from '@/lib/s
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock';
 import { SearchPanel } from '@/lib/store/types';
 import type { SearchListingType } from '@/lib/store/slices/searchSlice';
+import { LISTING_TYPE_SUMMARY_LABELS } from '@/lib/listing-type-labels';
 import { Z_LAYERS } from '@/lib/z-layers';
 import { DateRangePanel } from './DateRangePanel';
 import { SkeletonBlock, SkeletonText } from './Skeleton';
@@ -26,14 +27,6 @@ const LISTING_TYPE_FILTER_LABELS: Record<SearchListingType, string> = {
   all: 'All',
   sale: 'Buy',
   rent: 'Rent',
-  sold: 'Sold',
-};
-
-/** The "What" pill's closed-state summary — one word, matching the tone of the other segments. */
-const LISTING_TYPE_SUMMARY_LABELS: Record<SearchListingType, string> = {
-  all: 'All listings',
-  sale: 'For Sale',
-  rent: 'For Rent',
   sold: 'Sold',
 };
 
