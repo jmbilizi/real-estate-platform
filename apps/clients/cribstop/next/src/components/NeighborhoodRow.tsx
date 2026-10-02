@@ -9,6 +9,7 @@ import {
   CarouselArrows,
   useCarouselScroll,
 } from '@/components/CarouselShell';
+import { CARD_ACTIVE_CLASS, CARD_HOVER_CLASS } from '@/components/cardHover';
 import NeighborhoodPhotoStack, {
   COMPACT_PHOTO_AREA_CLASS,
   PHOTO_AREA_CLASS,
@@ -87,7 +88,7 @@ export function NeighborhoodTile({
       onMouseLeave={sync && (() => sync.onActive(null))}
       onFocus={sync && (() => sync.onActive(sync.key))}
       onBlur={sync && (() => sync.onActive(null))}
-      className={`group relative flex items-center rounded-md border bg-white px-2 py-3 sm:px-3 transition hover:shadow-card ${sync?.active ? 'border-ink shadow-card' : 'border-surface-border'} ${grid ? `${GRID_TILE_CLASS} ${GRID_TILE_LAYOUT_CLASS}` : `flex-col text-center ${ROW_TILE_CLASS}`}`}
+      className={`group relative flex items-center rounded-md border bg-white px-2 py-3 sm:px-3 ${CARD_HOVER_CLASS} ${sync?.active ? CARD_ACTIVE_CLASS : 'border-surface-border'} ${grid ? `${GRID_TILE_CLASS} ${GRID_TILE_LAYOUT_CLASS}` : `flex-col text-center ${ROW_TILE_CLASS}`}`}
     >
       <NeighborhoodPhotoStack photos={n.previewPhotos ?? []} compact={grid} />
       <TileText grid={grid}>
@@ -171,7 +172,7 @@ export function SeeAllTile({
       href={href}
       aria-label={`${title} — see all`}
       data-testid="neighborhood-see-all-tile"
-      className={`group flex min-h-11 flex-col items-center rounded-md border border-surface-border bg-surface-alt/40 px-2 py-3 sm:px-3 text-center transition hover:bg-surface-alt hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink [scroll-snap-stop:always] ${ROW_TILE_CLASS}`}
+      className={`group flex min-h-11 flex-col items-center rounded-md border border-surface-border bg-surface-alt/40 px-2 py-3 sm:px-3 text-center ${CARD_HOVER_CLASS} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink [scroll-snap-stop:always] ${ROW_TILE_CLASS}`}
     >
       <NeighborhoodPhotoStack photos={photos} />
       <span className="w-full truncate font-display text-base font-bold leading-6 text-ink group-hover:underline">
