@@ -29,7 +29,7 @@ describe('shared card hover (#526)', () => {
   it('is on the neighborhood card, and the active highlight keeps a dark border', () => {
     const n = { name: 'Petworth', city: 'Washington', state: 'DC', sale: 4, rent: 0 };
     const { container, rerender } = render(<NeighborhoodTile n={n} />);
-    expect(hasHover(container.querySelector('[data-neighborhood-key], .group'))).toBe(true);
+    expect(hasHover(container.firstElementChild)).toBe(true);
 
     rerender(<NeighborhoodTile n={n} sync={{ key: 'k', active: true, onActive: jest.fn() }} />);
     const card = container.querySelector('[data-active="true"]');
