@@ -34,7 +34,7 @@ const columnsOf = (el: Element | null) =>
   (el?.className ?? '').split(' ').filter((c) => /grid-cols-/.test(c));
 const SHARED = RESULTS_GRID_COLUMNS_CLASS.split(' ');
 const gapOf = (el: Element | null) =>
-  (el?.className ?? '').split(' ').filter((c) => /^gap-/.test(c));
+  (el?.className ?? '').split(' ').filter((c) => /(^|:)gap-/.test(c));
 const SHARED_GAP = RESULTS_GRID_GAP_CLASS.split(' ');
 
 // The first render of SearchExperience compiles a large import graph.

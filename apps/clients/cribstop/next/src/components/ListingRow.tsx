@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import ListingCard from './ListingCard';
+import { CARD_HOVER_CLASS } from '@/components/cardHover';
 import {
   CAROUSEL_ITEM_CLASS,
   CAROUSEL_SCROLLER_CLASS,
@@ -216,7 +217,7 @@ export default function ListingRow({
                 <Link
                   key="see-all"
                   href={href!}
-                  className={`group flex flex-col items-center justify-center gap-3 rounded-md border border-surface-border bg-surface-alt/40 p-6 text-center transition hover:bg-surface-alt hover:shadow-card ${CAROUSEL_ITEM_CLASS}`}
+                  className={`group flex flex-col items-center justify-center gap-3 rounded-md border border-surface-border bg-surface-alt/40 p-6 text-center ${CARD_HOVER_CLASS} ${CAROUSEL_ITEM_CLASS}`}
                   prefetch
                 >
                   <div className="relative aspect-square w-[80px] mx-auto rounded-md overflow-visible flex items-center justify-center">
