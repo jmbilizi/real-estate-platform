@@ -7,7 +7,7 @@ import type { ListingCardRow } from '@/lib/types';
 import { useApp } from '@/lib/context';
 import { openListingPanel } from '@/lib/listing-panel';
 import { copyToClipboard } from '@/lib/clipboard';
-import { formatTimeOnMarket } from '@/lib/format';
+import { formatNewListingBadge, formatTimeOnMarket } from '@/lib/format';
 import { useMinuteClock } from '@/lib/useMinuteClock';
 import { buildListingShare, listingShareUrl } from '@/lib/listing-share';
 import {
@@ -65,13 +65,18 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
    */
   // #459. The shared minute clock is null until hydration ends, so the first render is the day bucket.
   const minuteNow = useMinuteClock(!isComingSoon && listing.listedAtPrecise !== null);
-  const timeOnMarket = isComingSoon
-    ? null
-    : formatTimeOnMarket(
-        listing.listedAt,
-        minuteNow ?? Date.now(),
-        minuteNow === null ? null : listing.listedAtPrecise,
-      );
+  const now = minuteNow ?? Date.now();
+  const precise = minuteNow === null ? null : listing.listedAtPrecise;
+
+  /**
+   * #542. Under 7 days the age moves into a new-listing badge, so the footer slot stays empty to
+   * avoid repeating it. Coming Soon wins outright and a sold row never gets the badge.
+   */
+  const newListingBadge =
+    isComingSoon || isSold ? null : formatNewListingBadge(listing.listedAt, now, precise);
+  const isNew = newListingBadge !== null;
+  const timeOnMarket =
+    isComingSoon || isNew ? null : formatTimeOnMarket(listing.listedAt, now, precise);
 
   /**
    * #433. Share this listing: the Web Share API on a device that has one, the clipboard (with a
@@ -203,7 +208,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
          * below the image, which was the only row those cards had and others did not, and it made
          * tiles in a grid different heights (#79a90aa).
          */}
-        {(isComingSoon || marketingBadge || openHouse) && (
+        {(isComingSoon || newListingBadge || marketingBadge || openHouse) && (
           <div
             /*
              * `inset-x-3`, not `left-3` alone: the children cap themselves with percentage widths,
@@ -248,6 +253,17 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
                 <span className="listing-card-coming-soon-full">
                   {formatComingSoonBadge(listing.comingSoonDate)}
                 </span>
+              </span>
+            )}
+
+            {newListingBadge && (
+              /* #542. Same pill as Coming Soon, in the same slot. It never shows with Coming Soon. */
+              <span className="listing-card-new-pill inline-flex max-w-full items-center gap-1 whitespace-nowrap rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-ink shadow-card">
+                <span
+                  aria-hidden="true"
+                  className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-brand"
+                />
+                {newListingBadge}
               </span>
             )}
 
@@ -450,7 +466,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
          */}
         <div className="mt-1 flex items-center gap-1">
           <div
-            className={`listing-card-office-slot flex min-w-0 flex-1 items-center gap-0.5 ${timeOnMarket !== null ? 'max-w-[85%]' : 'max-w-full'}`}
+            className={`listing-card-office-slot flex min-w-0 flex-1 items-center gap-0.5 ${timeOnMarket !== null || isNew ? 'max-w-[85%]' : 'max-w-full'}`}
           >
             {/* #452. 17px, one step up from the icon row's 16px. At 18px the office name lost a character. */}
             <span

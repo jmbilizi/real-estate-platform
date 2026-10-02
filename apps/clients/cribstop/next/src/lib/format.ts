@@ -60,12 +60,18 @@ export function formatRelativeTime(iso: string, now: number = Date.now()): strin
   return `${months} month${months === 1 ? '' : 's'} ago`;
 }
 
+/** Elapsed time on market, in the unit the shared rules pick. `day` with `value` 0 means "today". */
+export interface ListingAge {
+  unit: 'min' | 'hr' | 'day';
+  value: number;
+}
+
 /**
- * #459. "N min" under an hour, "N hr" under 24 hours, from the server-proven list instant.
+ * #459. Minutes under an hour, hours under 24 hours, from the server-proven list instant.
  * `null` when there is no instant, it is unparseable, or it is 24 hours old or more, so the caller
  * falls back to the day buckets. Never derived from a date-only value.
  */
-function formatPreciseTimeOnMarket(listedAtPrecise: string | null, now: number): string | null {
+function preciseListingAge(listedAtPrecise: string | null, now: number): ListingAge | null {
   if (listedAtPrecise === null) {
     return null;
   }
@@ -74,9 +80,60 @@ function formatPreciseTimeOnMarket(listedAtPrecise: string | null, now: number):
     return null;
   }
   const minutes = Math.max(1, Math.floor((now - preciseMs) / 60_000));
-  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 60) return { unit: 'min', value: minutes };
   const hours = Math.floor(minutes / 60);
-  return hours < 24 ? `${hours} hr` : null;
+  return hours < 24 ? { unit: 'hr', value: hours } : null;
+}
+
+/**
+ * #542. Whole calendar days from the MLS list date to today in the property's time zone.
+ * `listedAt` is a date-only MLS value widened to midnight UTC, so its UTC date is the original
+ * list date. Counting 24-hour periods read "1 day ago" from 8pm Eastern on the list date.
+ * Calendar math also keeps a DST change day from shifting the count.
+ */
+function calendarDaysSince(listed: Date, now: number): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: PROPERTY_TIME_ZONE,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  }).formatToParts(new Date(now));
+  const part = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  const today = Date.UTC(part('year'), part('month') - 1, part('day'));
+  const listedDay = Date.UTC(listed.getUTCFullYear(), listed.getUTCMonth(), listed.getUTCDate());
+  return Math.max(0, Math.round((today - listedDay) / 86_400_000));
+}
+
+/**
+ * #542. The one rule set behind both time-on-market strings (footer and new-listing badge).
+ * Precise instant first, then whole elapsed days from `listedAt`. `null` when neither is usable.
+ */
+export function listingAge(
+  listedAt: string | null,
+  now: number = Date.now(),
+  listedAtPrecise: string | null = null,
+): ListingAge | null {
+  const precise = preciseListingAge(listedAtPrecise, now);
+  if (precise !== null) {
+    return precise;
+  }
+  if (listedAt === null) {
+    return null;
+  }
+  const listedAtMs = new Date(listedAt).getTime();
+  // An unparseable string reads the same as unknown: no dot, no text, not a garbage bucket.
+  if (Number.isNaN(listedAtMs)) {
+    return null;
+  }
+  return { unit: 'day', value: calendarDaysSince(new Date(listedAtMs), now) };
+}
+
+/** #542. A listing under this many days old gets the new-listing badge, not the footer time. */
+export const NEW_LISTING_MAX_DAYS = 7;
+
+/** True when the age is under {@link NEW_LISTING_MAX_DAYS} days. Minutes and hours always are. */
+export function isNewListingAge(age: ListingAge | null): boolean {
+  return age !== null && (age.unit !== 'day' || age.value < NEW_LISTING_MAX_DAYS);
 }
 
 /**
@@ -93,25 +150,34 @@ export function formatTimeOnMarket(
   now: number = Date.now(),
   listedAtPrecise: string | null = null,
 ): string | null {
-  const precise = formatPreciseTimeOnMarket(listedAtPrecise, now);
-  if (precise !== null) {
-    return precise;
-  }
-  if (listedAt === null) {
-    return null;
-  }
-  const listedAtMs = new Date(listedAt).getTime();
-  // An unparseable string reads the same as unknown: no dot, no text, not a garbage bucket.
-  if (Number.isNaN(listedAtMs)) {
-    return null;
-  }
-  const days = Math.floor((now - listedAtMs) / 86_400_000);
+  const age = listingAge(listedAt, now, listedAtPrecise);
+  if (age === null) return null;
+  if (age.unit !== 'day') return `${age.value} ${age.unit}`;
+  const days = age.value;
   if (days <= 0) return 'today';
   if (days < 7) return `${days}d`;
   if (days < 30) return `${Math.floor(days / 7)}w`;
   const months = Math.floor(days / 30);
   if (months <= 11) return `${months}mo`;
   return `${Math.max(1, Math.floor(days / 365))}y`;
+}
+
+/**
+ * #542. The new-listing badge text, e.g. "New · 12 min ago". `null` at 7 days or older, and when
+ * the age is unknown. Shares {@link listingAge} with the footer, so it never invents a time from
+ * a date-only value. The wording lives only here.
+ */
+export function formatNewListingBadge(
+  listedAt: string | null,
+  now: number = Date.now(),
+  listedAtPrecise: string | null = null,
+): string | null {
+  const age = listingAge(listedAt, now, listedAtPrecise);
+  if (age === null || !isNewListingAge(age)) return null;
+  if (age.unit === 'min') return `New · ${age.value} min ago`;
+  if (age.unit === 'hr') return `New · ${age.value} hr ago`;
+  if (age.value === 0) return 'New · Today';
+  return `New · ${age.value} ${age.value === 1 ? 'day' : 'days'} ago`;
 }
 
 export function formatDateTime(iso: string): string {

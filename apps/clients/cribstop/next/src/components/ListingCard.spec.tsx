@@ -210,7 +210,7 @@ describe('ListingCard', () => {
         <ListingCard
           listing={aListingCardRow({
             officeName: 'Acme Realty',
-            listedAt: '2026-10-08T00:00:00.000Z',
+            listedAt: '2025-01-08T00:00:00.000Z',
             status: 'Active',
           })}
         />,
@@ -281,7 +281,7 @@ describe('ListingCard', () => {
       jest.useRealTimers();
     });
 
-    it('shows minutes for a precise list instant and refreshes each minute (#459)', () => {
+    it('shows minutes in the new-listing badge and refreshes each minute (#459, #542)', () => {
       jest.useFakeTimers().setSystemTime(new Date('2026-10-15T12:00:00.000Z'));
       render(
         <ListingCard
@@ -293,11 +293,11 @@ describe('ListingCard', () => {
         />,
       );
 
-      expect(screen.getByText('5 min')).toBeInTheDocument();
+      expect(screen.getByText('New · 5 min ago')).toBeInTheDocument();
       act(() => {
         jest.advanceTimersByTime(60_000);
       });
-      expect(screen.getByText('6 min')).toBeInTheDocument();
+      expect(screen.getByText('New · 6 min ago')).toBeInTheDocument();
       jest.useRealTimers();
     });
 
@@ -616,7 +616,7 @@ describe('ListingCard', () => {
     it('keeps the office name on the left and time on market on the right of the attribution row', () => {
       render(
         <ListingCard
-          listing={aListingCardRow({ listedAt: '2026-10-08T00:00:00.000Z', status: 'Active' })}
+          listing={aListingCardRow({ listedAt: '2025-01-08T00:00:00.000Z', status: 'Active' })}
         />,
       );
 
@@ -976,5 +976,122 @@ describe('ListingCardSkeleton footer (#470)', () => {
     // Avatar circle and name bar sit in the office slot, the time bar in the time slot.
     expect(office?.querySelectorAll('span').length).toBeGreaterThanOrEqual(2);
     expect(time?.contains(office as Element)).toBe(false);
+  });
+});
+
+describe('new listing badge (#542)', () => {
+  const NOW = '2026-10-15T12:00:00.000Z';
+  const ago = (ms: number, base = NOW) => new Date(new Date(base).getTime() - ms).toISOString();
+  const HOUR = 3_600_000;
+  const DAY = 24 * HOUR;
+
+  function renderAt(now: string, overrides: Parameters<typeof aListingCardRow>[0]) {
+    jest.useFakeTimers().setSystemTime(new Date(now));
+    return render(<ListingCard listing={aListingCardRow({ status: 'Active', ...overrides })} />);
+  }
+
+  afterEach(() => jest.useRealTimers());
+
+  const badge = () => document.querySelector('.listing-card-new-pill');
+  const footerTime = () => document.querySelector('.listing-card-time-on-market');
+
+  it.each([
+    ['5 min', { listedAt: ago(0), listedAtPrecise: ago(5 * 60_000) }, 'New · 5 min ago'],
+    ['3 hr', { listedAt: ago(0), listedAtPrecise: ago(3 * HOUR + 600_000) }, 'New · 3 hr ago'],
+    ['today, no precise time', { listedAt: ago(2 * HOUR), listedAtPrecise: null }, 'New · Today'],
+    ['1 day', { listedAt: ago(DAY + HOUR), listedAtPrecise: null }, 'New · 1 day ago'],
+    ['6 days', { listedAt: ago(6 * DAY + HOUR), listedAtPrecise: null }, 'New · 6 days ago'],
+  ])('shows the badge text at %s', (_label, overrides, expected) => {
+    renderAt(NOW, overrides);
+
+    expect(badge()?.textContent).toBe(expected);
+  });
+
+  it('shows no badge at 7 days, and the footer keeps its "1w" form', () => {
+    renderAt(NOW, { listedAt: ago(7 * DAY), listedAtPrecise: null });
+
+    expect(badge()).toBeNull();
+    expect(footerTime()?.textContent).toBe('1w');
+  });
+
+  it('shows no badge when listedAt is unknown', () => {
+    renderAt(NOW, { listedAt: null, listedAtPrecise: null });
+
+    expect(badge()).toBeNull();
+  });
+
+  it('shows only the Coming Soon badge for a Coming Soon listing', () => {
+    renderAt(NOW, {
+      status: 'Coming Soon',
+      comingSoonDate: '2026-10-20T04:00:00.000Z',
+      listedAt: ago(DAY),
+      listedAtPrecise: null,
+    });
+
+    expect(badge()).toBeNull();
+    expect(document.querySelector('.listing-card-coming-soon-pill')).not.toBeNull();
+    expect(footerTime()).toBeNull();
+  });
+
+  it('shows no new badge on a sold listing', () => {
+    renderAt(NOW, {
+      status: 'Sold',
+      listingType: 'sold',
+      listedAt: ago(DAY),
+      listedAtPrecise: null,
+    });
+
+    expect(badge()).toBeNull();
+  });
+
+  it('leaves the footer slot empty under 7 days and keeps the 85% office budget', () => {
+    renderAt(NOW, { listedAt: ago(2 * DAY), listedAtPrecise: null });
+
+    expect(footerTime()).toBeNull();
+    expect(document.querySelector('.listing-card-office-slot')).toHaveClass('max-w-[85%]');
+  });
+
+  it('stacks the badge above the marketing pill, in the Coming Soon slot', () => {
+    renderAt(NOW, { listedAt: ago(DAY), listedAtPrecise: null, priceReduced: true });
+
+    const stack = (badge() as HTMLElement).parentElement as HTMLElement;
+    expect(stack.children[0]).toBe(badge());
+    expect(stack.children[1].textContent).toBe('Price reduced');
+  });
+
+  // `listedAt` is a date-only MLS value at midnight UTC. Days count in New York calendar days.
+  describe('New York calendar days, date-only listedAt at midnight UTC', () => {
+    it.each([
+      ['7:59pm Eastern on the list date', '2026-10-15', '2026-10-15T23:59:00.000Z', 'New · Today'],
+      ['8:01pm Eastern on the list date', '2026-10-15', '2026-10-16T00:01:00.000Z', 'New · Today'],
+      ['11:59pm Eastern on the list date', '2026-10-15', '2026-10-16T03:59:00.000Z', 'New · Today'],
+      ['12:01am Eastern the next day', '2026-10-15', '2026-10-16T04:01:00.000Z', 'New · 1 day ago'],
+      ['11:59pm Eastern on day 6', '2026-10-15', '2026-10-22T03:59:00.000Z', 'New · 6 days ago'],
+      ['12:01am Eastern on day 7', '2026-10-15', '2026-10-22T04:01:00.000Z', null],
+      // Fall back, 2026-11-01: Eastern leaves EDT at 2am, so the day has 25 hours.
+      ['11:30pm EST on the fall-back day', '2026-11-01', '2026-11-02T04:30:00.000Z', 'New · Today'],
+      [
+        '12:30am EST after the fall-back day',
+        '2026-11-01',
+        '2026-11-02T05:30:00.000Z',
+        'New · 1 day ago',
+      ],
+      // Spring forward, 2026-03-08: Eastern enters EDT at 2am, so the day has 23 hours.
+      [
+        '11:59pm EDT on the spring-forward day',
+        '2026-03-08',
+        '2026-03-09T03:59:00.000Z',
+        'New · Today',
+      ],
+      [
+        '12:01am EDT after the spring-forward day',
+        '2026-03-08',
+        '2026-03-09T04:01:00.000Z',
+        'New · 1 day ago',
+      ],
+    ])('%s', (_label, listDate, now, expected) => {
+      renderAt(now, { listedAt: `${listDate}T00:00:00.000Z`, listedAtPrecise: null });
+      expect(badge()?.textContent ?? null).toBe(expected);
+    });
   });
 });
