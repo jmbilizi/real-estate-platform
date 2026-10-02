@@ -60,9 +60,8 @@ export type NeighborhoodsLookup = (params: {
 }) => Promise<NeighborhoodRow[] | null>;
 
 /**
- * Our own neighborhood data (#390), matched by slug within a city and state. Never throws: a
- * network failure or a bad response reads as "no match", so the caller falls back to Nominatim
- * rather than erroring the whole tile link.
+ * Our own neighborhood data (#390), matched by slug within a city and state. Never throws. `null`
+ * means the call failed, and the caller reports an error, not a missing place.
  */
 export const gatewayNeighborhoodsLookup: NeighborhoodsLookup = async ({ slug, city, state }) => {
   const query = new URLSearchParams({ slug, city, state, limit: '5' });
@@ -178,7 +177,6 @@ export async function resolvePlace(
     q: `${place.name}, ${parent}`,
     limit: '5',
     addressdetails: '1',
-    ...(place.kind === 'neighborhood' ? { polygon: '1' } : {}),
   });
 
   if (place.kind === 'street') {
@@ -208,59 +206,29 @@ export async function resolvePlace(
     return { status: 'found', filters, label, suggestion: suggestionOf(hit, label) };
   }
 
-  // A neighborhood resolves against our own data first (#393): Bright subdivision names are
-  // frequent, but Nominatim (OpenStreetMap) knows only the ones that are also public
-  // neighborhoods, so it 404'd every subdivision name it had never heard of. One exact match here
-  // is enough to render results; Nominatim is then tried only for a boundary polygon, never as the
-  // sole source of a hit.
-  if (place.kind === 'neighborhood') {
-    const slug = slugify(place.name);
-    const ours = await lookupNeighborhoods({ slug, city: place.city, state });
-    if (ours && ours.length === 1) {
-      const match = ours[0] as NeighborhoodRow;
-      const label = placeLabel({ ...place, name: match.name, city: match.city });
-      const results = await lookup;
-      const hit = results?.find(
-        (r) =>
-          inState(r) &&
-          (NEIGHBORHOOD_TYPES.includes(r.type) || NEIGHBORHOOD_TYPES.includes(r.addresstype)) &&
-          (sameSlug(r.name, match.name) ||
-            NEIGHBORHOOD_TYPES.some((key) => sameSlug(r.address?.[key], match.name))),
-      );
-      const boundary = hit ? boundaryOf(hit) : undefined;
-      const filters: SearchFilters = boundary
-        ? { state, boundary }
-        : { neighborhood: match.name, city: match.city, state };
-      return hit
-        ? { status: 'found', filters, label, suggestion: suggestionOf(hit, label) }
-        : { status: 'found', filters, label };
-    }
-    // No single match in our data (none, or an ambiguous multiple) — fall through to the
-    // Nominatim-only resolution below, so a place our data does not know can still resolve.
-  }
-
+  // A neighborhood resolves only from our own data (#533). The slug matches exactly within the
+  // city and state. The filters are the exact `neighborhood`+`city`+`state` filters that the
+  // neighborhood card counts with. A geographic boundary would count other homes, so it is never a
+  // filter. A slug with no match is "not found", never a city search. Nominatim only seeds the
+  // search bar, and a miss there changes nothing.
+  const ours = await lookupNeighborhoods({ slug: slugify(place.name), city: place.city, state });
+  if (ours === null) return { status: 'error' };
+  const match = ours.find(
+    (row) =>
+      row.state === state && sameSlug(row.city, place.city) && sameSlug(row.name, place.name),
+  );
+  if (!match) return { status: 'not-found' };
+  const label = placeLabel({ ...place, name: match.name, city: match.city });
+  const filters: SearchFilters = { neighborhood: match.name, city: match.city, state };
   const results = await lookup;
-  if (results === null) return { status: 'error' };
-
-  const hit = results.find(
+  const hit = results?.find(
     (r) =>
       inState(r) &&
       (NEIGHBORHOOD_TYPES.includes(r.type) || NEIGHBORHOOD_TYPES.includes(r.addresstype)) &&
-      (sameSlug(r.name, place.name) ||
-        NEIGHBORHOOD_TYPES.some((key) => sameSlug(r.address?.[key], place.name))),
+      (sameSlug(r.name, match.name) ||
+        NEIGHBORHOOD_TYPES.some((key) => sameSlug(r.address?.[key], match.name))),
   );
-  if (!hit) return { status: 'not-found' };
-  const city = addressCity(hit.address ?? {}) ?? place.city;
-  const name = sameSlug(hit.name, place.name)
-    ? (hit.name as string)
-    : (NEIGHBORHOOD_TYPES.map((key) => hit.address?.[key]).find((n) =>
-        sameSlug(n, place.name),
-      ) as string);
-  const label = placeLabel({ ...place, name, city });
-  // A resolved boundary replaces `neighborhood` and `city` (#339).
-  const boundary = boundaryOf(hit);
-  const filters: SearchFilters = boundary
-    ? { state, boundary }
-    : { neighborhood: name, city, state };
-  return { status: 'found', filters, label, suggestion: suggestionOf(hit, label) };
+  return hit
+    ? { status: 'found', filters, label, suggestion: suggestionOf(hit, label) }
+    : { status: 'found', filters, label };
 }

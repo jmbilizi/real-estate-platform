@@ -54,6 +54,13 @@ const mockAppContext = {
 };
 jest.mock('@/lib/context', () => ({ useApp: () => mockAppContext }));
 
+const mockPush = jest.fn();
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mockPush, replace: jest.fn(), refresh: jest.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => '/',
+}));
+
 const mockedSearch = searchListings as jest.Mock;
 const mockedGroups = getNeighborhoodGroups as jest.Mock;
 
@@ -69,6 +76,24 @@ const row = (name: string, city = 'Bethesda', state = 'MD') => ({
   centroid: null,
   bounds: null,
 });
+
+/** What the server gives a neighborhood path: the exact filters, and the type of the path. */
+const drillPlace = (
+  options: { name?: string; city?: string; state?: string; query?: string } = {},
+) => {
+  const { name = 'Chevy Chase', city = 'Bethesda', state = 'MD', query = '' } = options;
+  return {
+    filters: {
+      neighborhood: name,
+      city,
+      state,
+      ...(query ? {} : { listingType: 'sale' as const }),
+    },
+    label: `${name}, ${city}, ${state}`,
+    query,
+    searchPlace: { kind: 'neighborhood' as const, name, city, state },
+  };
+};
 
 const choose = (control: string, option: string) => {
   fireEvent.click(screen.getByTestId(control));
@@ -92,6 +117,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  mockPush.mockReset();
   mockedSearch.mockReset();
   mockedGroups.mockReset();
 });
@@ -209,72 +235,66 @@ describe('Group by neighborhood (#502)', () => {
     expect(await screen.findByTestId('neighborhood-group-grid')).toBeTruthy();
   });
 
-  it('drills into a neighborhood and offers the way back', async () => {
+  it('drills into a neighborhood on its own path, with no repeated city or state (#533)', async () => {
+    window.history.replaceState(null, '', '/search?q=Bethesda&beds=2&groupBy=neighborhood');
     render(<SearchExperience initialQuery="q=Bethesda&beds=2&groupBy=neighborhood" />);
     const link = await screen.findByRole('link', { name: 'Chevy Chase' });
-    expect(link.getAttribute('href')).toContain('neighborhood=Chevy+Chase');
-    expect(link.getAttribute('href')).not.toContain('groupBy');
+    const href = new URL(link.getAttribute('href') ?? '', 'http://x');
+    expect(href.pathname).toBe('/bethesda-md/chevy-chase-neighborhood/homes-for-sale');
+    expect(href.searchParams.get('type')).toBe('all');
+    expect(href.searchParams.get('beds')).toBe('2');
+    expect(href.searchParams.get('q')).toBe('Bethesda');
+    expect(href.searchParams.get('from')).toBe('us');
+    for (const key of ['city', 'state', 'neighborhood', 'groupFrom', 'groupBy']) {
+      expect(href.searchParams.has(key)).toBe(false);
+    }
 
     fireEvent.click(link);
-
-    expect(screen.queryByTestId('neighborhood-group-grid')).toBeNull();
-    expect(currentParams().get('groupBy')).toBeNull();
-    expect(currentParams().get('neighborhood')).toBe('Chevy Chase');
-    expect(currentParams().get('city')).toBe('Bethesda');
-    expect(currentParams().get('state')).toBe('MD');
-    expect(currentParams().get('beds')).toBe('2');
-    await waitFor(() =>
-      expect(mockedSearch.mock.calls.at(-1)?.[0]).toMatchObject({
-        neighborhood: 'Chevy Chase',
-        city: 'Bethesda',
-        state: 'MD',
-        beds: 2,
-      }),
-    );
-
-    fireEvent.click(screen.getByTestId('back-to-neighborhoods'));
-    expect(currentParams().get('groupBy')).toBe('neighborhood');
-    expect(currentParams().get('neighborhood')).toBeNull();
-    expect(currentParams().get('beds')).toBe('2');
-    expect(await screen.findByTestId('neighborhood-group-grid')).toBeTruthy();
+    expect(mockPush).toHaveBeenCalledWith(link.getAttribute('href'));
   });
 
-  it('restores a bare city and state scope on the way back', async () => {
+  it('returns to a state-scope grouped view from a drill-down that left the state (#533)', async () => {
+    window.history.replaceState(null, '', '/dc/old?state=MD&groupBy=neighborhood');
     mockedGroups.mockResolvedValue({
       results: [row('Dupont Circle', 'Washington', 'DC')],
       total: 1,
     });
-    render(<SearchExperience initialQuery="state=MD&groupBy=neighborhood" />);
-    fireEvent.click(await screen.findByRole('link', { name: 'Dupont Circle' }));
-    expect(currentParams().get('city')).toBe('Washington');
-    expect(currentParams().get('state')).toBe('DC');
-    expect(currentParams().get('groupFrom')).toBe('|MD');
+    const { unmount } = render(<SearchExperience initialQuery="state=MD&groupBy=neighborhood" />);
+    const href = new URL(
+      (await screen.findByRole('link', { name: 'Dupont Circle' })).getAttribute('href') ?? '',
+      'http://x',
+    );
+    expect(href.pathname).toBe('/washington-dc/dupont-circle-neighborhood/homes-for-sale');
+    expect(href.searchParams.get('from')).toBe('VA'.replace('VA', 'MD'));
+    unmount();
 
-    fireEvent.click(screen.getByTestId('back-to-neighborhoods'));
-    expect(currentParams().get('state')).toBe('MD');
-    expect(currentParams().has('city')).toBe(false);
-    expect(currentParams().has('groupFrom')).toBe(false);
-    await waitFor(() => expect(lastGroupQuery()).toMatchObject({ state: 'MD' }));
-    expect(lastGroupQuery()).not.toHaveProperty('city');
-  });
-
-  it('comes back correctly from a shared drill-down URL', async () => {
+    window.history.replaceState(null, '', `${href.pathname}${href.search}`);
     render(
-      <SearchExperience initialQuery="city=Bethesda&state=MD&neighborhood=Chevy+Chase&groupFrom=Bethesda%7CMD" />,
+      <SearchExperience
+        initialQuery={href.search.slice(1)}
+        place={drillPlace({
+          name: 'Dupont Circle',
+          city: 'Washington',
+          state: 'DC',
+          query: 'type=all',
+        })}
+      />,
     );
     fireEvent.click(await screen.findByTestId('back-to-neighborhoods'));
-    expect(currentParams().get('groupBy')).toBe('neighborhood');
-    expect(currentParams().get('city')).toBe('Bethesda');
-    expect(currentParams().has('neighborhood')).toBe(false);
+    expect(mockPush).toHaveBeenCalledWith('/homes-for-sale?type=all&groupBy=neighborhood&state=MD');
+  });
+
+  it('comes back to the city grouped view from a shared neighborhood path (#533)', async () => {
+    window.history.replaceState(null, '', '/bethesda-md/chevy-chase-neighborhood/homes-for-sale');
+    render(<SearchExperience initialQuery="" place={drillPlace()} />);
+    fireEvent.click(await screen.findByTestId('back-to-neighborhoods'));
+    expect(mockPush).toHaveBeenCalledWith('/bethesda-md/homes-for-sale?groupBy=neighborhood');
   });
 
   it('puts the back arrow and a truncated, titled name in the results bar (#523)', async () => {
     const longName = 'Friendship Heights Village Center and Environs of Chevy Chase';
-    render(
-      <SearchExperience
-        initialQuery={`city=Bethesda&state=MD&neighborhood=${encodeURIComponent(longName)}&groupFrom=Bethesda%7CMD`}
-      />,
-    );
+    window.history.replaceState(null, '', '/bethesda-md/long-neighborhood/homes-for-sale');
+    render(<SearchExperience initialQuery="" place={drillPlace({ name: longName })} />);
     const back = await screen.findByTestId('back-to-neighborhoods');
     expect(back.getAttribute('aria-label')).toBe('Back to all neighborhoods');
     expect(back.className).toContain('h-11');
@@ -294,66 +314,102 @@ describe('Group by neighborhood (#502)', () => {
     expect(group.previousElementSibling?.textContent).toMatch(/^[\d,]+ Homes?$/);
 
     fireEvent.click(back);
-    expect(currentParams().get('groupBy')).toBe('neighborhood');
-    expect(screen.queryByTestId('drilled-neighborhood-name')).toBeNull();
+    expect(mockPush).toHaveBeenCalledWith('/bethesda-md/homes-for-sale?groupBy=neighborhood');
   });
 
-  describe('direct load of a drill-down on a place path (#525)', () => {
-    const place = {
-      filters: { city: 'Bethesda', state: 'MD', listingType: 'sale' as const },
-      label: 'Bethesda, MD',
-      query: '',
-    };
-    const drillQuery = 'neighborhood=Chevy+Chase&city=Bethesda&state=MD&groupFrom=Bethesda%7CMD';
+  describe('direct load of the neighborhood path (#533)', () => {
+    const PATH = '/bethesda-md/chevy-chase-neighborhood/homes-for-sale';
+
+    beforeEach(() => window.history.replaceState(null, '', PATH));
 
     it('renders the arrow and the name in the server HTML', () => {
-      const html = renderToString(<SearchExperience initialQuery={drillQuery} place={place} />);
+      const html = renderToString(<SearchExperience initialQuery="" place={drillPlace()} />);
       expect(html).toContain('data-testid="back-to-neighborhoods"');
       expect(html).toContain('Chevy Chase');
     });
 
-    it('searches the neighborhood only, and the arrow returns to the grouped search', async () => {
-      render(<SearchExperience initialQuery={drillQuery} place={place} />);
+    it('searches the exact neighborhood, city and state, and never a boundary', async () => {
+      render(<SearchExperience initialQuery="" place={drillPlace()} />);
       await waitFor(() =>
         expect(mockedSearch.mock.calls.at(-1)?.[0]).toMatchObject({
           neighborhood: 'Chevy Chase',
           city: 'Bethesda',
           state: 'MD',
+          listingType: 'sale',
         }),
       );
-      fireEvent.click(screen.getByTestId('back-to-neighborhoods'));
-      expect(currentParams().get('groupBy')).toBe('neighborhood');
-      expect(currentParams().has('neighborhood')).toBe(false);
-      expect(currentParams().has('groupFrom')).toBe(false);
-      expect(await screen.findByTestId('neighborhood-group-grid')).toBeTruthy();
+      expect(mockedSearch.mock.calls.at(-1)?.[0]).not.toHaveProperty('boundary');
+      expect(screen.getByTestId('drilled-neighborhood-name').textContent).toBe('Chevy Chase');
+      expect(screen.getByLabelText('Open filters').textContent).toBe('Filters');
     });
 
-    it('shows the arrow for a link without groupFrom', async () => {
+    it('survives a reload: the same props give the same view', async () => {
+      const first = render(<SearchExperience initialQuery="" place={drillPlace()} />);
+      const html = first.container.innerHTML;
+      first.unmount();
+      const again = render(<SearchExperience initialQuery="" place={drillPlace()} />);
+      expect(again.container.innerHTML).toBe(html);
+    });
+
+    it('returns to the same city and type by default', async () => {
+      render(<SearchExperience initialQuery="" place={drillPlace()} />);
+      fireEvent.click(await screen.findByTestId('back-to-neighborhoods'));
+      expect(mockPush).toHaveBeenCalledWith('/bethesda-md/homes-for-sale?groupBy=neighborhood');
+    });
+
+    it('returns to the type, the order and the scope that the link records', async () => {
+      window.history.replaceState(
+        null,
+        '',
+        `${PATH}?groupOrder=name&from=montgomery-county-md.all`,
+      );
       render(
         <SearchExperience
-          initialQuery="neighborhood=Chevy+Chase&city=Bethesda&state=MD"
-          place={place}
+          initialQuery="groupOrder=name&from=montgomery-county-md.all"
+          place={drillPlace()}
         />,
       );
       fireEvent.click(await screen.findByTestId('back-to-neighborhoods'));
-      expect(currentParams().get('groupBy')).toBe('neighborhood');
-      expect(currentParams().get('city')).toBe('Bethesda');
+      expect(mockPush).toHaveBeenCalledWith(
+        '/montgomery-county-md/homes-for-sale?groupOrder=name&type=all&groupBy=neighborhood',
+      );
     });
 
-    it('follows Back and Forward between the grouped view and the drill-down', async () => {
+    it('returns to the all type of a type=all path', async () => {
+      window.history.replaceState(null, '', `${PATH}?type=all`);
+      render(<SearchExperience initialQuery="" place={drillPlace({ query: 'type=all' })} />);
+      fireEvent.click(await screen.findByTestId('back-to-neighborhoods'));
+      expect(mockPush).toHaveBeenCalledWith(
+        '/bethesda-md/homes-for-sale?type=all&groupBy=neighborhood',
+      );
+    });
+
+    it('follows Back and Forward between the grouped view and the neighborhood', async () => {
+      const grouped = {
+        filters: { city: 'Bethesda', state: 'MD', listingType: 'sale' as const },
+        label: 'Bethesda, MD',
+        query: '',
+      };
       const { rerender } = render(
-        <SearchExperience initialQuery="groupBy=neighborhood" place={place} />,
+        <SearchExperience initialQuery="groupBy=neighborhood" place={grouped} />,
       );
       await screen.findByTestId('neighborhood-group-grid');
       expect(screen.queryByTestId('back-to-neighborhoods')).toBeNull();
 
-      rerender(<SearchExperience initialQuery={drillQuery} place={place} />);
+      rerender(<SearchExperience initialQuery="" place={drillPlace()} />);
       expect(await screen.findByTestId('back-to-neighborhoods')).toBeTruthy();
       expect(screen.getByTestId('drilled-neighborhood-name').textContent).toBe('Chevy Chase');
 
-      rerender(<SearchExperience initialQuery="groupBy=neighborhood" place={place} />);
+      rerender(<SearchExperience initialQuery="groupBy=neighborhood" place={grouped} />);
       expect(await screen.findByTestId('neighborhood-group-grid')).toBeTruthy();
       expect(screen.queryByTestId('back-to-neighborhoods')).toBeNull();
+    });
+
+    it('keeps the path when a filter changes', async () => {
+      render(<SearchExperience initialQuery="" place={drillPlace()} />);
+      await screen.findByTestId('back-to-neighborhoods');
+      fireEvent.click(screen.getByLabelText('Open filters'));
+      expect(window.location.pathname).toBe(PATH);
     });
   });
 
@@ -377,87 +433,6 @@ describe('Group by neighborhood (#502)', () => {
     expect(classes[0]).toContain('hover:bg-surface-soft');
     expect(classes[0]).toContain('rounded-lg');
     expect(classes[0]).toContain('focus-visible:ring-2');
-  });
-
-  it('drills down from the sale and rent counts with the listing type set', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda&groupBy=neighborhood" />);
-    const sale = await screen.findAllByRole('link', { name: /for sale in Chevy Chase/ });
-    expect(sale[0].getAttribute('href')).toContain('type=sale');
-    fireEvent.click(sale[0]);
-    expect(currentParams().get('type')).toBe('sale');
-    expect(currentParams().get('neighborhood')).toBe('Chevy Chase');
-    expect(currentParams().has('groupBy')).toBe(false);
-    await waitFor(() =>
-      expect(mockedSearch.mock.calls.at(-1)?.[0]).toMatchObject({
-        listingType: 'sale',
-        neighborhood: 'Chevy Chase',
-      }),
-    );
-  });
-
-  it('writes a drill-down that a direct load reads back the same, on a city path (#525)', async () => {
-    window.history.replaceState(null, '', '/bethesda-md/homes-for-sale?groupBy=neighborhood');
-    render(
-      <SearchExperience
-        initialQuery="groupBy=neighborhood"
-        place={{
-          filters: { city: 'Bethesda', state: 'MD', listingType: 'sale' },
-          label: 'Bethesda, MD',
-          query: '',
-        }}
-      />,
-    );
-    fireEvent.click((await screen.findAllByRole('link', { name: /for sale in Chevy Chase/ }))[0]);
-    // The path owns the listing type: no `type` in the URL and no listing-type filter to count.
-    expect(currentParams().has('type')).toBe(false);
-    expect(currentParams().get('neighborhood')).toBe('Chevy Chase');
-    expect(currentParams().get('groupFrom')).not.toBeNull();
-    expect(screen.getByLabelText('Open filters').textContent).toBe('Filters');
-  });
-
-  it('keeps type=all through a name click on a city path (#525)', async () => {
-    window.history.replaceState(
-      null,
-      '',
-      '/bethesda-md/homes-for-sale?type=all&groupBy=neighborhood',
-    );
-    const place = {
-      filters: { city: 'Bethesda', state: 'MD' },
-      label: 'Bethesda, MD',
-      query: 'type=all',
-    };
-    render(<SearchExperience initialQuery="groupBy=neighborhood" place={place} />);
-    fireEvent.click(await screen.findByRole('link', { name: 'Chevy Chase' }));
-    expect(currentParams().get('type')).toBe('all');
-    expect(currentParams().get('neighborhood')).toBe('Chevy Chase');
-    expect(screen.getByLabelText('Open filters').textContent).toBe('Filters');
-    await waitFor(() =>
-      expect(mockedSearch.mock.calls.at(-1)?.[0]).toMatchObject({ neighborhood: 'Chevy Chase' }),
-    );
-    expect(mockedSearch.mock.calls.at(-1)?.[0]).not.toHaveProperty('listingType');
-  });
-
-  it('moves to the other search path for a count link on a search path', async () => {
-    window.history.replaceState(null, '', '/homes-for-sale?q=Bethesda&groupBy=neighborhood');
-    render(
-      <SearchExperience
-        initialQuery="q=Bethesda&groupBy=neighborhood"
-        place={{ filters: { listingType: 'sale' }, label: '', query: '' }}
-      />,
-    );
-    const rent = (await screen.findAllByRole('link', { name: /for rent in Chevy Chase/ }))[0];
-    const href = rent.getAttribute('href') ?? '';
-    expect(href.startsWith('/homes-for-rent?')).toBe(true);
-    expect(href).toContain('neighborhood=Chevy+Chase');
-    expect(href).not.toContain('type=');
-    expect(href).not.toContain('groupBy');
-  });
-
-  it('drills down from the rent count with listing type rent', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda&groupBy=neighborhood" />);
-    fireEvent.click((await screen.findAllByRole('link', { name: /for rent in Kensington/ }))[0]);
-    expect(currentParams().get('type')).toBe('rent');
-    expect(currentParams().get('neighborhood')).toBe('Kensington');
   });
 
   it('follows Back and Forward', async () => {
@@ -537,17 +512,8 @@ describe('Group by neighborhood (#502)', () => {
       mockMapProps.current?.neighborhoods?.onSelect(mockMapProps.current?.neighborhoods?.rows[0]),
     );
 
-    expect(currentParams().has('groupBy')).toBe(false);
-    expect(currentParams().get('neighborhood')).toBe('Chevy Chase');
-    expect(currentParams().get('city')).toBe('Bethesda');
-    expect(currentParams().get('state')).toBe('MD');
-    expect(currentParams().get('beds')).toBe('2');
-    expect(currentParams().get('groupFrom')).not.toBeNull();
-    expect(mockMapProps.current?.neighborhoods).toBeUndefined();
-    expect(mockMapProps.current?.focusBounds).toEqual(bounds);
-
-    fireEvent.click(screen.getByTestId('back-to-neighborhoods'));
-    expect(mockMapProps.current?.focusBounds).toBeNull();
+    const [url] = mockPush.mock.calls.at(-1) as [string];
+    expect(url.startsWith('/bethesda-md/chevy-chase-neighborhood/homes-for-sale?')).toBe(true);
   });
 
   it('pages the groups by offset', async () => {

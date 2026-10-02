@@ -106,13 +106,16 @@ describe('legacySearchUrl (#350)', () => {
     expect(legacySearchUrl(params)).toBe('/alexandria-va/del-ray-neighborhood/homes-for-sale');
   });
 
-  it('keeps a drill-down link on the city path with its neighborhood and groupFrom (#525)', () => {
+  it('sends a neighborhood link to the neighborhood path, and reads groupFrom as from (#533)', () => {
     const params = new URLSearchParams(
       'neighborhood=Del+Ray&city=Alexandria&state=VA&groupFrom=Alexandria%7CVA&type=sale',
     );
-    expect(legacySearchUrl(params)).toBe(
-      '/alexandria-va/homes-for-sale?neighborhood=Del+Ray&city=Alexandria&state=VA&groupFrom=Alexandria%7CVA',
-    );
+    expect(legacySearchUrl(params)).toBe('/alexandria-va/del-ray-neighborhood/homes-for-sale');
+    expect(
+      legacySearchUrl(
+        new URLSearchParams('neighborhood=Del+Ray&city=Alexandria&state=VA&groupFrom=%7CVA'),
+      ),
+    ).toBe('/alexandria-va/del-ray-neighborhood/homes-for-sale?type=all&from=VA');
   });
 
   it('keeps anything else on the map-area path', () => {

@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import type { SearchPlace } from '@cribstop/property-contracts';
 import { getNeighborhoodGroups, searchListings } from '@/lib/api/listings';
 import SearchExperience from './SearchExperience';
 
@@ -26,6 +27,12 @@ const mockAppContext = {
   isSaved: () => false,
 };
 jest.mock('@/lib/context', () => ({ useApp: () => mockAppContext }));
+const mockPush = jest.fn();
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mockPush, replace: jest.fn(), refresh: jest.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => '/',
+}));
 
 const mockedSearch = searchListings as jest.Mock;
 const mockedGroups = getNeighborhoodGroups as jest.Mock;
@@ -62,31 +69,58 @@ beforeEach(() => {
 afterEach(() => {
   mockedSearch.mockReset();
   mockedGroups.mockReset();
+  mockPush.mockReset();
 });
 
+const COUNTY: SearchPlace = { kind: 'county', county: 'Fairfax County', state: 'VA' };
+const CITY: SearchPlace = { kind: 'city', city: 'Alexandria', state: 'VA' };
+
+/** `from` is what the arrow needs beyond the path. The cases cover every grouped-view scope. */
 const CASES = [
   {
     scope: 'city path',
     url: '/alexandria-va/homes-for-sale',
-    place: { filters: { city: 'Alexandria', state: 'VA' }, label: 'Alexandria, VA' },
-    prefix: '/alexandria-va',
+    place: {
+      filters: { city: 'Alexandria', state: 'VA' },
+      label: 'Alexandria, VA',
+      searchPlace: CITY,
+    },
+    scopeToken: '',
   },
   {
     scope: 'county path',
     url: '/fairfax-county-va/homes-for-sale',
-    place: { filters: { county: 'Fairfax County', state: 'VA' }, label: 'Fairfax County, VA' },
-    prefix: '/fairfax-county-va',
+    place: {
+      filters: { state: 'VA', boundary: '{"type":"Polygon"}' },
+      label: 'Fairfax County, VA',
+      searchPlace: COUNTY,
+    },
+    scopeToken: 'fairfax-county-va',
   },
   {
-    scope: 'state (map-area) path',
+    scope: 'state path',
     url: '/homes-for-sale',
-    place: { filters: { state: 'VA' }, label: '' },
-    prefix: '',
+    place: { filters: { state: 'VA' }, label: '', searchPlace: null },
+    scopeToken: 'VA',
     extra: 'state=VA&',
+  },
+  {
+    scope: 'no-region path',
+    url: '/homes-for-sale',
+    place: { filters: {}, label: '', searchPlace: null },
+    scopeToken: 'us',
   },
 ] as const;
 
-describe.each(CASES)('count links on a $scope (#528)', (c) => {
+const NEIGHBORHOOD = '/alexandria-va/kingstowne-neighborhood';
+
+/** The `from` value for a drill-down, or none when the arrow's default target is right. */
+const fromFor = (scopeToken: string, groupedType: string, type: string) => {
+  const typePart = groupedType === type ? '' : `.${groupedType}`;
+  return scopeToken || typePart ? `${scopeToken || 'city'}${typePart}` : null;
+};
+
+describe.each(CASES)('count links on a $scope (#528, #533)', (c) => {
   const extra = 'extra' in c ? c.extra : '';
 
   describe.each([
@@ -109,12 +143,11 @@ describe.each(CASES)('count links on a $scope (#528)', (c) => {
       const link = await screen.findByRole('link', { name: /for rent in Kingstowne/ });
       expect(link.textContent).toContain('13');
       const href = await hrefOf(/for rent in Kingstowne/);
-      expect(href.pathname).toBe(`${c.prefix}/homes-for-rent`);
-      expect(href.searchParams.has('type')).toBe(false);
-      expect(href.searchParams.get('neighborhood')).toBe('Kingstowne');
-      expect(href.searchParams.has('groupBy')).toBe(false);
-      // The way back returns to the grouped view's own type.
-      expect(href.searchParams.get('groupFrom')).toMatch(new RegExp(`\\|${viewType}$`));
+      expect(href.pathname).toBe(`${NEIGHBORHOOD}/homes-for-rent`);
+      expect([...href.searchParams.keys()].sort()).toEqual(
+        fromFor(c.scopeToken, viewType, 'rent') ? ['from'] : [],
+      );
+      expect(href.searchParams.get('from')).toBe(fromFor(c.scopeToken, viewType, 'rent'));
     });
 
     it('opens exactly the sale homes for the sale count', async () => {
@@ -122,45 +155,34 @@ describe.each(CASES)('count links on a $scope (#528)', (c) => {
       const link = await screen.findByRole('link', { name: /for sale in Kingstowne/ });
       expect(link.textContent).toContain('28');
       const href = await hrefOf(/for sale in Kingstowne/);
-      if (viewType === 'sale') {
-        // Same type as the view: the click commits in place and the path stays.
-        expect(href.pathname).toBe(c.url.replace(/^\/?/, '/'));
-      } else {
-        expect(href.pathname).toBe(`${c.prefix}/homes-for-sale`);
-      }
+      expect(href.pathname).toBe(`${NEIGHBORHOOD}/homes-for-sale`);
       expect(href.searchParams.has('type')).toBe(false);
+      expect(href.searchParams.get('from')).toBe(fromFor(c.scopeToken, viewType, 'sale'));
     });
 
     it('keeps the grouped view type on the name link', async () => {
       render(<SearchExperience initialQuery={query} place={place} />);
       const href = await hrefOf(/^Kingstowne$/);
-      expect(href.pathname).toBe(c.url.replace(/^\/?/, '/'));
+      expect(href.pathname).toBe(`${NEIGHBORHOOD}/homes-for-sale`);
       expect(href.searchParams.get('type')).toBe(viewType === 'all' ? 'all' : null);
+      expect(href.searchParams.get('from')).toBe(fromFor(c.scopeToken, viewType, viewType));
     });
-  });
 
-  it('reads a rent drill-down URL back as rent homes only, on a direct load', async () => {
-    const query = `${extra}neighborhood=Kingstowne&city=Alexandria&state=VA&groupFrom=Alexandria%7CVA%7Call`;
-    window.history.replaceState(null, '', `${c.prefix}/homes-for-rent?${query}`);
-    render(
-      <SearchExperience
-        initialQuery={query}
-        place={
-          {
-            ...c.place,
-            filters: { ...c.place.filters, listingType: 'rent' },
-            query: '',
-          } as never
+    it('repeats no value of the path in the query', async () => {
+      render(<SearchExperience initialQuery={query} place={place} />);
+      for (const name of [/^Kingstowne$/, /for sale in Kingstowne/, /for rent in Kingstowne/]) {
+        const href = await hrefOf(name);
+        for (const key of ['city', 'state', 'neighborhood', 'groupFrom', 'groupBy']) {
+          expect(href.searchParams.has(key)).toBe(false);
         }
-      />,
-    );
-    await waitFor(() =>
-      expect(mockedSearch.mock.calls.at(-1)?.[0]).toMatchObject({
-        listingType: 'rent',
-        neighborhood: 'Kingstowne',
-      }),
-    );
-    expect(screen.getByLabelText('Open filters').textContent).toBe('Filters');
-    expect(screen.getByTestId('back-to-neighborhoods')).toBeTruthy();
+      }
+    });
+
+    it('goes to the link on a click, so that the URL is the shareable one', async () => {
+      render(<SearchExperience initialQuery={query} place={place} />);
+      const link = await screen.findByRole('link', { name: /for rent in Kingstowne/ });
+      fireEvent.click(link);
+      expect(mockPush).toHaveBeenCalledWith(link.getAttribute('href'));
+    });
   });
 });

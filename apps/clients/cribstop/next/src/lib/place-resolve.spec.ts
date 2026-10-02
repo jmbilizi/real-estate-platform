@@ -20,29 +20,23 @@ const geocoder = (results: any[] | null) => jest.fn(async () => results);
 const lookup = (rows: any[] | null): NeighborhoodsLookup => jest.fn(async () => rows);
 const PLACE = { kind: 'neighborhood' as const, name: 'Del Ray', city: 'Alexandria', state: 'VA' };
 
-/**
- * #393: a neighborhood resolves against `GET /listings/neighborhoods` first, because Bright
- * subdivision names are frequent and Nominatim (OpenStreetMap) knows only the ones that are also
- * public neighborhoods.
- */
-describe('resolvePlace — neighborhood (#393)', () => {
-  it('resolves from our data alone when Nominatim has no matching hit', async () => {
-    const result = await resolvePlace(
-      PLACE,
-      geocoder([]),
-      lookup([
-        {
-          name: 'Del Ray',
-          city: 'Alexandria',
-          state: 'VA',
-          slug: 'del-ray',
-          total: 40,
-          sale: 30,
-          rent: 10,
-        },
-      ]),
-    );
+const DEL_RAY = {
+  name: 'Del Ray',
+  city: 'Alexandria',
+  state: 'VA',
+  slug: 'del-ray',
+  total: 40,
+  sale: 30,
+  rent: 10,
+};
 
+/**
+ * #533: a neighborhood resolves from our own data only. The filters are the exact
+ * neighborhood, city and state filters, never a boundary, so the page counts what the card counts.
+ */
+describe('resolvePlace — neighborhood (#533)', () => {
+  it('resolves to the exact neighborhood filters with no Nominatim hit', async () => {
+    const result = await resolvePlace(PLACE, geocoder([]), lookup([DEL_RAY]));
     expect(result).toEqual({
       status: 'found',
       filters: { neighborhood: 'Del Ray', city: 'Alexandria', state: 'VA' },
@@ -50,7 +44,7 @@ describe('resolvePlace — neighborhood (#393)', () => {
     });
   });
 
-  it('replaces the text filters with a boundary once Nominatim resolves one', async () => {
+  it('never filters by a boundary, even when Nominatim returns one', async () => {
     const geocode = geocoder([
       {
         type: 'suburb',
@@ -59,47 +53,22 @@ describe('resolvePlace — neighborhood (#393)', () => {
         geojson: POLYGON,
       },
     ]);
-    const result = await resolvePlace(
-      PLACE,
-      geocode,
-      lookup([
-        {
-          name: 'Del Ray',
-          city: 'Alexandria',
-          state: 'VA',
-          slug: 'del-ray',
-          total: 40,
-          sale: 30,
-          rent: 10,
-        },
-      ]),
-    );
-
-    expect(result).toMatchObject({
-      status: 'found',
-      filters: { state: 'VA', boundary: JSON.stringify(POLYGON) },
-      label: 'Del Ray, Alexandria, VA',
-    });
-    expect((result as { suggestion?: unknown }).suggestion).toBeDefined();
-  });
-
-  it('falls back to Nominatim when our data has no match', async () => {
-    const geocode = geocoder([
-      {
-        type: 'suburb',
-        name: 'Del Ray',
-        address: { suburb: 'Del Ray', city: 'Alexandria', ...VA },
-      },
-    ]);
-    const result = await resolvePlace(PLACE, geocode, lookup([]));
-
+    const result = await resolvePlace(PLACE, geocode, lookup([DEL_RAY]));
     expect(result).toMatchObject({
       status: 'found',
       filters: { neighborhood: 'Del Ray', city: 'Alexandria', state: 'VA' },
     });
+    expect((result as { filters: object }).filters).not.toHaveProperty('boundary');
+    expect((result as { suggestion?: unknown }).suggestion).toBeDefined();
   });
 
-  it('falls back to Nominatim when our data returns an ambiguous multiple match', async () => {
+  it('asks the API for the slug within the city and state', async () => {
+    const find = lookup([DEL_RAY]);
+    await resolvePlace({ ...PLACE, name: 'del ray' }, geocoder([]), find);
+    expect(find).toHaveBeenCalledWith({ slug: 'del-ray', city: 'Alexandria', state: 'VA' });
+  });
+
+  it('is not found when our data has no match, even if Nominatim knows the place', async () => {
     const geocode = geocoder([
       {
         type: 'suburb',
@@ -107,55 +76,39 @@ describe('resolvePlace — neighborhood (#393)', () => {
         address: { suburb: 'Del Ray', city: 'Alexandria', ...VA },
       },
     ]);
-    const ambiguous = lookup([
-      {
-        name: 'Del Ray',
-        city: 'Alexandria',
-        state: 'VA',
-        slug: 'del-ray',
-        total: 40,
-        sale: 30,
-        rent: 10,
-      },
-      {
-        name: 'Del Ray',
-        city: 'Fairfax',
-        state: 'VA',
-        slug: 'del-ray',
-        total: 6,
-        sale: 6,
-        rent: 0,
-      },
-    ]);
-    const result = await resolvePlace(PLACE, geocode, ambiguous);
+    expect(await resolvePlace(PLACE, geocode, lookup([]))).toEqual({ status: 'not-found' });
+  });
 
+  it('keeps the city of the path when two cities share a slug', async () => {
+    const other = {
+      name: 'Del Ray',
+      city: 'Fairfax',
+      state: 'VA',
+      slug: 'del-ray',
+      total: 40,
+      sale: 30,
+      rent: 10,
+    };
+    const rows = [other, DEL_RAY];
+    const result = await resolvePlace(PLACE, geocoder([]), lookup(rows));
     expect(result).toMatchObject({ status: 'found', filters: { city: 'Alexandria' } });
+    expect(
+      await resolvePlace({ ...PLACE, city: 'Fairfax' }, geocoder([]), lookup(rows)),
+    ).toMatchObject({
+      status: 'found',
+      filters: { city: 'Fairfax' },
+    });
+    expect(await resolvePlace({ ...PLACE, city: 'Reston' }, geocoder([]), lookup(rows))).toEqual({
+      status: 'not-found',
+    });
   });
 
-  it('reports not-found only when both our data and Nominatim miss', async () => {
-    const result = await resolvePlace(PLACE, geocoder([]), lookup([]));
-    expect(result).toEqual({ status: 'not-found' });
+  it('reports an error when our data cannot answer, and not a missing place', async () => {
+    expect(await resolvePlace(PLACE, geocoder([]), lookup(null))).toEqual({ status: 'error' });
   });
 
-  it('never 404s a tile link: a data-only match still renders, with no Nominatim network call needed', async () => {
-    const failedGeocode = geocoder(null); // simulates a Nominatim outage
-    const result = await resolvePlace(
-      PLACE,
-      failedGeocode,
-      lookup([
-        {
-          name: 'Del Ray',
-          city: 'Alexandria',
-          state: 'VA',
-          slug: 'del-ray',
-          total: 40,
-          sale: 30,
-          rent: 10,
-        },
-      ]),
-    );
-
-    // A resolved status, not 'error' — Nominatim's own outage does not fail a place our data knows.
+  it('still renders when Nominatim is down', async () => {
+    const result = await resolvePlace(PLACE, geocoder(null), lookup([DEL_RAY]));
     expect(result.status).toBe('found');
   });
 });

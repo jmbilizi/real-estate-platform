@@ -7,6 +7,7 @@ import {
 } from '@cribstop/property-contracts';
 import type { SearchFilters } from '@/lib/types';
 import { parseFiltersFromSearchParams } from '@/lib/listing-filters';
+import { legacyDrillUrl } from '@/lib/neighborhood-url';
 import { bareDC, bareZip, stateAbbr } from '@/lib/search-utils';
 
 /**
@@ -210,20 +211,10 @@ export const PLACE_QUERY_KEYS = [
   'listingType',
 ] as const;
 
-/** The query keys that scope a neighborhood drill-down (#525). */
-const DRILL_QUERY_KEYS: readonly string[] = ['neighborhood', 'city', 'state'];
-
-/** True for a drill-down query: a neighborhood with its city and state. */
-export function hasDrillDown(params: URLSearchParams): boolean {
-  return DRILL_QUERY_KEYS.every((key) => Boolean(params.get(key)));
-}
-
-/** A copy of `params` without the place keys. A drill-down keeps its neighborhood, city and state. */
-export function withoutPlaceKeys(params: URLSearchParams, keepDrill = false): URLSearchParams {
+/** A copy of `params` without the place keys. */
+export function withoutPlaceKeys(params: URLSearchParams): URLSearchParams {
   const rest = new URLSearchParams(params);
-  for (const key of PLACE_QUERY_KEYS) {
-    if (!(keepDrill && DRILL_QUERY_KEYS.includes(key))) rest.delete(key);
-  }
+  for (const key of PLACE_QUERY_KEYS) rest.delete(key);
   return rest;
 }
 
@@ -235,16 +226,18 @@ export function legacySearchUrl(params: URLSearchParams): string {
   const filters = parseFiltersFromSearchParams(params);
   const { city, state, neighborhood, street } = filters;
   let place: SearchPlace | null = null;
-  // A drill-down link (#525) keeps its neighborhood in the query, on the city path. The
-  // neighborhood landing path resolves a map boundary, which counts other homes.
-  const drill = hasDrillDown(params) && params.has('groupFrom');
+  // A neighborhood link is the neighborhood path (#533), with `groupFrom` read as `from`.
+  if (neighborhood && city && state) {
+    const type = filters.listingType ?? 'all';
+    const url = legacyDrillUrl(null, type, params);
+    if (url) return url;
+  }
   if (city && state) {
-    if (neighborhood && !drill) place = { kind: 'neighborhood', name: neighborhood, city, state };
-    else if (street) place = { kind: 'street', name: street, city, state };
+    if (street) place = { kind: 'street', name: street, city, state };
     else place = { kind: 'city', city, state };
   }
 
-  const rest = place ? withoutPlaceKeys(params, drill) : new URLSearchParams(params);
+  const rest = place ? withoutPlaceKeys(params) : new URLSearchParams(params);
   rest.delete('type');
   rest.delete('listingType');
   const override = listingTypeOverride(filters.listingType);

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import type { ParsedSearchPath } from '@cribstop/property-contracts';
 import SearchExperience from '@/components/SearchExperience';
 import { ListingErrorState } from '@/components/listing/ListingStates';
@@ -20,6 +20,7 @@ export default async function SearchPathView({
   params: URLSearchParams;
 }) {
   const props = await searchRouteProps(parsed, params);
+  if (props.status === 'redirect') permanentRedirect(props.to);
   if (props.status === 'not-found') notFound();
   if (props.status === 'error') {
     return (

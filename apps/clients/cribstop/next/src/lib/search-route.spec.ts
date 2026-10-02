@@ -1,14 +1,29 @@
 import { parseSearchPath } from '@cribstop/property-contracts';
+import { fetchGateway } from '@/app/api/_lib/gateway';
 import type { Geocoder } from './place-resolve';
 import { searchRouteProps } from './search-route';
 
 jest.mock('@/app/api/_lib/nominatim-fetch', () => ({ proxyNominatim: jest.fn() }));
-// Neighborhood resolution tries our own data first (#393). These tests exercise the Nominatim
-// fallback path only, so the gateway call is stubbed to "no match" rather than hitting a real
-// network address.
-jest.mock('@/app/api/_lib/gateway', () => ({
-  fetchGateway: jest.fn(async () => ({ ok: false, json: async () => null })),
-}));
+// A neighborhood resolves from our own data (#533). The gateway call returns the rows a test sets.
+jest.mock('@/app/api/_lib/gateway', () => ({ fetchGateway: jest.fn() }));
+const mockedGateway = fetchGateway as jest.Mock;
+const neighborhoodRow = (name: string, city: string, state = 'VA') => ({
+  key: `${state}|${city}|${name}`.toLowerCase(),
+  name,
+  city,
+  state,
+  slug: name.toLowerCase().replace(/ /g, '-'),
+  total: 40,
+  sale: 30,
+  rent: 10,
+  centroid: null,
+  bounds: null,
+});
+const ourData = (rows: unknown[]) =>
+  mockedGateway.mockResolvedValue({
+    ok: true,
+    json: async () => ({ results: rows, total: rows.length }),
+  });
 
 const POLYGON = {
   type: 'Polygon',
@@ -55,32 +70,71 @@ describe('searchRouteProps (#350)', () => {
     });
   });
 
-  describe('neighborhood drill-down on a place path (#525)', () => {
-    const city = {
-      type: 'city',
-      name: 'Ashburn',
-      address: { city: 'Ashburn', state: 'Virginia', 'ISO3166-2-lvl4': 'US-VA' },
-    };
-    const drill = 'neighborhood=Belmont&city=Ashburn&state=VA&groupFrom=Ashburn%7CVA&beds=2';
+  describe('old drill-down links redirect to the neighborhood path (#533)', () => {
+    const old = 'neighborhood=Belmont&city=Ashburn&state=VA&groupFrom=%7C%7Csale&beds=2';
 
-    it('keeps the neighborhood, city, state and groupFrom in the query', async () => {
-      const result = await props('/ashburn-va/homes-for-sale', drill, geocoder([city]));
-      expect(result).toMatchObject({ status: 'found', initialQuery: drill });
+    it('redirects a city path', async () => {
+      expect(await props('/ashburn-va/homes-for-sale', old)).toEqual({
+        status: 'redirect',
+        to: '/ashburn-va/belmont-neighborhood/homes-for-sale?beds=2',
+      });
     });
 
-    it('keeps a drill-down link that has no groupFrom', async () => {
-      const query = 'neighborhood=Belmont&city=Ashburn&state=VA';
-      const result = await props('/ashburn-va/homes-for-sale', query, geocoder([city]));
-      expect(result).toMatchObject({ initialQuery: query });
+    it('redirects a rent path and a type=all path', async () => {
+      expect(
+        await props('/ashburn-va/homes-for-rent', 'neighborhood=Belmont&city=Ashburn&state=VA'),
+      ).toEqual({
+        status: 'redirect',
+        to: '/ashburn-va/belmont-neighborhood/homes-for-rent',
+      });
+      expect(
+        await props(
+          '/ashburn-va/homes-for-sale',
+          'neighborhood=Belmont&city=Ashburn&state=VA&type=all',
+        ),
+      ).toEqual({
+        status: 'redirect',
+        to: '/ashburn-va/belmont-neighborhood/homes-for-sale?type=all',
+      });
+    });
+
+    it('records a county path as the way back', async () => {
+      expect(
+        await props(
+          '/loudoun-county-va/homes-for-sale',
+          'neighborhood=Belmont&city=Ashburn&state=VA',
+        ),
+      ).toEqual({
+        status: 'redirect',
+        to: '/ashburn-va/belmont-neighborhood/homes-for-sale?from=loudoun-county-va',
+      });
+    });
+
+    it('redirects a map-area path', async () => {
+      expect(
+        await props(
+          '/homes-for-sale',
+          'neighborhood=Belmont&city=Ashburn&state=VA&groupFrom=%7CVA%7Csale',
+        ),
+      ).toEqual({
+        status: 'redirect',
+        to: '/ashburn-va/belmont-neighborhood/homes-for-sale?from=VA',
+      });
+    });
+
+    it('does not look the place up before it redirects', async () => {
+      const geocode = geocoder([]);
+      await props('/ashburn-va/homes-for-sale', old, geocode);
+      expect(geocode).not.toHaveBeenCalled();
     });
 
     it('drops a lone neighborhood, which is no drill-down', async () => {
       const result = await props(
         '/ashburn-va/homes-for-sale',
         'neighborhood=Belmont',
-        geocoder([city]),
+        geocoder([{ type: 'city', name: 'Ashburn', address: { city: 'Ashburn', ...VA } }]),
       );
-      expect(result).toMatchObject({ initialQuery: '' });
+      expect(result).toMatchObject({ status: 'found', initialQuery: '' });
     });
   });
 
@@ -111,24 +165,89 @@ describe('searchRouteProps (#350)', () => {
     expect(first).toMatchObject({ initialQuery: 'page=3', place: { query: 'type=all' } });
   });
 
-  it('uses the boundary for a neighborhood, in place of the neighborhood and city filters', async () => {
-    const geocode = geocoder([
-      {
-        type: 'suburb',
-        name: 'Del Ray',
-        address: { suburb: 'Del Ray', city: 'Alexandria', ...VA },
-        geojson: POLYGON,
-      },
-    ]);
-    const result = await props('/alexandria-va/del-ray-neighborhood/homes-for-sale', '', geocode);
-    expect(result).toMatchObject({
-      status: 'found',
-      place: {
-        filters: { state: 'VA', boundary: JSON.stringify(POLYGON) },
-        label: 'Del Ray, Alexandria, VA',
-      },
+  describe('neighborhood path (#533)', () => {
+    const PATH = '/ashburn-va/ashburn-village-neighborhood/homes-for-sale';
+    const village = neighborhoodRow('Ashburn Village', 'Ashburn');
+    const hit = {
+      type: 'suburb',
+      name: 'Ashburn Village',
+      address: { suburb: 'Ashburn Village', city: 'Ashburn', ...VA },
+      geojson: POLYGON,
+    };
+
+    beforeEach(() => ourData([village]));
+    afterEach(() => mockedGateway.mockReset());
+
+    it('filters by the exact neighborhood, city and state, and never by a boundary', async () => {
+      const result = await props(PATH, '', geocoder([hit]));
+      expect(result).toMatchObject({
+        status: 'found',
+        initialQuery: '',
+        place: {
+          filters: {
+            neighborhood: 'Ashburn Village',
+            city: 'Ashburn',
+            state: 'VA',
+            listingType: 'sale',
+          },
+          label: 'Ashburn Village, Ashburn, VA',
+          searchPlace: { kind: 'neighborhood', city: 'ashburn', state: 'VA' },
+        },
+      });
+      expect(JSON.stringify(result)).not.toContain('boundary');
     });
-    expect(JSON.stringify(result)).not.toContain('"neighborhood"');
+
+    it('asks the API for the slug within the city and state', async () => {
+      await props(PATH, '', geocoder([]));
+      const url = String(mockedGateway.mock.calls[0]?.[0]);
+      const query = new URLSearchParams(url.split('?')[1]);
+      expect(query.get('slug')).toBe('ashburn-village');
+      expect(query.get('city')).toBe('ashburn');
+      expect(query.get('state')).toBe('VA');
+    });
+
+    it('is not found for a slug that matches nothing, and is not a city search', async () => {
+      ourData([]);
+      expect(await props(PATH, '', geocoder([hit]))).toEqual({ status: 'not-found' });
+    });
+
+    it('is not found when the match is in another city', async () => {
+      ourData([neighborhoodRow('Ashburn Village', 'Sterling')]);
+      expect(await props(PATH, '', geocoder([]))).toEqual({ status: 'not-found' });
+    });
+
+    it('carries the type, the filters, the order and from, and nothing the path says', async () => {
+      const result = await props(
+        PATH,
+        'type=all&beds=2&groupOrder=name&from=VA&city=X&state=MD&neighborhood=Y&page=2',
+        geocoder([]),
+      );
+      expect(result).toMatchObject({
+        initialQuery: 'beds=2&groupOrder=name&from=VA&page=2',
+        place: { query: 'type=all' },
+      });
+    });
+
+    it('keeps the text, ZIP and boundary scope of the grouped view it came from', async () => {
+      const result = await props(PATH, 'q=Ashburn&zip=20147', geocoder([]));
+      expect(result).toMatchObject({ initialQuery: 'q=Ashburn&zip=20147' });
+    });
+
+    it('turns map bounds into the boundary that the card counted with', async () => {
+      const result = await props(PATH, 'bounds=39,-77,38,-78', geocoder([]));
+      expect(result.status === 'found' && result.place.filters.boundary).toContain('Polygon');
+    });
+
+    it('answers the same for the same URL, so a reload restores the same view', async () => {
+      const a = await props(PATH, 'type=all&from=city.sale', geocoder([]));
+      const b = await props(PATH, 'type=all&from=city.sale', geocoder([]));
+      expect(b).toEqual(a);
+    });
+
+    it('reports an error when our data cannot answer', async () => {
+      mockedGateway.mockResolvedValue({ ok: false, json: async () => null });
+      expect(await props(PATH, '', geocoder([]))).toEqual({ status: 'error' });
+    });
   });
 
   describe('street scope', () => {
