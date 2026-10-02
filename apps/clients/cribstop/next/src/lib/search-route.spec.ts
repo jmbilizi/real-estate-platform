@@ -55,6 +55,23 @@ describe('searchRouteProps (#350)', () => {
     });
   });
 
+  describe('listing type of the path (#519)', () => {
+    const geocode = geocoder([
+      { type: 'city', name: 'Ashburn', address: { city: 'Ashburn', ...VA } },
+    ]);
+
+    it.each([
+      ['/ashburn-va/homes-for-sale', '', 'sale', ''],
+      ['/ashburn-va/homes-for-rent', '', 'rent', ''],
+      ['/ashburn-va/homes-for-sale', 'type=all', undefined, 'type=all'],
+      ['/ashburn-va/homes-for-rent', 'type=all', undefined, 'type=all'],
+    ])('%s?%s selects %s', async (path, query, listingType, placeQuery) => {
+      const result = await props(path, query, geocode);
+      expect(result).toMatchObject({ place: { query: placeQuery } });
+      expect((result as any).place.filters.listingType).toBe(listingType);
+    });
+  });
+
   it('gives the same props for the same URL, so a reload restores the same search', async () => {
     const geocode = geocoder([
       { type: 'city', name: 'Alexandria', address: { city: 'Alexandria', ...VA } },
