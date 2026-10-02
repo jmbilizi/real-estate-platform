@@ -1,10 +1,13 @@
 import type { NeighborhoodRow } from '@cribstop/property-contracts';
 import { NeighborhoodTile, NeighborhoodTileSkeleton } from '@/components/NeighborhoodRow';
-import { RESULTS_GRID_COLUMNS_CLASS } from '@/components/resultsGridColumns';
+import {
+  RESULTS_GRID_COLUMNS_CLASS,
+  RESULTS_GRID_GAP_CLASS,
+} from '@/components/resultsGridColumns';
 import { toNeighborhood } from '@/lib/neighborhoods';
 
-/** Same columns as the listing grid (#517). */
-const GROUP_GRID_CLASS = `grid gap-4 ${RESULTS_GRID_COLUMNS_CLASS}`;
+/** Same columns (#517) and gap (#519) as the listing grid. */
+const GROUP_GRID_CLASS = `grid ${RESULTS_GRID_GAP_CLASS} ${RESULTS_GRID_COLUMNS_CLASS}`;
 
 /** The grid's loading state. Same grid class and tile box as the loaded grid. */
 export function NeighborhoodGroupGridSkeleton({ count = 8 }: { count?: number }) {

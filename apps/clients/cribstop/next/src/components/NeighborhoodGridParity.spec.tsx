@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { getNeighborhoodGroups, searchListings } from '@/lib/api/listings';
 import { aListingCardRow } from '@/test/fixtures';
-import { RESULTS_GRID_COLUMNS_CLASS } from './resultsGridColumns';
+import { RESULTS_GRID_COLUMNS_CLASS, RESULTS_GRID_GAP_CLASS } from './resultsGridColumns';
 import { NeighborhoodGroupGridSkeleton } from './NeighborhoodGroupGrid';
 import SearchExperience from './SearchExperience';
 
@@ -33,6 +33,9 @@ jest.mock('@/lib/context', () => ({ useApp: () => mockAppContext }));
 const columnsOf = (el: Element | null) =>
   (el?.className ?? '').split(' ').filter((c) => /grid-cols-/.test(c));
 const SHARED = RESULTS_GRID_COLUMNS_CLASS.split(' ');
+const gapOf = (el: Element | null) =>
+  (el?.className ?? '').split(' ').filter((c) => /^gap-/.test(c));
+const SHARED_GAP = RESULTS_GRID_GAP_CLASS.split(' ');
 
 // The first render of SearchExperience compiles a large import graph.
 jest.setTimeout(30000);
@@ -77,10 +80,14 @@ describe('results grid parity between neighborhood and listing cards (#517)', ()
     fireEvent.click(screen.getByRole('option', { name: 'Neighborhood' }));
     const hoodGrid = await screen.findByTestId('neighborhood-group-grid');
     expect(columnsOf(hoodGrid)).toEqual(SHARED);
+    expect(gapOf(listingGrid)).toEqual(SHARED_GAP);
+    expect(gapOf(hoodGrid)).toEqual(SHARED_GAP);
   });
 
   it('gives the neighborhood skeleton the shared columns', () => {
     render(<NeighborhoodGroupGridSkeleton />);
-    expect(columnsOf(screen.getByTestId('neighborhood-group-skeleton'))).toEqual(SHARED);
+    const skeleton = screen.getByTestId('neighborhood-group-skeleton');
+    expect(columnsOf(skeleton)).toEqual(SHARED);
+    expect(gapOf(skeleton)).toEqual(SHARED_GAP);
   });
 });

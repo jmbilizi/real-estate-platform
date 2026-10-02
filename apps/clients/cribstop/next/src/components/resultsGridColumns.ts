@@ -3,3 +3,6 @@
  * import this, so a neighborhood card and a listing card show the same cards per row.
  */
 export const RESULTS_GRID_COLUMNS_CLASS = 'grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3';
+
+/** Gap of the same grids (#519). Both grids import it, so card spacing matches. */
+export const RESULTS_GRID_GAP_CLASS = 'gap-8 gap-y-12';

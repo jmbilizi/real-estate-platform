@@ -15,7 +15,10 @@ import ToolbarSelect, {
   type ToolbarOption,
 } from '@/components/ToolbarSelect';
 import ResultsPager from '@/components/ResultsPager';
-import { RESULTS_GRID_COLUMNS_CLASS } from '@/components/resultsGridColumns';
+import {
+  RESULTS_GRID_COLUMNS_CLASS,
+  RESULTS_GRID_GAP_CLASS,
+} from '@/components/resultsGridColumns';
 import NeighborhoodGroupGrid, {
   NeighborhoodGroupGridSkeleton,
 } from '@/components/NeighborhoodGroupGrid';
@@ -881,7 +884,7 @@ export default function SearchExperience({
             ) : isLoading ? (
               <ListingGridSkeleton
                 count={6}
-                className={`gap-x-8 gap-y-12 ${RESULTS_GRID_COLUMNS_CLASS}`}
+                className={`${RESULTS_GRID_GAP_CLASS} ${RESULTS_GRID_COLUMNS_CLASS}`}
               />
             ) : isError ? (
               /*
@@ -906,7 +909,7 @@ export default function SearchExperience({
               <EmptyState activeFilterCount={countActiveFilters(filters)} onClear={clearFilters} />
             ) : (
               <>
-                <div className={`grid gap-8 gap-y-12 ${RESULTS_GRID_COLUMNS_CLASS}`}>
+                <div className={`grid ${RESULTS_GRID_GAP_CLASS} ${RESULTS_GRID_COLUMNS_CLASS}`}>
                   {results.map((l) => (
                     <div
                       key={l.id}
