@@ -173,6 +173,9 @@ jobs:
               'OnMarketTimestamp',
               'StatusChangeTimestamp',
               'MajorChangeTimestamp',
+              'MajorChangeType',
+              'OriginalEntryTimestamp',
+              'DaysOnMarketIncrementTimestamp',
               'ModificationTimestamp',
             ];
             const select = fields.join(',');
@@ -221,6 +224,119 @@ jobs:
             console.log('\nFirst 5 records (key fields only):');
             for (const rec of sample) {
               console.log(JSON.stringify(rec));
+            }
+
+            await probeNewListings(serviceRoot, token);
+          }
+
+          // #542: do direct new listings carry a real on-market instant? Aggregates and
+          // ListingKey suffixes only. No address, agent or full key is ever printed.
+          const NY = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'America/New_York',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hourCycle: 'h23',
+          });
+          function nyParts(iso) {
+            if (!iso) return null;
+            const d = new Date(iso);
+            if (Number.isNaN(d.getTime())) return null;
+            const p = Object.fromEntries(NY.formatToParts(d).map((x) => [x.type, x.value]));
+            return {
+              date: `${p.year}-${p.month}-${p.day}`,
+              midnight: p.hour === '00' && p.minute === '00' && p.second === '00',
+            };
+          }
+          const pct = (n, d) => (d ? ((n / d) * 100).toFixed(1) : '0.0') + '%';
+
+          async function probeNewListings(serviceRoot, token) {
+            const today = nyParts(new Date().toISOString()).date;
+            const fields = [
+              'ListingKey',
+              'MLSListDate',
+              'ExpectedOnMarketDate',
+              'MajorChangeType',
+              'MajorChangeTimestamp',
+              'StatusChangeTimestamp',
+              'OriginalEntryTimestamp',
+              'DaysOnMarketIncrementTimestamp',
+            ];
+            const rows = [];
+            for (let page = 0; page < 15; page += 1) {
+              const url =
+                `${serviceRoot}/BrightProperties?$select=${fields.join(',')}` +
+                `&$filter=StandardStatus eq 'Active' and MLSListDate eq ${today}` +
+                `&$orderby=ListingKey&$top=200&$skip=${page * 200}`;
+              const res = await fetch(url, {
+                headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+              });
+              if (!res.ok) {
+                const body = await res.text();
+                console.log(`New-listing page ${page} failed: HTTP ${res.status} ${body.slice(0, 200)}`);
+                break;
+              }
+              const batch = (await res.json()).value || [];
+              rows.push(...batch);
+              if (batch.length < 200) break;
+            }
+            const direct = rows.filter((r) => !r.ExpectedOnMarketDate);
+            console.log(`\n--- New listings, NY date ${today} ---`);
+            console.log(`Active with MLSListDate = today: ${rows.length}`);
+            console.log(`Of those with no ExpectedOnMarketDate (no Coming Soon history): ${direct.length}`);
+
+            const types = {};
+            for (const r of direct) {
+              const k = r.MajorChangeType == null || r.MajorChangeType === '' ? '<null>' : r.MajorChangeType;
+              types[k] = (types[k] || 0) + 1;
+            }
+            console.log('MajorChangeType values (count):');
+            for (const [k, v] of Object.entries(types).sort((a, b) => b[1] - a[1])) {
+              console.log(`  ${k}: ${v}`);
+            }
+
+            let mctFilled = 0;
+            let mctSameDayReal = 0;
+            let sctFilled = 0;
+            let sctMidnight = 0;
+            let oetFilled = 0;
+            let domFilled = 0;
+            for (const r of direct) {
+              const mct = nyParts(r.MajorChangeTimestamp);
+              if (mct) {
+                mctFilled += 1;
+                if (mct.date === today && !mct.midnight) mctSameDayReal += 1;
+              }
+              const sct = nyParts(r.StatusChangeTimestamp);
+              if (sct) {
+                sctFilled += 1;
+                if (sct.midnight) sctMidnight += 1;
+              }
+              if (r.OriginalEntryTimestamp) oetFilled += 1;
+              if (r.DaysOnMarketIncrementTimestamp) domFilled += 1;
+            }
+            const n = direct.length;
+            console.log(`MajorChangeTimestamp filled: ${mctFilled}/${n} (${pct(mctFilled, n)})`);
+            console.log(`MajorChangeTimestamp non-midnight, same NY date: ${mctSameDayReal}/${n} (${pct(mctSameDayReal, n)})`);
+            console.log(`StatusChangeTimestamp at exact NY midnight: ${sctMidnight}/${sctFilled} filled (${pct(sctMidnight, sctFilled)})`);
+            console.log(`OriginalEntryTimestamp filled: ${oetFilled}/${n} (${pct(oetFilled, n)})`);
+            console.log(`DaysOnMarketIncrementTimestamp filled: ${domFilled}/${n} (${pct(domFilled, n)})`);
+
+            console.log('5 redacted examples:');
+            for (const r of direct.slice(0, 5)) {
+              console.log(
+                JSON.stringify({
+                  key: `…${String(r.ListingKey).slice(-4)}`,
+                  MajorChangeType: r.MajorChangeType ?? null,
+                  MajorChangeTimestamp: r.MajorChangeTimestamp ?? null,
+                  StatusChangeTimestamp: r.StatusChangeTimestamp ?? null,
+                  OriginalEntryTimestamp: r.OriginalEntryTimestamp ?? null,
+                  DaysOnMarketIncrementTimestamp: r.DaysOnMarketIncrementTimestamp ?? null,
+                }),
+              );
             }
           }
 
