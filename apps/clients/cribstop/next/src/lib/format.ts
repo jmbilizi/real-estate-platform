@@ -86,6 +86,25 @@ function preciseListingAge(listedAtPrecise: string | null, now: number): Listing
 }
 
 /**
+ * #542. Whole calendar days from the MLS list date to today in the property's time zone.
+ * `listedAt` is a date-only MLS value widened to midnight UTC, so its UTC date is the original
+ * list date. Counting 24-hour periods read "1 day ago" from 8pm Eastern on the list date.
+ * Calendar math also keeps a DST change day from shifting the count.
+ */
+function calendarDaysSince(listed: Date, now: number): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: PROPERTY_TIME_ZONE,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  }).formatToParts(new Date(now));
+  const part = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  const today = Date.UTC(part('year'), part('month') - 1, part('day'));
+  const listedDay = Date.UTC(listed.getUTCFullYear(), listed.getUTCMonth(), listed.getUTCDate());
+  return Math.max(0, Math.round((today - listedDay) / 86_400_000));
+}
+
+/**
  * #542. The one rule set behind both time-on-market strings (footer and new-listing badge).
  * Precise instant first, then whole elapsed days from `listedAt`. `null` when neither is usable.
  */
@@ -106,7 +125,7 @@ export function listingAge(
   if (Number.isNaN(listedAtMs)) {
     return null;
   }
-  return { unit: 'day', value: Math.max(0, Math.floor((now - listedAtMs) / 86_400_000)) };
+  return { unit: 'day', value: calendarDaysSince(new Date(listedAtMs), now) };
 }
 
 /** #542. A listing under this many days old gets the new-listing badge, not the footer time. */

@@ -1059,28 +1059,39 @@ describe('new listing badge (#542)', () => {
     expect(stack.children[1].textContent).toBe('Price reduced');
   });
 
-  describe('New York day boundaries', () => {
-    // 2026-10-15T00:00 in New York (EDT, UTC-4).
-    const listedAt = '2026-10-15T04:00:00.000Z';
-
-    it('still reads Today at 23:59 New York time', () => {
-      renderAt('2026-10-16T03:59:00.000Z', { listedAt, listedAtPrecise: null });
-      expect(badge()?.textContent).toBe('New · Today');
-    });
-
-    it('reads 1 day ago at 00:00 the next New York day', () => {
-      renderAt('2026-10-16T04:00:00.000Z', { listedAt, listedAtPrecise: null });
-      expect(badge()?.textContent).toBe('New · 1 day ago');
-    });
-
-    it('reads 6 days ago at 23:59 on the sixth day', () => {
-      renderAt('2026-10-22T03:59:00.000Z', { listedAt, listedAtPrecise: null });
-      expect(badge()?.textContent).toBe('New · 6 days ago');
-    });
-
-    it('drops the badge at 00:00 on the seventh day', () => {
-      renderAt('2026-10-22T04:00:00.000Z', { listedAt, listedAtPrecise: null });
-      expect(badge()).toBeNull();
+  // `listedAt` is a date-only MLS value at midnight UTC. Days count in New York calendar days.
+  describe('New York calendar days, date-only listedAt at midnight UTC', () => {
+    it.each([
+      ['7:59pm Eastern on the list date', '2026-10-15', '2026-10-15T23:59:00.000Z', 'New · Today'],
+      ['8:01pm Eastern on the list date', '2026-10-15', '2026-10-16T00:01:00.000Z', 'New · Today'],
+      ['11:59pm Eastern on the list date', '2026-10-15', '2026-10-16T03:59:00.000Z', 'New · Today'],
+      ['12:01am Eastern the next day', '2026-10-15', '2026-10-16T04:01:00.000Z', 'New · 1 day ago'],
+      ['11:59pm Eastern on day 6', '2026-10-15', '2026-10-22T03:59:00.000Z', 'New · 6 days ago'],
+      ['12:01am Eastern on day 7', '2026-10-15', '2026-10-22T04:01:00.000Z', null],
+      // Fall back, 2026-11-01: Eastern leaves EDT at 2am, so the day has 25 hours.
+      ['11:30pm EST on the fall-back day', '2026-11-01', '2026-11-02T04:30:00.000Z', 'New · Today'],
+      [
+        '12:30am EST after the fall-back day',
+        '2026-11-01',
+        '2026-11-02T05:30:00.000Z',
+        'New · 1 day ago',
+      ],
+      // Spring forward, 2026-03-08: Eastern enters EDT at 2am, so the day has 23 hours.
+      [
+        '11:59pm EDT on the spring-forward day',
+        '2026-03-08',
+        '2026-03-09T03:59:00.000Z',
+        'New · Today',
+      ],
+      [
+        '12:01am EDT after the spring-forward day',
+        '2026-03-08',
+        '2026-03-09T04:01:00.000Z',
+        'New · 1 day ago',
+      ],
+    ])('%s', (_label, listDate, now, expected) => {
+      renderAt(now, { listedAt: `${listDate}T00:00:00.000Z`, listedAtPrecise: null });
+      expect(badge()?.textContent ?? null).toBe(expected);
     });
   });
 });
