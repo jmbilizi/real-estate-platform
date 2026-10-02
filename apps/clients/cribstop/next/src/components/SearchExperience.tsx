@@ -15,6 +15,7 @@ import ToolbarSelect, {
   type ToolbarOption,
 } from '@/components/ToolbarSelect';
 import ResultsPager from '@/components/ResultsPager';
+import { RESULTS_GRID_COLUMNS_CLASS } from '@/components/resultsGridColumns';
 import NeighborhoodGroupGrid, {
   NeighborhoodGroupGridSkeleton,
 } from '@/components/NeighborhoodGroupGrid';
@@ -878,7 +879,10 @@ export default function SearchExperience({
                 </>
               )
             ) : isLoading ? (
-              <ListingGridSkeleton count={6} />
+              <ListingGridSkeleton
+                count={6}
+                className={`gap-x-8 gap-y-12 ${RESULTS_GRID_COLUMNS_CLASS}`}
+              />
             ) : isError ? (
               /*
                * A failed search is not "no homes match". The API rejects some filter combinations
@@ -902,7 +906,7 @@ export default function SearchExperience({
               <EmptyState activeFilterCount={countActiveFilters(filters)} onClear={clearFilters} />
             ) : (
               <>
-                <div className="grid gap-8 gap-y-12 grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3">
+                <div className={`grid gap-8 gap-y-12 ${RESULTS_GRID_COLUMNS_CLASS}`}>
                   {results.map((l) => (
                     <div
                       key={l.id}
