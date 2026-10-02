@@ -155,13 +155,16 @@ export function SimilarHomesSkeleton() {
   );
 }
 
-export function ListingGridSkeleton({ count = 8 }: { count?: number }) {
+export function ListingGridSkeleton({
+  count = 8,
+  className = 'grid-cols-2 gap-x-4 gap-y-6 layout:grid-cols-3',
+}: {
+  count?: number;
+  /** Replaces the default columns and gaps. */
+  className?: string;
+}) {
   return (
-    <div
-      className="grid grid-cols-2 gap-x-4 gap-y-6 layout:grid-cols-3"
-      role="status"
-      aria-label="Loading listings"
-    >
+    <div className={`grid ${className}`} role="status" aria-label="Loading listings">
       {Array.from({ length: count }, (_, i) => (
         <ListingCardSkeleton key={i} />
       ))}
