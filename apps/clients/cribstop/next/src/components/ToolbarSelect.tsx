@@ -6,9 +6,9 @@ export interface ToolbarOption<T extends string> {
   label: string;
 }
 
-/** The one button style for Filters, Group by and Sort in the results toolbar (#502). */
+/** The one button style for Filters, Group and Sort in the results toolbar (#502). */
 export const TOOLBAR_BUTTON_CLASS =
-  'min-h-11 min-w-11 justify-center bg-transparent px-2 py-0.5 text-sm font-semibold transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 cursor-pointer text-ink flex items-center gap-1.5';
+  'inline-flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-transparent px-2 text-sm font-semibold text-ink transition-colors duration-150 hover:bg-surface-soft active:bg-gray-200 aria-expanded:bg-surface-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 sm:px-3';
 
 /** The visible label of a toolbar button. Below `sm` only the icon shows. */
 export const TOOLBAR_LABEL_CLASS = 'hidden sm:inline';

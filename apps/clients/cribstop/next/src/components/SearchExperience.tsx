@@ -336,7 +336,7 @@ export default function SearchExperience({
   // Filter modal open state
   const [filterOpen, setFilterOpen] = useState(false);
 
-  /** "Group by" and the group order (#502). URL state, but not a filter and never counted as one. */
+  /** "Group" and the group order (#502). URL state, but not a filter and never counted as one. */
   const [group, setGroup] = useState<GroupState>(() =>
     parseGroupState(new URLSearchParams(initialQuery)),
   );
@@ -725,25 +725,59 @@ export default function SearchExperience({
           </div>
 
           {/* Slim sticky bar */}
-          <div className="search-results-bar sticky top-[65px] z-20 bg-white flex flex-wrap items-center justify-between gap-x-3 px-5 py-2 md:px-0 border-b border-surface-border mb-6">
-            <p className="text-sm text-ink-muted" aria-live="polite">
-              {(grouped ? isGroupsLoading : isLoading) ? (
-                <span className="inline-block h-4 w-24 animate-pulse rounded-xs bg-surface-soft align-middle" />
-              ) : (grouped ? isGroupsError : isError) ? (
-                <span className="text-ink">Results unavailable</span>
-              ) : grouped ? (
-                <>
-                  <span className="font-semibold text-ink">{groups.total.toLocaleString()}</span>{' '}
-                  {groups.total === 1 ? 'neighborhood' : 'neighborhoods'}
-                </>
-              ) : (
-                <>
-                  <span className="font-semibold text-ink">{total.toLocaleString()}</span>{' '}
-                  {total === 1 ? 'home' : 'homes'}
-                </>
+          <div className="search-results-bar sticky top-[65px] z-20 bg-white flex items-center justify-between gap-x-2 px-5 py-1 md:px-0 border-b border-surface-border mb-6">
+            <div className="flex min-w-0 flex-1 items-center gap-x-1">
+              {!grouped && filters.neighborhood && (
+                <button
+                  type="button"
+                  data-testid="back-to-neighborhoods"
+                  aria-label="Back to all neighborhoods"
+                  onClick={backToGroups}
+                  className="-ml-2 inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg text-ink transition-colors duration-150 hover:bg-surface-soft active:bg-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
+                >
+                  <svg
+                    width="20"
+                    height="20"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M19 12H5M12 19l-7-7 7-7" />
+                  </svg>
+                </button>
               )}
-            </p>
-            <div className="flex flex-wrap items-center justify-end gap-x-4 relative">
+              <p className="shrink-0 whitespace-nowrap text-sm text-ink-muted" aria-live="polite">
+                {(grouped ? isGroupsLoading : isLoading) ? (
+                  <span className="inline-block h-4 w-24 animate-pulse rounded-xs bg-surface-soft align-middle" />
+                ) : (grouped ? isGroupsError : isError) ? (
+                  <span className="text-ink">Results unavailable</span>
+                ) : grouped ? (
+                  <>
+                    <span className="font-semibold text-ink">{groups.total.toLocaleString()}</span>{' '}
+                    {groups.total === 1 ? 'neighborhood' : 'neighborhoods'}
+                  </>
+                ) : (
+                  <>
+                    <span className="font-semibold text-ink">{total.toLocaleString()}</span>{' '}
+                    {total === 1 ? 'home' : 'homes'}
+                  </>
+                )}
+              </p>
+              {!grouped && filters.neighborhood && (
+                <span
+                  data-testid="drilled-neighborhood-name"
+                  title={filters.neighborhood}
+                  className="min-w-0 truncate text-sm font-semibold text-ink"
+                >
+                  {filters.neighborhood}
+                </span>
+              )}
+            </div>
+            <div className="relative flex shrink-0 items-center justify-end gap-x-0.5 sm:gap-x-1">
               <button
                 onClick={() => setFilterOpen(true)}
                 className={TOOLBAR_BUTTON_CLASS}
@@ -776,7 +810,7 @@ export default function SearchExperience({
                 )}
               </button>
               <ToolbarSelect<GroupBy | 'none'>
-                label="Group by"
+                label="Group"
                 testId="group-by-control"
                 value={group.groupBy ?? 'none'}
                 options={GROUP_BY_OPTIONS}
@@ -829,17 +863,6 @@ export default function SearchExperience({
           </div>
 
           <div className="px-5 pb-10 md:px-0 md:pb-0">
-            {!grouped && filters.neighborhood && (
-              <button
-                type="button"
-                data-testid="back-to-neighborhoods"
-                onClick={backToGroups}
-                className="mb-4 inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-              >
-                <span aria-hidden="true">&larr;</span>
-                All neighborhoods
-              </button>
-            )}
             {grouped ? (
               isGroupsLoading ? (
                 <NeighborhoodGroupGridSkeleton />
@@ -859,7 +882,7 @@ export default function SearchExperience({
                   <p className="font-display text-xl font-bold">No neighborhoods match</p>
                   <p className="mt-1 text-sm text-ink-muted">
                     Your search ran and found no neighborhoods for these filters. Try removing a
-                    filter or set Group by to None to see the homes.
+                    filter or set Group to None to see the homes.
                   </p>
                 </div>
               ) : (
