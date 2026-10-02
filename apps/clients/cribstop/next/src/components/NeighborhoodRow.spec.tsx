@@ -1,9 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import NeighborhoodRow, {
-  type Neighborhood,
-  NeighborhoodTile,
-  NeighborhoodTileSkeleton,
-} from './NeighborhoodRow';
+import NeighborhoodRow, { type Neighborhood } from './NeighborhoodRow';
 
 const NEIGHBORHOODS: Neighborhood[] = [
   { name: 'Columbia Heights', city: 'Washington', state: 'DC', sale: 207, rent: 93 },
@@ -257,50 +253,5 @@ describe('NeighborhoodRow (#393)', () => {
     // Same photo area as a real tile, so the row height holds (#492).
     expect(container.querySelector('.aspect-\\[10\\/7\\]')).not.toBeNull();
     expect(screen.getByText('Explore neighborhoods')).toBeInTheDocument();
-  });
-});
-
-/** #520: below `sm` a grid tile is one row. The carousel tile keeps the vertical layout. */
-describe('compact grid tile below sm (#520)', () => {
-  const tile = (el: HTMLElement) => el.closest('.group') as HTMLElement;
-
-  it('lays the grid tile out as a row below sm and a column from sm', () => {
-    render(<NeighborhoodTile n={NEIGHBORHOODS[0]} grid />);
-    const cls = tile(screen.getByText('Columbia Heights')).className.split(' ');
-    expect(cls).toEqual(expect.arrayContaining(['flex-row', 'sm:flex-col', 'text-left']));
-    expect(cls).not.toContain('flex-col');
-  });
-
-  it('sizes the photo stack 112px wide below sm and restores the tile area from sm', () => {
-    render(<NeighborhoodTile n={NEIGHBORHOODS[0]} grid />);
-    const cls = screen.getByTestId('neighborhood-photo-placeholder').className.split(' ');
-    expect(cls).toEqual(
-      expect.arrayContaining(['w-28', 'h-24', 'sm:w-full', 'sm:aspect-[10/7]', 'sm:h-auto']),
-    );
-  });
-
-  it('keeps every link at 44px or taller', () => {
-    render(<NeighborhoodTile n={NEIGHBORHOODS[0]} grid />);
-    for (const name of [/for sale in/, /for rent in/]) {
-      expect(screen.getByLabelText(name).className).toContain('min-h-11');
-    }
-  });
-
-  it('keeps the carousel tile vertical', () => {
-    render(<NeighborhoodTile n={NEIGHBORHOODS[0]} />);
-    const el = tile(screen.getByText('Columbia Heights'));
-    expect(el.className).toContain('flex-col');
-    expect(el.className).not.toContain('flex-row');
-    expect(screen.getByTestId('neighborhood-photo-placeholder').className).toContain(
-      'aspect-[10/7] w-full',
-    );
-  });
-
-  it('gives the grid skeleton the compact shape', () => {
-    const { container } = render(<NeighborhoodTileSkeleton grid />);
-    const root = container.firstElementChild as HTMLElement;
-    expect(root.className).toContain('flex-row');
-    expect(root.className).toContain('sm:flex-col');
-    expect(container.querySelector('.w-28.h-24')).not.toBeNull();
   });
 });

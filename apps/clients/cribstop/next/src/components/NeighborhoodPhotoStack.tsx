@@ -36,11 +36,7 @@ const LAYOUTS: Record<1 | 2 | 3, { size: number; spots: Spot[] }> = {
 };
 
 /** The photo area every tile reserves, for the stack, its placeholder and the skeleton alike. */
-export const PHOTO_AREA_CLASS = 'relative mb-3 aspect-[10/7] w-full';
-
-/** In the one-column grid below `sm` (#519) the stack sits beside the text, 112px wide. */
-export const COMPACT_PHOTO_AREA_CLASS =
-  'relative h-24 w-28 shrink-0 sm:mb-3 sm:aspect-[10/7] sm:h-auto sm:w-full';
+export const PHOTO_AREA_CLASS = 'relative mx-auto mb-3 aspect-[10/7] w-full max-w-64';
 
 /**
  * Overlapped, slightly rotated photos for an "Explore neighborhoods" tile (#487). Every photo is a
@@ -51,15 +47,8 @@ export const COMPACT_PHOTO_AREA_CLASS =
  * `ListingImage`: listing photos come from arbitrary hosts, and the MLS mark in a photo's corner
  * must not be cropped.
  */
-export default function NeighborhoodPhotoStack({
-  photos,
-  compact = false,
-}: {
-  photos: NeighborhoodPreviewPhoto[];
-  /** Use the compact area below `sm` (#519). */
-  compact?: boolean;
-}) {
-  const areaClass = compact ? COMPACT_PHOTO_AREA_CLASS : PHOTO_AREA_CLASS;
+export default function NeighborhoodPhotoStack({ photos }: { photos: NeighborhoodPreviewPhoto[] }) {
+  const areaClass = PHOTO_AREA_CLASS;
   const [failed, setFailed] = useState<ReadonlySet<string>>(new Set());
   const rootRef = useRef<HTMLDivElement>(null);
 

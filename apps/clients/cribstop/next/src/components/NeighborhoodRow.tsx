@@ -1,212 +1,23 @@
 'use client';
 
-import type { MouseEvent, ReactNode } from 'react';
 import Link from 'next/link';
-import { type NeighborhoodPreviewPhoto, searchPath } from '@cribstop/property-contracts';
 import {
   CAROUSEL_ITEM_CLASS,
   CAROUSEL_SCROLLER_CLASS,
   CarouselArrows,
   useCarouselScroll,
 } from '@/components/CarouselShell';
-import { CARD_ACTIVE_CLASS, CARD_HOVER_CLASS } from '@/components/cardHover';
-import NeighborhoodPhotoStack, {
-  COMPACT_PHOTO_AREA_CLASS,
-  PHOTO_AREA_CLASS,
-} from '@/components/NeighborhoodPhotoStack';
-import { searchTargetUrl } from '@/lib/search-place';
+import NeighborhoodCard, {
+  type Neighborhood,
+  NeighborhoodCardSkeleton,
+  SeeAllCard,
+  seeAllPhotos,
+} from '@/components/NeighborhoodCard';
 
-/** One "Explore neighborhoods" tile (#393): name, place and counts, sourced from real data. */
-export interface Neighborhood {
-  name: string;
-  city: string;
-  state: string;
-  /** Matching for-sale count. */
-  sale: number;
-  /** Matching for-rent count. */
-  rent: number;
-  /** Live listing photos from the tile's own search results (#486), 0 to 5. */
-  previewPhotos?: NeighborhoodPreviewPhoto[];
-}
+export type { Neighborhood };
 
-/** In a grid (#493) the cell sets the width, so the tile fills it. */
-const GRID_TILE_CLASS = 'w-full min-w-0';
-/** In a grid, below `sm` the tile is one row (#519): photos left, text right. */
-const GRID_TILE_LAYOUT_CLASS = 'flex-row gap-3 text-left sm:flex-col sm:gap-0 sm:text-center';
-const GRID_TEXT_CLASS = 'min-w-0 flex-1 sm:w-full sm:flex-none';
-
-/** The text column of a grid tile (#519). The carousel tile has no wrapper. */
-function TileText({ grid, children }: { grid: boolean; children: ReactNode }) {
-  return grid ? <div className={GRID_TEXT_CLASS}>{children}</div> : <>{children}</>;
-}
-const ROW_TILE_CLASS = `${CAROUSEL_ITEM_CLASS} min-w-0`;
-
-const COUNT_LINK_BASE =
-  'flex min-h-11 items-center whitespace-nowrap rounded px-0 text-[11px] font-semibold sm:text-xs leading-tight text-ink-muted hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink';
-const COUNT_LINK_CLASS = `${COUNT_LINK_BASE} flex-1 justify-center text-center`;
-/** Below `sm` the links sit left, each as wide as its text (#519). */
-const GRID_COUNT_LINK_CLASS = `${COUNT_LINK_BASE} justify-start pr-4 sm:flex-1 sm:justify-center sm:pr-0 sm:text-center`;
-
-/**
- * Tile (#492). The main link is the name, stretched over the whole tile by a pseudo-element. The
- * count links are siblings above it (`z-10`), never nested inside it. Each count link is
- * `min-h-11` and takes its own half of the row, so the two hit areas never overlap.
- */
-export function NeighborhoodTile({
-  n,
-  grid = false,
-  hrefFor,
-  onSelect,
-  sync,
-}: {
-  n: Neighborhood;
-  grid?: boolean;
-  /** Links the tile to its map marker (#503). Hover and focus on the tile report its key. */
-  sync?: { key: string; active: boolean; onActive: (key: string | null) => void };
-  /** Replaces the target of the name link (no type) and of each count link (#502). */
-  hrefFor?: (listingType?: 'sale' | 'rent') => string;
-  /** Runs on a plain click of those links, in place of the navigation (#502). */
-  onSelect?: (listingType?: 'sale' | 'rent') => void;
-}) {
-  const countLinkClass = grid ? GRID_COUNT_LINK_CLASS : COUNT_LINK_CLASS;
-  const place = { kind: 'neighborhood', name: n.name, city: n.city, state: n.state } as const;
-  const href = hrefFor ? hrefFor() : searchTargetUrl({ kind: 'place', place }, 'all');
-  const onClickFor = (listingType?: 'sale' | 'rent') =>
-    onSelect
-      ? (e: MouseEvent) => {
-          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
-          e.preventDefault();
-          onSelect(listingType);
-        }
-      : undefined;
-
-  return (
-    <div
-      data-neighborhood-key={sync?.key}
-      data-active={sync?.active ? 'true' : undefined}
-      onMouseEnter={sync && (() => sync.onActive(sync.key))}
-      onMouseLeave={sync && (() => sync.onActive(null))}
-      onFocus={sync && (() => sync.onActive(sync.key))}
-      onBlur={sync && (() => sync.onActive(null))}
-      className={`group relative flex items-center rounded-md border bg-white px-2 py-3 sm:px-3 ${CARD_HOVER_CLASS} ${sync?.active ? CARD_ACTIVE_CLASS : 'border-surface-border'} ${grid ? `${GRID_TILE_CLASS} ${GRID_TILE_LAYOUT_CLASS}` : `flex-col text-center ${ROW_TILE_CLASS}`}`}
-    >
-      <NeighborhoodPhotoStack photos={n.previewPhotos ?? []} compact={grid} />
-      <TileText grid={grid}>
-        <h3 className="w-full truncate font-display text-base font-bold leading-6 text-ink">
-          <Link
-            href={href}
-            onClick={onClickFor()}
-            className="after:absolute after:inset-0 after:rounded-md after:content-[''] group-hover:underline focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ink"
-          >
-            {n.name}
-          </Link>
-        </h3>
-        <p className="w-full truncate text-sm leading-5 text-ink-muted">
-          {n.city}, {n.state}
-        </p>
-        {/* A zero count renders nothing. The row's request needs at least one matching listing
-         *  (`minCount`), so a tile never has two zero counts. */}
-        <div className={`relative z-10 mt-1 flex w-full ${grid ? 'flex-wrap sm:flex-nowrap' : ''}`}>
-          {n.sale > 0 && (
-            <Link
-              href={hrefFor ? hrefFor('sale') : searchPath(place, 'homes-for-sale')}
-              onClick={onClickFor('sale')}
-              aria-label={`${n.sale.toLocaleString()} for sale in ${n.name}`}
-              className={countLinkClass}
-            >
-              {n.sale.toLocaleString()} for sale
-            </Link>
-          )}
-          {n.rent > 0 && (
-            <Link
-              href={hrefFor ? hrefFor('rent') : searchPath(place, 'homes-for-rent')}
-              onClick={onClickFor('rent')}
-              aria-label={`${n.rent.toLocaleString()} for rent in ${n.name}`}
-              className={countLinkClass}
-            >
-              {n.rent.toLocaleString()} for rent
-            </Link>
-          )}
-        </div>
-      </TileText>
-    </div>
-  );
-}
-
-/** Most photos the "See all" tile may draw from. The stack shows 3, the rest replace failed loads. */
-const SEE_ALL_PHOTO_POOL = 5;
-
-/**
- * Photos for the "See all" tile (#495): one per tile first, then the extras. Every photo comes
- * from a tile already in the row, so each is a listing in a target the row links to.
- */
-export function seeAllPhotos(neighborhoods: Neighborhood[]): NeighborhoodPreviewPhoto[] {
-  const lists = neighborhoods.map((n) => n.previewPhotos ?? []);
-  const ordered = [...lists.map((l) => l[0]), ...lists.flatMap((l) => l.slice(1))];
-  const seen = new Set<string>();
-  const photos: NeighborhoodPreviewPhoto[] = [];
-  for (const photo of ordered) {
-    if (!photo || seen.has(photo.url)) continue;
-    seen.add(photo.url);
-    photos.push(photo);
-    if (photos.length === SEE_ALL_PHOTO_POOL) break;
-  }
-  return photos;
-}
-
-/**
- * Trailing tile (#495). Same box and width as `NeighborhoodTile`. The whole tile is one link. With
- * no photo the stack shows its placeholder.
- */
-export function SeeAllTile({
-  href,
-  photos,
-  title,
-}: {
-  href: string;
-  photos: NeighborhoodPreviewPhoto[];
-  title: string;
-}) {
-  return (
-    <Link
-      href={href}
-      aria-label={`${title} — see all`}
-      data-testid="neighborhood-see-all-tile"
-      className={`group flex min-h-11 flex-col items-center rounded-md border border-surface-border bg-surface-alt/40 px-2 py-3 sm:px-3 text-center ${CARD_HOVER_CLASS} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink [scroll-snap-stop:always] ${ROW_TILE_CLASS}`}
-    >
-      <NeighborhoodPhotoStack photos={photos} />
-      <span className="w-full truncate font-display text-base font-bold leading-6 text-ink group-hover:underline">
-        See all
-      </span>
-    </Link>
-  );
-}
-
-/** Same box structure as `NeighborhoodTile`, so the row never shifts height once data lands. */
-export function NeighborhoodTileSkeleton({ grid = false }: { grid?: boolean }) {
-  const skeletonJustify = grid ? 'justify-start sm:justify-center' : 'justify-center';
-  return (
-    <div
-      aria-hidden="true"
-      className={`flex items-center rounded-md border border-surface-border bg-white px-2 py-3 sm:px-3 ${grid ? `${GRID_TILE_CLASS} ${GRID_TILE_LAYOUT_CLASS}` : `flex-col ${ROW_TILE_CLASS}`}`}
-    >
-      <div
-        className={`${grid ? COMPACT_PHOTO_AREA_CLASS : PHOTO_AREA_CLASS} rounded bg-surface-soft skeleton-fill`}
-      />
-      <TileText grid={grid}>
-        <div className={`flex h-6 w-full items-center ${skeletonJustify}`}>
-          <div className="h-4 w-3/4 rounded bg-surface-soft skeleton-fill" />
-        </div>
-        <div className={`flex h-5 w-full items-center ${skeletonJustify}`}>
-          <div className="h-3 w-1/2 rounded bg-surface-soft skeleton-fill" />
-        </div>
-        <div className={`mt-1 flex min-h-11 w-full items-center ${skeletonJustify}`}>
-          <div className="h-3 w-2/3 rounded bg-surface-soft skeleton-fill" />
-        </div>
-      </TileText>
-    </div>
-  );
-}
+/** The container, not the card, sets the card width in the carousel (#534). */
+const ROW_ITEM_CLASS = `${CAROUSEL_ITEM_CLASS} min-w-0 flex`;
 
 interface Props {
   title: string;
@@ -298,14 +109,22 @@ export default function NeighborhoodRow({
         {loading ? (
           // With `href`, one more skeleton stands in for the "See all" tile.
           Array.from({ length: href ? max + 1 : max }, (_, i) => (
-            <NeighborhoodTileSkeleton key={i} />
+            <div key={i} className={ROW_ITEM_CLASS}>
+              <NeighborhoodCardSkeleton />
+            </div>
           ))
         ) : (
           <>
             {visible.map((n) => (
-              <NeighborhoodTile key={`${n.name}-${n.city}-${n.state}`} n={n} />
+              <div key={`${n.name}-${n.city}-${n.state}`} className={ROW_ITEM_CLASS}>
+                <NeighborhoodCard n={n} />
+              </div>
             ))}
-            {href && <SeeAllTile href={href} photos={seeAllPhotos(visible)} title={title} />}
+            {href && (
+              <div className={ROW_ITEM_CLASS}>
+                <SeeAllCard href={href} photos={seeAllPhotos(visible)} title={title} />
+              </div>
+            )}
           </>
         )}
       </div>

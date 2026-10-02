@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { aListingCardRow } from '@/test/fixtures';
 import { CARD_ACTIVE_CLASS, CARD_HOVER_CLASS } from './cardHover';
 import ListingCard from './ListingCard';
-import { NeighborhoodTile, SeeAllTile } from './NeighborhoodRow';
+import NeighborhoodCard, { SeeAllCard } from './NeighborhoodCard';
 import { RESULTS_GRID_GAP_CLASS } from './resultsGridColumns';
 
 jest.mock('@/lib/context', () => ({
@@ -28,17 +28,17 @@ describe('shared card hover (#526)', () => {
 
   it('is on the neighborhood card, and the active highlight keeps a dark border', () => {
     const n = { name: 'Petworth', city: 'Washington', state: 'DC', sale: 4, rent: 0 };
-    const { container, rerender } = render(<NeighborhoodTile n={n} />);
+    const { container, rerender } = render(<NeighborhoodCard n={n} />);
     expect(hasHover(container.firstElementChild)).toBe(true);
 
-    rerender(<NeighborhoodTile n={n} sync={{ key: 'k', active: true, onActive: jest.fn() }} />);
+    rerender(<NeighborhoodCard n={n} sync={{ key: 'k', active: true, onActive: jest.fn() }} />);
     const card = container.querySelector('[data-active="true"]');
     expect(hasHover(card)).toBe(true);
     for (const c of CARD_ACTIVE_CLASS.split(' ')) expect(card).toHaveClass(c);
   });
 
   it('is on the See all tile', () => {
-    render(<SeeAllTile href="/x" photos={[]} title="Neighborhoods" />);
+    render(<SeeAllCard href="/x" photos={[]} title="Neighborhoods" />);
 
     expect(hasHover(screen.getByRole('link'))).toBe(true);
   });

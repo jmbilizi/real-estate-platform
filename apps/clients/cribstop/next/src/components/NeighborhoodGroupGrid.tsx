@@ -1,5 +1,5 @@
 import type { NeighborhoodRow } from '@cribstop/property-contracts';
-import { NeighborhoodTile, NeighborhoodTileSkeleton } from '@/components/NeighborhoodRow';
+import NeighborhoodCard, { NeighborhoodCardSkeleton } from '@/components/NeighborhoodCard';
 import {
   RESULTS_GRID_COLUMNS_CLASS,
   RESULTS_GRID_GAP_CLASS,
@@ -14,14 +14,14 @@ export function NeighborhoodGroupGridSkeleton({ count = 8 }: { count?: number })
   return (
     <div className={GROUP_GRID_CLASS} data-testid="neighborhood-group-skeleton" aria-busy="true">
       {Array.from({ length: count }, (_, i) => (
-        <NeighborhoodTileSkeleton key={i} grid />
+        <NeighborhoodCardSkeleton key={i} />
       ))}
     </div>
   );
 }
 
 /**
- * The grouped results (#502): one tile per neighborhood. Each tile shows a name, a place, live
+ * The grouped results (#502): one card per neighborhood. Each card shows a name, a place, live
  * photos and counts. Nothing ranks or describes a neighborhood.
  */
 export default function NeighborhoodGroupGrid({
@@ -42,10 +42,9 @@ export default function NeighborhoodGroupGrid({
   return (
     <div className={GROUP_GRID_CLASS} data-testid="neighborhood-group-grid">
       {rows.map((row) => (
-        <NeighborhoodTile
+        <NeighborhoodCard
           key={row.key}
           n={toNeighborhood(row)}
-          grid
           hrefFor={(type) => hrefFor(row, type)}
           onSelect={(type) => onSelect(row, type)}
           sync={onActive && { key: row.key, active: activeKey === row.key, onActive }}
