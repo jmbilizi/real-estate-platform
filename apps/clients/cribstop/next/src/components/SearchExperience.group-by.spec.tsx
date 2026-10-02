@@ -415,6 +415,28 @@ describe('Group by neighborhood (#502)', () => {
     expect(screen.getByLabelText('Open filters').textContent).toBe('Filters');
   });
 
+  it('keeps type=all through a name click on a city path (#525)', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/bethesda-md/homes-for-sale?type=all&groupBy=neighborhood',
+    );
+    const place = {
+      filters: { city: 'Bethesda', state: 'MD' },
+      label: 'Bethesda, MD',
+      query: 'type=all',
+    };
+    render(<SearchExperience initialQuery="groupBy=neighborhood" place={place} />);
+    fireEvent.click(await screen.findByRole('link', { name: 'Chevy Chase' }));
+    expect(currentParams().get('type')).toBe('all');
+    expect(currentParams().get('neighborhood')).toBe('Chevy Chase');
+    expect(screen.getByLabelText('Open filters').textContent).toBe('Filters');
+    await waitFor(() =>
+      expect(mockedSearch.mock.calls.at(-1)?.[0]).toMatchObject({ neighborhood: 'Chevy Chase' }),
+    );
+    expect(mockedSearch.mock.calls.at(-1)?.[0]).not.toHaveProperty('listingType');
+  });
+
   it('moves to the other search path for a count link on a search path', async () => {
     window.history.replaceState(null, '', '/homes-for-sale?q=Bethesda&groupBy=neighborhood');
     render(
