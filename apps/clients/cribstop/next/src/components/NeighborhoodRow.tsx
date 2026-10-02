@@ -105,7 +105,7 @@ export function NeighborhoodTile({
         </p>
         {/* A zero count renders nothing. The row's request needs at least one matching listing
          *  (`minCount`), so a tile never has two zero counts. */}
-        <div className="relative z-10 mt-1 flex w-full">
+        <div className={`relative z-10 mt-1 flex w-full ${grid ? 'flex-wrap sm:flex-nowrap' : ''}`}>
           {n.sale > 0 && (
             <Link
               href={hrefFor ? hrefFor('sale') : searchPath(place, 'homes-for-sale')}
