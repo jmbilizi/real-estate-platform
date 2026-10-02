@@ -31,8 +31,12 @@ import { useTileFailure, useTileLayerConfig } from '@/components/map-tiles';
 // outlives the render that created it.
 let _openListing: ((id: string) => void) | null = null;
 
-/** Popup width in px. Keep equal to `w-[280px]` on the popup wrapper below. */
-const POPUP_WIDTH = 280;
+/**
+ * Popup width in px. A phone map pane is about 350px tall, so the narrower card keeps the popup
+ * inside it. Keep equal to the wrapper width classes below.
+ */
+const popupWidth = () =>
+  typeof window !== 'undefined' && window.matchMedia('(min-width: 640px)').matches ? 280 : 232;
 const PILL_W = 70;
 const PILL_H = 30;
 
@@ -280,10 +284,13 @@ function ClusteredMarkers({
   const clusterGroupRef = useRef<L.MarkerClusterGroup | null>(null);
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
   const popupRootsRef = useRef<Map<string, Root>>(new Map());
+  const reopenIdRef = useRef<string | null>(null);
 
   // Build / rebuild markers ONLY when the listings array itself changes.
   // Hover state is applied separately below to avoid rebuilding the whole cluster on every hover.
   useEffect(() => {
+    const reopenId = reopenIdRef.current;
+    reopenIdRef.current = null;
     if (clusterGroupRef.current) {
       const oldRoots = popupRootsRef.current;
       popupRootsRef.current = new Map();
@@ -326,7 +333,7 @@ function ClusteredMarkers({
         // The popup is its own React root, so it gets the store that `AppProvider` gives the page.
         root.render(
           <Provider store={store}>
-            <div className="w-[280px] bg-surface p-2">
+            <div className="w-[232px] bg-surface p-2 sm:w-[280px]">
               <ListingCard listing={row} />
             </div>
           </Provider>,
@@ -334,9 +341,12 @@ function ClusteredMarkers({
         popupRootsRef.current.set(l.id, root);
         marker.bindPopup(popupEl, {
           closeButton: false,
-          maxWidth: POPUP_WIDTH,
-          minWidth: POPUP_WIDTH,
+          maxWidth: popupWidth(),
+          minWidth: popupWidth(),
           autoPan: true,
+          // Keep the popup clear of the zoom controls (right) and the notice banner (top).
+          autoPanPaddingTopLeft: L.point(16, 64),
+          autoPanPaddingBottomRight: L.point(72, 16),
         });
       } else {
         marker.on('click', () => _openListing?.(l.id));
@@ -351,8 +361,19 @@ function ClusteredMarkers({
 
     clusterGroupRef.current = group;
     map.addLayer(group);
+    // A pan refetches the viewport pins and rebuilds every marker, which closes the open popup.
+    // Opening a popup can itself pan the map, so reopen the same listing's popup after the rebuild.
+    const reopen = reopenId ? markersRef.current.get(reopenId) : undefined;
+    // `chunkedLoading` adds markers a few at a time, so wait for this one to reach the map.
+    if (reopen) {
+      if (map.hasLayer(reopen)) reopen.openPopup();
+      else reopen.once('add', () => reopen.openPopup());
+    }
 
     return () => {
+      markersRef.current.forEach((m, id) => {
+        if (m.isPopupOpen()) reopenIdRef.current = id;
+      });
       const oldRoots = popupRootsRef.current;
       popupRootsRef.current = new Map();
       setTimeout(() => {
