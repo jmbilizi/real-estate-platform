@@ -1,7 +1,7 @@
 import express, { type Express, type NextFunction, type Request, type Response } from 'express';
 import {
   INTERNAL_ERROR_BODY,
-  MAP_PIN_THRESHOLD_DEFAULT,
+  MAP_PIN_CAP_DEFAULT,
   toOpenApiDocument,
 } from '@cribstop/property-contracts';
 import { getPool } from './db/pool';
@@ -116,8 +116,8 @@ export interface CreateAppOptions {
    */
   galleryLoader?: GalleryLoader;
   addressFetcher?: AddressFetcher;
-  /** Pins above this count in a viewport become clusters (#377). Env: MAP_PIN_THRESHOLD. */
-  mapPinThreshold?: number;
+  /** Most pins one map response carries (#546). Env: MAP_PIN_CAP. */
+  mapPinCap?: number;
   /** The admin sync token (#338). Defaults to reading BRIGHT_ADMIN_TOKEN per request. */
   adminToken?: () => string | undefined;
 }
@@ -184,7 +184,7 @@ export function createApp(options: CreateAppOptions = {}): Express {
       pool,
       galleryLoader,
       addressFetcher,
-      options.mapPinThreshold ?? envInt('MAP_PIN_THRESHOLD', MAP_PIN_THRESHOLD_DEFAULT),
+      options.mapPinCap ?? envInt('MAP_PIN_CAP', MAP_PIN_CAP_DEFAULT),
     ),
   );
   app.use(createInquiriesRouter({ pool, introspection, rateLimiter }));

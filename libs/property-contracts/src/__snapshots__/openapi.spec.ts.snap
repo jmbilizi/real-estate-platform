@@ -922,164 +922,74 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
         "type": "object",
       },
       "MapResponse": {
-        "oneOf": [
-          {
-            "additionalProperties": false,
-            "properties": {
-              "count": {
-                "maximum": 9007199254740991,
-                "minimum": 0,
-                "type": "integer",
-              },
-              "kind": {
-                "enum": [
-                  "pins",
-                ],
-                "type": "string",
-              },
-              "pins": {
-                "items": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "id": {
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
-                      "type": "string",
-                    },
-                    "latitude": {
-                      "type": "number",
-                    },
-                    "listingType": {
-                      "enum": [
-                        "sale",
-                        "rent",
-                        "sold",
-                      ],
-                      "type": "string",
-                    },
-                    "longitude": {
-                      "type": "number",
-                    },
-                    "price": {
-                      "nullable": true,
-                      "type": "number",
-                    },
-                    "status": {
-                      "enum": [
-                        "Active",
-                        "Pending",
-                        "Coming Soon",
-                        "Sold",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "id",
-                    "latitude",
-                    "longitude",
-                    "price",
-                    "status",
-                    "listingType",
-                  ],
-                  "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "pins": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string",
                 },
-                "type": "array",
-              },
-              "sampleCount": {
-                "maximum": 9007199254740991,
-                "minimum": 0,
-                "type": "integer",
-              },
-            },
-            "required": [
-              "kind",
-              "count",
-              "sampleCount",
-              "pins",
-            ],
-            "type": "object",
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "clusters": {
-                "items": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "bounds": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "east": {
-                          "type": "number",
-                        },
-                        "north": {
-                          "type": "number",
-                        },
-                        "south": {
-                          "type": "number",
-                        },
-                        "west": {
-                          "type": "number",
-                        },
-                      },
-                      "required": [
-                        "west",
-                        "south",
-                        "east",
-                        "north",
-                      ],
-                      "type": "object",
-                    },
-                    "count": {
-                      "exclusiveMinimum": true,
-                      "maximum": 9007199254740991,
-                      "minimum": 0,
-                      "type": "integer",
-                    },
-                    "latitude": {
-                      "type": "number",
-                    },
-                    "longitude": {
-                      "type": "number",
-                    },
-                  },
-                  "required": [
-                    "count",
-                    "latitude",
-                    "longitude",
-                    "bounds",
-                  ],
-                  "type": "object",
+                "latitude": {
+                  "type": "number",
                 },
-                "type": "array",
+                "listingType": {
+                  "enum": [
+                    "sale",
+                    "rent",
+                    "sold",
+                  ],
+                  "type": "string",
+                },
+                "longitude": {
+                  "type": "number",
+                },
+                "price": {
+                  "nullable": true,
+                  "type": "number",
+                },
+                "status": {
+                  "enum": [
+                    "Active",
+                    "Pending",
+                    "Coming Soon",
+                    "Sold",
+                  ],
+                  "type": "string",
+                },
               },
-              "count": {
-                "maximum": 9007199254740991,
-                "minimum": 0,
-                "type": "integer",
-              },
-              "kind": {
-                "enum": [
-                  "clusters",
-                ],
-                "type": "string",
-              },
-              "sampleCount": {
-                "maximum": 9007199254740991,
-                "minimum": 0,
-                "type": "integer",
-              },
+              "required": [
+                "id",
+                "latitude",
+                "longitude",
+                "price",
+                "status",
+                "listingType",
+              ],
+              "type": "object",
             },
-            "required": [
-              "kind",
-              "count",
-              "sampleCount",
-              "clusters",
-            ],
-            "type": "object",
+            "type": "array",
           },
+          "sampleCount": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer",
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer",
+          },
+        },
+        "required": [
+          "total",
+          "sampleCount",
+          "pins",
         ],
+        "type": "object",
       },
       "NeighborhoodsResponse": {
         "additionalProperties": false,
@@ -1868,7 +1778,7 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
     },
     "/listings/map": {
       "get": {
-        "description": "Takes the same filters as \`/listings\`, without paging or sort, plus the viewport \`bounds\` and \`zoom\`. The matching set is the search set limited to the viewport. Up to a configured threshold the response is one pin per listing. Above it, the response is grid clusters sized by \`zoom\`. A listing whose street address is withheld has no coordinates, so it is in no pin, no cluster and no \`count\`.",
+        "description": "Takes the same filters as \`/listings\`, without paging or sort, plus the viewport \`bounds\`. The matching set is the search set limited to the viewport. The response is one pin per listing, newest first, up to a cap. \`total\` counts every match in the viewport, so \`total\` above the pin count means the cap applied. The response never holds clusters. A listing whose street address is withheld has no coordinates, so it is in no pin and not in \`total\`.",
         "operationId": "getListingsMap",
         "parameters": [
           {
@@ -2142,16 +2052,6 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
               "type": "string",
             },
           },
-          {
-            "in": "query",
-            "name": "zoom",
-            "required": true,
-            "schema": {
-              "description": "Web-map zoom level, 0 to 22. Sets the cluster cell size.",
-              "pattern": "^(\\d|1\\d|2[0-2])$",
-              "type": "string",
-            },
-          },
         ],
         "responses": {
           "200": {
@@ -2162,7 +2062,7 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
                 },
               },
             },
-            "description": "Pins or clusters for the viewport.",
+            "description": "Pins and the viewport total.",
           },
           "400": {
             "content": {
@@ -2185,7 +2085,7 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
             "description": "Unexpected server error. The body carries no detail by design.",
           },
         },
-        "summary": "Map pins or clusters for a viewport",
+        "summary": "Map pins for a viewport",
       },
     },
     "/listings/meta": {

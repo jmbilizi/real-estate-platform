@@ -257,17 +257,18 @@ export function toOpenApiDocument() {
       '/listings/map': {
         get: {
           operationId: 'getListingsMap',
-          summary: 'Map pins or clusters for a viewport',
+          summary: 'Map pins for a viewport',
           description:
             'Takes the same filters as `/listings`, without paging or sort, plus the viewport ' +
-            '`bounds` and `zoom`. The matching set is the search set limited to the viewport. ' +
-            'Up to a configured threshold the response is one pin per listing. Above it, the ' +
-            'response is grid clusters sized by `zoom`. A listing whose street address is ' +
-            'withheld has no coordinates, so it is in no pin, no cluster and no `count`.',
+            '`bounds`. The matching set is the search set limited to the viewport. The response ' +
+            'is one pin per listing, newest first, up to a cap. `total` counts every match in ' +
+            'the viewport, so `total` above the pin count means the cap applied. The response ' +
+            'never holds clusters. A listing whose street address is withheld has no ' +
+            'coordinates, so it is in no pin and not in `total`.',
           parameters: searchParameters(mapRequestSchema),
           responses: {
             '200': {
-              description: 'Pins or clusters for the viewport.',
+              description: 'Pins and the viewport total.',
               content: {
                 'application/json': { schema: { $ref: '#/components/schemas/MapResponse' } },
               },
