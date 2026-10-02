@@ -559,10 +559,12 @@ export default function SearchExperience({
       window.location.assign(drillHref(row, listingType));
       return;
     }
+    // On a search path the path owns the listing type, so the filters omit it. A direct load of the
+    // same URL then matches this state, including the filter count (#525).
     const fit = usableFitBounds(row);
     setFocus(fit ? { name: row.name, city: row.city, state: row.state, bounds: fit } : null);
     setActiveGroupKey(null);
-    commitView(drillDownFilters(filters, row, listingType), {
+    commitView(drillDownFilters(filters, row, place ? undefined : listingType), {
       ...group,
       groupBy: undefined,
       from: scopeToken(filters, pathType),
@@ -610,7 +612,10 @@ export default function SearchExperience({
       typeof window === 'undefined' ? initialQuery : window.location.search,
     );
     const swapPath = Boolean(place && listingType && pathHoldsType());
-    const params = filtersToSearchParams(drillDownFilters(filters, row, listingType), base);
+    const params = filtersToSearchParams(
+      drillDownFilters(filters, row, place ? undefined : listingType),
+      base,
+    );
     writeGroupState(params, { ...group, groupBy: undefined, from: scopeToken(filters, pathType) });
     if (swapPath) {
       // The new path implies the type, and a `type` override would undo it.
@@ -758,22 +763,34 @@ export default function SearchExperience({
                 ) : grouped ? (
                   <>
                     <span className="font-semibold text-ink">{groups.total.toLocaleString()}</span>{' '}
-                    {groups.total === 1 ? 'neighborhood' : 'neighborhoods'}
+                    {groups.total === 1 ? 'Neighborhood' : 'Neighborhoods'}
                   </>
                 ) : (
                   <>
                     <span className="font-semibold text-ink">{total.toLocaleString()}</span>{' '}
-                    {total === 1 ? 'home' : 'homes'}
+                    {total === 1 ? 'Home' : 'Homes'}
                   </>
                 )}
               </p>
               {!grouped && filters.neighborhood && (
+                /* The parentheses sit outside the truncated name, so "(Promenade To…)" keeps its close. */
                 <span
-                  data-testid="drilled-neighborhood-name"
-                  title={filters.neighborhood}
-                  className="min-w-0 truncate text-sm font-semibold text-ink"
+                  data-testid="drilled-neighborhood"
+                  className="flex min-w-0 items-baseline text-sm text-ink-muted"
                 >
-                  {filters.neighborhood}
+                  <span aria-hidden="true" className="shrink-0">
+                    (
+                  </span>
+                  <span
+                    data-testid="drilled-neighborhood-name"
+                    title={filters.neighborhood}
+                    className="min-w-0 truncate font-semibold text-ink"
+                  >
+                    {filters.neighborhood}
+                  </span>
+                  <span aria-hidden="true" className="shrink-0">
+                    )
+                  </span>
                 </span>
               )}
             </div>

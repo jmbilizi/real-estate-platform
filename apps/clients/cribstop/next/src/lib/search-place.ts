@@ -210,6 +210,23 @@ export const PLACE_QUERY_KEYS = [
   'listingType',
 ] as const;
 
+/** The query keys that scope a neighborhood drill-down (#525). */
+const DRILL_QUERY_KEYS: readonly string[] = ['neighborhood', 'city', 'state'];
+
+/** True for a drill-down query: a neighborhood with its city and state. */
+export function hasDrillDown(params: URLSearchParams): boolean {
+  return DRILL_QUERY_KEYS.every((key) => Boolean(params.get(key)));
+}
+
+/** A copy of `params` without the place keys. A drill-down keeps its neighborhood, city and state. */
+export function withoutPlaceKeys(params: URLSearchParams, keepDrill = false): URLSearchParams {
+  const rest = new URLSearchParams(params);
+  for (const key of PLACE_QUERY_KEYS) {
+    if (!(keepDrill && DRILL_QUERY_KEYS.includes(key))) rest.delete(key);
+  }
+  return rest;
+}
+
 /**
  * The new URL for a legacy `/search?...` link. A city+state (with an optional neighborhood or
  * street) becomes a place path. Anything else keeps its query on the map-area path.
@@ -218,14 +235,16 @@ export function legacySearchUrl(params: URLSearchParams): string {
   const filters = parseFiltersFromSearchParams(params);
   const { city, state, neighborhood, street } = filters;
   let place: SearchPlace | null = null;
+  // A drill-down link (#525) keeps its neighborhood in the query, on the city path. The
+  // neighborhood landing path resolves a map boundary, which counts other homes.
+  const drill = hasDrillDown(params) && params.has('groupFrom');
   if (city && state) {
-    if (neighborhood) place = { kind: 'neighborhood', name: neighborhood, city, state };
+    if (neighborhood && !drill) place = { kind: 'neighborhood', name: neighborhood, city, state };
     else if (street) place = { kind: 'street', name: street, city, state };
     else place = { kind: 'city', city, state };
   }
 
-  const rest = new URLSearchParams(params);
-  if (place) for (const key of PLACE_QUERY_KEYS) rest.delete(key);
+  const rest = place ? withoutPlaceKeys(params, drill) : new URLSearchParams(params);
   rest.delete('type');
   rest.delete('listingType');
   const override = listingTypeOverride(filters.listingType);
