@@ -1,7 +1,12 @@
 import type { ParsedSearchPath } from '@cribstop/property-contracts';
 import type { SearchPathPlace } from '@/components/SearchExperience';
 import { type Geocoder, resolvePlace } from '@/lib/place-resolve';
-import { boundsToBoundary, listingTypeForPath, PLACE_QUERY_KEYS } from '@/lib/search-place';
+import {
+  boundsToBoundary,
+  hasDrillDown,
+  listingTypeForPath,
+  withoutPlaceKeys,
+} from '@/lib/search-place';
 
 /** Server-side props for a search path page (#350). */
 
@@ -47,8 +52,11 @@ export async function searchRouteProps(
   const resolution = await resolvePlace(parsed.place, geocode);
   if (resolution.status !== 'found') return resolution;
 
-  const own = new URLSearchParams(params);
-  for (const key of PLACE_QUERY_KEYS) own.delete(key);
+  // A neighborhood drill-down (#525) keeps its scope in the query, on any path that is not itself
+  // a neighborhood or street. The in-page click writes the same URL.
+  const keepDrill =
+    hasDrillDown(params) && parsed.place.kind !== 'neighborhood' && parsed.place.kind !== 'street';
+  const own = withoutPlaceKeys(params, keepDrill);
   return {
     status: 'found',
     initialQuery: own.toString(),

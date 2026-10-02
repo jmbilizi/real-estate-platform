@@ -1,3 +1,4 @@
+import { renderToString } from 'react-dom/server';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { getNeighborhoodGroups, searchListings } from '@/lib/api/listings';
 import SearchExperience from './SearchExperience';
@@ -109,7 +110,7 @@ describe('Group by neighborhood (#502)', () => {
 
     expect(await screen.findByTestId('neighborhood-group-grid')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Chevy Chase' })).toBeTruthy();
-    expect(screen.getByText('neighborhoods')).toBeTruthy();
+    expect(screen.getByText('Neighborhoods')).toBeTruthy();
     expect(currentParams().get('groupBy')).toBe('neighborhood');
     expect(currentParams().get('beds')).toBe('2');
     expect(lastGroupQuery()).toMatchObject({
@@ -158,12 +159,12 @@ describe('Group by neighborhood (#502)', () => {
     });
     mockedSearch.mockResolvedValue(env(1418));
     const { unmount } = render(<SearchExperience initialQuery="q=Bethesda" />);
-    expect((await screen.findByText('1,418')).parentElement?.textContent).toBe('1,418 homes');
+    expect((await screen.findByText('1,418')).parentElement?.textContent).toBe('1,418 Homes');
     unmount();
 
     mockedSearch.mockResolvedValue(env(1));
     render(<SearchExperience initialQuery="q=Bethesda" />);
-    expect((await screen.findByText('1')).parentElement?.textContent).toBe('1 home');
+    expect((await screen.findByText('1')).parentElement?.textContent).toBe('1 Home');
   });
 
   it('checks the selected option in the dropdown', async () => {
@@ -287,10 +288,73 @@ describe('Group by neighborhood (#502)', () => {
     expect(name.className).toContain('truncate');
     expect(name.className).toContain('min-w-0');
     expect(back.closest('.search-results-bar')?.contains(name)).toBe(true);
+    // The name sits in parentheses after the count. Only the name truncates.
+    const group = screen.getByTestId('drilled-neighborhood');
+    expect(group.textContent).toBe(`(${longName})`);
+    expect(group.previousElementSibling?.textContent).toMatch(/^[\d,]+ Homes?$/);
 
     fireEvent.click(back);
     expect(currentParams().get('groupBy')).toBe('neighborhood');
     expect(screen.queryByTestId('drilled-neighborhood-name')).toBeNull();
+  });
+
+  describe('direct load of a drill-down on a place path (#525)', () => {
+    const place = {
+      filters: { city: 'Bethesda', state: 'MD', listingType: 'sale' as const },
+      label: 'Bethesda, MD',
+      query: '',
+    };
+    const drillQuery = 'neighborhood=Chevy+Chase&city=Bethesda&state=MD&groupFrom=Bethesda%7CMD';
+
+    it('renders the arrow and the name in the server HTML', () => {
+      const html = renderToString(<SearchExperience initialQuery={drillQuery} place={place} />);
+      expect(html).toContain('data-testid="back-to-neighborhoods"');
+      expect(html).toContain('Chevy Chase');
+    });
+
+    it('searches the neighborhood only, and the arrow returns to the grouped search', async () => {
+      render(<SearchExperience initialQuery={drillQuery} place={place} />);
+      await waitFor(() =>
+        expect(mockedSearch.mock.calls.at(-1)?.[0]).toMatchObject({
+          neighborhood: 'Chevy Chase',
+          city: 'Bethesda',
+          state: 'MD',
+        }),
+      );
+      fireEvent.click(screen.getByTestId('back-to-neighborhoods'));
+      expect(currentParams().get('groupBy')).toBe('neighborhood');
+      expect(currentParams().has('neighborhood')).toBe(false);
+      expect(currentParams().has('groupFrom')).toBe(false);
+      expect(await screen.findByTestId('neighborhood-group-grid')).toBeTruthy();
+    });
+
+    it('shows the arrow for a link without groupFrom', async () => {
+      render(
+        <SearchExperience
+          initialQuery="neighborhood=Chevy+Chase&city=Bethesda&state=MD"
+          place={place}
+        />,
+      );
+      fireEvent.click(await screen.findByTestId('back-to-neighborhoods'));
+      expect(currentParams().get('groupBy')).toBe('neighborhood');
+      expect(currentParams().get('city')).toBe('Bethesda');
+    });
+
+    it('follows Back and Forward between the grouped view and the drill-down', async () => {
+      const { rerender } = render(
+        <SearchExperience initialQuery="groupBy=neighborhood" place={place} />,
+      );
+      await screen.findByTestId('neighborhood-group-grid');
+      expect(screen.queryByTestId('back-to-neighborhoods')).toBeNull();
+
+      rerender(<SearchExperience initialQuery={drillQuery} place={place} />);
+      expect(await screen.findByTestId('back-to-neighborhoods')).toBeTruthy();
+      expect(screen.getByTestId('drilled-neighborhood-name').textContent).toBe('Chevy Chase');
+
+      rerender(<SearchExperience initialQuery="groupBy=neighborhood" place={place} />);
+      expect(await screen.findByTestId('neighborhood-group-grid')).toBeTruthy();
+      expect(screen.queryByTestId('back-to-neighborhoods')).toBeNull();
+    });
   });
 
   it('shows no arrow and no name outside a drill-down (#523)', async () => {
@@ -329,6 +393,26 @@ describe('Group by neighborhood (#502)', () => {
         neighborhood: 'Chevy Chase',
       }),
     );
+  });
+
+  it('writes a drill-down that a direct load reads back the same, on a city path (#525)', async () => {
+    window.history.replaceState(null, '', '/bethesda-md/homes-for-sale?groupBy=neighborhood');
+    render(
+      <SearchExperience
+        initialQuery="groupBy=neighborhood"
+        place={{
+          filters: { city: 'Bethesda', state: 'MD', listingType: 'sale' },
+          label: 'Bethesda, MD',
+          query: '',
+        }}
+      />,
+    );
+    fireEvent.click((await screen.findAllByRole('link', { name: /for sale in Chevy Chase/ }))[0]);
+    // The path owns the listing type: no `type` in the URL and no listing-type filter to count.
+    expect(currentParams().has('type')).toBe(false);
+    expect(currentParams().get('neighborhood')).toBe('Chevy Chase');
+    expect(currentParams().get('groupFrom')).not.toBeNull();
+    expect(screen.getByLabelText('Open filters').textContent).toBe('Filters');
   });
 
   it('moves to the other search path for a count link on a search path', async () => {

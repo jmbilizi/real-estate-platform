@@ -55,6 +55,35 @@ describe('searchRouteProps (#350)', () => {
     });
   });
 
+  describe('neighborhood drill-down on a place path (#525)', () => {
+    const city = {
+      type: 'city',
+      name: 'Ashburn',
+      address: { city: 'Ashburn', state: 'Virginia', 'ISO3166-2-lvl4': 'US-VA' },
+    };
+    const drill = 'neighborhood=Belmont&city=Ashburn&state=VA&groupFrom=Ashburn%7CVA&beds=2';
+
+    it('keeps the neighborhood, city, state and groupFrom in the query', async () => {
+      const result = await props('/ashburn-va/homes-for-sale', drill, geocoder([city]));
+      expect(result).toMatchObject({ status: 'found', initialQuery: drill });
+    });
+
+    it('keeps a drill-down link that has no groupFrom', async () => {
+      const query = 'neighborhood=Belmont&city=Ashburn&state=VA';
+      const result = await props('/ashburn-va/homes-for-sale', query, geocoder([city]));
+      expect(result).toMatchObject({ initialQuery: query });
+    });
+
+    it('drops a lone neighborhood, which is no drill-down', async () => {
+      const result = await props(
+        '/ashburn-va/homes-for-sale',
+        'neighborhood=Belmont',
+        geocoder([city]),
+      );
+      expect(result).toMatchObject({ initialQuery: '' });
+    });
+  });
+
   describe('listing type of the path (#519)', () => {
     const geocode = geocoder([
       { type: 'city', name: 'Ashburn', address: { city: 'Ashburn', ...VA } },
