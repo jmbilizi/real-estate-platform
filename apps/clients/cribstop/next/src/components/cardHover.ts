@@ -6,5 +6,5 @@
 export const CARD_HOVER_CLASS =
   'transition-shadow duration-150 [@media(hover:hover)]:hover:shadow-[0_2px_10px_rgba(0,0,0,0.08)]';
 
-/** The marker-sync highlight (#503). A highlight, not a hover: a dark border and the quiet shadow. */
-export const CARD_ACTIVE_CLASS = 'border-ink shadow-[0_2px_10px_rgba(0,0,0,0.08)]';
+/** The marker-sync highlight (#503). A highlight, not a hover: a mid-dark border and the quiet shadow. */
+export const CARD_ACTIVE_CLASS = 'border-ink/60 shadow-[0_2px_10px_rgba(0,0,0,0.08)]';
