@@ -6,9 +6,16 @@ export interface ToolbarOption<T extends string> {
   label: string;
 }
 
+/** The one button style for Filters, Group by and Sort in the results toolbar (#502). */
+export const TOOLBAR_BUTTON_CLASS =
+  'min-h-11 min-w-11 justify-center bg-transparent px-2 py-0.5 text-sm font-semibold transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 cursor-pointer text-ink flex items-center gap-1.5';
+
+/** The visible label of a toolbar button. Below `sm` only the icon shows. */
+export const TOOLBAR_LABEL_CLASS = 'hidden sm:inline';
+
 /**
- * A results-toolbar dropdown (#502). Same look and behavior as `SortDropdown`: a 44px button with a
- * leading icon and a listbox beneath it. `label` names the control for screen readers.
+ * A results-toolbar dropdown. The button shows a fixed label (from `sm` up) and an icon. The current
+ * choice shows as a checkmark in the list and in the button's accessible name, never as button text.
  */
 export default function ToolbarSelect<T extends string>({
   label,
@@ -16,7 +23,6 @@ export default function ToolbarSelect<T extends string>({
   options,
   onChange,
   icon,
-  prefix,
   testId,
 }: {
   label: string;
@@ -24,8 +30,6 @@ export default function ToolbarSelect<T extends string>({
   options: readonly ToolbarOption<T>[];
   onChange: (v: T) => void;
   icon: React.ReactNode;
-  /** Visible text before the current value, for example "Group by:". */
-  prefix?: string;
   testId?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -38,8 +42,8 @@ export default function ToolbarSelect<T extends string>({
         <button
           type="button"
           data-testid={testId}
-          aria-label={`${label}: ${current?.label ?? ''}`}
-          className="min-h-11 bg-transparent px-2 py-0.5 text-sm font-semibold transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 cursor-pointer text-ink flex items-center gap-1.5"
+          aria-label={`${label}, current: ${current?.label ?? ''}`}
+          className={TOOLBAR_BUTTON_CLASS}
           onClick={() => setOpen((v) => !v)}
           aria-haspopup="listbox"
           aria-expanded={open}
@@ -47,10 +51,7 @@ export default function ToolbarSelect<T extends string>({
           <span className="shrink-0 text-ink-muted self-center" aria-hidden="true">
             {icon}
           </span>
-          <span className="border-b border-ink">
-            {prefix ? `${prefix} ` : null}
-            {current?.label}
-          </span>
+          <span className={TOOLBAR_LABEL_CLASS}>{label}</span>
         </button>
       </div>
       {open && (
@@ -74,6 +75,22 @@ export default function ToolbarSelect<T extends string>({
                 }}
               >
                 <span>{option.label}</span>
+                {option.value === value && (
+                  <svg
+                    width="16"
+                    height="16"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-ink ml-4 shrink-0"
+                    aria-hidden="true"
+                  >
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                )}
               </li>
             ))}
           </ul>

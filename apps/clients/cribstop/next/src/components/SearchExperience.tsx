@@ -9,8 +9,11 @@ import { listingIdFromPath } from '@/lib/listing-panel';
 
 import type { SearchFilters } from '@/lib/types';
 import type { SearchSuggestionValue } from '@/lib/store/types';
-import SortDropdown from '@/components/SortDropdown';
-import ToolbarSelect from '@/components/ToolbarSelect';
+import ToolbarSelect, {
+  TOOLBAR_BUTTON_CLASS,
+  TOOLBAR_LABEL_CLASS,
+  type ToolbarOption,
+} from '@/components/ToolbarSelect';
 import ResultsPager from '@/components/ResultsPager';
 import NeighborhoodGroupGrid, {
   NeighborhoodGroupGridSkeleton,
@@ -732,14 +735,14 @@ export default function SearchExperience({
               ) : (
                 <>
                   <span className="font-semibold text-ink">{total.toLocaleString()}</span>{' '}
-                  {total === 1 ? 'result' : 'results'}
+                  {total === 1 ? 'home' : 'homes'}
                 </>
               )}
             </p>
             <div className="flex flex-wrap items-center justify-end gap-x-4 relative">
               <button
                 onClick={() => setFilterOpen(true)}
-                className="min-h-11 bg-transparent px-2 py-0.5 text-sm font-semibold transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 cursor-pointer text-ink flex items-center gap-1.5"
+                className={TOOLBAR_BUTTON_CLASS}
                 aria-label="Open filters"
               >
                 <svg
@@ -761,7 +764,7 @@ export default function SearchExperience({
                   <line x1="9" y1="12" x2="21" y2="12" />
                   <line x1="3" y1="19" x2="15" y2="19" />
                 </svg>
-                Filters
+                <span className={TOOLBAR_LABEL_CLASS}>Filters</span>
                 {countActiveFilters(filters) > 0 && (
                   <span className="flex h-5 w-5 items-center justify-center rounded-full bg-ink text-[11px] font-bold text-white">
                     {countActiveFilters(filters)}
@@ -770,7 +773,6 @@ export default function SearchExperience({
               </button>
               <ToolbarSelect<GroupBy | 'none'>
                 label="Group by"
-                prefix="Group by:"
                 testId="group-by-control"
                 value={group.groupBy ?? 'none'}
                 options={GROUP_BY_OPTIONS}
@@ -787,11 +789,11 @@ export default function SearchExperience({
               />
               {grouped ? (
                 <ToolbarSelect<GroupOrder>
-                  label="Order neighborhoods by"
+                  label="Sort"
                   testId="group-order-control"
                   value={group.order}
                   options={GROUP_ORDER_OPTIONS}
-                  icon={ORDER_ICON}
+                  icon={SORT_ICON}
                   onChange={(order) => {
                     setGroup((prev) => ({ ...prev, order }));
                     setPage(1);
@@ -802,10 +804,13 @@ export default function SearchExperience({
                   }}
                 />
               ) : (
-                <SortDropdown
-                  value={filters.sort || 'recommended'}
+                <ToolbarSelect<SortValue>
+                  label="Sort"
+                  testId="sort-control"
+                  options={SORT_OPTIONS}
+                  icon={SORT_ICON}
+                  value={(filters.sort || 'recommended') as SortValue}
                   onChange={(v) => {
-                    if (!v) return;
                     setFilters((prev) => ({ ...prev, sort: v }));
                     setPage(1);
                     if (!ownsUrl) return; // not our URL to write — see `ownsUrl`
@@ -850,7 +855,7 @@ export default function SearchExperience({
                   <p className="font-display text-xl font-bold">No neighborhoods match</p>
                   <p className="mt-1 text-sm text-ink-muted">
                     Your search ran and found no neighborhoods for these filters. Try removing a
-                    filter or choose Group by: None to see the homes.
+                    filter or set Group by to None to see the homes.
                   </p>
                 </div>
               ) : (
@@ -924,6 +929,18 @@ export default function SearchExperience({
   );
 }
 
+type SortValue = NonNullable<SearchFilters['sort']>;
+
+// #391. "Newest" means the listing itself is new to the market, matching Zillow/Redfin, not the
+// last time the feed touched the record, which is what the API's own `newest` sort orders by. The
+// API keeps `newest` for that modification-time case. This control never offers it.
+const SORT_OPTIONS: ToolbarOption<SortValue>[] = [
+  { value: 'recommended', label: 'Recommended' },
+  { value: 'price-desc', label: 'Highest price' },
+  { value: 'price-asc', label: 'Lowest price' },
+  { value: 'newly-listed', label: 'Newest' },
+];
+
 const GROUP_BY_OPTIONS: { value: GroupBy | 'none'; label: string }[] = [
   { value: 'none', label: 'None' },
   { value: 'neighborhood', label: 'Neighborhood' },
@@ -954,9 +971,12 @@ const GROUP_ICON = (
   </svg>
 );
 
-const ORDER_ICON = (
+const SORT_ICON = (
   <svg {...ICON_PROPS}>
-    <path d="M4 6h16M4 12h10M4 18h6" />
+    <path d="m3 18 4 4 4-4" />
+    <path d="M7 22V2" />
+    <path d="m21 6-4-4-4 4" />
+    <path d="M17 2v20" />
   </svg>
 );
 

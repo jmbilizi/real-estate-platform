@@ -123,6 +123,74 @@ describe('Group by neighborhood (#502)', () => {
     expect(screen.getByLabelText('Open filters').textContent).toContain('1');
   });
 
+  it('shows fixed labels and names the current choice in the aria-label', async () => {
+    render(<SearchExperience initialQuery="q=Bethesda" />);
+    await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
+    const groupBy = screen.getByTestId('group-by-control');
+    const sort = screen.getByTestId('sort-control');
+    expect(groupBy.getAttribute('aria-label')).toBe('Group by, current: None');
+    expect(sort.getAttribute('aria-label')).toBe('Sort, current: Recommended');
+    // The button text is the fixed label, never the choice.
+    expect(groupBy.textContent).toBe('Group by');
+    expect(sort.textContent).toBe('Sort');
+
+    choose('group-by-control', 'Neighborhood');
+    await screen.findByTestId('neighborhood-group-grid');
+    expect(screen.getByTestId('group-by-control').textContent).toBe('Group by');
+    expect(screen.getByTestId('group-by-control').getAttribute('aria-label')).toBe(
+      'Group by, current: Neighborhood',
+    );
+    // Grouped view: the order control is the Sort button.
+    const order = screen.getByTestId('group-order-control');
+    expect(order.textContent).toBe('Sort');
+    expect(order.getAttribute('aria-label')).toBe('Sort, current: Most homes');
+    expect(screen.queryByTestId('sort-control')).toBeNull();
+  });
+
+  it('counts homes, not results', async () => {
+    const env = (total: number) => ({
+      results: [],
+      total,
+      page: 1,
+      pageSize: 20,
+      pageCount: 1,
+      appliedFilters: {},
+    });
+    mockedSearch.mockResolvedValue(env(1418));
+    const { unmount } = render(<SearchExperience initialQuery="q=Bethesda" />);
+    expect((await screen.findByText('1,418')).parentElement?.textContent).toBe('1,418 homes');
+    unmount();
+
+    mockedSearch.mockResolvedValue(env(1));
+    render(<SearchExperience initialQuery="q=Bethesda" />);
+    expect((await screen.findByText('1')).parentElement?.textContent).toBe('1 home');
+  });
+
+  it('checks the selected option in the dropdown', async () => {
+    render(<SearchExperience initialQuery="q=Bethesda" />);
+    fireEvent.click(screen.getByTestId('sort-control'));
+    const selected = screen.getByRole('option', { name: 'Recommended' });
+    expect(selected.getAttribute('aria-selected')).toBe('true');
+    expect(selected.querySelector('svg')).not.toBeNull();
+    expect(screen.getByRole('option', { name: 'Newest' }).querySelector('svg')).toBeNull();
+  });
+
+  it('shows only the icon below sm, with a 44px tap target, on all three buttons', async () => {
+    render(<SearchExperience initialQuery="q=Bethesda" />);
+    for (const button of [
+      screen.getByLabelText('Open filters'),
+      screen.getByTestId('group-by-control'),
+      screen.getByTestId('sort-control'),
+    ]) {
+      const label = [...button.querySelectorAll('span')].find((s) => s.textContent);
+      expect(label?.className).toContain('hidden');
+      expect(label?.className).toContain('sm:inline');
+      expect(button.className).toContain('min-h-11');
+      expect(button.className).toContain('min-w-11');
+      expect(button.querySelector('svg')).not.toBeNull();
+    }
+  });
+
   it('orders by name and keeps the order in the URL', async () => {
     render(<SearchExperience initialQuery="q=Bethesda&groupBy=neighborhood" />);
     await screen.findByTestId('neighborhood-group-grid');
