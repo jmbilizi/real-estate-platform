@@ -555,7 +555,7 @@ export default function SearchExperience({
   /** Shows one neighborhood's listings: group-by off, the neighborhood on, scoped by city and state. */
   const drillInto = (row: NeighborhoodRow, listingType?: 'sale' | 'rent') => {
     // On a search path the path owns the listing type, so a count link changes the path.
-    if (place && listingType && pathHoldsType()) {
+    if (place && listingType && listingType !== pathType && pathHoldsType()) {
       window.location.assign(drillHref(row, listingType));
       return;
     }
@@ -571,9 +571,10 @@ export default function SearchExperience({
     });
   };
 
+  // The path segment is the canonical listing type on every search path (map-area, city, ZIP,
+  // county), as in `listingTypeForPath`. A `type` query only adds `all` or `sold`.
   const pathHoldsType = () =>
-    typeof window !== 'undefined' &&
-    /^\/homes-for-(sale|rent)(\/|$)/.test(window.location.pathname);
+    typeof window !== 'undefined' && PATH_TYPE_SEGMENT.test(window.location.pathname);
 
   /** The listing type the current search path shows, or undefined off a search path. */
   const pathType = place
@@ -597,7 +598,7 @@ export default function SearchExperience({
       params.delete('type');
       if (origType === 'all') params.set('type', 'all');
       const path = window.location.pathname.replace(
-        /^\/homes-for-(sale|rent)/,
+        PATH_TYPE_SEGMENT,
         `/homes-for-${origType === 'rent' ? 'rent' : 'sale'}`,
       );
       window.location.assign(`${path}?${params.toString()}`);
@@ -611,7 +612,7 @@ export default function SearchExperience({
     const base = new URLSearchParams(
       typeof window === 'undefined' ? initialQuery : window.location.search,
     );
-    const swapPath = Boolean(place && listingType && pathHoldsType());
+    const swapPath = Boolean(place && listingType && listingType !== pathType && pathHoldsType());
     const params = filtersToSearchParams(
       drillDownFilters(filters, row, place ? undefined : listingType),
       base,
@@ -627,7 +628,7 @@ export default function SearchExperience({
     let path = typeof window === 'undefined' ? '' : window.location.pathname;
     if (swapPath) {
       path = path.replace(
-        /^\/homes-for-(sale|rent)/,
+        PATH_TYPE_SEGMENT,
         `/homes-for-${listingType === 'rent' ? 'rent' : 'sale'}`,
       );
     }
@@ -997,6 +998,9 @@ const GROUP_ORDER_OPTIONS: { value: GroupOrder; label: string }[] = [
   { value: 'count', label: 'Most homes' },
   { value: 'name', label: 'Name A-Z' },
 ];
+
+/** The listing-type segment of a search path, on a map-area path or after a place. */
+const PATH_TYPE_SEGMENT = /\/homes-for-(sale|rent)(?=\/|$)/;
 
 const ICON_PROPS = {
   width: 18,
