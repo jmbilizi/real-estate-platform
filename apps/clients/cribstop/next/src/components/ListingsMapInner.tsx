@@ -9,6 +9,7 @@ import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { createRoot, type Root } from 'react-dom/client';
+import { Provider } from 'react-redux';
 import type {
   MapCluster,
   MapPin,
@@ -21,24 +22,17 @@ import NeighborhoodMapLayer, {
 import type { ListingCardRow } from '@/lib/types';
 import { getListingsMap, type ListingSearchQuery } from '@/lib/api/listings';
 import { openListingPanel } from '@/lib/listing-panel';
-import {
-  formatClosePrice,
-  formatDwellingStats,
-  formatListingLocation,
-  formatListingPrice,
-  formatLotSize,
-  formatStreetAddress,
-  hasMapCoordinates,
-} from '@/lib/listing-format';
-import ListingImage from '@/components/listing/ListingImage';
-import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges';
-import ListingAttribution from '@/components/listing/ListingAttribution';
+import { hasMapCoordinates } from '@/lib/listing-format';
+import ListingCard from '@/components/ListingCard';
+import { store } from '@/lib/store/store';
 import { useTileFailure, useTileLayerConfig } from '@/components/map-tiles';
 
-// Module-level callback set by ListingsMapInner so MarkerPopup
-// (rendered in a separate createRoot) can still trigger modal navigation.
+// Set by ListingsMapInner. A pin for a row off the current page calls it, because a pin handler
+// outlives the render that created it.
 let _openListing: ((id: string) => void) | null = null;
 
+/** Popup width in px. Keep equal to `w-[280px]` on the popup wrapper below. */
+const POPUP_WIDTH = 280;
 const PILL_W = 70;
 const PILL_H = 30;
 
@@ -91,7 +85,7 @@ function toLatLngPairs(listings: ListingCardRow[]): [number, number][] {
 /**
  * Compact label for the price pill on the marker itself. A null price (seller-directed withholding)
  * must never render as `$0` or an empty pill — "Withheld" is the honest, compact alternative; the
- * popup renders the full withheld sentence via `formatListingPrice`.
+ * popup card renders the full withheld sentence.
  */
 function pinPriceLabel({ price, listingType }: Pick<MapPin, 'price' | 'listingType'>): string {
   if (price === null) return 'Withheld';
@@ -329,12 +323,19 @@ function ClusteredMarkers({
       if (row) {
         const popupEl = document.createElement('div');
         const root = createRoot(popupEl);
-        root.render(<MarkerPopup listing={row} />);
+        // The popup is its own React root, so it gets the store that `AppProvider` gives the page.
+        root.render(
+          <Provider store={store}>
+            <div className="w-[280px] bg-surface p-2">
+              <ListingCard listing={row} />
+            </div>
+          </Provider>,
+        );
         popupRootsRef.current.set(l.id, root);
         marker.bindPopup(popupEl, {
           closeButton: false,
-          maxWidth: 260,
-          minWidth: 240,
+          maxWidth: POPUP_WIDTH,
+          minWidth: POPUP_WIDTH,
           autoPan: true,
         });
       } else {
@@ -391,70 +392,6 @@ function ClusteredMarkers({
   }, [activeId, savedIds, pins]);
 
   return null;
-}
-
-/**
- * The map popup is a listing display surface, so it carries the same obligations the card does:
- * sample labelling wherever the row is visible, sponsored disclosure, and NAR 7.58 attribution
- * (agent name + a contact method + office name). Every nullable field is run through the shared
- * `lib/listing-format` helpers rather than read raw, so a null never reaches the DOM as a blank,
- * a bare comma, or a fabricated `$0`.
- */
-function MarkerPopup({ listing }: { listing: ListingCardRow }) {
-  const isSold = listing.listingType === 'sold' || listing.status === 'Sold';
-  const isParcel = listing.propertyType === 'Land';
-
-  const title = formatListingLocation(listing.neighborhood, listing.city, listing.state);
-  const address = formatStreetAddress(listing.address, listing.city, listing.state, listing.zip);
-  const statsLine = isParcel
-    ? formatLotSize(listing.lotSqft)
-    : formatDwellingStats(listing.beds, listing.baths, listing.sqft);
-  const price = formatListingPrice(listing.price, listing.listingType);
-  const soldLine = isSold ? formatClosePrice(listing.closePrice, listing.closeDate) : null;
-
-  return (
-    <div
-      onClick={() => _openListing?.(listing.id)}
-      className="min-w-[240px] max-w-[260px] cursor-pointer overflow-hidden rounded-[18px] border border-surface-border bg-surface shadow-card"
-      style={{ textDecoration: 'none', color: 'inherit' }}
-    >
-      <div className="relative h-[130px] w-full bg-surface-soft">
-        <ListingImage media={listing.primaryMedia} className="h-full w-full object-contain" />
-        {/* Required disclosure labels — never crowded out, shown whenever the row is. */}
-        {(listing.isSample || listing.sponsored) && (
-          <div className="absolute left-2 top-2 flex flex-wrap items-center gap-1">
-            {listing.isSample && <SampleBadge />}
-            {listing.sponsored && <SponsoredBadge />}
-          </div>
-        )}
-      </div>
-      <div className="px-4 py-3">
-        <p className="truncate text-sm font-bold tracking-wide text-ink">{title}</p>
-        {address && <p className="mt-0.5 truncate text-xs text-ink-muted">{address}</p>}
-        {statsLine && <p className="mt-0.5 text-xs text-ink-muted">{statsLine}</p>}
-        {/* The withheld sentence is prose, not a figure — styling it as a number reads as one. */}
-        <p
-          className={
-            soldLine || !price.isWithheld
-              ? 'mt-2 text-[15px] font-extrabold text-ink'
-              : 'mt-2 text-xs text-ink-body'
-          }
-        >
-          {soldLine ?? price.text}
-        </p>
-        {/*
-         * Same one-line courtesy form as the search card (#305): see ListingAttribution's header.
-         * `compact` has no effect at this density — see the same note on ListingCard.
-         */}
-        <ListingAttribution
-          attribution={listing}
-          source={listing.source}
-          compact
-          className="mt-2"
-        />
-      </div>
-    </div>
-  );
 }
 
 function InvalidateOnMount() {
@@ -635,16 +572,15 @@ export default function ListingsMapInner({
     () => groupMarkers.map((r) => [r.centroid.lat, r.centroid.lng]),
     [groupMarkers],
   );
-  // Keep the module-level callback up to date so MarkerPopup popups
-  // (rendered in separate React roots) can open the listing modal.
+  // Keep the module-level callback up to date so a pin for a row
+  // off the current page can open the listing panel.
   useEffect(() => {
     /*
      * The same instant open a card click performs, and it must stay the same: a pin and a card are
      * two views of one row, so opening them by different mechanisms is how they drift.
      *
-     * The row is looked up rather than passed, because these popups render in their own React roots
-     * outside this tree and can only reach back through a module-level callback. It is the row that
-     * lets the panel open populated. A viewport pin can be off the current page (#377); the panel
+     * The row is looked up rather than passed, because a pin handler can only reach back through a
+     * module-level callback. It is the row that lets the panel open populated. A viewport pin can be off the current page (#377); the panel
      * then loads the row itself.
      */
     _openListing = (id: string) =>
