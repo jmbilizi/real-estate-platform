@@ -38,6 +38,10 @@ const LAYOUTS: Record<1 | 2 | 3, { size: number; spots: Spot[] }> = {
 /** The photo area every tile reserves, for the stack, its placeholder and the skeleton alike. */
 export const PHOTO_AREA_CLASS = 'relative mb-3 aspect-[10/7] w-full';
 
+/** In the one-column grid below `sm` (#519) the stack sits beside the text, 112px wide. */
+export const COMPACT_PHOTO_AREA_CLASS =
+  'relative h-24 w-28 shrink-0 sm:mb-3 sm:aspect-[10/7] sm:h-auto sm:w-full';
+
 /**
  * Overlapped, slightly rotated photos for an "Explore neighborhoods" tile (#487). Every photo is a
  * listing the tile's own link target contains (#486), so this component never takes a URL from
@@ -47,7 +51,15 @@ export const PHOTO_AREA_CLASS = 'relative mb-3 aspect-[10/7] w-full';
  * `ListingImage`: listing photos come from arbitrary hosts, and the MLS mark in a photo's corner
  * must not be cropped.
  */
-export default function NeighborhoodPhotoStack({ photos }: { photos: NeighborhoodPreviewPhoto[] }) {
+export default function NeighborhoodPhotoStack({
+  photos,
+  compact = false,
+}: {
+  photos: NeighborhoodPreviewPhoto[];
+  /** Use the compact area below `sm` (#519). */
+  compact?: boolean;
+}) {
+  const areaClass = compact ? COMPACT_PHOTO_AREA_CLASS : PHOTO_AREA_CLASS;
   const [failed, setFailed] = useState<ReadonlySet<string>>(new Set());
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -67,7 +79,7 @@ export default function NeighborhoodPhotoStack({ photos }: { photos: Neighborhoo
       <div
         aria-hidden="true"
         data-testid="neighborhood-photo-placeholder"
-        className={`${PHOTO_AREA_CLASS} rounded-md bg-surface-soft`}
+        className={`${areaClass} rounded-md bg-surface-soft`}
       />
     );
   }
@@ -79,7 +91,7 @@ export default function NeighborhoodPhotoStack({ photos }: { photos: Neighborhoo
       ref={rootRef}
       aria-hidden="true"
       data-testid="neighborhood-photo-stack"
-      className={PHOTO_AREA_CLASS}
+      className={areaClass}
     >
       {shown.map((photo, i) => {
         const spot = layout.spots[i];
