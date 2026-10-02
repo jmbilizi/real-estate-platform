@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import ListingCard from '@/components/ListingCard';
 import ListingsMap from '@/components/ListingsMap';
 import type { NeighborhoodBounds } from '@/components/ListingsMapInner';
@@ -29,21 +30,28 @@ import {
   parseFiltersFromSearchParams,
   parsePageFromSearchParams,
 } from '@/lib/listing-filters';
-import { maxReachablePage, type NeighborhoodRow } from '@cribstop/property-contracts';
+import {
+  maxReachablePage,
+  type NeighborhoodRow,
+  type SearchPlace,
+} from '@cribstop/property-contracts';
 import { useListingSearch } from '@/lib/useListingSearch';
 import { useNeighborhoodGroups } from '@/lib/useNeighborhoodGroups';
 import {
-  backToGroupFilters,
-  drillDownFilters,
   GROUP_PAGE_SIZE,
   type GroupBy,
   type GroupOrder,
   type GroupState,
   parseGroupState,
-  scopeToken,
   writeGroupState,
 } from '@/lib/group-by';
 import { usableFitBounds } from '@/lib/neighborhoods';
+import {
+  backToGroupsUrl,
+  neighborhoodDrillUrl,
+  scopeOf,
+  type ViewType,
+} from '@/lib/neighborhood-url';
 import { ListingErrorState, ListingGridSkeleton } from '@/components/listing/ListingStates';
 
 export interface SearchExperienceProps {
@@ -107,6 +115,8 @@ export interface SearchPathPlace {
   label: string;
   /** Seeds the search bar's selected suggestion. */
   suggestion?: SearchSuggestionValue | null;
+  /** The place the path names. The neighborhood path needs it to derive the way back (#533). */
+  searchPlace?: SearchPlace | null;
   /** Query parameters that belong to the path and survive a filter change (`type=all`). */
   query?: string;
 }
@@ -139,6 +149,7 @@ export default function SearchExperience({
     setSearchSuggestion,
     setSearchListingType,
   } = useApp();
+  const router = useRouter();
 
   /**
    * Follows the Back and Forward buttons, but only while this instance owns the URL.
@@ -232,6 +243,8 @@ export default function SearchExperience({
     () => (place ? { ...filters, ...place.filters } : filters),
     [filters, place],
   );
+  /** The neighborhood the view is drilled into: from the neighborhood path, else from the query. */
+  const drilledName = requestFilters.neighborhood;
   // Two-phase geocode:
   //   Phase 1 — no polygon, ~300 bytes → sets map center immediately so tiles load fast
   //   Phase 2 — same query with polygon_geojson + aggressive simplification (~5-15 KB)
@@ -552,87 +565,56 @@ export default function SearchExperience({
     writeUrl(writeGroupState(params, nextGroup));
   };
 
-  /** Shows one neighborhood's listings: group-by off, the neighborhood on, scoped by city and state. */
-  const drillInto = (row: NeighborhoodRow, listingType?: 'sale' | 'rent') => {
-    // On a search path the path owns the listing type, so a count link changes the path.
-    if (place && listingType && listingType !== pathType && pathHoldsType()) {
-      window.location.assign(drillHref(row, listingType));
-      return;
-    }
-    // On a search path the path owns the listing type, so the filters omit it. A direct load of the
-    // same URL then matches this state, including the filter count (#525).
-    const fit = usableFitBounds(row);
-    setFocus(fit ? { name: row.name, city: row.city, state: row.state, bounds: fit } : null);
-    setActiveGroupKey(null);
-    commitView(drillDownFilters(filters, row, place ? undefined : listingType), {
-      ...group,
-      groupBy: undefined,
-      from: scopeToken(filters, pathType),
-    });
-  };
+  /** The query of the page now, for the URL of the next one. */
+  const currentQuery = () =>
+    new URLSearchParams(typeof window === 'undefined' ? initialQuery : window.location.search);
 
-  // The path segment is the canonical listing type on every search path (map-area, city, ZIP,
-  // county), as in `listingTypeForPath`. A `type` query only adds `all` or `sold`.
-  const pathHoldsType = () =>
-    typeof window !== 'undefined' && PATH_TYPE_SEGMENT.test(window.location.pathname);
-
-  /** The listing type the current search path shows, or undefined off a search path. */
-  const pathType = place
+  /**
+   * The listing type the view shows. The path segment is the canonical type on every search path,
+   * as in `listingTypeForPath`. A `type` query only adds `all` or `sold`.
+   */
+  const viewType: ViewType = place
     ? /(^|&)type=all(&|$)/.test(place.query ?? '')
       ? 'all'
       : (place.filters.listingType ?? 'all')
-    : undefined;
+    : (filters.listingType ?? 'all');
 
-  const backToGroups = () => {
-    setFocus(null);
-    const backFilters = backToGroupFilters(filters, group.from);
-    const backGroup: GroupState = { ...group, groupBy: 'neighborhood', from: undefined };
-    // A count link may have moved the search to the other path. Return to the path it left.
-    const origType = group.from?.split('|')[2];
-    if (place && origType && origType !== pathType && pathHoldsType()) {
-      const params = filtersToSearchParams(
-        backFilters,
-        new URLSearchParams(window.location.search),
-      );
-      writeGroupState(params, backGroup);
-      params.delete('type');
-      if (origType === 'all') params.set('type', 'all');
-      const path = window.location.pathname.replace(
-        PATH_TYPE_SEGMENT,
-        `/homes-for-${origType === 'rent' ? 'rent' : 'sale'}`,
-      );
-      window.location.assign(`${path}?${params.toString()}`);
-      return;
-    }
-    commitView(backFilters, backGroup);
+  /**
+   * The URL of a neighborhood's listings (#533): the neighborhood path. The path carries the city,
+   * state and type, so the query carries only what the path cannot say.
+   */
+  const drillHref = (row: NeighborhoodRow, listingType?: 'sale' | 'rent') => {
+    const carried = currentQuery();
+    if (requestFilters.zip) carried.set('zip', requestFilters.zip);
+    return neighborhoodDrillUrl({
+      target: row,
+      type: listingType ?? viewType,
+      scope: scopeOf(place?.searchPlace, requestFilters, row),
+      groupedType: viewType,
+      carried,
+    });
   };
 
-  /** The URL a card opens, for a new tab or a copied link. A plain click runs `drillInto`. */
-  const drillHref = (row: NeighborhoodRow, listingType?: 'sale' | 'rent') => {
-    const base = new URLSearchParams(
-      typeof window === 'undefined' ? initialQuery : window.location.search,
+  /** Opens one neighborhood's listings on its own path, so a reload or a shared link matches. */
+  const drillInto = (row: NeighborhoodRow, listingType?: 'sale' | 'rent') => {
+    if (!ownsUrl) return; // not our URL to write — see `ownsUrl`
+    const fit = usableFitBounds(row);
+    setFocus(fit ? { name: row.name, city: row.city, state: row.state, bounds: fit } : null);
+    setActiveGroupKey(null);
+    router.push(drillHref(row, listingType));
+  };
+
+  /** The way back derives from the path. `from` records a grouped view that was not the city's. */
+  const backToGroups = () => {
+    setFocus(null);
+    router.push(
+      backToGroupsUrl({
+        target: { city: requestFilters.city ?? '', state: requestFilters.state ?? '' },
+        type: viewType,
+        from: group.from,
+        current: currentQuery(),
+      }),
     );
-    const swapPath = Boolean(place && listingType && listingType !== pathType && pathHoldsType());
-    const params = filtersToSearchParams(
-      drillDownFilters(filters, row, place ? undefined : listingType),
-      base,
-    );
-    writeGroupState(params, { ...group, groupBy: undefined, from: scopeToken(filters, pathType) });
-    if (swapPath) {
-      // The new path implies the type, and a `type` override would undo it.
-      params.delete('type');
-    } else {
-      new URLSearchParams(place?.query).forEach((value, key) => params.set(key, value));
-    }
-    const qs = params.toString();
-    let path = typeof window === 'undefined' ? '' : window.location.pathname;
-    if (swapPath) {
-      path = path.replace(
-        PATH_TYPE_SEGMENT,
-        `/homes-for-${listingType === 'rent' ? 'rent' : 'sale'}`,
-      );
-    }
-    return `${path}${qs ? `?${qs}` : ''}`;
   };
 
   /** Touch: a first tap on a marker brings its card into view. */
@@ -703,9 +685,9 @@ export default function SearchExperience({
               focusBounds={
                 !grouped &&
                 focus &&
-                filters.neighborhood === focus.name &&
-                filters.city === focus.city &&
-                filters.state === focus.state
+                drilledName === focus.name &&
+                requestFilters.city === focus.city &&
+                requestFilters.state === focus.state
                   ? focus.bounds
                   : null
               }
@@ -733,7 +715,7 @@ export default function SearchExperience({
           {/* Slim sticky bar */}
           <div className="search-results-bar sticky top-[65px] z-20 bg-white flex items-center justify-between gap-x-2 px-5 py-1 md:px-0 border-b border-surface-border mb-6">
             <div className="flex min-w-0 flex-1 items-center gap-x-1">
-              {!grouped && filters.neighborhood && (
+              {!grouped && drilledName && (
                 <button
                   type="button"
                   data-testid="back-to-neighborhoods"
@@ -773,7 +755,7 @@ export default function SearchExperience({
                   </>
                 )}
               </p>
-              {!grouped && filters.neighborhood && (
+              {!grouped && drilledName && (
                 /* The parentheses sit outside the truncated name, so "(Promenade To…)" keeps its close. */
                 <span
                   data-testid="drilled-neighborhood"
@@ -784,10 +766,10 @@ export default function SearchExperience({
                   </span>
                   <span
                     data-testid="drilled-neighborhood-name"
-                    title={filters.neighborhood}
+                    title={drilledName}
                     className="min-w-0 truncate font-semibold text-ink"
                   >
-                    {filters.neighborhood}
+                    {drilledName}
                   </span>
                   <span aria-hidden="true" className="shrink-0">
                     )
@@ -834,7 +816,7 @@ export default function SearchExperience({
                 options={GROUP_BY_OPTIONS}
                 icon={GROUP_ICON}
                 onChange={(v) => {
-                  if (v === 'neighborhood' && filters.neighborhood) backToGroups();
+                  if (v === 'neighborhood' && drilledName) backToGroups();
                   else
                     commitView(filters, {
                       ...group,
@@ -998,9 +980,6 @@ const GROUP_ORDER_OPTIONS: { value: GroupOrder; label: string }[] = [
   { value: 'count', label: 'Most homes' },
   { value: 'name', label: 'Name A-Z' },
 ];
-
-/** The listing-type segment of a search path, on a map-area path or after a place. */
-const PATH_TYPE_SEGMENT = /\/homes-for-(sale|rent)(?=\/|$)/;
 
 const ICON_PROPS = {
   width: 18,
