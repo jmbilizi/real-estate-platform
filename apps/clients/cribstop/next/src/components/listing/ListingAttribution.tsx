@@ -9,18 +9,21 @@ import type { Attribution, ListingSource } from '@cribstop/property-contracts';
  * listing data, and it applies to search results rather than only detail pages. That reasoning is
  * still correct and still governs the `density="full"` block kept below.
  *
+ * **Stakeholder ruling, 2026-10-02 (supersedes the wording in #305): cards and the map popup show
+ * the office avatar and the bare office name.** `ListingCard` is the only card, and the map popup
+ * renders it. It does not render `Listing courtesy of`. Do not flag this in review.
+ *
  * **Stakeholder ruling, 2026-09-22 (#305): every card shows one line, whatever the row's
- * `source`.** Card surfaces (search card, map popup) no longer branch on `source`. Every card
- * renders `Listing courtesy of {officeName}` — no listing agent name, no phone, no email, no
- * `listedBy` line, `brightMLS` rows included. This is a business decision to accept the risk of a
+ * `source`.** Card surfaces no longer branch on `source`. No card shows a listing agent name, no
+ * phone, no email, no `listedBy` line, `brightMLS` rows included. This is a business decision to accept the risk of a
  * firm-only IDX card, not a finding that 7.58 no longer applies to an IDX row. #306 (human-action)
  * asks Real Broker LLC and Bright MLS to confirm firm-only attribution is acceptable on a card
  * before a live Bright row ships; #33 and #146 (Bright content and display rules) are blocked on
  * that answer. Until #306 closes, treat the 7.58 contact-method obligation as unresolved for cards,
  * not satisfied by this file.
  *
- * - Card surfaces, any `source`, `density="auto"` (the default) → `Listing courtesy of
- *   {officeName}`, always, per the ruling above.
+ * - `density="auto"` (the default) → `Listing courtesy of {officeName}`. No card uses this
+ *   component now. `ListingCard` renders its own office row, per the 2026-10-02 ruling.
  * - `density="courtesy"` (the detail page, out of scope for #305) → unchanged: a `brightMLS` row
  *   still gets the full block below instead of the one-sentence disclosure, exactly as before
  *   #305. A non-`brightMLS` row gets the one-sentence disclosure, also unchanged.

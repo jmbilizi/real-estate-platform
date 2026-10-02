@@ -437,10 +437,10 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
          *
          * NAR 7.58 / Bright MLS IDX still requires the listing firm's name, reasonably prominent,
          * in a typeface no smaller than the card's own median listing-data text (13/14px here).
-         * `cribstop-compliance-reviewer` ruled on this row for #433: dropping the literal phrase
-         * "Listing courtesy of" is fine (7.58 requires prominence and identification, not that
-         * exact wording), and truncating the name with a `title`/`aria-label` fallback is the same
-         * pattern the prior line already used. The office name is `text-[13px]`, at that floor.
+         * Stakeholder ruling, 2026-10-02 (#305, #433): cards and the map popup show the office
+         * avatar and the bare office name, with no "Listing courtesy of" wording. Truncating the
+         * name with a `title`/`aria-label` fallback is accepted. The office name is `text-[13px]`,
+         * at that floor.
          *
          * #470. Two separate slots. The office slot (avatar + name) takes at most 85% of the row
          * and truncates first. The time slot is `shrink-0`, takes the width its text needs,
