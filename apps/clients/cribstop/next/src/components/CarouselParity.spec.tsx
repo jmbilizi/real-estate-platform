@@ -41,12 +41,14 @@ describe('carousel parity between NeighborhoodRow and ListingRow (#508)', () => 
     expect(hood).toContain('sm:gap-5');
   });
 
-  it('gives a neighborhood tile and a listing card the same width classes', () => {
+  it('gives a neighborhood item and a listing card the same width classes', () => {
     const a = render(<ListingRow title="Featured" listings={[aListingCardRow({ id: '1' })]} />);
     render(<NeighborhoodRow title="Explore" neighborhoods={NEIGHBORHOODS} />);
     const widths = (el: Element) => el.className.split(' ').filter((c) => /(^|:)w-/.test(c));
     const card = scrollerOf(a.container).firstElementChild!;
-    const tile = screen.getByRole('link', { name: 'Columbia Heights' }).closest('div')!;
+    const tile = screen
+      .getByRole('link', { name: 'Columbia Heights' })
+      .closest('div')!.parentElement!;
     expect(widths(tile)).toEqual(widths(card));
     expect(widths(tile)).toContain('2xl:w-[calc((100%-7.5rem)/7)]');
     expect(widths(tile)).toContain('w-[42%]');
