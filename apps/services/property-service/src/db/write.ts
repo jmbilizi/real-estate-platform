@@ -847,7 +847,6 @@ export async function replaceFeedListingMedia(
   );
 }
 
-/** `source_media_key` of the `ListPictureURL` fallback photo. A real `MediaKey` is numeric. */
 /**
  * #564. Replaces a listing's grouped facts with the record's current ones. A group the record no
  * longer carries disappears. Run in the same transaction as `upsertListingBySourceKey()`.
@@ -878,6 +877,7 @@ export async function replaceListingFacts(
   );
 }
 
+/** `source_media_key` of the `ListPictureURL` fallback photo. A real `MediaKey` is numeric. */
 export const LIST_PICTURE_MEDIA_KEY = 'list-picture';
 
 /**
