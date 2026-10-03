@@ -70,7 +70,7 @@ export default function NeighborhoodCard({
       onMouseLeave={sync && (() => sync.onActive(null))}
       onFocus={sync && (() => sync.onActive(sync.key))}
       onBlur={sync && (() => sync.onActive(null))}
-      className={`group relative flex flex-col items-center rounded-md border bg-white px-2 py-3 text-center sm:px-3 ${CARD_BOX_CLASS} ${CARD_HOVER_CLASS} ${highlighted ? CARD_ACTIVE_CLASS : 'border-surface-border'}`}
+      className={`group flex flex-col items-center rounded-md border bg-white px-2 py-3 text-center sm:px-3 ${CARD_BOX_CLASS} ${CARD_HOVER_CLASS} ${highlighted ? CARD_ACTIVE_CLASS : 'border-surface-border'}`}
     >
       <NeighborhoodPhotoStack photos={n.previewPhotos ?? []} />
       <h3 className="w-full truncate font-display text-base font-bold leading-6 text-ink">
@@ -152,7 +152,7 @@ export function SeeAllCard({
       href={href}
       aria-label={`${title} — see all`}
       data-testid="neighborhood-see-all-tile"
-      className={`group flex min-h-11 flex-col items-center rounded-md border border-surface-border bg-surface-alt/40 px-2 py-3 text-center sm:px-3 ${CARD_BOX_CLASS} ${CARD_HOVER_CLASS} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink`}
+      className={`group flex min-h-11 flex-col items-center rounded-md border border-surface-border bg-surface-alt/40 px-2 py-3 text-center sm:px-3 ${CARD_BOX_CLASS} ${CARD_HOVER_CLASS}`}
     >
       <NeighborhoodPhotoStack photos={photos} />
       <span className="w-full truncate font-display text-base font-bold leading-6 text-ink group-hover:underline">
