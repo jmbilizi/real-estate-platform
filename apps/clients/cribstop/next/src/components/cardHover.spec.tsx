@@ -28,9 +28,9 @@ describe('shared card hover (#526)', () => {
       'relative',
       'isolate',
       'before:absolute',
-      'before:-inset-2.5',
+      'before:-inset-2',
       'before:-z-10',
-      'before:rounded-xl',
+      'before:rounded-lg',
       'before:pointer-events-none',
     ]) {
       expect(HOVER).toContain(c);

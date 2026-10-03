@@ -17,7 +17,7 @@ export const CAROUSEL_ITEM_CLASS = `flex-shrink-0 snap-start [scroll-snap-stop:a
 /**
  * `-mr-6`: the right edge bleeds past the section's padding below `sm`. The cut-off next item is
  * the "peek", not a rendering bug. `mt-0.5 pt-2.5` is the 12px gap to the header (#447). The
- * 12px padding with equal negative margin on the other sides keeps the 10px card halo (#550)
+ * 12px padding with equal negative margin on the other sides keeps the 8px card halo (#550)
  * from being clipped, and keeps card widths and positions the same.
  */
 export const CAROUSEL_SCROLLER_CLASS =
