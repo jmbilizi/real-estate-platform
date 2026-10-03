@@ -290,6 +290,35 @@ export const sortSchema = z
   );
 export type ListingSort = z.infer<typeof sortSchema>;
 
+/** `west,south,east,north` in degrees. The antimeridian is out of scope for this market. */
+export const searchBoundsSchema = z
+  .string()
+  .regex(/^-?\d+(\.\d+)?(,-?\d+(\.\d+)?){3}$/, 'must be four numbers: west,south,east,north')
+  .transform((value) => {
+    const [west, south, east, north] = value.split(',').map(Number) as [
+      number,
+      number,
+      number,
+      number,
+    ];
+    return { west, south, east, north };
+  })
+  .pipe(
+    z
+      .object({
+        west: z.number().min(-180).max(180),
+        south: z.number().min(-90).max(90),
+        east: z.number().min(-180).max(180),
+        north: z.number().min(-90).max(90),
+      })
+      .refine((b) => b.west < b.east && b.south < b.north, 'west < east and south < north'),
+  )
+  .describe(
+    'Viewport as `west,south,east,north` in decimal degrees. West must be less than east and ' +
+      'south less than north. A listing whose seller withheld the address has no coordinates, ' +
+      'so it never matches a viewport.',
+  );
+
 /**
  * Strict on purpose. An unknown parameter is rejected rather than ignored, which kills the
  * silent-typo'd-filter bug (`?bed=3` quietly returning unfiltered results) and, more importantly,
@@ -347,6 +376,7 @@ export const searchRequestSchema = z.strictObject({
         'instead — this and `boundary` should not both be sent for the same conceptual place.',
     ),
   boundary: boundaryPolygon.optional(),
+  bounds: searchBoundsSchema.optional(),
   openHouse: queryBoolean.optional(),
   newConstruction: queryBoolean.optional(),
   waterfront: queryBoolean.optional(),
