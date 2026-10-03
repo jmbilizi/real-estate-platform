@@ -683,6 +683,11 @@ export default function SearchExperience({
    * label names it. Without a place, the viewport alone is the area and clearing shows every match.
    */
   const placeLabel = place?.label || filters.query || '';
+  const mapAreaHint = `${
+    grouped ? 'Showing neighborhoods with homes in the map area.' : 'Showing homes in the map area.'
+  } Homes with a hidden address are not shown. Clear to ${
+    placeLabel ? `show all in ${placeLabel}` : 'show all homes'
+  }.`;
   const showAllLabel = placeLabel ? `Show all in ${placeLabel}` : 'Show all homes';
 
   const groupPageCount = Math.ceil(groups.total / GROUP_PAGE_SIZE);
@@ -732,7 +737,6 @@ export default function SearchExperience({
               filters={mapFilters}
               viewBounds={filters.bounds ?? null}
               onUserMove={onMapMoved}
-              total={total}
               neighborhoods={
                 grouped
                   ? {
@@ -839,27 +843,38 @@ export default function SearchExperience({
                 </span>
               )}
               {filters.bounds && (
-                <button
-                  type="button"
-                  data-testid="clear-map-area"
-                  aria-label="Map area filter on. Clear it to show the whole search area."
-                  onClick={clearViewport}
-                  className="ml-1 inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-full border border-surface-border bg-surface-soft px-2.5 text-xs font-semibold text-ink transition-colors duration-150 hover:bg-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
-                >
-                  Map area
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                    aria-hidden="true"
+                <span className="group relative ml-1 inline-flex shrink-0">
+                  <button
+                    type="button"
+                    data-testid="clear-map-area"
+                    aria-label="Map area filter on. Clear it to show the whole search area."
+                    onClick={clearViewport}
+                    aria-describedby="map-area-hint"
+                    className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-full border border-surface-border bg-surface-soft px-2.5 text-xs font-semibold text-ink transition-colors duration-150 hover:bg-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
                   >
-                    <path d="M6 6l12 12M18 6L6 18" />
-                  </svg>
-                </button>
+                    Map area
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M6 6l12 12M18 6L6 18" />
+                    </svg>
+                  </button>
+                  <span
+                    id="map-area-hint"
+                    role="tooltip"
+                    data-testid="map-area-hint"
+                    className="pointer-events-none invisible absolute left-0 top-full z-30 mt-1 w-60 max-w-[calc(100vw-2.5rem)] rounded-xl bg-ink px-3 py-2 text-xs font-medium leading-snug text-white opacity-0 shadow-card transition-opacity duration-150 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100"
+                  >
+                    {mapAreaHint}
+                  </span>
+                </span>
               )}
             </div>
             <div className="relative flex shrink-0 items-center justify-end gap-x-0.5 sm:gap-x-1">
@@ -948,24 +963,6 @@ export default function SearchExperience({
           </div>
 
           <div className="px-5 pb-10 md:px-0 md:pb-0">
-            {filters.bounds && (
-              <p
-                data-testid="map-area-note"
-                className="-mt-3 mb-4 text-xs leading-snug text-ink-muted"
-              >
-                {grouped
-                  ? 'Showing neighborhoods with homes in the map area.'
-                  : 'Showing homes in the map area.'}{' '}
-                Homes with a hidden address are not shown.{' '}
-                <button
-                  type="button"
-                  onClick={clearViewport}
-                  className="cursor-pointer font-semibold text-ink underline underline-offset-2"
-                >
-                  {showAllLabel}
-                </button>
-              </p>
-            )}
             {grouped ? (
               isGroupsLoading ? (
                 <NeighborhoodGroupGridSkeleton />
