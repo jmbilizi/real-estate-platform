@@ -1,21 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CustomMapControls } from '@/components/CustomMapControls';
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import 'leaflet.markercluster';
-import 'leaflet.markercluster/dist/MarkerCluster.css';
-import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
-import { createRoot, type Root } from 'react-dom/client';
-import { Provider } from 'react-redux';
-import type {
-  MapCluster,
-  MapPin,
-  MapResponse,
-  NeighborhoodRow,
-} from '@cribstop/property-contracts';
+import type { MapPin, MapResponse, NeighborhoodRow } from '@cribstop/property-contracts';
 import NeighborhoodMapLayer, {
   selectMappableNeighborhoods,
 } from '@/components/NeighborhoodMapLayer';
@@ -23,22 +13,8 @@ import type { ListingCardRow } from '@/lib/types';
 import { getListingsMap, type ListingSearchQuery } from '@/lib/api/listings';
 import { openListingPanel } from '@/lib/listing-panel';
 import { hasMapCoordinates } from '@/lib/listing-format';
-import ListingCard from '@/components/ListingCard';
-import { store } from '@/lib/store/store';
+import PricePinLayer from '@/components/PricePinLayer';
 import { useTileFailure, useTileLayerConfig } from '@/components/map-tiles';
-
-// Set by ListingsMapInner. A pin for a row off the current page calls it, because a pin handler
-// outlives the render that created it.
-let _openListing: ((id: string) => void) | null = null;
-
-/**
- * Popup width in px. A phone map pane is about 350px tall, so the narrower card keeps the popup
- * inside it. Keep equal to the wrapper width classes below.
- */
-const popupWidth = () =>
-  typeof window !== 'undefined' && window.matchMedia('(min-width: 640px)').matches ? 280 : 232;
-const PILL_W = 70;
-const PILL_H = 30;
 
 /**
  * Which rows may produce a map pin.
@@ -68,7 +44,7 @@ export function getSampleBannerCopy(pins: ListingCardRow[]): string | null {
   return sampleBannerCopyFor(pins.filter((listing) => listing.isSample).length, pins.length);
 }
 
-/** The same copy from counts, for server pins and clusters that carry no per-row flag. */
+/** The same copy from counts, for server pins that carry no per-row flag. */
 export function sampleBannerCopyFor(sampleCount: number, count: number): string | null {
   if (sampleCount === 0) return null;
   if (sampleCount === count) {
@@ -86,71 +62,6 @@ function toLatLngPairs(listings: ListingCardRow[]): [number, number][] {
   return pairs;
 }
 
-/**
- * Compact label for the price pill on the marker itself. A null price (seller-directed withholding)
- * must never render as `$0` or an empty pill — "Withheld" is the honest, compact alternative; the
- * popup card renders the full withheld sentence.
- */
-function pinPriceLabel({ price, listingType }: Pick<MapPin, 'price' | 'listingType'>): string {
-  if (price === null) return 'Withheld';
-  if (listingType === 'rent') return `$${(price / 1000).toFixed(1)}k`;
-  if (price >= 1_000_000) return `$${(price / 1_000_000).toFixed(1)}M`;
-  return `$${Math.round(price / 1000)}k`;
-}
-
-/**
- * `micro-label` (12px/700) from DESIGN.md, in the app's own typeface.
- *
- * These markers are built as raw HTML strings, so they get no Tailwind and no inherited font —
- * every one of them hardcoded `Inter`, which is the *fallback* in the font stack, not the face the
- * app ships. Every price pin and cluster on every map was therefore rendering in a different
- * typeface from the rest of the product, and the cluster badge was 800 weight, which the type scale
- * does not define at any size.
- */
-const MARKER_FONT = "700 12px/1 'Manrope Variable','Inter Variable',system-ui,sans-serif";
-
-function buildPriceIcon(price: string, active: boolean, saved: boolean) {
-  // Red: #FF385C, Black: #222, White: #fff
-  let tone;
-  if (active) {
-    tone = 'background:#FF385C;color:#fff;border-color:#FF385C;transform:scale(1.1);z-index:1000;';
-  } else if (saved) {
-    tone = 'background:#FF385C;color:#fff;border-color:#FF385C;';
-  } else {
-    tone = 'background:#fff;color:#222;border-color:rgba(0,0,0,.15);';
-  }
-  return L.divIcon({
-    className: 'cribstop-price-marker',
-    html: `<span style="${tone}display:inline-flex;align-items:center;justify-content:center;min-width:${PILL_W}px;height:${PILL_H}px;padding:0 10px;border-radius:9999px;border:1.5px solid;font:${MARKER_FONT};box-shadow:0 4px 16px rgba(34,34,34,0.18),0 1.5px 8px rgba(0,0,0,0.08);white-space:nowrap;cursor:pointer;transition:transform .15s;">${price}</span>`,
-    iconSize: [PILL_W, PILL_H],
-    iconAnchor: [PILL_W / 2, PILL_H / 2],
-    popupAnchor: [0, -PILL_H / 2 - 2],
-  });
-}
-
-function clusterIconFactory(cluster: any, highlightId: string | null) {
-  const count = cluster.getChildCount();
-  // Only highlight cluster if it contains the hovered property (activeId)
-  let highlight = false;
-  if (highlightId) {
-    cluster.getAllChildMarkers().forEach((marker: any) => {
-      if (marker.options && marker.options.listingId === highlightId) highlight = true;
-    });
-  }
-  const border = highlight ? '4px solid #FF385C' : '2.5px solid #bbb';
-  const boxShadow = highlight
-    ? '0 0 0 6px rgba(255,56,92,0.18),0 8px 24px rgba(34,34,34,0.18),0 1.5px 8px rgba(0,0,0,0.08)'
-    : '0 8px 24px rgba(34,34,34,0.13),0 1.5px 8px rgba(0,0,0,0.06)';
-  const bg = highlight ? '#fff' : '#fff';
-  const color = highlight ? '#FF385C' : '#222';
-  return L.divIcon({
-    className: 'cribstop-cluster',
-    html: `<span style="background:${bg};color:${color};display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:9999px;border:${border};font:${MARKER_FONT};box-shadow:${boxShadow};">${count}</span>`,
-    iconSize: [42, 42],
-    iconAnchor: [21, 21],
-  });
-}
-
 /** A page row with coordinates as a pin. Never a city or ZIP centroid. */
 function toPin(listing: ListingCardRow & { latitude: number; longitude: number }): MapPin {
   return {
@@ -163,55 +74,8 @@ function toPin(listing: ListingCardRow & { latitude: number; longitude: number }
   };
 }
 
-function formatClusterCount(count: number): string {
-  if (count >= 10_000) return `${Math.round(count / 1000)}k`;
-  if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
-  return String(count);
-}
-
-function buildServerClusterIcon(count: number) {
-  const size = count >= 1000 ? 56 : count >= 100 ? 48 : 42;
-  return L.divIcon({
-    className: 'cribstop-cluster',
-    html: `<span style="background:#fff;color:#222;display:inline-flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;border-radius:9999px;border:2.5px solid #bbb;font:${MARKER_FONT};box-shadow:0 8px 24px rgba(34,34,34,0.13),0 1.5px 8px rgba(0,0,0,0.06);cursor:pointer;">${formatClusterCount(count)}</span>`,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-  });
-}
-
 /**
- * Server clusters (#377). A click zooms to the cluster's own extent, so the next viewport
- * request breaks it into smaller clusters or pins.
- */
-function ServerClusters({ clusters }: { clusters: MapCluster[] }) {
-  const map = useMap();
-  useEffect(() => {
-    const layer = L.layerGroup();
-    for (const cluster of clusters) {
-      const marker = L.marker([cluster.latitude, cluster.longitude], {
-        icon: buildServerClusterIcon(cluster.count),
-      });
-      marker.on('click', () => {
-        const { west, south, east, north } = cluster.bounds;
-        const bounds = L.latLngBounds([south, west], [north, east]);
-        if (west === east && south === north) {
-          map.setView([south, west], Math.min(map.getZoom() + 3, map.getMaxZoom()));
-        } else {
-          map.fitBounds(bounds, { padding: [40, 40], maxZoom: map.getMaxZoom() });
-        }
-      });
-      layer.addLayer(marker);
-    }
-    layer.addTo(map);
-    return () => {
-      map.removeLayer(layer);
-    };
-  }, [clusters, map]);
-  return null;
-}
-
-/**
- * Requests pins or clusters for the viewport on load, on every pan or zoom (debounced), and on
+ * Requests the viewport pins on load, on every pan or zoom (debounced), and on
  * every filter change. It never touches the list: the list keeps its own search and `total`.
  */
 function ViewportQuery({
@@ -239,7 +103,6 @@ function ViewportQuery({
       getListingsMap(
         filtersRef.current,
         { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() },
-        map.getZoom(),
         controller.signal,
       )
         .then((result) => onResultRef.current(result))
@@ -262,155 +125,6 @@ function ViewportQuery({
       controller?.abort();
     };
   }, [map, filterKey]);
-
-  return null;
-}
-
-function ClusteredMarkers({
-  pins,
-  rowsById,
-  activeId,
-  savedIds,
-  onMarkerHover,
-}: {
-  pins: MapPin[];
-  /** The current results page. A pin for one of these rows gets the full popup. */
-  rowsById: Map<string, ListingCardRow>;
-  activeId: string | null;
-  savedIds?: Set<string>;
-  onMarkerHover?: (id: string | null) => void;
-}) {
-  const map = useMap();
-  const clusterGroupRef = useRef<L.MarkerClusterGroup | null>(null);
-  const markersRef = useRef<Map<string, L.Marker>>(new Map());
-  const popupRootsRef = useRef<Map<string, Root>>(new Map());
-  const reopenIdRef = useRef<string | null>(null);
-
-  // Build / rebuild markers ONLY when the listings array itself changes.
-  // Hover state is applied separately below to avoid rebuilding the whole cluster on every hover.
-  useEffect(() => {
-    const reopenId = reopenIdRef.current;
-    reopenIdRef.current = null;
-    if (clusterGroupRef.current) {
-      const oldRoots = popupRootsRef.current;
-      popupRootsRef.current = new Map();
-      setTimeout(() => {
-        oldRoots.forEach((root) => {
-          try {
-            root.unmount();
-          } catch {
-            /* ignore */
-          }
-        });
-      }, 0);
-      map.removeLayer(clusterGroupRef.current);
-      clusterGroupRef.current = null;
-      markersRef.current.clear();
-    }
-
-    const group = L.markerClusterGroup({
-      iconCreateFunction: (cluster) => clusterIconFactory(cluster, activeId),
-      showCoverageOnHover: false,
-      spiderfyOnMaxZoom: true,
-      maxClusterRadius: 55,
-      chunkedLoading: true,
-      removeOutsideVisibleBounds: false,
-    });
-
-    pins.forEach((l) => {
-      const marker = L.marker([l.latitude, l.longitude], {
-        icon: buildPriceIcon(pinPriceLabel(l), activeId === l.id, !!savedIds?.has(l.id)),
-        // @ts-expect-error: custom property for cluster highlight
-        listingId: l.id, // for cluster highlight
-      });
-
-      // A pin for a row on the current page gets the popup card. Any other pin opens the listing
-      // panel, which loads the row and carries the attribution a popup would.
-      const row = rowsById.get(l.id);
-      if (row) {
-        const popupEl = document.createElement('div');
-        const root = createRoot(popupEl);
-        // The popup is its own React root, so it gets the store that `AppProvider` gives the page.
-        root.render(
-          <Provider store={store}>
-            <div className="w-[232px] bg-surface p-2 sm:w-[280px]">
-              <ListingCard listing={row} />
-            </div>
-          </Provider>,
-        );
-        popupRootsRef.current.set(l.id, root);
-        marker.bindPopup(popupEl, {
-          closeButton: false,
-          maxWidth: popupWidth(),
-          minWidth: popupWidth(),
-          autoPan: true,
-          // Keep the popup clear of the zoom controls (right) and the notice banner (top).
-          autoPanPaddingTopLeft: L.point(16, 64),
-          autoPanPaddingBottomRight: L.point(72, 16),
-        });
-      } else {
-        marker.on('click', () => _openListing?.(l.id));
-      }
-
-      marker.on('mouseover', () => onMarkerHover?.(l.id));
-      marker.on('mouseout', () => onMarkerHover?.(null));
-
-      markersRef.current.set(l.id, marker);
-      group.addLayer(marker);
-    });
-
-    clusterGroupRef.current = group;
-    map.addLayer(group);
-    // A pan refetches the viewport pins and rebuilds every marker, which closes the open popup.
-    // Opening a popup can itself pan the map, so reopen the same listing's popup after the rebuild.
-    const reopen = reopenId ? markersRef.current.get(reopenId) : undefined;
-    // `chunkedLoading` adds markers a few at a time, so wait for this one to reach the map.
-    if (reopen) {
-      if (map.hasLayer(reopen)) reopen.openPopup();
-      else reopen.once('add', () => reopen.openPopup());
-    }
-
-    return () => {
-      markersRef.current.forEach((m, id) => {
-        if (m.isPopupOpen()) reopenIdRef.current = id;
-      });
-      const oldRoots = popupRootsRef.current;
-      popupRootsRef.current = new Map();
-      setTimeout(() => {
-        oldRoots.forEach((root) => {
-          try {
-            root.unmount();
-          } catch {
-            /* ignore */
-          }
-        });
-      }, 0);
-      if (clusterGroupRef.current) {
-        map.removeLayer(clusterGroupRef.current);
-        clusterGroupRef.current = null;
-      }
-      markersRef.current.clear();
-    };
-  }, [pins, rowsById]);
-
-  // Lightweight effect: just update each marker's icon when activeId / savedIds change.
-  // No cluster rebuild, no map pan, no flicker.
-  useEffect(() => {
-    pins.forEach((l) => {
-      const marker = markersRef.current.get(l.id);
-      if (!marker) return;
-      marker.setIcon(buildPriceIcon(pinPriceLabel(l), activeId === l.id, !!savedIds?.has(l.id)));
-      if (activeId === l.id) {
-        marker.setZIndexOffset(1000);
-      } else {
-        marker.setZIndexOffset(0);
-      }
-    });
-    // Force cluster icons to update by re-clustering (workaround for cluster highlight)
-    if (clusterGroupRef.current) {
-      clusterGroupRef.current.refreshClusters();
-    }
-  }, [activeId, savedIds, pins]);
 
   return null;
 }
@@ -522,6 +236,9 @@ function BoundaryLayer({ geojson }: { geojson: object | null }) {
     }
     if (!geojson) return;
     const layer = L.geoJSON(geojson as Parameters<typeof L.geoJSON>[0], {
+      // The outline is a picture. An interactive polygon sits above the canvas dots and takes
+      // their hover and tap events.
+      interactive: false,
       style: {
         color: '#FF385C',
         weight: 2,
@@ -556,7 +273,7 @@ interface Props {
   filters?: ListingSearchQuery;
   /** The list's `total`, the one count for the search. */
   total?: number;
-  /** Grouped view (#503): one marker per neighborhood replaces the listing pins and clusters. */
+  /** Grouped view (#503): one marker per neighborhood replaces the listing pins. */
   neighborhoods?: NeighborhoodMarkers;
   /** Fit the map here (a drilled-down neighborhood). */
   focusBounds?: NeighborhoodBounds | null;
@@ -593,31 +310,12 @@ export default function ListingsMapInner({
     () => groupMarkers.map((r) => [r.centroid.lat, r.centroid.lng]),
     [groupMarkers],
   );
-  // Keep the module-level callback up to date so a pin for a row
-  // off the current page can open the listing panel.
-  useEffect(() => {
-    /*
-     * The same instant open a card click performs, and it must stay the same: a pin and a card are
-     * two views of one row, so opening them by different mechanisms is how they drift.
-     *
-     * The row is looked up rather than passed, because a pin handler can only reach back through a
-     * module-level callback. It is the row that lets the panel open populated. A viewport pin can be off the current page (#377); the panel
-     * then loads the row itself.
-     */
-    _openListing = (id: string) =>
-      openListingPanel(
-        id,
-        listings.find((l) => l.id === id),
-      );
-  }, [listings]);
-
   // Pins only ever come from rows that have coordinates — a seller-suppressed row (address,
   // latitude and longitude null together) is excluded here and nowhere else: it stays in
   // `listings` for the result count and the list view, it just never gets a marker.
   const pins = useMemo(() => selectMappableListings(listings), [listings]);
   const pinCoords = useMemo(() => toLatLngPairs(pins), [pins]);
   const hiddenPinCount = listings.length - pins.length;
-  const rowsById = useMemo(() => new Map(listings.map((l) => [l.id, l])), [listings]);
 
   // Until the viewport request answers, or if it fails, the page's own rows are the pins.
   const [viewport, setViewport] = useState<MapResponse | null>(null);
@@ -625,20 +323,32 @@ export default function ListingsMapInner({
     () => pins.flatMap((l) => (hasMapCoordinates(l) ? [toPin(l)] : [])),
     [pins],
   );
-  const mapPins = viewport === null ? pagePins : viewport.kind === 'pins' ? viewport.pins : [];
+  const mapPins = viewport === null ? pagePins : viewport.pins;
   const sampleBannerCopy = useMemo(
     () =>
       viewport === null
         ? getSampleBannerCopy(pins)
-        : sampleBannerCopyFor(viewport.sampleCount, viewport.count),
+        : sampleBannerCopyFor(viewport.sampleCount, viewport.pins.length),
     [viewport, pins],
   );
+  // A pin opens the same panel a card click opens. The row is passed when the page has it, so the
+  // panel opens populated. Otherwise the panel loads the row itself.
+  const rowsById = useMemo(() => new Map(listings.map((l) => [l.id, l])), [listings]);
+  const openListing = useCallback(
+    (id: string) => openListingPanel(id, rowsById.get(id)),
+    [rowsById],
+  );
   // The list is the search area and the map is the viewport. Say so when they hold different sets.
-  // A withheld-address home has no pin, so the copy counts pins, never homes in the area.
+  // Over the cap the map holds the newest homes only. A withheld-address home has no pin, so the
+  // copy counts pins, never homes in the area.
   const viewportNote =
-    viewport !== null && typeof total === 'number' && viewport.count < total
-      ? `${viewport.count.toLocaleString()} of ${total.toLocaleString()} homes have a pin in this map view. The list shows all ${total.toLocaleString()}.`
-      : null;
+    viewport === null
+      ? null
+      : viewport.total > viewport.pins.length
+        ? `Showing the newest ${viewport.pins.length.toLocaleString()} of ${viewport.total.toLocaleString()} homes in this map view. Zoom in to see the rest.`
+        : typeof total === 'number' && viewport.total < total
+          ? `${viewport.total.toLocaleString()} of ${total.toLocaleString()} homes have a pin in this map view. The list shows all ${total.toLocaleString()}.`
+          : null;
 
   const center = useMemo<[number, number]>(() => {
     if (searchCenter) return searchCenter;
@@ -662,10 +372,8 @@ export default function ListingsMapInner({
       <MapContainer
         center={center}
         zoom={11}
-        // Set here, not only on `<TileLayer>`: `leaflet.markercluster` reads the map's own
-        // `maxZoom` to compute spiderfy behavior and throws "Map has no maxZoom specified" if it
-        // mounts before `<TileLayer>` does — which now happens on every load, since the tile URL
-        // arrives asynchronously from `/api/map-config` (#291).
+        // Set on the map, not only on `<TileLayer>`: the tile URL arrives asynchronously from
+        // `/api/map-config` (#291), so the map has no tile layer to supply a max zoom at first.
         maxZoom={19}
         scrollWheelZoom={false}
         zoomControl={false}
@@ -708,19 +416,19 @@ export default function ListingsMapInner({
         ) : (
           <>
             {filters && <ViewportQuery filters={filters} onResult={setViewport} />}
-            {viewport?.kind === 'clusters' && <ServerClusters clusters={viewport.clusters} />}
-            <ClusteredMarkers
+            <PricePinLayer
               pins={mapPins}
               rowsById={rowsById}
               activeId={activeId ?? null}
               savedIds={savedIds}
               onMarkerHover={onMarkerHover}
+              onOpenListing={openListing}
             />
           </>
         )}
       </MapContainer>
       {/*
-       * The map itself is a listing display surface: a price pin and a cluster count are the row
+       * The map itself is a listing display surface: a price pin is the row
        * being shown, before anyone clicks. So the sample label cannot live only in the popup —
        * PRD §6.3's rule is that if a sample row is visible, its label is visible, and today every
        * row is a sample, which makes the default map view a field of illustrative prices. This

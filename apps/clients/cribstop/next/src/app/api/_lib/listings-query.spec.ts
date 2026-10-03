@@ -218,7 +218,7 @@ describe('map query allowlist (#377)', () => {
       seniors: '1',
     });
     const forwarded = new URLSearchParams(buildListingsQuery(incoming, FORWARDABLE_MAP_PARAMS));
-    expect([...forwarded.keys()].sort()).toEqual(['bounds', 'city', 'state', 'zoom']);
+    expect([...forwarded.keys()].sort()).toEqual(['bounds', 'city', 'state']);
   });
 });
 

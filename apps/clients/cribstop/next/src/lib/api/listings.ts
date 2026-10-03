@@ -154,13 +154,12 @@ export async function searchListings(
 }
 
 /**
- * Pins or clusters for a map viewport (#377). Takes the list's filters; paging and sort are dropped
+ * Pins for a map viewport (#377, #546). Takes the list's filters; paging and sort are dropped
  * by the proxy allowlist, so the map set is the search set limited to `bounds`.
  */
 export async function getListingsMap(
   query: ListingSearchQuery,
   bounds: MapBounds,
-  zoom: number,
   signal?: AbortSignal,
 ): Promise<MapResponse> {
   const params = toSearchParams(query);
@@ -173,7 +172,6 @@ export async function getListingsMap(
     clamp(bounds.north, 90),
   ];
   params.set('bounds', edges.map((n) => n.toFixed(5)).join(','));
-  params.set('zoom', String(Math.round(zoom)));
   return getJson<MapResponse>(`/api/listings/map?${params.toString()}`, signal);
 }
 
