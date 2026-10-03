@@ -32,6 +32,8 @@ export interface SpreadPoint {
   x: number;
   y: number;
   label: string;
+  /** The same value for homes at one true coordinate, about 1 to 2 m. Needed to fan them out. */
+  coordKey?: string;
 }
 
 export interface PillOffset {
@@ -44,14 +46,24 @@ export interface PillOffset {
   rank: number;
 }
 
+export interface SpreadOptions {
+  /** Homes that share a true coordinate fan out onto arcs. It is on only at a high zoom. */
+  fan?: boolean;
+}
+
 type Spot = readonly [number, number];
 
-/** Arcs reach 6 rings, 81 spots, enough for a building of units at one coordinate. */
-const MAX_RINGS = 6;
-/** Tails closer than this share a spot. Only such a crowd fans out onto arcs. */
-const SAME_SPOT_PX = 3;
-/** A pill with no spot of its own strip may still take a spot in the first rings, to stay in view. */
-const RELAXED_GROUPS = 4;
+/**
+ * A body moves at most this far from its tail tip, in px, unless its home shares a true coordinate
+ * with another and the zoom is high. Past the cap, pills overlap. A leader line is never longer.
+ */
+export const OFFSET_CAP_PX = 28;
+/** Arcs for homes at one true coordinate: 3 rings, 27 spots, 136px at most. */
+const MAX_RINGS = 3;
+export const FAN_CAP_PX = 64 + 36 * (MAX_RINGS - 1);
+/** The most rects one query reads, so thousands of pills on a few pixels cost a bounded amount. */
+const MAX_POOL = 80;
+const MAX_PER_CELL = 40;
 
 /**
  * Where a body may sit, in the order tried: on the tip, two steps up, then arcs of growing radius
@@ -106,7 +118,10 @@ const HALF_H = PILL_BODY_H / 2;
  * to an arc over the tip. Homes at one coordinate fan out this way and never fuse, at any zoom.
  * The result depends on the point set and the zoom only, so a pan does not reshuffle it.
  */
-export function createPillSpreader(points: readonly SpreadPoint[]): PillSpreader {
+export function createPillSpreader(
+  points: readonly SpreadPoint[],
+  options: SpreadOptions = {},
+): PillSpreader {
   const order = [...points].sort((a, b) => b.y - a.y || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const grid = new Map<number, Rect[]>();
   // A cell index stays below 2^25 in magnitude at any zoom, so the key is unique.
@@ -123,10 +138,13 @@ export function createPillSpreader(points: readonly SpreadPoint[]): PillSpreader
       for (let r = Math.floor((cy - hh) / CELL_H); r <= r1; r++) {
         const cell = grid.get(key(c, r));
         if (!cell) continue;
-        for (const rect of cell) {
+        // The newest rects of a crowded cell. The older ones are far below in the stack.
+        for (let i = Math.max(0, cell.length - MAX_PER_CELL); i < cell.length; i++) {
+          const rect = cell[i];
           if (rect.seen === stamp) continue;
           rect.seen = stamp;
           found.push(rect);
+          if (found.length >= MAX_POOL) return found;
         }
       }
     }
@@ -145,27 +163,8 @@ export function createPillSpreader(points: readonly SpreadPoint[]): PillSpreader
     }
   };
 
-  // Placed tail tips by cell, to tell whether a pill shares its spot with a placed pill.
-  const tips = new Map<number, Array<[number, number]>>();
-  const addTip = (x: number, y: number) => {
-    const k = key(Math.floor(x / SAME_SPOT_PX), Math.floor(y / SAME_SPOT_PX));
-    const cell = tips.get(k);
-    if (cell) cell.push([x, y]);
-    else tips.set(k, [[x, y]]);
-  };
-  const tipCrowd = (x: number, y: number): number => {
-    let count = 0;
-    const c = Math.floor(x / SAME_SPOT_PX);
-    const r = Math.floor(y / SAME_SPOT_PX);
-    for (let i = c - 1; i <= c + 1; i++) {
-      for (let j = r - 1; j <= r + 1; j++) {
-        for (const [tx, ty] of tips.get(key(i, j)) ?? []) {
-          if (Math.abs(tx - x) < SAME_SPOT_PX && Math.abs(ty - y) < SAME_SPOT_PX) count++;
-        }
-      }
-    }
-    return count;
-  };
+  // Placed homes per true coordinate. Only a true crowd fans out.
+  const coordCount = new Map<string, number>();
 
   /** True when a body at (cx, cy) keeps its visible strip against every pill above it. */
   const fits = (
@@ -224,11 +223,11 @@ export function createPillSpreader(points: readonly SpreadPoint[]): PillSpreader
     let found = false;
     // Only a pill that shares its spot with a placed pill may move far. Elsewhere a pill steps up
     // twice at most. Pills of a dense area at low zoom then overlap, and the next zoom sorts them.
-    const crowd = tipCrowd(point.x, point.y);
+    const crowd = options.fan && point.coordKey ? (coordCount.get(point.coordKey) ?? 0) : 0;
     let capacity = 0;
     for (const group of SPOT_GROUPS) {
       // Search only as far as the crowd needs: a spot count of twice the crowd, plus a margin.
-      if (group.reach > 2 * VISIBLE_STRIP && (crowd === 0 || capacity >= 2 * crowd + 6)) break;
+      if (group.reach > OFFSET_CAP_PX && (crowd === 0 || capacity >= 2 * crowd + 6)) break;
       capacity += group.spots.length;
       const pool = near(baseX, baseY, w / 2 + group.reach, HALF_H + group.reach);
       for (const [sx, sy] of group.spots) {
@@ -242,7 +241,7 @@ export function createPillSpreader(points: readonly SpreadPoint[]): PillSpreader
     }
     if (!found) {
       // Take the nearest spot that leaves part of the body in view, even if its strip is short.
-      for (const group of SPOT_GROUPS.slice(0, RELAXED_GROUPS)) {
+      for (const group of SPOT_GROUPS.slice(0, crowd > 0 ? SPOT_GROUPS.length : 1)) {
         const pool = near(baseX, baseY, w / 2 + group.reach, HALF_H + group.reach);
         for (const [sx, sy] of group.spots) {
           if (!fits(baseX + sx, baseY + sy, w, pool, false)) continue;
@@ -254,17 +253,11 @@ export function createPillSpreader(points: readonly SpreadPoint[]): PillSpreader
         if (found) break;
       }
     }
-    // A crowd past the last arc climbs in a column. Its pills sit far from their tips, none hidden.
-    for (let j = 3; !found && j < 40; j++) {
-      const pool = near(baseX, baseY - j * VISIBLE_STRIP, w / 2, HALF_H + VISIBLE_STRIP);
-      if (fits(baseX, baseY - j * VISIBLE_STRIP, w, pool)) {
-        dy = -j * VISIBLE_STRIP;
-        found = true;
-      }
-    }
     const rect: Rect = { cx: baseX + dx, cy: baseY + dy, w, seen: 0 };
     add(rect);
-    addTip(point.x, point.y);
+    if (options.fan && point.coordKey) {
+      coordCount.set(point.coordKey, (coordCount.get(point.coordKey) ?? 0) + 1);
+    }
     placed.push({ id: point.id, rect });
     const offset: PillOffset = { dx, dy, roomy: true, rank };
     result.set(point.id, offset);
@@ -309,8 +302,11 @@ export interface PillSpreader {
   result: Map<string, PillOffset>;
 }
 
-export function spreadPills(points: readonly SpreadPoint[]): Map<string, PillOffset> {
-  const spreader = createPillSpreader(points);
+export function spreadPills(
+  points: readonly SpreadPoint[],
+  options: SpreadOptions = {},
+): Map<string, PillOffset> {
+  const spreader = createPillSpreader(points, options);
   while (spreader.next());
   while (spreader.nextRoomy());
   return spreader.result;

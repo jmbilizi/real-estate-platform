@@ -264,7 +264,8 @@ describe('PricePinLayer (#546, #549)', () => {
     expect(pills()).toContain(keptB);
   });
 
-  it('fans homes at one coordinate out, each with its tail on the shared point', () => {
+  it('fans homes at one true coordinate out at a high zoom, each tail on the shared point', () => {
+    mockMap.setZoom(18, { animate: false });
     const units = Array.from({ length: 24 }, (_, i) => pin(`unit${i}`, 0, 0));
     render(layer(units));
 
@@ -278,6 +279,15 @@ describe('PricePinLayer (#546, #549)', () => {
     // A moved pill draws its leader line and a dot on the true point.
     const names = drawn().map(([name]) => name);
     expect(names.filter((name) => name === 'arc')).toHaveLength(23);
+  });
+
+  it('keeps homes at one coordinate within 28px below the fan zoom (#554)', () => {
+    const units = Array.from({ length: 24 }, (_, i) => pin(`unit${i}`, 0, 0));
+    render(layer(units));
+
+    for (const p of pills()) {
+      expect(Math.hypot(p.spread.dx, p.spread.dy)).toBeLessThanOrEqual(28);
+    }
   });
 
   it('opens each pill of a stack on click, not just the top one', async () => {

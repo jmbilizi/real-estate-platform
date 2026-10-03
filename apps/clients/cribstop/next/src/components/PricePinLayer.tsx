@@ -178,6 +178,11 @@ function restackAll(ctx: Ctx) {
 
 /** More new pills than this are put in order in one pass, not one by one. */
 const BULK_RESTACK = 40;
+/** Homes at one true coordinate fan out from this zoom up, never below it. */
+export const FAN_MIN_ZOOM = 17;
+/** About 1.1 m: coordinates that agree to five decimals are one true coordinate. */
+const coordKeyOf = (pin: MapPin) => `${pin.latitude.toFixed(5)},${pin.longitude.toFixed(5)}`;
+
 /** Up to this many pills the layout runs in one go. Beyond it, it runs in slices. */
 const SYNC_LAYOUT_MAX = 250;
 /** The longest one slice of a layout holds the main thread, in ms. */
@@ -224,12 +229,19 @@ function writeOffset(layer: PillLayer, next: PillOffset) {
  */
 function layoutPills(map: L.Map, ctx: Ctx) {
   const zoom = map.getZoom();
+  const fan = zoom >= FAN_MIN_ZOOM;
   const points: SpreadPoint[] = [];
   const signature = new Map<string, string>();
   for (const layer of ctx.layers.values()) {
     const p = map.project(layer.getLatLng(), zoom);
-    points.push({ id: layer.pin.id, x: p.x, y: p.y, label: layer.label });
-    signature.set(layer.pin.id, `${p.x},${p.y},${layer.label}`);
+    points.push({
+      id: layer.pin.id,
+      x: p.x,
+      y: p.y,
+      label: layer.label,
+      coordKey: coordKeyOf(layer.pin),
+    });
+    signature.set(layer.pin.id, `${p.x},${p.y},${layer.label},${fan}`);
   }
   // The same points at the same zoom give the same spread, and a layout for them may be running.
   const last = ctx.signature;
@@ -249,7 +261,7 @@ function layoutPills(map: L.Map, ctx: Ctx) {
   if (ctx.slice) clearTimeout(ctx.slice);
   ctx.slice = null;
 
-  const spreader = createPillSpreader(points);
+  const spreader = createPillSpreader(points, { fan });
   let placing = true;
   const step = (): boolean => {
     if (placing) {

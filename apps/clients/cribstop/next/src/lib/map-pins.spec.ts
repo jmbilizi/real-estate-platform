@@ -1,8 +1,11 @@
 import {
+  FAN_CAP_PX,
+  OFFSET_CAP_PX,
   PILL_BODY_H,
   PILL_BOX_H,
   PILL_HIT_TOP,
   pillWidth,
+  type SpreadOptions,
   spreadPills,
   type SpreadPoint,
   VISIBLE_STRIP,
@@ -37,8 +40,8 @@ function bodyOf(point: SpreadPoint, dx: number, dy: number) {
  * Counts the sample points of each body that no pill above it covers. A pill above is one with a
  * lower rank. A count of zero means the pill cannot be clicked.
  */
-function visibleSamples(points: SpreadPoint[]): Map<string, number> {
-  const spread = spreadPills(points);
+function visibleSamples(points: SpreadPoint[], options: SpreadOptions = {}): Map<string, number> {
+  const spread = spreadPills(points, options);
   const rects = points.map((p) => {
     const o = spread.get(p.id) as { dx: number; dy: number; rank: number };
     return { id: p.id, rank: o.rank, ...bodyOf(p, o.dx, o.dy) };
@@ -87,22 +90,78 @@ describe('spreadPills (#549)', () => {
     expect(out.get('b')).toMatchObject({ dx: 0, dy: 0 });
   });
 
-  it('keeps every pill of a dense block clickable', () => {
-    // 40 homes in a block 120px by 90px, which is a dense block at the max zoom of the map.
+  it('keeps every body of a dense block inside the cap', () => {
+    // 40 homes in a block 120px by 90px, which is a dense block at a high zoom.
     const points = Array.from({ length: 40 }, (_, i) =>
       at(`p${i}`, 300 + ((i * 7919) % 120), 300 + ((i * 104_729) % 90), i % 3 ? '$585K' : '$1.2M'),
     );
-    const visible = visibleSamples(points);
-    for (const [id, count] of visible) expect({ id, ok: count > 0 }).toEqual({ id, ok: true });
+    for (const o of spreadPills(points).values()) {
+      expect(Math.hypot(o.dx, o.dy)).toBeLessThanOrEqual(OFFSET_CAP_PX + 0.5);
+    }
+    // Past the cap pills overlap, so some bodies in a block this dense are covered. A zoom shows them.
+    const hidden = [...visibleSamples(points).values()].filter((n) => n === 0);
+    expect(hidden.length).toBeLessThan(points.length);
   });
 
-  it('gives each home at one coordinate its own spot, so all are reachable', () => {
-    const condo = Array.from({ length: 60 }, (_, i) => at(`unit${i}`, 500, 500, '$412K'));
-    const out = spreadPills(condo);
-    const spots = new Set([...out.values()].map((o) => `${o.dx},${o.dy}`));
-    expect(spots.size).toBe(60);
-    const visible = visibleSamples(condo);
-    for (const [id, count] of visible) expect({ id, ok: count >= 4 }).toEqual({ id, ok: true });
+  it('fans homes at one true coordinate out, only when fan is on', () => {
+    const condo = Array.from({ length: 20 }, (_, i) => ({
+      ...at(`unit${i}`, 500, 500, '$412K'),
+      coordKey: '38.81097,-77.11151',
+    }));
+    const fanned = spreadPills(condo, { fan: true });
+    expect(new Set([...fanned.values()].map((o) => `${o.dx},${o.dy}`)).size).toBe(20);
+    for (const [id, count] of visibleSamples(condo, { fan: true })) {
+      expect({ id, ok: count >= 4 }).toEqual({ id, ok: true });
+    }
+    for (const o of fanned.values())
+      expect(Math.hypot(o.dx, o.dy)).toBeLessThanOrEqual(FAN_CAP_PX + 1);
+
+    // Zoomed out, the same pills stay within the small cap and just overlap.
+    for (const o of spreadPills(condo).values()) {
+      expect(Math.hypot(o.dx, o.dy)).toBeLessThanOrEqual(OFFSET_CAP_PX);
+    }
+  });
+
+  it.each([5, 8, 11, 13])(
+    'keeps every pill of a 900-home city within the cap at zoom %i',
+    (zoom) => {
+      // Alexandria, VA: about 12 km by 16 km. Web Mercator pixels at this zoom.
+      const world = 256 * 2 ** zoom;
+      const project = (lat: number, lng: number) => ({
+        x: ((lng + 180) / 360) * world,
+        y:
+          ((1 -
+            Math.log(Math.tan((lat * Math.PI) / 180) + 1 / Math.cos((lat * Math.PI) / 180)) /
+              Math.PI) /
+            2) *
+          world,
+      });
+      let seed = 3;
+      const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+      const points = Array.from({ length: 900 }, (_, i) => {
+        const p = project(38.75 + rnd() * 0.14, -77.15 + rnd() * 0.18);
+        return at(`h${i}`, p.x, p.y, '$585K');
+      });
+      const start = performance.now();
+      const out = spreadPills(points);
+      expect(performance.now() - start).toBeLessThan(1500);
+      expect(out.size).toBe(900);
+      for (const o of out.values()) {
+        expect(Math.hypot(o.dx, o.dy)).toBeLessThanOrEqual(OFFSET_CAP_PX + 0.5);
+      }
+    },
+  );
+
+  it('bounds the cost when thousands of homes collapse onto a few pixels', () => {
+    const points = Array.from({ length: 3000 }, (_, i) =>
+      at(`c${i}`, 1000 + (i % 5), 1000 + ((i / 5) % 5), '$585K'),
+    );
+    const start = performance.now();
+    const out = spreadPills(points);
+    expect(performance.now() - start).toBeLessThan(1500);
+    for (const o of out.values()) {
+      expect(Math.hypot(o.dx, o.dy)).toBeLessThanOrEqual(OFFSET_CAP_PX + 0.5);
+    }
   });
 
   it('keeps at least the visible strip of every pill in a stack of the same spot', () => {
