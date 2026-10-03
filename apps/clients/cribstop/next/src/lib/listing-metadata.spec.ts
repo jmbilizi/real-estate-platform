@@ -122,7 +122,7 @@ describe('listingMetadata — suppression is never undone by a preview', () => {
 
   it('carries no alt text the service did not send', () => {
     const meta = metaFor({
-      media: [{ url: 'https://example.com/a.jpg', altText: null }],
+      media: [{ url: 'https://example.com/a.jpg', altText: null, caption: null }],
     });
 
     expect(meta.openGraph?.images).toEqual([{ url: 'https://example.com/a.jpg', alt: undefined }]);

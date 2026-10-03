@@ -20,6 +20,7 @@ import { parseCalendarDate } from '../../db/date';
 import { OfferKind } from '../../db/types';
 
 import { AttributionFields, mapAttribution } from './attribution';
+import { mapListingDetailFacts, MappedListingDetailFacts } from './map-detail';
 import { mapPropertyType } from './property-type';
 import { BrightFeedTier, isSampleFeed, withSampleSuffix } from './sample';
 import { ListingStatusLookup, mapStandardStatus } from './status';
@@ -81,6 +82,8 @@ export interface MappedListingInput {
   readonly statusChangedAt: string | null;
   /** #391. `DaysOnMarket` — the current marketing period, not the lifetime total. */
   readonly daysOnMarket: number | null;
+  /** #564. Tax, HOA, tour, agent contact and grouped facts. Detail endpoint only. */
+  readonly detail: MappedListingDetailFacts;
 }
 
 export interface MappedRecord {
@@ -363,6 +366,7 @@ export function mapBrightPropertyRecord(
       comingSoonDate: toDateInstant(payload.ExpectedOnMarketDate),
       statusChangedAt: toTimestampInstant(payload.StatusChangeTimestamp),
       daysOnMarket: daysOnMarket.value,
+      detail: mapListingDetailFacts(payload),
     },
   };
 }

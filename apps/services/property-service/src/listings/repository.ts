@@ -205,9 +205,14 @@ export async function findListingById(pool: ReadClient, id: string): Promise<Lis
             p.lot_sqft   AS property_lot_sqft,
             u.unit_number, u.beds AS unit_beds, u.baths_display AS unit_baths,
             u.living_sqft AS unit_sqft,
+            l.tax_annual_amount::float8 AS tax_annual_amount, l.tax_year,
+            l.hoa_fee::float8 AS hoa_fee, l.hoa_fee_frequency, l.virtual_tour_url,
+            l.list_agent_phone, l.list_agent_email,
+            facts.facts,
             media.media,
             open_houses.open_houses
      FROM listing_search_v v
+     JOIN listings l ON l.id = v.id
      JOIN properties p ON p.id = v.property_id
      LEFT JOIN units u ON u.id = v.unit_id
      LEFT JOIN LATERAL (
@@ -216,12 +221,23 @@ export async function findListingById(pool: ReadClient, id: string): Promise<Lis
        -- most one photo (or none) exactly like the card's primaryMedia, rather than two different
        -- answers for the same listing.
        SELECT json_agg(
-                json_build_object('url', m.source_url, 'alt_text', m.alt_text)
+                json_build_object('url', m.source_url, 'alt_text', m.alt_text,
+                                  'caption', m.caption)
                 ORDER BY m.is_primary DESC, m.sort_order, m.id
               ) AS media
        FROM listing_media m
        WHERE m.listing_id = v.id AND m.source_url IS NOT NULL AND ${MEDIA_VISIBLE}
      ) media ON true
+     LEFT JOIN LATERAL (
+       -- #564. One array per group, in the order the feed lists the values.
+       SELECT json_object_agg(g.fact_group, g.items) AS facts
+       FROM (
+         SELECT f.fact_group, json_agg(f.value ORDER BY f.position) AS items
+         FROM listing_facts f
+         WHERE f.listing_id = v.id
+         GROUP BY f.fact_group
+       ) g
+     ) facts ON true
      LEFT JOIN LATERAL (
        -- Upcoming occurrences only, on the same \`ends_at > now()\` rule the view applies to the card's
        -- single open house. A showing that has already finished is not actionable, and listing it

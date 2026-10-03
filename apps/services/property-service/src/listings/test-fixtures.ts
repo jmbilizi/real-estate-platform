@@ -133,7 +133,15 @@ export type CardDbRowOverrides = Partial<
     property_lot_sqft: number | null;
     primary_media_url: string | null;
     primary_media_alt_text: string | null;
-    media: { url: string; alt_text: string | null }[] | null;
+    media: { url: string; alt_text: string | null; caption?: string | null }[] | null;
+    tax_annual_amount: number | null;
+    tax_year: number | null;
+    hoa_fee: number | null;
+    hoa_fee_frequency: string | null;
+    virtual_tour_url: string | null;
+    list_agent_phone: string | null;
+    list_agent_email: string | null;
+    facts: Partial<Record<string, string[]>> | null;
     open_houses: { starts_at: string; ends_at: string; remarks: string | null }[] | null;
   }
 >;
@@ -186,7 +194,9 @@ export interface DetailFixtureOverrides {
    * `listing_search_v` — the same structural reason the open-house remarks need suppressing at the
    * response boundary, and why a test needs to be able to put a street line in an alt text (#105).
    */
-  readonly media?: readonly Media[];
+  readonly media?: readonly (Media & { readonly caption?: string | null })[];
+  /** #564. Any of the detail-only facts, for the keys a test varies. */
+  readonly extras?: Partial<ListingDetail['listing']>;
 }
 
 export function detailFixture(overrides: DetailFixtureOverrides = {}): ListingDetail {
@@ -208,8 +218,26 @@ export function detailFixture(overrides: DetailFixtureOverrides = {}): ListingDe
       ...BASE_DETAIL_LISTING_INPUT,
       address,
       description: null,
-      media: overrides.media ?? [],
+      media: (overrides.media ?? []).map((item) => ({ caption: null, ...item })),
       openHouses: overrides.openHouses ?? [],
+      taxAnnualAmount: null,
+      taxYear: null,
+      hoaFee: null,
+      hoaFeeFrequency: null,
+      virtualTourUrl: null,
+      listAgentPhone: null,
+      listAgentEmail: null,
+      facts: {
+        parking: null,
+        heating: null,
+        cooling: null,
+        appliances: null,
+        basement: null,
+        flooring: null,
+        interior: null,
+        exterior: null,
+      },
+      ...overrides.extras,
     },
   });
 }

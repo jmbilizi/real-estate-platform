@@ -442,8 +442,89 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "nullable": true,
                 "type": "string",
               },
+              "facts": {
+                "additionalProperties": false,
+                "properties": {
+                  "appliances": {
+                    "items": {
+                      "type": "string",
+                    },
+                    "nullable": true,
+                    "type": "array",
+                  },
+                  "basement": {
+                    "items": {
+                      "type": "string",
+                    },
+                    "nullable": true,
+                    "type": "array",
+                  },
+                  "cooling": {
+                    "items": {
+                      "type": "string",
+                    },
+                    "nullable": true,
+                    "type": "array",
+                  },
+                  "exterior": {
+                    "items": {
+                      "type": "string",
+                    },
+                    "nullable": true,
+                    "type": "array",
+                  },
+                  "flooring": {
+                    "items": {
+                      "type": "string",
+                    },
+                    "nullable": true,
+                    "type": "array",
+                  },
+                  "heating": {
+                    "items": {
+                      "type": "string",
+                    },
+                    "nullable": true,
+                    "type": "array",
+                  },
+                  "interior": {
+                    "items": {
+                      "type": "string",
+                    },
+                    "nullable": true,
+                    "type": "array",
+                  },
+                  "parking": {
+                    "items": {
+                      "type": "string",
+                    },
+                    "nullable": true,
+                    "type": "array",
+                  },
+                },
+                "required": [
+                  "parking",
+                  "heating",
+                  "cooling",
+                  "appliances",
+                  "basement",
+                  "flooring",
+                  "interior",
+                  "exterior",
+                ],
+                "type": "object",
+              },
               "featured": {
                 "type": "boolean",
+              },
+              "hoaFee": {
+                "minimum": 0,
+                "nullable": true,
+                "type": "number",
+              },
+              "hoaFeeFrequency": {
+                "nullable": true,
+                "type": "string",
               },
               "id": {
                 "format": "uuid",
@@ -461,6 +542,14 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
               "latitude": {
                 "nullable": true,
                 "type": "number",
+              },
+              "listAgentEmail": {
+                "nullable": true,
+                "type": "string",
+              },
+              "listAgentPhone": {
+                "nullable": true,
+                "type": "string",
               },
               "listedAt": {
                 "format": "date-time",
@@ -507,6 +596,10 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                       "nullable": true,
                       "type": "string",
                     },
+                    "caption": {
+                      "nullable": true,
+                      "type": "string",
+                    },
                     "url": {
                       "format": "uri",
                       "type": "string",
@@ -515,6 +608,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                   "required": [
                     "url",
                     "altText",
+                    "caption",
                   ],
                   "type": "object",
                 },
@@ -626,7 +720,23 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 ],
                 "type": "string",
               },
+              "taxAnnualAmount": {
+                "minimum": 0,
+                "nullable": true,
+                "type": "number",
+              },
+              "taxYear": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "nullable": true,
+                "type": "integer",
+              },
               "title": {
+                "type": "string",
+              },
+              "virtualTourUrl": {
+                "format": "uri",
+                "nullable": true,
                 "type": "string",
               },
               "yearBuilt": {
@@ -685,6 +795,14 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
               "description",
               "media",
               "openHouses",
+              "taxAnnualAmount",
+              "taxYear",
+              "hoaFee",
+              "hoaFeeFrequency",
+              "virtualTourUrl",
+              "listAgentPhone",
+              "listAgentEmail",
+              "facts",
             ],
             "type": "object",
           },

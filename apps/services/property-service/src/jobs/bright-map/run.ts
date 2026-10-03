@@ -19,6 +19,7 @@ import {
   Queryable,
   refreshFeedPropertyAddress,
   replaceFeedListingMedia,
+  replaceListingFacts,
   upsertListingBySourceKey,
 } from '../../db/write';
 import { PropertyRow, UnitRow } from '../../db/types';
@@ -295,7 +296,15 @@ export async function mapBrightPayloads(
       listing_agent_name: listing.attribution.listingAgentName,
       is_sample: listing.isSample,
       last_updated: listing.lastUpdated,
+      tax_annual_amount: listing.detail.taxAnnualAmount,
+      tax_year: listing.detail.taxYear,
+      hoa_fee: listing.detail.hoaFee,
+      hoa_fee_frequency: listing.detail.hoaFeeFrequency,
+      virtual_tour_url: listing.detail.virtualTourUrl,
+      list_agent_phone: listing.detail.listAgentPhone,
+      list_agent_email: listing.detail.listAgentEmail,
     });
+    await replaceListingFacts(client, listingId, listing.detail.facts);
 
     // The main photo until the BrightMedia crawl (#191) delivers the gallery. See write.ts.
     const listPicture = listPictureUrl(payload.ListPictureURL);
