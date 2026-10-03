@@ -160,6 +160,28 @@ describe('GET /listings', () => {
     expect(response.body.pageCount).toBe(3);
   });
 
+  it('ANDs bounds with the place scope in both the page and the count (#558)', async () => {
+    const pool = createSearchPool();
+    await request(createApp({ pool }))
+      .get('/listings?city=Alexandria&state=VA&bounds=-77.07,38.79,-77.03,38.83')
+      .expect(200);
+
+    const searches = pool.statements.filter((sql) => sql.includes('FROM listing_search_v'));
+    expect(searches.length).toBeGreaterThanOrEqual(2);
+    for (const sql of searches) {
+      expect(sql).toContain('lower(v.city) = lower(');
+      expect(sql).toMatch(/v\.latitude BETWEEN/);
+      expect(sql).toMatch(/v\.longitude BETWEEN/);
+    }
+  });
+
+  it.each(['-77,38,-78,39', '1,2,3', 'abc'])('rejects bounds=%s with 400 (#558)', async (bounds) => {
+    await request(createApp({ pool: createSearchPool() }))
+      .get('/listings')
+      .query({ bounds })
+      .expect(400);
+  });
+
   it('echoes the normalised applied filter set, defaults included', async () => {
     const response = await request(createApp({ pool: createSearchPool() }))
       .get('/listings?beds=3')
