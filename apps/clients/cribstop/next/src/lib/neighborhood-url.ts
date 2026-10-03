@@ -1,3 +1,4 @@
+import { VIEWPORT_PARAM } from '@/lib/map-bounds';
 import {
   citySegment,
   parseSearchPath,
@@ -34,6 +35,8 @@ const OWNED_KEYS = [
   'city',
   'state',
   'neighborhood',
+  // The map view belongs to one place. A new path starts with the place's own fit.
+  VIEWPORT_PARAM,
 ] as const;
 
 export function withoutOwnedKeys(params: URLSearchParams): URLSearchParams {

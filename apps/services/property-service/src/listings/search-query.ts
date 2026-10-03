@@ -294,6 +294,18 @@ export function buildSearchQuery(request: SearchRequest): {
     );
   }
 
+  // #558. The viewport, as an extra AND on the place scope. `v.latitude` and `v.longitude` are the
+  // view's masked columns (migration 030). A listing with a withheld address has NULL there, fails
+  // the range test, and never matches, so a viewport cannot confirm or place a hidden address. The
+  // list, the map and the neighborhoods aggregate all read this one condition.
+  if (request.bounds) {
+    const { south, north, west, east } = request.bounds;
+    conditions.push(
+      `v.latitude BETWEEN ${bind(south)} AND ${bind(north)}
+       AND v.longitude BETWEEN ${bind(west)} AND ${bind(east)}`,
+    );
+  }
+
   // Booleans restrict only when true, matching filters.ts's `if (filters.openHouse)` guard.
   // `false` is a documented no-op; the route layer still echoes it back via `appliedFilters`.
   if (request.openHouse === true) {

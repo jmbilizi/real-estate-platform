@@ -5,13 +5,15 @@ import { CustomMapControls } from '@/components/CustomMapControls';
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import type { MapPin, MapResponse, NeighborhoodRow } from '@cribstop/property-contracts';
+import type { MapBounds, MapPin, MapResponse, NeighborhoodRow } from '@cribstop/property-contracts';
 import NeighborhoodMapLayer, {
   selectMappableNeighborhoods,
 } from '@/components/NeighborhoodMapLayer';
 import type { ListingCardRow } from '@/lib/types';
 import { getListingsMap, type ListingSearchQuery } from '@/lib/api/listings';
 import { hasMapCoordinates } from '@/lib/listing-format';
+import { formatBounds, roundBounds } from '@/lib/map-bounds';
+import { createUserMoveGate } from '@/lib/user-move-gate';
 import PricePinLayer from '@/components/PricePinLayer';
 import { useTileFailure, useTileLayerConfig } from '@/components/map-tiles';
 
@@ -128,6 +130,85 @@ function ViewportQuery({
   return null;
 }
 
+/**
+ * Reports the view the user moved the map to, once it settles (#558). Programmatic moves, such as
+ * the fit to the searched place, are not reported. `emitted` records what was reported, so
+ * `FitView` does not fit the map to a view the user already made.
+ */
+function UserMoveReporter({
+  onUserMove,
+  emitted,
+}: {
+  onUserMove: (bounds: MapBounds) => void;
+  emitted: { current: string };
+}) {
+  const map = useMap();
+  const onUserMoveRef = useRef(onUserMove);
+  onUserMoveRef.current = onUserMove;
+
+  useEffect(() => {
+    const gate = createUserMoveGate<MapBounds>({
+      onSettle: (view) => {
+        emitted.current = formatBounds(roundBounds(view));
+        onUserMoveRef.current(view);
+      },
+    });
+    const container = map.getContainer();
+    const mark = () => gate.markIntent();
+    // The page scrolls under the pointer until the user clicks the map to turn on wheel zoom, and a
+    // scroll then is not a map move. Only the keys Leaflet's keyboard handler reads move the map.
+    const markWheel = () => {
+      if (map.scrollWheelZoom.enabled()) gate.markIntent();
+    };
+    const MAP_KEYS = new Set([
+      'ArrowUp',
+      'ArrowDown',
+      'ArrowLeft',
+      'ArrowRight',
+      '+',
+      '=',
+      '-',
+      '_',
+    ]);
+    const markKey = (e: KeyboardEvent) => {
+      if (e.target === container && MAP_KEYS.has(e.key)) gate.markIntent();
+    };
+    const markPinch = (e: TouchEvent) => {
+      if (e.touches.length > 1) gate.markIntent();
+    };
+    const markZoomButton = (e: MouseEvent) => {
+      if ((e.target as Element | null)?.closest('button[aria-label^="Zoom"]')) gate.markIntent();
+    };
+    const read = (): MapBounds => {
+      const b = map.getBounds();
+      return { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() };
+    };
+    const onMoveEnd = () => gate.moveEnd(read);
+
+    map.on('dragstart', mark);
+    map.on('dragend', mark);
+    map.on('moveend', onMoveEnd);
+    container.addEventListener('wheel', markWheel, { passive: true });
+    container.addEventListener('dblclick', mark);
+    container.addEventListener('keydown', markKey);
+    container.addEventListener('touchstart', markPinch, { passive: true });
+    container.addEventListener('click', markZoomButton);
+    return () => {
+      map.off('dragstart', mark);
+      map.off('dragend', mark);
+      map.off('moveend', onMoveEnd);
+      container.removeEventListener('wheel', markWheel);
+      container.removeEventListener('dblclick', mark);
+      container.removeEventListener('keydown', markKey);
+      container.removeEventListener('touchstart', markPinch);
+      container.removeEventListener('click', markZoomButton);
+      gate.dispose();
+    };
+  }, [map, emitted]);
+
+  return null;
+}
+
 function InvalidateOnMount() {
   const map = useMap();
   useEffect(() => {
@@ -183,7 +264,12 @@ function FitView({
   coords,
   center,
   bounds: focus,
+  viewBounds,
+  emitted,
 }: {
+  /** The map view the list filters on (#558). While set, the map keeps the user's view. */
+  viewBounds?: MapBounds | null;
+  emitted: { current: string };
   /** A drilled-down neighborhood's bounds (#503). Wins over everything below. */
   bounds?: NeighborhoodBounds | null;
   geojson: object | null;
@@ -192,7 +278,28 @@ function FitView({
   center: [number, number] | null;
 }) {
   const map = useMap();
+  const viewKey = viewBounds ? formatBounds(viewBounds) : '';
+  const handledView = useRef('');
   useEffect(() => {
+    if (viewBounds) {
+      // A view the user made is already on screen. Any other view (a shared link, Back) is fitted once.
+      if (handledView.current !== viewKey) {
+        handledView.current = viewKey;
+        if (emitted.current !== viewKey) {
+          map.fitBounds(
+            [
+              [viewBounds.south, viewBounds.west],
+              [viewBounds.north, viewBounds.east],
+            ],
+            { animate: false },
+          );
+        }
+      }
+      return;
+    }
+    // The view filter is off: fit the place again.
+    handledView.current = '';
+    emitted.current = '';
     if (focus) {
       const bounds = L.latLngBounds([focus.south, focus.west], [focus.north, focus.east]);
       if (bounds.isValid()) {
@@ -221,7 +328,7 @@ function FitView({
       // Last resort: just pan to the geocoded point
       map.setView(center, 13, { animate: true });
     }
-  }, [geojson, coords, center, focus]);
+  }, [geojson, coords, center, focus, viewKey]);
   return null;
 }
 
@@ -276,6 +383,10 @@ interface Props {
   neighborhoods?: NeighborhoodMarkers;
   /** Fit the map here (a drilled-down neighborhood). */
   focusBounds?: NeighborhoodBounds | null;
+  /** The map view the list filters on (#558). */
+  viewBounds?: MapBounds | null;
+  /** The user moved the map. Called once the view settles. */
+  onUserMove?: (bounds: MapBounds) => void;
 }
 
 export type NeighborhoodBounds = NonNullable<NeighborhoodRow['bounds']>;
@@ -299,7 +410,10 @@ export default function ListingsMapInner({
   total,
   neighborhoods,
   focusBounds,
+  viewBounds,
+  onUserMove,
 }: Props) {
+  const emittedView = useRef('');
   const grouped = neighborhoods !== undefined;
   const groupMarkers = useMemo(
     () => selectMappableNeighborhoods(neighborhoods?.rows ?? []),
@@ -397,7 +511,10 @@ export default function ListingsMapInner({
           coords={grouped ? groupCoords : pinCoords}
           center={searchCenter ?? null}
           bounds={grouped ? null : focusBounds}
+          viewBounds={viewBounds}
+          emitted={emittedView}
         />
+        {onUserMove && <UserMoveReporter onUserMove={onUserMove} emitted={emittedView} />}
         {/* Searched area boundary outline */}
         <BoundaryLayer geojson={searchPolygon ?? null} />
         {grouped ? (

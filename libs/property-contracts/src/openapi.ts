@@ -178,7 +178,10 @@ export function toOpenApiDocument() {
             'supported browse path. It is also independent of the past-the-end rule: a page ' +
             'beyond the last result but INSIDE the window is a normal 200 with an empty ' +
             '`results` array. `total` is always the exact count of the full filtered set, even ' +
-            'when that count exceeds the window — it is never clamped to it.',
+            'when that count exceeds the window — it is never clamped to it.\n\n' +
+            'The optional `bounds` limits the result to a viewport. It is ANDed with every other ' +
+            'filter, so the result is the searched place within the viewport. A listing whose ' +
+            'street address is withheld has no coordinates, so it is not in a viewport result.',
           parameters: searchParameters(),
           responses: {
             '200': {

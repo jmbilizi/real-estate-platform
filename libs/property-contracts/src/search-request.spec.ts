@@ -221,6 +221,25 @@ describe('boundary polygon (#339)', () => {
   });
 });
 
+describe('bounds (#558)', () => {
+  it('is optional and parses west,south,east,north into numbers', () => {
+    expect(searchRequestSchema.parse({}).bounds).toBeUndefined();
+    expect(searchRequestSchema.parse({ bounds: '-77.1,38.8,-77.0,38.9' }).bounds).toEqual({
+      west: -77.1,
+      south: 38.8,
+      east: -77,
+      north: 38.9,
+    });
+  });
+
+  it.each(['-77,38,-78,39', '-77,39,-76,38', '1,2,3', 'a,b,c,d', '-181,0,0,1', '0,-91,1,0'])(
+    'rejects %s',
+    (bounds) => {
+      expect(searchRequestSchema.safeParse({ bounds }).success).toBe(false);
+    },
+  );
+});
+
 describe('the result window (#65)', () => {
   it('bounds the offset at 10,000 — the documented number', () => {
     expect(MAX_RESULT_OFFSET).toBe(10_000);

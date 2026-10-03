@@ -1,5 +1,4 @@
 import {
-  type MapBounds,
   type MapRequest,
   type MapResponse,
   mapResponseSchema,
@@ -10,11 +9,10 @@ import { resolvedSearchRequest } from './on-demand';
 import type { ReadPool } from './repository';
 import { buildSearchQuery } from './search-query';
 
-/** The map filters, as the search request `buildSearchQuery` takes. Paging and sort are unused. */
+/** The map request as a search request. It keeps `bounds`, so the viewport is one more search condition. */
 export function toSearchRequest(request: MapRequest): SearchRequest {
-  const { bounds: _bounds, ...filters } = request;
   return resolvedSearchRequest({
-    ...filters,
+    ...request,
     sort: 'recommended',
     page: 1,
     pageSize: PAGE_SIZE_DEFAULT,
@@ -52,21 +50,17 @@ export async function findMapPins(
     params.push(value);
     return `$${params.length}`;
   };
-  const inBounds = (b: MapBounds): string =>
-    `v.latitude BETWEEN ${bind(b.south)} AND ${bind(b.north)}
-     AND v.longitude BETWEEN ${bind(b.west)} AND ${bind(b.east)}`;
 
   const client = await pool.connect();
   try {
     // One snapshot for both statements, the same reason as `searchListings`.
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
 
-    const viewportWhere = `${where}\n  AND ${inBounds(request.bounds)}`;
     const boundParams = params.length;
     const pinResult = await client.query<PinDbRow>(
       `SELECT v.id, v.latitude, v.longitude, v.price, v.status, v.listing_type, v.is_sample
        FROM listing_search_v v
-       WHERE ${viewportWhere}
+       WHERE ${where}
        ORDER BY v.last_updated DESC, v.id DESC
        LIMIT ${bind(pinCap)}`,
       [...params],
@@ -75,7 +69,7 @@ export async function findMapPins(
     let total = pinResult.rows.length;
     if (total >= pinCap) {
       const countResult = await client.query<{ total: number }>(
-        `SELECT count(*)::int AS total FROM listing_search_v v WHERE ${viewportWhere}`,
+        `SELECT count(*)::int AS total FROM listing_search_v v WHERE ${where}`,
         params.slice(0, boundParams),
       );
       total = Number(countResult.rows[0]?.total ?? total);

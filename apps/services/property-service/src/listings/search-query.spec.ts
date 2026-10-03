@@ -221,4 +221,40 @@ describe('buildSearchQuery', () => {
     expect(where).toContain('lower(v.neighborhood) = lower(');
     expect(where).toContain('ST_Intersects(v.geog,');
   });
+
+  describe('bounds (#558)', () => {
+    const bounds = '-77.07,38.79,-77.03,38.83';
+
+    it('adds no viewport condition when bounds is absent', () => {
+      expect(build({ city: 'Alexandria' }).where).not.toContain('v.latitude');
+    });
+
+    it('ANDs the viewport with the place scope and every other filter', () => {
+      const { where, params } = build({ city: 'Alexandria', state: 'VA', beds: '3', bounds });
+      expect(where).toContain('lower(v.city) = lower(');
+      expect(where).toContain('lower(v.state) = lower(');
+      expect(where).toContain('v.beds >= ');
+      expect(where).toMatch(/v\.latitude BETWEEN \$\d+ AND \$\d+/);
+      expect(where).toMatch(/v\.longitude BETWEEN \$\d+ AND \$\d+/);
+      expect(params).toEqual(expect.arrayContaining([38.79, 38.83, -77.07, -77.03]));
+    });
+
+    it('is the only area when no place is sent, so the viewport alone scopes the search', () => {
+      const { where, params } = build({ bounds });
+      expect(where).toMatch(/v\.latitude BETWEEN/);
+      expect(where).not.toMatch(/v\.city|v\.state|v\.zip|v\.neighborhood|geog/);
+      expect(params).toEqual(expect.arrayContaining([38.79, 38.83, -77.07, -77.03]));
+    });
+
+    it('reads the masked columns, so a withheld address never matches', () => {
+      const { where } = build({ bounds });
+      expect(where).not.toMatch(/street_line|l\.latitude|geog/);
+    });
+
+    it('binds exactly one parameter per placeholder', () => {
+      const { where, params } = build({ city: 'Alexandria', bounds });
+      const placeholders = new Set(where.match(/\$\d+/g));
+      expect(placeholders.size).toBe(params.length);
+    });
+  });
 });

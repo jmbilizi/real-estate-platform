@@ -601,3 +601,20 @@ describe('cache headers', () => {
     expect(response.headers['cache-control']).not.toContain('no-store');
   });
 });
+
+/** #558. Fixture rows sit at latitude 0, longitude 0. The suppressed-address row hides its coordinates. */
+describe('GET /listings with bounds', () => {
+  it('returns a listing inside the viewport and none outside it', async () => {
+    const inside = await fetchAllResults({ bounds: '-1,-1,1,1' });
+    const outside = await fetchAllResults({ bounds: '10,10,11,11' });
+
+    expect(inside.some((row) => row.id === fixtures.sampleListingId)).toBe(true);
+    expect(outside.some((row) => row.id === fixtures.sampleListingId)).toBe(false);
+  });
+
+  it('never returns a listing whose address display is not allowed', async () => {
+    const everywhere = await fetchAllResults({ bounds: '-179,-89,179,89' });
+
+    expect(everywhere.some((row) => row.id === fixtures.suppressedAddressListingId)).toBe(false);
+  });
+});

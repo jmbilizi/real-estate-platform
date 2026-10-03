@@ -161,6 +161,20 @@ describe('getNeighborhoods', () => {
       expect(captured[0]?.text).toContain('FROM listing_search_v v');
     });
 
+    it('selects the view and ANDs the viewport for a bounds request (#558)', async () => {
+      const { client, captured } = fakeClient();
+
+      await getNeighborhoods(client, {
+        ...baseNeighborhoodsRequest,
+        bounds: { west: -77.07, south: 38.79, east: -77.03, north: 38.83 },
+      });
+
+      const text = captured[0]?.text ?? '';
+      expect(text).toContain('FROM listing_search_v v');
+      expect(text).toMatch(/v\.latitude BETWEEN/);
+      expect(captured[0]?.values).toEqual(expect.arrayContaining([38.79, 38.83, -77.07, -77.03]));
+    });
+
     it('keeps the direct source when only empty or false filters are set', async () => {
       const { client, captured } = fakeClient();
 

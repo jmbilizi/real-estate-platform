@@ -31,10 +31,12 @@ import {
   parsePageFromSearchParams,
 } from '@/lib/listing-filters';
 import {
+  type MapBounds,
   maxReachablePage,
   type NeighborhoodRow,
   type SearchPlace,
 } from '@cribstop/property-contracts';
+import { formatBounds, roundBounds, sameBounds, VIEWPORT_PARAM } from '@/lib/map-bounds';
 import { useListingSearch } from '@/lib/useListingSearch';
 import { useNeighborhoodGroups } from '@/lib/useNeighborhoodGroups';
 import {
@@ -243,6 +245,14 @@ export default function SearchExperience({
     () => (place ? { ...filters, ...place.filters } : filters),
     [filters, place],
   );
+  /**
+   * The filters the map pins use. The map reads its own view for `bounds`, so the viewport filter
+   * stays out of this set. The pins and the list then differ only by the debounce.
+   */
+  const mapFilters = useMemo(() => {
+    const { bounds: _bounds, ...rest } = requestFilters;
+    return rest;
+  }, [requestFilters]);
   /** The neighborhood the view is drilled into: from the neighborhood path, else from the query. */
   const drilledName = requestFilters.neighborhood;
   // Two-phase geocode:
@@ -438,11 +448,44 @@ export default function SearchExperience({
     seedFromParams(new URLSearchParams(initialQuery));
   }, [initialQuery, place, deferred, setLocation, setSearchSuggestion, setSearchListingType]);
 
-  /** Writes a query string for this path, with the path's own parameters kept. */
-  const writeUrl = (params: URLSearchParams) => {
+  /**
+   * Writes a query string for this path, with the path's own parameters kept. A map move replaces
+   * the history entry, so panning does not fill the history (#558).
+   */
+  const writeUrl = (params: URLSearchParams, mode: 'push' | 'replace' = 'push') => {
     new URLSearchParams(place?.query).forEach((value, key) => params.set(key, value));
     const qs = params.toString();
-    window.history.pushState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
+    const url = `${window.location.pathname}${qs ? `?${qs}` : ''}`;
+    if (mode === 'replace') window.history.replaceState({}, '', url);
+    else window.history.pushState({}, '', url);
+  };
+
+  /**
+   * The user moved the map (#558). The settled view becomes a filter on the list: the server ANDs
+   * it with the place, so the results stay inside the searched place. The URL entry is replaced,
+   * not pushed. A new view starts at page 1.
+   */
+  const onMapMoved = (raw: MapBounds) => {
+    const next = roundBounds(raw);
+    if (!(next.west < next.east && next.south < next.north)) return;
+    setFilters((prev) => (sameBounds(prev.bounds, next) ? prev : { ...prev, bounds: next }));
+    setPage(1);
+    if (!ownsUrl) return; // not our URL to write — see `ownsUrl`
+    const params = new URLSearchParams(window.location.search);
+    params.set(VIEWPORT_PARAM, formatBounds(next));
+    params.delete('page');
+    writeUrl(params, 'replace');
+  };
+
+  /** Drops the viewport filter. The list returns to the whole place and the map fits it again. */
+  const clearViewport = () => {
+    setFilters((prev) => ({ ...prev, bounds: undefined }));
+    setPage(1);
+    if (!ownsUrl) return; // not our URL to write — see `ownsUrl`
+    const params = new URLSearchParams(window.location.search);
+    params.delete(VIEWPORT_PARAM);
+    params.delete('page');
+    writeUrl(params);
   };
 
   const grouped = group.groupBy === 'neighborhood';
@@ -542,7 +585,8 @@ export default function SearchExperience({
    * empty state's clear, anything added later — goes through it once.
    */
   const applyFilters = (next: SearchFilters) => {
-    const committed = applyLandInterlock(next);
+    // The map view is not a modal control. A draft can hold an older view than the map now shows.
+    const committed = applyLandInterlock({ ...next, bounds: filters.bounds });
     setFilters(committed);
     setPage(1);
     if (!ownsUrl) return; // not our URL to write — see `ownsUrl`
@@ -559,13 +603,13 @@ export default function SearchExperience({
    * nothing at all.
    */
   const clearFilters = () => {
-    const { query, zip, street, city, state, neighborhood, boundary, sort } = filters;
-    applyFilters({ query, zip, street, city, state, neighborhood, boundary, sort });
+    const { query, zip, street, city, state, neighborhood, boundary, bounds, sort } = filters;
+    applyFilters({ query, zip, street, city, state, neighborhood, boundary, bounds, sort });
   };
 
   /** Commits a filter set and a group state together: state, URL and paging (#502). */
   const commitView = (nextFilters: SearchFilters, nextGroup: GroupState) => {
-    const committed = applyLandInterlock(nextFilters);
+    const committed = applyLandInterlock({ ...nextFilters, bounds: filters.bounds });
     setFilters(committed);
     setGroup(nextGroup);
     setPage(1);
@@ -634,6 +678,13 @@ export default function SearchExperience({
     card?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   };
 
+  /**
+   * The way back from the viewport filter. With a place, the viewport stays inside it and the
+   * label names it. Without a place, the viewport alone is the area and clearing shows every match.
+   */
+  const placeLabel = place?.label || filters.query || '';
+  const showAllLabel = placeLabel ? `Show all in ${placeLabel}` : 'Show all homes';
+
   const groupPageCount = Math.ceil(groups.total / GROUP_PAGE_SIZE);
   const reachableGroupPages = Math.min(groupPageCount, maxReachablePage(GROUP_PAGE_SIZE));
   const isGroupsLoading = groups.status === 'loading';
@@ -678,7 +729,9 @@ export default function SearchExperience({
               className="h-full w-full"
               searchCenter={searchCenter}
               searchPolygon={searchPolygon}
-              filters={requestFilters}
+              filters={mapFilters}
+              viewBounds={filters.bounds ?? null}
+              onUserMove={onMapMoved}
               total={total}
               neighborhoods={
                 grouped
@@ -785,6 +838,29 @@ export default function SearchExperience({
                   </span>
                 </span>
               )}
+              {filters.bounds && (
+                <button
+                  type="button"
+                  data-testid="clear-map-area"
+                  aria-label="Map area filter on. Clear it to show the whole search area."
+                  onClick={clearViewport}
+                  className="ml-1 inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-full border border-surface-border bg-surface-soft px-2.5 text-xs font-semibold text-ink transition-colors duration-150 hover:bg-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
+                >
+                  Map area
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+              )}
             </div>
             <div className="relative flex shrink-0 items-center justify-end gap-x-0.5 sm:gap-x-1">
               <button
@@ -872,6 +948,24 @@ export default function SearchExperience({
           </div>
 
           <div className="px-5 pb-10 md:px-0 md:pb-0">
+            {filters.bounds && (
+              <p
+                data-testid="map-area-note"
+                className="-mt-3 mb-4 text-xs leading-snug text-ink-muted"
+              >
+                {grouped
+                  ? 'Showing neighborhoods with homes in the map area.'
+                  : 'Showing homes in the map area.'}{' '}
+                Homes with a hidden address are not shown.{' '}
+                <button
+                  type="button"
+                  onClick={clearViewport}
+                  className="cursor-pointer font-semibold text-ink underline underline-offset-2"
+                >
+                  {showAllLabel}
+                </button>
+              </p>
+            )}
             {grouped ? (
               isGroupsLoading ? (
                 <NeighborhoodGroupGridSkeleton />
@@ -939,7 +1033,13 @@ export default function SearchExperience({
                * either of the other two: it says which filters are narrowing, and offers the one
                * action that widens them.
                */
-              <EmptyState activeFilterCount={countActiveFilters(filters)} onClear={clearFilters} />
+              <EmptyState
+                activeFilterCount={countActiveFilters(filters)}
+                onClear={clearFilters}
+                inMapArea={Boolean(filters.bounds)}
+                onClearMapArea={clearViewport}
+                showAllLabel={showAllLabel}
+              />
             ) : (
               <>
                 <div className={`grid ${RESULTS_GRID_GAP_CLASS} ${RESULTS_GRID_COLUMNS_CLASS}`}>
@@ -1023,9 +1123,16 @@ const SORT_ICON = (
 function EmptyState({
   activeFilterCount,
   onClear,
+  inMapArea,
+  onClearMapArea,
+  showAllLabel,
 }: {
   activeFilterCount: number;
   onClear: () => void;
+  /** The map view filter is on (#558). */
+  inMapArea: boolean;
+  onClearMapArea: () => void;
+  showAllLabel: string;
 }) {
   const filtered = activeFilterCount > 0;
   return (
@@ -1050,15 +1157,33 @@ function EmptyState({
         </svg>
       </div>
       <p className="mt-5 font-display text-xl font-bold">
-        {filtered ? 'No homes match your filters' : 'No homes to show here'}
+        {inMapArea
+          ? 'No homes in this map area'
+          : filtered
+            ? 'No homes match your filters'
+            : 'No homes to show here'}
       </p>
       <p className="mt-1 text-sm text-ink-muted">
-        {filtered
-          ? `Your search ran, and ${activeFilterCount === 1 ? 'the filter you applied matches' : `the ${activeFilterCount} filters you applied match`} no listings. Try widening your price range or removing a filter.`
-          : 'Your search ran and found no listings in this area. Try searching a nearby city or ZIP code.'}
+        {inMapArea
+          ? 'Your search ran and found no homes with a visible address in this part of the map. Zoom out, move the map, or clear the map area.'
+          : filtered
+            ? `Your search ran, and ${activeFilterCount === 1 ? 'the filter you applied matches' : `the ${activeFilterCount} filters you applied match`} no listings. Try widening your price range or removing a filter.`
+            : 'Your search ran and found no listings in this area. Try searching a nearby city or ZIP code.'}
       </p>
+      {inMapArea && (
+        <button onClick={onClearMapArea} className="btn-primary mt-5 text-sm">
+          {showAllLabel}
+        </button>
+      )}
       {filtered && (
-        <button onClick={onClear} className="btn-primary mt-5 text-sm">
+        <button
+          onClick={onClear}
+          className={
+            inMapArea
+              ? 'mt-3 block w-full text-sm font-semibold underline'
+              : 'btn-primary mt-5 text-sm'
+          }
+        >
           Clear all filters
         </button>
       )}
