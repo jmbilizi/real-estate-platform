@@ -10,15 +10,18 @@ import MapPinCard from '@/components/MapPinCard';
 import { store } from '@/lib/store/store';
 import type { ListingCardRow } from '@/lib/types';
 import { formatListingPriceShort } from '@/lib/listing-format';
-import { createPillSpreader, PILL_BOX_H, type PillOffset, type SpreadPoint } from '@/lib/map-pins';
+import { coordKeyOf, FAN_MIN_ZOOM, fanOffsets } from '@/lib/map-pins';
 import {
-  drawPill,
+  drawHome,
+  PILL_ANCHOR_H,
   PILL_FONT,
-  pillBounds,
-  pillContains,
-  pillGeometry,
-  type PillState,
-} from '@/lib/pill-draw';
+  pinBounds,
+  pinContains,
+  pinGeometry,
+  type PinState,
+} from '@/lib/pin-draw';
+
+export { FAN_MIN_ZOOM };
 
 /**
  * Popup width in px. A phone map pane is about 350px tall, so the narrower card keeps the popup
@@ -27,8 +30,12 @@ import {
 const popupWidth = () =>
   typeof window !== 'undefined' && window.matchMedia?.('(min-width: 640px)').matches ? 280 : 232;
 
+/** A phone or tablet has no hover. A tap opens the popup and the pin shows no hover pill. */
+const canHover = () =>
+  typeof window === 'undefined' || !window.matchMedia?.('(hover: none)').matches;
+
 /** The parts of Leaflet's canvas renderer that this layer drives. */
-interface PillRenderer extends L.Canvas {
+interface PinRenderer extends L.Canvas {
   _drawing: boolean;
   _ctx: CanvasRenderingContext2D;
   _extendRedrawBounds: (layer: L.Layer) => void;
@@ -38,19 +45,18 @@ interface PillRenderer extends L.Canvas {
   _container?: HTMLCanvasElement;
 }
 
-/** Before the first layout. Its rank never matches a real one, so the first layout always writes. */
-const NO_OFFSET: PillOffset = { dx: 0, dy: 0, roomy: false, rank: -1 };
+type Offset = { dx: number; dy: number };
+const NO_OFFSET: Offset = { dx: 0, dy: 0 };
 
 /**
- * One home as a price pill on the shared canvas (#549). The renderer draws it and finds the pill
- * under the pointer, and a layer later in its draw order is on top. The pill is a picture, so 1,800
- * of them cost one canvas and a pan moves that canvas as one piece.
+ * One home on the shared canvas (#549, #557). The renderer draws it and finds the home under the
+ * pointer, and a layer later in its draw order is on top. A home is a picture, so 1,800 of them
+ * cost one canvas and a pan moves that canvas as one piece.
  */
-class PillLayer extends L.CircleMarker {
+class PinLayer extends L.CircleMarker {
   readonly pin: MapPin;
-  readonly label: string;
-  state: PillState = 'plain';
-  spread: PillOffset = NO_OFFSET;
+  state: PinState = 'plain';
+  offset: Offset = NO_OFFSET;
 
   constructor(pin: MapPin, renderer: L.Renderer) {
     super([pin.latitude, pin.longitude], {
@@ -62,18 +68,28 @@ class PillLayer extends L.CircleMarker {
       bubblingMouseEvents: false,
     });
     this.pin = pin;
-    this.label = formatListingPriceShort(pin.price, pin.listingType).text;
   }
 
-  /** The pill for the projected position. `_point` is in layer pixels, the canvas's own space. */
+  /** The price on the pill. A home at rest draws no price, so it never formats one. */
+  get label() {
+    return this.state === 'active'
+      ? formatListingPriceShort(this.pin.price, this.pin.listingType).text
+      : '';
+  }
+
+  /** `_point` is in layer pixels, the canvas's own space. */
   geometry() {
     const { x, y } = (this as unknown as { _point: L.Point })._point;
-    return pillGeometry(x, y, this.label, this.spread);
+    return pinGeometry(x, y, this.offset);
   }
 
   // Leaflet calls these three. They replace the circle's own bounds, hit test and drawing.
   _updateBounds() {
-    const [minX, minY, maxX, maxY] = pillBounds(this.geometry());
+    const [minX, minY, maxX, maxY] = pinBounds(
+      this.geometry(),
+      this.label,
+      this.state === 'active',
+    );
     (this as unknown as { _pxBounds: L.Bounds })._pxBounds = L.bounds(
       L.point(minX, minY),
       L.point(maxX, maxY),
@@ -81,22 +97,21 @@ class PillLayer extends L.CircleMarker {
   }
 
   _containsPoint(point: L.Point) {
-    return pillContains(this.geometry(), this.spread.roomy, point.x, point.y);
+    return pinContains(this.geometry(), this.label, this.state === 'active', point.x, point.y);
   }
 
   _updatePath() {
-    const renderer = (this as unknown as { _renderer: PillRenderer })._renderer;
+    const renderer = (this as unknown as { _renderer: PinRenderer })._renderer;
     if (!renderer._drawing) return;
-    drawPill(renderer._ctx, this.geometry(), this.label, this.state);
+    drawHome(renderer._ctx, this.geometry(), this.label, this.state);
   }
 }
 
-/** The renderer that draws a pill. It is set once the pill is on the map. */
-const rendererOf = (layer: PillLayer) =>
-  (layer as unknown as { _renderer?: PillRenderer })._renderer;
+/** The renderer that draws a home. It is set once the home is on the map. */
+const rendererOf = (layer: PinLayer) => (layer as unknown as { _renderer?: PinRenderer })._renderer;
 
-/** Repaints a pill. The old bounds are cleared and the new ones drawn, as Leaflet's own update does. */
-function repaint(layer: PillLayer) {
+/** Repaints a home. The old bounds are cleared and the new ones drawn, as Leaflet's own update does. */
+function repaint(layer: PinLayer) {
   const renderer = rendererOf(layer);
   if (!renderer) return;
   renderer._extendRedrawBounds(layer);
@@ -105,30 +120,30 @@ function repaint(layer: PillLayer) {
 }
 
 /**
- * Draw order, first drawn first. A hovered or active pill is last, so on top. The rest go by screen
- * y, so a lower pill covers a higher one. That is the order the spread plans for. The order
- * depends only on state and position, so a pan does not reshuffle it.
+ * Draw order, first drawn first. A hovered or selected home is last, so on top. The rest go by
+ * screen y, so a lower pin covers a higher one, as the eye expects. The hit test reads this same
+ * order from the end, so the pin drawn on top takes the click. The order depends only on state and
+ * position, so a pan does not reshuffle it.
  */
-// Saved is drawn like plain: a raised pill could cover the strip that the spread kept for another.
-const STATE_ORDER: Record<PillState, number> = { plain: 0, saved: 0, active: 1 };
-const pointY = (l: PillLayer) => (l as unknown as { _point?: L.Point })._point?.y ?? 0;
-const byDrawOrder = (a: PillLayer, b: PillLayer) =>
+const STATE_ORDER: Record<PinState, number> = { plain: 0, saved: 0, active: 1 };
+const pointY = (l: PinLayer) => (l as unknown as { _point?: L.Point })._point?.y ?? 0;
+const byDrawOrder = (a: PinLayer, b: PinLayer) =>
   STATE_ORDER[a.state] - STATE_ORDER[b.state] ||
   pointY(a) - pointY(b) ||
   (a.pin.id < b.pin.id ? 1 : a.pin.id > b.pin.id ? -1 : 0);
 
 interface DrawNode {
-  layer: PillLayer;
+  layer: PinLayer;
   prev: DrawNode | null;
   next: DrawNode | null;
 }
-type OrderedRenderer = PillRenderer & { _drawFirst: DrawNode | null; _drawLast: DrawNode | null };
+type OrderedRenderer = PinRenderer & { _drawFirst: DrawNode | null; _drawLast: DrawNode | null };
 
 /**
- * Moves one pill after `anchor` in the renderer's draw list, or to the front. Leaflet has only
- * "to front" and "to back", and a hover must put a pill back where it was, not at the end.
+ * Moves one home after `anchor` in the renderer's draw list, or to the front. Leaflet has only
+ * "to front" and "to back", and a hover must put a home back where it was, not at the end.
  */
-function moveAfter(layer: PillLayer, anchor: PillLayer | null) {
+function moveAfter(layer: PinLayer, anchor: PinLayer | null) {
   const renderer = rendererOf(layer) as OrderedRenderer | undefined;
   const node = (layer as unknown as { _order?: DrawNode })._order;
   if (!renderer || !node) return;
@@ -155,8 +170,8 @@ function moveAfter(layer: PillLayer, anchor: PillLayer | null) {
   renderer._requestRedraw(layer);
 }
 
-/** Puts one pill at its place in the draw order. The sorted list stays sorted. */
-function restackOne(ctx: Ctx, layer: PillLayer) {
+/** Puts one home at its place in the draw order. The sorted list stays sorted. */
+function restackOne(ctx: Ctx, layer: PinLayer) {
   const at = ctx.order.indexOf(layer);
   if (at >= 0) ctx.order.splice(at, 1);
   let lo = 0;
@@ -170,143 +185,60 @@ function restackOne(ctx: Ctx, layer: PillLayer) {
   moveAfter(layer, ctx.order[lo - 1] ?? null);
 }
 
-/** Puts every pill in order. It is for a big change, such as the first fetch. */
+/** Puts every home in order. It is for a big change, such as the first fetch. */
 function restackAll(ctx: Ctx) {
   ctx.order.sort(byDrawOrder);
   for (const layer of ctx.order) layer.bringToFront();
 }
 
-/** More new pills than this are put in order in one pass, not one by one. */
+/** More new homes than this are put in order in one pass, not one by one. */
 const BULK_RESTACK = 40;
-/** Homes at one true coordinate fan out from this zoom up, never below it. */
-export const FAN_MIN_ZOOM = 17;
-/** About 1.1 m: coordinates that agree to five decimals are one true coordinate. */
-const coordKeyOf = (pin: MapPin) => `${pin.latitude.toFixed(5)},${pin.longitude.toFixed(5)}`;
-
-/** Up to this many pills the layout runs in one go. Beyond it, it runs in slices. */
-const SYNC_LAYOUT_MAX = 250;
-/** The longest one slice of a layout holds the main thread, in ms. */
-const SLICE_MS = 8;
-/** How long a zoom waits for the pin refetch before it lays out the pills it has. */
-const ZOOM_LAYOUT_DELAY_MS = 250;
 
 interface Ctx {
   group: L.FeatureGroup;
-  layers: Map<string, PillLayer>;
-  /** The pills in draw order, first drawn first. */
-  order: PillLayer[];
-  /** The points of the last layout, to skip a layout that would give the same result. */
-  signature: Map<string, string> | null;
-  /** A zoom layout waiting for the refetch that follows it. */
-  timer: ReturnType<typeof setTimeout> | null;
-  /** The running layout. A newer layout bumps it, and the older one stops. */
-  layoutRun: number;
-  slice: ReturnType<typeof setTimeout> | null;
-  /** The pill under the pointer. */
+  layers: Map<string, PinLayer>;
+  /** The homes in draw order, first drawn first. */
+  order: PinLayer[];
+  /** The home under the pointer. */
   hovered: string | null;
+  /** The home whose popup is open. */
+  selected: string | null;
 }
 
 /**
- * Writes one pill's body offset and marks its old and new bounds for the redraw. The layout asks
- * for one redraw when it ends, not one per pill.
+ * Fans out homes that share one true coordinate, from `FAN_MIN_ZOOM` up, so each condo unit is
+ * reachable. Every other home stays on its coordinate and small pins overlap freely. A fanned pin
+ * draws a leader line to its true coordinate. A layout is cheap, so it runs in one go.
  */
-function writeOffset(layer: PillLayer, next: PillOffset) {
-  const prev = layer.spread;
-  if (next.dx === prev.dx && next.dy === prev.dy && next.rank === prev.rank) return;
-  const renderer = rendererOf(layer);
-  renderer?._extendRedrawBounds(layer);
-  // The full hit area waits for the second pass, which knows every neighbour.
-  layer.spread = { ...next, roomy: false };
-  layer._updateBounds();
-  renderer?._extendRedrawBounds(layer);
-}
-
-/**
- * Spreads the bodies of overlapping pills (see `createPillSpreader`). The tail tip stays on the
- * coordinate, and a moved pill draws a leader line from its tail to that tip. A big layout runs
- * in slices of `SLICE_MS`, so it never holds the main thread for long. A newer layout cancels an
- * older one that is still running.
- */
-function layoutPills(map: L.Map, ctx: Ctx) {
-  const zoom = map.getZoom();
-  const fan = zoom >= FAN_MIN_ZOOM;
-  const points: SpreadPoint[] = [];
-  const signature = new Map<string, string>();
+function layoutPins(map: L.Map, ctx: Ctx) {
+  const fan =
+    map.getZoom() >= FAN_MIN_ZOOM
+      ? fanOffsets(
+          [...ctx.layers.values()].map((layer) => ({
+            id: layer.pin.id,
+            coordKey: coordKeyOf(layer.pin.latitude, layer.pin.longitude),
+          })),
+        )
+      : null;
   for (const layer of ctx.layers.values()) {
-    const p = map.project(layer.getLatLng(), zoom);
-    points.push({
-      id: layer.pin.id,
-      x: p.x,
-      y: p.y,
-      label: layer.label,
-      coordKey: coordKeyOf(layer.pin),
-    });
-    signature.set(layer.pin.id, `${p.x},${p.y},${layer.label},${fan}`);
+    const next = fan?.get(layer.pin.id) ?? NO_OFFSET;
+    if (next.dx === layer.offset.dx && next.dy === layer.offset.dy) continue;
+    const renderer = rendererOf(layer);
+    renderer?._extendRedrawBounds(layer);
+    layer.offset = next;
+    layer._updateBounds();
+    renderer?._extendRedrawBounds(layer);
   }
-  // The same points at the same zoom give the same spread, and a layout for them may be running.
-  const last = ctx.signature;
-  if (last && last.size === signature.size) {
-    let same = true;
-    for (const [id, sig] of signature) {
-      if (last.get(id) !== sig) {
-        same = false;
-        break;
-      }
-    }
-    if (same) return;
-  }
-  ctx.signature = signature;
-  ctx.layoutRun += 1;
-  const run = ctx.layoutRun;
-  if (ctx.slice) clearTimeout(ctx.slice);
-  ctx.slice = null;
-
-  const spreader = createPillSpreader(points, { fan });
-  let placing = true;
-  const step = (): boolean => {
-    if (placing) {
-      const item = spreader.next();
-      if (item) {
-        const layer = ctx.layers.get(item[0]);
-        if (layer) writeOffset(layer, item[1]);
-        return true;
-      }
-      placing = false;
-    }
-    const item = spreader.nextRoomy();
-    if (!item) {
-      const any = ctx.order[0];
-      if (any) rendererOf(any)?._requestRedraw(any);
-      return false;
-    }
-    const layer = ctx.layers.get(item[0]);
-    if (layer) layer.spread = { ...layer.spread, roomy: item[1] };
-    return true;
-  };
-
-  if (points.length <= SYNC_LAYOUT_MAX) {
-    while (step());
-    return;
-  }
-  const slice = () => {
-    ctx.slice = null;
-    if (run !== ctx.layoutRun) return;
-    const start = performance.now();
-    while (performance.now() - start < SLICE_MS) {
-      if (!step()) return;
-    }
-    ctx.slice = setTimeout(slice, 0);
-  };
-  slice();
+  const any = ctx.order[0];
+  if (any) rendererOf(any)?._requestRedraw(any);
 }
 
 /**
- * Every home as a price pill at its exact coordinate (#546, #549). There are no clusters and no
- * dots. Pills that overlap stack. The hovered or active pill is on top, then saved pills, then the
- * rest in screen order.
+ * Every home as a small pin at its exact coordinate (#546, #549, #557). There are no clusters. A
+ * hovered or selected home shows its price on a red pill, drawn on top.
  *
- * The pills are drawn on one canvas. A fetch is diffed against the pills on the map, so a pan adds
- * and removes only the pills that changed, and a hover or save change repaints one or two pills.
+ * The homes are drawn on one canvas. A fetch is diffed against the homes on the map, so a pan adds
+ * and removes only the homes that changed, and a hover or save change repaints one or two.
  */
 export default function PricePinLayer({
   pins,
@@ -382,27 +314,14 @@ export default function PricePinLayer({
     [map, closeCard],
   );
 
-  useEffect(() => {
-    const onPopupClose = (event: L.PopupEvent) => {
-      const open = popupRef.current;
-      if (!open || open.popup !== event.popup) return;
-      popupRef.current = null;
-      setTimeout(() => open.root.unmount(), 0);
-    };
-    map.on('popupclose', onPopupClose);
-    return () => {
-      map.off('popupclose', onPopupClose);
-      closeCard();
-    };
-  }, [map, closeCard]);
-
-  /** Sets one pill's look and stack order. Only repaints when the state changed. */
-  const applyState = useCallback((layer: PillLayer, ctx: Ctx) => {
+  /** Sets one home's look and stack order. Only repaints when the state changed. */
+  const applyState = useCallback((layer: PinLayer, ctx: Ctx) => {
     const { activeId: active, savedIds: saved } = view.current;
-    const next: PillState =
-      ctx.hovered === layer.pin.id || active === layer.pin.id
+    const id = layer.pin.id;
+    const next: PinState =
+      ctx.hovered === id || ctx.selected === id || active === id
         ? 'active'
-        : saved?.has(layer.pin.id)
+        : saved?.has(id)
           ? 'saved'
           : 'plain';
     if (next === layer.state) return false;
@@ -411,32 +330,50 @@ export default function PricePinLayer({
     return true;
   }, []);
 
+  const refresh = useCallback(
+    (id: string | null) => {
+      const ctx = ctxRef.current;
+      const layer = id ? ctx?.layers.get(id) : undefined;
+      if (ctx && layer && applyState(layer, ctx)) restackOne(ctx, layer);
+    },
+    [applyState],
+  );
+
+  useEffect(() => {
+    const onPopupClose = (event: L.PopupEvent) => {
+      const open = popupRef.current;
+      if (!open || open.popup !== event.popup) return;
+      popupRef.current = null;
+      setTimeout(() => open.root.unmount(), 0);
+      const ctx = ctxRef.current;
+      const was = ctx?.selected ?? null;
+      if (ctx) ctx.selected = null;
+      refresh(was);
+    };
+    map.on('popupclose', onPopupClose);
+    return () => {
+      map.off('popupclose', onPopupClose);
+      closeCard();
+    };
+  }, [map, closeCard, refresh]);
+
   // One feature group for the layer. Event delegation keeps it to three handlers, not 5,400.
   useEffect(() => {
     const group = L.featureGroup().addTo(map);
-    const ctx: Ctx = {
-      group,
-      layers: new Map(),
-      order: [],
-      signature: null,
-      timer: null,
-      layoutRun: 0,
-      slice: null,
-      hovered: null,
-    };
+    const ctx: Ctx = { group, layers: new Map(), order: [], hovered: null, selected: null };
     ctxRef.current = ctx;
     const find = (event: L.LeafletEvent) =>
-      ctx.layers.get((event.propagatedFrom as PillLayer).pin.id);
+      ctx.layers.get((event.propagatedFrom as PinLayer).pin.id);
     group.on('mouseover', (event) => {
       const layer = find(event);
-      if (!layer) return;
+      if (!layer || !canHover()) return;
       ctx.hovered = layer.pin.id;
       if (applyState(layer, ctx)) restackOne(ctx, layer);
       cb.current.onMarkerHover?.(layer.pin.id);
     });
     group.on('mouseout', (event) => {
       const layer = find(event);
-      if (!layer) return;
+      if (!layer || !canHover()) return;
       ctx.hovered = null;
       if (applyState(layer, ctx)) restackOne(ctx, layer);
       cb.current.onMarkerHover?.(null);
@@ -444,51 +381,47 @@ export default function PricePinLayer({
     group.on('click', (event) => {
       const layer = find(event);
       if (!layer) return;
-      // The popup opens above the body, which can sit away from its tail tip.
-      const { dx, dy } = layer.spread;
-      openCard(layer.pin.id, layer.getLatLng(), L.point(dx, dy - PILL_BOX_H - 4));
+      const previous = ctx.selected;
+      // `openCard` closes the old popup, and its `popupclose` clears the selection. Select after.
+      openCard(
+        layer.pin.id,
+        layer.getLatLng(),
+        L.point(layer.offset.dx, layer.offset.dy - PILL_ANCHOR_H),
+      );
+      ctx.selected = layer.pin.id;
+      refresh(previous);
+      refresh(layer.pin.id);
     });
-    // The spread depends on the zoom. A pan only moves the canvas, so it needs no new layout.
-    // A zoom also refetches the pins, and that fetch lays out again. The short wait lets it go
-    // first, so one layout serves both.
-    const onZoom = () => {
-      if (ctx.timer) clearTimeout(ctx.timer);
-      ctx.timer = setTimeout(() => {
-        ctx.timer = null;
-        layoutPills(map, ctx);
-      }, ZOOM_LAYOUT_DELAY_MS);
-    };
+    // The fan depends on the zoom. A pan only moves the canvas, so it needs no new layout.
+    const onZoom = () => layoutPins(map, ctx);
     map.on('zoomend', onZoom);
     // The pill font may load after the first draw. Draw again once it has.
     let alive = true;
     void document.fonts?.load(PILL_FONT).then(() => {
       if (!alive) return;
       // Draw now, and drop the redraw that was already waiting for a frame. The canvas exists only
-      // once a pill is on the map.
-      const pill = renderer as PillRenderer;
-      if (!pill._ctx) return;
-      if (pill._redrawRequest) L.Util.cancelAnimFrame(pill._redrawRequest);
-      pill._redraw();
+      // once a home is on the map.
+      const canvas = renderer as PinRenderer;
+      if (!canvas._ctx) return;
+      if (canvas._redrawRequest) L.Util.cancelAnimFrame(canvas._redrawRequest);
+      canvas._redraw();
     });
     return () => {
       alive = false;
       map.off('zoomend', onZoom);
-      if (ctx.timer) clearTimeout(ctx.timer);
-      ctx.layoutRun += 1;
-      if (ctx.slice) clearTimeout(ctx.slice);
       ctxRef.current = null;
       map.removeLayer(group);
     };
-  }, [map, renderer, openCard, applyState]);
+  }, [map, renderer, openCard, applyState, refresh]);
 
-  // Diff the fetched pins against the pills on the map.
+  // Diff the fetched pins against the homes on the map.
   useEffect(() => {
     const ctx = ctxRef.current;
     if (!ctx) return;
     const next = new Map<string, MapPin>();
     for (const pin of pins) next.set(pin.id, pin);
 
-    const gone = new Set<PillLayer>();
+    const gone = new Set<PinLayer>();
     for (const [id, layer] of ctx.layers) {
       const pin = next.get(id);
       const same =
@@ -501,17 +434,17 @@ export default function PricePinLayer({
       ctx.group.removeLayer(layer);
       ctx.layers.delete(id);
       gone.add(layer);
-      // A removed pill fires no `mouseout`, so a hovered pill would keep its card lit.
+      // A removed home fires no `mouseout`, so a hovered home would keep its card lit.
       if (ctx.hovered === id) {
         ctx.hovered = null;
         cb.current.onMarkerHover?.(null);
       }
     }
     if (gone.size) ctx.order = ctx.order.filter((layer) => !gone.has(layer));
-    const added: PillLayer[] = [];
+    const added: PinLayer[] = [];
     for (const pin of next.values()) {
       if (ctx.layers.has(pin.id)) continue;
-      const layer = new PillLayer(pin, renderer);
+      const layer = new PinLayer(pin, renderer);
       applyState(layer, ctx);
       ctx.layers.set(pin.id, layer);
       ctx.group.addLayer(layer);
@@ -520,22 +453,18 @@ export default function PricePinLayer({
     ctx.order.push(...added);
     if (added.length > BULK_RESTACK) restackAll(ctx);
     else for (const layer of added) restackOne(ctx, layer);
-    // The pills are a picture, not elements. Say what it holds, and point to the list, which has
+    // The pins are a picture, not elements. Say what it holds, and point to the list, which has
     // every home as a card that a keyboard can reach.
-    const canvas = (renderer as PillRenderer)._container;
+    const canvas = (renderer as PinRenderer)._container;
     canvas?.setAttribute('role', 'img');
     canvas?.setAttribute(
       'aria-label',
       `Map with ${next.size.toLocaleString()} homes. The results list shows the same homes as cards.`,
     );
-    if (ctx.timer) {
-      clearTimeout(ctx.timer);
-      ctx.timer = null;
-    }
-    layoutPills(map, ctx);
+    layoutPins(map, ctx);
   }, [pins, map, renderer, applyState]);
 
-  // A hover or save change from outside repaints the pills that changed.
+  // A hover or save change from outside repaints the homes that changed.
   useEffect(() => {
     const ctx = ctxRef.current;
     if (!ctx) return;

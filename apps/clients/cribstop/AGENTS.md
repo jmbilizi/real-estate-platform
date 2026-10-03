@@ -103,11 +103,13 @@ pnpm exec nx lint cribstop-next        # Also: test, type-check
   never `$0`, never an estimate. A suppressed address (`address`/`latitude`/`longitude` null
   together) renders no address and **never** a city or ZIP centroid; the map legitimately shows
   fewer pins than the result count, and that is explained in copy rather than hidden.
-- The search map draws every home as a price pill on one canvas (`PricePinLayer.tsx`,
-  `lib/pill-draw.ts`, `lib/map-pins.ts`, #549). There are no dots and no DOM markers: 1,800 DOM
-  markers dropped frames at 4x CPU. Pills may overlap. `spreadPills` offsets the bodies so none is
-  fully hidden at street zoom, and the tail tip stays on the coordinate. Any click on a pin opens
-  `MapPinCard`: the page row, or the card from `GET /listings/{id}/card`.
+- The search map draws every home as a small red teardrop pin on one canvas (`PricePinLayer.tsx`,
+  `lib/pin-draw.ts`, `lib/map-pins.ts`, #549, #557). There are no dots and no DOM markers: 1,800 DOM
+  markers dropped frames at 4x CPU. A pin shows no price at rest. A hovered home, a hovered listing
+  card, and the home with an open popup show the red price pill instead. A device with no hover
+  shows the pill only for the open popup. Pins overlap freely. Homes at one true coordinate fan out
+  only at zoom 17 or higher. Any click on a pin opens `MapPinCard`: the page row, or the card from
+  `GET /listings/{id}/card`.
 - `next/scripts/check-legal-content.js` blocks the **prod** deploy while `src/content/legal/*.json`
   carries `isDraft: true` (#219). It runs only from the prod job in
   `.github/workflows/deploy-k8s-resources.yml`, keyed on `DEPLOYMENT_ENV=prod`. `DEPLOYMENT_ENV` is
