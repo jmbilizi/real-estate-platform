@@ -15,11 +15,13 @@ export const CAROUSEL_ITEM_WIDTH_CLASS =
 export const CAROUSEL_ITEM_CLASS = `flex-shrink-0 snap-start [scroll-snap-stop:always] ${CAROUSEL_ITEM_WIDTH_CLASS}`;
 
 /**
- * `-mr-6 sm:mr-0`: the right edge bleeds past the section's padding below `sm`. The cut-off next
- * item is the "peek", not a rendering bug. `mt-3` is the whole gap to the header (#447).
+ * `-mr-6`: the right edge bleeds past the section's padding below `sm`. The cut-off next item is
+ * the "peek", not a rendering bug. `mt-0.5 pt-2.5` is the 12px gap to the header (#447). The
+ * 12px padding with equal negative margin on the other sides keeps the 8px card halo (#550)
+ * from being clipped, and keeps card widths and positions the same.
  */
 export const CAROUSEL_SCROLLER_CLASS =
-  'mt-3 flex snap-x snap-mandatory gap-3 sm:gap-5 overflow-x-auto pb-3 scrollbar-none -mr-6 sm:mr-0';
+  'mt-0.5 flex snap-x snap-mandatory gap-3 sm:gap-5 overflow-x-auto pb-3 pt-2.5 scrollbar-none -ml-3 pl-3 scroll-pl-3 -mr-6 sm:-mr-3 sm:pr-3 sm:scroll-pr-3';
 
 /** Scroll position state and the arrow handler for one scroller. */
 export function useCarouselScroll(rescanKey: readonly unknown[]) {
