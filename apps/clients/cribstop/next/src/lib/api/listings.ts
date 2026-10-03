@@ -14,6 +14,7 @@ import type {
   OpenHouse,
   SearchRequest,
 } from '@cribstop/property-contracts';
+import { formatBounds } from '@/lib/map-bounds';
 
 /**
  * Client for the Property API's `listings` resource, following the `lib/api/account.ts` pattern:
@@ -134,7 +135,9 @@ export function toSearchParams(query: ListingSearchQuery): URLSearchParams {
   for (const [key, value] of Object.entries(query)) {
     if (value === undefined || value === null || value === '') continue;
 
-    if (Array.isArray(value)) {
+    if (key === 'bounds' && typeof value === 'object' && !Array.isArray(value)) {
+      params.set(key, formatBounds(value as MapBounds));
+    } else if (Array.isArray(value)) {
       for (const entry of value) params.append(key, String(entry));
     } else if (typeof value === 'boolean') {
       params.set(key, value ? 'true' : 'false');
@@ -164,15 +167,7 @@ export async function getListingsMap(
   signal?: AbortSignal,
 ): Promise<MapResponse> {
   const params = toSearchParams(query);
-  // A zoomed-out Leaflet view reports longitudes past ±180. The contract accepts only real ones.
-  const clamp = (value: number, limit: number) => Math.max(-limit, Math.min(limit, value));
-  const edges = [
-    clamp(bounds.west, 180),
-    clamp(bounds.south, 90),
-    clamp(bounds.east, 180),
-    clamp(bounds.north, 90),
-  ];
-  params.set('bounds', edges.map((n) => n.toFixed(5)).join(','));
+  params.set('bounds', formatBounds(bounds));
   return getJson<MapResponse>(`/api/listings/map?${params.toString()}`, signal);
 }
 

@@ -3,9 +3,11 @@ import {
   isDefaultStatusFilter,
   LISTING_TYPES,
   PROPERTY_TYPES,
+  searchBoundsSchema,
   SORT_VALUES,
   STATUS_FILTER_VALUES,
 } from '@cribstop/property-contracts';
+import { formatBounds } from '@/lib/map-bounds';
 import type { SearchFilters } from '@/lib/types';
 
 /**
@@ -105,6 +107,11 @@ export function parseFiltersFromSearchParams(params: URLSearchParams): SearchFil
     boundaryRaw && /^\{.*"type"\s*:\s*"(Multi)?Polygon"/s.test(boundaryRaw)
       ? boundaryRaw
       : undefined;
+
+  // #558. The map view as a filter. A malformed value is dropped, not forwarded to a 400.
+  const boundsRaw = str('bounds');
+  const parsedBounds = boundsRaw ? searchBoundsSchema.safeParse(boundsRaw) : null;
+  filters.bounds = parsedBounds?.success ? parsedBounds.data : undefined;
 
   /**
    * Enum parameters are validated against the contract's own value sets before being forwarded.
@@ -242,6 +249,7 @@ const FILTER_PARAM_KEYS = [
   'state',
   'neighborhood',
   'boundary',
+  'bounds',
   'type',
   'listingType',
   'propertyType',
@@ -299,6 +307,7 @@ export function filtersToSearchParams(
   set('state', filters.state);
   set('neighborhood', filters.neighborhood);
   set('boundary', filters.boundary);
+  set('bounds', filters.bounds ? formatBounds(filters.bounds) : undefined);
   if (filters.listingType && filters.listingType !== 'all') set('type', filters.listingType);
   for (const type of filters.propertyType ?? []) params.append('propertyType', type);
   // Only written when the caller narrowed away from the contract's own default (`Active`,

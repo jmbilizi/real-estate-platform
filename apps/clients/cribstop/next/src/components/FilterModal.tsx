@@ -27,6 +27,7 @@ const PRESERVED_ON_CLEAR = [
   'state',
   'neighborhood',
   'boundary',
+  'bounds',
   'sort',
 ] as const;
 

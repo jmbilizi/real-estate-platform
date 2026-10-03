@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
+import type { MapBounds } from '@cribstop/property-contracts';
 import type { ListingSearchQuery } from '@/lib/api/listings';
 import type { ListingCardRow } from '@/lib/types';
 import type { NeighborhoodBounds, NeighborhoodMarkers } from './ListingsMapInner';
@@ -23,6 +24,10 @@ interface Props {
   neighborhoods?: NeighborhoodMarkers;
   /** Fit the map here (a drilled-down neighborhood). */
   focusBounds?: NeighborhoodBounds | null;
+  /** The map view the list filters on (#558). */
+  viewBounds?: MapBounds | null;
+  /** The user moved the map. Called once the view settles. */
+  onUserMove?: (bounds: MapBounds) => void;
   /**
    * Whether the map may start loading, as opposed to being deliberately held on its placeholder.
    *

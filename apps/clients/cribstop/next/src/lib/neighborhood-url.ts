@@ -34,6 +34,8 @@ const OWNED_KEYS = [
   'city',
   'state',
   'neighborhood',
+  // The map view belongs to one place. A new path starts with the place's own fit.
+  'bounds',
 ] as const;
 
 export function withoutOwnedKeys(params: URLSearchParams): URLSearchParams {
