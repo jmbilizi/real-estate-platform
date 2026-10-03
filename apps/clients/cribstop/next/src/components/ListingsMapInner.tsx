@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CustomMapControls } from '@/components/CustomMapControls';
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -11,7 +11,6 @@ import NeighborhoodMapLayer, {
 } from '@/components/NeighborhoodMapLayer';
 import type { ListingCardRow } from '@/lib/types';
 import { getListingsMap, type ListingSearchQuery } from '@/lib/api/listings';
-import { openListingPanel } from '@/lib/listing-panel';
 import { hasMapCoordinates } from '@/lib/listing-format';
 import PricePinLayer from '@/components/PricePinLayer';
 import { useTileFailure, useTileLayerConfig } from '@/components/map-tiles';
@@ -331,13 +330,9 @@ export default function ListingsMapInner({
         : sampleBannerCopyFor(viewport.sampleCount, viewport.pins.length),
     [viewport, pins],
   );
-  // A pin opens the same panel a card click opens. The row is passed when the page has it, so the
-  // panel opens populated. Otherwise the panel loads the row itself.
+  // A pin opens the card popup (#549). A home on this page shows its row. Any other pin loads its
+  // card. Only a click on the card opens the detail.
   const rowsById = useMemo(() => new Map(listings.map((l) => [l.id, l])), [listings]);
-  const openListing = useCallback(
-    (id: string) => openListingPanel(id, rowsById.get(id)),
-    [rowsById],
-  );
   // The list is the search area and the map is the viewport. Say so when they hold different sets.
   // Over the cap the map holds the newest homes only. A withheld-address home has no pin, so the
   // copy counts pins, never homes in the area.
@@ -422,7 +417,6 @@ export default function ListingsMapInner({
               activeId={activeId ?? null}
               savedIds={savedIds}
               onMarkerHover={onMarkerHover}
-              onOpenListing={openListing}
             />
           </>
         )}

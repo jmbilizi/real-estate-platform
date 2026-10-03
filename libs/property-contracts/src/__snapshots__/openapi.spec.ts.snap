@@ -2546,6 +2546,57 @@ The bound is on depth alone — no filter is required, and an unfiltered search 
         "summary": "Listing detail",
       },
     },
+    "/listings/{id}/card": {
+      "get": {
+        "description": "Returns the one card row that search returns for this listing, with the same address suppression. A map pin for a listing outside the current results page renders its popup card from this. Unknown, removed and seller-suppressed listings are indistinguishable.",
+        "operationId": "getListingCard",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingCardRow",
+                },
+              },
+            },
+            "description": "The listing card.",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No such listing.",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+        },
+        "summary": "Listing card",
+      },
+    },
     "/listings/{id}/inquiries": {
       "post": {
         "description": "Works signed-out and signed-in — an unauthenticated request is never rejected for being unauthenticated. \`name\` and \`email\` are always required, regardless of sign-in state. \`consentToContact\` records only that the consumer asked to also be connected with a Real Broker, LLC agent; the listing agent is always notified regardless of this value. No delivery happens yet — the created record starts in the \`pending\` delivery state. Never returned by any read endpoint.

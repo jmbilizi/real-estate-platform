@@ -128,6 +128,31 @@
       }
     },
     {
+      "UpstreamPathTemplate": "/property/listings/{id}/card",
+      "UpstreamHttpMethod": ["GET"],
+      "DownstreamPathTemplate": "/listings/{id}/card",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "property-service-svc",
+          "Port": 3002
+        }
+      ],
+      "Priority": 1,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 120
+      },
+      "QoSOptions": {
+        "Timeout": 3000,
+        "MinimumThroughput": 5,
+        "SamplingDuration": 30000,
+        "BreakDuration": 5000
+      }
+    },
+    {
       "UpstreamPathTemplate": "/property/listings/{id}/page",
       "UpstreamHttpMethod": ["GET"],
       "DownstreamPathTemplate": "/listings/{id}/page",

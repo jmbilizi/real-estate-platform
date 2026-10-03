@@ -12,7 +12,7 @@ jest.mock('react-leaflet', () => ({
   TileLayer: () => null,
   useMap: () => ({ getContainer: () => document.createElement('div') }),
 }));
-jest.mock('leaflet', () => ({ __esModule: true, default: {} }));
+jest.mock('leaflet', () => ({ __esModule: true, default: { CircleMarker: class {} } }));
 
 import {
   getSampleBannerCopy,

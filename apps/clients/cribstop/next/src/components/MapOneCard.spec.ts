@@ -51,9 +51,12 @@ describe('map files render listings only through ListingCard', () => {
     }
   });
 
-  it('PricePinLayer renders the shared ListingCard in its popup', () => {
-    const source = readFileSync(join(dir, 'PricePinLayer.tsx'), 'utf8');
-    expect(source).toMatch(/import ListingCard from '@\/components\/ListingCard'/);
-    expect(source).toMatch(/<ListingCard\b/);
+  it('PricePinLayer opens MapPinCard, and MapPinCard renders the shared ListingCard', () => {
+    const layer = readFileSync(join(dir, 'PricePinLayer.tsx'), 'utf8');
+    expect(layer).toMatch(/import MapPinCard from '@\/components\/MapPinCard'/);
+    expect(layer).toMatch(/<MapPinCard\b/);
+    const card = readFileSync(join(dir, 'MapPinCard.tsx'), 'utf8');
+    expect(card).toMatch(/import ListingCard from '@\/components\/ListingCard'/);
+    expect(card).toMatch(/<ListingCard\b/);
   });
 });

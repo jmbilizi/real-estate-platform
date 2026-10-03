@@ -310,6 +310,35 @@ export function toOpenApiDocument() {
           },
         },
       },
+      '/listings/{id}/card': {
+        get: {
+          operationId: 'getListingCard',
+          summary: 'Listing card',
+          description:
+            'Returns the one card row that search returns for this listing, with the same ' +
+            'address suppression. A map pin for a listing outside the current results page ' +
+            'renders its popup card from this. Unknown, removed and seller-suppressed listings ' +
+            'are indistinguishable.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: schema(idSchema, 'input') },
+          ],
+          responses: {
+            '200': {
+              description: 'The listing card.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ListingCardRow' } },
+              },
+            },
+            '404': {
+              description: 'No such listing.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
       '/listings/{id}/page': {
         get: {
           operationId: 'getListingPropertyPage',

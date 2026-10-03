@@ -1,4 +1,5 @@
 import {
+  type ListingCardRow,
   type ListingDetail,
   type ListingsEnvelope,
   type ListingsMeta,
@@ -244,6 +245,27 @@ export async function findListingById(pool: ReadClient, id: string): Promise<Lis
   // The single named suppression boundary. Applied here, at the edge, so there is exactly one place
   // that decides it and one place to test.
   return applyAddressSuppression(toListingDetail(row));
+}
+
+/**
+ * One card row (#549), built by the same SELECT, join, mapper and suppression boundary as a search
+ * result, so a map popup shows exactly the card the results grid shows for that listing. Read
+ * straight from the view like `findListingById`, so an unknown, soft-deleted and seller-suppressed
+ * id are the same `null`. It never starts a gallery fetch: the card carries one photo at most.
+ */
+export async function findListingCardById(
+  pool: ReadClient,
+  id: string,
+): Promise<ListingCardRow | null> {
+  const result = await pool.query<ListingCardDbRow>(
+    `SELECT ${LISTING_CARD_SELECT}, pm.primary_media_url, pm.primary_media_alt_text,
+            ${CARD_UNIT_NUMBER}
+     FROM listing_search_v v${PRIMARY_MEDIA_JOIN}
+     WHERE v.id = $1`,
+    [id],
+  );
+  const row = result.rows[0];
+  return row ? applyCardAddressSuppression(toListingCardRow(row)) : null;
 }
 
 /**

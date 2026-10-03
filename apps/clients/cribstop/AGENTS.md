@@ -49,9 +49,10 @@ pnpm exec nx lint cribstop-next        # Also: test, type-check
   this layer, not at the render site.
 - `next/src/app/api/account/*` and `next/src/app/api/listings/*` — **real backend** via the API
   gateway. Account is `/account/*`; listings are `/property/listings`, `/property/listings/meta`,
-  `/property/listings/{id}` (the service serves `/listings/*`; Ocelot rewrites — never call the
-  service path directly). The browser never talks to the gateway: it calls these route handlers,
-  which make the hop server-side via `app/api/_lib/gateway.ts`. Do not break this wiring.
+  `/property/listings/{id}`, `/property/listings/{id}/card` (the service serves `/listings/*`;
+  Ocelot rewrites — never call the service path directly). The browser never talks to the gateway:
+  it calls these route handlers, which make the hop server-side via `app/api/_lib/gateway.ts`. Do
+  not break this wiring.
 - `next/src/app/api/_lib/listings-query.ts` — the forwardable query-parameter set is **derived from
   the contract's `searchRequestSchema`**, never hand-listed. It is an allowlist on purpose: it is
   what makes "no occupancy value is ever transmitted" (#34) structural instead of a rule someone has
@@ -102,6 +103,11 @@ pnpm exec nx lint cribstop-next        # Also: test, type-check
   never `$0`, never an estimate. A suppressed address (`address`/`latitude`/`longitude` null
   together) renders no address and **never** a city or ZIP centroid; the map legitimately shows
   fewer pins than the result count, and that is explained in copy rather than hidden.
+- The search map draws every home as a price pill on one canvas (`PricePinLayer.tsx`,
+  `lib/pill-draw.ts`, `lib/map-pins.ts`, #549). There are no dots and no DOM markers: 1,800 DOM
+  markers dropped frames at 4x CPU. Pills may overlap. `spreadPills` offsets the bodies so none is
+  fully hidden at street zoom, and the tail tip stays on the coordinate. Any click on a pin opens
+  `MapPinCard`: the page row, or the card from `GET /listings/{id}/card`.
 - `next/scripts/check-legal-content.js` blocks the **prod** deploy while `src/content/legal/*.json`
   carries `isDraft: true` (#219). It runs only from the prod job in
   `.github/workflows/deploy-k8s-resources.yml`, keyed on `DEPLOYMENT_ENV=prod`. `DEPLOYMENT_ENV` is
