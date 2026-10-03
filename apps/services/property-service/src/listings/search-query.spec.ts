@@ -239,6 +239,13 @@ describe('buildSearchQuery', () => {
       expect(params).toEqual(expect.arrayContaining([38.79, 38.83, -77.07, -77.03]));
     });
 
+    it('is the only area when no place is sent, so the viewport alone scopes the search', () => {
+      const { where, params } = build({ bounds });
+      expect(where).toMatch(/v\.latitude BETWEEN/);
+      expect(where).not.toMatch(/v\.city|v\.state|v\.zip|v\.neighborhood|geog/);
+      expect(params).toEqual(expect.arrayContaining([38.79, 38.83, -77.07, -77.03]));
+    });
+
     it('reads the masked columns, so a withheld address never matches', () => {
       const { where } = build({ bounds });
       expect(where).not.toMatch(/street_line|l\.latitude|geog/);

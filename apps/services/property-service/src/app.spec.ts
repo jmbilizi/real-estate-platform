@@ -175,12 +175,15 @@ describe('GET /listings', () => {
     }
   });
 
-  it.each(['-77,38,-78,39', '1,2,3', 'abc'])('rejects bounds=%s with 400 (#558)', async (bounds) => {
-    await request(createApp({ pool: createSearchPool() }))
-      .get('/listings')
-      .query({ bounds })
-      .expect(400);
-  });
+  it.each(['-77,38,-78,39', '1,2,3', 'abc'])(
+    'rejects bounds=%s with 400 (#558)',
+    async (bounds) => {
+      await request(createApp({ pool: createSearchPool() }))
+        .get('/listings')
+        .query({ bounds })
+        .expect(400);
+    },
+  );
 
   it('echoes the normalised applied filter set, defaults included', async () => {
     const response = await request(createApp({ pool: createSearchPool() }))
