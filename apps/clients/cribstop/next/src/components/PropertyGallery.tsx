@@ -54,13 +54,22 @@ export default function PropertyGallery({
     return () => document.removeEventListener('keydown', handleKey);
   }, [handleKey]);
 
+  const badgeOverlay = children ? (
+    <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-[calc(100%-1.5rem)]">
+      {children}
+    </div>
+  ) : null;
+
   if (media.length === 0) {
     return (
-      <ListingImage
-        media={null}
-        sizeHint="detail"
-        className="aspect-video w-full overflow-hidden rounded-2xl md:h-[480px]"
-      />
+      <div className="relative">
+        <ListingImage
+          media={null}
+          sizeHint="detail"
+          className="aspect-video w-full overflow-hidden rounded-2xl md:h-[480px]"
+        />
+        {badgeOverlay}
+      </div>
     );
   }
 
@@ -161,7 +170,7 @@ export default function PropertyGallery({
             Show all {media.length} photos
           </button>
         </div>
-        {children}
+        {badgeOverlay}
       </div>
 
       {/* Lightbox */}

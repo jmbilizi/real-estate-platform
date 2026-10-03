@@ -7,6 +7,7 @@ import MortgageTeaser from '@/components/MortgageTeaser';
 import ListingRow from '@/components/ListingRow';
 import SingleListingMap from '@/components/SingleListingMap';
 import ListingAttribution from '@/components/listing/ListingAttribution';
+import GalleryStatusBadge from '@/components/listing/GalleryStatusBadge';
 import ListingProvenance from '@/components/listing/ListingProvenance';
 import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges';
 import { SimilarHomesSkeleton } from '@/components/listing/ListingStates';
@@ -280,7 +281,9 @@ export default function ListingDetailContent({
       <div className="flex-1 min-h-0 scrollbar-overlay bg-surface-alt px-6 sm:px-8 py-4 pb-8">
         {/* Gallery — the first panel, exactly the block the skeleton opens with. */}
         <div className={`overflow-hidden ${PANEL}`}>
-          <PropertyGallery media={listing.media} />
+          <PropertyGallery media={listing.media}>
+            <GalleryStatusBadge {...listing} statusLabel={statusLabel} />
+          </PropertyGallery>
         </div>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_380px] lg:items-start">
@@ -288,10 +291,7 @@ export default function ListingDetailContent({
           <div className="space-y-4">
             {/* Badges + price + address */}
             <div className={`${PANEL} p-6`}>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="badge bg-surface-border text-ink">
-                  {statusLabel ?? listing.status}
-                </span>
+              <div className="mb-3 flex flex-wrap items-center gap-1.5 empty:hidden">
                 {listing.isSample && <SampleBadge />}
                 {listing.sponsored && <SponsoredBadge />}
                 {listing.priceReduced && (
@@ -303,7 +303,7 @@ export default function ListingDetailContent({
               </div>
 
               {closePriceText ? (
-                <div className="mt-3 rounded-2xl border border-surface-border bg-surface-alt px-4 py-3">
+                <div className="rounded-2xl border border-surface-border bg-surface-alt px-4 py-3">
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
                     Sold
                   </p>
@@ -329,8 +329,8 @@ export default function ListingDetailContent({
                 <p
                   className={
                     priceDisplay.isWithheld
-                      ? 'mt-3 text-base font-medium italic text-ink-muted'
-                      : 'mt-3 text-xl font-semibold tracking-[-0.18px] text-ink'
+                      ? 'text-base font-medium italic text-ink-muted'
+                      : 'text-xl font-semibold tracking-[-0.18px] text-ink'
                   }
                 >
                   {priceDisplay.text}

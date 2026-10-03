@@ -277,7 +277,12 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
          * branded placeholder rather than a mosaic. Only `layoutRow` can know that, which is one of
          * the three things it is still consulted for.
          */}
-        <div className={`overflow-hidden ${panel}`} data-skeleton-section="gallery">
+        <div className={`relative overflow-hidden ${panel}`} data-skeleton-section="gallery">
+          {/* #565. The status badge, top left. Absolute, so it adds no height. */}
+          <div
+            data-skeleton-status-badge
+            className={`absolute left-3 top-3 z-10 h-6 w-24 rounded-full ${FILL}`}
+          />
           {layoutRow && !layoutRow.primaryMedia ? (
             /* The one listing whose loaded gallery really is a single block. */
             <div className={`aspect-video ${FILL} md:aspect-auto md:h-[480px]`} />
@@ -306,7 +311,7 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
         <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_380px] lg:items-start">
           <div className="space-y-4">
             {/*
-             * Price panel: the status/disclosure badge row, the price, the location line.
+             * Price panel: the price and the location line. The status badge is on the gallery (#565).
              *
              * No disclosure label is rendered here, and that is the correct reading of the rule
              * rather than an omission. `isSample` is owed "on every surface a sample row appears
@@ -318,8 +323,7 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
              * this state no longer does.
              */}
             <div className={`${panel} p-6`} data-skeleton-section="price">
-              <div className={`h-5 w-24 rounded-full ${FILL}`} />
-              <div className={`mt-3 h-9 w-1/2 rounded-xs ${FILL}`} />
+              <div className={`h-9 w-1/2 rounded-xs ${FILL}`} />
               <div className={`mt-2 h-4 w-1/3 rounded-xs ${FILL}`} />
             </div>
             {/*
