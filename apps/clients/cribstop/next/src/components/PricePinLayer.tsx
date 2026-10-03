@@ -22,9 +22,11 @@ import {
 /** `micro-label` (12px/700) from DESIGN.md, in the app's own typeface. Markers are raw HTML. */
 const MARKER_FONT = "700 12px/1 'Manrope Variable','Inter Variable',system-ui,sans-serif";
 
-/** Dot radius plus the hit tolerance gives a 44px tap target (2 x (4.5 + 17.5)). */
-const DOT_RADIUS = 4.5;
-const DOT_HIT_TOLERANCE = 17.5;
+/** Dot radius plus the hit tolerance gives a 44px tap target (2 x (4 + 18)). */
+const DOT_RADIUS = 4;
+/** Slate, lighter than ink, so dense areas show the map. The ring is white. */
+const DOT_FILL = '#5B6B8C';
+const DOT_HIT_TOLERANCE = 18;
 /** How far past the viewport a pill may sit, as a share of the larger side. */
 const LAYOUT_PAD_RATIO = 0.15;
 
@@ -178,8 +180,8 @@ export default function PricePinLayer({
         radius: DOT_RADIUS,
         weight: 1.5,
         color: '#fff',
-        fillColor: '#222',
-        fillOpacity: 1,
+        fillColor: DOT_FILL,
+        fillOpacity: 0.92,
         bubblingMouseEvents: false,
       }),
       marker: null,
@@ -284,7 +286,7 @@ export default function PricePinLayer({
             }
           }
           if (!dotLayer.hasLayer(entry.dot)) dotLayer.addLayer(entry.dot);
-          entry.dot.setStyle({ fillColor: saved?.has(entry.pin.id) ? '#FF385C' : '#222' });
+          entry.dot.setStyle({ fillColor: saved?.has(entry.pin.id) ? '#FF385C' : DOT_FILL });
         } else if (entry.marker) {
           const next = stateOf(entry.pin.id);
           if (next !== entry.pillState) {

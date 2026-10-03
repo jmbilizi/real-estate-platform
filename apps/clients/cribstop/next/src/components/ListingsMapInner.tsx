@@ -436,8 +436,9 @@ export default function ListingsMapInner({
        */}
       {/* Tiles failed to load — surface it rather than leaving a silent blank map (#291). Ranks
           first: a broken basemap outranks the illustrative-price and hidden-pin notices below it. */}
-      {/* One stack, so the notices never overlap whichever subset is showing. */}
-      <div className="pointer-events-none absolute left-3 right-3 top-3 z-[400] flex flex-col gap-1.5">
+      {/* One stack, so the notices never overlap whichever subset is showing. `right-20` keeps it
+          clear of the zoom and fullscreen controls, which sit in the top right corner. */}
+      <div className="pointer-events-none absolute left-3 right-20 top-3 z-[400] flex flex-col gap-1.5">
         {tilesFailed && (
           <div className="rounded-2xl bg-ink/85 px-3 py-1.5 text-center text-[11px] font-semibold text-white shadow-card backdrop-blur">
             Map imagery is temporarily unavailable. Pin locations and prices below are unaffected.
@@ -448,15 +449,15 @@ export default function ListingsMapInner({
             {sampleBannerCopy}
           </div>
         )}
-        {!grouped && hiddenPinCount > 0 && (
-          <div className="rounded-2xl bg-surface/95 px-3 py-1.5 text-center text-[11px] font-medium text-ink-muted shadow-card backdrop-blur">
-            Some sellers have chosen not to display their home’s location, so those homes appear in
-            your results but not as pins on this map.
-          </div>
-        )}
-        {!grouped && viewportNote && (
-          <div className="rounded-2xl bg-surface/95 px-3 py-1.5 text-center text-[11px] font-medium text-ink-muted shadow-card backdrop-blur">
-            {viewportNote}
+        {!grouped && (hiddenPinCount > 0 || viewportNote) && (
+          <div className="flex flex-col gap-1 rounded-2xl bg-surface/95 px-3 py-1.5 text-center text-[11px] font-medium leading-snug text-ink-muted shadow-card backdrop-blur">
+            {viewportNote && <p>{viewportNote}</p>}
+            {hiddenPinCount > 0 && (
+              <p>
+                Some sellers have chosen not to display their home’s location, so those homes appear
+                in your results but not as pins on this map.
+              </p>
+            )}
           </div>
         )}
       </div>
