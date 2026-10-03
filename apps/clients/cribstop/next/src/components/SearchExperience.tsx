@@ -849,7 +849,6 @@ export default function SearchExperience({
                     data-testid="clear-map-area"
                     aria-label="Map area filter on. Clear it to show the whole search area."
                     onClick={clearViewport}
-                    title={mapAreaHint}
                     aria-describedby="map-area-hint"
                     className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-full border border-surface-border bg-surface-soft px-2.5 text-xs font-semibold text-ink transition-colors duration-150 hover:bg-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
                   >

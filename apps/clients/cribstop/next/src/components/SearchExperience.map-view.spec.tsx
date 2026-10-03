@@ -136,7 +136,6 @@ describe('the map view starts only after the user moves the map', () => {
     await waitFor(() => expect(screen.getByText('31')).toBeTruthy());
     expect(screen.getByTestId('clear-map-area')).toBeTruthy();
     expect(screen.getByTestId('map-area-hint').textContent).toContain('hidden address');
-    expect(screen.getByTestId('clear-map-area').getAttribute('title')).toContain('hidden address');
     expect(screen.queryByTestId('map-area-note')).toBeNull();
     expect(mockMapProps.current?.viewBounds).toEqual(OLD_TOWN);
   });
