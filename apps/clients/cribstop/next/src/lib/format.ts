@@ -181,21 +181,31 @@ export function formatTimeOnMarket(
 }
 
 /**
- * #542. The new-listing badge text, e.g. "New · 12 min ago". `null` at 7 days or older, and when
- * the age is unknown. Shares {@link listingAge} with the footer, so it never invents a time from
- * a date-only value. The wording lives only here.
+ * #565. The age words shared by the card badge and the gallery badge: "12 min ago", "Today",
+ * "1 day ago". `null` at 7 days or older, and when the age is unknown. Shares {@link listingAge}
+ * with the footer, so it never invents a time from a date-only value. The wording lives only here.
  */
-export function formatNewListingBadge(
+export function formatNewListingAge(
   listedAt: string | null,
   now: number = Date.now(),
   listedAtPrecise: string | null = null,
 ): string | null {
   const age = listingAge(listedAt, now, listedAtPrecise);
   if (age === null || !isNewListingAge(age)) return null;
-  if (age.unit === 'min') return `New · ${age.value} min ago`;
-  if (age.unit === 'hr') return `New · ${age.value} hr ago`;
-  if (age.value === 0) return 'New · Today';
-  return `New · ${age.value} ${age.value === 1 ? 'day' : 'days'} ago`;
+  if (age.unit === 'min') return `${age.value} min ago`;
+  if (age.unit === 'hr') return `${age.value} hr ago`;
+  if (age.value === 0) return 'Today';
+  return `${age.value} ${age.value === 1 ? 'day' : 'days'} ago`;
+}
+
+/** #542. The new-listing badge text, e.g. "New · 12 min ago". `null` when there is no age to show. */
+export function formatNewListingBadge(
+  listedAt: string | null,
+  now: number = Date.now(),
+  listedAtPrecise: string | null = null,
+): string | null {
+  const age = formatNewListingAge(listedAt, now, listedAtPrecise);
+  return age === null ? null : `New · ${age}`;
 }
 
 export function formatDateTime(iso: string): string {

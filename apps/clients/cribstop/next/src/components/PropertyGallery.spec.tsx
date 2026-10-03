@@ -1,6 +1,28 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import PropertyGallery from './PropertyGallery';
 
+describe('PropertyGallery badge slot (#565)', () => {
+  const media = [{ url: 'https://example.com/a.jpg', altText: 'Front elevation' }];
+
+  it('renders the badge over the photos', () => {
+    render(
+      <PropertyGallery media={media}>
+        <span>For sale</span>
+      </PropertyGallery>,
+    );
+    expect(screen.getByText('For sale')).toBeInTheDocument();
+  });
+
+  it('renders the badge over the placeholder when there are no photos', () => {
+    render(
+      <PropertyGallery media={[]}>
+        <span>For sale</span>
+      </PropertyGallery>,
+    );
+    expect(screen.getByText('For sale')).toBeInTheDocument();
+  });
+});
+
 describe('PropertyGallery', () => {
   it('renders the branded placeholder rather than nothing when media is empty', () => {
     render(<PropertyGallery media={[]} />);
