@@ -26,7 +26,8 @@ describe('Z_LAYERS', () => {
     ['chrome', 'searchBar'],
     ['searchBar', 'searchBarMorphGhost'],
     ['searchBarMorphGhost', 'searchOverlay'],
-    ['searchOverlay', 'dialog'],
+    ['searchOverlay', 'mapExpanded'],
+    ['mapExpanded', 'dialog'],
     ['dialog', 'slidePanel'],
     ['slidePanel', 'toast'],
   ] as const)('keeps %s below %s', (below, above) => {
@@ -56,6 +57,7 @@ describe('Z_LAYERS', () => {
       Z_LAYERS.searchBar,
       Z_LAYERS.searchBarMorphGhost,
       Z_LAYERS.searchOverlay,
+      Z_LAYERS.mapExpanded,
     ];
 
     expect(Math.max(...chrome)).toBeLessThan(Z_LAYERS.dialog);

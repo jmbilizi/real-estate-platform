@@ -715,7 +715,7 @@ export default function SearchExperience({
             Mobile  : absolute, fills parent so sticky has room to hold.
             Desktop : normal right-half column, edge-to-edge (no padding). ── */}
         <div
-          className="absolute inset-0 z-0
+          className="search-map-column absolute inset-0 z-0
                      md:relative md:inset-auto md:order-last md:w-[52%]"
         >
           <div className="sticky top-[65px] h-[45vh] search-map-sticky md:py-6 md:pl-3 md:pr-10 lg:pl-5 lg:pr-20">

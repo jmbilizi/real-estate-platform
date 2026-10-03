@@ -17,11 +17,11 @@ jest.mock('@/components/MapPinCard', () => ({
   ),
 }));
 
-import PricePinLayer from './PricePinLayer';
+import PricePinLayer, { FAN_MIN_ZOOM } from './PricePinLayer';
 import { getListingPanel, resetListingPanel } from '@/lib/listing-panel';
 import { aListingCardRow } from '@/test/fixtures';
 import { formatListingPriceShort } from '@/lib/listing-format';
-import { pillGeometry } from '@/lib/pill-draw';
+import { FAN_CAP_PX } from '@/lib/map-pins';
 
 const CENTER: [number, number] = [38.9, -77.03];
 
@@ -79,6 +79,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  delete (window as unknown as { matchMedia?: unknown }).matchMedia;
   cleanup();
   mockMap.remove();
   host.remove();
@@ -89,7 +90,7 @@ type Pill = L.CircleMarker & {
   pin: MapPin;
   label: string;
   state: string;
-  spread: { dx: number; dy: number; roomy: boolean; rank: number };
+  offset: { dx: number; dy: number };
   _point: L.Point;
   _renderer: {
     _drawFirst: { layer: Pill; next: unknown } | null;
@@ -139,8 +140,19 @@ function layer(pins: MapPin[], over: Partial<Parameters<typeof PricePinLayer>[0]
   return <PricePinLayer pins={pins} rowsById={new Map()} activeId={null} {...over} />;
 }
 
-describe('PricePinLayer (#546, #549)', () => {
-  it('draws one pill per point with its price, and nothing as a dot, even where pills overlap', () => {
+/** Moves the pointer to a layer point, as the canvas receives it. */
+function pointerAt(layerPoint: L.Point) {
+  const at = mockMap.layerPointToContainerPoint(layerPoint);
+  const canvas = host.querySelector('canvas') as HTMLCanvasElement;
+  act(() => {
+    canvas.dispatchEvent(
+      new MouseEvent('mousemove', { clientX: at.x, clientY: at.y, bubbles: true }),
+    );
+  });
+}
+
+describe('PricePinLayer (#557)', () => {
+  it('draws one pin per home with no price text at rest, and no circle markers', () => {
     const pins = [
       pin('a', 0, 0),
       pin('b', 0.00001, 0.00001),
@@ -151,93 +163,171 @@ describe('PricePinLayer (#546, #549)', () => {
 
     expect(pills()).toHaveLength(pins.length);
     expect(circles()).toBe(0);
-    const labels = drawn()
-      .filter(([name]) => name === 'fillText')
-      .map(([, args]) => args[0]);
-    expect(labels).toEqual(pins.map(() => '$585K'));
+    const recorded = drawn();
+    expect(recorded.some(([name]) => name === 'fillText')).toBe(false);
+    // One teardrop path per home, and each starts at the coordinate.
+    const tips = recorded.filter(([name]) => name === 'moveTo').map(([, args]) => args);
+    expect(tips).toHaveLength(pins.length);
+    for (const p of pills()) expect(tips).toContainEqual([p._point.x, p._point.y]);
   });
 
-  it('writes the price from the card formatter family, never a different figure', () => {
-    const pins = [
-      pin('sale', 0, -0.006, { price: 585_000 }),
-      pin('rent', 0, 0, { price: 2100, listingType: 'rent' }),
-      pin('none', 0, 0.006, { price: null }),
-    ];
-    render(layer(pins));
-
-    const labels = pins.map((p) => pillOf(p.id).label);
-    expect(labels).toEqual(pins.map((p) => formatListingPriceShort(p.price, p.listingType).text));
-    expect(labels).toEqual(['$585K', '$2.1K/mo', 'Withheld']);
-  });
-
-  it('puts the pointer tail tip on the exact coordinate', () => {
+  it('puts the pin tip on the exact coordinate', () => {
     const p = pin('a', 0, 0);
     render(layer([p]));
 
     const only = pills()[0];
     expect(only.getLatLng().lat).toBe(p.latitude);
     expect(only.getLatLng().lng).toBe(p.longitude);
-    const g = pillGeometry(only._point.x, only._point.y, only.label, only.spread);
-    // An unmoved pill has its tail tip on the point, and its body above it.
-    expect([g.tailX, g.tailY]).toEqual([only._point.x, only._point.y]);
-    expect(g.bottom).toBeLessThan(g.tailY);
+    expect(only.offset).toEqual({ dx: 0, dy: 0 });
   });
 
-  it('puts the hovered pill on top of an overlapping pill, and drops it back after', () => {
+  it('shows the red price pill when the pointer hovers a pin, and a pin again after', () => {
     const onMarkerHover = jest.fn();
-    // `low` is lower on screen, so by default it covers `high`.
-    const pins = [pin('high', 0.00002, 0), pin('low', 0, 0)];
-    render(layer(pins, { onMarkerHover }));
-    expect(drawOrder()).toEqual(['high', 'low']);
+    render(layer([pin('a', 0, 0), pin('b', 0, 0.004)], { onMarkerHover }));
 
-    act(() => {
-      pillOf('high').fire('mouseover', {}, true);
-    });
-    expect(drawOrder()).toEqual(['low', 'high']);
-    expect(pillOf('high').state).toBe('active');
-    expect(onMarkerHover).toHaveBeenLastCalledWith('high');
-
-    act(() => {
-      pillOf('high').fire('mouseout', {}, true);
-    });
-    expect(drawOrder()).toEqual(['high', 'low']);
-    expect(pillOf('high').state).toBe('plain');
-    expect(onMarkerHover).toHaveBeenLastCalledWith(null);
-  });
-
-  it('puts the pill of the highlighted card on top', () => {
-    const pins = [pin('high', 0.00002, 0), pin('low', 0, 0)];
-    const { rerender } = render(layer(pins));
-    rerender(layer(pins, { activeId: 'high' }));
-
-    expect(drawOrder().at(-1)).toBe('high');
-    rerender(layer(pins, { activeId: null }));
-    expect(drawOrder()).toEqual(['high', 'low']);
-  });
-
-  it('draws the hovered pill in the brand red, with no text but its price', () => {
-    render(layer([pin('a', 0, 0)]));
     act(() => {
       pillOf('a').fire('mouseover', {}, true);
     });
+    expect(pillOf('a').state).toBe('active');
+    expect(onMarkerHover).toHaveBeenLastCalledWith('a');
+    const texts = drawn().filter(([name]) => name === 'fillText');
+    expect(texts.map(([, args]) => args[0])).toEqual(['$585K']);
 
-    const calls2 = drawn();
-    const fills = calls2.filter(([name]) => name === 'fillText');
-    expect(fills).toHaveLength(1);
-    expect(fills[0][1][0]).toBe('$585K');
-    expect(JSON.stringify(calls2)).not.toContain('title');
+    act(() => {
+      pillOf('a').fire('mouseout', {}, true);
+    });
+    expect(pillOf('a').state).toBe('plain');
+    expect(onMarkerHover).toHaveBeenLastCalledWith(null);
+    expect(drawn().some(([name]) => name === 'fillText')).toBe(false);
   });
 
-  it('marks a saved pill without raising it, so no pill loses its visible strip', () => {
+  it('writes the price from the card formatter family', () => {
+    const pins = [
+      pin('sale', 0, -0.006, { price: 585_000 }),
+      pin('rent', 0, 0, { price: 2100, listingType: 'rent' }),
+      pin('none', 0, 0.006, { price: null }),
+    ];
+    render(layer(pins));
+    for (const id of ['sale', 'rent', 'none']) {
+      act(() => {
+        pillOf(id).fire('mouseover', {}, true);
+      });
+    }
+
+    const labels = pins.map((p) => pillOf(p.id).label);
+    expect(labels).toEqual(pins.map((p) => formatListingPriceShort(p.price, p.listingType).text));
+    expect(labels).toEqual(['$585K', '$2.1K/mo', 'Withheld']);
+  });
+
+  it('shows the pill of the hovered listing card, on top, and a pin again after', () => {
+    const pins = [pin('high', 0.00002, 0), pin('low', 0, 0)];
+    const { rerender } = render(layer(pins));
+    expect(drawOrder()).toEqual(['high', 'low']);
+
+    rerender(layer(pins, { activeId: 'high' }));
+    expect(pillOf('high').state).toBe('active');
+    expect(drawOrder().at(-1)).toBe('high');
+
+    rerender(layer(pins, { activeId: null }));
+    expect(pillOf('high').state).toBe('plain');
+    expect(drawOrder()).toEqual(['high', 'low']);
+  });
+
+  it('marks a saved pin, and a hover on it still shows the pill', () => {
     const pins = [pin('saved', 0.00002, 0), pin('plain', 0, 0)];
     render(layer(pins, { savedIds: new Set(['saved']) }));
 
     expect(pillOf('saved').state).toBe('saved');
-    // The stable screen order holds: the lower pill is on top.
-    expect(drawOrder()).toEqual(['saved', 'plain']);
+    expect(pillOf('plain').state).toBe('plain');
+    act(() => {
+      pillOf('saved').fire('mouseover', {}, true);
+    });
+    expect(pillOf('saved').state).toBe('active');
   });
 
-  it('keeps the stacking order through a pan and a refetch', () => {
+  it('opens the card popup on click and shows the pill of the selected pin until it closes', async () => {
+    render(layer([pin('first', 0, 0), pin('second', 0, 0.004)]));
+
+    await act(async () => {
+      pillOf('first').fire('click', {}, true);
+    });
+    expect(popupCard()?.getAttribute('data-id')).toBe('first');
+    expect(getListingPanel()).toBeNull();
+    expect(pillOf('first').state).toBe('active');
+
+    await act(async () => {
+      pillOf('second').fire('click', {}, true);
+    });
+    expect(popupCard()?.getAttribute('data-id')).toBe('second');
+    expect(pillOf('first').state).toBe('plain');
+    expect(pillOf('second').state).toBe('active');
+
+    await act(async () => {
+      mockMap.closePopup();
+    });
+    expect(pillOf('second').state).toBe('plain');
+  });
+
+  it('hands the page row to the popup for a pin on the page, and none for one off it', async () => {
+    render(
+      layer([pin('on', 0, 0), pin('off', 0, 0.004)], {
+        rowsById: new Map([['on', aListingCardRow({ id: 'on' })]]),
+      }),
+    );
+
+    await act(async () => {
+      pillOf('on').fire('click', {}, true);
+    });
+    expect(popupCard()?.getAttribute('data-has-row')).toBe('yes');
+    await act(async () => {
+      pillOf('off').fire('click', {}, true);
+    });
+    expect(popupCard()?.getAttribute('data-has-row')).toBe('no');
+  });
+
+  it('opens a popup on tap and shows no hover pill when the device has no hover', async () => {
+    const onMarkerHover = jest.fn();
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: (query: string) => ({ matches: query === '(hover: none)', media: query }),
+    });
+    render(layer([pin('a', 0, 0)], { onMarkerHover }));
+
+    act(() => {
+      pillOf('a').fire('mouseover', {}, true);
+    });
+    expect(pillOf('a').state).toBe('plain');
+    expect(onMarkerHover).not.toHaveBeenCalled();
+    await act(async () => {
+      pillOf('a').fire('click', {}, true);
+    });
+    expect(popupCard()?.getAttribute('data-id')).toBe('a');
+    expect(pillOf('a').state).toBe('active');
+  });
+
+  it('gives the pointer to the topmost drawn pin where two hit boxes overlap', () => {
+    const onMarkerHover = jest.fn();
+    // `top` is lower on screen, so it is drawn last. Both hit boxes hold the probe point.
+    render(layer([pin('under', 0.00002, 0), pin('top', 0, 0)], { onMarkerHover }));
+    const top = pillOf('top');
+    expect(drawOrder()).toEqual(['under', 'top']);
+
+    pointerAt(L.point(top._point.x, top._point.y - 8));
+
+    expect(onMarkerHover).toHaveBeenLastCalledWith('top');
+  });
+
+  it('reaches the pin below when the pointer is outside the pin on top', () => {
+    const onMarkerHover = jest.fn();
+    render(layer([pin('under', 0.002, 0), pin('top', 0, 0)], { onMarkerHover }));
+    const under = pillOf('under');
+
+    pointerAt(L.point(under._point.x, under._point.y - 8));
+
+    expect(onMarkerHover).toHaveBeenLastCalledWith('under');
+  });
+
+  it('keeps the draw order through a pan and a refetch', () => {
     const pins = [pin('a', 0.00004, 0), pin('b', 0.00002, 0), pin('c', 0, 0)];
     const { rerender } = render(layer(pins));
     const before = drawOrder();
@@ -245,7 +335,6 @@ describe('PricePinLayer (#546, #549)', () => {
     act(() => {
       mockMap.panBy([120, 80], { animate: false });
     });
-    // A refetch returns the same homes plus a new one. Existing pills are reused.
     const reused = pills();
     rerender(layer([...pins, pin('d', 0.00006, 0)]));
 
@@ -253,7 +342,7 @@ describe('PricePinLayer (#546, #549)', () => {
     for (const p of reused) expect(pills()).toContain(p);
   });
 
-  it('adds and removes only the pills that changed on a refetch', () => {
+  it('adds and removes only the pins that changed on a refetch', () => {
     const pins = [pin('a', 0, -0.004), pin('b', 0, 0), pin('c', 0, 0.004)];
     const { rerender } = render(layer(pins));
     const keptB = pillOf('b');
@@ -264,92 +353,7 @@ describe('PricePinLayer (#546, #549)', () => {
     expect(pills()).toContain(keptB);
   });
 
-  it('fans homes at one true coordinate out at a high zoom, each tail on the shared point', () => {
-    mockMap.setZoom(18, { animate: false });
-    const units = Array.from({ length: 24 }, (_, i) => pin(`unit${i}`, 0, 0));
-    render(layer(units));
-
-    const spots = new Set(pills().map((p) => `${p.spread.dx},${p.spread.dy}`));
-    expect(spots.size).toBe(24);
-    // Every pill is on the shared coordinate. Only the body moves.
-    for (const p of pills()) {
-      expect(p.getLatLng().lat).toBe(units[0].latitude);
-      expect(p.getLatLng().lng).toBe(units[0].longitude);
-    }
-    // A moved pill draws its leader line and a dot on the true point.
-    const names = drawn().map(([name]) => name);
-    expect(names.filter((name) => name === 'arc')).toHaveLength(23);
-  });
-
-  it('keeps homes at one coordinate within 28px below the fan zoom (#554)', () => {
-    const units = Array.from({ length: 24 }, (_, i) => pin(`unit${i}`, 0, 0));
-    render(layer(units));
-
-    for (const p of pills()) {
-      expect(Math.hypot(p.spread.dx, p.spread.dy)).toBeLessThanOrEqual(28);
-    }
-  });
-
-  it('opens each pill of a stack on click, not just the top one', async () => {
-    const pins = [pin('u1', 0, 0), pin('u2', 0, 0), pin('u3', 0, 0)];
-    render(layer(pins));
-
-    const opened: Array<string | null> = [];
-    for (const p of pills()) {
-      await act(async () => {
-        p.fire('click', {}, true);
-      });
-      opened.push(popupCard()?.getAttribute('data-id') ?? null);
-    }
-    expect(opened.sort()).toEqual(['u1', 'u2', 'u3']);
-  });
-
-  it('re-spreads when the zoom changes', () => {
-    // 0.0003 deg is about 9px apart at zoom 15, so the pair collides, and about 290px at zoom 20.
-    const pins = [pin('a', 0, 0), pin('b', 0.0003, 0)];
-    render(layer(pins));
-    const moved = () => pills().filter((p) => p.spread.dx !== 0 || p.spread.dy !== 0).length;
-    expect(moved()).toBe(1);
-
-    jest.useFakeTimers();
-    try {
-      act(() => {
-        mockMap.setZoom(20, { animate: false });
-        // The layout waits briefly for the refetch that follows a zoom.
-        jest.advanceTimersByTime(1000);
-      });
-    } finally {
-      jest.useRealTimers();
-    }
-    expect(moved()).toBe(0);
-  });
-
-  it('opens the card popup, not the listing panel, for a pin that is not on the page', async () => {
-    const pins = [pin('first', 0, 0)];
-    render(layer(pins));
-
-    await act(async () => {
-      pillOf('first').fire('click', {}, true);
-    });
-
-    expect(popupCard()?.getAttribute('data-id')).toBe('first');
-    expect(popupCard()?.getAttribute('data-has-row')).toBe('no');
-    expect(getListingPanel()).toBeNull();
-  });
-
-  it('hands the page row to the popup for a pin that is on the page', async () => {
-    const pins = [pin('first', 0, 0)];
-    render(layer(pins, { rowsById: new Map([['first', aListingCardRow({ id: 'first' })]]) }));
-
-    await act(async () => {
-      pillOf('first').fire('click', {}, true);
-    });
-
-    expect(popupCard()?.getAttribute('data-has-row')).toBe('yes');
-    expect(getListingPanel()).toBeNull();
-  });
-
-  it('clears the hover when the hovered pill leaves the map', () => {
+  it('clears the hover when the hovered pin leaves the map', () => {
     const onMarkerHover = jest.fn();
     const pins = [pin('a', 0, 0), pin('b', 0, 0.004)];
     const { rerender } = render(layer(pins, { onMarkerHover }));
@@ -361,34 +365,68 @@ describe('PricePinLayer (#546, #549)', () => {
     expect(onMarkerHover).toHaveBeenLastCalledWith(null);
   });
 
-  it('finds the pill under the pointer on the canvas, and the top pill where two overlap', () => {
-    const onMarkerHover = jest.fn();
-    const pins = [pin('under', 0.00002, 0), pin('top', 0, 0)];
-    render(layer(pins, { onMarkerHover }));
-    const top = pillOf('top');
-    const g = pillGeometry(top._point.x, top._point.y, top.label, top.spread);
-    // A point inside the bodies of both pills, shifted from layer to container pixels.
-    const inBoth = mockMap.layerPointToContainerPoint(L.point(g.tailX, g.top + 14));
-    const canvas = host.querySelector('canvas') as HTMLCanvasElement;
+  it('fans homes at one true coordinate out at zoom 17 and higher, each tip within the cap', () => {
+    mockMap.setZoom(18, { animate: false });
+    const units = Array.from({ length: 24 }, (_, i) => pin(`unit${i}`, 0, 0));
+    render(layer(units));
 
-    act(() => {
-      canvas.dispatchEvent(
-        new MouseEvent('mousemove', { clientX: inBoth.x, clientY: inBoth.y, bubbles: true }),
-      );
-    });
-
-    // `top` is lower on screen and drawn last, so it takes the hit.
-    expect(onMarkerHover).toHaveBeenLastCalledWith('top');
+    const spots = new Set(pills().map((p) => `${p.offset.dx},${p.offset.dy}`));
+    expect(spots.size).toBe(24);
+    for (const p of pills()) {
+      expect(p.getLatLng().lat).toBe(units[0].latitude);
+      expect(Math.hypot(p.offset.dx, p.offset.dy)).toBeLessThanOrEqual(FAN_CAP_PX + 1);
+    }
+    // A fanned pin draws a leader line and a dot on the true point.
+    expect(drawn().filter(([name]) => name === 'arc').length).toBeGreaterThanOrEqual(23);
   });
 
-  it('removes every pill on unmount', () => {
+  it('does not fan homes below zoom 17, and does not move homes that only sit close', () => {
+    const units = Array.from({ length: 24 }, (_, i) => pin(`unit${i}`, 0, 0));
+    render(layer([...units, pin('near', 0.00002, 0)]));
+
+    for (const p of pills()) expect(p.offset).toEqual({ dx: 0, dy: 0 });
+    expect(FAN_MIN_ZOOM).toBe(17);
+  });
+
+  it('fans at the zoom change, and folds back below zoom 17', () => {
+    const units = Array.from({ length: 6 }, (_, i) => pin(`unit${i}`, 0, 0));
+    const moved = () => pills().filter((p) => p.offset.dx !== 0 || p.offset.dy !== 0).length;
+    render(layer([...units, pin('near', 0.00002, 0)]));
+    expect(moved()).toBe(0);
+
+    act(() => {
+      mockMap.setZoom(18, { animate: false });
+    });
+    expect(moved()).toBe(5);
+
+    act(() => {
+      mockMap.setZoom(15, { animate: false });
+    });
+    expect(moved()).toBe(0);
+  });
+
+  it('opens each pin of a fanned stack on click', async () => {
+    mockMap.setZoom(18, { animate: false });
+    render(layer([pin('u1', 0, 0), pin('u2', 0, 0), pin('u3', 0, 0)]));
+
+    const opened: Array<string | null> = [];
+    for (const p of pills()) {
+      await act(async () => {
+        p.fire('click', {}, true);
+      });
+      opened.push(popupCard()?.getAttribute('data-id') ?? null);
+    }
+    expect(opened.sort()).toEqual(['u1', 'u2', 'u3']);
+  });
+
+  it('removes every pin on unmount', () => {
     const { unmount } = render(layer([pin('a', 0, -0.004), pin('b', 0, 0.004)]));
     unmount();
 
     expect(pills()).toHaveLength(0);
   });
 
-  it('draws 1,800 points as 1,800 pills, each with its price', () => {
+  it('draws 1,800 homes as 1,800 pins with no price text', () => {
     const many = Array.from({ length: 1800 }, (_, i) =>
       pin(`p${i}`, ((i * 7919) % 1000) / 100_000, ((i * 104_729) % 1000) / 100_000),
     );
@@ -396,12 +434,13 @@ describe('PricePinLayer (#546, #549)', () => {
 
     expect(pills()).toHaveLength(1800);
     expect(circles()).toBe(0);
-    const labels = drawn().filter(([name]) => name === 'fillText');
-    expect(labels).toHaveLength(1800);
+    const recorded = drawn();
+    expect(recorded.filter(([name]) => name === 'moveTo')).toHaveLength(1800);
+    expect(recorded.some(([name]) => name === 'fillText')).toBe(false);
   });
 });
 
-describe('listing map has no clusters, no dots and no DOM markers (#546, #549)', () => {
+describe('listing map has no clusters, no dots and no DOM markers (#546, #549, #557)', () => {
   const source = (file: string) => readFileSync(join(__dirname, file), 'utf8');
 
   it('never loads leaflet.markercluster', () => {
@@ -416,6 +455,8 @@ describe('listing map has no clusters, no dots and no DOM markers (#546, #549)',
   });
 
   it('leaves NeighborhoodMapLayer unchanged', () => {
-    expect(source('NeighborhoodMapLayer.tsx')).not.toMatch(/PricePinLayer|map-pins|pill-draw/);
+    expect(source('NeighborhoodMapLayer.tsx')).not.toMatch(
+      /PricePinLayer|map-pins|pin-draw|pill-draw/,
+    );
   });
 });
