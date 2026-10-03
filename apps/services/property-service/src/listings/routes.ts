@@ -27,6 +27,7 @@ import {
 import {
   findBrightListingKeys,
   findListingById,
+  findListingCardById,
   getListingsMeta,
   getNeighborhoods,
   type ReadPool,
@@ -290,6 +291,27 @@ export function createListingsRouter(
         }
       }
       res.set('Cache-Control', cacheControl).status(200).json(detail);
+    }),
+  );
+
+  /**
+   * #549. One card row, for a map popup of a pin that is not on the current results page. Same 404
+   * as the detail route for a malformed, unknown, soft-deleted or seller-suppressed id.
+   */
+  router.get(
+    '/listings/:id/card',
+    asyncRoute(async (req: Request, res: Response) => {
+      const id = idSchema.safeParse(req.params.id);
+      if (!id.success) {
+        notFound(res);
+        return;
+      }
+      const card = await findListingCardById(pool, id.data);
+      if (card === null) {
+        notFound(res);
+        return;
+      }
+      res.set('Cache-Control', LISTINGS_CACHE_CONTROL).status(200).json(card);
     }),
   );
 

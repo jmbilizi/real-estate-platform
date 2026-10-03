@@ -61,6 +61,63 @@ describe('GET /listings never calls Bright', () => {
   });
 });
 
+/** #549. */
+describe('GET /listings/:id/card', () => {
+  const ID = '018f2f2a-6d1b-7c3d-8b2e-000000000001';
+
+  function cardPool(rows: unknown[]): { pool: ReadPool; texts: string[] } {
+    const texts: string[] = [];
+    const query = <T>(text: string): Promise<{ rows: T[] }> => {
+      texts.push(text);
+      return Promise.resolve({ rows: rows as T[] });
+    };
+    return {
+      pool: { query, connect: () => Promise.resolve({ query, release: () => undefined }) },
+      texts,
+    };
+  }
+
+  it('returns the search card for one listing, with no gallery fetch', async () => {
+    const loader = countingGalleryLoader();
+    const { pool, texts } = cardPool([cardDbRowFixture()]);
+    const response = await request(createApp({ pool, galleryLoader: loader })).get(
+      `/listings/${ID}/card`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.id).toBe(ID);
+    expect(response.headers['cache-control']).toBe('public, max-age=60');
+    expect(loader.calls).toBe(0);
+    // One read of the visibility view, and no other table decides who may see the card.
+    expect(texts).toHaveLength(1);
+    expect(texts[0]).toContain('FROM listing_search_v v');
+  });
+
+  it('keeps the address, coordinates and unit number masked together', async () => {
+    const { pool } = cardPool([
+      cardDbRowFixture({ address: null, latitude: null, longitude: null, unit_number: '4B' }),
+    ]);
+    const response = await request(createApp({ pool })).get(`/listings/${ID}/card`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.address).toBeNull();
+    expect(response.body.latitude).toBeNull();
+    expect(response.body.longitude).toBeNull();
+    expect(JSON.stringify(response.body)).not.toContain('4B');
+  });
+
+  it('answers an unknown, suppressed or malformed id with the same 404', async () => {
+    const { pool } = cardPool([]);
+    const app = createApp({ pool });
+    const unknown = await request(app).get(`/listings/${ID}/card`);
+    const malformed = await request(app).get('/listings/not-an-id/card');
+
+    expect(unknown.status).toBe(404);
+    expect(malformed.status).toBe(404);
+    expect(unknown.body).toEqual(malformed.body);
+  });
+});
+
 /** #390. */
 describe('GET /listings/neighborhoods', () => {
   function neighborhoodsPool(rows: unknown[]): ReadPool {

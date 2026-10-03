@@ -846,6 +846,7 @@ describe('GET /openapi.json', () => {
       '/listings/meta',
       '/listings/neighborhoods',
       '/listings/{id}',
+      '/listings/{id}/card',
       '/listings/{id}/inquiries',
       '/listings/{id}/page',
       '/properties/lookup',

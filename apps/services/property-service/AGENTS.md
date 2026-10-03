@@ -323,6 +323,10 @@ rule (#33). For those rows the view projects only the address (still masked on
 `address_display_allowed`) and property-record facts: NAR 7.58 forbids the display of their listing
 data.
 
+- `GET /listings/:id/card` (#549) returns one `ListingCardRow`. It uses the search SELECT, mapper
+  and address suppression (`findListingCardById`), and it never starts a gallery fetch. A map pin
+  that is not on the results page renders its popup card from it. Unknown, removed and suppressed
+  ids give the same 404 as `/listings/:id`.
 - `GET /listings/:id/page` (`listings/property-page.ts`) returns `PropertyPage` from
   `@cribstop/property-contracts`. `detail` is the `/listings/:id` detail when displayable, else
   null. `path` is the address URL, null when the seller withheld the address.
