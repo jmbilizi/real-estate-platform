@@ -8,7 +8,7 @@ import { join } from 'path';
 
 const dir = __dirname;
 const mapFiles = readdirSync(dir).filter(
-  (f) => /^(.*Map.*|map-.*)\.tsx?$/.test(f) && !/\.spec\.tsx?$/.test(f),
+  (f) => /^(.*Map.*|map-.*|PricePinLayer)\.tsx?$/.test(f) && !/\.spec\.tsx?$/.test(f),
 );
 
 const FORBIDDEN: Array<[string, RegExp]> = [
@@ -24,8 +24,9 @@ const FORBIDDEN: Array<[string, RegExp]> = [
   ],
 ];
 
-// The detail page's single-pin map labels its pin with the price. A pin label is not a card.
-const PRICE_FORMATTER_ALLOWED = new Set(['SingleListingMapInner.tsx']);
+// A pin label is not a card. The detail page's single-pin map and the search map's price pills
+// (#546) print the price, and the pill uses the card's formatter so the two always agree.
+const PRICE_FORMATTER_ALLOWED = new Set(['SingleListingMapInner.tsx', 'PricePinLayer.tsx']);
 
 describe('map files render listings only through ListingCard', () => {
   it('finds the map files', () => {
@@ -50,8 +51,8 @@ describe('map files render listings only through ListingCard', () => {
     }
   });
 
-  it('ListingsMapInner renders the shared ListingCard in its popup', () => {
-    const source = readFileSync(join(dir, 'ListingsMapInner.tsx'), 'utf8');
+  it('PricePinLayer renders the shared ListingCard in its popup', () => {
+    const source = readFileSync(join(dir, 'PricePinLayer.tsx'), 'utf8');
     expect(source).toMatch(/import ListingCard from '@\/components\/ListingCard'/);
     expect(source).toMatch(/<ListingCard\b/);
   });

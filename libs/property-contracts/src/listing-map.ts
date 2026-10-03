@@ -2,10 +2,11 @@ import { z } from 'zod';
 import { consumerStatusSchema, idSchema, listingTypeSchema } from './common';
 import { searchRequestSchema } from './search-request';
 
-/** Above this many mappable listings in the viewport, `GET /listings/map` returns clusters. */
-export const MAP_PIN_THRESHOLD_DEFAULT = 500;
-
-export const MAP_ZOOM_MAX = 22;
+/**
+ * The most pins one `GET /listings/map` response carries. A viewport with more homes gets the
+ * newest ones, and `total` says how many there are. The map never groups homes into clusters.
+ */
+export const MAP_PIN_CAP_DEFAULT = 1800;
 
 /** `west,south,east,north` in degrees. The antimeridian is out of scope for this market. */
 const mapBounds = z
@@ -35,20 +36,13 @@ const mapBounds = z
       'south less than north.',
   );
 
-const mapZoom = z
-  .string()
-  .regex(/^(\d|1\d|2[0-2])$/, `must be a whole number from 0 to ${MAP_ZOOM_MAX}`)
-  .transform(Number)
-  .pipe(z.number().int().min(0).max(MAP_ZOOM_MAX))
-  .describe(`Web-map zoom level, 0 to ${MAP_ZOOM_MAX}. Sets the cluster cell size.`);
-
 /**
  * The search filters, minus paging and sort, plus the viewport. Derived from
  * `searchRequestSchema` so the map and the list accept the same filters. Strict, like search.
  */
 export const mapRequestSchema = searchRequestSchema
   .omit({ sort: true, page: true, pageSize: true })
-  .extend({ bounds: mapBounds, zoom: mapZoom });
+  .extend({ bounds: mapBounds });
 
 export type MapRequestInput = z.input<typeof mapRequestSchema>;
 export type MapRequest = z.output<typeof mapRequestSchema>;
@@ -61,42 +55,21 @@ export const mapPinSchema = z.object({
   longitude: z.number(),
   price: z.number().nullable(),
   status: consumerStatusSchema,
-  /** Sets the pin label format (`$2.5k` for rent, `$450k` for sale). */
+  /** Sets the pin label format (`/mo` suffix for rent). */
   listingType: listingTypeSchema,
 });
 
-export const mapClusterSchema = z.object({
-  count: z.number().int().positive(),
-  latitude: z.number(),
-  longitude: z.number(),
-  bounds: z.object({
-    west: z.number(),
-    south: z.number(),
-    east: z.number(),
-    north: z.number(),
-  }),
+/**
+ * `total` is the number of mappable listings in the viewport. `pins` holds the newest of them, up
+ * to the cap, so `pins.length < total` means the viewport is over the cap. A listing whose seller
+ * withheld the address has no coordinates, so it is in no pin and not in `total`.
+ * `sampleCount` is how many of `pins` are sample data, for the map's disclosure banner.
+ */
+export const mapResponseSchema = z.object({
+  total: z.number().int().nonnegative(),
+  sampleCount: z.number().int().nonnegative(),
+  pins: z.array(mapPinSchema),
 });
 
-/**
- * `count` is the number of mappable listings in the viewport. A listing whose seller withheld the
- * address has no coordinates, so it is in no pin, no cluster and no `count`.
- * `sampleCount` is how many of those are sample data, for the map's disclosure banner.
- */
-export const mapResponseSchema = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('pins'),
-    count: z.number().int().nonnegative(),
-    sampleCount: z.number().int().nonnegative(),
-    pins: z.array(mapPinSchema),
-  }),
-  z.object({
-    kind: z.literal('clusters'),
-    count: z.number().int().nonnegative(),
-    sampleCount: z.number().int().nonnegative(),
-    clusters: z.array(mapClusterSchema),
-  }),
-]);
-
 export type MapPin = z.infer<typeof mapPinSchema>;
-export type MapCluster = z.infer<typeof mapClusterSchema>;
 export type MapResponse = z.infer<typeof mapResponseSchema>;

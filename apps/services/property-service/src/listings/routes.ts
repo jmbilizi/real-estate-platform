@@ -3,7 +3,7 @@ import {
   type ErrorBody,
   exceedsResultWindow,
   idSchema,
-  MAP_PIN_THRESHOLD_DEFAULT,
+  MAP_PIN_CAP_DEFAULT,
   type MapRequest,
   mapRequestSchema,
   type NeighborhoodsRequest,
@@ -161,7 +161,7 @@ export function createListingsRouter(
   pool: ReadPool,
   galleryLoader?: GalleryLoader,
   addressFetcher?: AddressFetcher,
-  mapPinThreshold = MAP_PIN_THRESHOLD_DEFAULT,
+  mapPinCap = MAP_PIN_CAP_DEFAULT,
 ): Router {
   const router = Router();
 
@@ -231,7 +231,7 @@ export function createListingsRouter(
         res.status(400).json(parsed.body);
         return;
       }
-      const map = await findMapPins(pool, parsed.value, mapPinThreshold);
+      const map = await findMapPins(pool, parsed.value, mapPinCap);
       res.set('Cache-Control', LISTINGS_CACHE_CONTROL).status(200).json(map);
     }),
   );

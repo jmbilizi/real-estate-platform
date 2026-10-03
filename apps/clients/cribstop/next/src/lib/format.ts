@@ -23,6 +23,24 @@ export function formatPrice(value: number, listingType?: 'sale' | 'rent' | 'sold
   return listingType === 'rent' ? `${formatted}/mo` : formatted;
 }
 
+/** `2.0` becomes `2`. Keeps `2.1`. */
+function trimDecimals(value: number, digits: number): string {
+  return String(Number(value.toFixed(digits)));
+}
+
+/**
+ * Compact price for a map pill: `$585K`, `$2.1M`, `$2.1K/mo`. It shortens the figure
+ * `formatPrice` prints and changes nothing else, so a pill and a card never name different prices.
+ * It never rounds a price up to the next unit: `$999,600` reads `$1M`, not `$1000K`.
+ */
+export function formatPriceShort(value: number, listingType?: 'sale' | 'rent' | 'sold'): string {
+  const suffix = listingType === 'rent' ? '/mo' : '';
+  if (value >= 999_500) return `$${trimDecimals(value / 1_000_000, 2)}M${suffix}`;
+  if (value >= 10_000) return `$${Math.round(value / 1000)}K${suffix}`;
+  if (value >= 1000) return `$${trimDecimals(value / 1000, 1)}K${suffix}`;
+  return `$${Math.round(value)}${suffix}`;
+}
+
 export function formatNumber(value: number): string {
   return new Intl.NumberFormat('en-US').format(value);
 }

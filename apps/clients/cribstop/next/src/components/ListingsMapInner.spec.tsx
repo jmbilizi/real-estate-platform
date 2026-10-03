@@ -13,7 +13,6 @@ jest.mock('react-leaflet', () => ({
   useMap: () => ({ getContainer: () => document.createElement('div') }),
 }));
 jest.mock('leaflet', () => ({ __esModule: true, default: {} }));
-jest.mock('leaflet.markercluster', () => ({}));
 
 import {
   getSampleBannerCopy,

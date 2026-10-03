@@ -1,6 +1,6 @@
 import type { ListingSource, ListingType, OpenHouse } from '@cribstop/property-contracts';
 import { BRAND } from '@/lib/brand';
-import { formatNumber, formatPrice, PROPERTY_TIME_ZONE } from '@/lib/format';
+import { formatNumber, formatPrice, formatPriceShort, PROPERTY_TIME_ZONE } from '@/lib/format';
 
 /**
  * Null-safe presentation of listing fields.
@@ -47,6 +47,21 @@ export interface PriceDisplay {
 export function formatListingPrice(price: number | null, listingType: ListingType): PriceDisplay {
   if (price === null) return { text: PRICE_WITHHELD_COPY, isWithheld: true };
   return { text: formatPrice(price, listingType), isWithheld: false };
+}
+
+/** Compact withheld label for a map pill. The card and the popup carry the full sentence. */
+export const PRICE_WITHHELD_SHORT = 'Withheld';
+
+/**
+ * The map pill text. It follows `formatListingPrice` rule for rule: a null price is withheld, never
+ * `$0`, and a rent price keeps `/mo`. Only the figure is shortened.
+ */
+export function formatListingPriceShort(
+  price: number | null,
+  listingType: ListingType,
+): PriceDisplay {
+  if (price === null) return { text: PRICE_WITHHELD_SHORT, isWithheld: true };
+  return { text: formatPriceShort(price, listingType), isWithheld: false };
 }
 
 /**
