@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { SearchFilters } from '@/lib/types';
 import FilterModalContent from '@/components/FilterModalContent';
 import { applyLandInterlock, filtersToSearchParams } from '@/lib/listing-filters';
@@ -118,6 +118,39 @@ export default function FilterModal({ onClose, filters, onChange, resultCount }:
     };
   }, []);
 
+  // Keep focus inside the dialog: move it in on open, wrap Tab, and give it back on close.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialog.focus();
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      const items = Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || active === dialog)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    dialog.addEventListener('keydown', onKeyDown);
+    return () => {
+      dialog.removeEventListener('keydown', onKeyDown);
+      if (opener?.isConnected) opener.focus();
+    };
+  }, []);
+
   // Close on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -148,7 +181,9 @@ export default function FilterModal({ onClose, filters, onChange, resultCount }:
 
   return (
     <div
-      className="fixed inset-0 z-dialog flex items-end sm:items-center justify-center"
+      ref={dialogRef}
+      tabIndex={-1}
+      className="fixed inset-0 z-dialog flex items-end sm:items-center justify-center outline-none"
       role="dialog"
       aria-modal="true"
       aria-label="Filters"
