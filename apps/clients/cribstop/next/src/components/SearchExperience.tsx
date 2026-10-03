@@ -36,7 +36,7 @@ import {
   type NeighborhoodRow,
   type SearchPlace,
 } from '@cribstop/property-contracts';
-import { formatBounds, roundBounds, sameBounds } from '@/lib/map-bounds';
+import { formatBounds, roundBounds, sameBounds, VIEWPORT_PARAM } from '@/lib/map-bounds';
 import { useListingSearch } from '@/lib/useListingSearch';
 import { useNeighborhoodGroups } from '@/lib/useNeighborhoodGroups';
 import {
@@ -472,7 +472,7 @@ export default function SearchExperience({
     setPage(1);
     if (!ownsUrl) return; // not our URL to write — see `ownsUrl`
     const params = new URLSearchParams(window.location.search);
-    params.set('bounds', formatBounds(next));
+    params.set(VIEWPORT_PARAM, formatBounds(next));
     params.delete('page');
     writeUrl(params, 'replace');
   };
@@ -483,7 +483,7 @@ export default function SearchExperience({
     setPage(1);
     if (!ownsUrl) return; // not our URL to write — see `ownsUrl`
     const params = new URLSearchParams(window.location.search);
-    params.delete('bounds');
+    params.delete(VIEWPORT_PARAM);
     params.delete('page');
     writeUrl(params);
   };

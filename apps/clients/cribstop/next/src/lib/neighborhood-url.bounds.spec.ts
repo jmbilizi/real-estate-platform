@@ -1,7 +1,7 @@
 import { backToGroupsUrl, neighborhoodDrillUrl, scopeOf } from './neighborhood-url';
 
 describe('the map view is not carried to another place (#558)', () => {
-  const bounds = 'bounds=-77.0602,38.7977,-77.0301,38.8189';
+  const bounds = 'viewport=-77.0602,38.7977,-77.0301,38.8189';
   const oldTown = { name: 'Old Town', city: 'Alexandria', state: 'VA' };
 
   it('drops bounds on a drill-down', () => {
@@ -23,6 +23,6 @@ describe('the map view is not carried to another place (#558)', () => {
       current: new URLSearchParams(`${bounds}&beds=2`),
     });
 
-    expect(url).not.toContain('bounds');
+    expect(url).not.toContain('viewport');
   });
 });

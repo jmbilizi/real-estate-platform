@@ -119,7 +119,7 @@ describe('the map view starts only after the user moves the map', () => {
     expect(lastQuery().bounds).toBeUndefined();
     expect(mockMapProps.current?.viewBounds).toBeNull();
     expect(screen.queryByTestId('clear-map-area')).toBeNull();
-    expect(params().has('bounds')).toBe(false);
+    expect(params().has('viewport')).toBe(false);
   });
 
   it('filters the list by the view, resets to page 1 and updates the count', async () => {
@@ -187,7 +187,7 @@ describe('the URL carries the map view', () => {
 
     moveMap(OLD_TOWN);
 
-    expect(params().get('bounds')).toBe('-77.06020,38.79770,-77.03010,38.81890');
+    expect(params().get('viewport')).toBe('-77.06020,38.79770,-77.03010,38.81890');
     expect(params().has('page')).toBe(false);
     expect(params().get('q')).toBe('Alexandria, VA');
     expect(replace).toHaveBeenCalled();
@@ -201,10 +201,10 @@ describe('the URL carries the map view', () => {
     window.history.replaceState(
       null,
       '',
-      '/search?q=Alexandria%2C+VA&bounds=-77.0602,38.7977,-77.0301,38.8189',
+      '/search?q=Alexandria%2C+VA&viewport=-77.0602,38.7977,-77.0301,38.8189',
     );
     render(
-      <SearchExperience initialQuery="q=Alexandria%2C+VA&bounds=-77.0602,38.7977,-77.0301,38.8189" />,
+      <SearchExperience initialQuery="q=Alexandria%2C+VA&viewport=-77.0602,38.7977,-77.0301,38.8189" />,
     );
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
 
@@ -215,7 +215,7 @@ describe('the URL carries the map view', () => {
   });
 
   it('drops a malformed bounds value instead of sending a request the API rejects', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA&bounds=-77,38,-78,39" />);
+    render(<SearchExperience initialQuery="q=Alexandria%2C+VA&viewport=-77,38,-78,39" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
 
     expect(lastQuery().bounds).toBeUndefined();
@@ -257,7 +257,7 @@ describe('the way back to the whole place', () => {
 
     await waitFor(() => expect(lastQuery().bounds).toBeUndefined());
     expect(lastQuery().page).toBe(1);
-    expect(params().has('bounds')).toBe(false);
+    expect(params().has('viewport')).toBe(false);
     expect(params().get('q')).toBe('Alexandria, VA');
     expect(screen.queryByTestId('clear-map-area')).toBeNull();
     expect(mockMapProps.current?.viewBounds).toBeNull();
@@ -297,7 +297,7 @@ describe('the view works with the other controls', () => {
     await waitFor(() => expect(lastQuery().bounds).toEqual(OLD_TOWN));
     expect(lastQuery()).toMatchObject({ beds: 2, minPrice: 300000, query: 'Alexandria, VA' });
     expect(params().get('beds')).toBe('2');
-    expect(params().has('bounds')).toBe(true);
+    expect(params().has('viewport')).toBe(true);
   });
 
   it('keeps the view when the sort changes', async () => {
@@ -311,7 +311,7 @@ describe('the view works with the other controls', () => {
 
     await waitFor(() => expect(lastQuery().sort).toBe('price-asc'));
     expect(lastQuery().bounds).toEqual(OLD_TOWN);
-    expect(params().has('bounds')).toBe(true);
+    expect(params().has('viewport')).toBe(true);
   });
 
   it('does not count the view as a filter', async () => {
@@ -374,8 +374,8 @@ describe('a search with no place', () => {
   });
 
   it('restores the view from a direct load of the URL', async () => {
-    window.history.replaceState(null, '', '/homes-for-sale?bounds=-105.31,39.97,-105.2,40.05');
-    render(<SearchExperience initialQuery="bounds=-105.31,39.97,-105.2,40.05" />);
+    window.history.replaceState(null, '', '/homes-for-sale?viewport=-105.31,39.97,-105.2,40.05');
+    render(<SearchExperience initialQuery="viewport=-105.31,39.97,-105.2,40.05" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
 
     expect(queries()).toHaveLength(1);
@@ -392,6 +392,6 @@ describe('a search with no place', () => {
     fireEvent.click(screen.getByTestId('clear-map-area'));
 
     await waitFor(() => expect(lastQuery().bounds).toBeUndefined());
-    expect(params().has('bounds')).toBe(false);
+    expect(params().has('viewport')).toBe(false);
   });
 });

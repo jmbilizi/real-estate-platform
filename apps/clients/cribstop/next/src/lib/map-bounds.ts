@@ -5,6 +5,12 @@ import type { MapBounds } from '@cribstop/property-contracts';
  * one string form: `west,south,east,north`.
  */
 
+/**
+ * The page URL parameter for the map view, `west,south,east,north`. It is not `bounds`: the map-area
+ * search path already uses `?bounds=<n,e,s,w>` to name a place (#350). The API parameter is `bounds`.
+ */
+export const VIEWPORT_PARAM = 'viewport';
+
 const clamp = (value: number, limit: number) => Math.max(-limit, Math.min(limit, value));
 
 /**
