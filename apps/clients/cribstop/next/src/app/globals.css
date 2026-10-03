@@ -337,6 +337,26 @@ body {
   }
 }
 
+/* ── Expanded search map (#556) ──────────────────────────────────────────────
+   The map is fixed to the viewport, but a fixed element stacks inside its ancestors. Its map
+   column is a stacking context at z-0, so the header, the docked search bar and the results bar
+   painted over the map and hid its own exit control. Raising the column puts the map above them.
+   The page behind cannot scroll, so the scroll position is the same after the exit. ── */
+html[data-map-expanded] .search-map-column {
+  z-index: theme('zIndex.map-expanded');
+}
+html[data-map-expanded] {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+.fullscreen-map {
+  position: fixed !important;
+  inset: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  border-radius: 0 !important;
+}
+
 /* ── Tabs ↔ Pill swap ───────────────────────────────────────────────────────
    Everything here is keyed off the data-header-pill attribute (set in
    ScrollSentinel.tsx at a single scroll threshold with hysteresis around it) —
