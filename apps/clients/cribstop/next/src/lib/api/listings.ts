@@ -2,6 +2,7 @@ import { GATEWAY_ERROR_CODES, type GatewayErrorCode } from '@cribstop/gateway-co
 import { errorBodySchema } from '@cribstop/property-contracts';
 import type {
   ErrorBody,
+  ListingCardRow,
   ListingDetail,
   ListingsEnvelope,
   ListingsMeta,
@@ -370,6 +371,11 @@ export function toListingDetailView(detail: ListingDetail): ListingDetailView {
     officeBrokerLeadEmail: listing.officeBrokerLeadEmail,
     listedBy: listing.listedBy,
   };
+}
+
+/** One card row, the same shape search returns. A map popup for an off-page pin renders it. */
+export async function getListingCard(id: string, signal?: AbortSignal): Promise<ListingCardRow> {
+  return getJson<ListingCardRow>(`/api/listings/${encodeURIComponent(id)}/card`, signal);
 }
 
 export async function getListing(id: string, signal?: AbortSignal): Promise<ListingDetailView> {
