@@ -14,7 +14,7 @@ jest.mock('@/lib/api/listings', () => {
 
 // The fetch lifecycle is what this suite tests, not the detail page's own rendering — that's
 // ListingDetailContent's own spec. A stub keeps these tests from depending on the redux store,
-// SingleListingMap/leaflet, and the similar-homes fetch that component owns. The close button
+// SingleListingMap/leaflet, and the nearby-homes fetch that component owns. The close button
 // exercises the same `onClose` (= `handleClose`) the real chevron would.
 jest.mock('@/components/ListingDetailContent', () => ({
   __esModule: true,
