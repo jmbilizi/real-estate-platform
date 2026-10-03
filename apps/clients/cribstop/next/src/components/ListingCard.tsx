@@ -170,7 +170,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
       role="link"
       tabIndex={0}
       aria-label={`View listing at ${formatCardAddress(listing)}`}
-      className={`listing-card-root group block cursor-pointer rounded-md ${CARD_HOVER_CLASS} focus:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2`}
+      className={`listing-card-root group block cursor-pointer rounded-md ${CARD_HOVER_CLASS} focus:outline-none`}
       onClick={openPanel}
       onKeyDown={(e) => {
         if (e.key !== 'Enter' && e.key !== ' ') return;
