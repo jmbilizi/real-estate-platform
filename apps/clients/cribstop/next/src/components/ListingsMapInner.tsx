@@ -377,8 +377,6 @@ interface Props {
   searchPolygon?: object | null;
   /** The list's filters. The map requests every match in the viewport with them (#377). */
   filters?: ListingSearchQuery;
-  /** The list's `total`, the one count for the search. */
-  total?: number;
   /** Grouped view (#503): one marker per neighborhood replaces the listing pins. */
   neighborhoods?: NeighborhoodMarkers;
   /** Fit the map here (a drilled-down neighborhood). */
@@ -407,7 +405,6 @@ export default function ListingsMapInner({
   searchCenter,
   searchPolygon,
   filters,
-  total,
   neighborhoods,
   focusBounds,
   viewBounds,
@@ -447,18 +444,6 @@ export default function ListingsMapInner({
   // A pin opens the card popup (#549). A home on this page shows its row. Any other pin loads its
   // card. Only a click on the card opens the detail.
   const rowsById = useMemo(() => new Map(listings.map((l) => [l.id, l])), [listings]);
-  // The list is the search area and the map is the viewport. Say so when they hold different sets.
-  // Over the cap the map holds the newest homes only. A withheld-address home has no pin, so the
-  // copy counts pins, never homes in the area.
-  const viewportNote =
-    viewport === null
-      ? null
-      : viewport.total > viewport.pins.length
-        ? `Showing the newest ${viewport.pins.length.toLocaleString()} of ${viewport.total.toLocaleString()} homes in this map view. Zoom in to see the rest.`
-        : typeof total === 'number' && viewport.total < total
-          ? `${viewport.total.toLocaleString()} of ${total.toLocaleString()} homes have a pin in this map view. The list shows all ${total.toLocaleString()}.`
-          : null;
-
   const center = useMemo<[number, number]>(() => {
     if (searchCenter) return searchCenter;
     const coords = grouped ? groupCoords : pinCoords;
@@ -560,15 +545,12 @@ export default function ListingsMapInner({
             {sampleBannerCopy}
           </div>
         )}
-        {!grouped && (hiddenPinCount > 0 || viewportNote) && (
+        {!grouped && hiddenPinCount > 0 && (
           <div className="flex flex-col gap-1 rounded-2xl bg-surface/95 px-3 py-1.5 text-center text-[11px] font-medium leading-snug text-ink-muted shadow-card backdrop-blur">
-            {viewportNote && <p>{viewportNote}</p>}
-            {hiddenPinCount > 0 && (
-              <p>
-                Some sellers have chosen not to display their home’s location, so those homes appear
-                in your results but not as pins on this map.
-              </p>
-            )}
+            <p>
+              Some sellers have chosen not to display their home’s location, so those homes appear
+              in your results but not as pins on this map.
+            </p>
           </div>
         )}
       </div>

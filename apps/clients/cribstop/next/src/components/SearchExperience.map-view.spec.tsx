@@ -135,7 +135,9 @@ describe('the map view starts only after the user moves the map', () => {
     expect(lastQuery().query).toBe('Alexandria, VA');
     await waitFor(() => expect(screen.getByText('31')).toBeTruthy());
     expect(screen.getByTestId('clear-map-area')).toBeTruthy();
-    expect(screen.getByTestId('map-area-note').textContent).toContain('hidden address');
+    expect(screen.getByTestId('map-area-hint').textContent).toContain('hidden address');
+    expect(screen.getByTestId('clear-map-area').getAttribute('title')).toContain('hidden address');
+    expect(screen.queryByTestId('map-area-note')).toBeNull();
     expect(mockMapProps.current?.viewBounds).toEqual(OLD_TOWN);
   });
 
@@ -263,13 +265,14 @@ describe('the way back to the whole place', () => {
     expect(mockMapProps.current?.viewBounds).toBeNull();
   });
 
-  it('offers the same way back from the note and names the place', async () => {
+  it('names the place in the Map area hint and clears from the chip', async () => {
     render(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     moveMap(OLD_TOWN);
-    await waitFor(() => expect(screen.getByTestId('map-area-note')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('map-area-hint')).toBeTruthy());
+    expect(screen.getByTestId('map-area-hint').textContent).toContain('show all in Alexandria, VA');
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Show all in Alexandria, VA' })[0]);
+    fireEvent.click(screen.getByTestId('clear-map-area'));
 
     await waitFor(() => expect(lastQuery().bounds).toBeUndefined());
   });
@@ -377,7 +380,7 @@ describe('the view works with the other controls', () => {
       expect((mockedGroups.mock.calls.at(-1)?.[0] as Query).bounds).toEqual(OLD_TOWN),
     );
     expect(mockedGroups.mock.calls.at(-1)?.[0]).toMatchObject({ offset: 0 });
-    expect(screen.getByTestId('map-area-note').textContent).toContain('neighborhoods');
+    expect(screen.getByTestId('map-area-hint').textContent).toContain('neighborhoods');
   });
 });
 
