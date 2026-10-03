@@ -155,6 +155,24 @@ function UserMoveReporter({
     });
     const container = map.getContainer();
     const mark = () => gate.markIntent();
+    // The page scrolls under the pointer until the user clicks the map to turn on wheel zoom, and a
+    // scroll then is not a map move. Only the keys Leaflet's keyboard handler reads move the map.
+    const markWheel = () => {
+      if (map.scrollWheelZoom.enabled()) gate.markIntent();
+    };
+    const MAP_KEYS = new Set([
+      'ArrowUp',
+      'ArrowDown',
+      'ArrowLeft',
+      'ArrowRight',
+      '+',
+      '=',
+      '-',
+      '_',
+    ]);
+    const markKey = (e: KeyboardEvent) => {
+      if (e.target === container && MAP_KEYS.has(e.key)) gate.markIntent();
+    };
     const markPinch = (e: TouchEvent) => {
       if (e.touches.length > 1) gate.markIntent();
     };
@@ -170,18 +188,18 @@ function UserMoveReporter({
     map.on('dragstart', mark);
     map.on('dragend', mark);
     map.on('moveend', onMoveEnd);
-    container.addEventListener('wheel', mark, { passive: true });
+    container.addEventListener('wheel', markWheel, { passive: true });
     container.addEventListener('dblclick', mark);
-    container.addEventListener('keydown', mark);
+    container.addEventListener('keydown', markKey);
     container.addEventListener('touchstart', markPinch, { passive: true });
     container.addEventListener('click', markZoomButton);
     return () => {
       map.off('dragstart', mark);
       map.off('dragend', mark);
       map.off('moveend', onMoveEnd);
-      container.removeEventListener('wheel', mark);
+      container.removeEventListener('wheel', markWheel);
       container.removeEventListener('dblclick', mark);
-      container.removeEventListener('keydown', mark);
+      container.removeEventListener('keydown', markKey);
       container.removeEventListener('touchstart', markPinch);
       container.removeEventListener('click', markZoomButton);
       gate.dispose();

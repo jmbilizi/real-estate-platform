@@ -314,6 +314,35 @@ describe('the view works with the other controls', () => {
     expect(params().has('viewport')).toBe(true);
   });
 
+  it('keeps the newer map view when the filter modal applies an older draft', async () => {
+    render(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
+    await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
+    moveMap(OLD_TOWN);
+    await waitFor(() => expect(lastQuery().bounds).toEqual(OLD_TOWN));
+
+    fireEvent.click(screen.getByLabelText('Open filters'));
+    const newer = { ...OLD_TOWN, west: -77.1, east: -77.07 };
+    moveMap(newer);
+    await waitFor(() => expect(lastQuery().bounds).toEqual(newer));
+    fireEvent.click(screen.getByRole('button', { name: /^Show homes/ }));
+
+    await waitFor(() => expect(lastQuery().bounds).toEqual(newer));
+    expect(params().get('viewport')).toBe('-77.10000,38.79770,-77.07000,38.81890');
+  });
+
+  it('drops the view when the URL changes to another place', async () => {
+    const { rerender } = render(
+      <SearchExperience initialQuery="q=Alexandria%2C+VA&viewport=-77.0602,38.7977,-77.0301,38.8189" />,
+    );
+    await waitFor(() => expect(lastQuery().bounds).toEqual(OLD_TOWN));
+
+    rerender(<SearchExperience initialQuery="q=Arlington%2C+VA" />);
+
+    await waitFor(() => expect(lastQuery().query).toBe('Arlington, VA'));
+    expect(lastQuery().bounds).toBeUndefined();
+    expect(mockMapProps.current?.viewBounds).toBeNull();
+  });
+
   it('does not count the view as a filter', async () => {
     render(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());

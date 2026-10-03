@@ -585,7 +585,8 @@ export default function SearchExperience({
    * empty state's clear, anything added later — goes through it once.
    */
   const applyFilters = (next: SearchFilters) => {
-    const committed = applyLandInterlock(next);
+    // The map view is not a modal control. A draft can hold an older view than the map now shows.
+    const committed = applyLandInterlock({ ...next, bounds: filters.bounds });
     setFilters(committed);
     setPage(1);
     if (!ownsUrl) return; // not our URL to write — see `ownsUrl`
@@ -608,7 +609,7 @@ export default function SearchExperience({
 
   /** Commits a filter set and a group state together: state, URL and paging (#502). */
   const commitView = (nextFilters: SearchFilters, nextGroup: GroupState) => {
-    const committed = applyLandInterlock(nextFilters);
+    const committed = applyLandInterlock({ ...nextFilters, bounds: filters.bounds });
     setFilters(committed);
     setGroup(nextGroup);
     setPage(1);
