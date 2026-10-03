@@ -82,6 +82,29 @@ describe('CustomMapControls expand and exit', () => {
     expect(htmlExpanded()).toBe(false);
   });
 
+  it('leaves Escape to an open dialog', () => {
+    render(
+      <>
+        <CustomMapControls />
+        <div role="dialog" aria-modal="true" />
+      </>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Full screen map' }));
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(htmlExpanded()).toBe(true);
+  });
+
+  it('does not pop a history entry that something else pushed after expand', () => {
+    render(<CustomMapControls />);
+    fireEvent.click(screen.getByRole('button', { name: 'Full screen map' }));
+    window.history.pushState({ panel: true }, '', window.location.href);
+    fireEvent.click(screen.getByRole('button', { name: 'Exit full screen map' }));
+
+    expect(back).not.toHaveBeenCalled();
+    expect(htmlExpanded()).toBe(false);
+  });
+
   it('ignores Escape while the map is not expanded', () => {
     render(<CustomMapControls />);
     fireEvent.keyDown(window, { key: 'Escape' });

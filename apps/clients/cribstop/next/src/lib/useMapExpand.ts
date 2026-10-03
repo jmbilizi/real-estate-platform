@@ -39,7 +39,8 @@ export function useMapExpand(container: HTMLElement | null) {
     setExpanded(false);
     if (pushedRef.current) {
       pushedRef.current = false;
-      window.history.back();
+      // Pop only the entry that expand pushed. A later entry, such as a listing panel, is not ours.
+      if (window.history.state?.mapExpanded) window.history.back();
     }
   }, []);
 
@@ -54,7 +55,10 @@ export function useMapExpand(container: HTMLElement | null) {
       setExpanded(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !event.defaultPrevented) exit();
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      // A dialog above the map owns Escape.
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      exit();
     };
 
     window.addEventListener('popstate', onPopState);
