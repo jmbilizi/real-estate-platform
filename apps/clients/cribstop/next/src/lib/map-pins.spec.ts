@@ -1,7 +1,12 @@
-import { layoutPricePills, PILL_BOX_H, pillWidth, type PinPoint } from './map-pins';
-
-const view = { width: 400, height: 700, pad: 60 };
-const at = (id: string, x: number, y: number, label = '$585K'): PinPoint => ({ id, x, y, label });
+import {
+  PILL_BODY_H,
+  PILL_BOX_H,
+  PILL_HIT_TOP,
+  pillWidth,
+  spreadPills,
+  type SpreadPoint,
+  VISIBLE_STRIP,
+} from './map-pins';
 
 describe('pillWidth', () => {
   it('never goes below the 44px tap target', () => {
@@ -14,67 +19,119 @@ describe('pillWidth', () => {
   });
 });
 
-describe('layoutPricePills (#546)', () => {
-  it('gives a lone pin a pill', () => {
-    expect([...layoutPricePills([at('a', 100, 200)], view)]).toEqual(['a']);
-  });
+const at = (id: string, x: number, y: number, label = '$585K'): SpreadPoint => ({
+  id,
+  x,
+  y,
+  label,
+});
 
-  it('keeps the higher-priority pill whole and turns the overlapping one into a dot', () => {
-    const pills = layoutPricePills([at('first', 100, 200), at('second', 110, 205)], view);
-    expect(pills.has('first')).toBe(true);
-    expect(pills.has('second')).toBe(false);
-  });
+/** Body rect of a pill after the spread. The tail tip is the bottom centre of the 44px box. */
+function bodyOf(point: SpreadPoint, dx: number, dy: number) {
+  const w = pillWidth(point.label);
+  const top = point.y - PILL_BOX_H + PILL_HIT_TOP + dy;
+  return { l: point.x + dx - w / 2, r: point.x + dx + w / 2, t: top, b: top + PILL_BODY_H };
+}
 
-  it('lets two clear pills both stay whole', () => {
-    const pills = layoutPricePills([at('a', 60, 200), at('b', 300, 200)], view);
-    expect([...pills].sort()).toEqual(['a', 'b']);
+/**
+ * Counts the sample points of each body that no pill above it covers. A pill above is one with a
+ * lower rank. A count of zero means the pill cannot be clicked.
+ */
+function visibleSamples(points: SpreadPoint[]): Map<string, number> {
+  const spread = spreadPills(points);
+  const rects = points.map((p) => {
+    const o = spread.get(p.id) as { dx: number; dy: number; rank: number };
+    return { id: p.id, rank: o.rank, ...bodyOf(p, o.dx, o.dy) };
   });
-
-  it('treats the pill as the box above the tail tip, so a pin straight below stays whole', () => {
-    // The first pill spans y 165..200. A pin 60px lower has its own box at 205..240.
-    const pills = layoutPricePills([at('a', 100, 200), at('b', 100, 260)], view);
-    expect(pills.size).toBe(2);
-  });
-
-  it('turns a pin far outside the viewport into a dot without a pill', () => {
-    const pills = layoutPricePills([at('away', 2000, 200), at('near', 100, 200)], view);
-    expect([...pills]).toEqual(['near']);
-  });
-
-  it('never returns more pills than input points, and never drops the first point', () => {
-    const points = Array.from({ length: 2000 }, (_, i) =>
-      at(`p${i}`, (i * 7) % 400, (i * 13) % 700),
-    );
-    const pills = layoutPricePills(points, view);
-    expect(pills.has('p0')).toBe(true);
-    expect(pills.size).toBeLessThan(points.length);
-  });
-
-  it('keeps every pill clear of every other pill', () => {
-    const points = Array.from({ length: 600 }, (_, i) =>
-      at(`p${i}`, (i * 37) % 400, 40 + ((i * 53) % 640), i % 2 ? '$1.2M' : '$585K'),
-    );
-    const pills = layoutPricePills(points, view);
-    const boxes = points
-      .filter((p) => pills.has(p.id))
-      .map((p) => ({
-        l: p.x - pillWidth(p.label) / 2,
-        r: p.x + pillWidth(p.label) / 2,
-        t: p.y - 35,
-        b: p.y,
-      }));
-    for (let i = 0; i < boxes.length; i++) {
-      for (let j = i + 1; j < boxes.length; j++) {
-        const a = boxes[i];
-        const b = boxes[j];
-        const overlap = a.l < b.r && a.r > b.l && a.t < b.b && a.b > b.t;
-        expect(overlap).toBe(false);
+  const result = new Map<string, number>();
+  for (const me of rects) {
+    let visible = 0;
+    for (let x = me.l + 1; x < me.r; x += 3) {
+      for (let y = me.t + 1; y < me.b; y += 3) {
+        const covered = rects.some(
+          (o) => o.rank < me.rank && x >= o.l && x <= o.r && y >= o.t && y <= o.b,
+        );
+        if (!covered) visible++;
       }
     }
+    result.set(me.id, visible);
+  }
+  return result;
+}
+
+describe('spreadPills (#549)', () => {
+  it('leaves a lone pill on its tip, with room for the full hit area', () => {
+    const out = spreadPills([at('a', 100, 200)]);
+    expect(out.get('a')).toMatchObject({ dx: 0, dy: 0, roomy: true });
   });
 
-  it('is deterministic for the same input order', () => {
-    const points = [at('a', 100, 200), at('b', 105, 202), at('c', 300, 400)];
-    expect([...layoutPricePills(points, view)]).toEqual([...layoutPricePills(points, view)]);
+  it('leaves pills that do not overlap where they are', () => {
+    const out = spreadPills([at('a', 60, 200), at('b', 300, 200), at('c', 60, 400)]);
+    for (const id of ['a', 'b', 'c']) expect(out.get(id)).toMatchObject({ dx: 0, dy: 0 });
+  });
+
+  it('steps the lower pill of a heavy overlap away so both bodies show', () => {
+    // The pill with the larger y is lower on screen, so it is on top.
+    const out = spreadPills([at('under', 102, 200), at('top', 100, 203)]);
+    expect(out.get('top')).toMatchObject({ dx: 0, dy: 0, rank: 0 });
+    const under = out.get('under');
+    expect(under?.rank).toBe(1);
+    expect(Math.abs((under?.dy ?? 0) - 0) + Math.abs(under?.dx ?? 0)).toBeGreaterThan(0);
+    expect(under?.roomy).toBe(false);
+  });
+
+  it('lets pills overlap a little without moving them', () => {
+    const w = pillWidth('$585K');
+    // Overlap in x is 10% of the width.
+    const out = spreadPills([at('a', 100, 200), at('b', 100 + w * 0.9, 200)]);
+    expect(out.get('b')).toMatchObject({ dx: 0, dy: 0 });
+  });
+
+  it('keeps every pill of a dense block clickable', () => {
+    // 40 homes in a block 120px by 90px, which is a dense block at the max zoom of the map.
+    const points = Array.from({ length: 40 }, (_, i) =>
+      at(`p${i}`, 300 + ((i * 7919) % 120), 300 + ((i * 104_729) % 90), i % 3 ? '$585K' : '$1.2M'),
+    );
+    const visible = visibleSamples(points);
+    for (const [id, count] of visible) expect({ id, ok: count > 0 }).toEqual({ id, ok: true });
+  });
+
+  it('gives each home at one coordinate its own spot, so all are reachable', () => {
+    const condo = Array.from({ length: 60 }, (_, i) => at(`unit${i}`, 500, 500, '$412K'));
+    const out = spreadPills(condo);
+    const spots = new Set([...out.values()].map((o) => `${o.dx},${o.dy}`));
+    expect(spots.size).toBe(60);
+    const visible = visibleSamples(condo);
+    for (const [id, count] of visible) expect({ id, ok: count >= 4 }).toEqual({ id, ok: true });
+  });
+
+  it('keeps at least the visible strip of every pill in a stack of the same spot', () => {
+    const stack = Array.from({ length: 3 }, (_, i) => at(`s${i}`, 200, 300));
+    const out = spreadPills(stack);
+    const ys = [...out.values()].map((o) => o.dy).sort((a, b) => b - a);
+    expect(ys[0] - ys[1]).toBeGreaterThanOrEqual(VISIBLE_STRIP);
+    expect(ys[1] - ys[2]).toBeGreaterThanOrEqual(VISIBLE_STRIP);
+  });
+
+  it('does not depend on input order, so a refetch does not reshuffle the pills', () => {
+    const points = Array.from({ length: 80 }, (_, i) =>
+      at(`p${i}`, 100 + ((i * 31) % 50), 100 + ((i * 17) % 40)),
+    );
+    const a = spreadPills(points);
+    const b = spreadPills([...points].reverse());
+    for (const p of points) expect(b.get(p.id)).toEqual(a.get(p.id));
+  });
+
+  it('spreads 1,800 points fast enough to run on every zoom', () => {
+    const points = Array.from({ length: 1800 }, (_, i) =>
+      at(`p${i}`, ((i * 7919) % 1400) + 100, ((i * 104_729) % 900) + 100),
+    );
+    const start = performance.now();
+    spreadPills(points);
+    expect(performance.now() - start).toBeLessThan(1500);
+    // At the cap of 1,800 pins in view, at most a pill in a hundred has no visible spot. The next
+    // zoom shows it. A block that is zoomed in has none (see the tests above).
+    const hidden = [...visibleSamples(points).values()].filter((count) => count === 0);
+    expect(hidden.length).toBeLessThanOrEqual(points.length / 100);
   });
 });
