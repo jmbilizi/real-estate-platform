@@ -59,6 +59,11 @@ export const Z_LAYERS = {
   searchBarMorphGhost: 56,
   /** The full-screen mobile search experience. Still page chrome: a dialog covers it. */
   searchOverlay: 60,
+  /**
+   * The expanded search map (#556). Covers the header, the docked search bar and the results bar,
+   * so none of them can paint over it. Below dialogs, which the user must still be able to answer.
+   */
+  mapExpanded: 65,
   /** Modals: listing detail, auth, filters. Above all page chrome, by the rule above. */
   dialog: 70,
   /** App-global slide-in panel, which may be summoned over a dialog. */
