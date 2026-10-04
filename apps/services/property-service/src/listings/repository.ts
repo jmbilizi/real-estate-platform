@@ -859,4 +859,99 @@ export async function findAddressCandidates(
   return result.rows;
 }
 
+/**
+ * Card rows for a set of listing ids (#23, #76), built by the same SELECT, join, mapper and
+ * suppression boundary as `findListingCardById`. One statement for the whole set, so a list of
+ * saved homes is not one lookup per row. An id the view does not hold is absent from the map.
+ */
+export async function findListingCardsByIds(
+  pool: ReadClient,
+  ids: readonly string[],
+): Promise<Map<string, ListingCardRow>> {
+  if (ids.length === 0) return new Map();
+  const result = await pool.query<ListingCardDbRow>(
+    `SELECT ${LISTING_CARD_SELECT}, pm.primary_media_url, pm.primary_media_alt_text,
+            ${CARD_UNIT_NUMBER}
+     FROM listing_search_v v${PRIMARY_MEDIA_JOIN}
+     WHERE v.id = ANY($1::uuid[])`,
+    [ids],
+  );
+  return new Map(
+    result.rows.map((row) => {
+      const card = applyCardAddressSuppression(toListingCardRow(row));
+      return [card.id, card];
+    }),
+  );
+}
+
+/** One `listing_detail_v` row of a home, tagged with the home id it was found for. */
+export interface HomeRowDbRow extends PropertyRecordDbRow {
+  home_id: string;
+}
+
+/**
+ * Every listing of each home in `homeIds`, newest first, at most `perHome` per home. The same read
+ * as `findHomeRows`, for a set of homes in one statement. A home whose listings are all deleted
+ * or withheld from the internet has no row here.
+ */
+export async function findHomeRowsForHomes(
+  pool: ReadClient,
+  homeIds: readonly string[],
+  perHome = 20,
+): Promise<HomeRowDbRow[]> {
+  if (homeIds.length === 0) return [];
+  const result = await pool.query<HomeRowDbRow>(
+    `SELECT h.home_id, ${PROPERTY_RECORD_SELECT}
+       FROM unnest($1::uuid[]) AS h(home_id)
+       CROSS JOIN LATERAL (
+         SELECT ${PROPERTY_RECORD_SELECT} FROM listing_detail_v d
+          WHERE d.unit_id = h.home_id OR (d.unit_id IS NULL AND d.property_id = h.home_id)
+          ORDER BY d.last_updated DESC, d.id DESC
+          LIMIT $2
+       ) d`,
+    [homeIds, perHome],
+  );
+  return result.rows;
+}
+
+/**
+ * The durable facts of a home, from `properties` and `units` only. The address is not read here:
+ * the street line stays behind `listing_detail_v`, which masks it per listing. So a home with no
+ * readable listing has no address.
+ */
+export interface HomeFactsDbRow {
+  home_id: string;
+  city: string;
+  state: string;
+  zip: string;
+  neighborhood: string | null;
+  property_type: string;
+  beds: number | null;
+  baths: number | string | null;
+  sqft: number | null;
+  lot_sqft: number | null;
+  year_built: number | null;
+  is_sample: boolean;
+}
+
+export async function findHomeFacts(
+  pool: ReadClient,
+  homeIds: readonly string[],
+): Promise<HomeFactsDbRow[]> {
+  if (homeIds.length === 0) return [];
+  const result = await pool.query<HomeFactsDbRow>(
+    `SELECT h.home_id, p.city, p.state, p.zip5 AS zip, p.neighborhood, p.property_type,
+            COALESCE(u.beds, p.beds) AS beds,
+            COALESCE(u.baths_display, p.baths_display) AS baths,
+            COALESCE(u.living_sqft, p.living_sqft) AS sqft,
+            p.lot_sqft, p.year_built,
+            (p.is_sample OR COALESCE(u.is_sample, false)) AS is_sample
+       FROM unnest($1::uuid[]) AS h(home_id)
+       LEFT JOIN units u ON u.id = h.home_id
+       JOIN properties p ON p.id = COALESCE(u.property_id, h.home_id)`,
+    [homeIds],
+  );
+  return result.rows;
+}
+
 export { NOT_FOUND_BODY };

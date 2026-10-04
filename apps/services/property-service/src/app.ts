@@ -13,6 +13,8 @@ import type { ReadPool } from './listings/repository';
 import { createBrightSyncAdminRouter } from './admin/bright-sync-routes';
 import type { SyncQueryable } from './jobs/bright-sync/store';
 import { createInquiriesRouter } from './inquiries/routes';
+import { createSavedStateReader } from './saved/identity';
+import { createSavedHomesRouter } from './saved/routes';
 import {
   createHttpIntrospectionClient,
   type IntrospectionClient,
@@ -185,8 +187,10 @@ export function createApp(options: CreateAppOptions = {}): Express {
       galleryLoader,
       addressFetcher,
       options.mapPinCap ?? envInt('MAP_PIN_CAP', MAP_PIN_CAP_DEFAULT),
+      createSavedStateReader(pool, introspection),
     ),
   );
+  app.use(createSavedHomesRouter({ pool, introspection }));
   app.use(createInquiriesRouter({ pool, introspection, rateLimiter }));
   app.use(createBrightSyncAdminRouter(pool as unknown as SyncQueryable, options.adminToken));
 
