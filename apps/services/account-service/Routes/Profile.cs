@@ -276,10 +276,8 @@ internal static class Profile
                     .ToDictionary(g => g.Key, g => g.Select(e => e.Description).ToArray()));
             }
 
-            // Rotate the security stamp. Cookie sessions are rejected on their very next request
-            // and refresh tokens can no longer be exchanged; an already-issued bearer access token
-            // survives until its own expiry, because BearerTokenHandler never re-reads the stamp
-            // (issue #142).
+            // Rotate the security stamp. It revokes cookie sessions, refresh tokens and bearer access
+            // tokens on their next use.
             await userManager.UpdateSecurityStampAsync(user).ConfigureAwait(false);
             return Results.NoContent();
         }).RequireAuthorization();

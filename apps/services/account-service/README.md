@@ -217,11 +217,12 @@ revalidation and `/account/refresh`. Neither depends on `AccountRecovery:Require
 unknown address. `/account/confirmEmail` refuses a deleted account with the generic confirmation
 failure.
 
-An `Identity.Bearer` **access** token already in circulation is the exception: `BearerTokenHandler`
-unprotects the ticket and checks its own `ExpiresUtc`, and never re-reads the security stamp. So a
-bearer token issued before the revocation keeps working until it expires on its own. This applies to
-every stamp rotation in the service — soft-delete, admin suspension, and password reset alike.
-Tracked in issue #142.
+Bearer **access** tokens are revoked the same way (#142). `BearerTokenHandler` has no
+principal-validation event, so `BearerStampCheck` runs from `BearerTokenEvents.OnMessageReceived`.
+It unprotects the token and calls `SignInManager.ValidateSecurityStampAsync`. A token issued before
+any stamp rotation (soft-delete, admin suspension, password reset) gets `401` on its next use. Cost:
+one user read per bearer request, the same as the cookie path. `/internal/account/introspect` makes
+the same stamp check, so both agree.
 
 ---
 

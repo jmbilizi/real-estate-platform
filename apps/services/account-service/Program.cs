@@ -188,12 +188,14 @@ internal static class Program
         // sent as "authorization: bearer <token>" is rejected even though RFC 7235 §2.1 makes the
         // auth-scheme token case-insensitive — and Ocelot forwards headers verbatim. Parse the header
         // ourselves so the service, and the introspection endpoint that reports on it, agree.
+        // The same hook revokes a token whose security stamp was rotated (#142): the handler has no
+        // principal-validation event, so the stamp check runs here and fails the message.
         builder.Services.Configure<BearerTokenOptions>(IdentityConstants.BearerScheme, options =>
-            options.Events.OnMessageReceived = messageContext =>
+            options.Events.OnMessageReceived = async messageContext =>
             {
                 messageContext.Token = BearerTokenHeader.Parse(
                     messageContext.Request.Headers.Authorization.ToString());
-                return Task.CompletedTask;
+                await BearerStampCheck.RejectRevokedAsync(messageContext).ConfigureAwait(false);
             });
 
         // Resolves a forwarded cookie/bearer/API-key credential to an account id (see Routes/CredentialIntrospection.cs).
