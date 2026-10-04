@@ -6,7 +6,7 @@
 
 #
 
-# This resource is applied via kustomization.yaml as a remote reference.
+# This directory's kustomization.yaml holds the remote reference.
 
 # No local files needed - Kustomize fetches directly from GitHub.
 

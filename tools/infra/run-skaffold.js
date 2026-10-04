@@ -218,6 +218,20 @@ function addFastExitFlags(argsList) {
 
 args = addFastExitFlags(args);
 
+// Skaffold stamps a fresh `skaffold.dev/run-id` label into every pod template on each run. Every
+// Deployment, including the ingress-nginx controller, then restarts on every deploy, and the
+// controller's admission webhook has no endpoint while the next apply creates an Ingress (#101).
+// A fixed value keeps unchanged workloads unchanged. Image digests still drive real rollouts.
+function addStableRunIdLabel(argsList) {
+  if (!['dev', 'debug', 'run', 'deploy'].includes(argsList[0])) {
+    return argsList;
+  }
+  const labelAlreadySet = argsList.some((a) => a.includes('skaffold.dev/run-id'));
+  return labelAlreadySet ? argsList : [...argsList, '--label', 'skaffold.dev/run-id=local'];
+}
+
+args = addStableRunIdLabel(args);
+
 function spawnOk(cmd, cmdArgs) {
   const result = spawnSync(cmd, cmdArgs, {
     cwd: workspaceRoot,

@@ -1,0 +1,7 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Local phase 1 (#101): the controller and its admission webhook, deployed and awaited before
+# any Ingress is applied. See the `ingress-nginx` module in skaffold.yaml.
+resources:
+  - ../../base/nginx-ingress
