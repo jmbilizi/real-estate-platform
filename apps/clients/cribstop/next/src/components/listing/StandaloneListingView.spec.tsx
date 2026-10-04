@@ -110,6 +110,24 @@ describe('StandaloneListingView', () => {
     );
   });
 
+  it('opens the modal on a hard load of a property page path (#587), and closes to the search', async () => {
+    pathname = '/property/118-baggett-place-alexandria-va/' + ID;
+    window.history.replaceState(null, '', pathname);
+    render(<StandaloneListingView id={ID} initialState={readyState()} cityQuery={CITY_QUERY} />);
+
+    expect(screen.getByText('Close listing')).toBeInTheDocument();
+    expect(document.querySelector('[data-search-backdrop]')).toHaveAttribute(
+      'data-search-backdrop',
+      'inert',
+    );
+
+    pathname = '/homes-for-sale';
+    await closeThePanel();
+
+    expect(screen.queryByText('Close listing')).toBeNull();
+    expect(window.location.pathname).toBe('/homes-for-sale');
+  });
+
   it('navigates only when there is no city behind the panel to reveal', async () => {
     render(
       <StandaloneListingView

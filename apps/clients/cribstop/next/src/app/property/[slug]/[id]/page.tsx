@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { idSchema, type PropertyPage } from '@cribstop/property-contracts';
 import { ListingErrorState } from '@/components/listing/ListingStates';
-import PropertyPageView from '@/components/listing/PropertyPageView';
+import PropertyPageView, { PropertyHistory } from '@/components/listing/PropertyPageView';
+import StandaloneListingView from '@/components/listing/StandaloneListingView';
 import { toListingDetailView } from '@/lib/api/listings';
 import {
   loadPropertyByHomeId,
@@ -78,5 +79,33 @@ export default async function PropertyRoute({ params }: RouteProps) {
   if (state.viaHomeId || safeDecode(slug) !== state.page.slug) {
     permanentRedirect(state.page.canonicalPath);
   }
-  return <PropertyPageView page={state.page} />;
+
+  const { page } = state;
+  if (page.latestListing === null) return <PropertyPageView page={page} />;
+
+  /*
+   * A property with a listing opens as the listing modal over that city's search, the same panel a
+   * card click shows. A card click pushes this URL, so a reload or a shared link lands here and must
+   * look the same. The listing resolves on the server, so it is in the first HTML for crawlers.
+   * Only an off-market property, which has no listing to show, keeps the full page above.
+   */
+  const listing = toListingDetailView(page.latestListing);
+  const cityQuery = new URLSearchParams({
+    q: `${listing.city}, ${listing.state}`,
+    city: listing.city,
+    state: listing.state,
+  }).toString();
+
+  return (
+    <StandaloneListingView
+      id={listing.id}
+      initialState={{ status: 'ready', listing }}
+      cityQuery={cityQuery}
+      statusLabel={page.marketStatus}
+      nearby={page.nearby}
+      propertyPanel={
+        page.history.length > 0 ? <PropertyHistory entries={page.history} /> : undefined
+      }
+    />
+  );
 }

@@ -36,6 +36,9 @@ export default function ListingDetailModal({
   onClosed,
   initialState,
   layoutRow,
+  statusLabel,
+  nearby,
+  propertyPanel,
 }: {
   id: string;
   /**
@@ -65,6 +68,10 @@ export default function ListingDetailModal({
    * never becomes `state`, because a card row is not a detail and must not be mistaken for one.
    */
   layoutRow?: ListingCardRow;
+  /** Property page extras (#382), passed through to `ListingDetailContent` unchanged. */
+  statusLabel?: string;
+  nearby?: ListingCardRow[];
+  propertyPanel?: React.ReactNode;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(true);
@@ -154,7 +161,13 @@ export default function ListingDetailModal({
       {state.status === 'loading' && <ListingDetailSkeleton layoutRow={layoutRow} />}
 
       {state.status === 'ready' && (
-        <ListingDetailContent listing={state.listing} onClose={handleClose} />
+        <ListingDetailContent
+          listing={state.listing}
+          onClose={handleClose}
+          statusLabel={statusLabel}
+          nearby={nearby}
+          propertyPanel={propertyPanel}
+        />
       )}
 
       {state.status === 'not-found' && (

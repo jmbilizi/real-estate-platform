@@ -5,6 +5,12 @@ import { usePathname, useRouter } from 'next/navigation';
 import ListingDetailModal from '@/components/ListingDetailModal';
 import ListingSearchBackdrop from '@/components/listing/ListingSearchBackdrop';
 import type { ListingDetailState } from '@/lib/api/listings';
+import type { ListingCardRow } from '@/lib/types';
+
+/** `/listing/<id>` and the property page `/property/<slug>/<id>` (#382) both carry a listing. */
+function isListingPath(pathname: string): boolean {
+  return pathname.startsWith('/listing/') || pathname.startsWith('/property/');
+}
 
 /**
  * A directly-loaded listing, and what closing it does.
@@ -23,6 +29,9 @@ export default function StandaloneListingView({
   id,
   initialState,
   cityQuery,
+  statusLabel,
+  nearby,
+  propertyPanel,
 }: {
   id: string;
   initialState: ListingDetailState;
@@ -31,6 +40,10 @@ export default function StandaloneListingView({
    * failed to load and there is therefore no city to fall back on.
    */
   cityQuery: string | null;
+  /** Property page extras (#382), shown in the modal exactly as on a soft open. */
+  statusLabel?: string;
+  nearby?: ListingCardRow[];
+  propertyPanel?: React.ReactNode;
 }) {
   const router = useRouter();
 
@@ -45,7 +58,7 @@ export default function StandaloneListingView({
    * in the accessibility tree underneath an open panel, which is the thing `inert` exists to stop.
    */
   const pathname = usePathname();
-  const onListingUrl = pathname.startsWith('/listing/');
+  const onListingUrl = isListingPath(pathname);
 
   /**
    * Has *this* panel been dismissed?
@@ -97,7 +110,14 @@ export default function StandaloneListingView({
     <>
       {cityQuery && <ListingSearchBackdrop query={cityQuery} live={showingResults} />}
       {!dismissed && (
-        <ListingDetailModal id={id} initialState={initialState} onClosed={handleClosed} />
+        <ListingDetailModal
+          id={id}
+          initialState={initialState}
+          onClosed={handleClosed}
+          statusLabel={statusLabel}
+          nearby={nearby}
+          propertyPanel={propertyPanel}
+        />
       )}
     </>
   );
