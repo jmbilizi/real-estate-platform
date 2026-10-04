@@ -1,5 +1,5 @@
 import { toOpenApiDocument } from './openapi';
-import { savedHomesRequestSchema, savedHomeSchema } from './saved-homes';
+import { savedHomeSchema, savedHomesRequestSchema } from './saved-homes';
 import { listingCardSchema } from './listing-card';
 import { UNAUTHENTICATED_BODY } from './errors';
 
