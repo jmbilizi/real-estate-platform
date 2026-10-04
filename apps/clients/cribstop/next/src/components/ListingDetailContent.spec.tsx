@@ -515,16 +515,8 @@ describe('ListingDetailContent — agent card (#571)', () => {
 
 describe('ListingDetailContent — buyer-agent card (#591)', () => {
   it('holds the CTAs and the broker line, below the Listing Agent card', async () => {
-    const onRequestTour = jest.fn();
-    const onMessageAgent = jest.fn();
     const view = toListingDetailView(aListingDetail());
-    await renderAndSettle(
-      <ListingDetailContent
-        listing={view}
-        onRequestTour={onRequestTour}
-        onMessageAgent={onMessageAgent}
-      />,
-    );
+    await renderAndSettle(<ListingDetailContent listing={view} />);
 
     const card = screen.getByTestId('buyer-agent-card');
     expect(card.textContent).toContain('Cribstop, brokered by Real Broker, LLC');
@@ -534,15 +526,18 @@ describe('ListingDetailContent — buyer-agent card (#591)', () => {
     const agentCard = screen.getByText(/^Listing (Agent|Office)$/).parentElement as HTMLElement;
     expect(agentCard.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-    // The card and the phone bar share the handlers.
-    for (const tour of screen.getAllByRole('button', { name: 'Request a Tour' })) {
-      fireEvent.click(tour);
+    // The card and the phone bar open the same request dialog.
+    for (const [name, title] of [
+      ['Request a Tour', 'Request a Tour'],
+      ['Message Agent', 'Message Your Buyer Agent'],
+    ]) {
+      for (const button of screen.getAllByRole('button', { name })) {
+        fireEvent.click(button);
+        expect(screen.getByRole('dialog', { name: title })).toBeInTheDocument();
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(screen.queryByRole('dialog')).toBeNull();
+      }
     }
-    for (const message of screen.getAllByRole('button', { name: 'Message Agent' })) {
-      fireEvent.click(message);
-    }
-    expect(onRequestTour).toHaveBeenCalledTimes(2);
-    expect(onMessageAgent).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('button', { name: /listing agent|schedule/i })).toBeNull();
   });
 });
@@ -603,5 +598,14 @@ describe('ListingDetailContent — Nearby homes without a panel (#572)', () => {
     const summaries = container.querySelectorAll('#facts summary');
     expect(summaries.length).toBeGreaterThan(0);
     summaries.forEach((s) => expect(s.className).toMatch(/\bmin-h-11\b/));
+  });
+});
+
+describe('ListingDetailContent — closed listing (#132)', () => {
+  it('offers no request buttons on a sold listing', async () => {
+    const view = toListingDetailView(aListingDetail({ listing: { status: 'Sold' } }));
+    await renderAndSettle(<ListingDetailContent listing={view} />);
+    expect(screen.queryAllByRole('button', { name: 'Request a Tour' })).toHaveLength(0);
+    expect(screen.getByTestId('buyer-agent-card').textContent).toContain('no longer available');
   });
 });
