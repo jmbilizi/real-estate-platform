@@ -5,13 +5,13 @@ import { complianceFixtureIds } from './support/fixture-ids';
 /**
  * `POST /listings/:id/inquiries` (#131) against a REAL service and REAL database.
  *
- * Rate limiting is deliberately NOT exercised here. This suite runs against one long-lived server
- * for the whole `nx e2e` invocation, so the in-memory limiter's counters persist across every test
- * in this file (and, if a future spec file also posts inquiries, across files too). Asserting exact
- * counts against shared mutable state is flaky and would leak into unrelated tests. The mechanism
- * itself — per-IP, per-listing, 429 with `Retry-After`, no SQL run when refused — is covered at the
- * unit level (`src/inquiries/rate-limit.spec.ts`) and the HTTP-with-injected-fake level
- * (`src/app.spec.ts`), both of which control the limiter's state directly.
+ * The service runs with the per-IP and per-listing limits raised, through the preload in
+ * `support/e2e-serve-defaults.js` (#611). The suite posts more than 5 times from one IP. The limiter
+ * mechanism (per-IP, per-listing, 429 with `Retry-After`) is covered by
+ * `src/inquiries/rate-limit.spec.ts` and `src/app.spec.ts`.
+ *
+ * The service only stores an inquiry. It does not route it. Routing to the Cribstop buyer-agent
+ * intake (ruling 2026-10-04) is out of scope here.
  */
 const fixtures = complianceFixtureIds();
 
@@ -40,6 +40,21 @@ describe('POST /listings/:id/inquiries — signed-out', () => {
     });
 
     expect(response.status).toBe(201);
+  });
+});
+
+describe('POST /listings/:id/inquiries — e2e harness', () => {
+  it('runs with the rate limits raised, so a sixth request from one IP is not a 429', async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i += 1) {
+      const response = await axios.post(
+        `/listings/${fixtures.sampleListingId}/inquiries`,
+        VALID_BODY,
+      );
+      statuses.push(response.status);
+    }
+
+    expect(statuses).toEqual([201, 201, 201, 201, 201, 201]);
   });
 });
 
