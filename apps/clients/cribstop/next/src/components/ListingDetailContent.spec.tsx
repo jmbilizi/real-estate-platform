@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { aListingDetail } from '@/test/fixtures';
+import { aListingCardRow, aListingDetail } from '@/test/fixtures';
 import { searchListings, toListingDetailView } from '@/lib/api/listings';
 import ListingDetailContent from './ListingDetailContent';
 
@@ -170,6 +170,40 @@ describe('ListingDetailContent — suppressed address', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
       '100 Test St, Bethesda, MD 20814',
     );
+  });
+});
+
+describe('ListingDetailContent — Nearby homes (#566)', () => {
+  it('searches active homes of the same offer around the listing and omits the listing itself', async () => {
+    const view = toListingDetailView(
+      aListingDetail({ listing: { latitude: 38.98, longitude: -77.1, listingType: 'rent' } }),
+    );
+    mockedSearchListings.mockResolvedValue({
+      results: [
+        aListingCardRow({ id: view.id }),
+        aListingCardRow({ id: '77777777-7777-4777-8777-777777777777' }),
+      ],
+      total: 2,
+      page: 1,
+      pageSize: 9,
+      pageCount: 1,
+      appliedFilters: {},
+    });
+    await renderAndSettle(<ListingDetailContent listing={view} />);
+
+    const query = mockedSearchListings.mock.calls[0][0];
+    expect(query).toMatchObject({ listingType: 'rent', status: ['Active'] });
+    expect(JSON.parse(query.boundary).type).toBe('Polygon');
+    expect(await screen.findByText('Nearby homes')).toBeInTheDocument();
+    expect(screen.queryByText(/similar homes/i)).toBeNull();
+  });
+
+  it('renders the server rows without a client search', () => {
+    const view = toListingDetailView(aListingDetail());
+    render(<ListingDetailContent listing={view} nearby={[aListingCardRow()]} />);
+
+    expect(screen.getByText('Nearby homes')).toBeInTheDocument();
+    expect(mockedSearchListings).not.toHaveBeenCalled();
   });
 });
 

@@ -41,7 +41,7 @@ export default function ListingPanelHost() {
   if (!panel) return null;
 
   /*
-   * Keyed on the listing, so opening a second listing from the first one's "similar homes" row
+   * Keyed on the listing, so opening a second listing from the first one's "Nearby homes" row
    * remounts rather than re-using the open panel's state. Without the key the new listing would
    * inherit the previous one's resolved state and show the wrong home for a frame.
    */

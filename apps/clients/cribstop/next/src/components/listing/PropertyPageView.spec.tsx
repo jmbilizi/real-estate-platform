@@ -46,21 +46,28 @@ const DISPLAYABLE_STATUSES: MarketStatus[] = [
   'Sold',
 ];
 
-describe('PropertyPageView — market-status badge (#349)', () => {
-  it.each(DISPLAYABLE_STATUSES)('renders the exact badge text for %s', async (marketStatus) => {
+const GALLERY_BADGE_TEXT: Record<string, string> = {
+  Active: 'For sale',
+  'Coming Soon': 'Coming soon',
+  'Under Contract': 'Under contract',
+  Pending: 'Pending',
+  Sold: 'Sold',
+};
+
+describe('PropertyPageView — market-status badge (#349, #565)', () => {
+  it.each(DISPLAYABLE_STATUSES)('renders the gallery badge text for %s', async (marketStatus) => {
     render(<PropertyPageView page={aPropertyPage({ marketStatus })} />);
 
     // #382: the page API sends the nearby listings, so the client runs no search of its own.
-    await waitFor(() =>
-      expect(screen.getByText(marketStatus, { selector: '.badge' })).toBeVisible(),
-    );
+    await waitFor(() => expect(screen.getByTestId('gallery-status-badge')).toBeVisible());
     expect(mockedSearchListings).not.toHaveBeenCalled();
 
-    // One badge only, with the market status, so Under Contract never also reads Pending.
-    expect(screen.getByText(marketStatus, { selector: '.badge' })).toBeInTheDocument();
-    expect(screen.queryAllByText(/^(Active|Pending|Coming Soon|Sold)$/)).toHaveLength(
-      marketStatus === 'Under Contract' ? 0 : 1,
+    // One status badge only, so Under Contract never also reads Pending. None in the page body.
+    expect(screen.getAllByTestId('gallery-status-badge')).toHaveLength(1);
+    expect(screen.getByTestId('gallery-status-badge')).toHaveTextContent(
+      new RegExp(`^${GALLERY_BADGE_TEXT[marketStatus]}`),
     );
+    expect(document.querySelector('.badge')).toBeNull();
   });
 });
 
@@ -95,9 +102,9 @@ describe('PropertyPageView — Off market (#349)', () => {
     expect(screen.queryByText(/\$[\d,]/)).toBeNull();
     expect(screen.queryByText(/schedule a tour/i)).toBeNull();
     expect(screen.queryByText(/message agent/i)).toBeNull();
-    expect(screen.queryByText(/similar homes/i)).toBeNull();
+    expect(screen.queryByText(/nearby homes/i)).toBeNull();
 
-    // The similar-homes fetch never fires on this branch — no `ListingDetailContent` mounted.
+    // The nearby-homes fetch never fires on this branch — no `ListingDetailContent` mounted.
     expect(mockedSearchListings).not.toHaveBeenCalled();
   });
 

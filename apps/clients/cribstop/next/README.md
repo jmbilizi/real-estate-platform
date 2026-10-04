@@ -86,7 +86,7 @@ amenities or status.
 - **Office broker lead phone and email** displayed in agent card if available
 - Listing description and key facts / amenities grid
 - Map section showing property location
-- Similar homes section
+- Nearby homes section
 - Mortgage / affordability teaser card
 - Contact agent / schedule tour CTA
 - Saved listing action
@@ -500,7 +500,7 @@ Design a premium property detail page with:
 - Broker attribution shown clearly
 - Listing description
 - Key facts and amenities
-- Similar homes section
+- Nearby homes section
 - Mortgage or affordability teaser card
 - Contact agent / schedule tour CTA
 - Saved listing action

@@ -7,9 +7,10 @@ import MortgageTeaser from '@/components/MortgageTeaser';
 import ListingRow from '@/components/ListingRow';
 import SingleListingMap from '@/components/SingleListingMap';
 import ListingAttribution from '@/components/listing/ListingAttribution';
+import GalleryStatusBadge from '@/components/listing/GalleryStatusBadge';
 import ListingProvenance from '@/components/listing/ListingProvenance';
 import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges';
-import { SimilarHomesSkeleton } from '@/components/listing/ListingStates';
+import { NearbyHomesSkeleton } from '@/components/listing/ListingStates';
 import { formatNumber, formatPrice } from '@/lib/format';
 import { BRAND } from '@/lib/brand';
 import {
@@ -41,7 +42,7 @@ interface Props {
   statusLabel?: string;
   /**
    * #382: the property page passes the service's nearby listings. They replace the client-side
-   * "Similar homes" fetch, so the page renders only what the page API returned.
+   * "Nearby homes" fetch, so the page renders only what the page API returned.
    */
   nearby?: ListingCardRow[];
   /** #382: property page panels (the listing history), rendered before the nearby row. */
@@ -71,11 +72,14 @@ const EMAIL_ICON =
   'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z';
 const PANEL = 'rounded-2xl border border-surface-border bg-white';
 
-/** "Similar Homes" fetch lifecycle. A failed nice-to-have must not break the page, so a failure
+/** "Nearby homes" fetch lifecycle. A failed nice-to-have must not break the page, so a failure
  *  renders the same as "no results" — nothing — rather than an error banner. */
-type SimilarState =
+type NearbyState =
   | { status: 'loading'; results: [] }
   | { status: 'ready' | 'error'; results: ListingCardRow[] };
+
+/** Half the side of the nearby search square, in degrees. Matches the property page API (~2 km). */
+const NEARBY_HALF_SIDE = 0.02;
 
 export default function ListingDetailContent({
   listing,
@@ -123,50 +127,75 @@ export default function ListingDetailContent({
     else toast('We could not copy the link.', 'error');
   }
 
-  const [similar, setSimilar] = useState<SimilarState>({ status: 'loading', results: [] });
+  const [fetched, setFetched] = useState<NearbyState>({ status: 'loading', results: [] });
 
   const serverNearby = nearby !== undefined;
 
   useEffect(() => {
     if (serverNearby) return;
     const controller = new AbortController();
-    setSimilar({ status: 'loading', results: [] });
+    setFetched({ status: 'loading', results: [] });
 
     /**
-     * `listingType` matters as much as `propertyType` here: without it, a $1.9M condo for sale was
-     * shown rentals as "similar homes", and the "See all" link — which does carry the listing type
-     * — went somewhere that did not match what the row above it showed.
-     *
-     * A sold listing is deliberately compared against sold inventory rather than live: the useful
-     * comparison for a closed sale is other closed sales, and `listingType=all` excludes sold
-     * anyway, so asking for it explicitly is the only way to get any results at all.
+     * Same query as the property page API: active homes of the same offer (sale or rent) in a
+     * square around this one, else in its city. A sold listing compares against live inventory.
      */
+    const { latitude: lat, longitude: lng } = listing;
+    const d = NEARBY_HALF_SIDE;
+    const place =
+      lat !== null && lng !== null
+        ? {
+            boundary: JSON.stringify({
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [lng - d, lat - d],
+                  [lng + d, lat - d],
+                  [lng + d, lat + d],
+                  [lng - d, lat + d],
+                  [lng - d, lat - d],
+                ],
+              ],
+            }),
+          }
+        : { city: listing.city, state: listing.state };
     searchListings(
       {
-        propertyType: [listing.propertyType],
-        listingType: listing.listingType,
-        pageSize: 8,
+        ...place,
+        listingType: listing.listingType === 'rent' ? 'rent' : 'sale',
+        status: ['Active'],
+        sort: 'newest',
+        pageSize: 9,
       },
       controller.signal,
     )
       .then((envelope) => {
-        setSimilar({
+        setFetched({
           status: 'ready',
           results: envelope.results.filter((row) => row.id !== listing.id),
         });
       })
       .catch((err) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
-        setSimilar({ status: 'error', results: [] });
+        setFetched({ status: 'error', results: [] });
       });
 
     return () => controller.abort();
-  }, [serverNearby, listing.id, listing.propertyType, listing.listingType]);
-
-  const similarHref = searchTargetUrl(
-    { kind: 'place', place: { kind: 'city', city: listing.city, state: listing.state } },
+  }, [
+    serverNearby,
+    listing.id,
+    listing.latitude,
+    listing.longitude,
+    listing.city,
+    listing.state,
     listing.listingType,
-    new URLSearchParams({ propertyType: listing.propertyType }),
+  ]);
+
+  const nearbyRows = serverNearby ? nearby : fetched.results;
+
+  const nearbyHref = searchTargetUrl(
+    { kind: 'place', place: { kind: 'city', city: listing.city, state: listing.state } },
+    listing.listingType === 'rent' ? 'rent' : 'sale',
   );
 
   const streetAddress = formatStreetAddress(
@@ -288,7 +317,9 @@ export default function ListingDetailContent({
       <div className="flex-1 min-h-0 scrollbar-overlay bg-surface-alt px-6 sm:px-8 py-4 pb-8">
         {/* Gallery — the first panel, exactly the block the skeleton opens with. */}
         <div className={`overflow-hidden ${PANEL}`}>
-          <PropertyGallery media={listing.media} />
+          <PropertyGallery media={listing.media}>
+            <GalleryStatusBadge {...listing} statusLabel={statusLabel} />
+          </PropertyGallery>
         </div>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_380px] lg:items-start">
@@ -296,10 +327,7 @@ export default function ListingDetailContent({
           <div className="space-y-4">
             {/* Badges + price + address */}
             <div className={`${PANEL} p-6`}>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="badge bg-surface-border text-ink">
-                  {statusLabel ?? listing.status}
-                </span>
+              <div className="mb-3 flex flex-wrap items-center gap-1.5 empty:hidden">
                 {listing.isSample && <SampleBadge />}
                 {listing.sponsored && <SponsoredBadge />}
                 {listing.priceReduced && (
@@ -311,7 +339,7 @@ export default function ListingDetailContent({
               </div>
 
               {closePriceText ? (
-                <div className="mt-3 rounded-2xl border border-surface-border bg-surface-alt px-4 py-3">
+                <div className="rounded-2xl border border-surface-border bg-surface-alt px-4 py-3">
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
                     Sold
                   </p>
@@ -337,8 +365,8 @@ export default function ListingDetailContent({
                 <p
                   className={
                     priceDisplay.isWithheld
-                      ? 'mt-3 text-base font-medium italic text-ink-muted'
-                      : 'mt-3 text-xl font-semibold tracking-[-0.18px] text-ink'
+                      ? 'text-base font-medium italic text-ink-muted'
+                      : 'text-xl font-semibold tracking-[-0.18px] text-ink'
                   }
                 >
                   {priceDisplay.text}
@@ -550,37 +578,21 @@ export default function ListingDetailContent({
 
         {propertyPanel !== undefined && <div className={`mt-4 ${PANEL}`}>{propertyPanel}</div>}
 
-        {nearby !== undefined && nearby.length > 0 && (
+        {/* Nearby homes — the last panel, so the stack closes the way it opened. */}
+        {!serverNearby && fetched.status === 'loading' && (
           <div className={`mt-4 ${PANEL}`}>
+            <NearbyHomesSkeleton />
+          </div>
+        )}
+        {nearbyRows.length > 0 && (
+          <div className={`mt-4 ${PANEL}`}>
+            {/* The panel's own inset: `ListingRow` defaults to a full-bleed section's gutter. */}
             <ListingRow
               title="Nearby homes"
-              listings={nearby}
+              listings={nearbyRows}
               max={6}
-              href={similarHref}
+              href={nearbyHref}
               sectionClassName="px-6 py-6"
-              titleClassName="text-xl font-semibold tracking-tight"
-            />
-          </div>
-        )}
-
-        {/* Similar homes — the last panel, so the stack closes the way it opened. */}
-        {!serverNearby && similar.status === 'loading' && (
-          <div className={`mt-4 ${PANEL}`}>
-            <SimilarHomesSkeleton />
-          </div>
-        )}
-        {!serverNearby && similar.status === 'ready' && similar.results.length > 0 && (
-          <div className={`mt-4 ${PANEL}`}>
-            {/* `ListingRow` defaults to the page-level gutter (`px-6 sm:px-10 lg:px-20`), which is
-                a full-bleed section's padding, not a panel's — inside a panel it put the heading
-                and cards hard against the border. This is the panel's own inset. */}
-            <ListingRow
-              title="Similar homes"
-              listings={similar.results}
-              max={6}
-              href={similarHref}
-              sectionClassName="px-6 py-6"
-              /* Matches this page's other section headings exactly — see `titleClassName`. */
               titleClassName="text-xl font-semibold tracking-tight"
             />
           </div>

@@ -16,7 +16,7 @@ jest.mock('react-leaflet', () => ({
 import fs from 'fs';
 import path from 'path';
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { CustomMapControls } from './CustomMapControls';
+import { CustomMapControls, type ViewControls } from './CustomMapControls';
 import { MAP_EXPANDED_ATTRIBUTE } from '@/lib/useMapExpand';
 
 const htmlExpanded = () => document.documentElement.hasAttribute(MAP_EXPANDED_ATTRIBUTE);
@@ -205,5 +205,91 @@ describe('search layout stays attached to the header (#556)', () => {
 
     expect(bar?.[1]).toContain('sticky top-[65px]');
     expect(bar?.[1]).not.toMatch(/\bfixed\b/);
+  });
+});
+
+describe('filter and group buttons on the expanded map (#576)', () => {
+  const controls = (over: Partial<ViewControls> = {}): ViewControls => ({
+    filterCount: 0,
+    onOpenFilters: jest.fn(),
+    grouped: false,
+    onToggleGroup: jest.fn(),
+    ...over,
+  });
+  const expand = () => fireEvent.click(screen.getByRole('button', { name: 'Full screen map' }));
+
+  beforeEach(() => {
+    jest.spyOn(window.history, 'back').mockImplementation(() => undefined);
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
+    container.className = '';
+  });
+
+  it('shows neither button on the split map', () => {
+    render(<CustomMapControls viewControls={controls()} />);
+
+    expect(screen.queryByTestId('map-filters')).toBeNull();
+    expect(screen.queryByTestId('map-group')).toBeNull();
+  });
+
+  it('shows both buttons once the map is expanded, and hides them again on exit', () => {
+    render(<CustomMapControls viewControls={controls()} />);
+    expand();
+
+    expect(screen.getByTestId('map-filters')).toBeTruthy();
+    expect(screen.getByTestId('map-group')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Exit full screen map' }));
+    expect(screen.queryByTestId('map-filters')).toBeNull();
+    expect(screen.queryByTestId('map-group')).toBeNull();
+  });
+
+  it('shows no buttons when the map has no view controls', () => {
+    render(<CustomMapControls />);
+    expand();
+
+    expect(screen.queryByTestId('map-filters')).toBeNull();
+  });
+
+  it('opens the filters from an icon-only 44px button with no text', () => {
+    const vc = controls();
+    render(<CustomMapControls viewControls={vc} />);
+    expand();
+    const button = screen.getByRole('button', { name: 'Open filters' });
+    fireEvent.click(button);
+
+    expect(vc.onOpenFilters).toHaveBeenCalledTimes(1);
+    expect(button.style.width).toBe('44px');
+    expect(button.style.height).toBe('44px');
+    expect(button.textContent).toBe('');
+    expect(button.getAttribute('title')).toBeNull();
+  });
+
+  it('shows the active filter count as a badge and in the name', () => {
+    render(<CustomMapControls viewControls={controls({ filterCount: 3 })} />);
+    expand();
+
+    expect(screen.getByTestId('map-filters-count').textContent).toBe('3');
+    expect(screen.getByRole('button', { name: 'Open filters, 3 active' })).toBeTruthy();
+  });
+
+  it('toggles grouping and reports the pressed state', () => {
+    const vc = controls();
+    const { rerender } = render(<CustomMapControls viewControls={vc} />);
+    expand();
+    const button = screen.getByRole('button', { name: 'Group by neighborhood' });
+
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+    expect(button.style.width).toBe('44px');
+    expect(button.style.height).toBe('44px');
+    expect(button.textContent).toBe('');
+    fireEvent.click(button);
+    expect(vc.onToggleGroup).toHaveBeenCalledTimes(1);
+
+    rerender(<CustomMapControls viewControls={{ ...vc, grouped: true }} />);
+    expect(
+      screen.getByRole('button', { name: 'Group by neighborhood' }).getAttribute('aria-pressed'),
+    ).toBe('true');
   });
 });
