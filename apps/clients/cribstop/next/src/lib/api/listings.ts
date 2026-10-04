@@ -272,6 +272,8 @@ export interface ListingDetailView {
   description: string | null;
   media: Media[];
   openHouses: OpenHouse[];
+  /** #573. The unbranded tour URL. Unvalidated MLS text, so pass it through `resolveTourEntry`. */
+  virtualTourUrl: string | null;
 
   // --- NAR 7.58 attribution ------------------------------------------------------------------
   listingAgentName: string | null;
@@ -356,6 +358,7 @@ export function toListingDetailView(detail: ListingDetail): ListingDetailView {
     description: listing.description,
     media: listing.media,
     openHouses: listing.openHouses,
+    virtualTourUrl: listing.virtualTourUrl,
 
     listingAgentName: listing.listingAgentName,
     brokerName: listing.brokerName,

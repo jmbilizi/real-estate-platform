@@ -83,3 +83,34 @@ describe('PropertyGallery lightbox', () => {
     expect(screen.getByTestId('gallery-swipe-counter')).toHaveTextContent('1 / 3');
   });
 });
+
+describe('PropertyGallery 3D tour entry (#573)', () => {
+  const media = [{ url: 'https://example.com/a.jpg', altText: 'Front elevation' }];
+
+  it('shows nothing without a tour URL', () => {
+    render(<PropertyGallery media={media} tourUrl={null} />);
+    expect(screen.queryByText('3D tour')).not.toBeInTheDocument();
+  });
+
+  it('shows nothing for a URL that is not https', () => {
+    render(<PropertyGallery media={media} tourUrl="http://my.matterport.com/show/?m=a" />);
+    expect(screen.queryByText(/3D tour/)).not.toBeInTheDocument();
+  });
+
+  it('opens an allowlisted host in a full-screen iframe and closes on Escape', () => {
+    render(<PropertyGallery media={media} tourUrl="https://my.matterport.com/show/?m=a" />);
+    fireEvent.click(screen.getByRole('button', { name: '3D tour' }));
+    const frame = document.querySelector('iframe') as HTMLIFrameElement;
+    expect(frame).toHaveAttribute('src', 'https://my.matterport.com/show/?m=a');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(document.querySelector('iframe')).toBeNull();
+  });
+
+  it('opens any other https host in a new tab', () => {
+    render(<PropertyGallery media={media} tourUrl="https://tours.example.com/t/1" />);
+    const link = screen.getByRole('link', { name: /3D tour/ });
+    expect(link).toHaveAttribute('href', 'https://tours.example.com/t/1');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+});

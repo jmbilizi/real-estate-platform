@@ -281,7 +281,7 @@ export default function ListingDetailContent({
       <div className="flex-1 min-h-0 scrollbar-overlay bg-surface-alt px-6 sm:px-8 py-4 pb-8">
         {/* Gallery — the first panel, exactly the block the skeleton opens with. */}
         <div className={`overflow-hidden ${PANEL}`}>
-          <PropertyGallery media={listing.media}>
+          <PropertyGallery media={listing.media} tourUrl={listing.virtualTourUrl}>
             <GalleryStatusBadge {...listing} statusLabel={statusLabel} />
           </PropertyGallery>
         </div>

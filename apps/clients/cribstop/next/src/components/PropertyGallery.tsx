@@ -3,6 +3,7 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import type { Media } from '@/lib/types';
 import ListingImage from '@/components/listing/ListingImage';
+import { resolveTourEntry } from '@/lib/tour-url';
 
 /**
  * The detail page's photo gallery.
@@ -16,15 +17,20 @@ export type GalleryPhoto = Media & { caption?: string | null };
 
 export default function PropertyGallery({
   media,
+  tourUrl,
   children,
 }: {
   media: GalleryPhoto[];
+  /** The unbranded virtual tour URL. The "3D tour" entry shows only when it passes `resolveTourEntry`. */
+  tourUrl?: string | null;
   /** Overlay slot inside the gallery frame, for example a status badge. */
   children?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
   const [swipeIdx, setSwipeIdx] = useState(0);
+  const [tourOpen, setTourOpen] = useState(false);
+  const tour = resolveTourEntry(tourUrl);
   const trackRef = useRef<HTMLDivElement>(null);
 
   const onSwipeScroll = useCallback(() => {
@@ -35,6 +41,7 @@ export default function PropertyGallery({
 
   const handleKey = useCallback(
     (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setTourOpen(false);
       if (!open) return;
       if (e.key === 'Escape') setOpen(false);
       if (e.key === 'ArrowRight') {
@@ -60,6 +67,73 @@ export default function PropertyGallery({
     </div>
   ) : null;
 
+  const tourPill =
+    'absolute bottom-3 left-3 z-10 inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-[11px] font-semibold text-ink shadow-card md:bottom-4 md:left-4 md:text-sm';
+  const tourIcon = (
+    <svg
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"
+      />
+    </svg>
+  );
+  const tourEntry = !tour ? null : tour.mode === 'frame' ? (
+    <button type="button" onClick={() => setTourOpen(true)} className={tourPill}>
+      {tourIcon}3D tour
+    </button>
+  ) : (
+    <a href={tour.href} target="_blank" rel="noopener noreferrer" className={tourPill}>
+      {tourIcon}3D tour<span className="sr-only"> (opens in a new tab)</span>
+    </a>
+  );
+  const tourViewer =
+    tour?.mode === 'frame' && tourOpen ? (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="3D tour"
+        className="fixed inset-0 z-[100] flex flex-col bg-ink/95"
+      >
+        <div className="flex items-center justify-between p-4 text-white">
+          <button
+            type="button"
+            onClick={() => setTourOpen(false)}
+            autoFocus
+            className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium hover:bg-white/10"
+          >
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            Close
+          </button>
+          <p className="text-sm font-medium">3D tour</p>
+          <span className="w-16" />
+        </div>
+        <iframe
+          src={tour.href}
+          title="3D tour"
+          className="min-h-0 w-full flex-1 border-0 bg-white"
+          allow="fullscreen; xr-spatial-tracking"
+          sandbox="allow-scripts allow-same-origin allow-popups allow-presentation"
+          referrerPolicy="no-referrer"
+        />
+      </div>
+    ) : null;
+
   if (media.length === 0) {
     return (
       <div className="relative">
@@ -69,6 +143,8 @@ export default function PropertyGallery({
           className="aspect-video w-full overflow-hidden rounded-2xl md:h-[480px]"
         />
         {badgeOverlay}
+        {tourEntry}
+        {tourViewer}
       </div>
     );
   }
@@ -171,7 +247,9 @@ export default function PropertyGallery({
           </button>
         </div>
         {badgeOverlay}
+        {tourEntry}
       </div>
+      {tourViewer}
 
       {/* Lightbox */}
       {open && (

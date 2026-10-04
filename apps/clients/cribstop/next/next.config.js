@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const path = require('path');
 const { isProductionBuild } = require('./scripts/is-production-build');
+const { frameHosts } = require('./src/lib/tour-hosts.json');
 const nextConfig = {
   reactStrictMode: true,
   // standalone output: enabled in CI and container builds, skipped on Windows dev
@@ -15,6 +16,16 @@ const nextConfig = {
       { protocol: 'https', hostname: 'images.unsplash.com' },
       { protocol: 'https', hostname: 'picsum.photos' },
     ],
+  },
+  // frame-src is the only directive set. It limits iframes to the tour hosts the gallery embeds (#573).
+  async headers() {
+    const frameSrc = ["'self'", ...frameHosts.map((h) => `https://${h}`)].join(' ');
+    return [
+      {
+        source: '/:path*',
+        headers: [{ key: 'Content-Security-Policy', value: `frame-src ${frameSrc}` }],
+      },
+    ];
   },
 };
 
