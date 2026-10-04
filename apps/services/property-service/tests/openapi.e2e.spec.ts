@@ -9,21 +9,32 @@ import { join } from 'node:path';
  */
 
 describe('published document identity', () => {
-  it('serves the Property API document with info.title, exactly four paths, and the four operation ids', async () => {
+  it('serves the Property API document with info.title and a unique operation id on every operation', async () => {
     const response = await axios.get('/openapi.json');
 
     expect(response.status).toBe(200);
     expect(response.data.info.title).toBe('Property Service');
-    expect(Object.keys(response.data.paths).sort()).toEqual([
-      '/listings',
-      '/listings/meta',
-      '/listings/neighborhoods',
-      '/listings/{id}',
-    ]);
-    expect(response.data.paths['/listings'].get.operationId).toBe('searchListings');
-    expect(response.data.paths['/listings/meta'].get.operationId).toBe('getListingsMeta');
-    expect(response.data.paths['/listings/neighborhoods'].get.operationId).toBe('getNeighborhoods');
-    expect(response.data.paths['/listings/{id}'].get.operationId).toBe('getListing');
+
+    // The path list is not pinned here, so a new route cannot make this test stale.
+    // `src/openapi-drift.spec.ts` checks the document against the router.
+    // The snapshot in `libs/property-contracts` pins the exact content.
+    const paths = Object.keys(response.data.paths);
+    expect(paths.length).toBeGreaterThan(0);
+
+    const operationIds: string[] = [];
+    for (const path of paths) {
+      const item = response.data.paths[path] as Record<string, { operationId?: string }>;
+      const operations = Object.entries(item)
+        .filter(([key]) => ['get', 'post', 'put', 'patch', 'delete'].includes(key))
+        .map(([, operation]) => operation);
+      expect(operations.length).toBeGreaterThan(0);
+      for (const operation of operations) {
+        expect(typeof operation.operationId).toBe('string');
+        expect(operation.operationId).not.toBe('');
+        operationIds.push(operation.operationId as string);
+      }
+    }
+    expect(new Set(operationIds).size).toBe(operationIds.length);
   });
 });
 
@@ -73,6 +84,10 @@ describe('path templates match the gateway route file byte-for-byte', () => {
     expect(publishedPaths.length).toBeGreaterThan(0);
     for (const path of publishedPaths) {
       expect(gatewayTemplates.has(path)).toBe(true);
+    }
+    // A gateway route that the document omits has no Swagger entry behind the gateway.
+    for (const template of gatewayTemplates) {
+      expect(publishedPaths).toContain(template);
     }
   });
 });
