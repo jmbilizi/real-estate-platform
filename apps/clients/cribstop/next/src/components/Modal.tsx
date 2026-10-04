@@ -36,7 +36,11 @@ function lockScroll() {
    * the server-rendered panel from its first paint, so this call changes nothing on screen.
    */
   const root = document.documentElement;
-  if (typeof CSS !== 'undefined' && CSS.supports('scrollbar-gutter', 'stable')) {
+  if (
+    typeof CSS !== 'undefined' &&
+    typeof CSS.supports === 'function' &&
+    CSS.supports('scrollbar-gutter', 'stable')
+  ) {
     root.style.scrollbarGutter = 'stable';
   } else if (root.style.overflow !== 'hidden') {
     // Older browsers: pad by the scrollbar width, as before.
