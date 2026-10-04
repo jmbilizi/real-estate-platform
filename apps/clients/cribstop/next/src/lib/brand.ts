@@ -30,6 +30,11 @@ export const BRAND = {
   /** Site / product name — always displayed smaller than the brokerage. */
   siteName: 'Cribstop',
 
+  /** Pillar names. Page copy reads these; never hardcode a pillar name (#89). */
+  pillars: {
+    connect: 'Connect',
+  },
+
   /** Full site domain shown in copy. */
   siteDomain: 'Cribstop.com',
 
