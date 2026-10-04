@@ -21,8 +21,8 @@ export default function ListingFacts({
       <h2 className="px-6 pt-6 text-xl font-semibold tracking-tight">Facts &amp; features</h2>
       <div className="mt-2 divide-y divide-surface-border">
         {groups.map((group, i) => (
-          <details key={group.id} open={i === 0} className="group px-6 py-4">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-base font-semibold text-ink [&::-webkit-details-marker]:hidden">
+          <details key={group.id} open={i === 0} className="group px-6">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 py-4 text-base font-semibold text-ink [&::-webkit-details-marker]:hidden">
               {group.title}
               <svg
                 className="h-4 w-4 shrink-0 text-ink-muted transition-transform group-open:rotate-180"
@@ -35,13 +35,13 @@ export default function ListingFacts({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
               </svg>
             </summary>
-            <dl className="mt-3 space-y-3">
+            <dl className="space-y-3 pb-4">
               {group.rows.map((row) => (
                 <div key={row.label}>
                   <dt className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
                     {row.label}
                   </dt>
-                  <dd className="mt-1 text-sm text-ink-body">{row.value}</dd>
+                  <dd className="mt-1 break-words text-sm text-ink-body">{row.value}</dd>
                 </div>
               ))}
             </dl>

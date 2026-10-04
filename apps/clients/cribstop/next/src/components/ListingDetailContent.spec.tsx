@@ -256,57 +256,66 @@ describe('ListingDetailContent — Listing Agent card contact method (#344)', ()
   });
 });
 
-describe('ListingDetailContent — NAR 7.58 attribution', () => {
-  /**
-   * The disclosure panel always asks `ListingAttribution` for the reduced `courtesy` density — the
-   * Listing Agent card in the sidebar already carries the name, office, phone and email, so the
-   * courtesy line exists to avoid repeating all of it. `ListingAttribution`'s `showFullBlock` still
-   * treats `density === 'courtesy' && source === 'brightMLS'` as the full block, unchanged by #305
-   * (which only removed the card default's, `density === 'auto'`, dependence on `source`). Scoped
-   * to the disclosure panel because the sidebar's Listing Agent card independently renders the same
-   * agent name, phone and email as plain text.
-   */
-  it('renders the full block for a brightMLS row even though the detail page requests courtesy density', async () => {
-    const view = toListingDetailView(
+describe('ListingDetailContent — NAR 7.58 attribution and the disclaimer footer (#572)', () => {
+  const bright = () =>
+    toListingDetailView(
       aListingDetail({
         listing: {
           source: 'brightMLS',
           listedBy: 'Jane Q. Agent – Bright Partner Realty',
           listingAgentName: 'Jane Q. Agent',
           officeName: 'Bright Partner Realty',
+          listAgentPhone: '(301) 555-0100',
+          listAgentEmail: 'jane.agent@example.com',
           brokerPhone: '(301) 555-0199',
-          brokerEmail: 'jane.agent@example.com',
+          brokerEmail: null,
         },
       }),
     );
-    const { container } = await renderAndSettle(<ListingDetailContent listing={view} />);
 
-    const disclosure = container.querySelector(
-      '.text-\\[13px\\].leading-relaxed.text-ink-muted',
-    ) as HTMLElement;
+  it('names the agent, the office and a contact method once, in the agent card, for a brightMLS row', async () => {
+    await renderAndSettle(<ListingDetailContent listing={bright()} />);
 
-    expect(
-      within(disclosure).getByText('Jane Q. Agent – Bright Partner Realty'),
-    ).toBeInTheDocument();
-    expect(within(disclosure).getByText('Jane Q. Agent')).toBeInTheDocument();
-    expect(within(disclosure).getByRole('link', { name: '(301) 555-0199' })).toBeInTheDocument();
-    expect(
-      within(disclosure).getByRole('link', { name: 'jane.agent@example.com' }),
-    ).toBeInTheDocument();
-    expect(within(disclosure).getByText(/Bright Partner Realty/)).toBeInTheDocument();
+    const card = screen.getByText('Listing Agent').parentElement as HTMLElement;
+    expect(within(card).getByText('Jane Q. Agent')).toBeInTheDocument();
+    expect(within(card).getByText('Bright Partner Realty')).toBeInTheDocument();
+    expect(within(card).getByRole('link', { name: /\(301\) 555-0100/ })).toBeInTheDocument();
+    // The old disclosure card repeated these. Each now appears exactly once on the page.
+    expect(screen.getAllByText('Jane Q. Agent')).toHaveLength(1);
+    expect(screen.getAllByRole('link', { name: /\(301\) 555-0199/ })).toHaveLength(1);
+    expect(screen.queryByText('Jane Q. Agent – Bright Partner Realty')).toBeNull();
+    expect(screen.queryByText(/Listing courtesy of/i)).toBeNull();
   });
 
-  it('carries the median type-size floor on the attribution line explicitly, rather than inheriting the disclosure panel’s smaller size', async () => {
-    // The disclosure panel itself is `text-[13px]`. Attribution must not fall below the median type
-    // size used for the listing data — `text-sm` (14px) on the rebuilt detail page — so the line has
-    // to set it explicitly rather than inherit the panel's 13px, a floor missed by a pixel that a
-    // future layout change could silently reintroduce.
-    const view = toListingDetailView(aListingDetail({ listing: { source: 'internal' } }));
-    await renderAndSettle(<ListingDetailContent listing={view} />);
+  it('keeps the office name in the agent card at the 14px median floor', async () => {
+    await renderAndSettle(<ListingDetailContent listing={bright()} />);
 
-    const attribution = screen.getByText(/Listing courtesy of/i);
-    expect(attribution.className).toContain('text-sm');
-    expect(attribution.className).not.toMatch(/text-\[1[0-3]px\]|text-xs/);
+    const office = screen.getByText('Bright Partner Realty');
+    expect(office.className).toContain('text-sm');
+    expect(office.className).not.toMatch(/text-\[1[0-3]px\]|text-xs/);
+  });
+
+  it('ends the page with the Bright provenance line and the personal-use line, in a small box-less footer', async () => {
+    const { container } = await renderAndSettle(<ListingDetailContent listing={bright()} />);
+
+    const footer = container.querySelector('footer') as HTMLElement;
+    expect(footer).not.toBeNull();
+    expect(footer.className).toContain('text-xs');
+    expect(footer.className).not.toMatch(/\b(border|bg-white|rounded-2xl)\b/);
+    expect(within(footer).getByText(/Information provided by Bright MLS/)).toBeInTheDocument();
+    expect(within(footer).getByText(/Data last updated:/)).toBeInTheDocument();
+    expect(within(footer).getByText(/personal, non-commercial use/)).toBeInTheDocument();
+    const body = container.querySelector('[data-scroll-body]') as HTMLElement;
+    expect(body.lastElementChild).toBe(footer);
+  });
+
+  it('shows only the personal-use line for an internal row', async () => {
+    const view = toListingDetailView(aListingDetail({ listing: { source: 'internal' } }));
+    const { container } = await renderAndSettle(<ListingDetailContent listing={view} />);
+
+    const footer = container.querySelector('footer') as HTMLElement;
+    expect(within(footer).getByText(/personal, non-commercial use/)).toBeInTheDocument();
+    expect(within(footer).queryByText(/Bright/i)).toBeNull();
   });
 });
 
@@ -498,5 +507,64 @@ describe('ListingDetailContent — agent card (#571)', () => {
 
     expect(screen.getByText('Listing Office')).toBeInTheDocument();
     expect(screen.getByText('A')).toBeInTheDocument();
+  });
+});
+
+describe('ListingDetailContent — phone pass (#572)', () => {
+  it('holds the CTA bar at the screen edge, clear of the home indicator, with 44px buttons', async () => {
+    const view = toListingDetailView(aListingDetail());
+    await renderAndSettle(<ListingDetailContent listing={view} />);
+    const bar = screen.getByTestId('listing-mobile-bar');
+    expect(bar.className).toMatch(/\bsticky\b/);
+    expect(bar.className).toMatch(/\bbottom-0\b/);
+    expect(bar.innerHTML).toContain('env(safe-area-inset-bottom)');
+    for (const name of ['Message', 'Schedule Tour']) {
+      expect(within(bar).getByRole('button', { name }).className).toMatch(/\bmin-h-11\b/);
+    }
+  });
+
+  it('makes the Share, Save and Back buttons 44px square on a phone', async () => {
+    const view = toListingDetailView(aListingDetail());
+    await renderAndSettle(<ListingDetailContent listing={view} onClose={jest.fn()} />);
+    for (const name of ['Share', 'Save', 'Go back']) {
+      expect(screen.getByRole('button', { name }).className).toMatch(/\bh-11\b/);
+      expect(screen.getByRole('button', { name }).className).toMatch(/\bw-11\b/);
+    }
+  });
+});
+
+describe('ListingDetailContent — Nearby homes without a panel (#572)', () => {
+  it('renders the row directly on the page, with no bordered white box around it', () => {
+    const view = toListingDetailView(aListingDetail());
+    const { container } = render(
+      <ListingDetailContent listing={view} nearby={[aListingCardRow()]} />,
+    );
+    const nearby = container.querySelector('#nearby') as HTMLElement;
+    expect(nearby).not.toBeNull();
+    expect(nearby.className).not.toMatch(/\b(border|bg-white|rounded-2xl|p-\d|px-\d)\b/);
+    expect(within(nearby).getByRole('heading', { name: /nearby homes/i })).toBeInTheDocument();
+  });
+
+  it('gives the facts summary rows a 44px tap target', async () => {
+    const view = toListingDetailView(
+      aListingDetail({
+        listing: {
+          facts: {
+            parking: ['2-car garage'],
+            heating: ['Forced air'],
+            cooling: null,
+            appliances: null,
+            basement: null,
+            flooring: null,
+            interior: null,
+            exterior: null,
+          },
+        },
+      }),
+    );
+    const { container } = await renderAndSettle(<ListingDetailContent listing={view} />);
+    const summaries = container.querySelectorAll('#facts summary');
+    expect(summaries.length).toBeGreaterThan(0);
+    summaries.forEach((s) => expect(s.className).toMatch(/\bmin-h-11\b/));
   });
 });

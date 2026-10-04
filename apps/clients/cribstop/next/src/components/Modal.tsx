@@ -267,7 +267,7 @@ export default function Modal({
   // Card shape & size per mobileStyle
   const cardMobile =
     mobileStyle === 'full-screen'
-      ? 'h-screen rounded-none sm:h-auto sm:rounded-2xl'
+      ? 'h-screen h-dvh rounded-none sm:h-auto sm:rounded-2xl'
       : mobileStyle === 'bottom-sheet'
         ? 'rounded-t-2xl rounded-b-none sm:rounded-2xl max-h-[85vh] sm:max-h-none'
         : 'rounded-2xl';

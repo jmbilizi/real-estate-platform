@@ -24,7 +24,7 @@ import type { Attribution, ListingSource } from '@cribstop/property-contracts';
  *
  * - `density="auto"` (the default) → `Listing courtesy of {officeName}`. No card uses this
  *   component now. `ListingCard` renders its own office row, per the 2026-10-02 ruling.
- * - `density="courtesy"` (the detail page, out of scope for #305) → unchanged: a `brightMLS` row
+ * - `density="courtesy"` (no surface uses it since #572) → unchanged: a `brightMLS` row
  *   still gets the full block below instead of the one-sentence disclosure, exactly as before
  *   #305. A non-`brightMLS` row gets the one-sentence disclosure, also unchanged.
  * - `density="full"` → the full IDX block: listing agent name, at least one contact method, and
