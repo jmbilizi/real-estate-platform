@@ -147,6 +147,7 @@ spec:
                 secretKeyRef:
                   name: postmark-secret
                   key: POSTMARK_SERVER_TOKEN
+            # The key joins postmark-secret in #620. Until then the variable is empty and sending stays off.
             - name: INQUIRY_INTAKE_ADDRESS
               valueFrom:
                 secretKeyRef:

@@ -58,7 +58,8 @@ function positiveInt(env: Env, name: string, fallback: number): number {
     return fallback;
   }
   const parsed = Number(raw);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+  // The SQL casts these to int4, so a larger value would fail on every tick.
+  return Number.isInteger(parsed) && parsed > 0 && parsed <= 2_000_000_000 ? parsed : fallback;
 }
 
 export function resolveSendConfig(env: Env): SendResolution {

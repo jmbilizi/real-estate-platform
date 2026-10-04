@@ -222,6 +222,31 @@ describe('runDeliveryTick', () => {
     expect(entries.some((e) => e.entry.event === 'inquiry_delivery_overdue')).toBe(false);
   });
 
+  it('does not retry or resend when recording a successful send fails', async () => {
+    const send = jest.fn(() => Promise.resolve({ messageId: 'pm-9' }));
+    const rows = [row('a')];
+    const inner = fakeDb(rows);
+    const db: Queryable = {
+      query: ((sql: string, params?: unknown[]) =>
+        sql.includes("delivery_state = 'delivered'")
+          ? Promise.reject(new Error('statement timeout'))
+          : inner.query(sql, params)) as Queryable['query'],
+    };
+    const entries: { entry: Record<string, unknown> }[] = [];
+    const result = await runDeliveryTick({
+      db,
+      channel: { send },
+      resolution: ENABLED,
+      tuning: TUNING,
+      log: (_level, entry) => entries.push({ entry }),
+    });
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ delivered: 0, retried: 0, failed: 0 });
+    expect(rows[0]?.state).toBe('sending');
+    expect(entries.some((e) => e.entry.event === 'inquiry_delivery_record_failed')).toBe(true);
+  });
+
   it('never logs consumer data', async () => {
     const channel: DeliveryChannel = {
       send: () => Promise.reject(new DeliveryError('Postmark down', true)),

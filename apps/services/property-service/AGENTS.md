@@ -708,4 +708,7 @@ the listing agent is never a recipient.
 - **Tuning env vars:** `INQUIRY_DELIVERY_INTERVAL_MS`, `_BATCH_SIZE`, `_MAX_ATTEMPTS`,
   `_BASE_BACKOFF_MS`, `_MAX_BACKOFF_MS`, `_LEASE_MS`, `_OVERDUE_AGE_MS`, `_REQUEST_TIMEOUT_MS`, plus
   `INQUIRY_SITE_ORIGIN` (the listing link) and `INQUIRY_POSTMARK_MESSAGE_STREAM`.
+- A `failed` inquiry stays in the overdue alert until an operator requeues it:
+  `UPDATE listing_inquiries SET delivery_state = 'pending', delivery_attempts = 0, next_attempt_at = now() WHERE id = '<id>'`.
+  The worker uses its own pool (30 s statement timeout), not the API pool.
 - Out of scope: agent matching and assignment, and a consumer confirmation email.

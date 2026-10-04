@@ -1,5 +1,5 @@
+import { Pool } from 'pg';
 import { createApp } from './app';
-import { getPool } from './db/pool';
 import { startInquiryDelivery } from './inquiries/delivery/start';
 
 const app = createApp();
@@ -32,5 +32,20 @@ server.on('error', (error) => {
 
 // Inquiry delivery (#134) runs in this process, off the request path. It sends nothing unless the
 // environment declares permission in configuration. See src/inquiries/delivery/config.ts.
-const deliveryWorker = startInquiryDelivery(getPool());
-process.once('SIGTERM', () => deliveryWorker.stop());
+// It uses its own small pool: the API pool's 4 s statement_timeout is tuned for request traffic.
+if (process.env.DATABASE_URL) {
+  const deliveryPool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    max: 2,
+    statement_timeout: 30_000,
+  });
+  deliveryPool.on('error', (error) => console.error('Inquiry delivery pool error:', error.message));
+  const deliveryWorker = startInquiryDelivery(deliveryPool);
+  // A SIGTERM listener replaces Node's default exit. Exit here, as the default did.
+  process.once('SIGTERM', () => {
+    deliveryWorker.stop();
+    process.exit(0);
+  });
+} else {
+  console.warn('DATABASE_URL is not set. Inquiry delivery is not started.');
+}

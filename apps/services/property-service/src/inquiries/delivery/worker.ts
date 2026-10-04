@@ -79,41 +79,63 @@ export async function runDeliveryTick(deps: DeliveryWorkerDeps): Promise<TickRes
         fromAddress: resolution.send.fromAddress,
         siteOrigin: tuning.siteOrigin,
       });
+      let messageId: string;
       try {
-        const receipt = await channel.send(message);
-        await recordDelivered(db, inquiry.id, receipt.messageId);
+        messageId = (await channel.send(message)).messageId;
+      } catch (error) {
+        const retryable = error instanceof DeliveryError ? error.retryable : true;
+        const text = error instanceof Error ? error.message : 'Unknown delivery error.';
+        try {
+          if (!retryable || inquiry.delivery_attempts >= tuning.maxAttempts) {
+            await recordFailed(db, inquiry.id, text);
+            result.failed += 1;
+            log('error', {
+              event: 'inquiry_delivery_failed',
+              inquiryId: inquiry.id,
+              attempts: inquiry.delivery_attempts,
+              retryable,
+              error: text,
+            });
+          } else {
+            const delay = backoffMs(tuning, inquiry.delivery_attempts);
+            await recordRetry(db, inquiry.id, text, delay);
+            result.retried += 1;
+            log('warn', {
+              event: 'inquiry_delivery_retry',
+              inquiryId: inquiry.id,
+              attempts: inquiry.delivery_attempts,
+              retryInMs: delay,
+              error: text,
+            });
+          }
+        } catch (recordError) {
+          // The row stays 'sending'. The lease expiry makes it due again.
+          log('error', {
+            event: 'inquiry_delivery_record_failed',
+            inquiryId: inquiry.id,
+            error: recordError instanceof Error ? recordError.message : 'Unknown error.',
+          });
+        }
+        continue;
+      }
+      // The send succeeded. A failure to record it must not count as a send failure. A retry
+      // would send a duplicate. The lease expiry makes the row due again.
+      try {
+        await recordDelivered(db, inquiry.id, messageId);
         result.delivered += 1;
         log('info', {
           event: 'inquiry_delivered',
           inquiryId: inquiry.id,
-          messageId: receipt.messageId,
+          messageId,
           attempts: inquiry.delivery_attempts,
         });
-      } catch (error) {
-        const retryable = error instanceof DeliveryError ? error.retryable : true;
-        const text = error instanceof Error ? error.message : 'Unknown delivery error.';
-        if (!retryable || inquiry.delivery_attempts >= tuning.maxAttempts) {
-          await recordFailed(db, inquiry.id, text);
-          result.failed += 1;
-          log('error', {
-            event: 'inquiry_delivery_failed',
-            inquiryId: inquiry.id,
-            attempts: inquiry.delivery_attempts,
-            retryable,
-            error: text,
-          });
-        } else {
-          const delay = backoffMs(tuning, inquiry.delivery_attempts);
-          await recordRetry(db, inquiry.id, text, delay);
-          result.retried += 1;
-          log('warn', {
-            event: 'inquiry_delivery_retry',
-            inquiryId: inquiry.id,
-            attempts: inquiry.delivery_attempts,
-            retryInMs: delay,
-            error: text,
-          });
-        }
+      } catch (recordError) {
+        log('error', {
+          event: 'inquiry_delivery_record_failed',
+          inquiryId: inquiry.id,
+          messageId,
+          error: recordError instanceof Error ? recordError.message : 'Unknown error.',
+        });
       }
     }
   }
