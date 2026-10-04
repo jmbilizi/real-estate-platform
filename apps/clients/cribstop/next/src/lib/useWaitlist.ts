@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useApp } from '@/lib/context';
 import { useToast } from '@/lib/useToast';
 import {
@@ -10,6 +10,13 @@ import {
   leaveWaitlist,
   type WaitlistInterest,
 } from '@/lib/api/waitlist';
+
+/**
+ * A pending join expires, so a visitor who closes the login modal is not joined by a later login.
+ * The hook cannot read the modal state: `useSearchParams` would force the page out of static
+ * prerendering without a Suspense boundary, which would drop the page body from the first HTML.
+ */
+const PENDING_JOIN_TTL_MS = 5 * 60_000;
 
 /**
  * Shared waitlist state for the gated-preview pages (Connect #89, Services #88).
@@ -23,14 +30,12 @@ export function useWaitlist() {
   const { user, sessionLoading } = useApp();
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const { toast } = useToast();
 
   const [joined, setJoined] = useState<ReadonlySet<WaitlistInterest>>(new Set());
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState<ReadonlySet<WaitlistInterest>>(new Set());
-  const pendingJoin = useRef<WaitlistInterest | null>(null);
-  const sawAuthModal = useRef(false);
+  const pendingJoin = useRef<{ kind: WaitlistInterest; at: number } | null>(null);
 
   const setIn = (
     set: ReadonlySet<WaitlistInterest>,
@@ -77,17 +82,6 @@ export function useWaitlist() {
 
   const signedIn = Boolean(user);
 
-  // A visitor who closes the login modal without signing in drops the pending join, so a later
-  // login from elsewhere does not join them without a tap.
-  const modalOpen = ['login', 'signup'].includes(searchParams.get('modal') ?? '');
-  useEffect(() => {
-    if (modalOpen) sawAuthModal.current = true;
-    else if (sawAuthModal.current && !signedIn) {
-      sawAuthModal.current = false;
-      pendingJoin.current = null;
-    }
-  }, [modalOpen, signedIn]);
-
   useEffect(() => {
     if (sessionLoading) return;
     if (!signedIn) {
@@ -109,7 +103,7 @@ export function useWaitlist() {
         setLoaded(true);
         const pending = pendingJoin.current;
         pendingJoin.current = null;
-        if (pending) void join(pending);
+        if (pending && Date.now() - pending.at < PENDING_JOIN_TTL_MS) void join(pending.kind);
       });
 
     return () => {
@@ -120,7 +114,7 @@ export function useWaitlist() {
   const toggle = useCallback(
     (kind: WaitlistInterest) => {
       if (!signedIn) {
-        pendingJoin.current = kind;
+        pendingJoin.current = { kind, at: Date.now() };
         router.push(`${pathname}?modal=login`, { scroll: false });
         return;
       }
