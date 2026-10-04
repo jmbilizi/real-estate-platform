@@ -420,18 +420,22 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
                   </p>
                 </div>
               </div>
-              {/* Four contact rows, not three: the loaded card lists agent phone, agent email,
-                  office phone and office email. Counted from the rendered card, not guessed. */}
-              <div className="mt-4 space-y-1.5 text-sm">
-                <Bar className="w-3/4" />
-                <Bar className="w-4/5" />
-                <Bar className="w-2/3" />
-                <Bar className="w-3/5" />
+              {/* Four tap rows of 44px (`min-h-11`), as the loaded card: agent phone, agent email,
+                  office phone, office email. */}
+              <div className="mt-4 space-y-1 text-sm">
+                {['w-3/4', 'w-4/5', 'w-2/3', 'w-3/5'].map((w) => (
+                  <div key={w} className="flex min-h-11 items-center">
+                    <Bar className={`${w}`} />
+                  </div>
+                ))}
               </div>
               {/* `btn-primary` measures 40px and `btn-secondary` 42px — they are not the same
                   height, and averaging them left this card 12px short of the loaded one. */}
               <div className={`mt-5 h-10 w-full rounded-full ${FILL}`} />
               <div className={`mt-2 h-[42px] w-full rounded-full ${FILL}`} />
+              <p className="mt-4 text-[12px] leading-snug">
+                <Bar className="w-3/5" />
+              </p>
             </div>
 
             {/*
@@ -452,9 +456,17 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
                 <p className="mt-2 text-xl font-semibold">
                   <Bar className="w-2/5" />
                 </p>
-                <div className="mt-3 space-y-1 text-sm">
-                  <Bar className="w-4/5" />
-                  <Bar className="w-3/5" />
+                {/* Three labelled 44px inputs, as on the loaded card. Tax and HOA rows are not
+                    reserved: they depend on data the skeleton does not have. */}
+                <div className="mt-4 space-y-4">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i}>
+                      <p className="text-sm">
+                        <Bar className="w-1/3" />
+                      </p>
+                      <div className={`mt-1 h-11 w-full rounded-lg ${FILL}`} />
+                    </div>
+                  ))}
                 </div>
                 <p className="mt-3 text-xs">
                   <Bar className="w-full" />

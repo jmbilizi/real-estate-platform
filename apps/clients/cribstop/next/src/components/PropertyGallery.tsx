@@ -3,6 +3,7 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import type { Media } from '@/lib/types';
 import ListingImage from '@/components/listing/ListingImage';
+import { resolveTourEntry } from '@/lib/tour-url';
 
 /**
  * The detail page's photo gallery.
@@ -14,17 +15,102 @@ import ListingImage from '@/components/listing/ListingImage';
  */
 export type GalleryPhoto = Media & { caption?: string | null };
 
+/**
+ * Full-screen tour dialog. Focus moves to Close on open, Tab cycles Close and the iframe, the page
+ * does not scroll behind it, and focus returns to the opener on close. A sentinel after the iframe
+ * catches Tab leaving it, because key events inside a cross-origin frame never reach this page.
+ */
+function TourViewer({ href, onClose }: { href: string; onClose: () => void }) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    const html = document.documentElement;
+    const prevOverflow = html.style.overflow;
+    const prevPadding = html.style.paddingRight;
+    html.style.paddingRight = `${window.innerWidth - html.clientWidth}px`;
+    html.style.overflow = 'hidden';
+    closeRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCloseRef.current();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      html.style.overflow = prevOverflow;
+      html.style.paddingRight = prevPadding;
+      if (opener && document.contains(opener)) opener.focus();
+    };
+  }, []);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="3D tour"
+      className="fixed inset-0 z-[100] flex flex-col bg-ink/95"
+    >
+      <div className="flex items-center justify-between p-4 text-white">
+        <button
+          ref={closeRef}
+          type="button"
+          onClick={onClose}
+          onKeyDown={(e) => {
+            if (e.key === 'Tab' && e.shiftKey) {
+              e.preventDefault();
+              frameRef.current?.focus();
+            }
+          }}
+          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium hover:bg-white/10"
+        >
+          <svg
+            className="h-5 w-5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+          Close
+        </button>
+        <p className="text-sm font-medium">3D tour</p>
+        <span className="w-16" />
+      </div>
+      <iframe
+        ref={frameRef}
+        src={href}
+        title="3D tour"
+        className="min-h-0 w-full flex-1 border-0 bg-white"
+        allow="autoplay; fullscreen; web-share; xr-spatial-tracking"
+        allowFullScreen
+        sandbox="allow-scripts allow-same-origin allow-popups allow-presentation"
+        referrerPolicy="no-referrer"
+      />
+      <div tabIndex={0} aria-hidden="true" onFocus={() => closeRef.current?.focus()} />
+    </div>
+  );
+}
+
 export default function PropertyGallery({
   media,
+  tourUrl,
   children,
 }: {
   media: GalleryPhoto[];
+  /** The unbranded virtual tour URL. The "3D tour" entry shows only when it passes `resolveTourEntry`. */
+  tourUrl?: string | null;
   /** Overlay slot inside the gallery frame, for example a status badge. */
   children?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
   const [swipeIdx, setSwipeIdx] = useState(0);
+  const [tourOpenHref, setTourOpenHref] = useState<string | null>(null);
+  const tour = resolveTourEntry(tourUrl);
   const trackRef = useRef<HTMLDivElement>(null);
 
   const onSwipeScroll = useCallback(() => {
@@ -60,6 +146,38 @@ export default function PropertyGallery({
     </div>
   ) : null;
 
+  const tourPill =
+    'absolute bottom-3 left-3 z-10 inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-[11px] font-semibold text-ink shadow-card md:bottom-4 md:left-4 md:text-sm';
+  const tourIcon = (
+    <svg
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"
+      />
+    </svg>
+  );
+  const tourEntry = !tour ? null : tour.mode === 'frame' ? (
+    <button type="button" onClick={() => setTourOpenHref(tour.href)} className={tourPill}>
+      {tourIcon}3D tour
+    </button>
+  ) : (
+    <a href={tour.href} target="_blank" rel="noopener noreferrer" className={tourPill}>
+      {tourIcon}3D tour<span className="sr-only"> (opens in a new tab)</span>
+    </a>
+  );
+  const tourViewer =
+    tour?.mode === 'frame' && tourOpenHref === tour.href ? (
+      <TourViewer href={tour.href} onClose={() => setTourOpenHref(null)} />
+    ) : null;
+
   if (media.length === 0) {
     return (
       <div className="relative">
@@ -69,6 +187,8 @@ export default function PropertyGallery({
           className="aspect-video w-full overflow-hidden rounded-2xl md:h-[480px]"
         />
         {badgeOverlay}
+        {tourEntry}
+        {tourViewer}
       </div>
     );
   }
@@ -171,7 +291,9 @@ export default function PropertyGallery({
           </button>
         </div>
         {badgeOverlay}
+        {tourEntry}
       </div>
+      {tourViewer}
 
       {/* Lightbox */}
       {open && (
