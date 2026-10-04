@@ -7,12 +7,13 @@ import {
   savedHomesRequestSchema,
   type SavedState,
   UNAUTHENTICATED_BODY,
+  UNAVAILABLE_BODY,
 } from '@cribstop/property-contracts';
 import type { IntrospectionClient } from '../inquiries/account-introspection';
 import { findPropertyRecord, type ReadClient } from '../listings/repository';
 import { propertyIdOf } from '../listings/property-page';
 import { buildSavedHomes } from './homes';
-import { identifyAccount, PRIVATE_CACHE_CONTROL } from './identity';
+import { authenticate, PRIVATE_CACHE_CONTROL } from './identity';
 import { countSavedHomes, listSavedHomeRows, saveHome, unsaveHome } from './store';
 
 /**
@@ -50,15 +51,19 @@ export function createSavedHomesRouter(deps: SavedHomesRouterDeps): Router {
   const router = Router();
   const { pool, introspection } = deps;
 
-  /** The calling account, or `null` after sending the one 401. Runs before any other check, so a
-   *  signed-out caller learns nothing about which ids exist. */
+  /** The calling account, or `null` after sending the one 401, or a 503 when account-service did
+   *  not answer, which a client may retry. Runs before any other check, so a signed-out caller
+   *  learns nothing about which ids exist. */
   async function requireAccount(req: Request, res: Response): Promise<string | null> {
     res.set('Cache-Control', PRIVATE_CACHE_CONTROL);
-    const accountId = await identifyAccount(introspection, req);
-    if (accountId === null) {
+    const outcome = await authenticate(introspection, req);
+    if (outcome.kind === 'account') return outcome.accountId;
+    if (outcome.kind === 'unavailable') {
+      res.set('Retry-After', '2').status(503).json(UNAVAILABLE_BODY);
+    } else {
       res.status(401).json(UNAUTHENTICATED_BODY);
     }
-    return accountId;
+    return null;
   }
 
   /** The home a listing is on, through `listing_detail_v`. An unknown, deleted or withheld listing

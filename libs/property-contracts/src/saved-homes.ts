@@ -54,11 +54,11 @@ export const savedHomeSchema = z.object({
 export const savedHomesRequestSchema = z.strictObject({
   page: z
     .string()
-    .regex(/^[1-9]\d*$/, 'must be a positive whole number')
+    .regex(/^[1-9]\d{0,6}$/, 'must be a whole number from 1 to 9999999')
     .transform(Number)
     .pipe(z.number().int().min(1))
     .default(1)
-    .describe('Whole number, 1 or greater. Default 1.'),
+    .describe('Whole number from 1 to 9999999. Default 1.'),
   pageSize: queryPageSize.default(PAGE_SIZE_DEFAULT),
 });
 

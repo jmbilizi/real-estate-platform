@@ -114,6 +114,14 @@ const serverErrorResponse = {
   },
 };
 
+const unavailableResponse = {
+  description:
+    'account-service did not answer, so the session is unknown. Retry. This is not a sign-out.',
+  content: {
+    'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+  },
+};
+
 const unauthenticatedResponse = {
   description: 'No valid credential. The body gives no reason.',
   content: {
@@ -526,6 +534,7 @@ export function toOpenApiDocument() {
               },
             },
             '401': unauthenticatedResponse,
+            '503': unavailableResponse,
             '404': {
               description: 'No such listing.',
               content: {
@@ -551,6 +560,7 @@ export function toOpenApiDocument() {
               },
             },
             '401': unauthenticatedResponse,
+            '503': unavailableResponse,
             '404': {
               description: 'No such listing.',
               content: {
@@ -586,6 +596,7 @@ export function toOpenApiDocument() {
               },
             },
             '401': unauthenticatedResponse,
+            '503': unavailableResponse,
             '500': serverErrorResponse,
           },
         },
@@ -609,6 +620,7 @@ export function toOpenApiDocument() {
               },
             },
             '401': unauthenticatedResponse,
+            '503': unavailableResponse,
             '404': {
               description: 'The id is not a well-formed id.',
               content: {

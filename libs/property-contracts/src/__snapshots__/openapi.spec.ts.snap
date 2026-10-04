@@ -18,6 +18,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                   "internal_error",
                   "rate_limited",
                   "unauthenticated",
+                  "unavailable",
                 ],
                 "type": "string",
               },
@@ -3142,6 +3143,16 @@ Rate-limited per client and per listing; a request over either limit gets 429 wi
             },
             "description": "Unexpected server error. The body carries no detail by design.",
           },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "account-service did not answer, so the session is unknown. Retry. This is not a sign-out.",
+          },
         },
         "summary": "Remove the home that one listing is on from saved homes",
       },
@@ -3200,6 +3211,16 @@ Rate-limited per client and per listing; a request over either limit gets 429 wi
               },
             },
             "description": "Unexpected server error. The body carries no detail by design.",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "account-service did not answer, so the session is unknown. Retry. This is not a sign-out.",
           },
         },
         "summary": "Save the home that one listing is on",
@@ -3333,8 +3354,8 @@ Rate-limited per client and per listing; a request over either limit gets 429 wi
             "name": "page",
             "required": false,
             "schema": {
-              "description": "Whole number, 1 or greater. Default 1.",
-              "pattern": "^[1-9]\\d*$",
+              "description": "Whole number from 1 to 9999999. Default 1.",
+              "pattern": "^[1-9]\\d{0,6}$",
               "type": "string",
             },
           },
@@ -3389,6 +3410,16 @@ Rate-limited per client and per listing; a request over either limit gets 429 wi
               },
             },
             "description": "Unexpected server error. The body carries no detail by design.",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "account-service did not answer, so the session is unknown. Retry. This is not a sign-out.",
           },
         },
         "summary": "The saved homes of the signed-in account",
@@ -3450,6 +3481,16 @@ Rate-limited per client and per listing; a request over either limit gets 429 wi
               },
             },
             "description": "Unexpected server error. The body carries no detail by design.",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "account-service did not answer, so the session is unknown. Retry. This is not a sign-out.",
           },
         },
         "summary": "Remove a saved home by its home id",

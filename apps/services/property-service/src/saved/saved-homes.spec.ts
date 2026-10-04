@@ -1,5 +1,9 @@
 import request from 'supertest';
-import { NOT_FOUND_BODY, UNAUTHENTICATED_BODY } from '@cribstop/property-contracts';
+import {
+  NOT_FOUND_BODY,
+  UNAUTHENTICATED_BODY,
+  UNAVAILABLE_BODY,
+} from '@cribstop/property-contracts';
 import { createApp } from '../app';
 import type { IntrospectionClient } from '../inquiries/account-introspection';
 import type { PropertyRecordDbRow, ReadPool } from '../listings/repository';
@@ -95,6 +99,44 @@ describe('saved homes: authentication', () => {
     expect(response.status).toBe(401);
     expect(response.body).toEqual(UNAUTHENTICATED_BODY);
     expect(response.headers['cache-control']).toBe('private, no-store');
+    expect(pool.recorded).toEqual([]);
+  });
+});
+
+describe('saved homes: account-service outage and bad ids', () => {
+  it('answers a retryable 503, not 401, when account-service gives no answer', async () => {
+    const pool = createPool(() => []);
+    const introspection: IntrospectionClient = {
+      resolveAccountId: () => Promise.resolve(null),
+      introspect: () => Promise.resolve({ kind: 'unavailable' }),
+    };
+    const response = await request(createApp({ pool, introspection }))
+      .put(`/listings/${LISTING_ID}/saved`)
+      .set(header);
+
+    expect(response.status).toBe(503);
+    expect(response.body).toEqual(UNAVAILABLE_BODY);
+    expect(response.headers['retry-after']).toBe('2');
+    expect(pool.recorded).toEqual([]);
+  });
+
+  it('answers 401 when the resolved account id is not a UUID, and runs no SQL', async () => {
+    const pool = createPool(() => []);
+    const response = await request(createApp({ pool, introspection: signedInAs('not-a-uuid') }))
+      .get('/saved-homes')
+      .set(header);
+
+    expect(response.status).toBe(401);
+    expect(pool.recorded).toEqual([]);
+  });
+
+  it('rejects a page number past the safe bound with 400, never a database error', async () => {
+    const pool = createPool(() => []);
+    const response = await request(createApp({ pool, introspection: signedInAs(ACCOUNT_A) }))
+      .get('/saved-homes?page=99999999999999999999')
+      .set(header);
+
+    expect(response.status).toBe(400);
     expect(pool.recorded).toEqual([]);
   });
 });
