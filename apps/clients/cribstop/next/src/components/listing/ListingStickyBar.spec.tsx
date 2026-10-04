@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useRef } from 'react';
 import ListingStickyBar from './ListingStickyBar';
@@ -137,5 +137,43 @@ describe('ListingStickyBar', () => {
     );
     expect(screen.getByRole('button', { name: 'Facts' })).toHaveAttribute('aria-current', 'true');
     expect(screen.getByRole('button', { name: 'Map' })).not.toHaveAttribute('aria-current');
+  });
+});
+
+describe('ListingStickyBar clicked link (#572)', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  const spyEntries = (...ids: string[]) =>
+    ids.map((id) => ({ isIntersecting: true, target: document.getElementById(id) as Element }));
+
+  it('is active at once and keeps the clicked link while the scroll passes other sections', () => {
+    window.scrollBy = jest.fn();
+    render(<Harness sections={['overview', 'facts', 'map']} />);
+    setGalleryOutOfView(true);
+    const spy = observers[observers.length - 1];
+    act(() => spy.callback(spyEntries('overview')));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Map' }));
+    expect(screen.getByRole('button', { name: 'Map' })).toHaveAttribute('aria-current', 'true');
+
+    act(() => spy.callback(spyEntries('facts')));
+    expect(screen.getByRole('button', { name: 'Map' })).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByRole('button', { name: 'Facts' })).not.toHaveAttribute('aria-current');
+  });
+
+  it('hands control back to the scroll-spy once the scroll has settled', () => {
+    window.scrollBy = jest.fn();
+    render(<Harness sections={['overview', 'facts', 'map']} />);
+    setGalleryOutOfView(true);
+    const spy = observers[observers.length - 1];
+
+    fireEvent.click(screen.getByRole('button', { name: 'Map' }));
+    fireEvent.scroll(window);
+    act(() => {
+      jest.advanceTimersByTime(400);
+    });
+    act(() => spy.callback(spyEntries('facts')));
+    expect(screen.getByRole('button', { name: 'Facts' })).toHaveAttribute('aria-current', 'true');
   });
 });

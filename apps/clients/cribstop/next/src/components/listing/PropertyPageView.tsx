@@ -148,12 +148,12 @@ function OffMarketPropertyView({
       )}
 
       {nearby.length > 0 && (
-        <div id="nearby" className="mt-6 rounded-2xl border border-surface-border">
+        <div id="nearby" className="mt-6">
           <ListingRow
             title="Nearby homes"
             listings={nearby}
             max={6}
-            sectionClassName="px-6 py-6"
+            sectionClassName="pt-2"
             titleClassName="text-xl font-semibold tracking-tight"
           />
         </div>

@@ -138,7 +138,7 @@ export function ListingCardSkeleton() {
  */
 export function NearbyHomesSkeleton() {
   return (
-    <section className="px-6 py-6" aria-hidden="true">
+    <section className="pt-2" aria-hidden="true">
       {/* `ListingRow`'s heading block: a column with its own bottom padding, not a bare bar. */}
       <div className="flex flex-col gap-1 pb-1">
         <div className={`h-7 w-40 rounded-xs ${FILL}`} />
@@ -226,9 +226,9 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
       <div className="flex flex-shrink-0 items-center gap-3 border-b border-surface-border bg-white px-6 pb-3 pt-4 sm:px-8">
         <div className={`h-11 w-11 flex-shrink-0 rounded-full ${FILL}`} />
         <div className="min-w-0 flex-1" />
-        <div className="hidden shrink-0 items-center gap-1.5 sm:flex">
-          <div className={`h-10 w-24 rounded-full ${FILL}`} />
-          <div className={`h-10 w-24 rounded-full ${FILL}`} />
+        <div className="flex shrink-0 items-center gap-1.5">
+          <div className={`h-11 w-11 rounded-full sm:h-10 sm:w-24 ${FILL}`} />
+          <div className={`h-11 w-11 rounded-full sm:h-10 sm:w-24 ${FILL}`} />
         </div>
       </div>
 
@@ -390,16 +390,6 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
                 <div className={`h-[380px] w-full ${FILL}`} />
               </div>
             </div>
-
-            {/* Listing disclosure — attribution and provenance, both detail-only. */}
-            <div
-              className={`${panel} p-6 text-[13px] leading-relaxed`}
-              data-skeleton-section="disclosure"
-            >
-              <Bar className="w-2/3" />
-              <Bar className="mt-2 w-1/2" />
-              <Bar className="mt-2 w-3/4" />
-            </div>
           </div>
 
           {/* Sidebar — agent card, buyer-agent card, then the mortgage estimate. */}
@@ -415,7 +405,7 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
                   <p className="font-semibold">
                     <Bar className="w-2/3" />
                   </p>
-                  <p className="text-[13px]">
+                  <p className="text-sm">
                     <Bar className="mt-1 w-1/2" />
                   </p>
                 </div>
@@ -439,15 +429,14 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
               <p className="mt-3 font-semibold">
                 <Bar className="w-4/5" />
               </p>
-              <p className="mt-1 text-[13px] leading-snug">
+              <p className="mt-1 text-sm leading-snug">
                 <Bar className="w-full" />
                 <Bar className="mt-1 w-2/3" />
               </p>
-              {/* `btn-primary` measures 40px and `btn-secondary` 42px — they are not the same
-                  height, and averaging them left this card 12px short of the loaded one. */}
-              <div className={`mt-5 h-10 w-full rounded-full ${FILL}`} />
-              <div className={`mt-2 h-[42px] w-full rounded-full ${FILL}`} />
-              <p className="mt-4 text-[12px] leading-snug">
+              {/* Both buttons are `min-h-11` (44px) on the loaded card. */}
+              <div className={`mt-5 h-11 w-full rounded-full ${FILL}`} />
+              <div className={`mt-2 h-11 w-full rounded-full ${FILL}`} />
+              <p className="mt-4 text-sm leading-snug">
                 <Bar className="w-3/5" />
               </p>
             </div>
@@ -499,16 +488,25 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
          * The same component the loaded page shows while that request is in flight, so the two
          * states are the same block rather than two guesses at it.
          */}
-        <div className={`mt-4 ${panel}`} data-skeleton-section="nearby-homes">
+        <div className="mt-4" data-skeleton-section="nearby-homes">
           <NearbyHomesSkeleton />
+        </div>
+
+        {/* The disclaimer footer: two small lines, no box. */}
+        <div
+          className="mt-6 space-y-1.5 text-xs leading-relaxed"
+          data-skeleton-section="disclosure"
+        >
+          <Bar className="w-3/4" />
+          <Bar className="w-2/3" />
         </div>
       </div>
 
       {/* The loaded page has a sticky CTA bar below `lg`. Without a placeholder of the same height
           the mobile layout shifts on load the same way the header did on desktop. */}
-      <div className="flex flex-shrink-0 gap-2 border-t border-surface-border bg-white px-4 py-3 lg:hidden">
-        <div className={`h-9 flex-1 rounded-full ${FILL}`} />
-        <div className={`h-9 flex-1 rounded-full ${FILL}`} />
+      <div className="flex flex-shrink-0 gap-2 border-t border-surface-border bg-white px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 lg:hidden">
+        <div className={`h-11 flex-1 rounded-full ${FILL}`} />
+        <div className={`h-11 flex-1 rounded-full ${FILL}`} />
       </div>
     </div>
   );
