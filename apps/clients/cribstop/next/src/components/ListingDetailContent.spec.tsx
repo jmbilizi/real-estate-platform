@@ -534,9 +534,9 @@ describe('ListingDetailContent — phone pass (#572)', () => {
 });
 
 describe('ListingDetailContent — Nearby homes without a panel (#572)', () => {
-  it('renders the row directly on the page, with no bordered white box around it', async () => {
+  it('renders the row directly on the page, with no bordered white box around it', () => {
     const view = toListingDetailView(aListingDetail());
-    const { container } = await renderAndSettle(
+    const { container } = render(
       <ListingDetailContent listing={view} nearby={[aListingCardRow()]} />,
     );
     const nearby = container.querySelector('#nearby') as HTMLElement;

@@ -143,18 +143,19 @@ describe('PropertyGallery phone pass (#572)', () => {
     { url: 'https://example.com/b.jpg', altText: 'B' },
     { url: 'https://example.com/c.jpg', altText: 'C' },
   ];
-  const open = () => fireEvent.click(screen.getByRole('button', { name: 'View photo 2 of 3' }));
+  const tile = () => screen.getAllByRole('button', { name: 'View photo 2 of 3' })[0];
+  const open = () => fireEvent.click(tile());
 
   it('moves focus into the photo viewer, locks page scroll, and restores both on close', () => {
     render(<PropertyGallery media={photos} />);
-    const tile = screen.getByRole('button', { name: 'View photo 2 of 3' });
-    tile.focus();
-    fireEvent.click(tile);
+    const opener = tile();
+    opener.focus();
+    fireEvent.click(opener);
     expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
     expect(document.documentElement.style.overflow).toBe('hidden');
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(document.documentElement.style.overflow).toBe('');
-    expect(tile).toHaveFocus();
+    expect(opener).toHaveFocus();
   });
 
   it('keeps Tab inside the photo viewer', () => {
