@@ -679,6 +679,40 @@ endpoint and there must never be one**: an inquiry is never returned by any list
   tables continuously and a plain `CREATE INDEX` blocks it for the index build's duration (#388).
   Migrations 034 and 036 predate this rule and are not rewritten.
 
+## Inquiry delivery (`src/inquiries/delivery/`)
+
+#134 delivers each stored inquiry to the **Cribstop buyer-agent intake**. The recipient is the
+`INQUIRY_INTAKE_ADDRESS` configuration value. It never comes from a request or from the listing, and
+the listing agent is never a recipient.
+
+- **In-process worker.** `startInquiryDelivery()` runs from `main.ts` only, never from `createApp`.
+  A tick marks sample inquiries, claims due rows with `FOR UPDATE SKIP LOCKED`, sends, and records
+  the outcome. The consumer submit never waits on it. `store.ts` owns every delivery-state
+  transition. `write.ts` still owns the INSERT.
+- **One interface.** `DeliveryChannel` (`channel.ts`) is the seam. `postmark-channel.ts` is the only
+  implementation. If intake moves to a CRM or a queue, add a channel. Do not change the worker.
+- **States.** `pending` → `sending` → `delivered`, or back to `pending` with backoff, or `failed`
+  after `INQUIRY_DELIVERY_MAX_ATTEMPTS`. `sample` marks an inquiry on an `is_sample` listing (#93).
+  It is never sent. Delivery is at-least-once: a crash after Postmark accepts and before the row
+  update can send one duplicate.
+- **Fail closed.** The worker sends only when `INQUIRY_EXTERNAL_SEND` is exactly `true` and
+  `POSTMARK_SERVER_TOKEN`, `INQUIRY_INTAKE_ADDRESS` and `INQUIRY_FROM_ADDRESS` are real values (not
+  unset, not `StrongBase64Password`). Permission comes from configuration, never from `NODE_ENV` or
+  an environment name. Otherwise inquiries stay `pending` and the log says why. dev and test use a
+  Postmark sandbox token. A sandbox accepts and discards, so tests prove the request shape and the
+  recorded MessageID, not delivery.
+- **Undelivered is loud.** Every tick logs `event: "inquiry_delivery_overdue"` at error level while
+  any inquiry not `delivered` is older than `INQUIRY_DELIVERY_OVERDUE_AGE_MS` (default 15 minutes).
+  The line carries the count, the oldest age and the disabled reason. Alert on that event. No log
+  line holds consumer data.
+- **Tuning env vars:** `INQUIRY_DELIVERY_INTERVAL_MS`, `_BATCH_SIZE`, `_MAX_ATTEMPTS`,
+  `_BASE_BACKOFF_MS`, `_MAX_BACKOFF_MS`, `_LEASE_MS`, `_OVERDUE_AGE_MS`, `_REQUEST_TIMEOUT_MS`, plus
+  `INQUIRY_SITE_ORIGIN` (the listing link) and `INQUIRY_POSTMARK_MESSAGE_STREAM`.
+- A `failed` inquiry stays in the overdue alert until an operator requeues it:
+  `UPDATE listing_inquiries SET delivery_state = 'pending', delivery_attempts = 0, next_attempt_at = now() WHERE id = '<id>'`.
+  The worker uses its own pool (30 s statement timeout), not the API pool.
+- Out of scope: agent matching and assignment, and a consumer confirmation email.
+
 ## Saved homes (`src/saved/`)
 
 `PUT|DELETE /listings/{id}/saved`, `DELETE /saved-homes/{id}`, `GET /saved-homes` (#23). They extend

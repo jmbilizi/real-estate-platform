@@ -137,6 +137,23 @@ spec:
               value: "20"
             - name: INQUIRY_RATE_LIMIT_PER_LISTING_WINDOW_MS
               value: "3600000"
+            # Inquiry delivery to the Cribstop buyer-agent intake (#134). The worker sends nothing
+            # until INQUIRY_EXTERNAL_SEND is "true" AND the token, intake address and from address
+            # are all real. Unset or placeholder values keep it off and loud. Set
+            # INQUIRY_EXTERNAL_SEND, INQUIRY_FROM_ADDRESS and INQUIRY_SITE_ORIGIN per environment
+            # in the overlay patch, never here. dev and test use a Postmark sandbox token.
+            - name: POSTMARK_SERVER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: postmark-secret
+                  key: POSTMARK_SERVER_TOKEN
+            # The key joins postmark-secret in #620. Until then the variable is empty and sending stays off.
+            - name: INQUIRY_INTAKE_ADDRESS
+              valueFrom:
+                secretKeyRef:
+                  name: postmark-secret
+                  key: INQUIRY_INTAKE_ADDRESS
+                  optional: true
           livenessProbe:
             httpGet:
               path: /health

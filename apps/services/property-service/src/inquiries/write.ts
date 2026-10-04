@@ -2,7 +2,8 @@ import type { InquiryKind } from '@cribstop/property-contracts';
 import { CONSENT_DISCLOSURE_TEXT } from '@cribstop/property-contracts';
 
 /**
- * THE ONLY MODULE THAT WRITES `listing_inquiries` (#131), mirroring `src/db/write.ts`'s rule for
+ * THE ONLY MODULE THAT INSERTS `listing_inquiries` (#131). Delivery-state updates (#134) live in
+ * `delivery/store.ts`. Mirrors `src/db/write.ts`'s rule for
  * `listings`: one writer, so the consent-triad invariant (all three of `consentToContact`,
  * `consent_disclosure_text` and `consent_given_at`, or none) is decided in exactly one place.
  */
