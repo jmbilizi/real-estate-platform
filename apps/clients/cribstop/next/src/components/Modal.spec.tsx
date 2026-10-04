@@ -59,6 +59,8 @@ describe('Modal', () => {
   });
 
   it('keeps the scrollbar gutter instead of padding the page when it locks scroll', () => {
+    // An earlier test's deferred unlock may not have run yet.
+    document.documentElement.removeAttribute('style');
     const original = globalThis.CSS;
     Object.defineProperty(globalThis, 'CSS', {
       configurable: true,
