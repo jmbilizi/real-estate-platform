@@ -252,6 +252,46 @@ export default function ListingDetailContent({
           : []),
       ];
 
+  // Shared by the detail header and the full-screen photo viewer.
+  const shareSaveButtons = (
+    <>
+      <button
+        onClick={handleShare}
+        className="btn-secondary h-11 w-11 px-0 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-5"
+        aria-label="Share"
+      >
+        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+          />
+        </svg>
+        <span className="hidden sm:inline">Share</span>
+      </button>
+      <button
+        onClick={() => toggleSave(listing.id)}
+        className={`btn-secondary h-11 w-11 px-0 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-5 ${saved ? 'border-brand text-brand' : ''}`}
+        aria-label={saved ? 'Saved' : 'Save'}
+      >
+        <svg
+          className={`h-4 w-4 ${saved ? 'fill-brand' : 'fill-none'}`}
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          strokeWidth={2}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+          />
+        </svg>
+        <span className="hidden sm:inline">{saved ? 'Saved' : 'Save'}</span>
+      </button>
+    </>
+  );
+
   return (
     <div ref={rootRef} className="flex flex-col h-full min-h-0">
       {/*
@@ -289,42 +329,7 @@ export default function ListingDetailContent({
           skip={nearbyRows.length > 0 ? [] : ['nearby']}
         />
         <div className="min-w-0 flex-1 md:hidden" />
-        <div className="flex shrink-0 items-center gap-1.5">
-          <button
-            onClick={handleShare}
-            className="btn-secondary h-11 w-11 px-0 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-5"
-            aria-label="Share"
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
-              />
-            </svg>
-            <span className="hidden sm:inline">Share</span>
-          </button>
-          <button
-            onClick={() => toggleSave(listing.id)}
-            className={`btn-secondary h-11 w-11 px-0 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-5 ${saved ? 'border-brand text-brand' : ''}`}
-            aria-label={saved ? 'Saved' : 'Save'}
-          >
-            <svg
-              className={`h-4 w-4 ${saved ? 'fill-brand' : 'fill-none'}`}
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-              />
-            </svg>
-            <span className="hidden sm:inline">{saved ? 'Saved' : 'Save'}</span>
-          </button>
-        </div>
+        <div className="flex shrink-0 items-center gap-1.5">{shareSaveButtons}</div>
       </div>
 
       {/* Scrollable body — `surface-alt` is the canvas that makes a white panel read as a panel. */}
@@ -334,7 +339,11 @@ export default function ListingDetailContent({
       >
         {/* Gallery — the first panel, exactly the block the skeleton opens with. */}
         <div className={`overflow-hidden ${PANEL}`}>
-          <PropertyGallery media={listing.media} tourUrl={listing.virtualTourUrl}>
+          <PropertyGallery
+            media={listing.media}
+            tourUrl={listing.virtualTourUrl}
+            viewerActions={shareSaveButtons}
+          >
             <GalleryStatusBadge {...listing} statusLabel={statusLabel} />
           </PropertyGallery>
         </div>

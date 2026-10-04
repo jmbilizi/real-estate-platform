@@ -102,9 +102,6 @@ const TOUR_FRAME_PROPS = {
   referrerPolicy: 'strict-origin-when-cross-origin',
 } as const;
 
-/** How long the strip tour slide stays in view before its iframe loads. */
-const TOUR_SETTLE_MS = 250;
-
 /** The tour a gallery plays: the iframe `src` and the page URL for a new tab. */
 type GalleryTour = { src: string; href: string };
 
@@ -120,13 +117,13 @@ function TourFrame({ tour }: { tour: GalleryTour }) {
       <iframe
         {...TOUR_FRAME_PROPS}
         src={tour.src}
-        className="min-h-0 w-full flex-1 rounded-xl border-0 bg-white"
+        className="min-h-0 w-full flex-1 rounded-xl border border-surface-border bg-white"
       />
       <a
         href={tour.href}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex min-h-11 items-center self-center rounded-full px-3 py-1.5 text-sm font-medium text-white underline hover:bg-white/10"
+        className="inline-flex min-h-11 items-center self-center rounded-full px-3 py-1.5 text-sm font-medium text-ink underline hover:bg-surface-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
       >
         Open the tour in a new tab<span className="sr-only"> (opens in a new tab)</span>
       </a>
@@ -145,6 +142,7 @@ function PhotoViewer({
   index,
   onIndex,
   onClose,
+  actions,
 }: {
   media: GalleryPhoto[];
   tour: GalleryTour | null;
@@ -152,6 +150,8 @@ function PhotoViewer({
   index: number;
   onIndex: (next: (prev: number) => number) => void;
   onClose: () => void;
+  /** Right slot of the top bar, for example Share and Save. */
+  actions?: ReactNode;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -176,8 +176,11 @@ function PhotoViewer({
     },
   });
 
-  const navButton =
-    'flex min-h-11 items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium hover:bg-white/10 disabled:opacity-30';
+  // A white ground like the rest of the site. Photos keep their own tones, and `object-contain`
+  // never crops the Bright MLS watermark. Nothing overlays the photo.
+  const ring =
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2';
+  const circle = `flex h-11 w-11 items-center justify-center rounded-full border border-surface-border bg-white text-ink shadow-card transition-colors hover:bg-surface-soft disabled:opacity-30 ${ring}`;
 
   return (
     <div
@@ -185,16 +188,22 @@ function PhotoViewer({
       role="dialog"
       aria-modal="true"
       aria-label="Photo viewer"
-      className="fixed inset-0 z-[100] flex flex-col bg-ink/95"
+      className="fixed inset-0 z-[100] flex flex-col bg-white text-ink"
     >
-      <div className="flex items-center justify-between px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))] text-white">
-        <button ref={closeRef} type="button" onClick={onClose} className={navButton}>
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
+        <button
+          ref={closeRef}
+          type="button"
+          onClick={onClose}
+          className={`inline-flex min-h-11 items-center gap-1.5 justify-self-start rounded-full border border-surface-border bg-white px-4 text-sm font-medium text-ink shadow-card transition-colors hover:bg-surface-soft ${ring}`}
+        >
           <svg
-            className="h-5 w-5"
+            className="h-4 w-4"
             fill="none"
             stroke="currentColor"
-            strokeWidth={2}
+            strokeWidth={2.5}
             viewBox="0 0 24 24"
+            aria-hidden="true"
           >
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -203,9 +212,9 @@ function PhotoViewer({
         <p className="text-sm font-medium tabular-nums">
           {index + 1} / {count}
         </p>
-        <span className="w-16" />
+        <div className="flex items-center justify-self-end gap-1.5">{actions}</div>
       </div>
-      <div className="relative flex min-h-0 flex-1 items-center justify-center px-4 py-4">
+      <div className="relative flex min-h-0 flex-1 items-center justify-center px-4 py-2">
         {onTour ? (
           <TourFrame tour={tour} />
         ) : (
@@ -216,13 +225,13 @@ function PhotoViewer({
           />
         )}
       </div>
-      {/* Bottom bar: prev/next arrows and the photo caption, when the photo has one. */}
-      <div className="flex items-center justify-between px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 text-white">
+      {/* Bottom bar: prev/next and the photo caption, when the photo has one. */}
+      <div className="flex items-center justify-between gap-3 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
         <button
           type="button"
           onClick={prev}
           disabled={count <= 1}
-          className={navButton}
+          className={circle}
           aria-label="Previous"
         >
           <svg
@@ -231,13 +240,13 @@ function PhotoViewer({
             stroke="currentColor"
             strokeWidth={2.5}
             viewBox="0 0 24 24"
+            aria-hidden="true"
           >
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
-          Prev
         </button>
         <p
-          className="min-w-0 flex-1 px-3 text-center text-sm text-white/90"
+          className="min-w-0 flex-1 px-3 text-center text-sm text-ink-muted"
           data-testid="gallery-caption"
         >
           {photo?.caption ?? ''}
@@ -246,16 +255,16 @@ function PhotoViewer({
           type="button"
           onClick={next}
           disabled={count <= 1}
-          className={navButton}
+          className={circle}
           aria-label="Next"
         >
-          Next
           <svg
             className="h-5 w-5"
             fill="none"
             stroke="currentColor"
             strokeWidth={2.5}
             viewBox="0 0 24 24"
+            aria-hidden="true"
           >
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
           </svg>
@@ -265,24 +274,89 @@ function PhotoViewer({
   );
 }
 
+function TourIcon({ className }: { className: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"
+      />
+    </svg>
+  );
+}
+
+function ExternalIcon({ className }: { className: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M13.5 6H18v4.5M18 6l-7.5 7.5M10 6H6.5A1.5 1.5 0 005 7.5v10A1.5 1.5 0 006.5 19h10a1.5 1.5 0 001.5-1.5V14"
+      />
+    </svg>
+  );
+}
+
 /**
- * The tour slide in the phone swipe strip. The iframe loads only while the slide is in view. A
- * cross-origin frame takes every touch, so a visitor could not swipe back out of it. The frame
- * ignores touches until the visitor taps to explore, and Done hands the swipe back.
+ * The look of the tour tile: a listing photo with a centered circle and label. The overlay stays
+ * centered, so it never covers the Bright MLS watermark at the bottom left of the photo. The
+ * photo is `object-contain`, like every other tile, so nothing crops the watermark.
  */
-function StripTourSlide({ tour, inView }: { tour: GalleryTour; inView: boolean }) {
+function TourTileFace({
+  photo,
+  external = false,
+}: {
+  photo: GalleryPhoto | null;
+  external?: boolean;
+}) {
+  return (
+    <>
+      <ListingImage media={photo} className="h-full w-full object-contain" />
+      <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2">
+        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-ink/60 text-white">
+          <TourIcon className="h-6 w-6" />
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-md bg-ink/70 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-white">
+          Explore 3D tour
+          {external && <ExternalIcon className="h-3 w-3" />}
+        </span>
+      </span>
+    </>
+  );
+}
+
+/**
+ * The tour slide in the phone swipe strip. It shows the tour tile until the visitor taps it. The
+ * tap loads the iframe, so a swipe past the slide never loads a heavy tour. A cross-origin frame
+ * takes every touch, so Done unloads it and hands the swipe back.
+ */
+function StripTourSlide({
+  tour,
+  photo,
+  inView,
+}: {
+  tour: GalleryTour;
+  photo: GalleryPhoto | null;
+  inView: boolean;
+}) {
   const [exploring, setExploring] = useState(false);
-  // A swipe across the slide must not load the tour, so the slide counts as active only after
-  // it has stayed in view.
-  const [active, setActive] = useState(false);
   useEffect(() => {
-    if (!inView) {
-      setActive(false);
-      setExploring(false);
-      return;
-    }
-    const timer = setTimeout(() => setActive(true), TOUR_SETTLE_MS);
-    return () => clearTimeout(timer);
+    if (!inView) setExploring(false);
   }, [inView]);
 
   return (
@@ -290,37 +364,30 @@ function StripTourSlide({ tour, inView }: { tour: GalleryTour; inView: boolean }
       className="relative h-full w-full shrink-0 snap-center bg-ink"
       data-testid="gallery-swipe-tour"
     >
-      {active && (
-        <iframe
-          {...TOUR_FRAME_PROPS}
-          src={tour.src}
-          className={`h-full w-full border-0 bg-white ${exploring ? '' : 'pointer-events-none'}`}
-        />
-      )}
-      {active && !exploring && (
+      {exploring ? (
+        <>
+          <iframe
+            {...TOUR_FRAME_PROPS}
+            src={tour.src}
+            className="h-full w-full border-0 bg-white"
+          />
+          <button
+            type="button"
+            onClick={() => setExploring(false)}
+            className="absolute right-3 top-3 min-h-11 rounded-full bg-white/95 px-4 py-2 text-sm font-semibold text-ink shadow-card"
+          >
+            Done
+          </button>
+        </>
+      ) : (
         <button
           type="button"
           onClick={() => setExploring(true)}
-          className="absolute inset-0 flex items-center justify-center bg-ink/10"
+          aria-label="Explore 3D tour"
+          className="relative block h-full w-full bg-surface-soft"
         >
-          <span className="rounded-full bg-white/95 px-4 py-2 text-sm font-semibold text-ink shadow-card">
-            Tap to explore the 3D tour
-          </span>
+          <TourTileFace photo={photo} />
         </button>
-      )}
-      {active && exploring && (
-        <button
-          type="button"
-          onClick={() => setExploring(false)}
-          className="absolute right-3 top-3 min-h-11 rounded-full bg-white/95 px-4 py-2 text-sm font-semibold text-ink shadow-card"
-        >
-          Done
-        </button>
-      )}
-      {!active && (
-        <div className="flex h-full w-full items-center justify-center text-sm font-medium text-white/90">
-          3D tour
-        </div>
       )}
     </div>
   );
@@ -329,11 +396,14 @@ function StripTourSlide({ tour, inView }: { tour: GalleryTour; inView: boolean }
 export default function PropertyGallery({
   media,
   tourUrl,
+  viewerActions,
   children,
 }: {
   media: GalleryPhoto[];
   /** The unbranded virtual tour URL. The "3D tour" entry shows only when it passes `resolveTourEntry`. */
   tourUrl?: string | null;
+  /** Buttons for the full-screen viewer's top bar, for example Share and Save. */
+  viewerActions?: ReactNode;
   /** Overlay slot inside the gallery frame, for example a status badge. */
   children?: ReactNode;
 }) {
@@ -375,23 +445,7 @@ export default function PropertyGallery({
   ) : null;
 
   const tourPill =
-    'absolute bottom-3 left-3 z-10 inline-flex min-h-11 items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-[11px] font-semibold text-ink shadow-card md:bottom-4 md:left-4 md:min-h-0 md:text-sm';
-  const tourIcon = (
-    <svg
-      className="h-4 w-4"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"
-      />
-    </svg>
-  );
+    'pointer-events-auto inline-flex min-h-11 items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-[11px] font-semibold text-ink shadow-card md:min-h-0 md:text-sm';
   /** On a phone the strip plays the tour in place. Elsewhere the viewer opens on the tour slide. */
   const showTour = () => {
     const track = trackRef.current;
@@ -408,28 +462,56 @@ export default function PropertyGallery({
     setActiveIdx(tourSlide);
     setOpen(true);
   };
-  const tourEntry = !entry ? null : tour ? (
-    <button type="button" onClick={showTour} className={tourPill}>
-      {tourIcon}3D tour
+  const openTourViewer = () => {
+    setActiveIdx(tourSlide);
+    setOpen(true);
+  };
+  const pill = !entry ? null : tour ? (
+    <button
+      type="button"
+      onClick={showTour}
+      aria-label="Open 3D tour"
+      data-testid="gallery-tour-pill"
+      className={tourPill}
+    >
+      <TourIcon className="h-4 w-4" />
+      3D
     </button>
   ) : (
-    <a href={entry.href} target="_blank" rel="noopener noreferrer" className={tourPill}>
-      {tourIcon}3D tour
-      <svg
-        className="h-3.5 w-3.5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={2}
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M13.5 6H18v4.5M18 6l-7.5 7.5M10 6H6.5A1.5 1.5 0 005 7.5v10A1.5 1.5 0 006.5 19h10a1.5 1.5 0 001.5-1.5V14"
-        />
-      </svg>
-      <span className="sr-only"> (opens in a new tab)</span>
+    <a
+      href={entry.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="Open 3D tour in a new tab"
+      data-testid="gallery-tour-pill"
+      className={tourPill}
+    >
+      <TourIcon className="h-4 w-4" />
+      3D
+      <ExternalIcon className="h-3.5 w-3.5" />
+    </a>
+  );
+  const tileClass = 'relative overflow-hidden bg-surface-soft transition hover:brightness-95';
+  const tourTile = !entry ? null : tour ? (
+    <button
+      type="button"
+      onClick={openTourViewer}
+      aria-label="Open 3D tour"
+      data-testid="gallery-tour-tile"
+      className={tileClass}
+    >
+      <TourTileFace photo={media[1 % Math.max(media.length, 1)] ?? null} />
+    </button>
+  ) : (
+    <a
+      href={entry.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="Open 3D tour in a new tab"
+      data-testid="gallery-tour-tile"
+      className={tileClass}
+    >
+      <TourTileFace photo={media[1 % Math.max(media.length, 1)] ?? null} external />
     </a>
   );
   const viewer = open ? (
@@ -440,6 +522,7 @@ export default function PropertyGallery({
       index={Math.min(activeIdx, slideCount - 1)}
       onIndex={setActiveIdx}
       onClose={() => setOpen(false)}
+      actions={viewerActions}
     />
   ) : null;
 
@@ -452,7 +535,9 @@ export default function PropertyGallery({
           className="aspect-video w-full overflow-hidden rounded-2xl md:h-[480px]"
         />
         {badgeOverlay}
-        {tourEntry}
+        {pill && (
+          <div className="absolute bottom-3 right-3 z-10 md:bottom-4 md:right-4">{pill}</div>
+        )}
         {viewer}
       </div>
     );
@@ -483,7 +568,12 @@ export default function PropertyGallery({
           >
             {Array.from({ length: slideCount }, (_, slide) =>
               tour && slide === tourSlide ? (
-                <StripTourSlide key="tour" tour={tour} inView={swipeIdx === tourSlide} />
+                <StripTourSlide
+                  key="tour"
+                  tour={tour}
+                  photo={media[1 % media.length]}
+                  inView={swipeIdx === tourSlide}
+                />
               ) : (
                 <button
                   type="button"
@@ -503,12 +593,16 @@ export default function PropertyGallery({
               ),
             )}
           </div>
-          <span
-            data-testid="gallery-swipe-counter"
-            className="pointer-events-none absolute bottom-3 right-3 rounded-full bg-white/95 px-3 py-1.5 text-[11px] font-semibold tabular-nums text-ink shadow-card"
-          >
-            {Math.min(swipeIdx, slideCount - 1) + 1} / {slideCount}
-          </span>
+          {/* The bottom-right row. The bottom left stays clear for the Bright MLS watermark. */}
+          <div className="pointer-events-none absolute bottom-3 right-3 z-10 flex items-center gap-2">
+            {swipeIdx !== tourSlide && pill}
+            <span
+              data-testid="gallery-swipe-counter"
+              className="pointer-events-none rounded-full bg-white/95 px-3 py-1.5 text-[11px] font-semibold tabular-nums text-ink shadow-card"
+            >
+              {Math.min(swipeIdx, slideCount - 1) + 1} / {slideCount}
+            </span>
+          </div>
         </div>
 
         {/* Desktop: mosaic grid */}
@@ -524,7 +618,8 @@ export default function PropertyGallery({
           >
             <ListingImage media={media[0]} className="h-full w-full object-contain" />
           </button>
-          {tileIndices.slice(1).map((mediaIdx, tileIdx) => (
+          {tourTile}
+          {tileIndices.slice(tourTile ? 2 : 1).map((mediaIdx, tileIdx) => (
             <button
               type="button"
               key={tileIdx}
@@ -563,7 +658,6 @@ export default function PropertyGallery({
           </button>
         </div>
         {badgeOverlay}
-        {tourEntry}
       </div>
       {viewer}
     </>
