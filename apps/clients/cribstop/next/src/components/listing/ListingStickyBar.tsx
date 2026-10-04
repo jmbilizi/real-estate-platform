@@ -15,6 +15,9 @@ const SECTIONS = [
 /** Gap in px between the bar and a section after a link click. */
 const SCROLL_GAP = 12;
 
+/** Quiet time in ms after the last scroll event before the scroll-spy resumes. */
+const SETTLE_MS = 150;
+
 /** Fallback for the site header height. `--navbar-h` in `globals.css` is the source. */
 const NAVBAR_FALLBACK = 65;
 
@@ -63,6 +66,10 @@ export default function ListingStickyBar({
   const [visible, setVisible] = useState(false);
   const [presentKey, setPresentKey] = useState('');
   const [active, setActive] = useState<string | null>(null);
+  /** True while a link-click scroll runs. The scroll-spy must not overwrite the clicked link then. */
+  const spyLocked = useRef(false);
+  const unlockSpy = useRef<(() => void) | null>(null);
+  useEffect(() => () => unlockSpy.current?.(), []);
 
   useEffect(() => {
     setInDialog(wrapRef.current?.closest('[role="dialog"]') != null);
@@ -121,6 +128,7 @@ export default function ListingStickyBar({
           if (e.isIntersecting) inView.add(e.target.id);
           else inView.delete(e.target.id);
         }
+        if (spyLocked.current) return;
         const first = ids.find((id) => inView.has(id));
         if (first) setActive(first);
       },
@@ -143,8 +151,30 @@ export default function ListingStickyBar({
     const host: { scrollBy: (o: ScrollToOptions) => void } = body ?? window;
     const hostTop = body ? body.getBoundingClientRect().top : navbarHeight();
     const delta = target.getBoundingClientRect().top - hostTop - barH - SCROLL_GAP;
-    host.scrollBy({ top: delta, behavior: reduce ? 'auto' : 'smooth' });
+    // The clicked link is active at once and stays so until the scroll settles. A smooth scroll
+    // crosses other sections, and a section near the page end may never reach the active band.
     setActive(id);
+    lockSpyUntilScrollSettles(body ?? window);
+    host.scrollBy({ top: delta, behavior: reduce ? 'auto' : 'smooth' });
+  }
+
+  function lockSpyUntilScrollSettles(target: HTMLElement | Window) {
+    unlockSpy.current?.();
+    spyLocked.current = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const release = () => {
+      clearTimeout(timer);
+      target.removeEventListener('scroll', rearm);
+      spyLocked.current = false;
+      unlockSpy.current = null;
+    };
+    const rearm = () => {
+      clearTimeout(timer);
+      timer = setTimeout(release, SETTLE_MS);
+    };
+    target.addEventListener('scroll', rearm, { passive: true });
+    unlockSpy.current = release;
+    rearm();
   }
 
   return (

@@ -297,6 +297,14 @@ body {
   border-radius: 10px !important;
   overflow: hidden;
 }
+/* The detail page's map: a 44px zoom target on a phone (Leaflet's default is 30px). */
+@media (max-width: 767px) {
+  .listing-detail-map .leaflet-container .leaflet-control-zoom a {
+    width: 44px;
+    height: 44px;
+    line-height: 44px;
+  }
+}
 /* Hide default marker-cluster bubble styles */
 .marker-cluster-small,
 .marker-cluster-medium,
