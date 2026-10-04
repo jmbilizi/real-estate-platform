@@ -7,9 +7,11 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using AccountService.Configuration;
+using AccountService.Helpers;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 #pragma warning disable CA2234 // Pass Uri objects instead of strings
@@ -142,26 +144,22 @@ namespace AccountService.Tests.Integration
         [Fact]
         public async Task ResetPassword_RejectsAnExpiredToken()
         {
-            // The lifetime is configuration, and this is the proof: a 1ms lifetime makes every
-            // issued reset token expired by the time it is redeemed, with no sleeping in the test.
-            // A negative value is not used here: AccountRecoveryOptions.Validate rejects it at
-            // startup, since a real deployment misconfigured this way should fail loudly rather than
-            // silently expire every token.
+            // Identity checks expiry against the wall clock, so a short lifetime set at startup
+            // is racy: a redeem inside the same clock tick still passes (flaked dev CI). Issue the
+            // code under the normal lifetime, then move the live lifetime below zero. The token
+            // is then expired whatever the clock reads. The startup validator rejects a negative
+            // value in configuration, so this can only be done on the live options.
             //
-            // It also proves the lifetime is *isolated*. Email confirmation still works below on the
-            // same host, because it runs on Identity's shared DataProtectionTokenProviderOptions
-            // while reset runs on the dedicated PasswordResetTokenProvider. Without that separate
-            // provider this setting would have expired the confirmation token too.
-            using var factory = new AccountRecoveryFactory(options =>
-            {
-                NoDelay(options);
-                options.TokenLifetime = TimeSpan.FromMilliseconds(1);
-            });
+            // The email confirmation below still works on the same host, so the reset lifetime is
+            // isolated from the confirmation provider.
+            using var factory = new AccountRecoveryFactory(NoDelay);
             using var client = factory.CreateClient();
 
             var email = $"expired-{Guid.NewGuid()}@example.com";
             await RegisterAndConfirmAsync(factory, client, email);
             var resetCode = await RequestResetCodeAsync(factory, client, email);
+            factory.Services.GetRequiredService<IOptions<PasswordResetTokenProviderOptions>>().Value.TokenLifespan =
+                TimeSpan.FromHours(-1);
 
             using var response = await PostResetAsync(client, email, resetCode, NewPassword);
 
