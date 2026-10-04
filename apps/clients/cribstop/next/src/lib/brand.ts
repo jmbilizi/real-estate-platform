@@ -32,6 +32,7 @@ export const BRAND = {
 
   /** Pillar names. Page copy reads these; never hardcode a pillar name (#89). */
   pillars: {
+    services: 'Services',
     connect: 'Connect',
   },
 
