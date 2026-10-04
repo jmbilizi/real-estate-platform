@@ -417,3 +417,70 @@ export function officeAvatarTone(initial: string): string {
   const index = initial.toUpperCase().charCodeAt(0) - 65;
   return index >= 0 && index < 26 ? AVATAR_TONES[index % AVATAR_TONES.length] : AVATAR_TONES[7];
 }
+
+/** #571. The agent monogram: first letters of the first and last name word. "Jane Q. Agent" -> "JA". */
+export function agentInitials(name: string): string {
+  const all = name.match(/[\p{L}\p{N}]+/gu) ?? [];
+  const words = all.filter((w, i) => i === 0 || !/^(jr|sr|ii|iii|iv|esq|team|group)$/i.test(w));
+  if (words.length === 0) return '';
+  const first = words[0].charAt(0);
+  const last = words.length > 1 ? words[words.length - 1].charAt(0) : '';
+  return (first + last).toUpperCase();
+}
+
+/** `tel:` target for a display phone. Keeps digits and a leading "+". Null when no digit remains. */
+export function telHref(phone: string): string | null {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length === 0) return null;
+  return `tel:${phone.trim().startsWith('+') ? '+' : ''}${digits}`;
+}
+
+export interface AgentContactLine {
+  kind: 'phone' | 'email';
+  owner: 'Agent' | 'Office' | 'Agent / Office';
+  value: string;
+  href: string;
+}
+
+/**
+ * #571. Every contact line the agent card shows: agent phone, agent email, then the office lines.
+ * Blank values are omitted. A value equal to an earlier line is dropped, so one number never
+ * shows twice. The office lines stay because NAR 7.58 needs the firm plus a participant-supplied
+ * contact method on the display.
+ */
+export function agentContactLines(l: {
+  listAgentPhone: string | null;
+  listAgentEmail: string | null;
+  brokerPhone: string;
+  brokerEmail: string | null;
+  officeBrokerLeadPhone: string | null;
+  officeBrokerLeadEmail: string | null;
+}): AgentContactLine[] {
+  const candidates: Array<[AgentContactLine['kind'], AgentContactLine['owner'], string | null]> = [
+    ['phone', 'Agent', l.listAgentPhone],
+    ['email', 'Agent', l.listAgentEmail],
+    ['phone', 'Office', l.brokerPhone],
+    ['email', 'Office', l.brokerEmail],
+    ['phone', 'Office', l.officeBrokerLeadPhone],
+    ['email', 'Office', l.officeBrokerLeadEmail],
+  ];
+  const seen = new Map<string, AgentContactLine>();
+  const lines: AgentContactLine[] = [];
+  for (const [kind, owner, raw] of candidates) {
+    const value = raw?.trim();
+    if (!value) continue;
+    const href = kind === 'phone' ? telHref(value) : `mailto:${value}`;
+    if (!href) continue;
+    const key = `${kind}:${kind === 'phone' ? value.replace(/\D/g, '') : value.toLowerCase()}`;
+    const earlier = seen.get(key);
+    if (earlier) {
+      // The agent and the office share this value. Keep one line and name both owners.
+      if (earlier.owner !== owner) earlier.owner = 'Agent / Office';
+      continue;
+    }
+    const line: AgentContactLine = { kind, owner, value, href };
+    seen.set(key, line);
+    lines.push(line);
+  }
+  return lines;
+}

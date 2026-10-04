@@ -443,18 +443,22 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
                   </p>
                 </div>
               </div>
-              {/* Four contact rows, not three: the loaded card lists agent phone, agent email,
-                  office phone and office email. Counted from the rendered card, not guessed. */}
-              <div className="mt-4 space-y-1.5 text-sm">
-                <Bar className="w-3/4" />
-                <Bar className="w-4/5" />
-                <Bar className="w-2/3" />
-                <Bar className="w-3/5" />
+              {/* Four tap rows of 44px (`min-h-11`), as the loaded card: agent phone, agent email,
+                  office phone, office email. */}
+              <div className="mt-4 space-y-1 text-sm">
+                {['w-3/4', 'w-4/5', 'w-2/3', 'w-3/5'].map((w) => (
+                  <div key={w} className="flex min-h-11 items-center">
+                    <Bar className={`${w}`} />
+                  </div>
+                ))}
               </div>
               {/* `btn-primary` measures 40px and `btn-secondary` 42px — they are not the same
                   height, and averaging them left this card 12px short of the loaded one. */}
               <div className={`mt-5 h-10 w-full rounded-full ${FILL}`} />
               <div className={`mt-2 h-[42px] w-full rounded-full ${FILL}`} />
+              <p className="mt-4 text-[12px] leading-snug">
+                <Bar className="w-3/5" />
+              </p>
             </div>
 
             {/*

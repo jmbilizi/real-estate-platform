@@ -1,4 +1,6 @@
 import {
+  agentContactLines,
+  agentInitials,
   formatClosePrice,
   formatComingSoonBadge,
   formatComingSoonBadgeShort,
@@ -13,6 +15,7 @@ import {
   officeAvatarTone,
   officeInitial,
   PRICE_WITHHELD_COPY,
+  telHref,
 } from './listing-format';
 
 describe('formatListingPrice', () => {
@@ -276,5 +279,36 @@ describe('officeAvatarTone', () => {
   it('gives a digit or non-Latin letter the neutral tone', () => {
     expect(officeAvatarTone('1')).toBe('bg-avatar-8');
     expect(officeAvatarTone('É')).toBe('bg-avatar-8');
+  });
+});
+
+describe('agent card helpers (#571)', () => {
+  it('builds a monogram from the first and last name word', () => {
+    expect(agentInitials('Jane Q. Agent')).toBe('JA');
+    expect(agentInitials('cher')).toBe('C');
+    expect(agentInitials('John Smith Jr.')).toBe('JS');
+    expect(agentInitials('The Smith Team')).toBe('TS');
+    expect(agentInitials('  ')).toBe('');
+  });
+
+  it('builds a tel: target from digits and a leading plus', () => {
+    expect(telHref('(301) 555-0199')).toBe('tel:3015550199');
+    expect(telHref('+1 301 555 0199')).toBe('tel:+13015550199');
+    expect(telHref('n/a')).toBeNull();
+  });
+
+  it('lists agent lines first, omits blanks, and drops a repeated value', () => {
+    const lines = agentContactLines({
+      listAgentPhone: '(301) 555-0100',
+      listAgentEmail: null,
+      brokerPhone: '301-555-0100',
+      brokerEmail: 'Office@Acme.example',
+      officeBrokerLeadPhone: '',
+      officeBrokerLeadEmail: 'office@acme.example',
+    });
+    expect(lines.map((l) => [l.owner, l.href])).toEqual([
+      ['Agent / Office', 'tel:3015550100'],
+      ['Office', 'mailto:Office@Acme.example'],
+    ]);
   });
 });
