@@ -19,6 +19,9 @@ export function resolveTourEntry(raw: string | null | undefined): TourEntry | nu
     return null;
   }
   if (url.protocol !== 'https:' || url.username || url.password) return null;
-  const frameable = (tourHosts.frameHosts as string[]).includes(url.hostname.toLowerCase());
+  // The CSP source has no port, so a custom port cannot be framed.
+  const defaultPort = url.port === '';
+  const frameable =
+    defaultPort && (tourHosts.frameHosts as string[]).includes(url.hostname.toLowerCase());
   return { href: url.href, mode: frameable ? 'frame' : 'tab' };
 }

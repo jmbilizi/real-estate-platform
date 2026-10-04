@@ -34,6 +34,10 @@ describe('resolveTourEntry', () => {
     expect(resolveTourEntry('https://matterport.com/x')?.mode).toBe('tab');
   });
 
+  it('opens a custom port in a new tab, because the CSP source has no port', () => {
+    expect(resolveTourEntry('https://my.matterport.com:8443/x')?.mode).toBe('tab');
+  });
+
   it('returns null for null and undefined', () => {
     expect(resolveTourEntry(null)).toBeNull();
     expect(resolveTourEntry(undefined)).toBeNull();

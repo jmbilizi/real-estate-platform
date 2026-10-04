@@ -29,7 +29,7 @@ export default function PropertyGallery({
   const [open, setOpen] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
   const [swipeIdx, setSwipeIdx] = useState(0);
-  const [tourOpen, setTourOpen] = useState(false);
+  const [tourOpenHref, setTourOpenHref] = useState<string | null>(null);
   const tour = resolveTourEntry(tourUrl);
   const trackRef = useRef<HTMLDivElement>(null);
 
@@ -41,7 +41,7 @@ export default function PropertyGallery({
 
   const handleKey = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setTourOpen(false);
+      if (e.key === 'Escape') setTourOpenHref(null);
       if (!open) return;
       if (e.key === 'Escape') setOpen(false);
       if (e.key === 'ArrowRight') {
@@ -86,7 +86,7 @@ export default function PropertyGallery({
     </svg>
   );
   const tourEntry = !tour ? null : tour.mode === 'frame' ? (
-    <button type="button" onClick={() => setTourOpen(true)} className={tourPill}>
+    <button type="button" onClick={() => setTourOpenHref(tour.href)} className={tourPill}>
       {tourIcon}3D tour
     </button>
   ) : (
@@ -95,7 +95,7 @@ export default function PropertyGallery({
     </a>
   );
   const tourViewer =
-    tour?.mode === 'frame' && tourOpen ? (
+    tour?.mode === 'frame' && tourOpenHref === tour.href ? (
       <div
         role="dialog"
         aria-modal="true"
@@ -105,7 +105,7 @@ export default function PropertyGallery({
         <div className="flex items-center justify-between p-4 text-white">
           <button
             type="button"
-            onClick={() => setTourOpen(false)}
+            onClick={() => setTourOpenHref(null)}
             autoFocus
             className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium hover:bg-white/10"
           >
