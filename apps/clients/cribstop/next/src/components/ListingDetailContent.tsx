@@ -324,12 +324,8 @@ export default function ListingDetailContent({
         skip={nearbyRows.length > 0 ? [] : ['nearby']}
         actions={
           <>
-            <button type="button" className="btn-secondary py-2 text-sm" onClick={onMessageAgent}>
-              Message Agent
-            </button>
-            <button type="button" className="btn-primary py-2 text-sm" onClick={onRequestTour}>
-              Request a Tour
-            </button>
+            <button className="btn-secondary py-2 text-sm">Message</button>
+            <button className="btn-primary py-2 text-sm">Schedule Tour</button>
           </>
         }
       />
