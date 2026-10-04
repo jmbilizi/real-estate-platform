@@ -22,5 +22,8 @@
     "sites.genevirtualtours.com",
     "view.vincentandmorgan.co",
     "www.asteroommls.com"
-  ]
+  ],
+  "pathPrefixes": {
+    "www.zillow.com": ["/view-imx/"]
+  }
 }

@@ -11,12 +11,17 @@ const VIMEO_ID = /^\d{6,12}$/;
 const VIMEO_HASH = /^[a-f0-9]{8,12}$/i;
 const MATTERPORT_ID = /^[A-Za-z0-9]{11}$/;
 
-/** A listed host `*.example.com` covers every subdomain and not `example.com` itself. */
-export function hostIsFrameable(hostname: string): boolean {
-  const host = hostname.toLowerCase();
-  return (tourHosts.frameHosts as string[]).some((entry) =>
+/**
+ * A listed host `*.example.com` covers every subdomain and not `example.com` itself. A host in
+ * `pathPrefixes` is a general site, so only those paths play in the gallery.
+ */
+export function hostIsFrameable(url: URL): boolean {
+  const host = url.hostname.toLowerCase();
+  const listed = (tourHosts.frameHosts as string[]).some((entry) =>
     entry.startsWith('*.') ? host.endsWith(entry.slice(1)) : host === entry,
   );
+  const prefixes = (tourHosts.pathPrefixes as Record<string, string[]>)[host];
+  return listed && (!prefixes || prefixes.some((p) => url.pathname.startsWith(p)));
 }
 
 /**
@@ -81,7 +86,7 @@ export function resolveTourEntry(raw: string | null | undefined): TourEntry | nu
   if (url.protocol !== 'https:' || url.username || url.password) return null;
   const candidate = toEmbedUrl(url) ?? url;
   // The CSP source has no port, so a custom port cannot be framed.
-  const frameable = candidate.port === '' && hostIsFrameable(candidate.hostname);
+  const frameable = candidate.port === '' && hostIsFrameable(candidate);
   return {
     href: url.href,
     mode: frameable ? 'frame' : 'tab',

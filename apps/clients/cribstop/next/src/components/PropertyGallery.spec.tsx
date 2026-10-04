@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import PropertyGallery from './PropertyGallery';
 
 describe('PropertyGallery badge slot (#565)', () => {
@@ -171,7 +171,10 @@ describe('PropertyGallery tour slide (#590)', () => {
   const setViewport = (desktop: boolean) => {
     window.matchMedia = jest.fn().mockReturnValue({ matches: desktop }) as never;
   };
+  const settle = () => act(() => void jest.advanceTimersByTime(300));
+  beforeEach(() => jest.useFakeTimers());
   afterEach(() => {
+    jest.useRealTimers();
     delete (window as { matchMedia?: unknown }).matchMedia;
   });
 
@@ -237,6 +240,8 @@ describe('PropertyGallery tour slide (#590)', () => {
     scrollStripTo(0);
     fireEvent.click(screen.getByRole('button', { name: '3D tour' }));
     expect(screen.queryByRole('dialog')).toBeNull();
+    scrollStripTo(1);
+    settle();
     expect(counter()).toHaveTextContent('2 / 4');
     expect(document.querySelector('iframe')).toHaveAttribute('src', tourUrl);
   });
@@ -245,6 +250,8 @@ describe('PropertyGallery tour slide (#590)', () => {
     render(<PropertyGallery media={photos} tourUrl={tourUrl} />);
     expect(document.querySelector('iframe')).toBeNull();
     scrollStripTo(1);
+    expect(document.querySelector('iframe')).toBeNull();
+    settle();
     const frame = document.querySelector('iframe') as HTMLIFrameElement;
     expect(frame.className).toMatch(/pointer-events-none/);
     fireEvent.click(screen.getByRole('button', { name: 'Tap to explore the 3D tour' }));
@@ -255,7 +262,17 @@ describe('PropertyGallery tour slide (#590)', () => {
     scrollStripTo(2);
     expect(document.querySelector('iframe')).toBeNull();
     scrollStripTo(1);
+    settle();
     expect(document.querySelector('iframe')?.className).toMatch(/pointer-events-none/);
+  });
+
+  it('does not load the strip frame for a swipe that only passes the tour slide', () => {
+    render(<PropertyGallery media={photos} tourUrl={tourUrl} />);
+    scrollStripTo(1);
+    act(() => void jest.advanceTimersByTime(100));
+    scrollStripTo(2);
+    settle();
+    expect(document.querySelector('iframe')).toBeNull();
   });
 
   it('shows the tour alone when the listing has no photo', () => {

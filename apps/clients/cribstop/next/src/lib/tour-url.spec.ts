@@ -55,6 +55,15 @@ describe('resolveTourEntry', () => {
     expect(resolveTourEntry(undefined)).toBeNull();
   });
 
+  it('frames Zillow only on its tour path', () => {
+    expect(resolveTourEntry('https://www.zillow.com/view-imx/321f9912-7cd4?wl=true')?.mode).toBe(
+      'frame',
+    );
+    expect(resolveTourEntry('https://www.zillow.com/homedetails/1-Main-St/123_zpid/')?.mode).toBe(
+      'tab',
+    );
+  });
+
   describe('wildcard hosts', () => {
     it('frames any subdomain of a listed `*.` host', () => {
       expect(

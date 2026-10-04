@@ -97,8 +97,13 @@ const TOUR_FRAME_PROPS = {
   allow: 'autoplay; fullscreen; web-share; xr-spatial-tracking',
   allowFullScreen: true,
   sandbox: 'allow-scripts allow-same-origin allow-popups allow-presentation',
-  referrerPolicy: 'no-referrer',
+  // YouTube refuses an embed that sends no Referer (error 153), and a Vimeo domain-restricted
+  // video needs one too. This policy sends the origin only, never the listing path.
+  referrerPolicy: 'strict-origin-when-cross-origin',
 } as const;
+
+/** How long the strip tour slide stays in view before its iframe loads. */
+const TOUR_SETTLE_MS = 250;
 
 /** The tour a gallery plays: the iframe `src` and the page URL for a new tab. */
 type GalleryTour = { src: string; href: string };
@@ -265,11 +270,20 @@ function PhotoViewer({
  * cross-origin frame takes every touch, so a visitor could not swipe back out of it. The frame
  * ignores touches until the visitor taps to explore, and Done hands the swipe back.
  */
-function StripTourSlide({ tour, active }: { tour: GalleryTour; active: boolean }) {
+function StripTourSlide({ tour, inView }: { tour: GalleryTour; inView: boolean }) {
   const [exploring, setExploring] = useState(false);
+  // A swipe across the slide must not load the tour, so the slide counts as active only after
+  // it has stayed in view.
+  const [active, setActive] = useState(false);
   useEffect(() => {
-    if (!active) setExploring(false);
-  }, [active]);
+    if (!inView) {
+      setActive(false);
+      setExploring(false);
+      return;
+    }
+    const timer = setTimeout(() => setActive(true), TOUR_SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, [inView]);
 
   return (
     <div
@@ -384,7 +398,6 @@ export default function PropertyGallery({
     const phone =
       typeof window.matchMedia === 'function' && !window.matchMedia('(min-width: 768px)').matches;
     if (phone && track) {
-      setSwipeIdx(tourSlide);
       if (typeof track.scrollTo === 'function') {
         track.scrollTo({ left: tourSlide * track.clientWidth, behavior: 'smooth' });
       } else {
@@ -470,7 +483,7 @@ export default function PropertyGallery({
           >
             {Array.from({ length: slideCount }, (_, slide) =>
               tour && slide === tourSlide ? (
-                <StripTourSlide key="tour" tour={tour} active={swipeIdx === tourSlide} />
+                <StripTourSlide key="tour" tour={tour} inView={swipeIdx === tourSlide} />
               ) : (
                 <button
                   type="button"
