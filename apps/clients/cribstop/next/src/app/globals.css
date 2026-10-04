@@ -795,3 +795,20 @@ html[data-map-expanded] {
     font-size: 12px;
   }
 }
+
+/* Detail header (#594). Pinned under the site header on the page, at the top of the modal. */
+.listing-header {
+  position: sticky;
+  top: var(--navbar-h, 65px);
+  z-index: 20;
+  container-type: inline-size;
+}
+[role='dialog'] .listing-header {
+  top: env(safe-area-inset-top, 0px);
+}
+/* The section links hide before the price or the address squeeze. */
+@container (max-width: 900px) {
+  .listing-header-nav {
+    display: none;
+  }
+}

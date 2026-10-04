@@ -295,13 +295,15 @@ describe('ListingDetailContent — NAR 7.58 attribution and the disclaimer foote
     expect(office.className).not.toMatch(/text-\[1[0-3]px\]|text-xs/);
   });
 
-  it('ends the page with the Bright provenance line and the personal-use line, in a small box-less footer', async () => {
+  it('ends the page with the Bright provenance line and the personal-use line, in a small centered footer under a hairline', async () => {
     const { container } = await renderAndSettle(<ListingDetailContent listing={bright()} />);
 
     const footer = container.querySelector('footer') as HTMLElement;
     expect(footer).not.toBeNull();
     expect(footer.className).toContain('text-xs');
-    expect(footer.className).not.toMatch(/\b(border|bg-white|rounded-2xl)\b/);
+    expect(footer.className).toContain('text-center');
+    expect(footer.className).toContain('border-t');
+    expect(footer.className).not.toMatch(/\b(bg-white|rounded-2xl)\b/);
     expect(within(footer).getByText(/Information provided by Bright MLS/)).toBeInTheDocument();
     expect(within(footer).getByText(/Data last updated:/)).toBeInTheDocument();
     expect(within(footer).getByText(/personal, non-commercial use/)).toBeInTheDocument();

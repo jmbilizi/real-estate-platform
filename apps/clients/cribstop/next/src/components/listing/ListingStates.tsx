@@ -222,10 +222,14 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
 
   return (
     <div className="flex h-full min-h-0 flex-col" role="status" aria-label="Loading listing">
-      {/* Header bar: back and actions only. The address and stats sit in the overview panel. */}
+      {/* Header bar: back and actions on a phone. From md up, a price and address placeholder follows the back button. */}
       <div className="flex flex-shrink-0 items-center gap-3 border-b border-surface-border bg-white px-6 pb-3 pt-4 sm:px-8">
         <div className={`h-11 w-11 flex-shrink-0 rounded-full ${FILL}`} />
-        <div className="min-w-0 flex-1" />
+        <div className="hidden min-w-0 flex-1 md:block">
+          <div className={`h-5 w-28 rounded ${FILL}`} />
+          <div className={`mt-1 h-3.5 w-48 max-w-full rounded ${FILL}`} />
+        </div>
+        <div className="min-w-0 flex-1 md:hidden" />
         <div className="flex shrink-0 items-center gap-1.5">
           <div className={`h-11 w-11 rounded-full sm:h-10 sm:w-24 ${FILL}`} />
           <div className={`h-11 w-11 rounded-full sm:h-10 sm:w-24 ${FILL}`} />
@@ -492,13 +496,13 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
           <NearbyHomesSkeleton />
         </div>
 
-        {/* The disclaimer footer: two small lines, no box. */}
+        {/* The disclaimer footer: a hairline, then two small centered lines. */}
         <div
-          className="mt-6 space-y-1.5 text-xs leading-relaxed"
+          className="mt-8 space-y-1.5 border-t border-surface-border pt-6 text-xs leading-relaxed"
           data-skeleton-section="disclosure"
         >
-          <Bar className="w-3/4" />
-          <Bar className="w-2/3" />
+          <Bar className="mx-auto w-3/4" />
+          <Bar className="mx-auto w-2/3" />
         </div>
       </div>
 

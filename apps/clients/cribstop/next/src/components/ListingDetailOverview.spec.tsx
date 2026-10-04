@@ -39,7 +39,7 @@ async function renderAndSettle(ui: React.ReactElement) {
 const noFacts = aListingDetail().listing.facts;
 
 describe('ListingDetailContent — overview block and facts (#568)', () => {
-  it('shows the address and the stats once, inside the overview block', async () => {
+  it('shows the address in the overview and the desktop header, the stats once', async () => {
     const view = toListingDetailView(aListingDetail());
     const { container } = await renderAndSettle(<ListingDetailContent listing={view} />);
 
@@ -48,18 +48,25 @@ describe('ListingDetailContent — overview block and facts (#568)', () => {
       '100 Test St, Bethesda, MD 20814',
     );
     expect(within(overview).getByText('Beds')).toBeInTheDocument();
-    expect(screen.getAllByText(/100 Test St/)).toHaveLength(1);
+    // The desktop header repeats the street line (#594), the one accepted exception.
+    expect(screen.getAllByText(/100 Test St/)).toHaveLength(2);
+    expect(
+      within(screen.getByTestId('listing-header-nav')).getByText('100 Test St'),
+    ).toBeInTheDocument();
     expect(screen.getAllByText('Beds')).toHaveLength(1);
   });
 
-  it('shows the price once: the mobile bar carries none', async () => {
+  it('shows the price in the overview and the desktop header only: the mobile bar carries none', async () => {
     const view = toListingDetailView(aListingDetail());
     const { container } = await renderAndSettle(<ListingDetailContent listing={view} />);
 
     const price = (container.querySelector('#overview') as HTMLElement).querySelector(
       'p.text-xl',
     ) as HTMLElement;
-    expect(screen.getAllByText(price.textContent as string)).toHaveLength(1);
+    expect(screen.getAllByText(price.textContent as string)).toHaveLength(2);
+    expect(
+      within(screen.getByTestId('listing-header-nav')).getByText(price.textContent as string),
+    ).toBeInTheDocument();
   });
 
   it('gives each section a stable id', () => {

@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useRef } from 'react';
-import ListingStickyBar from './ListingStickyBar';
+import ListingHeaderNav from './ListingHeaderNav';
 
 type IoCallback = (entries: Partial<IntersectionObserverEntry>[]) => void;
 interface FakeObserver {
@@ -29,18 +29,18 @@ beforeEach(() => {
 
 function Harness({ sections, skip }: { sections: string[]; skip?: string[] }) {
   const root = useRef<HTMLDivElement>(null);
-  const gallery = useRef<HTMLDivElement>(null);
+  const header = useRef<HTMLDivElement>(null);
   return (
     <div ref={root}>
-      <ListingStickyBar
-        galleryRef={gallery}
-        scopeRef={root}
-        price="$500,000"
-        address="12 Elm St"
-        skip={skip}
-        actions={<button>Message</button>}
-      />
-      <div ref={gallery}>gallery</div>
+      <div ref={header}>
+        <ListingHeaderNav
+          headerRef={header}
+          scopeRef={root}
+          price="$500,000"
+          address="12 Elm St"
+          skip={skip}
+        />
+      </div>
       {sections.map((id) => (
         <section key={id} id={id}>
           {id}
@@ -50,51 +50,30 @@ function Harness({ sections, skip }: { sections: string[]; skip?: string[] }) {
   );
 }
 
-/** The gallery observer is the first one created. */
-function setGalleryOutOfView(out: boolean) {
-  act(() =>
-    observers[0].callback([
-      {
-        isIntersecting: !out,
-        boundingClientRect: { top: out ? -300 : 20 } as DOMRectReadOnly,
-        rootBounds: { top: 65 } as DOMRectReadOnly,
-      },
-    ]),
-  );
-}
+const spy = () => observers[observers.length - 1];
+const spyEntries = (...ids: string[]) =>
+  ids.map((id) => ({ isIntersecting: true, target: document.getElementById(id) as Element }));
 
-describe('ListingStickyBar', () => {
-  it('renders nothing while the gallery is in view', () => {
+describe('ListingHeaderNav', () => {
+  it('shows the price and the address at once, with no scroll needed', () => {
     render(<Harness sections={['overview']} />);
-    expect(screen.queryByTestId('listing-sticky-bar')).toBeNull();
+    const nav = screen.getByTestId('listing-header-nav');
+    expect(within(nav).getByText('$500,000')).toBeInTheDocument();
+    expect(within(nav).getByText('12 Elm St')).toBeInTheDocument();
   });
 
-  it('shows price, address and the actions once the gallery has scrolled out', () => {
+  it('has no Message or Tour button', () => {
     render(<Harness sections={['overview']} />);
-    setGalleryOutOfView(true);
-    const bar = screen.getByTestId('listing-sticky-bar');
-    expect(within(bar).getByText('$500,000')).toBeInTheDocument();
-    expect(within(bar).getByText('12 Elm St')).toBeInTheDocument();
-    expect(within(bar).getByRole('button', { name: 'Message' })).toBeInTheDocument();
-  });
-
-  it('hides again when the gallery returns', () => {
-    render(<Harness sections={['overview']} />);
-    setGalleryOutOfView(true);
-    setGalleryOutOfView(false);
-    expect(screen.queryByTestId('listing-sticky-bar')).toBeNull();
+    expect(screen.queryByRole('button', { name: /message|tour/i })).toBeNull();
   });
 
   it('is display:none below md, so a phone never shows it', () => {
     render(<Harness sections={['overview']} />);
-    expect(screen.getByTestId('listing-sticky-bar-anchor').className).toMatch(
-      /\bhidden\b.*\bmd:block\b/,
-    );
+    expect(screen.getByTestId('listing-header-nav').className).toMatch(/\bhidden\b.*\bmd:flex\b/);
   });
 
   it('links only the sections that exist', () => {
     render(<Harness sections={['overview', 'map']} />);
-    setGalleryOutOfView(true);
     const nav = screen.getByRole('navigation', { name: 'Listing sections' });
     expect(
       within(nav)
@@ -105,14 +84,17 @@ describe('ListingStickyBar', () => {
 
   it('omits a section named in `skip`', () => {
     render(<Harness sections={['overview', 'nearby']} skip={['nearby']} />);
-    setGalleryOutOfView(true);
     expect(screen.queryByRole('button', { name: 'Nearby' })).toBeNull();
   });
 
-  it('scrolls the window to the section with the bar offset', async () => {
+  it('renders no nav when no section exists', () => {
+    render(<Harness sections={[]} />);
+    expect(screen.queryByRole('navigation')).toBeNull();
+  });
+
+  it('scrolls the window to the section with the header offset', async () => {
     window.scrollBy = jest.fn();
     render(<Harness sections={['overview', 'map']} />);
-    setGalleryOutOfView(true);
     await userEvent.click(screen.getByRole('button', { name: 'Map' }));
     expect(window.scrollBy).toHaveBeenCalledWith(
       expect.objectContaining({ behavior: 'smooth', top: expect.any(Number) }),
@@ -123,41 +105,31 @@ describe('ListingStickyBar', () => {
     window.scrollBy = jest.fn();
     (window.matchMedia as jest.Mock).mockReturnValue({ matches: true });
     render(<Harness sections={['overview', 'map']} />);
-    setGalleryOutOfView(true);
     await userEvent.click(screen.getByRole('button', { name: 'Map' }));
     expect(window.scrollBy).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'auto' }));
   });
 
   it('marks the section in view as current', () => {
     render(<Harness sections={['overview', 'facts', 'map']} />);
-    setGalleryOutOfView(true);
-    const spy = observers[observers.length - 1];
-    act(() =>
-      spy.callback([{ isIntersecting: true, target: document.getElementById('facts') as Element }]),
-    );
+    act(() => spy().callback(spyEntries('facts')));
     expect(screen.getByRole('button', { name: 'Facts' })).toHaveAttribute('aria-current', 'true');
     expect(screen.getByRole('button', { name: 'Map' })).not.toHaveAttribute('aria-current');
   });
 });
 
-describe('ListingStickyBar clicked link (#572)', () => {
+describe('ListingHeaderNav clicked link (#572)', () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
-
-  const spyEntries = (...ids: string[]) =>
-    ids.map((id) => ({ isIntersecting: true, target: document.getElementById(id) as Element }));
 
   it('is active at once and keeps the clicked link while the scroll passes other sections', () => {
     window.scrollBy = jest.fn();
     render(<Harness sections={['overview', 'facts', 'map']} />);
-    setGalleryOutOfView(true);
-    const spy = observers[observers.length - 1];
-    act(() => spy.callback(spyEntries('overview')));
+    act(() => spy().callback(spyEntries('overview')));
 
     fireEvent.click(screen.getByRole('button', { name: 'Map' }));
     expect(screen.getByRole('button', { name: 'Map' })).toHaveAttribute('aria-current', 'true');
 
-    act(() => spy.callback(spyEntries('facts')));
+    act(() => spy().callback(spyEntries('facts')));
     expect(screen.getByRole('button', { name: 'Map' })).toHaveAttribute('aria-current', 'true');
     expect(screen.getByRole('button', { name: 'Facts' })).not.toHaveAttribute('aria-current');
   });
@@ -165,15 +137,13 @@ describe('ListingStickyBar clicked link (#572)', () => {
   it('hands control back to the scroll-spy once the scroll has settled', () => {
     window.scrollBy = jest.fn();
     render(<Harness sections={['overview', 'facts', 'map']} />);
-    setGalleryOutOfView(true);
-    const spy = observers[observers.length - 1];
 
     fireEvent.click(screen.getByRole('button', { name: 'Map' }));
     fireEvent.scroll(window);
     act(() => {
       jest.advanceTimersByTime(400);
     });
-    act(() => spy.callback(spyEntries('facts')));
+    act(() => spy().callback(spyEntries('facts')));
     expect(screen.getByRole('button', { name: 'Facts' })).toHaveAttribute('aria-current', 'true');
   });
 });

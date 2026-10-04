@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 
-/** The page sections the bar can link to, in page order. A link shows only if its id is in the DOM. */
+/** The page sections the nav can link to, in page order. A link shows only if its id is in the DOM. */
 const SECTIONS = [
   { id: 'overview', label: 'Overview' },
   { id: 'facts', label: 'Facts' },
@@ -12,7 +12,7 @@ const SECTIONS = [
   { id: 'nearby', label: 'Nearby' },
 ] as const;
 
-/** Gap in px between the bar and a section after a link click. */
+/** Gap in px between the header and a section after a link click. */
 const SCROLL_GAP = 12;
 
 /** Quiet time in ms after the last scroll event before the scroll-spy resumes. */
@@ -22,8 +22,8 @@ const SETTLE_MS = 150;
 const NAVBAR_FALLBACK = 65;
 
 interface Props {
-  /** The gallery panel. The bar shows after it scrolls out of view. */
-  galleryRef: RefObject<HTMLElement | null>;
+  /** The detail header. Its height is the scroll offset when the window scrolls. */
+  headerRef: RefObject<HTMLElement | null>;
   /** The detail root. Section ids are looked up inside it. */
   scopeRef: RefObject<HTMLElement | null>;
   /** The price as the overview shows it. */
@@ -32,8 +32,6 @@ interface Props {
   address: string;
   /** Section ids to hide although their element exists (a section still loading). */
   skip?: readonly string[];
-  /** The CTA buttons come from the parent, so one place wires them (#132). */
-  actions: ReactNode;
 }
 
 function navbarHeight(): number {
@@ -42,28 +40,27 @@ function navbarHeight(): number {
 }
 
 /**
- * Desktop sticky bar (#569). Phones never show it: `hidden md:block` keeps it out of the layout and
- * the accessibility tree, and the bottom bar stays their CTA.
+ * Desktop price, address and section links for the detail header (#594, replaces the sticky bar of
+ * #569). Phones never show it: `hidden md:flex` keeps it out of the layout and the accessibility
+ * tree, and the header stays back, Share and Save there.
  *
- * The zero-height sticky wrapper takes no space, so showing the bar moves nothing and the loading
- * skeleton needs no matching block.
+ * Two scroll hosts exist. In the modal the body (`[data-scroll-body]`) scrolls below the header, so
+ * the header covers nothing and the offset is the gap alone. On the property page and the
+ * `/listing/[id]` hard load the window scrolls and the header sticks under the site header, so the
+ * offset adds both heights.
  *
- * Two scroll hosts exist. In the modal the body (`[data-scroll-body]`) scrolls and the bar sticks
- * at the top of the panel. On the property page and the `/listing/[id]` hard load the window
- * scrolls, so the bar sticks under the site header.
+ * The links hide by container width (`.listing-header-nav` in `globals.css`), before the price or
+ * the address squeeze.
  */
-export default function ListingStickyBar({
-  galleryRef,
+export default function ListingHeaderNav({
+  headerRef,
   scopeRef,
   price,
   address,
   skip = [],
-  actions,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
-  const barRef = useRef<HTMLDivElement>(null);
   const [inDialog, setInDialog] = useState(false);
-  const [visible, setVisible] = useState(false);
   const [presentKey, setPresentKey] = useState('');
   const [active, setActive] = useState<string | null>(null);
   /** True while a link-click scroll runs. The scroll-spy must not overwrite the clicked link then. */
@@ -78,7 +75,7 @@ export default function ListingStickyBar({
   const skipKey = skip.join(',');
   // No dependency list on purpose: a section can mount after any render. The state changes only
   // when the set of ids changes.
-  useLayoutEffect(() => {
+  useEffect(() => {
     const scope = scopeRef.current;
     if (!scope) return;
     const skipped = skipKey.split(',');
@@ -97,31 +94,17 @@ export default function ListingStickyBar({
   const scrollBody = () =>
     inDialog ? (scopeRef.current?.querySelector<HTMLElement>('[data-scroll-body]') ?? null) : null;
 
-  // Visibility: the bar shows after the gallery has left the top of the view.
-  useEffect(() => {
-    const gallery = galleryRef.current;
-    if (!gallery || typeof IntersectionObserver === 'undefined') return;
-    const body = scrollBody();
-    const observer = new IntersectionObserver(
-      ([entry]) =>
-        setVisible(
-          !entry.isIntersecting && entry.boundingClientRect.top < (entry.rootBounds?.top ?? 0),
-        ),
-      { root: body, rootMargin: `-${body ? 0 : navbarHeight()}px 0px 0px 0px` },
-    );
-    observer.observe(gallery);
-    return () => observer.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [galleryRef, inDialog]);
+  /** Px of the scroll host's top edge that the header covers. Zero in the modal. */
+  const coveredTop = (body: HTMLElement | null) =>
+    body ? 0 : navbarHeight() + (headerRef.current?.offsetHeight ?? 0);
 
-  // Scroll-spy: the first linked section in the band below the bar is the active one.
+  // Scroll-spy: the first linked section in the band below the header is the active one.
   useEffect(() => {
     const scope = scopeRef.current;
-    if (!scope || !visible || typeof IntersectionObserver === 'undefined') return;
+    if (!scope || typeof IntersectionObserver === 'undefined') return;
     const ids = linkKey ? linkKey.split(',') : [];
     const inView = new Set<string>();
     const body = scrollBody();
-    const barH = barRef.current?.offsetHeight ?? 0;
     const observer = new IntersectionObserver(
       (entries) => {
         for (const e of entries) {
@@ -132,7 +115,7 @@ export default function ListingStickyBar({
         const first = ids.find((id) => inView.has(id));
         if (first) setActive(first);
       },
-      { root: body, rootMargin: `-${(body ? 0 : navbarHeight()) + barH}px 0px -55% 0px` },
+      { root: body, rootMargin: `-${coveredTop(body)}px 0px -55% 0px` },
     );
     for (const id of ids) {
       const el = scope.querySelector(`#${id}`);
@@ -140,17 +123,16 @@ export default function ListingStickyBar({
     }
     return () => observer.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeRef, visible, linkKey, inDialog]);
+  }, [scopeRef, linkKey, inDialog]);
 
   function scrollToSection(id: string) {
     const target = scopeRef.current?.querySelector(`#${id}`);
     if (!target) return;
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-    const barH = barRef.current?.offsetHeight ?? 0;
     const body = scrollBody();
     const host: { scrollBy: (o: ScrollToOptions) => void } = body ?? window;
-    const hostTop = body ? body.getBoundingClientRect().top : navbarHeight();
-    const delta = target.getBoundingClientRect().top - hostTop - barH - SCROLL_GAP;
+    const hostTop = body ? body.getBoundingClientRect().top : 0;
+    const delta = target.getBoundingClientRect().top - hostTop - coveredTop(body) - SCROLL_GAP;
     // The clicked link is active at once and stays so until the scroll settles. A smooth scroll
     // crosses other sections, and a section near the page end may never reach the active band.
     setActive(id);
@@ -180,48 +162,39 @@ export default function ListingStickyBar({
   return (
     <div
       ref={wrapRef}
-      className="sticky z-20 hidden h-0 md:block"
-      style={{ top: inDialog ? 'env(safe-area-inset-top, 0px)' : 'var(--navbar-h, 65px)' }}
-      data-testid="listing-sticky-bar-anchor"
+      data-testid="listing-header-nav"
+      className="hidden min-w-0 flex-1 items-center gap-5 md:flex"
     >
-      {visible && (
-        <div
-          ref={barRef}
-          data-testid="listing-sticky-bar"
-          className="absolute inset-x-0 top-0 border-b border-surface-border bg-white/95 shadow-[0_4px_16px_rgba(0,0,0,0.08)] backdrop-blur-sm"
+      <div className="min-w-0 max-w-[20rem] shrink">
+        <p className="truncate text-[17px] font-semibold leading-6 tracking-[-0.18px] text-ink">
+          {price}
+        </p>
+        <p className="truncate text-[13px] leading-4 text-ink-muted">{address}</p>
+      </div>
+      {links.length > 0 && (
+        <nav
+          aria-label="Listing sections"
+          className="listing-header-nav shrink-0 border-l border-surface-border pl-4"
         >
-          <div className="mx-auto flex max-w-7xl items-center gap-4 px-6 py-2.5 sm:px-8">
-            <div className="min-w-0 shrink">
-              <p className="truncate text-base font-semibold tracking-[-0.18px] text-ink">
-                {price}
-              </p>
-              <p className="truncate text-[13px] text-ink-muted">{address}</p>
-            </div>
-            {links.length > 0 && (
-              <nav aria-label="Listing sections" className="min-w-0 overflow-x-auto">
-                <ul className="flex items-center gap-1">
-                  {links.map((s) => (
-                    <li key={s.id}>
-                      <button
-                        type="button"
-                        onClick={() => scrollToSection(s.id)}
-                        aria-current={active === s.id ? 'true' : undefined}
-                        className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
-                          active === s.id
-                            ? 'bg-surface-alt text-ink'
-                            : 'text-ink-muted hover:bg-surface-soft hover:text-ink'
-                        }`}
-                      >
-                        {s.label}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </nav>
-            )}
-            <div className="ml-auto flex shrink-0 items-center gap-2">{actions}</div>
-          </div>
-        </div>
+          <ul className="flex items-center gap-0.5">
+            {links.map((s) => (
+              <li key={s.id}>
+                <button
+                  type="button"
+                  onClick={() => scrollToSection(s.id)}
+                  aria-current={active === s.id ? 'true' : undefined}
+                  className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+                    active === s.id
+                      ? 'bg-surface-alt text-ink'
+                      : 'text-ink-muted hover:bg-surface-soft hover:text-ink'
+                  }`}
+                >
+                  {s.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
       )}
     </div>
   );
