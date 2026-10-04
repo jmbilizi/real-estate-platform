@@ -402,9 +402,9 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
             </div>
           </div>
 
-          {/* Sidebar — agent card, then the mortgage estimate. */}
+          {/* Sidebar — agent card, buyer-agent card, then the mortgage estimate. */}
           <div className="space-y-4">
-            {/* Listing agent: label, avatar row, three contact lines, two buttons. */}
+            {/* Listing agent: label, avatar row, four contact lines. */}
             <div className={`${panel} p-6`} data-skeleton-section="agent">
               <p className="text-[11px] font-semibold uppercase tracking-wider">
                 <Bar className="w-24" />
@@ -429,6 +429,20 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* Buyer-agent card (#591): label, name line, two-line blurb, two buttons, broker line. */}
+            <div className={`${panel} p-6`} data-skeleton-section="buyer-agent">
+              <p className="text-[11px] font-semibold uppercase tracking-wider">
+                <Bar className="w-24" />
+              </p>
+              <p className="mt-3 font-semibold">
+                <Bar className="w-4/5" />
+              </p>
+              <p className="mt-1 text-[13px] leading-snug">
+                <Bar className="w-full" />
+                <Bar className="mt-1 w-2/3" />
+              </p>
               {/* `btn-primary` measures 40px and `btn-secondary` 42px — they are not the same
                   height, and averaging them left this card 12px short of the loaded one. */}
               <div className={`mt-5 h-10 w-full rounded-full ${FILL}`} />
