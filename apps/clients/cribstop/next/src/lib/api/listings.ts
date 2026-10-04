@@ -283,6 +283,11 @@ export interface ListingDetailView {
   officeBrokerLeadEmail: string | null;
   /** Derived server-side. Rendered as-is — never reassembled here, or it could disagree. */
   listedBy: string;
+
+  // --- #570 cost estimate inputs. Null when the feed does not carry the value. ---------------
+  taxAnnualAmount: number | null;
+  hoaFee: number | null;
+  hoaFeeFrequency: string | null;
 }
 
 /**
@@ -365,6 +370,10 @@ export function toListingDetailView(detail: ListingDetail): ListingDetailView {
     officeBrokerLeadPhone: listing.officeBrokerLeadPhone,
     officeBrokerLeadEmail: listing.officeBrokerLeadEmail,
     listedBy: listing.listedBy,
+
+    taxAnnualAmount: listing.taxAnnualAmount,
+    hoaFee: listing.hoaFee,
+    hoaFeeFrequency: listing.hoaFeeFrequency,
   };
 }
 

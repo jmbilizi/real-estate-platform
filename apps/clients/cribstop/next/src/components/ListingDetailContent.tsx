@@ -554,7 +554,12 @@ export default function ListingDetailContent({
 
             {/* Mortgage */}
             {listing.listingType === 'sale' && listing.price !== null && (
-              <MortgageTeaser price={listing.price} />
+              <MortgageTeaser
+                price={listing.price}
+                taxAnnualAmount={listing.taxAnnualAmount}
+                hoaFee={listing.hoaFee}
+                hoaFeeFrequency={listing.hoaFeeFrequency}
+              />
             )}
           </aside>
         </div>

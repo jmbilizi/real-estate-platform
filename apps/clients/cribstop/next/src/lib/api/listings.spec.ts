@@ -103,6 +103,19 @@ describe('toListingDetailView', () => {
     );
     expect(view.listedBy).toBe('Jane Doe – Real Broker, LLC');
   });
+
+  it('carries the tax and HOA inputs of the cost estimate (#570)', () => {
+    const view = toListingDetailView(
+      aListingDetail({
+        listing: { taxAnnualAmount: 6000, hoaFee: 250, hoaFeeFrequency: 'Monthly' },
+      }),
+    );
+    expect([view.taxAnnualAmount, view.hoaFee, view.hoaFeeFrequency]).toEqual([
+      6000,
+      250,
+      'Monthly',
+    ]);
+  });
 });
 
 describe('toSearchParams', () => {
