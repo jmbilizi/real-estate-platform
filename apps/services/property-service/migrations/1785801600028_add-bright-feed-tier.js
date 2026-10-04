@@ -1,6 +1,22 @@
 exports.shorthands = undefined;
 
 /**
+ * Builds the two backfill statements. node-pg-migrate 9 has no `pgm.format`, so the tier is
+ * escaped here as a SQL string literal (#397).
+ *
+ * @param {string} tier
+ * @returns {string[]}
+ */
+function buildTierBackfillSql(tier) {
+  const literal = `'${String(tier).replace(/'/g, "''")}'`;
+  return [
+    `UPDATE bright_staging_records SET feed_tier = ${literal};`,
+    `UPDATE bright_replication_cursor SET feed_tier = ${literal};`,
+  ];
+}
+exports.buildTierBackfillSql = buildTierBackfillSql;
+
+/**
  * Records which Bright feed tier wrote each staging row and cursor (#314).
  *
  * A tier switch (`BRIGHT_MLS_ENV` test to production, or back) must not let the next run treat the
@@ -28,8 +44,9 @@ exports.up = (pgm) => {
     pgm.sql('DELETE FROM bright_staging_records;');
     pgm.sql('DELETE FROM bright_replication_cursor;');
   } else {
-    pgm.sql(pgm.format('UPDATE bright_staging_records SET feed_tier = %L;', knownTier));
-    pgm.sql(pgm.format('UPDATE bright_replication_cursor SET feed_tier = %L;', knownTier));
+    for (const statement of buildTierBackfillSql(knownTier)) {
+      pgm.sql(statement);
+    }
   }
 
   pgm.alterColumn('bright_staging_records', 'feed_tier', { notNull: true });
