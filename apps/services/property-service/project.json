@@ -103,14 +103,14 @@
     "format": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "prettier --write .",
+        "command": "prettier --write --ignore-path ../../../.gitignore --ignore-path ../../../.prettierignore .",
         "cwd": "apps/services/property-service"
       }
     },
     "format-check": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "prettier --check .",
+        "command": "prettier --check --ignore-path ../../../.gitignore --ignore-path ../../../.prettierignore .",
         "cwd": "apps/services/property-service"
       }
     },
