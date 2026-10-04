@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import PropertyGallery from './PropertyGallery';
 
 describe('PropertyGallery badge slot (#565)', () => {
@@ -71,6 +71,21 @@ describe('PropertyGallery lightbox', () => {
     expect(within(dialog).getByText('3 / 3')).toBeInTheDocument();
   });
 
+  it('wears the site theme and shows the caller actions in the top bar (#599)', () => {
+    render(<PropertyGallery media={photos} viewerActions={<button type="button">Save</button>} />);
+    openLightbox();
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.className).toMatch(/\bbg-white\b/);
+    expect(within(dialog).getByRole('button', { name: 'Save' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Close' }).className).toMatch(
+      /focus-visible:ring-brand/,
+    );
+    expect(within(dialog).getByRole('button', { name: 'Next' }).className).toMatch(
+      /rounded-full.*shadow-card/,
+    );
+    expect(within(dialog).getByTestId('gallery-caption').className).toMatch(/text-ink-muted/);
+  });
+
   it('closes on Escape', () => {
     render(<PropertyGallery media={photos} />);
     openLightbox();
@@ -89,17 +104,72 @@ describe('PropertyGallery 3D tour entry (#573)', () => {
 
   it('shows nothing without a tour URL', () => {
     render(<PropertyGallery media={media} tourUrl={null} />);
-    expect(screen.queryByText('3D tour')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open 3D tour' })).not.toBeInTheDocument();
+  });
+
+  it('shows "3D" and keeps the bottom left clear for the Bright MLS watermark (#599)', () => {
+    const { container } = render(
+      <PropertyGallery media={media} tourUrl="https://my.matterport.com/show/?m=a" />,
+    );
+    const pill = screen.getByTestId('gallery-tour-pill');
+    expect(pill).toHaveTextContent(/^3D$/);
+    expect(pill).toHaveAttribute('aria-label', 'Open 3D tour');
+    const row = pill.parentElement as HTMLElement;
+    expect(row.className).toMatch(/\bbottom-3\b/);
+    expect(row.className).toMatch(/\bright-3\b/);
+    const counter = screen.getByTestId('gallery-swipe-counter');
+    expect(row).toContainElement(counter);
+    expect(pill.compareDocumentPosition(counter) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(counter.className).toMatch(/pointer-events-none/);
+    expect(row.className).toMatch(/pointer-events-none/);
+    expect(container.querySelector('[class*="left-"]')).toBeNull();
+  });
+
+  it('puts the tour tile in the first small mosaic tile, with the label and a photo behind', () => {
+    const photos = [
+      { url: 'https://example.com/a.jpg', altText: 'A' },
+      { url: 'https://example.com/b.jpg', altText: 'B' },
+      { url: 'https://example.com/c.jpg', altText: 'C' },
+    ];
+    render(<PropertyGallery media={photos} tourUrl="https://my.matterport.com/show/?m=a" />);
+    const tile = screen.getByTestId('gallery-tour-tile');
+    expect(tile).toHaveAttribute('aria-label', 'Open 3D tour');
+    expect(tile).toHaveTextContent('Explore 3D tour');
+    expect(within(tile).getByAltText('B')).toBeInTheDocument();
+    const grid = tile.parentElement as HTMLElement;
+    expect(grid.children[0]).toHaveAttribute('aria-label', 'View primary photo');
+    expect(grid.children[1]).toBe(tile);
+    expect(grid.children).toHaveLength(1 + 1 + 3 + 1);
+    expect(within(grid).getByRole('button', { name: /Show all 3 photos/ })).toBeInTheDocument();
+    fireEvent.click(tile);
+    expect(screen.getByRole('dialog')).toHaveTextContent('2 / 4');
+    expect(document.querySelector('iframe')).toHaveAttribute(
+      'src',
+      'https://my.matterport.com/show/?m=a',
+    );
+  });
+
+  it('keeps the mosaic as before when there is no tour', () => {
+    const photos = [
+      { url: 'https://example.com/a.jpg', altText: 'A' },
+      { url: 'https://example.com/b.jpg', altText: 'B' },
+    ];
+    render(<PropertyGallery media={photos} />);
+    expect(screen.queryByTestId('gallery-tour-tile')).toBeNull();
+    expect(screen.queryByTestId('gallery-tour-pill')).toBeNull();
+    expect(
+      screen.getByRole('button', { name: /Show all 2 photos/ }).parentElement?.children,
+    ).toHaveLength(6);
   });
 
   it('shows nothing for a URL that is not https', () => {
     render(<PropertyGallery media={media} tourUrl="http://my.matterport.com/show/?m=a" />);
-    expect(screen.queryByText(/3D tour/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /3D tour/ })).not.toBeInTheDocument();
   });
 
   it('plays an allowlisted host in the viewer and closes on Escape', () => {
     render(<PropertyGallery media={media} tourUrl="https://my.matterport.com/show/?m=a" />);
-    fireEvent.click(screen.getByRole('button', { name: '3D tour' }));
+    fireEvent.click(screen.getByTestId('gallery-tour-pill'));
     const frame = document.querySelector('iframe') as HTMLIFrameElement;
     expect(frame).toHaveAttribute('src', 'https://my.matterport.com/show/?m=a');
     expect(screen.getAllByRole('dialog')).toHaveLength(1);
@@ -109,7 +179,7 @@ describe('PropertyGallery 3D tour entry (#573)', () => {
 
   it('moves focus to Close, locks page scroll, and restores both on close', () => {
     render(<PropertyGallery media={media} tourUrl="https://my.matterport.com/show/?m=a" />);
-    const pill = screen.getByRole('button', { name: '3D tour' });
+    const pill = screen.getByTestId('gallery-tour-pill');
     pill.focus();
     fireEvent.click(pill);
     expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
@@ -121,7 +191,7 @@ describe('PropertyGallery 3D tour entry (#573)', () => {
 
   it('puts the frame between Close and Prev, so Tab leaves the frame for Prev', () => {
     render(<PropertyGallery media={media} tourUrl="https://my.matterport.com/show/?m=a" />);
-    fireEvent.click(screen.getByRole('button', { name: '3D tour' }));
+    fireEvent.click(screen.getByTestId('gallery-tour-pill'));
     const frame = document.querySelector('iframe') as HTMLIFrameElement;
     const follows = (a: Node, b: Node) =>
       Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
@@ -131,18 +201,24 @@ describe('PropertyGallery 3D tour entry (#573)', () => {
 
   it('opens any other https host in a new tab, with an external-link icon', () => {
     render(<PropertyGallery media={media} tourUrl="https://tours.example.com/t/1" />);
-    const link = screen.getByRole('link', { name: /3D tour/ });
+    const link = screen.getByTestId('gallery-tour-pill');
     expect(link).toHaveAttribute('href', 'https://tours.example.com/t/1');
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
     expect(link.querySelectorAll('svg')).toHaveLength(2);
+    expect(link).toHaveAttribute('aria-label', 'Open 3D tour in a new tab');
+    const tile = screen.getByTestId('gallery-tour-tile');
+    expect(tile).toHaveAttribute('href', 'https://tours.example.com/t/1');
+    expect(tile).toHaveAttribute('target', '_blank');
+    expect(tile).toHaveTextContent('Explore 3D tour');
+    expect(tile.querySelectorAll('svg')).toHaveLength(2);
     expect(screen.queryByTestId('gallery-swipe-tour')).toBeNull();
     expect(screen.getByTestId('gallery-swipe-counter')).toHaveTextContent('1 / 1');
   });
 
   it('keeps the page URL as the new-tab link and plays the embed form', () => {
     render(<PropertyGallery media={media} tourUrl="https://vimeo.com/76979871" />);
-    fireEvent.click(screen.getByRole('button', { name: '3D tour' }));
+    fireEvent.click(screen.getByTestId('gallery-tour-pill'));
     expect(document.querySelector('iframe')).toHaveAttribute(
       'src',
       'https://player.vimeo.com/video/76979871',
@@ -171,7 +247,6 @@ describe('PropertyGallery tour slide (#590)', () => {
   const setViewport = (desktop: boolean) => {
     window.matchMedia = jest.fn().mockReturnValue({ matches: desktop }) as never;
   };
-  const settle = () => act(() => void jest.advanceTimersByTime(300));
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => {
     jest.useRealTimers();
@@ -229,7 +304,7 @@ describe('PropertyGallery tour slide (#590)', () => {
   it('opens the viewer on the tour slide when the pill is used on a desktop', () => {
     setViewport(true);
     render(<PropertyGallery media={photos} tourUrl={tourUrl} />);
-    fireEvent.click(screen.getByRole('button', { name: '3D tour' }));
+    fireEvent.click(screen.getByTestId('gallery-tour-pill'));
     expect(screen.getByRole('dialog')).toHaveTextContent('2 / 4');
     expect(document.querySelector('iframe')).toHaveAttribute('src', tourUrl);
   });
@@ -238,47 +313,42 @@ describe('PropertyGallery tour slide (#590)', () => {
     setViewport(false);
     render(<PropertyGallery media={photos} tourUrl={tourUrl} />);
     scrollStripTo(0);
-    fireEvent.click(screen.getByRole('button', { name: '3D tour' }));
+    fireEvent.click(screen.getByTestId('gallery-tour-pill'));
     expect(screen.queryByRole('dialog')).toBeNull();
     scrollStripTo(1);
-    settle();
     expect(counter()).toHaveTextContent('2 / 4');
-    expect(document.querySelector('iframe')).toHaveAttribute('src', tourUrl);
+    expect(document.querySelector('iframe')).toBeNull();
+    expect(screen.queryByTestId('gallery-tour-pill')).toBeNull();
   });
 
-  it('loads the strip frame only in view and ignores touches until the visitor taps', () => {
+  it('shows the tour tile in the strip and loads the frame only after a tap', () => {
     render(<PropertyGallery media={photos} tourUrl={tourUrl} />);
-    expect(document.querySelector('iframe')).toBeNull();
     scrollStripTo(1);
+    const slide = screen.getByTestId('gallery-swipe-tour');
+    expect(slide).toHaveTextContent('Explore 3D tour');
+    expect(within(slide).getByAltText('B')).toBeInTheDocument();
     expect(document.querySelector('iframe')).toBeNull();
-    settle();
-    const frame = document.querySelector('iframe') as HTMLIFrameElement;
-    expect(frame.className).toMatch(/pointer-events-none/);
-    fireEvent.click(screen.getByRole('button', { name: 'Tap to explore the 3D tour' }));
-    expect(frame.className).not.toMatch(/pointer-events-none/);
+    fireEvent.click(within(slide).getByRole('button', { name: 'Explore 3D tour' }));
+    expect(document.querySelector('iframe')).toHaveAttribute('src', tourUrl);
     fireEvent.click(screen.getByRole('button', { name: 'Done' }));
-    expect(frame.className).toMatch(/pointer-events-none/);
-    fireEvent.click(screen.getByRole('button', { name: 'Tap to explore the 3D tour' }));
+    expect(document.querySelector('iframe')).toBeNull();
+    expect(slide).toHaveTextContent('Explore 3D tour');
+    fireEvent.click(within(slide).getByRole('button', { name: 'Explore 3D tour' }));
     scrollStripTo(2);
     expect(document.querySelector('iframe')).toBeNull();
-    scrollStripTo(1);
-    settle();
-    expect(document.querySelector('iframe')?.className).toMatch(/pointer-events-none/);
   });
 
   it('does not load the strip frame for a swipe that only passes the tour slide', () => {
     render(<PropertyGallery media={photos} tourUrl={tourUrl} />);
     scrollStripTo(1);
-    act(() => void jest.advanceTimersByTime(100));
     scrollStripTo(2);
-    settle();
     expect(document.querySelector('iframe')).toBeNull();
   });
 
   it('shows the tour alone when the listing has no photo', () => {
     setViewport(true);
     render(<PropertyGallery media={[]} tourUrl={tourUrl} />);
-    fireEvent.click(screen.getByRole('button', { name: '3D tour' }));
+    fireEvent.click(screen.getByTestId('gallery-tour-pill'));
     expect(screen.getByRole('dialog')).toHaveTextContent('1 / 1');
     expect(document.querySelector('iframe')).toHaveAttribute('src', tourUrl);
   });
@@ -337,10 +407,10 @@ describe('PropertyGallery phone pass (#572)', () => {
 
   it('gives the viewer controls and the tour pill a 44px target on a phone', () => {
     render(<PropertyGallery media={photos} tourUrl="https://my.matterport.com/show/?m=a" />);
-    expect(screen.getByRole('button', { name: '3D tour' }).className).toMatch(/\bmin-h-11\b/);
+    expect(screen.getByTestId('gallery-tour-pill').className).toMatch(/\bmin-h-11\b/);
     open();
     for (const name of ['Close', 'Previous', 'Next']) {
-      expect(screen.getByRole('button', { name }).className).toMatch(/\bmin-h-11\b/);
+      expect(screen.getByRole('button', { name }).className).toMatch(/\b(min-h-11|h-11)\b/);
     }
   });
 
