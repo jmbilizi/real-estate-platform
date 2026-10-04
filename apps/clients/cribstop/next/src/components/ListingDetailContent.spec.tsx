@@ -550,8 +550,8 @@ describe('ListingDetailContent — Nearby homes without a panel (#572)', () => {
       aListingDetail({
         listing: {
           facts: {
-            parking: '2-car garage',
-            heating: 'Forced air',
+            parking: ['2-car garage'],
+            heating: ['Forced air'],
             cooling: null,
             appliances: null,
             basement: null,
