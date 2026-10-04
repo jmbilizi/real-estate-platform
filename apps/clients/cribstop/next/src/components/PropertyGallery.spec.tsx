@@ -106,6 +106,28 @@ describe('PropertyGallery 3D tour entry (#573)', () => {
     expect(document.querySelector('iframe')).toBeNull();
   });
 
+  it('moves focus to Close, locks page scroll, and restores both on close', () => {
+    render(<PropertyGallery media={media} tourUrl="https://my.matterport.com/show/?m=a" />);
+    const pill = screen.getByRole('button', { name: '3D tour' });
+    pill.focus();
+    fireEvent.click(pill);
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
+    expect(document.documentElement.style.overflow).toBe('hidden');
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(document.documentElement.style.overflow).toBe('');
+    expect(pill).toHaveFocus();
+  });
+
+  it('keeps Tab inside the dialog: Shift+Tab on Close goes to the frame, the end sentinel goes to Close', () => {
+    render(<PropertyGallery media={media} tourUrl="https://my.matterport.com/show/?m=a" />);
+    fireEvent.click(screen.getByRole('button', { name: '3D tour' }));
+    const close = screen.getByRole('button', { name: 'Close' });
+    fireEvent.keyDown(close, { key: 'Tab', shiftKey: true });
+    expect(document.querySelector('iframe')).toHaveFocus();
+    fireEvent.focus(screen.getByRole('dialog').lastElementChild as HTMLElement);
+    expect(close).toHaveFocus();
+  });
+
   it('opens any other https host in a new tab', () => {
     render(<PropertyGallery media={media} tourUrl="https://tours.example.com/t/1" />);
     const link = screen.getByRole('link', { name: /3D tour/ });

@@ -15,6 +15,86 @@ import { resolveTourEntry } from '@/lib/tour-url';
  */
 export type GalleryPhoto = Media & { caption?: string | null };
 
+/**
+ * Full-screen tour dialog. Focus moves to Close on open, Tab cycles Close and the iframe, the page
+ * does not scroll behind it, and focus returns to the opener on close. A sentinel after the iframe
+ * catches Tab leaving it, because key events inside a cross-origin frame never reach this page.
+ */
+function TourViewer({ href, onClose }: { href: string; onClose: () => void }) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    const html = document.documentElement;
+    const prevOverflow = html.style.overflow;
+    const prevPadding = html.style.paddingRight;
+    html.style.paddingRight = `${window.innerWidth - html.clientWidth}px`;
+    html.style.overflow = 'hidden';
+    closeRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCloseRef.current();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      html.style.overflow = prevOverflow;
+      html.style.paddingRight = prevPadding;
+      if (opener && document.contains(opener)) opener.focus();
+    };
+  }, []);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="3D tour"
+      className="fixed inset-0 z-[100] flex flex-col bg-ink/95"
+    >
+      <div className="flex items-center justify-between p-4 text-white">
+        <button
+          ref={closeRef}
+          type="button"
+          onClick={onClose}
+          onKeyDown={(e) => {
+            if (e.key === 'Tab' && e.shiftKey) {
+              e.preventDefault();
+              frameRef.current?.focus();
+            }
+          }}
+          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium hover:bg-white/10"
+        >
+          <svg
+            className="h-5 w-5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+          Close
+        </button>
+        <p className="text-sm font-medium">3D tour</p>
+        <span className="w-16" />
+      </div>
+      <iframe
+        ref={frameRef}
+        src={href}
+        title="3D tour"
+        className="min-h-0 w-full flex-1 border-0 bg-white"
+        allow="autoplay; fullscreen; web-share; xr-spatial-tracking"
+        allowFullScreen
+        sandbox="allow-scripts allow-same-origin allow-popups allow-presentation"
+        referrerPolicy="no-referrer"
+      />
+      <div tabIndex={0} aria-hidden="true" onFocus={() => closeRef.current?.focus()} />
+    </div>
+  );
+}
+
 export default function PropertyGallery({
   media,
   tourUrl,
@@ -41,7 +121,6 @@ export default function PropertyGallery({
 
   const handleKey = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setTourOpenHref(null);
       if (!open) return;
       if (e.key === 'Escape') setOpen(false);
       if (e.key === 'ArrowRight') {
@@ -96,42 +175,7 @@ export default function PropertyGallery({
   );
   const tourViewer =
     tour?.mode === 'frame' && tourOpenHref === tour.href ? (
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="3D tour"
-        className="fixed inset-0 z-[100] flex flex-col bg-ink/95"
-      >
-        <div className="flex items-center justify-between p-4 text-white">
-          <button
-            type="button"
-            onClick={() => setTourOpenHref(null)}
-            autoFocus
-            className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium hover:bg-white/10"
-          >
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-            Close
-          </button>
-          <p className="text-sm font-medium">3D tour</p>
-          <span className="w-16" />
-        </div>
-        <iframe
-          src={tour.href}
-          title="3D tour"
-          className="min-h-0 w-full flex-1 border-0 bg-white"
-          allow="fullscreen; xr-spatial-tracking"
-          sandbox="allow-scripts allow-same-origin allow-popups allow-presentation"
-          referrerPolicy="no-referrer"
-        />
-      </div>
+      <TourViewer href={tour.href} onClose={() => setTourOpenHref(null)} />
     ) : null;
 
   if (media.length === 0) {
