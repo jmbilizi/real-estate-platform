@@ -83,11 +83,9 @@ internal sealed class AppUserManager(
     /// (<c>IUserConfirmation</c>, a custom validator) is not on the paths Identity actually takes.
     /// </para>
     /// <para>
-    /// Note what this does <em>not</em> fix: <c>/account/login</c> does not consult
-    /// <c>IsEmailConfirmedAsync</c> at all unless <c>RequireConfirmedEmail</c> is on, so while that
-    /// flag is off a soft-deleted account can still sign in with its existing password. That hole is
-    /// pre-existing and service-wide, not something this ticket introduces, and it is filed
-    /// separately rather than widened into scope here.
+    /// Sign-in does not rely on this predicate. <c>AppSignInManager.CanSignInAsync</c> refuses a
+    /// soft-deleted account on its own, so the refusal holds while
+    /// <c>SignInOptions.RequireConfirmedAccount</c> is off (#152).
     /// </para>
     /// </remarks>
     /// <param name="user">The account to test.</param>
@@ -102,6 +100,25 @@ internal sealed class AppUserManager(
         }
 
         return await base.IsEmailConfirmedAsync(user).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Refuses to confirm the address of a soft-deleted account.
+    /// </summary>
+    /// <remarks>
+    /// Identity's <c>/confirmEmail</c> answers a failure with <c>401</c>, which
+    /// <c>IdentityResponseShapingFilter</c> turns into the one body every failed confirmation gets.
+    /// </remarks>
+    /// <param name="user">The account to confirm.</param>
+    /// <param name="token">The confirmation token.</param>
+    /// <returns>A failure for a soft-deleted account, else the result of the confirmation.</returns>
+    public override async Task<IdentityResult> ConfirmEmailAsync(ApplicationUser user, string token)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+
+        return user.DeletedAt.HasValue
+            ? IdentityResult.Failed(ErrorDescriber.InvalidToken())
+            : await base.ConfirmEmailAsync(user, token).ConfigureAwait(false);
     }
 
     /// <summary>
