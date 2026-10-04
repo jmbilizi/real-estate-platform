@@ -49,6 +49,30 @@ function Harness({ open, onClose }: { open: boolean; onClose: () => void }) {
 }
 
 describe('Modal', () => {
+  it('renders an instant modal at its final position, with no enter-animation class (#587)', () => {
+    renderWithOutsideButton({ instant: true, mobileStyle: 'full-screen' });
+
+    const card = screen.getByRole('dialog');
+    expect(card.className).toContain('translate-y-0');
+    expect(card.className).not.toContain('translate-y-full');
+    expect(card.className).not.toContain('sm:opacity-0');
+  });
+
+  it('keeps the scrollbar gutter instead of padding the page when it locks scroll', () => {
+    // An earlier test's deferred unlock may not have run yet.
+    document.documentElement.removeAttribute('style');
+    const original = globalThis.CSS;
+    Object.defineProperty(globalThis, 'CSS', {
+      configurable: true,
+      value: { supports: () => true },
+    });
+    renderWithOutsideButton({ instant: true });
+    Object.defineProperty(globalThis, 'CSS', { configurable: true, value: original });
+
+    expect(document.documentElement.style.scrollbarGutter).toBe('stable');
+    expect(document.documentElement.style.paddingRight).toBe('');
+  });
+
   it('exposes dialog semantics', () => {
     renderWithOutsideButton();
 

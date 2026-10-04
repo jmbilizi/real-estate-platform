@@ -6,7 +6,6 @@ import AmenityChips from '@/components/AmenityChips';
 import MortgageTeaser from '@/components/MortgageTeaser';
 import ListingRow from '@/components/ListingRow';
 import SingleListingMap from '@/components/SingleListingMap';
-import ListingAttribution from '@/components/listing/ListingAttribution';
 import GalleryStatusBadge from '@/components/listing/GalleryStatusBadge';
 import ListingProvenance from '@/components/listing/ListingProvenance';
 import ListingFacts from '@/components/listing/ListingFacts';
@@ -284,7 +283,7 @@ export default function ListingDetailContent({
         <div className="flex shrink-0 items-center gap-1.5">
           <button
             onClick={handleShare}
-            className="btn-secondary px-2.5 sm:gap-1.5 sm:px-5"
+            className="btn-secondary h-11 w-11 px-0 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-5"
             aria-label="Share"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -299,7 +298,7 @@ export default function ListingDetailContent({
           </button>
           <button
             onClick={() => toggleSave(listing.id)}
-            className={`btn-secondary px-2.5 sm:gap-1.5 sm:px-5 ${saved ? 'border-brand text-brand' : ''}`}
+            className={`btn-secondary h-11 w-11 px-0 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-5 ${saved ? 'border-brand text-brand' : ''}`}
             aria-label={saved ? 'Saved' : 'Save'}
           >
             <svg
@@ -439,37 +438,10 @@ export default function ListingDetailContent({
                   longitude={listing.longitude}
                   price={listing.price}
                   listingType={listing.listingType}
-                  className="h-[380px] w-full"
+                  className="listing-detail-map h-[380px] w-full"
                 />
               </div>
             </section>
-
-            {/* Listing disclosure — provenance is driven off this row's own `source`, never a
-                build flag, env var or default (rule #6). */}
-            <div className={`${PANEL} p-6 text-[13px] leading-relaxed text-ink-muted`}>
-              {/*
-               * `courtesy`, not `full`: the Listing Agent card alongside this already carries the
-               * agent's name, office, phone and email, so the full block repeated all of it a few
-               * hundred pixels away. 7.58 asks that the display identify the listing firm and a
-               * participant-supplied contact method — the agent card does that, more prominently
-               * than a footnote can. This block is the courtesy attribution and the provenance.
-               */}
-              <ListingAttribution
-                attribution={listing}
-                source={listing.source}
-                density="courtesy"
-                className="text-ink-body"
-              />
-              <ListingProvenance
-                source={listing.source}
-                lastUpdated={listing.lastUpdated}
-                className="mt-2"
-              />
-              <p className="mt-2">
-                This information is for personal, non-commercial use. Some properties may no longer
-                be available.
-              </p>
-            </div>
           </div>
 
           {/* Sidebar */}
@@ -500,7 +472,7 @@ export default function ListingDetailContent({
                     {listing.listingAgentName ?? listing.officeName}
                   </p>
                   {listing.listingAgentName && (
-                    <p className="truncate text-[13px] text-ink-muted">{listing.officeName}</p>
+                    <p className="truncate text-sm text-ink-muted">{listing.officeName}</p>
                   )}
                 </div>
               </div>
@@ -536,9 +508,9 @@ export default function ListingDetailContent({
                   </li>
                 ))}
               </ul>
-              <button className="btn-primary mt-5 w-full">Schedule a Tour</button>
-              <button className="btn-secondary mt-2 w-full">Message Agent</button>
-              <p className="mt-4 text-[13px] font-medium leading-snug text-ink-muted">
+              <button className="btn-primary mt-5 min-h-11 w-full">Schedule a Tour</button>
+              <button className="btn-secondary mt-2 min-h-11 w-full">Message Agent</button>
+              <p className="mt-4 text-sm font-medium leading-snug text-ink-muted">
                 Brokered by {BRAND.brokerage} &middot; {BRAND.siteName}
               </p>
             </div>
@@ -562,7 +534,7 @@ export default function ListingDetailContent({
                     </li>
                   ))}
                 </ul>
-                <button className="mt-3 text-sm font-semibold text-brand hover:underline">
+                <button className="mt-1 min-h-11 text-sm font-semibold text-brand hover:underline">
                   + Add to calendar
                 </button>
               </div>
@@ -586,34 +558,55 @@ export default function ListingDetailContent({
           </div>
         )}
 
-        {/* Nearby homes — the last panel, so the stack closes the way it opened. */}
+        {/* Nearby homes. A carousel, like the home page rows, so it has no panel around it. */}
         {!serverNearby && fetched.status === 'loading' && (
-          <div id="nearby" className={`mt-4 ${PANEL}`}>
+          <div id="nearby" className="mt-4">
             <NearbyHomesSkeleton />
           </div>
         )}
         {nearbyRows.length > 0 && (
-          <div id="nearby" className={`mt-4 ${PANEL}`}>
-            {/* The panel's own inset: `ListingRow` defaults to a full-bleed section's gutter. */}
+          <div id="nearby" className="mt-4">
+            {/* No side inset: the body's gutter already aligns the title with the panels above. */}
             <ListingRow
               title="Nearby homes"
               listings={nearbyRows}
               max={6}
               href={nearbyHref}
-              sectionClassName="px-6 py-6"
+              sectionClassName="pt-2"
               titleClassName="text-xl font-semibold tracking-tight"
             />
           </div>
         )}
+
+        {/*
+         * The listing disclaimer: two centered lines under a hairline, at the very end. The attribution NAR 7.58
+         * requires (firm, agent, a contact method) lives in the Listing Agent card, once.
+         * Provenance is driven off this row's own `source`, never a build flag or default.
+         */}
+        <footer className="mt-8 space-y-1.5 border-t border-surface-border pt-6 text-center text-xs leading-relaxed text-ink-muted">
+          <ListingProvenance source={listing.source} lastUpdated={listing.lastUpdated} />
+          <p>
+            This information is for personal, non-commercial use. Some properties may no longer be
+            available.
+          </p>
+        </footer>
       </div>
       {/* end body wrapper */}
 
-      {/* Mobile sticky CTA bar */}
-      <div className="flex-shrink-0 border-t border-surface-border bg-white/95 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] backdrop-blur-sm lg:hidden">
+      {/*
+       * Mobile CTA bar (#572). In the modal it is the last flex row, so it never covers the body.
+       * On the property page the window scrolls, so `sticky bottom-0` holds it at the screen edge.
+       * The bottom padding clears the home indicator (needs `viewportFit: 'cover'`, set in the root
+       * layout). Each button is 44px tall.
+       */}
+      <div
+        data-testid="listing-mobile-bar"
+        className="sticky bottom-0 z-20 flex-shrink-0 border-t border-surface-border bg-white/95 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] backdrop-blur-sm lg:hidden"
+      >
         {/* No price here: the overview block holds it once (#568). */}
-        <div className="flex gap-2 px-4 py-3">
-          <button className="btn-secondary flex-1 py-2 text-sm">Message</button>
-          <button className="btn-primary flex-1 py-2 text-sm">Schedule Tour</button>
+        <div className="flex gap-2 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+          <button className="btn-secondary min-h-11 flex-1 py-2 text-sm">Message</button>
+          <button className="btn-primary min-h-11 flex-1 py-2 text-sm">Schedule Tour</button>
         </div>
       </div>
     </div>
