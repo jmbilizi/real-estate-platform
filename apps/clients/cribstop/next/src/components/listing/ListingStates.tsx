@@ -390,16 +390,6 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
                 <div className={`h-[380px] w-full ${FILL}`} />
               </div>
             </div>
-
-            {/* Listing disclosure — attribution and provenance, both detail-only. */}
-            <div
-              className={`${panel} p-6 text-[13px] leading-relaxed`}
-              data-skeleton-section="disclosure"
-            >
-              <Bar className="w-2/3" />
-              <Bar className="mt-2 w-1/2" />
-              <Bar className="mt-2 w-3/4" />
-            </div>
           </div>
 
           {/* Sidebar — agent card, then the mortgage estimate. */}
@@ -415,7 +405,7 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
                   <p className="font-semibold">
                     <Bar className="w-2/3" />
                   </p>
-                  <p className="text-[13px]">
+                  <p className="text-sm">
                     <Bar className="mt-1 w-1/2" />
                   </p>
                 </div>
@@ -486,6 +476,15 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
          */}
         <div className="mt-4" data-skeleton-section="nearby-homes">
           <NearbyHomesSkeleton />
+        </div>
+
+        {/* The disclaimer footer: two small lines, no box. */}
+        <div
+          className="mt-6 space-y-1.5 text-xs leading-relaxed"
+          data-skeleton-section="disclosure"
+        >
+          <Bar className="w-3/4" />
+          <Bar className="w-2/3" />
         </div>
       </div>
 

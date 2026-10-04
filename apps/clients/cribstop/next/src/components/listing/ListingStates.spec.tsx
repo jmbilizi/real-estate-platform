@@ -138,10 +138,10 @@ describe('ListingDetailSkeleton', () => {
       'description',
       'amenities',
       'map',
-      'disclosure',
       'agent',
       'mortgage',
       'nearby-homes',
+      'disclosure',
     ];
 
     it.each(SECTIONS)('reserves the %s section', (section) => {

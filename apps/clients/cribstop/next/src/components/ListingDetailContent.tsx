@@ -6,7 +6,6 @@ import AmenityChips from '@/components/AmenityChips';
 import MortgageTeaser from '@/components/MortgageTeaser';
 import ListingRow from '@/components/ListingRow';
 import SingleListingMap from '@/components/SingleListingMap';
-import ListingAttribution from '@/components/listing/ListingAttribution';
 import GalleryStatusBadge from '@/components/listing/GalleryStatusBadge';
 import ListingProvenance from '@/components/listing/ListingProvenance';
 import ListingFacts from '@/components/listing/ListingFacts';
@@ -448,33 +447,6 @@ export default function ListingDetailContent({
                 />
               </div>
             </section>
-
-            {/* Listing disclosure — provenance is driven off this row's own `source`, never a
-                build flag, env var or default (rule #6). */}
-            <div className={`${PANEL} p-6 text-[13px] leading-relaxed text-ink-muted`}>
-              {/*
-               * `courtesy`, not `full`: the Listing Agent card alongside this already carries the
-               * agent's name, office, phone and email, so the full block repeated all of it a few
-               * hundred pixels away. 7.58 asks that the display identify the listing firm and a
-               * participant-supplied contact method — the agent card does that, more prominently
-               * than a footnote can. This block is the courtesy attribution and the provenance.
-               */}
-              <ListingAttribution
-                attribution={listing}
-                source={listing.source}
-                density="courtesy"
-                className="text-ink-body"
-              />
-              <ListingProvenance
-                source={listing.source}
-                lastUpdated={listing.lastUpdated}
-                className="mt-2"
-              />
-              <p className="mt-2">
-                This information is for personal, non-commercial use. Some properties may no longer
-                be available.
-              </p>
-            </div>
           </div>
 
           {/* Sidebar */}
@@ -505,7 +477,7 @@ export default function ListingDetailContent({
                     {listing.listingAgentName ?? listing.officeName}
                   </p>
                   {listing.listingAgentName && (
-                    <p className="truncate text-[13px] text-ink-muted">{listing.officeName}</p>
+                    <p className="truncate text-sm text-ink-muted">{listing.officeName}</p>
                   )}
                 </div>
               </div>
@@ -610,6 +582,19 @@ export default function ListingDetailContent({
             />
           </div>
         )}
+
+        {/*
+         * The listing disclaimer: two lines at the very end, no box. The attribution NAR 7.58
+         * requires (firm, agent, a contact method) lives in the Listing Agent card, once.
+         * Provenance is driven off this row's own `source`, never a build flag or default.
+         */}
+        <footer className="mt-6 space-y-1.5 text-xs leading-relaxed text-ink-muted">
+          <ListingProvenance source={listing.source} lastUpdated={listing.lastUpdated} />
+          <p>
+            This information is for personal, non-commercial use. Some properties may no longer be
+            available.
+          </p>
+        </footer>
       </div>
       {/* end body wrapper */}
 

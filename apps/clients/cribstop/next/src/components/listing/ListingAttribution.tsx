@@ -24,7 +24,7 @@ import type { Attribution, ListingSource } from '@cribstop/property-contracts';
  *
  * - `density="auto"` (the default) → `Listing courtesy of {officeName}`. No card uses this
  *   component now. `ListingCard` renders its own office row, per the 2026-10-02 ruling.
- * - `density="courtesy"` (the detail page, out of scope for #305) → unchanged: a `brightMLS` row
+ * - `density="courtesy"` (no surface uses it since #572) → unchanged: a `brightMLS` row
  *   still gets the full block below instead of the one-sentence disclosure, exactly as before
  *   #305. A non-`brightMLS` row gets the one-sentence disclosure, also unchanged.
  * - `density="full"` → the full IDX block: listing agent name, at least one contact method, and
@@ -50,10 +50,6 @@ import type { Attribution, ListingSource } from '@cribstop/property-contracts';
  * hover-only `title` carrying it, which does not satisfy 7.58's "reasonably prominent". The
  * courtesy line has its own `title` and is never truncated away, so the firm stays visible.
  */
-
-/** An inline link's padding box counts as its tap area, so this reaches 44px without moving a line. Desktop does not need it. */
-const CONTACT_LINK = 'py-3.5 hover:underline lg:py-0';
-
 export default function ListingAttribution({
   attribution,
   source,
@@ -150,19 +146,13 @@ export default function ListingAttribution({
       {contact && (
         <p {...compactLineProps(contactText)}>
           {brokerPhone && (
-            <a
-              href={`tel:${brokerPhone.replace(/[^\d+]/g, '')}`}
-              className={compact ? 'hover:underline' : CONTACT_LINK}
-            >
+            <a href={`tel:${brokerPhone.replace(/[^\d+]/g, '')}`} className="hover:underline">
               {brokerPhone}
             </a>
           )}
           {brokerPhone && brokerEmail && <span aria-hidden="true"> · </span>}
           {brokerEmail && (
-            <a
-              href={`mailto:${brokerEmail}`}
-              className={compact ? 'hover:underline' : CONTACT_LINK}
-            >
+            <a href={`mailto:${brokerEmail}`} className="hover:underline">
               {brokerEmail}
             </a>
           )}
