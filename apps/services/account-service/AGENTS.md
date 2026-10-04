@@ -72,6 +72,11 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   enforcement on, an account created before this shipped gets no reset token until its owner
   confirms through `/resendConfirmationEmail`. Tests:
   `Tests/Integration/AccountRecoveryEndpointTests.cs`.
+- **A soft-deleted account cannot sign in, and the refusal is central** (#152).
+  `Models/AppSignInManager.cs` overrides `CanSignInAsync` (every sign-in path) and
+  `ValidateSecurityStampAsync` (cookie and `/account/refresh`). `AppUserManager.ConfirmEmailAsync`
+  refuses it too. Do not move this behind `RequireConfirmedAccount`, which is a separate switch.
+  Tests: `Tests/Integration/DeletedAccountSignInTests.cs`.
 - CPM: versionless `<PackageReference>`; run `pnpm run nx:reset` after project structure changes.
 
 ## Identity surface (register, confirm, resend, reset)

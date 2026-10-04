@@ -34,6 +34,38 @@ internal sealed class AppSignInManager(
     // Stored separately to avoid CS9107 (base constructor also captures contextAccessor).
     private readonly IHttpContextAccessor httpContextAccessor = contextAccessor;
 
+    /// <summary>
+    /// Refuses every sign-in for a soft-deleted account, whatever the sign-in path.
+    /// </summary>
+    /// <remarks>
+    /// <c>PreSignInCheck</c> calls this for password, two-factor and external sign-in. It does not
+    /// depend on <c>SignInOptions.RequireConfirmedAccount</c>, which is a separate switch (#149).
+    /// <c>/account/login</c> maps the resulting <c>NotAllowed</c> to <c>Failed</c>, so the response
+    /// matches an unknown address.
+    /// </remarks>
+    /// <param name="user">The account that tries to sign in.</param>
+    /// <returns><see langword="false"/> for a soft-deleted account.</returns>
+    public override async Task<bool> CanSignInAsync(ApplicationUser user)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+
+        return !user.DeletedAt.HasValue
+            && await base.CanSignInAsync(user).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Rejects the security stamp of a soft-deleted account, so cookie revalidation and
+    /// <c>/account/refresh</c> refuse it even if the stamp was not rotated.
+    /// </summary>
+    /// <param name="user">The account that owns the stamp.</param>
+    /// <param name="securityStamp">The stamp the credential carries.</param>
+    /// <returns><see langword="true"/> when the account is live and the stamp matches.</returns>
+    public override async Task<bool> ValidateSecurityStampAsync(ApplicationUser? user, string? securityStamp)
+    {
+        return user is { DeletedAt: null }
+            && await base.ValidateSecurityStampAsync(user, securityStamp).ConfigureAwait(false);
+    }
+
     /// <inheritdoc/>
     public override async Task SignInWithClaimsAsync(
         ApplicationUser user,

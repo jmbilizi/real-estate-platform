@@ -210,6 +210,13 @@ Because `ValidationInterval = TimeSpan.Zero`, the next request carrying that use
 rejected with `401` immediately — there is no expiry window — and their **refresh tokens** are dead,
 since `/account/refresh` revalidates the stamp before issuing anything.
 
+Soft-delete also blocks **new** sessions (#152). `AppSignInManager.CanSignInAsync` refuses a
+soft-deleted account on every sign-in path, and `ValidateSecurityStampAsync` refuses it for cookie
+revalidation and `/account/refresh`. Neither depends on `AccountRecovery:RequireConfirmedEmail`.
+`/account/login` answers a deleted account with the same `Failed` problem as a wrong password or an
+unknown address. `/account/confirmEmail` refuses a deleted account with the generic confirmation
+failure.
+
 An `Identity.Bearer` **access** token already in circulation is the exception: `BearerTokenHandler`
 unprotects the ticket and checks its own `ExpiresUtc`, and never re-reads the security stamp. So a
 bearer token issued before the revocation keeps working until it expires on its own. This applies to
