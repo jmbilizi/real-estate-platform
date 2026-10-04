@@ -29,16 +29,29 @@ function lockScroll() {
     clearTimeout(scheduledScrollUnlock);
     scheduledScrollUnlock = null;
   }
-  // Only measure when the scrollbar is still visible (skip on Strict Mode re-mount)
-  if (document.documentElement.style.overflow !== 'hidden') {
-    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
-    document.documentElement.style.paddingRight = `${scrollbarWidth}px`;
-    document.documentElement.style.overflow = 'hidden';
+  /*
+   * The gutter is kept instead of padding the page by the scrollbar's width. Padding was measured and
+   * applied after hydration, so the viewport widened by a scrollbar width at that moment and a
+   * directly-loaded panel visibly slid right. `globals.css` applies the same two declarations to
+   * the server-rendered panel from its first paint, so this call changes nothing on screen.
+   */
+  const root = document.documentElement;
+  if (
+    typeof CSS !== 'undefined' &&
+    typeof CSS.supports === 'function' &&
+    CSS.supports('scrollbar-gutter', 'stable')
+  ) {
+    root.style.scrollbarGutter = 'stable';
+  } else if (root.style.overflow !== 'hidden') {
+    // Older browsers: pad by the scrollbar width, as before.
+    root.style.paddingRight = `${window.innerWidth - root.clientWidth}px`;
   }
+  root.style.overflow = 'hidden';
 }
 
 function unlockScroll() {
   document.documentElement.style.paddingRight = '';
+  document.documentElement.style.scrollbarGutter = '';
   document.documentElement.style.overflow = '';
 }
 
@@ -291,6 +304,7 @@ export default function Modal({
       /* `z-dialog`, not `z-50` — see `lib/z-layers`. At 50 this tied with the sticky header and sat
          *below* the docked search bar's 55, so scrolling a results page far enough to dock the pill
          and then opening a listing put the pill on top of the panel's own header row. */
+      data-scroll-lock
       className={`fixed inset-0 z-dialog flex justify-center overflow-hidden bg-black/30 ${backdropAlign}`}
     >
       <div
