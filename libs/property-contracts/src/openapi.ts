@@ -5,6 +5,7 @@ import { listingDetailSchema } from './listing-detail';
 import { propertyLookupResponseSchema, propertyPageSchema } from './property-page';
 import { listingInquiryRequestSchema, listingInquiryResponseSchema } from './listing-inquiry';
 import { listingsMetaSchema } from './listings-meta';
+import { savedHomesEnvelopeSchema, savedHomesRequestSchema, savedStateSchema } from './saved-homes';
 import { neighborhoodsRequestSchema, neighborhoodsResponseSchema } from './neighborhoods';
 import { mapRequestSchema, mapResponseSchema } from './listing-map';
 import { errorBodySchema } from './errors';
@@ -79,6 +80,8 @@ function componentSchemas() {
   registry.add(mapResponseSchema, { id: 'MapResponse' });
   registry.add(listingInquiryRequestSchema, { id: 'ListingInquiryRequest' });
   registry.add(listingInquiryResponseSchema, { id: 'ListingInquiryResponse' });
+  registry.add(savedHomesEnvelopeSchema, { id: 'SavedHomesEnvelope' });
+  registry.add(savedStateSchema, { id: 'SavedState' });
   registry.add(errorBodySchema, { id: 'ErrorBody' });
 
   const { schemas } = z.toJSONSchema(registry, {
@@ -106,6 +109,21 @@ function componentSchemas() {
  */
 const serverErrorResponse = {
   description: 'Unexpected server error. The body carries no detail by design.',
+  content: {
+    'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+  },
+};
+
+const unavailableResponse = {
+  description:
+    'account-service did not answer, so the session is unknown. Retry. This is not a sign-out.',
+  content: {
+    'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+  },
+};
+
+const unauthenticatedResponse = {
+  description: 'No valid credential. The body gives no reason.',
   content: {
     'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
   },
@@ -181,7 +199,10 @@ export function toOpenApiDocument() {
             'when that count exceeds the window — it is never clamped to it.\n\n' +
             'The optional `bounds` limits the result to a viewport. It is ANDed with every other ' +
             'filter, so the result is the searched place within the viewport. A listing whose ' +
-            'street address is withheld has no coordinates, so it is not in a viewport result.',
+            'street address is withheld has no coordinates, so it is not in a viewport result.\n\n' +
+            'A signed-in request also gets `isSaved` and `isFavorited` on each result, resolved ' +
+            'by home, and a `private, no-store` response. A signed-out request never gets them ' +
+            'and is never rejected for lacking a credential.',
           parameters: searchParameters(),
           responses: {
             '200': {
@@ -486,6 +507,122 @@ export function toOpenApiDocument() {
                 'Rate limit exceeded for this client or this listing. Documented here — unlike ' +
                 'the read endpoints above — because this limit is enforced by the service ' +
                 'itself (keyed on the path parameter), not by the gateway.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/listings/{id}/saved': {
+        put: {
+          operationId: 'saveListingHome',
+          summary: 'Save the home that one listing is on',
+          description:
+            'Requires sign-in. The service resolves the home of the listing, so the client does ' +
+            'not need a property id. Saving is idempotent: saving a home again, through the same ' +
+            'or another listing, is the same save. A save belongs to the account, never to a role.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: schema(idSchema, 'input') },
+          ],
+          responses: {
+            '200': {
+              description: 'The home is saved.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/SavedState' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '503': unavailableResponse,
+            '404': {
+              description: 'No such listing.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+        delete: {
+          operationId: 'unsaveListingHome',
+          summary: 'Remove the home that one listing is on from saved homes',
+          description:
+            'Requires sign-in. Removing a home that is not saved is a success with `saved` false.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: schema(idSchema, 'input') },
+          ],
+          responses: {
+            '200': {
+              description: 'The home is not saved.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/SavedState' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '503': unavailableResponse,
+            '404': {
+              description: 'No such listing.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/saved-homes': {
+        get: {
+          operationId: 'listSavedHomes',
+          summary: 'The saved homes of the signed-in account',
+          description:
+            'Requires sign-in. Returns only the calling account’s homes, newest save first. ' +
+            'Each row is a home: the property facts plus its current consumer-visible listing, ' +
+            'or `listing` null when it has none. An off-market home is a normal row, never a ' +
+            '404 and never left out. Address and coordinates carry the same masking as search. ' +
+            'The response is `private, no-store`.',
+          parameters: searchParameters(savedHomesRequestSchema),
+          responses: {
+            '200': {
+              description: 'A page of saved homes with an exact total.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/SavedHomesEnvelope' } },
+              },
+            },
+            '400': {
+              description: 'Unknown or invalid query parameter (`invalid_request`).',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/saved-homes/{id}': {
+        delete: {
+          operationId: 'unsaveHome',
+          summary: 'Remove a saved home by its home id',
+          description:
+            'Requires sign-in. `id` is the `propertyId` of a saved home. It works for a home with ' +
+            'no consumer-visible listing. Removing a home that is not saved is a success with ' +
+            '`saved` false. A request never touches another account’s saves.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: schema(idSchema, 'input') },
+          ],
+          responses: {
+            '200': {
+              description: 'The home is not saved.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/SavedState' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '503': unavailableResponse,
+            '404': {
+              description: 'The id is not a well-formed id.',
               content: {
                 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
               },

@@ -67,6 +67,11 @@ export const listingCardSchema = z
     // #459. The instant the listing was listed, only when the feed proves it: the status change is
     // on the list date and is not a date-only midnight. Null otherwise. Never a guess.
     listedAtPrecise: z.iso.datetime().nullable(),
+    // #23. Present only on an authenticated request, omitted for a signed-out caller. This is the one
+    // field a card may omit: a per-user value cannot live in a shared-cache response. Both names
+    // carry the same value, resolved by home id, so every listing of a saved home reads as saved.
+    isSaved: z.boolean().optional(),
+    isFavorited: z.boolean().optional(),
   })
   .extend(attributionSchema.shape);
 

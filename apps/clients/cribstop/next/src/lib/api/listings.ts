@@ -106,6 +106,9 @@ const USER_FACING_MESSAGE: Record<ListingsErrorCode, string> = {
     'The listings service is temporarily unavailable. Please try again shortly.',
   /** The gateway's own 429 (#177) — a person can act on this; retrying immediately will not help. */
   rate_limited: "You're making requests too quickly. Please wait a moment and try again.",
+  /** The saved-homes routes (#23). The UI that calls them is #25. */
+  unauthenticated: 'Sign in to save homes.',
+  unavailable: 'Saved homes are briefly unavailable. Please try again.',
 };
 
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {

@@ -79,7 +79,10 @@ type ExpectedCardKeys =
   | 'officeName'
   | 'officeBrokerLeadPhone'
   | 'officeBrokerLeadEmail'
-  | 'listedBy';
+  | 'listedBy'
+  // #23. Optional: present only on an authenticated request.
+  | 'isSaved'
+  | 'isFavorited';
 
 export type _CardKeysMissing = AssertNever<Exclude<ExpectedCardKeys, keyof ListingCardRow>>;
 export type _CardKeysExtra = AssertNever<Exclude<keyof ListingCardRow, ExpectedCardKeys>>;

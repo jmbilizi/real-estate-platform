@@ -104,4 +104,29 @@ describe('createHttpIntrospectionClient', () => {
 
     expect(accountId).toBeNull();
   });
+
+  // #23. The saved-homes routes must not read an outage as "signed out".
+  it('reports an outage as unavailable through introspect()', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const client = createHttpIntrospectionClient(OPTIONS);
+
+    global.fetch = jest
+      .fn()
+      .mockRejectedValue(new Error('ECONNREFUSED')) as unknown as typeof fetch;
+    expect(await client.introspect?.({ cookie: 'x=1' })).toEqual({ kind: 'unavailable' });
+
+    global.fetch = jest.fn().mockResolvedValue({ ok: false }) as unknown as typeof fetch;
+    expect(await client.introspect?.({ cookie: 'x=1' })).toEqual({ kind: 'unavailable' });
+  });
+
+  it('reports an invalid or missing credential as signed-out through introspect()', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ isValid: false, accountId: null }),
+    }) as unknown as typeof fetch;
+    const client = createHttpIntrospectionClient(OPTIONS);
+
+    expect(await client.introspect?.({ cookie: 'x=1' })).toEqual({ kind: 'signed-out' });
+    expect(await client.introspect?.({})).toEqual({ kind: 'signed-out' });
+  });
 });
