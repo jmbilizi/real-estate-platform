@@ -152,12 +152,24 @@ function ensureNodeTargets(
     };
   }
 
-  // format — root .prettierrc.js is auto-discovered; no --config needed
+  // format — root .prettierrc.js is auto-discovered; no --config needed.
+  // Prettier reads ignore files from cwd only, so pass the root ones explicitly. An explicit
+  // --ignore-path replaces the default (.gitignore + .prettierignore), so list both.
+  const prettierIgnoreArgs = ['.gitignore', '.prettierignore']
+    .map((f) => `--ignore-path ${toPosix(path.relative(projectRootRel, '.'))}/${f}`)
+    .join(' ');
+  const legacyPrettier = { format: 'prettier --write .', 'format-check': 'prettier --check .' };
+  for (const [name, legacy] of Object.entries(legacyPrettier)) {
+    const opts = projectJson.targets[name]?.options;
+    if (opts && opts.command === legacy) {
+      opts.command = `${legacy.slice(0, -2)} ${prettierIgnoreArgs} .`;
+    }
+  }
   if (!projectJson.targets.format) {
     projectJson.targets.format = {
       executor: 'nx:run-commands',
       options: {
-        command: 'prettier --write .',
+        command: `prettier --write ${prettierIgnoreArgs} .`,
         cwd: toPosix(projectRootRel),
       },
     };
@@ -168,7 +180,7 @@ function ensureNodeTargets(
     projectJson.targets['format-check'] = {
       executor: 'nx:run-commands',
       options: {
-        command: 'prettier --check .',
+        command: `prettier --check ${prettierIgnoreArgs} .`,
         cwd: toPosix(projectRootRel),
       },
     };

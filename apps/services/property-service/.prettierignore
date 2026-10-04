@@ -1,3 +1,0 @@
-# Verbatim Bright MLS HTTP capture. Sha256 recorded in sibling README and compared against hash
-# the ingestion job computes over the wire bytes. Reformat reports a drift that did not happen.
-docs/bright-mls/service-document.json
