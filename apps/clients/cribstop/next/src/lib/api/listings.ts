@@ -281,6 +281,9 @@ export interface ListingDetailView {
 
   // --- NAR 7.58 attribution ------------------------------------------------------------------
   listingAgentName: string | null;
+  /** #564. The listing agent's own contact. Null when the feed has none. */
+  listAgentPhone: string | null;
+  listAgentEmail: string | null;
   brokerName: string;
   brokerPhone: string;
   brokerEmail: string | null;
@@ -369,6 +372,8 @@ export function toListingDetailView(detail: ListingDetail): ListingDetailView {
     facts: listing.facts,
 
     listingAgentName: listing.listingAgentName,
+    listAgentPhone: listing.listAgentPhone,
+    listAgentEmail: listing.listAgentEmail,
     brokerName: listing.brokerName,
     brokerPhone: listing.brokerPhone,
     brokerEmail: listing.brokerEmail,

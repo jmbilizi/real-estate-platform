@@ -13,13 +13,17 @@ import ListingFacts from '@/components/listing/ListingFacts';
 import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges';
 import { NearbyHomesSkeleton } from '@/components/listing/ListingStates';
 import { formatNumber, formatPrice } from '@/lib/format';
+import { BRAND } from '@/lib/brand';
 import {
+  agentContactLines,
+  agentInitials,
   formatClosePrice,
   formatListingLocation,
   formatListingPrice,
   formatLotSize,
   formatOpenHouse,
   formatStreetAddress,
+  officeInitial,
 } from '@/lib/listing-format';
 import { copyToClipboard } from '@/lib/clipboard';
 import { buildListingShare, listingShareUrl } from '@/lib/listing-share';
@@ -62,6 +66,10 @@ interface Props {
  * Values are the existing system's (`rounded-2xl`, `surface-border`, `surface-alt`), not new ones:
  * the brief is to make what we already have consistent, not to introduce another visual language.
  */
+const PHONE_ICON =
+  'M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z';
+const EMAIL_ICON =
+  'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z';
 const PANEL = 'rounded-2xl border border-surface-border bg-white';
 
 /** "Nearby homes" fetch lifecycle. A failed nice-to-have must not break the page, so a failure
@@ -455,83 +463,64 @@ export default function ListingDetailContent({
              */}
             <div className={`${PANEL} p-6`}>
               <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
-                Listing Agent
+                {listing.listingAgentName ? 'Listing Agent' : 'Listing Office'}
               </p>
               <div className="mt-3 flex items-center gap-3">
-                <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand to-brand-700 font-bold text-white">
-                  {listing.brokerName[0]}
+                {/* Monogram: the feed has no agent photo keyed to the listing agent (#564). */}
+                <div
+                  aria-hidden="true"
+                  className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand to-brand-700 font-bold text-white"
+                >
+                  {listing.listingAgentName
+                    ? agentInitials(listing.listingAgentName)
+                    : officeInitial(listing.officeName)}
                 </div>
                 <div className="min-w-0">
                   <p className="truncate font-semibold text-ink">
-                    {listing.listingAgentName ?? listing.brokerName}
+                    {listing.listingAgentName ?? listing.officeName}
                   </p>
-                  <p className="truncate text-[13px] text-ink-muted">{listing.officeName}</p>
+                  {listing.listingAgentName && (
+                    <p className="truncate text-[13px] text-ink-muted">{listing.officeName}</p>
+                  )}
                 </div>
               </div>
-              <div className="mt-4 space-y-1.5 text-sm">
-                {/*
-                 * #344: NAR 7.58 requires the firm plus a phone OR an email, not both. Bright
-                 * omits the office email on 45% of the feed, so `brokerEmail` is nullable and
-                 * `brokerPhone` can be `''` on the rare row with an email and no phone — each
-                 * line renders only when its value is present.
-                 */}
-                {listing.brokerPhone && (
-                  <p className="flex items-center gap-2 text-ink-muted">
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                      />
-                    </svg>
-                    {listing.brokerPhone}
-                  </p>
-                )}
-                {listing.brokerEmail && (
-                  <p className="flex items-center gap-2 text-ink-muted">
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                      />
-                    </svg>
-                    {listing.brokerEmail}
-                  </p>
-                )}
-                {listing.officeBrokerLeadPhone && (
-                  <p className="flex items-center gap-2 text-ink-muted">
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                      />
-                    </svg>
-                    <span className="text-ink-subtle">Office:</span>&nbsp;
-                    {listing.officeBrokerLeadPhone}
-                  </p>
-                )}
-                {listing.officeBrokerLeadEmail && (
-                  <p className="flex items-center gap-2 text-ink-muted">
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                      />
-                    </svg>
-                    <span className="text-ink-subtle">Office:</span>&nbsp;
-                    {listing.officeBrokerLeadEmail}
-                  </p>
-                )}
-              </div>
+              {/*
+               * #344: NAR 7.58 requires the firm plus a phone OR an email, not both, so the office
+               * lines stay beside the agent's own. Each line renders only when its value is
+               * present, and each is one tap. `min-h-11` keeps the tap target 44px on a phone.
+               */}
+              <ul className="mt-4 space-y-1 text-sm">
+                {agentContactLines(listing).map((line) => (
+                  <li key={`${line.kind}:${line.value}`}>
+                    <a
+                      href={line.href}
+                      className="flex min-h-11 items-center gap-2 break-all text-ink-muted hover:text-brand"
+                    >
+                      <svg
+                        className="h-4 w-4 flex-shrink-0"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d={line.kind === 'phone' ? PHONE_ICON : EMAIL_ICON}
+                        />
+                      </svg>
+                      <span className="text-ink-subtle">{line.owner}:</span>
+                      <span>{line.value}</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
               <button className="btn-primary mt-5 w-full">Schedule a Tour</button>
               <button className="btn-secondary mt-2 w-full">Message Agent</button>
+              <p className="mt-4 text-[13px] font-medium leading-snug text-ink-muted">
+                Brokered by {BRAND.brokerage} &middot; {BRAND.siteName}
+              </p>
             </div>
 
             {/* Open houses — the API sends only upcoming occurrences, so "upcoming" is never

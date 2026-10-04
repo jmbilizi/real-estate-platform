@@ -458,3 +458,45 @@ describe('ListingDetailContent — Share (#135)', () => {
     expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument();
   });
 });
+
+describe('ListingDetailContent — agent card (#571)', () => {
+  it('shows the agent monogram, the bare office name and one-tap links', async () => {
+    const view = toListingDetailView(
+      aListingDetail({
+        listing: {
+          listingAgentName: 'Jane Q. Agent',
+          officeName: 'Acme Realty',
+          listAgentPhone: '(301) 555-0100',
+          listAgentEmail: 'jane@acme.example',
+          brokerPhone: '(301) 555-0199',
+          brokerEmail: null,
+        },
+      }),
+    );
+    await renderAndSettle(<ListingDetailContent listing={view} />);
+
+    expect(screen.getByText('JA')).toBeInTheDocument();
+    expect(screen.getByText('Acme Realty')).toBeInTheDocument();
+    const card = screen.getByText('Listing Agent').parentElement as HTMLElement;
+    expect(within(card).queryByText(/listing courtesy of/i)).toBeNull();
+    expect(screen.getByRole('link', { name: /\(301\) 555-0100/ })).toHaveAttribute(
+      'href',
+      'tel:3015550100',
+    );
+    expect(screen.getByRole('link', { name: /jane@acme\.example/ })).toHaveAttribute(
+      'href',
+      'mailto:jane@acme.example',
+    );
+    expect(screen.getByText(/Brokered by Real Broker, LLC/)).toBeInTheDocument();
+  });
+
+  it('leads with the office and its initial when the feed has no agent name', async () => {
+    const view = toListingDetailView(
+      aListingDetail({ listing: { listingAgentName: null, officeName: 'Acme Realty' } }),
+    );
+    await renderAndSettle(<ListingDetailContent listing={view} />);
+
+    expect(screen.getByText('Listing Office')).toBeInTheDocument();
+    expect(screen.getByText('A')).toBeInTheDocument();
+  });
+});
