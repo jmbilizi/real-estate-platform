@@ -150,13 +150,19 @@ export default function ListingAttribution({
       {contact && (
         <p {...compactLineProps(contactText)}>
           {brokerPhone && (
-            <a href={`tel:${brokerPhone.replace(/[^\d+]/g, '')}`} className={compact ? 'hover:underline' : CONTACT_LINK}>
+            <a
+              href={`tel:${brokerPhone.replace(/[^\d+]/g, '')}`}
+              className={compact ? 'hover:underline' : CONTACT_LINK}
+            >
               {brokerPhone}
             </a>
           )}
           {brokerPhone && brokerEmail && <span aria-hidden="true"> · </span>}
           {brokerEmail && (
-            <a href={`mailto:${brokerEmail}`} className={compact ? 'hover:underline' : CONTACT_LINK}>
+            <a
+              href={`mailto:${brokerEmail}`}
+              className={compact ? 'hover:underline' : CONTACT_LINK}
+            >
               {brokerEmail}
             </a>
           )}
