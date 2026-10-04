@@ -272,6 +272,8 @@ export interface ListingDetailView {
   description: string | null;
   media: Media[];
   openHouses: OpenHouse[];
+  /** #573. The unbranded tour URL. Unvalidated MLS text, so pass it through `resolveTourEntry`. */
+  virtualTourUrl: string | null;
   /** #568. Detail-only facts. A fact the feed does not carry is null. */
   taxAnnualAmount: number | null;
   taxYear: number | null;
@@ -365,6 +367,7 @@ export function toListingDetailView(detail: ListingDetail): ListingDetailView {
     description: listing.description,
     media: listing.media,
     openHouses: listing.openHouses,
+    virtualTourUrl: listing.virtualTourUrl,
     taxAnnualAmount: listing.taxAnnualAmount,
     taxYear: listing.taxYear,
     hoaFee: listing.hoaFee,
