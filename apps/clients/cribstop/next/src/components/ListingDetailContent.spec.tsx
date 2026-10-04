@@ -546,7 +546,22 @@ describe('ListingDetailContent — Nearby homes without a panel (#572)', () => {
   });
 
   it('gives the facts summary rows a 44px tap target', async () => {
-    const view = toListingDetailView(aListingDetail());
+    const view = toListingDetailView(
+      aListingDetail({
+        listing: {
+          facts: {
+            parking: '2-car garage',
+            heating: 'Forced air',
+            cooling: null,
+            appliances: null,
+            basement: null,
+            flooring: null,
+            interior: null,
+            exterior: null,
+          },
+        },
+      }),
+    );
     const { container } = await renderAndSettle(<ListingDetailContent listing={view} />);
     const summaries = container.querySelectorAll('#facts summary');
     expect(summaries.length).toBeGreaterThan(0);
