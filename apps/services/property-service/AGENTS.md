@@ -712,3 +712,22 @@ the listing agent is never a recipient.
   `UPDATE listing_inquiries SET delivery_state = 'pending', delivery_attempts = 0, next_attempt_at = now() WHERE id = '<id>'`.
   The worker uses its own pool (30 s statement timeout), not the API pool.
 - Out of scope: agent matching and assignment, and a consumer confirmation email.
+
+## Saved homes (`src/saved/`)
+
+`PUT|DELETE /listings/{id}/saved`, `DELETE /saved-homes/{id}`, `GET /saved-homes` (#23). They extend
+the Property API document. Never publish a second document.
+
+- A save keys on `(account_id, property_id)`. `property_id` is the home id of #386: the unit id in a
+  subdivided building, else the property id. `listing_id` is context only and no read uses it.
+- `store.ts` is the only module that touches `saved_homes`. Every statement filters on `account_id`.
+- The list is home-shaped. An off-market home returns `listing: null`. It is never a 404 and never
+  dropped. `homes.ts` reads three statements per page, never one per home.
+- Masking follows the property page. This module never reads the street line. `listing_detail_v` and
+  `listing_search_v` mask it. One listing that withheld the address masks the whole home. A home
+  with no readable listing has no address.
+- Identity: `identity.ts` calls the #86 introspection client. Nothing caches the result, so a
+  revoked session stops at once. The save routes answer 401 when the caller does not resolve,
+  including when account-service is down.
+- The read routes add `isSaved` and `isFavorited` only for a caller that resolves to an account.
+  That response is `private, no-store`. An anonymous response stays public and byte-identical.

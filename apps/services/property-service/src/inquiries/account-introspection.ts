@@ -16,9 +16,20 @@ export interface CredentialHeaders {
   apiKey?: string;
 }
 
+/** What account-service said. `unavailable` means it gave no answer, which is not "signed out". */
+export type IntrospectionOutcome =
+  | { readonly kind: 'account'; readonly accountId: string }
+  | { readonly kind: 'signed-out' }
+  | { readonly kind: 'unavailable' };
+
 export interface IntrospectionClient {
   /** Resolves the forwarded credential to an account id, or `null` when signed out or invalid. */
   resolveAccountId(headers: CredentialHeaders): Promise<string | null>;
+  /**
+   * Same call, but an outage stays visible as `unavailable`. A route that must not read an outage
+   * as "signed out" (saved homes, #23) uses this. A client without it is treated as always up.
+   */
+  introspect?(headers: CredentialHeaders): Promise<IntrospectionOutcome>;
 }
 
 function hasAnyCredential(headers: CredentialHeaders): boolean {
@@ -49,33 +60,41 @@ export interface HttpIntrospectionClientOptions {
 export function createHttpIntrospectionClient(
   options: HttpIntrospectionClientOptions,
 ): IntrospectionClient {
+  async function introspect(headers: CredentialHeaders): Promise<IntrospectionOutcome> {
+    if (!hasAnyCredential(headers)) {
+      return { kind: 'signed-out' };
+    }
+
+    try {
+      const response = await fetch(options.url, {
+        method: 'POST',
+        headers: {
+          ...(headers.cookie ? { Cookie: headers.cookie } : {}),
+          ...(headers.authorization ? { Authorization: headers.authorization } : {}),
+          ...(headers.apiKey ? { [API_KEY_HEADER]: headers.apiKey } : {}),
+        },
+        signal: AbortSignal.timeout(options.timeoutMs),
+      });
+
+      if (!response.ok) {
+        return { kind: 'unavailable' };
+      }
+
+      const body = (await response.json()) as IntrospectionResponseBody;
+      return body.isValid === true && typeof body.accountId === 'string'
+        ? { kind: 'account', accountId: body.accountId }
+        : { kind: 'signed-out' };
+    } catch (error) {
+      console.warn('Credential introspection failed.', error);
+      return { kind: 'unavailable' };
+    }
+  }
+
   return {
     async resolveAccountId(headers: CredentialHeaders): Promise<string | null> {
-      if (!hasAnyCredential(headers)) {
-        return null;
-      }
-
-      try {
-        const response = await fetch(options.url, {
-          method: 'POST',
-          headers: {
-            ...(headers.cookie ? { Cookie: headers.cookie } : {}),
-            ...(headers.authorization ? { Authorization: headers.authorization } : {}),
-            ...(headers.apiKey ? { [API_KEY_HEADER]: headers.apiKey } : {}),
-          },
-          signal: AbortSignal.timeout(options.timeoutMs),
-        });
-
-        if (!response.ok) {
-          return null;
-        }
-
-        const body = (await response.json()) as IntrospectionResponseBody;
-        return body.isValid === true && typeof body.accountId === 'string' ? body.accountId : null;
-      } catch (error) {
-        console.warn('Credential introspection failed; treating the request as signed-out.', error);
-        return null;
-      }
+      const outcome = await introspect(headers);
+      return outcome.kind === 'account' ? outcome.accountId : null;
     },
+    introspect,
   };
 }

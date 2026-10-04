@@ -36,8 +36,11 @@ describe('toOpenApiDocument', () => {
       '/listings/{id}/card',
       '/listings/{id}/inquiries',
       '/listings/{id}/page',
+      '/listings/{id}/saved',
       '/properties/lookup',
       '/properties/{id}/page',
+      '/saved-homes',
+      '/saved-homes/{id}',
     ]);
   });
 

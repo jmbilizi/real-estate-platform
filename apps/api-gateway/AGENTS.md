@@ -57,16 +57,17 @@ every caller pays the full timeout. Such a value still passes Polly's own floors
 it. Keep `SamplingDuration ≥ 1.5 × MinimumThroughput × Timeout`. `RouteQoSOptionsTests` enforces
 that for every route and for the global fallback.
 
-| Class            | Routes                                                                                      | `Timeout` | `MinimumThroughput` | `SamplingDuration` | `BreakDuration` |
-| ---------------- | ------------------------------------------------------------------------------------------- | --------- | ------------------- | ------------------ | --------------- |
-| Fast public read | `/property/listings/meta`, `/property/listings/{id}`, `/property/listings/{id}/card` (#549) | 3000      | 5                   | 30000              | 5000            |
-| Public search    | `/property/listings` (exact `COUNT(*)` per search)                                          | 5000      | 5                   | 45000              | 5000            |
-| Map read         | `/property/listings/map` (capped pins, #377, #546)                                          | 5000      | 5                   | 45000              | 5000            |
-| Inquiry write    | `/property/listings/{id}/inquiries` (#131)                                                  | 5000      | 5                   | 45000              | 5000            |
-| Auth write       | `/account/*` (password hashing, outbound email)                                             | 10000     | 4                   | 60000              | 10000           |
-| Model inference  | `/inference/embeddings`                                                                     | 30000     | 2                   | 90000              | 15000           |
-| Inference read   | `/inference/models`                                                                         | 5000      | 5                   | 45000              | 10000           |
-| Inference probe  | `/inference/health`, `/inference/ready`                                                     | 3000      | 5                   | 30000              | 10000           |
+| Class            | Routes                                                                                       | `Timeout` | `MinimumThroughput` | `SamplingDuration` | `BreakDuration` |
+| ---------------- | -------------------------------------------------------------------------------------------- | --------- | ------------------- | ------------------ | --------------- |
+| Fast public read | `/property/listings/meta`, `/property/listings/{id}`, `/property/listings/{id}/card` (#549)  | 3000      | 5                   | 30000              | 5000            |
+| Public search    | `/property/listings` (exact `COUNT(*)` per search)                                           | 5000      | 5                   | 45000              | 5000            |
+| Map read         | `/property/listings/map` (capped pins, #377, #546)                                           | 5000      | 5                   | 45000              | 5000            |
+| Inquiry write    | `/property/listings/{id}/inquiries` (#131)                                                   | 5000      | 5                   | 45000              | 5000            |
+| Saved homes      | `/property/listings/{id}/saved`, `/property/saved-homes`, `/property/saved-homes/{id}` (#23) | 5000      | 5                   | 45000              | 5000            |
+| Auth write       | `/account/*` (password hashing, outbound email)                                              | 10000     | 4                   | 60000              | 10000           |
+| Model inference  | `/inference/embeddings`                                                                      | 30000     | 2                   | 90000              | 15000           |
+| Inference read   | `/inference/models`                                                                          | 5000      | 5                   | 45000              | 10000           |
+| Inference probe  | `/inference/health`, `/inference/ready`                                                      | 3000      | 5                   | 30000              | 10000           |
 
 The threshold falls as the timeout rises, for the same reason: two consecutive 30-second timeouts on
 an inference call is already an outage, and demanding five would need a three-minute window.

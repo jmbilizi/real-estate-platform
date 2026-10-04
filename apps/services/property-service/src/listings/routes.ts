@@ -15,6 +15,7 @@ import {
   type SearchRequest,
   searchRequestSchema,
 } from '@cribstop/property-contracts';
+import { PRIVATE_CACHE_CONTROL, type SavedStateReader, withSavedFlags } from '../saved/identity';
 import type { GalleryLoader } from './gallery-loader';
 import { findMapPins } from './map-query';
 import { resolvedSearchRequest } from './on-demand';
@@ -44,10 +45,10 @@ import {
  * `/listings` and `/listings/{id}` embed a time-relative fact — the upcoming open house — so a long
  * TTL would keep serving a showing that has finished. 60s is the ceiling.
  *
- * Deliberately NOT `no-store`: these payloads carry no PII (no `isSaved`, no per-user ranking, nothing
- * derived from a caller identity) and must not start to. Making them uncacheable would be paying a
- * permanent cost for privacy we do not need here, and would quietly license adding per-user fields
- * later.
+ * Deliberately NOT `no-store`: an anonymous payload carries no PII (no per-user ranking, nothing
+ * derived from a caller identity) and must not start to. The one per-user field is `isSaved` (#23).
+ * It appears only on a request that resolves to an account, and that response is `private,
+ * no-store` instead (`PRIVATE_CACHE_CONTROL`), so it never enters a shared cache.
  */
 const LISTINGS_CACHE_CONTROL = 'public, max-age=60';
 
@@ -163,6 +164,7 @@ export function createListingsRouter(
   galleryLoader?: GalleryLoader,
   addressFetcher?: AddressFetcher,
   mapPinCap = MAP_PIN_CAP_DEFAULT,
+  savedState?: SavedStateReader,
 ): Router {
   const router = Router();
 
@@ -203,7 +205,23 @@ export function createListingsRouter(
       // `resolvedSearchRequest()` parsed out of it instead (`on-demand.ts`). `appliedFilters` below
       // echoes that resolved request, city/state in place of query, because it is what actually ran.
       const effectiveRequest = resolvedSearchRequest(parsed.value);
+      // Resolves the caller beside the search. A request with no credential resolves at once.
+      const account = savedState?.identify(req);
       const envelope = await searchListings(pool, effectiveRequest);
+      // #23. Saved flags only for a caller that resolves to an account. Such a response is
+      // private. Every other response stays byte-identical and public.
+      const accountId = (await account) ?? null;
+      if (savedState !== undefined && accountId !== null) {
+        const saved = await savedState.savedAmong(
+          accountId,
+          envelope.results.map((card) => card.propertyId),
+        );
+        res
+          .set('Cache-Control', PRIVATE_CACHE_CONTROL)
+          .status(200)
+          .json({ ...envelope, results: envelope.results.map((c) => withSavedFlags(c, saved)) });
+        return;
+      }
       // Postgres only. The sync worker (#338) keeps the database current, so search never calls
       // Bright and never waits on it.
       res.set('Cache-Control', LISTINGS_CACHE_CONTROL).status(200).json(envelope);
@@ -267,6 +285,7 @@ export function createListingsRouter(
         notFound(res);
         return;
       }
+      const account = savedState?.identify(req);
       let detail = await findListingById(pool, id.data);
       if (detail === null) {
         notFound(res);
@@ -289,6 +308,14 @@ export function createListingsRouter(
             cacheControl = 'no-store';
           }
         }
+      }
+      // #23. Same rule as the search route: flags and a private response only for a caller that
+      // resolves to an account.
+      const accountId = (await account) ?? null;
+      if (savedState !== undefined && accountId !== null) {
+        const saved = await savedState.savedAmong(accountId, [detail.listing.propertyId]);
+        detail = { ...detail, listing: withSavedFlags(detail.listing, saved) };
+        cacheControl = PRIVATE_CACHE_CONTROL;
       }
       res.set('Cache-Control', cacheControl).status(200).json(detail);
     }),

@@ -89,7 +89,7 @@ const queryPage = z
 
 /** Mirrors `PAGE_SIZE_MAX` (100) exactly in the regex — if that constant ever changes, this
  *  pattern must change with it, or the published bound silently drifts from the enforced one. */
-const queryPageSize = z
+export const queryPageSize = z
   .string()
   .regex(/^([1-9][0-9]?|100)$/, `must be a whole number from 1 to ${PAGE_SIZE_MAX}`)
   .transform(Number)

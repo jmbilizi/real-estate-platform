@@ -251,6 +251,81 @@
         "SamplingDuration": 45000,
         "BreakDuration": 5000
       }
+    },
+    {
+      "UpstreamPathTemplate": "/property/listings/{id}/saved",
+      "UpstreamHttpMethod": ["PUT", "DELETE"],
+      "DownstreamPathTemplate": "/listings/{id}/saved",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "property-service-svc",
+          "Port": 3002
+        }
+      ],
+      "Priority": 3,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 60
+      },
+      "QoSOptions": {
+        "Timeout": 5000,
+        "MinimumThroughput": 5,
+        "SamplingDuration": 45000,
+        "BreakDuration": 5000
+      }
+    },
+    {
+      "UpstreamPathTemplate": "/property/saved-homes",
+      "UpstreamHttpMethod": ["GET"],
+      "DownstreamPathTemplate": "/saved-homes",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "property-service-svc",
+          "Port": 3002
+        }
+      ],
+      "Priority": 1,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 60
+      },
+      "QoSOptions": {
+        "Timeout": 5000,
+        "MinimumThroughput": 5,
+        "SamplingDuration": 45000,
+        "BreakDuration": 5000
+      }
+    },
+    {
+      "UpstreamPathTemplate": "/property/saved-homes/{id}",
+      "UpstreamHttpMethod": ["DELETE"],
+      "DownstreamPathTemplate": "/saved-homes/{id}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "property-service-svc",
+          "Port": 3002
+        }
+      ],
+      "Priority": 1,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 60
+      },
+      "QoSOptions": {
+        "Timeout": 5000,
+        "MinimumThroughput": 5,
+        "SamplingDuration": 45000,
+        "BreakDuration": 5000
+      }
     }
   ],
   "SwaggerEndPoints": [
