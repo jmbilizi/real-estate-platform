@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import type { MapBounds } from '@cribstop/property-contracts';
 import type { ListingSearchQuery } from '@/lib/api/listings';
 import type { ListingCardRow } from '@/lib/types';
+import type { ViewControls } from './CustomMapControls';
 import type { NeighborhoodBounds, NeighborhoodMarkers } from './ListingsMapInner';
 import { MAP_PANEL_CLASS } from './map-panel';
 
@@ -38,6 +39,8 @@ interface Props {
    * so the layout is not a hole.
    */
   active?: boolean;
+  /** Filter and group buttons, shown on the map only while it is expanded (#576). */
+  viewControls?: ViewControls;
 }
 
 /** The one placeholder, used both before mount and while the map chunk is in flight. */

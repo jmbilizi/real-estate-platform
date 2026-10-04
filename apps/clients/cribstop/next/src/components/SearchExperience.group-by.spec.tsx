@@ -531,3 +531,43 @@ describe('Group by neighborhood (#502)', () => {
     await waitFor(() => expect(lastGroupQuery()).toMatchObject({ offset: 48 }));
   });
 });
+
+describe('Expanded map filter and group buttons (#576)', () => {
+  const viewControls = () =>
+    (
+      mockMapProps.current as unknown as {
+        viewControls: {
+          filterCount: number;
+          onOpenFilters: () => void;
+          grouped: boolean;
+          onToggleGroup: () => void;
+        };
+      }
+    ).viewControls;
+
+  it('opens the toolbar filter dialog and passes the active filter count', async () => {
+    render(<SearchExperience initialQuery="q=Bethesda&beds=2" />);
+    await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
+
+    expect(viewControls().filterCount).toBe(1);
+    act(() => viewControls().onOpenFilters());
+
+    expect(screen.getByRole('dialog', { name: 'Filters' })).toBeTruthy();
+  });
+
+  it('toggles Group by neighborhood on and off with the same URL as the toolbar', async () => {
+    render(<SearchExperience initialQuery="q=Bethesda" />);
+    await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
+
+    expect(viewControls().grouped).toBe(false);
+    act(() => viewControls().onToggleGroup());
+    expect(await screen.findByTestId('neighborhood-group-grid')).toBeTruthy();
+    expect(currentParams().get('groupBy')).toBe('neighborhood');
+    expect(viewControls().grouped).toBe(true);
+
+    act(() => viewControls().onToggleGroup());
+    await waitFor(() => expect(screen.queryByTestId('neighborhood-group-grid')).toBeNull());
+    expect(currentParams().get('groupBy')).toBeNull();
+    expect(viewControls().grouped).toBe(false);
+  });
+});

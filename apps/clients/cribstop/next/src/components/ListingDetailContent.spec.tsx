@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { aListingDetail } from '@/test/fixtures';
+import { aListingCardRow, aListingDetail } from '@/test/fixtures';
 import { searchListings, toListingDetailView } from '@/lib/api/listings';
 import ListingDetailContent from './ListingDetailContent';
 
@@ -170,6 +170,40 @@ describe('ListingDetailContent — suppressed address', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
       '100 Test St, Bethesda, MD 20814',
     );
+  });
+});
+
+describe('ListingDetailContent — Nearby homes (#566)', () => {
+  it('searches active homes of the same offer around the listing and omits the listing itself', async () => {
+    const view = toListingDetailView(
+      aListingDetail({ listing: { latitude: 38.98, longitude: -77.1, listingType: 'rent' } }),
+    );
+    mockedSearchListings.mockResolvedValue({
+      results: [
+        aListingCardRow({ id: view.id }),
+        aListingCardRow({ id: '77777777-7777-4777-8777-777777777777' }),
+      ],
+      total: 2,
+      page: 1,
+      pageSize: 9,
+      pageCount: 1,
+      appliedFilters: {},
+    });
+    await renderAndSettle(<ListingDetailContent listing={view} />);
+
+    const query = mockedSearchListings.mock.calls[0][0];
+    expect(query).toMatchObject({ listingType: 'rent', status: ['Active'] });
+    expect(JSON.parse(query.boundary).type).toBe('Polygon');
+    expect(await screen.findByText('Nearby homes')).toBeInTheDocument();
+    expect(screen.queryByText(/similar homes/i)).toBeNull();
+  });
+
+  it('renders the server rows without a client search', () => {
+    const view = toListingDetailView(aListingDetail());
+    render(<ListingDetailContent listing={view} nearby={[aListingCardRow()]} />);
+
+    expect(screen.getByText('Nearby homes')).toBeInTheDocument();
+    expect(mockedSearchListings).not.toHaveBeenCalled();
   });
 });
 
@@ -422,5 +456,47 @@ describe('ListingDetailContent — Share (#135)', () => {
     await renderAndSettle(<ListingDetailContent listing={toListingDetailView(aListingDetail())} />);
 
     expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument();
+  });
+});
+
+describe('ListingDetailContent — agent card (#571)', () => {
+  it('shows the agent monogram, the bare office name and one-tap links', async () => {
+    const view = toListingDetailView(
+      aListingDetail({
+        listing: {
+          listingAgentName: 'Jane Q. Agent',
+          officeName: 'Acme Realty',
+          listAgentPhone: '(301) 555-0100',
+          listAgentEmail: 'jane@acme.example',
+          brokerPhone: '(301) 555-0199',
+          brokerEmail: null,
+        },
+      }),
+    );
+    await renderAndSettle(<ListingDetailContent listing={view} />);
+
+    expect(screen.getByText('JA')).toBeInTheDocument();
+    expect(screen.getByText('Acme Realty')).toBeInTheDocument();
+    const card = screen.getByText('Listing Agent').parentElement as HTMLElement;
+    expect(within(card).queryByText(/listing courtesy of/i)).toBeNull();
+    expect(screen.getByRole('link', { name: /\(301\) 555-0100/ })).toHaveAttribute(
+      'href',
+      'tel:3015550100',
+    );
+    expect(screen.getByRole('link', { name: /jane@acme\.example/ })).toHaveAttribute(
+      'href',
+      'mailto:jane@acme.example',
+    );
+    expect(screen.getByText(/Brokered by Real Broker, LLC/)).toBeInTheDocument();
+  });
+
+  it('leads with the office and its initial when the feed has no agent name', async () => {
+    const view = toListingDetailView(
+      aListingDetail({ listing: { listingAgentName: null, officeName: 'Acme Realty' } }),
+    );
+    await renderAndSettle(<ListingDetailContent listing={view} />);
+
+    expect(screen.getByText('Listing Office')).toBeInTheDocument();
+    expect(screen.getByText('A')).toBeInTheDocument();
   });
 });

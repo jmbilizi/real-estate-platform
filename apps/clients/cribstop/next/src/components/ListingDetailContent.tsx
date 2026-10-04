@@ -7,18 +7,23 @@ import MortgageTeaser from '@/components/MortgageTeaser';
 import ListingRow from '@/components/ListingRow';
 import SingleListingMap from '@/components/SingleListingMap';
 import ListingAttribution from '@/components/listing/ListingAttribution';
+import GalleryStatusBadge from '@/components/listing/GalleryStatusBadge';
 import ListingProvenance from '@/components/listing/ListingProvenance';
+import ListingFacts from '@/components/listing/ListingFacts';
 import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges';
-import { SimilarHomesSkeleton } from '@/components/listing/ListingStates';
+import { NearbyHomesSkeleton } from '@/components/listing/ListingStates';
 import { formatNumber, formatPrice } from '@/lib/format';
+import { BRAND } from '@/lib/brand';
 import {
+  agentContactLines,
+  agentInitials,
   formatClosePrice,
-  formatDwellingStats,
   formatListingLocation,
   formatListingPrice,
   formatLotSize,
   formatOpenHouse,
   formatStreetAddress,
+  officeInitial,
 } from '@/lib/listing-format';
 import { copyToClipboard } from '@/lib/clipboard';
 import { buildListingShare, listingShareUrl } from '@/lib/listing-share';
@@ -37,7 +42,7 @@ interface Props {
   statusLabel?: string;
   /**
    * #382: the property page passes the service's nearby listings. They replace the client-side
-   * "Similar homes" fetch, so the page renders only what the page API returned.
+   * "Nearby homes" fetch, so the page renders only what the page API returned.
    */
   nearby?: ListingCardRow[];
   /** #382: property page panels (the listing history), rendered before the nearby row. */
@@ -61,13 +66,20 @@ interface Props {
  * Values are the existing system's (`rounded-2xl`, `surface-border`, `surface-alt`), not new ones:
  * the brief is to make what we already have consistent, not to introduce another visual language.
  */
+const PHONE_ICON =
+  'M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z';
+const EMAIL_ICON =
+  'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z';
 const PANEL = 'rounded-2xl border border-surface-border bg-white';
 
-/** "Similar Homes" fetch lifecycle. A failed nice-to-have must not break the page, so a failure
+/** "Nearby homes" fetch lifecycle. A failed nice-to-have must not break the page, so a failure
  *  renders the same as "no results" — nothing — rather than an error banner. */
-type SimilarState =
+type NearbyState =
   | { status: 'loading'; results: [] }
   | { status: 'ready' | 'error'; results: ListingCardRow[] };
+
+/** Half the side of the nearby search square, in degrees. Matches the property page API (~2 km). */
+const NEARBY_HALF_SIDE = 0.02;
 
 export default function ListingDetailContent({
   listing,
@@ -115,50 +127,75 @@ export default function ListingDetailContent({
     else toast('We could not copy the link.', 'error');
   }
 
-  const [similar, setSimilar] = useState<SimilarState>({ status: 'loading', results: [] });
+  const [fetched, setFetched] = useState<NearbyState>({ status: 'loading', results: [] });
 
   const serverNearby = nearby !== undefined;
 
   useEffect(() => {
     if (serverNearby) return;
     const controller = new AbortController();
-    setSimilar({ status: 'loading', results: [] });
+    setFetched({ status: 'loading', results: [] });
 
     /**
-     * `listingType` matters as much as `propertyType` here: without it, a $1.9M condo for sale was
-     * shown rentals as "similar homes", and the "See all" link — which does carry the listing type
-     * — went somewhere that did not match what the row above it showed.
-     *
-     * A sold listing is deliberately compared against sold inventory rather than live: the useful
-     * comparison for a closed sale is other closed sales, and `listingType=all` excludes sold
-     * anyway, so asking for it explicitly is the only way to get any results at all.
+     * Same query as the property page API: active homes of the same offer (sale or rent) in a
+     * square around this one, else in its city. A sold listing compares against live inventory.
      */
+    const { latitude: lat, longitude: lng } = listing;
+    const d = NEARBY_HALF_SIDE;
+    const place =
+      lat !== null && lng !== null
+        ? {
+            boundary: JSON.stringify({
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [lng - d, lat - d],
+                  [lng + d, lat - d],
+                  [lng + d, lat + d],
+                  [lng - d, lat + d],
+                  [lng - d, lat - d],
+                ],
+              ],
+            }),
+          }
+        : { city: listing.city, state: listing.state };
     searchListings(
       {
-        propertyType: [listing.propertyType],
-        listingType: listing.listingType,
-        pageSize: 8,
+        ...place,
+        listingType: listing.listingType === 'rent' ? 'rent' : 'sale',
+        status: ['Active'],
+        sort: 'newest',
+        pageSize: 9,
       },
       controller.signal,
     )
       .then((envelope) => {
-        setSimilar({
+        setFetched({
           status: 'ready',
           results: envelope.results.filter((row) => row.id !== listing.id),
         });
       })
       .catch((err) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
-        setSimilar({ status: 'error', results: [] });
+        setFetched({ status: 'error', results: [] });
       });
 
     return () => controller.abort();
-  }, [serverNearby, listing.id, listing.propertyType, listing.listingType]);
-
-  const similarHref = searchTargetUrl(
-    { kind: 'place', place: { kind: 'city', city: listing.city, state: listing.state } },
+  }, [
+    serverNearby,
+    listing.id,
+    listing.latitude,
+    listing.longitude,
+    listing.city,
+    listing.state,
     listing.listingType,
-    new URLSearchParams({ propertyType: listing.propertyType }),
+  ]);
+
+  const nearbyRows = serverNearby ? nearby : fetched.results;
+
+  const nearbyHref = searchTargetUrl(
+    { kind: 'place', place: { kind: 'city', city: listing.city, state: listing.state } },
+    listing.listingType === 'rent' ? 'rent' : 'sale',
   );
 
   const streetAddress = formatStreetAddress(
@@ -183,7 +220,6 @@ export default function ListingDetailContent({
     listing.state,
   );
 
-  const dwellingStats = formatDwellingStats(listing.beds, listing.baths, listing.sqft);
   const lotSizeText = formatLotSize(listing.lotSqft);
   const priceDisplay = formatListingPrice(listing.price, listing.listingType);
   const closePriceText = formatClosePrice(listing.closePrice, listing.closeDate);
@@ -191,7 +227,9 @@ export default function ListingDetailContent({
   // Non-parcel dwelling stat tiles — each part is omitted rather than rendered as a dash or a
   // zero when the API sends null, and the whole block is suppressed for a parcel (rule #4).
   const statTiles = listing.isParcel
-    ? []
+    ? lotSizeText
+      ? [{ label: 'Lot Size', value: lotSizeText }]
+      : []
     : [
         ...(listing.beds !== null ? [{ label: 'Beds', value: listing.beds }] : []),
         ...(listing.baths !== null ? [{ label: 'Baths', value: listing.baths }] : []),
@@ -224,20 +262,8 @@ export default function ListingDetailContent({
             </svg>
           </button>
         )}
-        <div className="min-w-0 flex-1">
-          {/*
-           * `title-md` (16px/600) flat, replacing a `text-xs`→`text-xl` ladder that rendered this
-           * heading at 12/14/16/18/20px depending on viewport — four of those five are not steps
-           * in the DESIGN.md scale. If this changes, the skeleton's placeholder in
-           * `ListingStates` must change with it or the two states stop measuring the same.
-           */}
-          <h1 className="text-base font-semibold tracking-tight text-ink">
-            {streetAddress ?? suppressedAddressHeading}
-          </h1>
-          <p className="mt-1 text-sm text-ink-muted">
-            {[dwellingStats, listing.propertyType].filter(Boolean).join(' · ')}
-          </p>
-        </div>
+        {/* Address and stats live in the overview block, once. This bar holds actions only. */}
+        <div className="min-w-0 flex-1" />
         <div className="flex shrink-0 items-center gap-1.5">
           <button
             onClick={handleShare}
@@ -280,96 +306,86 @@ export default function ListingDetailContent({
       <div className="flex-1 min-h-0 scrollbar-overlay bg-surface-alt px-6 sm:px-8 py-4 pb-8">
         {/* Gallery — the first panel, exactly the block the skeleton opens with. */}
         <div className={`overflow-hidden ${PANEL}`}>
-          <PropertyGallery media={listing.media} />
+          <PropertyGallery media={listing.media}>
+            <GalleryStatusBadge {...listing} statusLabel={statusLabel} />
+          </PropertyGallery>
         </div>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_380px] lg:items-start">
           {/* Main column */}
           <div className="space-y-4">
-            {/* Badges + price + address */}
-            <div className={`${PANEL} p-6`}>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="badge bg-surface-border text-ink">
-                  {statusLabel ?? listing.status}
-                </span>
-                {listing.isSample && <SampleBadge />}
-                {listing.sponsored && <SponsoredBadge />}
-                {listing.priceReduced && (
-                  <span className="badge bg-amber-100 text-amber-800">Price Reduced</span>
-                )}
-                {listing.newConstruction && (
-                  <span className="badge bg-emerald-100 text-emerald-800">New Construction</span>
-                )}
-              </div>
-
-              {closePriceText ? (
-                <div className="mt-3 rounded-2xl border border-surface-border bg-surface-alt px-4 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
-                    Sold
-                  </p>
-                  <p className="mt-1 text-xl font-semibold tracking-[-0.18px] text-ink">
-                    {closePriceText}
-                  </p>
-                  {listing.price !== null && (
-                    <p className="mt-1 text-sm text-ink-muted">
-                      Listed at {formatPrice(listing.price, listing.listingType)}
-                    </p>
+            {/*
+             * Overview (#568): the one place price, address and stats appear. The header bar, the
+             * map section and the mobile bar carry none of them. The status badge is on the gallery
+             * (#565). The stat tiles sit inside this panel under a hairline.
+             */}
+            <section id="overview" className={PANEL}>
+              <div className="p-6">
+                <div className="mb-3 flex flex-wrap items-center gap-1.5 empty:hidden">
+                  {listing.isSample && <SampleBadge />}
+                  {listing.sponsored && <SponsoredBadge />}
+                  {listing.priceReduced && (
+                    <span className="badge bg-amber-100 text-amber-800">Price Reduced</span>
+                  )}
+                  {listing.newConstruction && (
+                    <span className="badge bg-emerald-100 text-emerald-800">New Construction</span>
                   )}
                 </div>
-              ) : (
-                /*
-                 * `display-sm` (20px/600) — the same style as the monthly estimate, deliberately.
-                 *
-                 * It has been 36px/800, then 30px/700, then 21px/700. Each step was still asking
-                 * the price to dominate the page. It does not need to: it sits alone in a panel
-                 * directly under the gallery, which is placement enough, and the surrounding
-                 * section headings are the same size. Matching the estimate's weight rather than
-                 * outranking it takes the last of the shout out of it.
-                 */
-                <p
-                  className={
-                    priceDisplay.isWithheld
-                      ? 'mt-3 text-base font-medium italic text-ink-muted'
-                      : 'mt-3 text-xl font-semibold tracking-[-0.18px] text-ink'
-                  }
-                >
-                  {priceDisplay.text}
-                </p>
-              )}
 
-              <p className="mt-2 text-ink-muted">
-                {formatListingLocation(listing.neighborhood, listing.city, listing.state)}{' '}
-                {listing.zip}
-              </p>
-            </div>
-
-            {/* Stats — suppressed entirely for a parcel, which shows lot size instead */}
-            {listing.isParcel
-              ? lotSizeText && (
-                  <div className={`max-w-xs ${PANEL} px-5 py-4`}>
+                {closePriceText ? (
+                  <div className="rounded-2xl border border-surface-border bg-surface-alt px-4 py-3">
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
-                      Lot Size
+                      Sold
                     </p>
-                    <p className="mt-1 text-base font-semibold text-ink">{lotSizeText}</p>
+                    <p className="mt-1 text-xl font-semibold tracking-[-0.18px] text-ink">
+                      {closePriceText}
+                    </p>
+                    {listing.price !== null && (
+                      <p className="mt-1 text-sm text-ink-muted">
+                        Listed at {formatPrice(listing.price, listing.listingType)}
+                      </p>
+                    )}
                   </div>
-                )
-              : statTiles.length > 0 && (
-                  <div
-                    className={`grid grid-cols-2 gap-0 overflow-hidden ${PANEL} sm:grid-cols-3 lg:grid-cols-6`}
+                ) : (
+                  /*
+                   * `display-sm` (20px/600). It sits first in the panel under the gallery, which
+                   * is placement enough, so it does not outrank the section headings.
+                   */
+                  <p
+                    className={
+                      priceDisplay.isWithheld
+                        ? 'text-base font-medium italic text-ink-muted'
+                        : 'text-xl font-semibold tracking-[-0.18px] text-ink'
+                    }
                   >
-                    {statTiles.map((s, i, arr) => (
-                      <div
-                        key={s.label}
-                        className={`px-5 py-4 ${i !== arr.length - 1 ? 'border-b border-surface-border sm:border-b-0 sm:border-r' : ''}`}
-                      >
-                        <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
-                          {s.label}
-                        </p>
-                        <p className="mt-1 text-base font-semibold text-ink">{s.value}</p>
-                      </div>
-                    ))}
-                  </div>
+                    {priceDisplay.text}
+                  </p>
                 )}
+
+                {/*
+                 * The street line already carries city, state and ZIP. When the seller withheld
+                 * the address the heading is the location alone: `title` is never a fallback
+                 * (#59), and there is no second line to repeat it.
+                 */}
+                <h1 className="mt-2 text-base font-semibold tracking-tight text-ink">
+                  {streetAddress ?? suppressedAddressHeading}
+                </h1>
+              </div>
+
+              {/* A parcel has no dwelling, so it shows lot size instead of the dwelling tiles. */}
+              {statTiles.length > 0 && (
+                <div className="grid grid-cols-2 gap-y-4 border-t border-surface-border px-6 py-4 sm:grid-cols-3 lg:grid-cols-6">
+                  {statTiles.map((s) => (
+                    <div key={s.label} className="min-w-0">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
+                        {s.label}
+                      </p>
+                      <p className="mt-1 break-words text-base font-semibold text-ink">{s.value}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
 
             {/* Description */}
             {listing.description && (
@@ -378,6 +394,8 @@ export default function ListingDetailContent({
                 <p className="mt-3 leading-relaxed text-ink-muted">{listing.description}</p>
               </div>
             )}
+
+            <ListingFacts listing={listing} className={PANEL} />
 
             {/* Amenities */}
             {listing.amenities.length > 0 && (
@@ -390,11 +408,8 @@ export default function ListingDetailContent({
             )}
 
             {/* Where you'll live */}
-            <div className={`${PANEL} p-6`}>
+            <section id="map" className={`${PANEL} p-6`}>
               <h2 className="text-xl font-semibold tracking-tight">Where you&apos;ll live</h2>
-              <p className="mt-2 text-sm text-ink-muted">
-                {formatListingLocation(listing.neighborhood, listing.city, listing.state)}
-              </p>
               {/* Square, not rounded: the panel around it is already a rounded card, and a second
                   radius inside the first reads as a card within a card. Keeping the hairline gives
                   the map an edge without repeating the container's shape. */}
@@ -407,7 +422,7 @@ export default function ListingDetailContent({
                   className="h-[380px] w-full"
                 />
               </div>
-            </div>
+            </section>
 
             {/* Listing disclosure — provenance is driven off this row's own `source`, never a
                 build flag, env var or default (rule #6). */}
@@ -448,83 +463,64 @@ export default function ListingDetailContent({
              */}
             <div className={`${PANEL} p-6`}>
               <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
-                Listing Agent
+                {listing.listingAgentName ? 'Listing Agent' : 'Listing Office'}
               </p>
               <div className="mt-3 flex items-center gap-3">
-                <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand to-brand-700 font-bold text-white">
-                  {listing.brokerName[0]}
+                {/* Monogram: the feed has no agent photo keyed to the listing agent (#564). */}
+                <div
+                  aria-hidden="true"
+                  className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand to-brand-700 font-bold text-white"
+                >
+                  {listing.listingAgentName
+                    ? agentInitials(listing.listingAgentName)
+                    : officeInitial(listing.officeName)}
                 </div>
                 <div className="min-w-0">
                   <p className="truncate font-semibold text-ink">
-                    {listing.listingAgentName ?? listing.brokerName}
+                    {listing.listingAgentName ?? listing.officeName}
                   </p>
-                  <p className="truncate text-[13px] text-ink-muted">{listing.officeName}</p>
+                  {listing.listingAgentName && (
+                    <p className="truncate text-[13px] text-ink-muted">{listing.officeName}</p>
+                  )}
                 </div>
               </div>
-              <div className="mt-4 space-y-1.5 text-sm">
-                {/*
-                 * #344: NAR 7.58 requires the firm plus a phone OR an email, not both. Bright
-                 * omits the office email on 45% of the feed, so `brokerEmail` is nullable and
-                 * `brokerPhone` can be `''` on the rare row with an email and no phone — each
-                 * line renders only when its value is present.
-                 */}
-                {listing.brokerPhone && (
-                  <p className="flex items-center gap-2 text-ink-muted">
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                      />
-                    </svg>
-                    {listing.brokerPhone}
-                  </p>
-                )}
-                {listing.brokerEmail && (
-                  <p className="flex items-center gap-2 text-ink-muted">
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                      />
-                    </svg>
-                    {listing.brokerEmail}
-                  </p>
-                )}
-                {listing.officeBrokerLeadPhone && (
-                  <p className="flex items-center gap-2 text-ink-muted">
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                      />
-                    </svg>
-                    <span className="text-ink-subtle">Office:</span>&nbsp;
-                    {listing.officeBrokerLeadPhone}
-                  </p>
-                )}
-                {listing.officeBrokerLeadEmail && (
-                  <p className="flex items-center gap-2 text-ink-muted">
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                      />
-                    </svg>
-                    <span className="text-ink-subtle">Office:</span>&nbsp;
-                    {listing.officeBrokerLeadEmail}
-                  </p>
-                )}
-              </div>
+              {/*
+               * #344: NAR 7.58 requires the firm plus a phone OR an email, not both, so the office
+               * lines stay beside the agent's own. Each line renders only when its value is
+               * present, and each is one tap. `min-h-11` keeps the tap target 44px on a phone.
+               */}
+              <ul className="mt-4 space-y-1 text-sm">
+                {agentContactLines(listing).map((line) => (
+                  <li key={`${line.kind}:${line.value}`}>
+                    <a
+                      href={line.href}
+                      className="flex min-h-11 items-center gap-2 break-all text-ink-muted hover:text-brand"
+                    >
+                      <svg
+                        className="h-4 w-4 flex-shrink-0"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d={line.kind === 'phone' ? PHONE_ICON : EMAIL_ICON}
+                        />
+                      </svg>
+                      <span className="text-ink-subtle">{line.owner}:</span>
+                      <span>{line.value}</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
               <button className="btn-primary mt-5 w-full">Schedule a Tour</button>
               <button className="btn-secondary mt-2 w-full">Message Agent</button>
+              <p className="mt-4 text-[13px] font-medium leading-snug text-ink-muted">
+                Brokered by {BRAND.brokerage} &middot; {BRAND.siteName}
+              </p>
             </div>
 
             {/* Open houses — the API sends only upcoming occurrences, so "upcoming" is never
@@ -564,39 +560,27 @@ export default function ListingDetailContent({
           </aside>
         </div>
 
-        {propertyPanel !== undefined && <div className={`mt-4 ${PANEL}`}>{propertyPanel}</div>}
+        {propertyPanel !== undefined && (
+          <div id="history" className={`mt-4 ${PANEL}`}>
+            {propertyPanel}
+          </div>
+        )}
 
-        {nearby !== undefined && nearby.length > 0 && (
-          <div className={`mt-4 ${PANEL}`}>
+        {/* Nearby homes — the last panel, so the stack closes the way it opened. */}
+        {!serverNearby && fetched.status === 'loading' && (
+          <div id="nearby" className={`mt-4 ${PANEL}`}>
+            <NearbyHomesSkeleton />
+          </div>
+        )}
+        {nearbyRows.length > 0 && (
+          <div id="nearby" className={`mt-4 ${PANEL}`}>
+            {/* The panel's own inset: `ListingRow` defaults to a full-bleed section's gutter. */}
             <ListingRow
               title="Nearby homes"
-              listings={nearby}
+              listings={nearbyRows}
               max={6}
-              href={similarHref}
+              href={nearbyHref}
               sectionClassName="px-6 py-6"
-              titleClassName="text-xl font-semibold tracking-tight"
-            />
-          </div>
-        )}
-
-        {/* Similar homes — the last panel, so the stack closes the way it opened. */}
-        {!serverNearby && similar.status === 'loading' && (
-          <div className={`mt-4 ${PANEL}`}>
-            <SimilarHomesSkeleton />
-          </div>
-        )}
-        {!serverNearby && similar.status === 'ready' && similar.results.length > 0 && (
-          <div className={`mt-4 ${PANEL}`}>
-            {/* `ListingRow` defaults to the page-level gutter (`px-6 sm:px-10 lg:px-20`), which is
-                a full-bleed section's padding, not a panel's — inside a panel it put the heading
-                and cards hard against the border. This is the panel's own inset. */}
-            <ListingRow
-              title="Similar homes"
-              listings={similar.results}
-              max={6}
-              href={similarHref}
-              sectionClassName="px-6 py-6"
-              /* Matches this page's other section headings exactly — see `titleClassName`. */
               titleClassName="text-xl font-semibold tracking-tight"
             />
           </div>
@@ -606,25 +590,10 @@ export default function ListingDetailContent({
 
       {/* Mobile sticky CTA bar */}
       <div className="flex-shrink-0 border-t border-surface-border bg-white/95 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] backdrop-blur-sm lg:hidden">
-        <div className="flex items-center justify-between gap-3 px-4 py-3">
-          <div className="min-w-0">
-            {/*
-             * `priceDisplay.text` rather than a re-format through `formatPrice`, which took a
-             * non-null `number` and so needed an `as number` cast here. The cast was unreachable
-             * behind the ternary, but `formatPrice(null)` renders `$0` via `Intl.NumberFormat` —
-             * exactly the fabricated price the withheld copy exists to prevent — so the cast was one
-             * refactor away from being the bug. There is now no path that can format a null price.
-             */}
-            {/* `title-md` (16px/600). Was 18px/800 — the last `extrabold` on the page, and the
-                system defines no 800 weight at any size. */}
-            <p className="text-base font-semibold leading-tight text-ink">
-              {closePriceText ?? priceDisplay.text}
-            </p>
-          </div>
-          <div className="flex shrink-0 gap-2">
-            <button className="btn-secondary py-2 text-sm">Message</button>
-            <button className="btn-primary py-2 text-sm">Schedule Tour</button>
-          </div>
+        {/* No price here: the overview block holds it once (#568). */}
+        <div className="flex gap-2 px-4 py-3">
+          <button className="btn-secondary flex-1 py-2 text-sm">Message</button>
+          <button className="btn-primary flex-1 py-2 text-sm">Schedule Tour</button>
         </div>
       </div>
     </div>
