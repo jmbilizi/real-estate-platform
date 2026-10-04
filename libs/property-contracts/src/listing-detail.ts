@@ -59,10 +59,11 @@ const listingExtraFieldsSchema = z.object({
   hoaFee: z.number().nonnegative().nullable(),
   hoaFeeFrequency: z.string().nullable(),
   // The unbranded virtual tour only. Null when the seller withheld the address.
-  virtualTourUrl: z.url().nullable(),
+  // The service nulls a value that fails this shape. The client opens `https` only.
+  virtualTourUrl: z.url({ protocol: /^https?$/ }).nullable(),
   // The listing agent's own contact. The office name and phone are in the attribution fields.
   listAgentPhone: z.string().nullable(),
-  listAgentEmail: z.string().nullable(),
+  listAgentEmail: z.email().nullable(),
   facts: listingFactsSchema,
 });
 

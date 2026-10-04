@@ -129,6 +129,15 @@ describe('listingDetailSchema', () => {
     ).toBe(false);
   });
 
+  it('accepts an http or https tour and rejects other schemes and a malformed email (#564)', () => {
+    const withListing = (extra: Record<string, unknown>) =>
+      listingDetailSchema.safeParse({ ...detail, listing: { ...detail.listing, ...extra } })
+        .success;
+    expect(withListing({ virtualTourUrl: 'http://tours.example/abc' })).toBe(true);
+    expect(withListing({ virtualTourUrl: 'javascript:alert(1)' })).toBe(false);
+    expect(withListing({ listAgentEmail: 'a b@@example' })).toBe(false);
+  });
+
   it('keeps the detail facts off the card schema (#564)', () => {
     expect(Object.keys(listingCardSchema.shape)).not.toEqual(
       expect.arrayContaining(['taxAnnualAmount', 'hoaFee', 'virtualTourUrl', 'facts']),

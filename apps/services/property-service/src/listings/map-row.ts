@@ -2,7 +2,6 @@ import {
   type ListingCardRow,
   listingCardSchema,
   type ListingDetail,
-  listingDetailSchema,
   type ListingsMeta,
   listingsMetaSchema,
   propertyPagePath,
@@ -10,6 +9,7 @@ import {
   streetLineOf,
 } from '@cribstop/property-contracts';
 
+import { parseListingDetail } from './detail-repair';
 import { derivePreciseListedAt } from './listed-at-precise';
 
 /**
@@ -238,7 +238,7 @@ export function toListingCardRow(row: ListingCardDbRow): ListingCardRow {
  * property's is current. Display-suppressed values are never re-sourced from here.
  */
 export function toListingDetail(row: ListingCardDbRow): ListingDetail {
-  return listingDetailSchema.parse({
+  return parseListingDetail({
     property: {
       id: row.property_id,
       propertyType: row.property_type,
