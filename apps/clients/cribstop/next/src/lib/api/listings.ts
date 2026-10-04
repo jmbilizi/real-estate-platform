@@ -1,6 +1,7 @@
 import { GATEWAY_ERROR_CODES, type GatewayErrorCode } from '@cribstop/gateway-contracts';
 import { errorBodySchema } from '@cribstop/property-contracts';
 import type {
+  DetailMedia,
   ErrorBody,
   ListingCardRow,
   ListingDetail,
@@ -8,13 +9,13 @@ import type {
   ListingsMeta,
   MapBounds,
   MapResponse,
-  Media,
   NeighborhoodsRequest,
   NeighborhoodsResponse,
   OpenHouse,
   SearchRequest,
 } from '@cribstop/property-contracts';
 import { formatBounds } from '@/lib/map-bounds';
+import { photoCaption } from '@/lib/photo-caption';
 
 /**
  * Client for the Property API's `listings` resource, following the `lib/api/account.ts` pattern:
@@ -270,7 +271,8 @@ export interface ListingDetailView {
   comingSoonDate: string | null;
   listedAtPrecise: string | null;
   description: string | null;
-  media: Media[];
+  /** #600. `caption` is already resolved: long description, else a real short description. */
+  media: DetailMedia[];
   openHouses: OpenHouse[];
   /** #573. The unbranded tour URL. Unvalidated MLS text, so pass it through `resolveTourEntry`. */
   virtualTourUrl: string | null;
@@ -365,7 +367,10 @@ export function toListingDetailView(detail: ListingDetail): ListingDetailView {
     comingSoonDate: listing.comingSoonDate,
     listedAtPrecise: listing.listedAtPrecise,
     description: listing.description,
-    media: listing.media,
+    media: listing.media.map((photo) => ({
+      ...photo,
+      caption: photoCaption(photo, listing.address),
+    })),
     openHouses: listing.openHouses,
     virtualTourUrl: listing.virtualTourUrl,
     taxAnnualAmount: listing.taxAnnualAmount,
