@@ -8,12 +8,12 @@ import ListingRow from '@/components/ListingRow';
 import SingleListingMap from '@/components/SingleListingMap';
 import ListingAttribution from '@/components/listing/ListingAttribution';
 import ListingProvenance from '@/components/listing/ListingProvenance';
+import ListingFacts from '@/components/listing/ListingFacts';
 import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges';
 import { SimilarHomesSkeleton } from '@/components/listing/ListingStates';
 import { formatNumber, formatPrice } from '@/lib/format';
 import {
   formatClosePrice,
-  formatDwellingStats,
   formatListingLocation,
   formatListingPrice,
   formatLotSize,
@@ -183,7 +183,6 @@ export default function ListingDetailContent({
     listing.state,
   );
 
-  const dwellingStats = formatDwellingStats(listing.beds, listing.baths, listing.sqft);
   const lotSizeText = formatLotSize(listing.lotSqft);
   const priceDisplay = formatListingPrice(listing.price, listing.listingType);
   const closePriceText = formatClosePrice(listing.closePrice, listing.closeDate);
@@ -191,7 +190,9 @@ export default function ListingDetailContent({
   // Non-parcel dwelling stat tiles — each part is omitted rather than rendered as a dash or a
   // zero when the API sends null, and the whole block is suppressed for a parcel (rule #4).
   const statTiles = listing.isParcel
-    ? []
+    ? lotSizeText
+      ? [{ label: 'Lot Size', value: lotSizeText }]
+      : []
     : [
         ...(listing.beds !== null ? [{ label: 'Beds', value: listing.beds }] : []),
         ...(listing.baths !== null ? [{ label: 'Baths', value: listing.baths }] : []),
@@ -224,20 +225,8 @@ export default function ListingDetailContent({
             </svg>
           </button>
         )}
-        <div className="min-w-0 flex-1">
-          {/*
-           * `title-md` (16px/600) flat, replacing a `text-xs`→`text-xl` ladder that rendered this
-           * heading at 12/14/16/18/20px depending on viewport — four of those five are not steps
-           * in the DESIGN.md scale. If this changes, the skeleton's placeholder in
-           * `ListingStates` must change with it or the two states stop measuring the same.
-           */}
-          <h1 className="text-base font-semibold tracking-tight text-ink">
-            {streetAddress ?? suppressedAddressHeading}
-          </h1>
-          <p className="mt-1 text-sm text-ink-muted">
-            {[dwellingStats, listing.propertyType].filter(Boolean).join(' · ')}
-          </p>
-        </div>
+        {/* Address and stats live in the overview block, once. This bar holds actions only. */}
+        <div className="min-w-0 flex-1" />
         <div className="flex shrink-0 items-center gap-1.5">
           <button
             onClick={handleShare}
@@ -286,90 +275,81 @@ export default function ListingDetailContent({
         <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_380px] lg:items-start">
           {/* Main column */}
           <div className="space-y-4">
-            {/* Badges + price + address */}
-            <div className={`${PANEL} p-6`}>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="badge bg-surface-border text-ink">
-                  {statusLabel ?? listing.status}
-                </span>
-                {listing.isSample && <SampleBadge />}
-                {listing.sponsored && <SponsoredBadge />}
-                {listing.priceReduced && (
-                  <span className="badge bg-amber-100 text-amber-800">Price Reduced</span>
-                )}
-                {listing.newConstruction && (
-                  <span className="badge bg-emerald-100 text-emerald-800">New Construction</span>
-                )}
-              </div>
-
-              {closePriceText ? (
-                <div className="mt-3 rounded-2xl border border-surface-border bg-surface-alt px-4 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
-                    Sold
-                  </p>
-                  <p className="mt-1 text-xl font-semibold tracking-[-0.18px] text-ink">
-                    {closePriceText}
-                  </p>
-                  {listing.price !== null && (
-                    <p className="mt-1 text-sm text-ink-muted">
-                      Listed at {formatPrice(listing.price, listing.listingType)}
-                    </p>
+            {/*
+             * Overview (#568): the one place price, address and stats appear. The header bar, the
+             * map section and the mobile bar carry none of them. The stat tiles sit inside this
+             * panel under a hairline, so one block answers "what is this home" on a phone.
+             */}
+            <section id="overview" className={PANEL}>
+              <div className="p-6">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="badge bg-surface-border text-ink">
+                    {statusLabel ?? listing.status}
+                  </span>
+                  {listing.isSample && <SampleBadge />}
+                  {listing.sponsored && <SponsoredBadge />}
+                  {listing.priceReduced && (
+                    <span className="badge bg-amber-100 text-amber-800">Price Reduced</span>
+                  )}
+                  {listing.newConstruction && (
+                    <span className="badge bg-emerald-100 text-emerald-800">New Construction</span>
                   )}
                 </div>
-              ) : (
-                /*
-                 * `display-sm` (20px/600) — the same style as the monthly estimate, deliberately.
-                 *
-                 * It has been 36px/800, then 30px/700, then 21px/700. Each step was still asking
-                 * the price to dominate the page. It does not need to: it sits alone in a panel
-                 * directly under the gallery, which is placement enough, and the surrounding
-                 * section headings are the same size. Matching the estimate's weight rather than
-                 * outranking it takes the last of the shout out of it.
-                 */
-                <p
-                  className={
-                    priceDisplay.isWithheld
-                      ? 'mt-3 text-base font-medium italic text-ink-muted'
-                      : 'mt-3 text-xl font-semibold tracking-[-0.18px] text-ink'
-                  }
-                >
-                  {priceDisplay.text}
-                </p>
-              )}
 
-              <p className="mt-2 text-ink-muted">
-                {formatListingLocation(listing.neighborhood, listing.city, listing.state)}{' '}
-                {listing.zip}
-              </p>
-            </div>
-
-            {/* Stats — suppressed entirely for a parcel, which shows lot size instead */}
-            {listing.isParcel
-              ? lotSizeText && (
-                  <div className={`max-w-xs ${PANEL} px-5 py-4`}>
+                {closePriceText ? (
+                  <div className="mt-3 rounded-2xl border border-surface-border bg-surface-alt px-4 py-3">
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
-                      Lot Size
+                      Sold
                     </p>
-                    <p className="mt-1 text-base font-semibold text-ink">{lotSizeText}</p>
+                    <p className="mt-1 text-xl font-semibold tracking-[-0.18px] text-ink">
+                      {closePriceText}
+                    </p>
+                    {listing.price !== null && (
+                      <p className="mt-1 text-sm text-ink-muted">
+                        Listed at {formatPrice(listing.price, listing.listingType)}
+                      </p>
+                    )}
                   </div>
-                )
-              : statTiles.length > 0 && (
-                  <div
-                    className={`grid grid-cols-2 gap-0 overflow-hidden ${PANEL} sm:grid-cols-3 lg:grid-cols-6`}
+                ) : (
+                  /*
+                   * `display-sm` (20px/600). It sits first in the panel under the gallery, which
+                   * is placement enough, so it does not outrank the section headings.
+                   */
+                  <p
+                    className={
+                      priceDisplay.isWithheld
+                        ? 'mt-3 text-base font-medium italic text-ink-muted'
+                        : 'mt-3 text-xl font-semibold tracking-[-0.18px] text-ink'
+                    }
                   >
-                    {statTiles.map((s, i, arr) => (
-                      <div
-                        key={s.label}
-                        className={`px-5 py-4 ${i !== arr.length - 1 ? 'border-b border-surface-border sm:border-b-0 sm:border-r' : ''}`}
-                      >
-                        <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
-                          {s.label}
-                        </p>
-                        <p className="mt-1 text-base font-semibold text-ink">{s.value}</p>
-                      </div>
-                    ))}
-                  </div>
+                    {priceDisplay.text}
+                  </p>
                 )}
+
+                {/*
+                 * The street line already carries city, state and ZIP. When the seller withheld
+                 * the address the heading is the location alone: `title` is never a fallback
+                 * (#59), and there is no second line to repeat it.
+                 */}
+                <h1 className="mt-2 text-base font-semibold tracking-tight text-ink">
+                  {streetAddress ?? suppressedAddressHeading}
+                </h1>
+              </div>
+
+              {/* A parcel has no dwelling, so it shows lot size instead of the dwelling tiles. */}
+              {statTiles.length > 0 && (
+                <div className="grid grid-cols-2 gap-y-4 border-t border-surface-border px-6 py-4 sm:grid-cols-3 lg:grid-cols-6">
+                  {statTiles.map((s) => (
+                    <div key={s.label} className="min-w-0">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
+                        {s.label}
+                      </p>
+                      <p className="mt-1 break-words text-base font-semibold text-ink">{s.value}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
 
             {/* Description */}
             {listing.description && (
@@ -378,6 +358,8 @@ export default function ListingDetailContent({
                 <p className="mt-3 leading-relaxed text-ink-muted">{listing.description}</p>
               </div>
             )}
+
+            <ListingFacts listing={listing} className={PANEL} />
 
             {/* Amenities */}
             {listing.amenities.length > 0 && (
@@ -390,11 +372,8 @@ export default function ListingDetailContent({
             )}
 
             {/* Where you'll live */}
-            <div className={`${PANEL} p-6`}>
+            <section id="map" className={`${PANEL} p-6`}>
               <h2 className="text-xl font-semibold tracking-tight">Where you&apos;ll live</h2>
-              <p className="mt-2 text-sm text-ink-muted">
-                {formatListingLocation(listing.neighborhood, listing.city, listing.state)}
-              </p>
               {/* Square, not rounded: the panel around it is already a rounded card, and a second
                   radius inside the first reads as a card within a card. Keeping the hairline gives
                   the map an edge without repeating the container's shape. */}
@@ -407,7 +386,7 @@ export default function ListingDetailContent({
                   className="h-[380px] w-full"
                 />
               </div>
-            </div>
+            </section>
 
             {/* Listing disclosure — provenance is driven off this row's own `source`, never a
                 build flag, env var or default (rule #6). */}
@@ -559,10 +538,14 @@ export default function ListingDetailContent({
           </aside>
         </div>
 
-        {propertyPanel !== undefined && <div className={`mt-4 ${PANEL}`}>{propertyPanel}</div>}
+        {propertyPanel !== undefined && (
+          <div id="history" className={`mt-4 ${PANEL}`}>
+            {propertyPanel}
+          </div>
+        )}
 
         {nearby !== undefined && nearby.length > 0 && (
-          <div className={`mt-4 ${PANEL}`}>
+          <div id="nearby" className={`mt-4 ${PANEL}`}>
             <ListingRow
               title="Nearby homes"
               listings={nearby}
@@ -581,7 +564,7 @@ export default function ListingDetailContent({
           </div>
         )}
         {!serverNearby && similar.status === 'ready' && similar.results.length > 0 && (
-          <div className={`mt-4 ${PANEL}`}>
+          <div id="nearby" className={`mt-4 ${PANEL}`}>
             {/* `ListingRow` defaults to the page-level gutter (`px-6 sm:px-10 lg:px-20`), which is
                 a full-bleed section's padding, not a panel's — inside a panel it put the heading
                 and cards hard against the border. This is the panel's own inset. */}
@@ -601,25 +584,10 @@ export default function ListingDetailContent({
 
       {/* Mobile sticky CTA bar */}
       <div className="flex-shrink-0 border-t border-surface-border bg-white/95 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] backdrop-blur-sm lg:hidden">
-        <div className="flex items-center justify-between gap-3 px-4 py-3">
-          <div className="min-w-0">
-            {/*
-             * `priceDisplay.text` rather than a re-format through `formatPrice`, which took a
-             * non-null `number` and so needed an `as number` cast here. The cast was unreachable
-             * behind the ternary, but `formatPrice(null)` renders `$0` via `Intl.NumberFormat` —
-             * exactly the fabricated price the withheld copy exists to prevent — so the cast was one
-             * refactor away from being the bug. There is now no path that can format a null price.
-             */}
-            {/* `title-md` (16px/600). Was 18px/800 — the last `extrabold` on the page, and the
-                system defines no 800 weight at any size. */}
-            <p className="text-base font-semibold leading-tight text-ink">
-              {closePriceText ?? priceDisplay.text}
-            </p>
-          </div>
-          <div className="flex shrink-0 gap-2">
-            <button className="btn-secondary py-2 text-sm">Message</button>
-            <button className="btn-primary py-2 text-sm">Schedule Tour</button>
-          </div>
+        {/* No price here: the overview block holds it once (#568). */}
+        <div className="flex gap-2 px-4 py-3">
+          <button className="btn-secondary flex-1 py-2 text-sm">Message</button>
+          <button className="btn-primary flex-1 py-2 text-sm">Schedule Tour</button>
         </div>
       </div>
     </div>
