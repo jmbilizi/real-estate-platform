@@ -62,7 +62,7 @@ function Bar({ className = '' }: { className?: string }) {
  * the same width at every breakpoint or the panel resizes when the cards arrive. It lived in
  * `ListingRow` and the skeleton carried a truncated copy that stopped at `md`, so above that
  * breakpoint the placeholders were cards-per-row too few, hence too wide, hence too tall: the
- * similar-homes panel measured 468px against the loaded 391px and shrank on load. `ListingRow`
+ * nearby-homes panel measured 468px against the loaded 391px and shrank on load. `ListingRow`
  * already imports this module, so the class lives on this side of that dependency.
  */
 export const CARD_WIDTH_CLASS = CAROUSEL_ITEM_CLASS;
@@ -129,14 +129,14 @@ export function ListingCardSkeleton() {
 }
 
 /**
- * The similar-homes carousel while its own request is in flight.
+ * The nearby-homes carousel while its own request is in flight.
  *
  * Lives here rather than in `ListingDetailContent` because two different states need the identical
- * block and they must not drift: the detail page renders it while `similar` is loading, and the
+ * block and they must not drift: the detail page renders it while the nearby fetch is loading, and the
  * detail *skeleton* renders it because the carousel is a section of the page like any other. A
  * second hand-built copy in the skeleton would have been one more thing to keep in step by hand.
  */
-export function SimilarHomesSkeleton() {
+export function NearbyHomesSkeleton() {
   return (
     <section className="px-6 py-6" aria-hidden="true">
       {/* `ListingRow`'s heading block: a column with its own bottom padding, not a bare bar. */}
@@ -216,7 +216,7 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
    * it would be a second, unrelated motion fighting the first.
    *
    * It also made this page load in two vocabularies: the panels pulsed grey while the
-   * similar-homes carousel below them swept violet, on the same screen at the same moment.
+   * nearby-homes carousel below them swept violet, on the same screen at the same moment.
    * One source for the fill means one source for the motion.
    */
 
@@ -492,7 +492,7 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
         </div>
 
         {/*
-         * Similar homes closes the stack, as it does on the loaded page — and it is reserved here
+         * Nearby homes closes the stack, as it does on the loaded page — and it is reserved here
          * even though the carousel has its own request, because that request does not start until
          * the detail has landed. Without this block the panel grew by ~390px twice: once when the
          * detail arrived, again when the carousel did.
@@ -500,8 +500,8 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
          * The same component the loaded page shows while that request is in flight, so the two
          * states are the same block rather than two guesses at it.
          */}
-        <div className={`mt-4 ${panel}`} data-skeleton-section="similar-homes">
-          <SimilarHomesSkeleton />
+        <div className={`mt-4 ${panel}`} data-skeleton-section="nearby-homes">
+          <NearbyHomesSkeleton />
         </div>
       </div>
 

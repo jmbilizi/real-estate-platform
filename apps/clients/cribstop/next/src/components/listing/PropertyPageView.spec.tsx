@@ -102,9 +102,9 @@ describe('PropertyPageView — Off market (#349)', () => {
     expect(screen.queryByText(/\$[\d,]/)).toBeNull();
     expect(screen.queryByText(/schedule a tour/i)).toBeNull();
     expect(screen.queryByText(/message agent/i)).toBeNull();
-    expect(screen.queryByText(/similar homes/i)).toBeNull();
+    expect(screen.queryByText(/nearby homes/i)).toBeNull();
 
-    // The similar-homes fetch never fires on this branch — no `ListingDetailContent` mounted.
+    // The nearby-homes fetch never fires on this branch — no `ListingDetailContent` mounted.
     expect(mockedSearchListings).not.toHaveBeenCalled();
   });
 
