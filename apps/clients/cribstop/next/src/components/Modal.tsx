@@ -35,11 +35,18 @@ function lockScroll() {
    * directly-loaded panel visibly slid right. `globals.css` applies the same two declarations to
    * the server-rendered panel from its first paint, so this call changes nothing on screen.
    */
-  document.documentElement.style.scrollbarGutter = 'stable';
-  document.documentElement.style.overflow = 'hidden';
+  const root = document.documentElement;
+  if (typeof CSS !== 'undefined' && CSS.supports('scrollbar-gutter', 'stable')) {
+    root.style.scrollbarGutter = 'stable';
+  } else if (root.style.overflow !== 'hidden') {
+    // Older browsers: pad by the scrollbar width, as before.
+    root.style.paddingRight = `${window.innerWidth - root.clientWidth}px`;
+  }
+  root.style.overflow = 'hidden';
 }
 
 function unlockScroll() {
+  document.documentElement.style.paddingRight = '';
   document.documentElement.style.scrollbarGutter = '';
   document.documentElement.style.overflow = '';
 }

@@ -59,7 +59,13 @@ describe('Modal', () => {
   });
 
   it('keeps the scrollbar gutter instead of padding the page when it locks scroll', () => {
+    const original = globalThis.CSS;
+    Object.defineProperty(globalThis, 'CSS', {
+      configurable: true,
+      value: { supports: () => true },
+    });
     renderWithOutsideButton({ instant: true });
+    Object.defineProperty(globalThis, 'CSS', { configurable: true, value: original });
 
     expect(document.documentElement.style.scrollbarGutter).toBe('stable');
     expect(document.documentElement.style.paddingRight).toBe('');
