@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { InquiryKind } from '@cribstop/property-contracts';
+import BuyerAgentRequestDialog from '@/components/listing/BuyerAgentRequestDialog';
 import PropertyGallery from '@/components/PropertyGallery';
 import AmenityChips from '@/components/AmenityChips';
 import MortgageTeaser from '@/components/MortgageTeaser';
@@ -47,10 +49,6 @@ interface Props {
   nearby?: ListingCardRow[];
   /** #382: property page panels (the listing history), rendered before the nearby row. */
   propertyPanel?: React.ReactNode;
-  /** #591: "Request a Tour" asks Cribstop to act as the buyer's agent. #132 wires the inquiry API here. */
-  onRequestTour?: () => void;
-  /** #591: "Message Agent" messages Cribstop as the buyer's agent. #132 wires it here. */
-  onMessageAgent?: () => void;
 }
 
 /**
@@ -91,13 +89,18 @@ export default function ListingDetailContent({
   statusLabel,
   nearby,
   propertyPanel,
-  onRequestTour,
-  onMessageAgent,
 }: Props) {
   const { toggleSave, isSaved } = useApp();
   const { toast } = useToast();
   const saved = isSaved(listing.id);
   const rootRef = useRef<HTMLDivElement>(null);
+  // #132: one request path for every "Request a Tour" and "Message Agent" button.
+  const [requestKind, setRequestKind] = useState<InquiryKind | null>(null);
+  const closeRequest = useCallback(() => setRequestKind(null), []);
+  // A closed sale cannot take a request. Field suppression never changes this.
+  const canRequest = listing.status !== 'Sold';
+  const onRequestTour = () => setRequestKind('tour_request');
+  const onMessageAgent = () => setRequestKind('message');
   const headerRef = useRef<HTMLDivElement>(null);
 
   /**
@@ -533,20 +536,28 @@ export default function ListingDetailContent({
                 Request a tour with a {BRAND.siteName} buyer agent. Touring with an agent may
                 require a written buyer agreement. A tour request is not a booking.
               </p>
-              <button
-                type="button"
-                className="btn-primary mt-5 min-h-11 w-full"
-                onClick={onRequestTour}
-              >
-                Request a Tour
-              </button>
-              <button
-                type="button"
-                className="btn-secondary mt-2 min-h-11 w-full"
-                onClick={onMessageAgent}
-              >
-                Message Agent
-              </button>
+              {canRequest ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn-primary mt-5 min-h-11 w-full"
+                    onClick={onRequestTour}
+                  >
+                    Request a Tour
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary mt-2 min-h-11 w-full"
+                    onClick={onMessageAgent}
+                  >
+                    Message Agent
+                  </button>
+                </>
+              ) : (
+                <p className="mt-4 text-sm font-medium text-ink">
+                  This home is no longer available, so requests are closed.
+                </p>
+              )}
               <p className="mt-4 text-sm font-medium leading-snug text-ink-muted">
                 Brokered by {BRAND.brokerage} &middot; {BRAND.siteName}
               </p>
@@ -636,8 +647,12 @@ export default function ListingDetailContent({
        * The bottom padding clears the home indicator (needs `viewportFit: 'cover'`, set in the root
        * layout). Each button is 44px tall.
        */}
+      {requestKind !== null && (
+        <BuyerAgentRequestDialog listingId={listing.id} kind={requestKind} onClose={closeRequest} />
+      )}
       <div
         data-testid="listing-mobile-bar"
+        hidden={!canRequest}
         className="sticky bottom-0 z-20 flex-shrink-0 border-t border-surface-border bg-white/95 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] backdrop-blur-sm lg:hidden"
       >
         {/* No price here: the overview block holds it once (#568). */}
