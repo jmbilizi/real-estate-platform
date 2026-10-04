@@ -515,7 +515,7 @@ export default function ListingDetailContent({
               </ul>
               <button className="btn-primary mt-5 min-h-11 w-full">Schedule a Tour</button>
               <button className="btn-secondary mt-2 min-h-11 w-full">Message Agent</button>
-              <p className="mt-4 text-[13px] font-medium leading-snug text-ink-muted">
+              <p className="mt-4 text-sm font-medium leading-snug text-ink-muted">
                 Brokered by {BRAND.brokerage} &middot; {BRAND.siteName}
               </p>
             </div>

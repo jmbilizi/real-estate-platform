@@ -422,7 +422,7 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
               {/* Both buttons are `min-h-11` (44px) on the loaded card. */}
               <div className={`mt-5 h-11 w-full rounded-full ${FILL}`} />
               <div className={`mt-2 h-11 w-full rounded-full ${FILL}`} />
-              <p className="mt-4 text-[12px] leading-snug">
+              <p className="mt-4 text-sm leading-snug">
                 <Bar className="w-3/5" />
               </p>
             </div>
