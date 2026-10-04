@@ -218,3 +218,17 @@ describe('ListingDetailSkeleton', () => {
     });
   });
 });
+
+describe('ListingDetailSkeleton phone pass (#572)', () => {
+  it('holds the Nearby homes block with no panel, as the loaded page', () => {
+    const { container } = render(<ListingDetailSkeleton layoutRow={aListingCardRow()} />);
+    const nearby = container.querySelector('[data-skeleton-section="nearby-homes"]') as HTMLElement;
+    expect(nearby.className).not.toMatch(/\b(border|bg-white|rounded-2xl)\b/);
+  });
+
+  it('shows the header action placeholders on a phone and a 44px CTA bar', () => {
+    const { container } = render(<ListingDetailSkeleton />);
+    expect(container.querySelector('.hidden.sm\\:flex')).toBeNull();
+    expect(container.innerHTML).toContain('env(safe-area-inset-bottom)');
+  });
+});

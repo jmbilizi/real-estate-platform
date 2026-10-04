@@ -136,3 +136,101 @@ describe('PropertyGallery 3D tour entry (#573)', () => {
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   });
 });
+
+describe('PropertyGallery phone pass (#572)', () => {
+  const photos = [
+    { url: 'https://example.com/a.jpg', altText: 'A' },
+    { url: 'https://example.com/b.jpg', altText: 'B' },
+    { url: 'https://example.com/c.jpg', altText: 'C' },
+  ];
+  const open = () => fireEvent.click(screen.getByRole('button', { name: 'View photo 2 of 3' }));
+
+  it('moves focus into the photo viewer, locks page scroll, and restores both on close', () => {
+    render(<PropertyGallery media={photos} />);
+    const tile = screen.getByRole('button', { name: 'View photo 2 of 3' });
+    tile.focus();
+    fireEvent.click(tile);
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
+    expect(document.documentElement.style.overflow).toBe('hidden');
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(document.documentElement.style.overflow).toBe('');
+    expect(tile).toHaveFocus();
+  });
+
+  it('keeps Tab inside the photo viewer', () => {
+    render(<PropertyGallery media={photos} />);
+    open();
+    const close = screen.getByRole('button', { name: 'Close' });
+    const next = screen.getByRole('button', { name: 'Next' });
+    next.focus();
+    fireEvent.keyDown(next, { key: 'Tab' });
+    expect(close).toHaveFocus();
+    fireEvent.keyDown(close, { key: 'Tab', shiftKey: true });
+    expect(next).toHaveFocus();
+  });
+
+  it('pulls focus back in when it sits outside the viewer', () => {
+    render(<PropertyGallery media={photos} />);
+    open();
+    (document.activeElement as HTMLElement).blur();
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
+  });
+
+  it('keeps Escape from reaching the modal behind it', () => {
+    const outer = jest.fn();
+    window.addEventListener('keydown', outer);
+    render(<PropertyGallery media={photos} />);
+    open();
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Escape' });
+    expect(outer).not.toHaveBeenCalled();
+    window.removeEventListener('keydown', outer);
+  });
+
+  it('gives the viewer controls and the tour pill a 44px target on a phone', () => {
+    render(<PropertyGallery media={photos} tourUrl="https://my.matterport.com/show/?m=a" />);
+    expect(screen.getByRole('button', { name: '3D tour' }).className).toMatch(/\bmin-h-11\b/);
+    open();
+    for (const name of ['Close', 'Previous', 'Next']) {
+      expect(screen.getByRole('button', { name }).className).toMatch(/\bmin-h-11\b/);
+    }
+  });
+
+  it('clears the notch and the home indicator in the viewer', () => {
+    render(<PropertyGallery media={photos} />);
+    open();
+    const html = screen.getByRole('dialog').innerHTML;
+    expect(html).toContain('env(safe-area-inset-top)');
+    expect(html).toContain('env(safe-area-inset-bottom)');
+  });
+
+  it('resets the swipe counter when the photo set changes', () => {
+    const { rerender } = render(<PropertyGallery media={photos} />);
+    const track = screen.getByTestId('gallery-swipe');
+    Object.defineProperty(track, 'clientWidth', { value: 300, configurable: true });
+    track.scrollLeft = 600;
+    fireEvent.scroll(track);
+    expect(screen.getByTestId('gallery-swipe-counter')).toHaveTextContent('3 / 3');
+
+    rerender(
+      <PropertyGallery
+        media={[
+          { url: 'https://example.com/x.jpg', altText: 'X' },
+          { url: 'https://example.com/y.jpg', altText: 'Y' },
+        ]}
+      />,
+    );
+    expect(screen.getByTestId('gallery-swipe-counter')).toHaveTextContent('1 / 2');
+    expect(track.scrollLeft).toBe(0);
+  });
+
+  it('keeps the counter when a parent rebuilds an identical array', () => {
+    const { rerender } = render(<PropertyGallery media={photos} />);
+    const track = screen.getByTestId('gallery-swipe');
+    Object.defineProperty(track, 'clientWidth', { value: 300, configurable: true });
+    track.scrollLeft = 300;
+    fireEvent.scroll(track);
+    rerender(<PropertyGallery media={photos.map((p) => ({ ...p }))} />);
+    expect(screen.getByTestId('gallery-swipe-counter')).toHaveTextContent('2 / 3');
+  });
+});

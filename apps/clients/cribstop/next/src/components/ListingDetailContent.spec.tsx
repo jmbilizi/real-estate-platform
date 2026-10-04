@@ -500,3 +500,47 @@ describe('ListingDetailContent — agent card (#571)', () => {
     expect(screen.getByText('A')).toBeInTheDocument();
   });
 });
+
+describe('ListingDetailContent — phone pass (#572)', () => {
+  it('holds the CTA bar at the screen edge, clear of the home indicator, with 44px buttons', async () => {
+    const view = toListingDetailView(aListingDetail());
+    await renderAndSettle(<ListingDetailContent listing={view} />);
+    const bar = screen.getByTestId('listing-mobile-bar');
+    expect(bar.className).toMatch(/\bsticky\b/);
+    expect(bar.className).toMatch(/\bbottom-0\b/);
+    expect(bar.innerHTML).toContain('env(safe-area-inset-bottom)');
+    for (const name of ['Message', 'Schedule Tour']) {
+      expect(within(bar).getByRole('button', { name }).className).toMatch(/\bmin-h-11\b/);
+    }
+  });
+
+  it('makes the Share, Save and Back buttons 44px square on a phone', async () => {
+    const view = toListingDetailView(aListingDetail());
+    await renderAndSettle(<ListingDetailContent listing={view} onClose={jest.fn()} />);
+    for (const name of ['Share', 'Save', 'Go back']) {
+      expect(screen.getByRole('button', { name }).className).toMatch(/\bh-11\b/);
+      expect(screen.getByRole('button', { name }).className).toMatch(/\bw-11\b/);
+    }
+  });
+});
+
+describe('ListingDetailContent — Nearby homes without a panel (#572)', () => {
+  it('renders the row directly on the page, with no bordered white box around it', async () => {
+    const view = toListingDetailView(aListingDetail());
+    const { container } = await renderAndSettle(
+      <ListingDetailContent listing={view} nearby={[aListingCardRow()]} />,
+    );
+    const nearby = container.querySelector('#nearby') as HTMLElement;
+    expect(nearby).not.toBeNull();
+    expect(nearby.className).not.toMatch(/\b(border|bg-white|rounded-2xl|p-\d|px-\d)\b/);
+    expect(within(nearby).getByRole('heading', { name: /nearby homes/i })).toBeInTheDocument();
+  });
+
+  it('gives the facts summary rows a 44px tap target', async () => {
+    const view = toListingDetailView(aListingDetail());
+    const { container } = await renderAndSettle(<ListingDetailContent listing={view} />);
+    const summaries = container.querySelectorAll('#facts summary');
+    expect(summaries.length).toBeGreaterThan(0);
+    summaries.forEach((s) => expect(s.className).toMatch(/\bmin-h-11\b/));
+  });
+});
