@@ -63,6 +63,32 @@ describe('ConfirmEmailPanel', () => {
     expect(screen.getByLabelText('Email address')).toBeInTheDocument();
   });
 
+  it.each([
+    ['error', 'Check your connection, then try again.'],
+    ['rate-limited', 'Too many tries. Wait a moment, then try again.'],
+  ] as const)('shows a retryable %s state and retries without a reload', async (outcome, copy) => {
+    mockConfirmEmail.mockResolvedValueOnce(outcome).mockResolvedValueOnce('confirmed');
+    render(<ConfirmEmailPanel userId="user-1" code="abc123" />);
+
+    expect(await screen.findByText(/couldn't confirm your email/i)).toBeInTheDocument();
+    expect(screen.getByText(copy)).toBeInTheDocument();
+    expect(screen.queryByText(/this link is no longer valid/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+    expect(await screen.findByText('Email confirmed')).toBeInTheDocument();
+    expect(mockConfirmEmail).toHaveBeenCalledTimes(2);
+    expect(mockConfirmEmail).toHaveBeenLastCalledWith({ userId: 'user-1', code: 'abc123' });
+  });
+
+  it('leaves the confirming state when the call rejects', async () => {
+    mockConfirmEmail.mockRejectedValue(new TypeError('Failed to fetch'));
+    render(<ConfirmEmailPanel userId="user-1" code="abc123" />);
+
+    expect(await screen.findByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    expect(screen.queryByText(/confirming your email/i)).not.toBeInTheDocument();
+  });
+
   it('strips userId and code from the URL once the link has been read', () => {
     const replaceState = jest.spyOn(window.history, 'replaceState');
     mockConfirmEmail.mockResolvedValue('confirmed');

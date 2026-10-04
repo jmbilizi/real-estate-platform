@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { confirmEmail } from '@/lib/api/account';
 import { useConfirmationResend } from '@/lib/useConfirmationResend';
 
-type Status = 'confirming' | 'confirmed' | 'invalid';
+type Status = 'confirming' | 'confirmed' | 'invalid' | 'rate-limited' | 'error';
 
 /**
  * Redeems the `userId`/`code` a confirmation email links to. Expired, used, tampered and unknown
@@ -42,8 +42,17 @@ export default function ConfirmEmailPanel({
       return;
     }
 
-    confirmEmail({ userId, code }).then(setStatus);
+    redeem();
   }, [userId, code]);
+
+  // `userId` and `code` stay in props after the URL is stripped, so a retry needs no reload.
+  function redeem() {
+    if (!userId || !code) return;
+    setStatus('confirming');
+    confirmEmail({ userId, code })
+      .then(setStatus)
+      .catch(() => setStatus('error'));
+  }
 
   // Each status renders a different heading in the same position; a screen reader needs focus
   // moved to it every time.
@@ -62,6 +71,28 @@ export default function ConfirmEmailPanel({
         >
           Confirming your email...
         </h2>
+      </Card>
+    );
+  }
+
+  if (status === 'error' || status === 'rate-limited') {
+    return (
+      <Card>
+        <h2
+          ref={headingRef}
+          tabIndex={-1}
+          className="text-center font-display text-2xl font-bold tracking-tight"
+        >
+          We couldn&apos;t confirm your email
+        </h2>
+        <p role="alert" className="mt-2 text-center text-sm text-ink-muted">
+          {status === 'rate-limited'
+            ? 'Too many tries. Wait a moment, then try again.'
+            : 'Check your connection, then try again.'}
+        </p>
+        <button type="button" onClick={redeem} className="btn-primary mt-6 w-full py-3">
+          Try again
+        </button>
       </Card>
     );
   }
