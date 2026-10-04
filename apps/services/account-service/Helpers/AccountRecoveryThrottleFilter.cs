@@ -92,8 +92,8 @@ internal sealed class AccountRecoveryThrottleFilter(
     /// <remarks>
     /// Every external request arrives through Ocelot, so <c>RemoteIpAddress</c> is the gateway pod
     /// for all of them and a peer-keyed limit becomes one global bucket. <c>X-Real-IP</c> is what
-    /// the gateway forwards and what its own limits key on. It is caller-asserted (#143). The
-    /// per-email limits are the ones that do not depend on the caller's claim.
+    /// the gateway forwards and what its own limits key on. The gateway derives it, so a caller
+    /// cannot set it (#143). The per-email limits do not depend on the caller's claim.
     /// </remarks>
     /// <param name="context">The request.</param>
     /// <returns>The client address, or <see langword="null"/> when unknown.</returns>

@@ -10,7 +10,6 @@ using System.Threading.RateLimiting;
 using ApiGateway.Extensions;
 using ApiGateway.Middleware;
 using ApiGateway.Services;
-using Microsoft.AspNetCore.HttpOverrides;
 using MMLib.SwaggerForOcelot.Configuration;
 using Ocelot.DependencyInjection;
 using Ocelot.Middleware;
@@ -183,36 +182,8 @@ namespace ApiGateway
         /// <param name="env">The web host environment.</param>
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
-            // Configure forwarded headers (X-Forwarded-For from Nginx Ingress or direct testing)
-            var forwardedHeadersOptions = new ForwardedHeadersOptions
-            {
-                ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
-                RequireHeaderSymmetry = false, // Allow X-Forwarded-For without X-Forwarded-Host
-                ForwardLimit = null, // Allow unlimited proxies for local testing
-            };
-
-            // For local development: accept forwarded headers from any source
-            if (env.IsDevelopment())
-            {
-                forwardedHeadersOptions.KnownProxies.Clear();
-                forwardedHeadersOptions.KnownIPNetworks.Clear();
-            }
-
-            app.UseForwardedHeaders(forwardedHeadersOptions);
-
-            // Ensure X-Real-IP is always set for Ocelot rate limiting.
-            // In production, Nginx sets this header. Locally (no reverse proxy),
-            // fall back to the TCP connection's remote IP address.
-            app.Use(async (context, next) =>
-            {
-                if (!context.Request.Headers.ContainsKey("X-Real-IP"))
-                {
-                    var remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-                    context.Request.Headers["X-Real-IP"] = remoteIp;
-                }
-
-                await next().ConfigureAwait(false);
-            });
+            // Trust X-Forwarded-For only from TRUSTED_PROXY_NETWORKS. X-Real-IP is always derived (#143).
+            app.UseTrustedClientIp(Configuration);
 
             app.UseCors("CORSPolicy");
 
@@ -309,11 +280,9 @@ namespace ApiGateway
         /// <param name="request">The HTTP request.</param>
         /// <returns>The trusted client IP, or null if not available.</returns>
         /// <remarks>
-        /// Reads X-Real-IP, not X-Forwarded-For. Nginx Ingress always sets X-Real-IP from its
-        /// own observed connection, and the gateway's Service is ClusterIP-only, so an external
-        /// caller reaches it only through Ingress and cannot set this header itself. The pipeline
-        /// middleware earlier in <see cref="Configure"/> guarantees X-Real-IP is set before
-        /// routing runs, even locally with no proxy in front. <see cref="ExtractClientIp"/> reads
+        /// Reads X-Real-IP, not X-Forwarded-For. <c>UseTrustedClientIp</c> overwrites X-Real-IP on
+        /// every request from the transport peer, or from X-Forwarded-For when the peer is a
+        /// trusted proxy. A caller cannot set it. <see cref="ExtractClientIp"/> reads
         /// the first X-Forwarded-For hop instead, which an external caller sets directly. That
         /// fits trace enrichment. It does not fit an anonymous endpoint, where a forged hop would
         /// let an external caller pick their own reported region (#362). This does not cover a
@@ -524,16 +493,7 @@ namespace ApiGateway
         /// <returns>Client IP address or null if not available.</returns>
         private static string? ExtractClientIp(HttpRequest request)
         {
-            // Priority 1: X-Forwarded-For (set by Nginx Ingress, may contain proxy chain)
-            string? forwardedFor = request.Headers["X-Forwarded-For"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(forwardedFor))
-            {
-                // Take first IP in chain (original client)
-                // Format: "client, proxy1, proxy2"
-                return forwardedFor.Split(',')[0].Trim();
-            }
-
-            // Priority 2: X-Real-IP (set by some reverse proxies)
+            // X-Real-IP is derived by UseTrustedClientIp. X-Forwarded-For is caller-controlled.
             string? realIp = request.Headers["X-Real-IP"].FirstOrDefault();
             if (!string.IsNullOrEmpty(realIp))
             {

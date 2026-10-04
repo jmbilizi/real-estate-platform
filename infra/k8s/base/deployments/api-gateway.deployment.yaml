@@ -39,6 +39,10 @@ spec:
             # ASPNETCORE_ENVIRONMENT: Defined in patches (Development/Staging/Production)
             - name: ASPNETCORE_URLS
               value: "http://+:8080"
+            # Peers allowed to set X-Forwarded-For (#143). The pod CIDR, which holds ingress-nginx.
+            # k3s (hetzner-k3s) and Kind both default to 10.244.0.0/16.
+            - name: TRUSTED_PROXY_NETWORKS
+              value: "10.244.0.0/16"
             # Kubernetes metadata (Downward API)
             - name: K8S_POD_NAME
               valueFrom:

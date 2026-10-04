@@ -28,6 +28,23 @@ Use one only for data the gateway itself holds (see `/geo/region`, backed by `Ge
 everything else through Ocelot to a downstream service. A gateway-local endpoint bypasses Ocelot's
 per-route QoS, so it must carry its own rate limit (`AddRateLimiter` / `RequireRateLimiting`).
 
+## Client Identity (rate limits)
+
+Ocelot buckets every rate limit on `X-Real-IP` (`ClientIdHeader`). `UseTrustedClientIp`
+(`Extensions/TrustedClientIpExtensions.cs`) overwrites that header on every request. A caller never
+sets it.
+
+- Source of the value: the transport peer, or the `X-Forwarded-For` client when the peer is inside
+  `TRUSTED_PROXY_NETWORKS` (comma-separated CIDRs).
+- Behind ingress-nginx: the Deployment sets the pod CIDR (`10.244.0.0/16`, the k3s and Kind
+  default). The ingress ConfigMap keeps `use-forwarded-headers` off, so nginx sets the client from
+  its own peer.
+- Local Skaffold, or the variable unset: no proxy is trusted. The peer is the client.
+- Never call `UseForwardedHeaders` with empty known-proxy lists. The middleware then trusts every
+  peer.
+- Ocelot limits stay per replica, so the effective limit is the configured limit times the replica
+  count.
+
 ## Quality of Service (timeouts and circuit breakers)
 
 Every route in `Configuration/Routes/*.json` carries `QoSOptions`. `Startup.cs` calls
