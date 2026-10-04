@@ -134,8 +134,7 @@ describe('ListingDetailSkeleton', () => {
   describe('section coverage', () => {
     const SECTIONS = [
       'gallery',
-      'price',
-      'stats',
+      'overview',
       'description',
       'amenities',
       'map',
