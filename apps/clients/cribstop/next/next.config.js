@@ -17,7 +17,8 @@ const nextConfig = {
       { protocol: 'https', hostname: 'picsum.photos' },
     ],
   },
-  // frame-src is the only directive set. It limits iframes to the tour hosts the gallery embeds (#573).
+  // frame-src is the only directive set. It limits iframes to the tour hosts the gallery embeds (#573, #590).
+  // frame-src also checks every redirect target, so list the host a tour URL redirects to.
   async headers() {
     const frameSrc = ["'self'", ...frameHosts.map((h) => `https://${h}`)].join(' ');
     return [

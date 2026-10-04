@@ -1,3 +1,29 @@
 {
-  "frameHosts": ["my.matterport.com"]
+  "frameHosts": [
+    "my.matterport.com",
+    "www.zillow.com",
+    "www.youtube-nocookie.com",
+    "player.vimeo.com",
+    "iframe.videodelivery.net",
+    "*.hd.pics",
+    "*.vids.io",
+    "*.youriguide.com",
+    "*.truplace.com",
+    "*.visithome.ai",
+    "gressphotography.com",
+    "portal.agentadmins.com",
+    "go.as.media",
+    "homes.btwimages.com",
+    "listing.hdbros.com",
+    "listings.carmichaelphotovideo.com",
+    "listings.housefli.com",
+    "media.recreativevisual.com",
+    "seehouseat.com",
+    "sites.genevirtualtours.com",
+    "view.vincentandmorgan.co",
+    "www.asteroommls.com"
+  ],
+  "pathPrefixes": {
+    "www.zillow.com": ["/view-imx/"]
+  }
 }
