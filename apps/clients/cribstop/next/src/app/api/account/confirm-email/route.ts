@@ -30,11 +30,12 @@ export async function GET(req: Request) {
   });
 
   if (!upstream) {
-    return NextResponse.json({ outcome: 'invalid' }, { status: 503 });
+    return NextResponse.json({ outcome: 'error' }, { status: 503 });
   }
 
-  return NextResponse.json(
-    { outcome: upstream.ok ? 'confirmed' : 'invalid' },
-    { status: upstream.ok ? 200 : 401 },
-  );
+  if (upstream.ok) return NextResponse.json({ outcome: 'confirmed' }, { status: 200 });
+  // A 429 or 5xx says nothing about the link, so the page must offer a retry, not "invalid".
+  if (upstream.status === 429) return NextResponse.json({ outcome: 'error' }, { status: 429 });
+  if (upstream.status >= 500) return NextResponse.json({ outcome: 'error' }, { status: 503 });
+  return NextResponse.json({ outcome: 'invalid' }, { status: 401 });
 }

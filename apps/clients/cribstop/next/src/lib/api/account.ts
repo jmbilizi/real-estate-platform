@@ -219,20 +219,28 @@ export async function resendConfirmationEmail(email: string): Promise<void> {
   if (!res.ok) throw new Error('Unable to send the request');
 }
 
-export type ConfirmEmailOutcome = 'confirmed' | 'invalid';
+export type ConfirmEmailOutcome = 'confirmed' | 'invalid' | 'rate-limited' | 'error';
 
 /**
  * Redeems a confirmation link's `userId`/`code`. Expired, used, tampered and unknown links all
  * answer `invalid` (#147's non-enumeration guarantee); an already-confirmed link answers
- * `confirmed`, same as a first-time success.
+ * `confirmed`, same as a first-time success. Network failures, 5xx and 429 never reject. They
+ * answer `error` or `rate-limited`, which the caller can retry (#298).
  */
 export async function confirmEmail(payload: {
   userId: string;
   code: string;
 }): Promise<ConfirmEmailOutcome> {
   const params = new URLSearchParams({ userId: payload.userId, code: payload.code });
-  const res = await fetch(`/api/account/confirm-email?${params.toString()}`);
-  return res.ok ? 'confirmed' : 'invalid';
+  try {
+    const res = await fetch(`/api/account/confirm-email?${params.toString()}`);
+    if (res.ok) return 'confirmed';
+    if (res.status === 429) return 'rate-limited';
+    if (res.status >= 500) return 'error';
+    return 'invalid';
+  } catch {
+    return 'error';
+  }
 }
 
 let cachedConfirmationExpiryHours: number | null = null;
