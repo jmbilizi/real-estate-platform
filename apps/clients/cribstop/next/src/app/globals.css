@@ -51,6 +51,13 @@ html {
   overflow-anchor: none;
 }
 
+/* A rendered modal locks page scroll from the first paint. `Modal` sets the same values from an
+   effect later, so a hard load does not shift by the scrollbar's width when it hydrates. */
+html:has([data-scroll-lock]) {
+  overflow: hidden;
+  scrollbar-gutter: stable;
+}
+
 body {
   @apply antialiased text-ink bg-white;
 }
