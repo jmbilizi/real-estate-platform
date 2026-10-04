@@ -55,7 +55,7 @@ function historyEvent(entry: PropertyHistoryEntry): string {
   return `${entry.marketStatus} · ${formatListingPrice(entry.price, listingType).text}`;
 }
 
-function PropertyHistory({ entries }: { entries: PropertyHistoryEntry[] }) {
+export function PropertyHistory({ entries }: { entries: PropertyHistoryEntry[] }) {
   return (
     <section className="px-6 py-6" data-testid="property-history">
       <h2 className="text-xl font-semibold tracking-tight text-ink">Listing history</h2>
