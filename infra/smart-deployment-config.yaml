@@ -203,7 +203,6 @@ global_triggers:
 ignored_paths:
   description: "Documentation and non-deployment files"
   paths:
-    - infra/k8s/base/nginx-ingress/** # Documentation only
     - infra/k8s/**/*.md # Markdown documentation
     - infra/k8s/**/README.md # README files
     - infra/k8s/**/readme.md # README files (lowercase)

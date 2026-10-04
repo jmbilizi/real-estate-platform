@@ -19,7 +19,7 @@ labels:
 # 7. Ingress rules (external routing)
 resources:
   # Infrastructure: Nginx Ingress Controller (remote official manifest)
-  - https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.1/deploy/static/provider/cloud/deploy.yaml
+  - nginx-ingress
 
   # Secrets (all first)
   - secrets/postgres.secret.yaml

@@ -235,7 +235,11 @@ Provider mapping (Claude only — keep vendor names out of the rest of this guid
   phase. Today that means the `ingress-nginx` lane completes before the jaeger / api-gateway /
   cribstop-web lanes, because `ValidatingWebhookConfiguration/ingress-nginx-admission` is
   `failurePolicy: Fail` on Ingress `CREATE,UPDATE`. Add a webhook and the ordering follows
-  automatically; nothing needs editing in the action.
+  automatically; nothing needs editing in the action. Local Skaffold has the same phasing (#101):
+  the `ingress-nginx` module deploys first, and its after-deploy hook
+  (`tools/infra/wait-ingress-admission.js`) waits for the admission webhook. `run-skaffold.js` also
+  pins the `skaffold.dev/run-id` label, because a fresh value restarts every Deployment, the
+  controller included, on each deploy.
 - **The inverse is just as silent: a gateway can advertise a service that is gated off.**
   `apps/api-gateway/Startup.cs` loads every `Configuration/Routes/*.json` unconditionally, so a
   route file ships routes _and_ a `SwaggerEndPoints` entry regardless of whether

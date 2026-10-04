@@ -1,7 +1,8 @@
 # Skaffold Configuration for Real Estate Platform
 # https://skaffold.dev/docs/references/yaml/
 #
-# Two modules in one file:
+# Three modules in one file:
+#   - ingress-nginx: controller + admission webhook, deployed first (#101)
 #   - services: gateway, services, infrastructure (manifests + deploy + port-forwards)
 #   - clients:  frontend apps (requires services)
 #
@@ -13,12 +14,40 @@
 # - CI/CD: Use an Nx-driven profile in the future to leverage caching/affected detection
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Module: ingress-nginx — phase 1 (#101)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Deployed and awaited before `services` (via `requires`). The admission webhook of this
+# controller is failurePolicy: Fail on Ingress CREATE/UPDATE, so no Ingress can apply until its
+# endpoint is Ready. This is the local counterpart of the CI ingress-nginx lane.
+apiVersion: skaffold/v4beta11
+kind: Config
+metadata:
+  name: ingress-nginx
+
+manifests:
+  kustomize:
+    paths:
+      - infra/k8s/podman/ingress-nginx
+    buildArgs:
+      - --enable-alpha-plugins
+
+deploy:
+  kubectl:
+    hooks:
+      after:
+        - host:
+            command: ["node", "tools/infra/wait-ingress-admission.js"]
+
+---
+# ═══════════════════════════════════════════════════════════════════════════════
 # Module: services — gateway, services, and shared infrastructure
 # ═══════════════════════════════════════════════════════════════════════════════
 apiVersion: skaffold/v4beta11
 kind: Config
 metadata:
   name: services
+requires:
+  - configs: [ingress-nginx]
 
 build:
   tagPolicy:
