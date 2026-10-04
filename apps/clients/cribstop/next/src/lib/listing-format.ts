@@ -430,7 +430,9 @@ export function agentInitials(name: string): string {
 
 /** `tel:` target for a display phone. Keeps digits and a leading "+". Null when no digit remains. */
 export function telHref(phone: string): string | null {
-  const digits = phone.replace(/\D/g, '');
+  // Drop an extension ("x123", "ext. 4"): its digits would otherwise join the dialed number.
+  const main = phone.split(/\s*(?:x|ext\.?|#)/i)[0];
+  const digits = main.replace(/\D/g, '');
   if (digits.length === 0) return null;
   return `tel:${phone.trim().startsWith('+') ? '+' : ''}${digits}`;
 }
@@ -469,7 +471,10 @@ export function agentContactLines(l: {
   for (const [kind, owner, raw] of candidates) {
     const value = raw?.trim();
     if (!value) continue;
-    const href = kind === 'phone' ? telHref(value) : `mailto:${value}`;
+    const href =
+      kind === 'phone'
+        ? telHref(value)
+        : `mailto:${encodeURIComponent(value).replace(/%40/g, '@')}`;
     if (!href) continue;
     const key = `${kind}:${kind === 'phone' ? value.replace(/\D/g, '') : value.toLowerCase()}`;
     const earlier = seen.get(key);

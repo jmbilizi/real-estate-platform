@@ -295,6 +295,7 @@ describe('agent card helpers (#571)', () => {
     expect(telHref('(301) 555-0199')).toBe('tel:3015550199');
     expect(telHref('+1 301 555 0199')).toBe('tel:+13015550199');
     expect(telHref('n/a')).toBeNull();
+    expect(telHref('(301) 555-0100 x123')).toBe('tel:3015550100');
   });
 
   it('lists agent lines first, omits blanks, and drops a repeated value', () => {
