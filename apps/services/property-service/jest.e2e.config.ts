@@ -16,6 +16,9 @@ export default {
   globalSetup: '<rootDir>/tests/support/global-setup.ts',
   globalTeardown: '<rootDir>/tests/support/global-teardown.ts',
   setupFiles: ['<rootDir>/tests/support/test-setup.ts'],
+  // Suites share one database. Parallel workers change row counts between two paging requests,
+  // so the `total` assertions in listings-search fail intermittently.
+  maxWorkers: 1,
   testEnvironment: 'node',
   transform: {
     '^.+\\.[tj]s$': [

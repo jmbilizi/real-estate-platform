@@ -16,9 +16,15 @@ describe('published document identity', () => {
     expect(response.data.info.title).toBe('Property Service');
     expect(Object.keys(response.data.paths).sort()).toEqual([
       '/listings',
+      '/listings/map',
       '/listings/meta',
       '/listings/neighborhoods',
       '/listings/{id}',
+      '/listings/{id}/card',
+      '/listings/{id}/inquiries',
+      '/listings/{id}/page',
+      '/properties/lookup',
+      '/properties/{id}/page',
     ]);
     expect(response.data.paths['/listings'].get.operationId).toBe('searchListings');
     expect(response.data.paths['/listings/meta'].get.operationId).toBe('getListingsMeta');
