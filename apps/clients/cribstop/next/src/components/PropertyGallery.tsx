@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import type { Media } from '@/lib/types';
 import ListingImage from '@/components/listing/ListingImage';
 
@@ -12,16 +12,39 @@ import ListingImage from '@/components/listing/ListingImage';
  * in, because that would put marketing copy into the accessible name of a photo it does not
  * describe. An empty array renders the branded placeholder via `ListingImage` rather than nothing.
  */
-export default function PropertyGallery({ media }: { media: Media[] }) {
+export type GalleryPhoto = Media & { caption?: string | null };
+
+export default function PropertyGallery({
+  media,
+  children,
+}: {
+  media: GalleryPhoto[];
+  /** Overlay slot inside the gallery frame, for example a status badge. */
+  children?: ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
+  const [swipeIdx, setSwipeIdx] = useState(0);
+  const trackRef = useRef<HTMLDivElement>(null);
+
+  const onSwipeScroll = useCallback(() => {
+    const el = trackRef.current;
+    if (!el || el.clientWidth === 0) return;
+    setSwipeIdx(Math.round(el.scrollLeft / el.clientWidth));
+  }, []);
 
   const handleKey = useCallback(
     (e: KeyboardEvent) => {
       if (!open) return;
       if (e.key === 'Escape') setOpen(false);
-      if (e.key === 'ArrowRight') setActiveIdx((p) => (p + 1) % media.length);
-      if (e.key === 'ArrowLeft') setActiveIdx((p) => (p - 1 + media.length) % media.length);
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        setActiveIdx((p) => (p + 1) % media.length);
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        setActiveIdx((p) => (p - 1 + media.length) % media.length);
+      }
     },
     [open, media.length],
   );
@@ -31,13 +54,22 @@ export default function PropertyGallery({ media }: { media: Media[] }) {
     return () => document.removeEventListener('keydown', handleKey);
   }, [handleKey]);
 
+  const badgeOverlay = children ? (
+    <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-[calc(100%-1.5rem)]">
+      {children}
+    </div>
+  ) : null;
+
   if (media.length === 0) {
     return (
-      <ListingImage
-        media={null}
-        sizeHint="detail"
-        className="aspect-video w-full overflow-hidden rounded-2xl md:h-[480px]"
-      />
+      <div className="relative">
+        <ListingImage
+          media={null}
+          sizeHint="detail"
+          className="aspect-video w-full overflow-hidden rounded-2xl md:h-[480px]"
+        />
+        {badgeOverlay}
+      </div>
     );
   }
 
@@ -56,21 +88,36 @@ export default function PropertyGallery({ media }: { media: Media[] }) {
     <>
       {/* Mosaic — Airbnb-style: 1 big left + 2x2 grid right */}
       <div className="relative">
-        {/* Mobile: single image */}
-        <button
-          type="button"
-          onClick={() => {
-            setActiveIdx(0);
-            setOpen(true);
-          }}
-          aria-label={`View all ${media.length} photos`}
-          className="relative block aspect-[4/3] w-full overflow-hidden rounded-2xl bg-surface-soft md:hidden"
-        >
-          <ListingImage media={media[0]} className="h-full w-full object-contain" />
-          <span className="absolute bottom-3 right-3 rounded-full bg-white/95 px-3 py-1.5 text-[11px] font-semibold text-ink shadow-card">
-            See all {media.length} {media.length === 1 ? 'photo' : 'photos'}
+        {/* Mobile: swipeable strip in the same aspect-[4/3] frame, so the skeleton still fits. */}
+        <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-surface-soft md:hidden">
+          <div
+            ref={trackRef}
+            onScroll={onSwipeScroll}
+            data-testid="gallery-swipe"
+            className="scrollbar-none flex h-full w-full snap-x snap-mandatory overflow-x-auto"
+          >
+            {media.map((photo, i) => (
+              <button
+                type="button"
+                key={i}
+                onClick={() => {
+                  setActiveIdx(i);
+                  setOpen(true);
+                }}
+                aria-label={`View photo ${i + 1} of ${media.length}`}
+                className="block h-full w-full shrink-0 snap-center"
+              >
+                <ListingImage media={photo} className="h-full w-full object-contain" />
+              </button>
+            ))}
+          </div>
+          <span
+            data-testid="gallery-swipe-counter"
+            className="pointer-events-none absolute bottom-3 right-3 rounded-full bg-white/95 px-3 py-1.5 text-[11px] font-semibold tabular-nums text-ink shadow-card"
+          >
+            {Math.min(swipeIdx, media.length - 1) + 1} / {media.length}
           </span>
-        </button>
+        </div>
 
         {/* Desktop: mosaic grid */}
         <div className="hidden md:grid md:h-[480px] md:grid-cols-4 md:grid-rows-2 md:gap-2 md:overflow-hidden md:rounded-2xl">
@@ -123,11 +170,17 @@ export default function PropertyGallery({ media }: { media: Media[] }) {
             Show all {media.length} photos
           </button>
         </div>
+        {badgeOverlay}
       </div>
 
       {/* Lightbox */}
       {open && (
-        <div className="fixed inset-0 z-[100] flex flex-col bg-ink/95">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Photo viewer"
+          className="fixed inset-0 z-[100] flex flex-col bg-ink/95"
+        >
           <div className="flex items-center justify-between p-4 text-white">
             <button
               onClick={() => setOpen(false)}
@@ -156,7 +209,7 @@ export default function PropertyGallery({ media }: { media: Media[] }) {
               backdrop={false}
             />
           </div>
-          {/* Bottom bar — mirrors top bar height, houses prev/next arrows */}
+          {/* Bottom bar: prev/next arrows and the photo caption, when the photo has one. */}
           <div className="flex items-center justify-between px-4 py-3 text-white">
             <button
               onClick={() => setActiveIdx((p) => (p === 0 ? media.length - 1 : p - 1))}
@@ -175,8 +228,11 @@ export default function PropertyGallery({ media }: { media: Media[] }) {
               </svg>
               Prev
             </button>
-            <p className="text-sm font-medium tabular-nums">
-              {activeIdx + 1} / {media.length}
+            <p
+              className="min-w-0 flex-1 px-3 text-center text-sm text-white/90"
+              data-testid="gallery-caption"
+            >
+              {media[activeIdx]?.caption ?? ''}
             </p>
             <button
               onClick={() => setActiveIdx((p) => (p === media.length - 1 ? 0 : p + 1))}

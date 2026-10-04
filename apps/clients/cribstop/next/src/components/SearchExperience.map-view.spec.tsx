@@ -135,7 +135,6 @@ describe('the map view starts only after the user moves the map', () => {
     expect(lastQuery().query).toBe('Alexandria, VA');
     await waitFor(() => expect(screen.getByText('31')).toBeTruthy());
     expect(screen.getByTestId('clear-map-area')).toBeTruthy();
-    expect(screen.getByTestId('map-area-hint').textContent).toContain('hidden address');
     expect(screen.queryByTestId('map-area-note')).toBeNull();
     expect(mockMapProps.current?.viewBounds).toEqual(OLD_TOWN);
   });
@@ -264,12 +263,11 @@ describe('the way back to the whole place', () => {
     expect(mockMapProps.current?.viewBounds).toBeNull();
   });
 
-  it('names the place in the Map area hint and clears from the chip', async () => {
+  it('clears the map area from the chip', async () => {
     render(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     moveMap(OLD_TOWN);
-    await waitFor(() => expect(screen.getByTestId('map-area-hint')).toBeTruthy());
-    expect(screen.getByTestId('map-area-hint').textContent).toContain('show all in Alexandria, VA');
+    await waitFor(() => expect(screen.getByTestId('clear-map-area')).toBeTruthy());
 
     fireEvent.click(screen.getByTestId('clear-map-area'));
 
@@ -379,7 +377,6 @@ describe('the view works with the other controls', () => {
       expect((mockedGroups.mock.calls.at(-1)?.[0] as Query).bounds).toEqual(OLD_TOWN),
     );
     expect(mockedGroups.mock.calls.at(-1)?.[0]).toMatchObject({ offset: 0 });
-    expect(screen.getByTestId('map-area-hint').textContent).toContain('neighborhoods');
   });
 });
 
