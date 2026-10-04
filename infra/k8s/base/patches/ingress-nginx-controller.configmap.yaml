@@ -1,0 +1,12 @@
+# Do not trust a client-supplied X-Forwarded-For (#143). With use-forwarded-headers off, nginx
+# replaces X-Forwarded-For and sets X-Real-IP from the connection peer. The gateway reads them
+# only from a peer inside TRUSTED_PROXY_NETWORKS. These are the upstream defaults, pinned so
+# that a change is a visible edit.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ingress-nginx-controller
+  namespace: ingress-nginx
+data:
+  use-forwarded-headers: "false"
+  compute-full-forwarded-for: "false"
