@@ -9,7 +9,7 @@ export interface InquiryInput {
 }
 
 /** `unavailable`: the listing is gone, so a retry cannot work. `retryable`: the user may try again. */
-export type InquiryFailure = 'unavailable' | 'rate_limited' | 'retryable';
+export type InquiryFailure = 'unavailable' | 'invalid' | 'rate_limited' | 'retryable';
 
 export class InquiryError extends Error {
   constructor(readonly failure: InquiryFailure) {
@@ -31,6 +31,7 @@ export async function submitInquiry(listingId: string, input: InquiryInput): Pro
   }
   if (res.ok) return;
   if (res.status === 404) throw new InquiryError('unavailable');
+  if (res.status === 400) throw new InquiryError('invalid');
   if (res.status === 429) throw new InquiryError('rate_limited');
   throw new InquiryError('retryable');
 }

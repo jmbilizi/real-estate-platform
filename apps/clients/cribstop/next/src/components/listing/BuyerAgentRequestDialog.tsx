@@ -54,6 +54,8 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
   const titleId = useId();
   const cardRef = useRef<HTMLDivElement>(null);
   const sendingRef = useRef(false);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const touched = useRef(new Set<Field>());
 
   const [values, setValues] = useState<Record<Field, string>>({
@@ -63,6 +65,8 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
     message: '',
   });
   const [errors, setErrors] = useState<Errors>({});
+  const alertRef = useRef<HTMLParagraphElement>(null);
+  const doneRef = useRef<HTMLButtonElement>(null);
   const [phase, setPhase] = useState<Phase>({ status: 'editing' });
 
   // Prefill from the account. The profile can arrive after the dialog opens, so an untouched
@@ -81,14 +85,15 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
   useEffect(() => {
     const returnTo = document.activeElement as HTMLElement | null;
     const root = document.documentElement;
-    const previousOverflow = root.style.overflow;
-    root.style.overflow = 'hidden';
+    // Lock only if nothing else has. The listing modal may already hold the lock.
+    const lockedHere = root.style.overflow !== 'hidden';
+    if (lockedHere) root.style.overflow = 'hidden';
     cardRef.current?.querySelector<HTMLElement>('input')?.focus();
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -109,10 +114,9 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
     document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('keydown', onKey);
-      root.style.overflow = previousOverflow;
+      if (lockedHere) root.style.overflow = '';
       if (returnTo && document.contains(returnTo)) returnTo.focus();
     };
-    // `onClose` is stable for the life of the dialog: the parent passes a setter wrapper.
   }, []);
 
   function update(field: Field, value: string) {
@@ -123,6 +127,7 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
   function validate(): Errors {
     const next: Errors = {};
     if (!values.name.trim()) next.name = 'Enter your name.';
+    else if (values.name.trim().length > 200) next.name = 'Enter a shorter name.';
     if (!values.email.trim()) next.email = 'Enter your email address.';
     else if (!EMAIL_PATTERN.test(values.email.trim())) next.email = 'Enter a valid email address.';
     if (values.phone.trim().length > 40) next.phone = 'Enter a shorter phone number.';
@@ -157,6 +162,7 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
         ...(values.message.trim() && { message: values.message.trim() }),
       });
       setPhase({ status: 'sent' });
+      requestAnimationFrame(() => doneRef.current?.focus());
     } catch (err) {
       const failure = err instanceof InquiryError ? err.failure : 'retryable';
       setPhase(
@@ -166,18 +172,25 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
               retryable: false,
               message: 'This home is no longer available, so we could not send your request.',
             }
-          : failure === 'rate_limited'
+          : failure === 'invalid'
             ? {
                 status: 'failed',
                 retryable: true,
-                message: 'Too many requests right now. Wait a moment, then try again.',
+                message: 'Check your details and try again.',
               }
-            : {
-                status: 'failed',
-                retryable: true,
-                message: 'We could not send your request. Check your connection and try again.',
-              },
+            : failure === 'rate_limited'
+              ? {
+                  status: 'failed',
+                  retryable: true,
+                  message: 'Too many requests right now. Wait a moment, then try again.',
+                }
+              : {
+                  status: 'failed',
+                  retryable: true,
+                  message: 'We could not send your request. Check your connection and try again.',
+                },
       );
+      requestAnimationFrame(() => alertRef.current?.focus());
     } finally {
       sendingRef.current = false;
     }
@@ -204,7 +217,7 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
           onChange={(e) => update(field, e.target.value)}
           aria-invalid={errors[field] ? true : undefined}
           aria-describedby={errors[field] ? errorId : undefined}
-          disabled={sending}
+          readOnly={sending}
           {...props}
         />
         {errors[field] && (
@@ -218,7 +231,7 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
+      className="fixed inset-0 z-request-dialog flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -241,7 +254,12 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
               {kind === 'tour_request' ? 'tour request' : 'message'}.
               {kind === 'tour_request' && ' A tour request is not a booking.'}
             </p>
-            <button type="button" className="btn-primary mt-5 min-h-11 w-full" onClick={onClose}>
+            <button
+              ref={doneRef}
+              type="button"
+              className="btn-primary mt-5 min-h-11 w-full"
+              onClick={onClose}
+            >
               Done
             </button>
           </div>
@@ -292,7 +310,7 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
                 onChange={(e) => update('message', e.target.value)}
                 aria-invalid={errors.message ? true : undefined}
                 aria-describedby={errors.message ? `${titleId}-message-error` : undefined}
-                disabled={sending}
+                readOnly={sending}
               />
               {errors.message && (
                 <p id={`${titleId}-message-error`} className="mt-1 text-sm text-red-700">
@@ -302,7 +320,12 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
             </div>
 
             {phase.status === 'failed' && (
-              <p role="alert" className="text-sm font-medium text-red-700">
+              <p
+                ref={alertRef}
+                role="alert"
+                tabIndex={-1}
+                className="text-sm font-medium text-red-700"
+              >
                 {phase.message}
               </p>
             )}
@@ -312,7 +335,7 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
                 Close
               </button>
             ) : (
-              <button type="submit" className="btn-primary min-h-11 w-full" disabled={sending}>
+              <button type="submit" className="btn-primary min-h-11 w-full" aria-disabled={sending}>
                 {sending ? 'Sending…' : phase.status === 'failed' ? 'Try Again' : copy.submit}
               </button>
             )}

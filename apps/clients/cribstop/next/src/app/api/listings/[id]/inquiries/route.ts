@@ -15,7 +15,16 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const { id } = await ctx.params;
   const input = await req.json().catch(() => null);
   const kind = inquiryKindSchema.safeParse(input?.kind);
-  if (!input || typeof input !== 'object' || !kind.success) {
+  const isText = (v: unknown) => v === undefined || typeof v === 'string';
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    !kind.success ||
+    typeof input.name !== 'string' ||
+    typeof input.email !== 'string' ||
+    !isText(input.phone) ||
+    !isText(input.message)
+  ) {
     return NextResponse.json(
       { error: { code: 'invalid_request', message: 'Invalid request body.' } },
       { status: 400 },
