@@ -391,6 +391,27 @@ trusts it exactly and derives the endpoints. A test-feed row is marked `is_sampl
 hosts are logged, never URLs or credential material: `bright-client.ts` keeps only RFC 6749's closed
 `error` codes from a failure body.
 
+**Detail-page facts (#564).** `GET /listings/:id` carries tax, HOA, virtual tour, listing-agent
+contact, photo captions and eight grouped facts. The list, card and map payloads carry none of them.
+`bright-map/map-detail.ts` maps them, and each field name is declared in `$metadata`.
+
+- Scalars are columns on `listings`: `tax_annual_amount`, `tax_year`, `hoa_fee`,
+  `hoa_fee_frequency`, `virtual_tour_url`, `list_agent_phone`, `list_agent_email`. Grouped facts
+  (parking, heating, cooling, appliances, basement, flooring, interior, exterior) are rows in
+  `listing_facts`. A DB CHECK closes the group set and caps the value length. Add no group for tags,
+  keywords or neighborhood character.
+- `replaceListingFacts()` in `write.ts` is the only writer of `listing_facts`.
+- Not mapped, because the feed does not declare them: `VirtualTourURLBranded`, a 3D or Matterport
+  field, and a listing-agent photo. The listing office name and phone are the existing attribution
+  fields.
+- Only the unbranded tour URL shows. A branded tour carries agent or brokerage marketing.
+  **Assumption:** no written Bright term confirms the IDX rule (#33).
+- Suppression: `applyAddressSuppression()` nulls `virtualTourUrl` and every `caption` when the
+  address is masked. Tax, HOA and agent contact stay.
+- **Backfill.** A row fills when the sync next writes it. To fill every listing now, queue a full
+  backfill: `POST /admin/bright/sync` with `{ "mode": "backfill" }` (port-forward to 3002, bearer
+  `BRIGHT_ADMIN_TOKEN`). The migration adds the columns with no data.
+
 **Photos.** A listing shows its `ListPictureURL` from the property record. The detail page fetches
 the full gallery. The media suppression gate is lifted for Bright rows by the 2026-09-22 ruling
 (#146, #33): Bright images carry their watermark and Cribstop is licensed to show them. Read it

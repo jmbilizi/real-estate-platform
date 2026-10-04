@@ -173,6 +173,14 @@ export interface ListingRow {
   listing_agent_name: string | null;
   is_sample: boolean;
   last_updated: string;
+  /** #564. Detail-page facts. Omitted means null. */
+  tax_annual_amount?: number | null;
+  tax_year?: number | null;
+  hoa_fee?: number | null;
+  hoa_fee_frequency?: string | null;
+  virtual_tour_url?: string | null;
+  list_agent_phone?: string | null;
+  list_agent_email?: string | null;
 }
 
 export interface OpenHouseRow {

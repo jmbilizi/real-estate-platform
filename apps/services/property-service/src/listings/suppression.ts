@@ -1,4 +1,9 @@
-import type { ListingCardRow, ListingDetail, Media } from '@cribstop/property-contracts';
+import type {
+  DetailMedia,
+  ListingCardRow,
+  ListingDetail,
+  Media,
+} from '@cribstop/property-contracts';
 
 /**
  * The ONE rule for media on an address-suppressed listing, written once and applied by both of the
@@ -26,6 +31,11 @@ import type { ListingCardRow, ListingDetail, Media } from '@cribstop/property-co
  */
 function withheldAltText<T extends Media>(media: T): T {
   return { ...media, altText: null };
+}
+
+/** #564. The long caption is feed text like `altText`, so the same rule nulls it. */
+function withheldCaption(media: DetailMedia): DetailMedia {
+  return { ...withheldAltText(media), caption: null };
 }
 
 /**
@@ -96,7 +106,9 @@ export function applyAddressSuppression(detail: ListingDetail): ListingDetail {
     unit: detail.unit === null ? null : { ...detail.unit, unitNumber: null },
     listing: {
       ...detail.listing,
-      media: detail.listing.media.map(withheldAltText),
+      media: detail.listing.media.map(withheldCaption),
+      // #564. A tour URL can carry the street address in its path or in the tour page itself.
+      virtualTourUrl: null,
       openHouses: detail.listing.openHouses.map((openHouse) => ({
         ...openHouse,
         remarks: null,

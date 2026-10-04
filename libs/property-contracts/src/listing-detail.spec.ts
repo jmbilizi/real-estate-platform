@@ -1,3 +1,4 @@
+import { listingCardSchema } from './listing-card';
 import { listingDetailSchema } from './listing-detail';
 
 const detail = {
@@ -32,7 +33,7 @@ const detail = {
     lotSqft: 8000,
     yearBuilt: 1998,
     description: 'Sample listing description.',
-    media: [{ url: 'https://x/1.jpg', altText: null }],
+    media: [{ url: 'https://x/1.jpg', altText: null, caption: null }],
     openHouses: [],
     amenities: ['Garage'],
     featured: false,
@@ -54,6 +55,23 @@ const detail = {
     officeBrokerLeadPhone: null,
     officeBrokerLeadEmail: null,
     listedBy: 'B – O',
+    taxAnnualAmount: null,
+    taxYear: null,
+    hoaFee: null,
+    hoaFeeFrequency: null,
+    virtualTourUrl: null,
+    listAgentPhone: null,
+    listAgentEmail: null,
+    facts: {
+      parking: null,
+      heating: null,
+      cooling: null,
+      appliances: null,
+      basement: null,
+      flooring: null,
+      interior: null,
+      exterior: null,
+    },
   },
 };
 
@@ -67,9 +85,63 @@ describe('listingDetailSchema', () => {
     expect(listingDetailSchema.safeParse(withoutUnit).success).toBe(false);
   });
 
+  it.each([
+    'taxAnnualAmount',
+    'taxYear',
+    'hoaFee',
+    'hoaFeeFrequency',
+    'virtualTourUrl',
+    'listAgentPhone',
+    'listAgentEmail',
+    'facts',
+  ])('requires the %s key to be present (#564)', (key) => {
+    const { [key]: _omitted, ...rest } = detail.listing as Record<string, unknown>;
+    expect(listingDetailSchema.safeParse({ ...detail, listing: rest }).success).toBe(false);
+  });
+
+  it('accepts present detail facts and rejects a negative amount or a non-URL tour (#564)', () => {
+    const present = {
+      ...detail,
+      listing: {
+        ...detail.listing,
+        taxAnnualAmount: 5120.5,
+        taxYear: 2025,
+        hoaFee: 310,
+        hoaFeeFrequency: 'Monthly',
+        virtualTourUrl: 'https://tours.example/abc',
+        listAgentPhone: '2025550100',
+        listAgentEmail: 'agent@example.com',
+        facts: { ...detail.listing.facts, heating: ['Forced Air'] },
+      },
+    };
+    expect(listingDetailSchema.safeParse(present).success).toBe(true);
+    expect(
+      listingDetailSchema.safeParse({
+        ...present,
+        listing: { ...present.listing, taxAnnualAmount: -1 },
+      }).success,
+    ).toBe(false);
+    expect(
+      listingDetailSchema.safeParse({
+        ...present,
+        listing: { ...present.listing, virtualTourUrl: 'not a url' },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('keeps the detail facts off the card schema (#564)', () => {
+    expect(Object.keys(listingCardSchema.shape)).not.toEqual(
+      expect.arrayContaining(['taxAnnualAmount', 'hoaFee', 'virtualTourUrl', 'facts']),
+    );
+  });
+
   it('carries description on detail and media as objects', () => {
     const parsed = listingDetailSchema.parse(detail);
     expect(parsed.listing.description).toBe('Sample listing description.');
-    expect(parsed.listing.media[0]).toEqual({ url: 'https://x/1.jpg', altText: null });
+    expect(parsed.listing.media[0]).toEqual({
+      url: 'https://x/1.jpg',
+      altText: null,
+      caption: null,
+    });
   });
 });

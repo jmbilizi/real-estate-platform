@@ -26,13 +26,54 @@ const unitFactsSchema = z.object({
   sqft: z.number().int().nonnegative().nullable(),
 });
 
+/**
+ * #564. One gallery photo on the detail page. `altText` is Bright's short description. `caption` is
+ * its long description. Both are null on an address-suppressed listing.
+ */
+export const detailMediaSchema = mediaSchema.extend({
+  caption: z.string().nullable(),
+});
+
+/**
+ * #564. Grouped facts. Each group is the list Bright carries, or `null` when it carries none.
+ * There is no group for tags, keywords or neighborhood character.
+ */
+export const listingFactsSchema = z.object({
+  parking: z.array(z.string()).nullable(),
+  heating: z.array(z.string()).nullable(),
+  cooling: z.array(z.string()).nullable(),
+  appliances: z.array(z.string()).nullable(),
+  basement: z.array(z.string()).nullable(),
+  flooring: z.array(z.string()).nullable(),
+  interior: z.array(z.string()).nullable(),
+  exterior: z.array(z.string()).nullable(),
+});
+
+/**
+ * #564. Detail-only facts from the Bright record. Never on the card or the map payload. Every key
+ * is present. A fact the feed does not carry is `null`.
+ */
+const listingExtraFieldsSchema = z.object({
+  taxAnnualAmount: z.number().nonnegative().nullable(),
+  taxYear: z.number().int().nullable(),
+  hoaFee: z.number().nonnegative().nullable(),
+  hoaFeeFrequency: z.string().nullable(),
+  // The unbranded virtual tour only. Null when the seller withheld the address.
+  virtualTourUrl: z.url().nullable(),
+  // The listing agent's own contact. The office name and phone are in the attribution fields.
+  listAgentPhone: z.string().nullable(),
+  listAgentEmail: z.string().nullable(),
+  facts: listingFactsSchema,
+});
+
 const listingDetailFieldsSchema = listingCardSchema
   .omit({ primaryMedia: true, openHouse: true })
   .extend({
     description: z.string().nullable(),
-    media: z.array(mediaSchema),
+    media: z.array(detailMediaSchema),
     openHouses: z.array(openHouseSchema),
-  });
+  })
+  .extend(listingExtraFieldsSchema.shape);
 
 /** The object graph, not a card. `unit: null` means "the offer is the whole property". */
 export const listingDetailSchema = z.object({
@@ -42,3 +83,5 @@ export const listingDetailSchema = z.object({
 });
 
 export type ListingDetail = z.infer<typeof listingDetailSchema>;
+export type DetailMedia = z.infer<typeof detailMediaSchema>;
+export type ListingFacts = z.infer<typeof listingFactsSchema>;

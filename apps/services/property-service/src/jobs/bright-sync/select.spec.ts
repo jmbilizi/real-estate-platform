@@ -55,6 +55,22 @@ const FULL: Record<string, unknown> = {
   ListOfficeName: 'Acme Realty',
   ListOfficePhone: '2025550101',
   ListOfficeEmail: 'office@acme.example',
+  TaxAnnualAmount: 5120.5,
+  TaxYear: 2025,
+  AssociationFee: 310,
+  AssociationFeeFrequency: 'Monthly',
+  VirtualTourURLUnbranded: 'https://tours.example/abc',
+  ListAgentPreferredPhone: '2025550100',
+  ListAgentDirectPhone: '2025550101',
+  ListAgentEmail: 'agent@example.com',
+  ParkingFeatures: ['Driveway'],
+  Heating: ['Forced Air'],
+  Cooling: ['Central A/C'],
+  Appliances: ['Dishwasher'],
+  Basement: ['Finished'],
+  Flooring: ['Hardwood'],
+  InteriorFeatures: ['Crown Molding'],
+  ExteriorFeatures: ['Deck'],
 };
 
 /** Records every property name the mapper reads, including reads of absent fields. */

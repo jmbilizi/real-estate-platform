@@ -72,7 +72,16 @@ export interface ListingCardDbRow {
   /** Detail projection only. */
   description?: string | null;
   /** Joined aggregates, detail projection only. */
-  media?: { url: string; alt_text: string | null }[] | null;
+  media?: { url: string; alt_text: string | null; caption?: string | null }[] | null;
+  /** #564. Detail projection only. `facts` maps a group to its values; absent groups have no key. */
+  tax_annual_amount?: number | null;
+  tax_year?: number | null;
+  hoa_fee?: number | null;
+  hoa_fee_frequency?: string | null;
+  virtual_tour_url?: string | null;
+  list_agent_phone?: string | null;
+  list_agent_email?: string | null;
+  facts?: Partial<Record<string, string[]>> | null;
   open_houses?: { starts_at: string; ends_at: string; remarks: string | null }[] | null;
   primary_media_url?: string | null;
   primary_media_alt_text?: string | null;
@@ -249,7 +258,28 @@ export function toListingDetail(row: ListingCardDbRow): ListingDetail {
     listing: {
       ...commonFields(row),
       description: row.description ?? null,
-      media: (row.media ?? []).map((item) => ({ url: item.url, altText: item.alt_text })),
+      media: (row.media ?? []).map((item) => ({
+        url: item.url,
+        altText: item.alt_text,
+        caption: item.caption ?? null,
+      })),
+      taxAnnualAmount: row.tax_annual_amount ?? null,
+      taxYear: row.tax_year ?? null,
+      hoaFee: row.hoa_fee ?? null,
+      hoaFeeFrequency: row.hoa_fee_frequency ?? null,
+      virtualTourUrl: row.virtual_tour_url ?? null,
+      listAgentPhone: row.list_agent_phone ?? null,
+      listAgentEmail: row.list_agent_email ?? null,
+      facts: {
+        parking: row.facts?.parking ?? null,
+        heating: row.facts?.heating ?? null,
+        cooling: row.facts?.cooling ?? null,
+        appliances: row.facts?.appliances ?? null,
+        basement: row.facts?.basement ?? null,
+        flooring: row.facts?.flooring ?? null,
+        interior: row.facts?.interior ?? null,
+        exterior: row.facts?.exterior ?? null,
+      },
       openHouses: (row.open_houses ?? []).map((item) => ({
         startsAt: nestedInstant(item.starts_at),
         endsAt: nestedInstant(item.ends_at),

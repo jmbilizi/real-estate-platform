@@ -113,7 +113,9 @@ export async function upsertListing(
         broker_name, broker_phone, broker_email, office_name,
         office_broker_lead_phone, office_broker_lead_email, listing_agent_name,
         is_sample, last_updated, original_list_price, listed_at, coming_soon_date,
-        status_changed_at)
+        status_changed_at,
+        tax_annual_amount, tax_year, hoa_fee, hoa_fee_frequency, virtual_tour_url,
+        list_agent_phone, list_agent_email)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
              $9, $10, $11, $12,
              $13, $14, $15,
@@ -126,7 +128,8 @@ export async function upsertListing(
              $41, $42,
              $43, $44, $45, $46,
              $47, $48, $49,
-             $50, $51, $52, $53, $54, $55)
+             $50, $51, $52, $53, $54, $55,
+             $56, $57, $58, $59, $60, $61, $62)
      -- Re-ingesting the same feed record (source_system, source_listing_key) reuses the SAME id
      -- (resolved by the caller, see upsertListingBySourceKey), so this is the idempotent re-run
      -- path (#93): every column the INSERT list carries is also refreshed on conflict.
@@ -185,6 +188,14 @@ export async function upsertListing(
        coming_soon_date = EXCLUDED.coming_soon_date,
        -- #459. Refreshed like listed_at.
        status_changed_at = EXCLUDED.status_changed_at,
+       -- #564. Refreshed like the other feed facts. An absent value clears the old one.
+       tax_annual_amount = EXCLUDED.tax_annual_amount,
+       tax_year = EXCLUDED.tax_year,
+       hoa_fee = EXCLUDED.hoa_fee,
+       hoa_fee_frequency = EXCLUDED.hoa_fee_frequency,
+       virtual_tour_url = EXCLUDED.virtual_tour_url,
+       list_agent_phone = EXCLUDED.list_agent_phone,
+       list_agent_email = EXCLUDED.list_agent_email,
        -- A record the feed maps again is live again (#338): a takedown is not permanent.
        deleted_at = NULL
      -- #391. xmax = 0 is Postgres' own "this row was just inserted, not updated" signal, cheaper
@@ -254,6 +265,13 @@ export async function upsertListing(
       row.listed_at,
       row.coming_soon_date,
       row.status_changed_at,
+      row.tax_annual_amount ?? null,
+      row.tax_year ?? null,
+      row.hoa_fee ?? null,
+      row.hoa_fee_frequency ?? null,
+      row.virtual_tour_url ?? null,
+      row.list_agent_phone ?? null,
+      row.list_agent_email ?? null,
     ],
   );
 
@@ -826,6 +844,36 @@ export async function replaceFeedListingMedia(
         AND source_media_key IS NOT NULL
         AND NOT (source_media_key = ANY($2::text[]))`,
     [listingId, rows.map((row) => row.source_media_key)],
+  );
+}
+
+/**
+ * #564. Replaces a listing's grouped facts with the record's current ones. A group the record no
+ * longer carries disappears. Run in the same transaction as `upsertListingBySourceKey()`.
+ */
+export async function replaceListingFacts(
+  client: Queryable,
+  listingId: string,
+  facts: Readonly<Record<string, readonly string[]>>,
+): Promise<void> {
+  await client.query('DELETE FROM listing_facts WHERE listing_id = $1', [listingId]);
+  const groups: string[] = [];
+  const positions: number[] = [];
+  const values: string[] = [];
+  for (const [group, items] of Object.entries(facts)) {
+    items.forEach((value, position) => {
+      groups.push(group);
+      positions.push(position);
+      values.push(value);
+    });
+  }
+  if (values.length === 0) {
+    return;
+  }
+  await client.query(
+    `INSERT INTO listing_facts (listing_id, fact_group, position, value)
+     SELECT $1, g, p, v FROM unnest($2::text[], $3::int[], $4::text[]) AS t(g, p, v)`,
+    [listingId, groups, positions, values],
   );
 }
 

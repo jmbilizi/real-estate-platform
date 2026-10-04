@@ -78,8 +78,8 @@ describe('toListingDetailView', () => {
         listing: {
           description: 'Sunny corner unit.',
           media: [
-            { url: 'https://example.com/1.jpg', altText: 'Living room' },
-            { url: 'https://example.com/2.jpg', altText: null },
+            { url: 'https://example.com/1.jpg', altText: 'Living room', caption: null },
+            { url: 'https://example.com/2.jpg', altText: null, caption: null },
           ],
           openHouses: [
             {
