@@ -68,3 +68,7 @@ resources:
   ## DaemonSets (node-level services like Logging, monitoring, networking on every node)
 
   ## Jobs (one-time tasks like database schema migration, initialize cache, initial data load, one-time data import)
+
+# ingress-nginx controller settings (#143). The upstream manifest ships the ConfigMap empty.
+patches:
+  - path: patches/ingress-nginx-controller.configmap.yaml
