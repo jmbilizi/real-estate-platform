@@ -1,4 +1,6 @@
 import { createApp } from './app';
+import { getPool } from './db/pool';
+import { startInquiryDelivery } from './inquiries/delivery/start';
 
 const app = createApp();
 
@@ -27,3 +29,8 @@ server.on('error', (error) => {
   console.error(`property-service failed to listen on port ${port}:`, error);
   process.exit(1);
 });
+
+// Inquiry delivery (#134) runs in this process, off the request path. It sends nothing unless the
+// environment declares permission in configuration. See src/inquiries/delivery/config.ts.
+const deliveryWorker = startInquiryDelivery(getPool());
+process.once('SIGTERM', () => deliveryWorker.stop());
