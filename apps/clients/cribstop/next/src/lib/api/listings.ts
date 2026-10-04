@@ -274,6 +274,12 @@ export interface ListingDetailView {
   openHouses: OpenHouse[];
   /** #573. The unbranded tour URL. Unvalidated MLS text, so pass it through `resolveTourEntry`. */
   virtualTourUrl: string | null;
+  /** #568. Detail-only facts. A fact the feed does not carry is null. */
+  taxAnnualAmount: number | null;
+  taxYear: number | null;
+  hoaFee: number | null;
+  hoaFeeFrequency: string | null;
+  facts: ListingDetail['listing']['facts'];
 
   // --- NAR 7.58 attribution ------------------------------------------------------------------
   listingAgentName: string | null;
@@ -359,6 +365,11 @@ export function toListingDetailView(detail: ListingDetail): ListingDetailView {
     media: listing.media,
     openHouses: listing.openHouses,
     virtualTourUrl: listing.virtualTourUrl,
+    taxAnnualAmount: listing.taxAnnualAmount,
+    taxYear: listing.taxYear,
+    hoaFee: listing.hoaFee,
+    hoaFeeFrequency: listing.hoaFeeFrequency,
+    facts: listing.facts,
 
     listingAgentName: listing.listingAgentName,
     brokerName: listing.brokerName,

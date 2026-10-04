@@ -134,15 +134,14 @@ describe('ListingDetailSkeleton', () => {
   describe('section coverage', () => {
     const SECTIONS = [
       'gallery',
-      'price',
-      'stats',
+      'overview',
       'description',
       'amenities',
       'map',
       'disclosure',
       'agent',
       'mortgage',
-      'similar-homes',
+      'nearby-homes',
     ];
 
     it.each(SECTIONS)('reserves the %s section', (section) => {

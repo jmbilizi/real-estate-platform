@@ -62,7 +62,7 @@ function Bar({ className = '' }: { className?: string }) {
  * the same width at every breakpoint or the panel resizes when the cards arrive. It lived in
  * `ListingRow` and the skeleton carried a truncated copy that stopped at `md`, so above that
  * breakpoint the placeholders were cards-per-row too few, hence too wide, hence too tall: the
- * similar-homes panel measured 468px against the loaded 391px and shrank on load. `ListingRow`
+ * nearby-homes panel measured 468px against the loaded 391px and shrank on load. `ListingRow`
  * already imports this module, so the class lives on this side of that dependency.
  */
 export const CARD_WIDTH_CLASS = CAROUSEL_ITEM_CLASS;
@@ -129,14 +129,14 @@ export function ListingCardSkeleton() {
 }
 
 /**
- * The similar-homes carousel while its own request is in flight.
+ * The nearby-homes carousel while its own request is in flight.
  *
  * Lives here rather than in `ListingDetailContent` because two different states need the identical
- * block and they must not drift: the detail page renders it while `similar` is loading, and the
+ * block and they must not drift: the detail page renders it while the nearby fetch is loading, and the
  * detail *skeleton* renders it because the carousel is a section of the page like any other. A
  * second hand-built copy in the skeleton would have been one more thing to keep in step by hand.
  */
-export function SimilarHomesSkeleton() {
+export function NearbyHomesSkeleton() {
   return (
     <section className="px-6 py-6" aria-hidden="true">
       {/* `ListingRow`'s heading block: a column with its own bottom padding, not a bare bar. */}
@@ -216,37 +216,16 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
    * it would be a second, unrelated motion fighting the first.
    *
    * It also made this page load in two vocabularies: the panels pulsed grey while the
-   * similar-homes carousel below them swept violet, on the same screen at the same moment.
+   * nearby-homes carousel below them swept violet, on the same screen at the same moment.
    * One source for the fill means one source for the motion.
    */
 
   return (
     <div className="flex h-full min-h-0 flex-col" role="status" aria-label="Loading listing">
-      {/*
-       * Header bar, matching the loaded page's back / address / actions row.
-       *
-       * The title and subtitle placeholders carry the **same type classes** as the real `h1` and
-       * `p` and are filled with a non-breaking space, so their boxes are set by the type scale
-       * rather than by a guessed pixel height. Sized by hand (`h-4`/`h-3`) this header measured
-       * 73px against the loaded header's 81px, and every element below jumped 8px the instant the
-       * data landed — against a modal whose rounded corners stay put, which reads as the border
-       * itself flickering. Tying the boxes to the type scale keeps them equal at every breakpoint,
-       * including the ones this header changes size at (`sm`/`md`/`lg`/`xl`).
-       */}
+      {/* Header bar: back and actions only. The address and stats sit in the overview panel. */}
       <div className="flex flex-shrink-0 items-center gap-3 border-b border-surface-border bg-white px-6 pb-3 pt-4 sm:px-8">
         <div className={`h-11 w-11 flex-shrink-0 rounded-full ${FILL}`} />
-        <div className="min-w-0 flex-1">
-          {/* The placeholders stay *inside* the real `h1` and `p`, so their boxes come from the
-              type scale rather than from a guessed height. Sized by hand (`h-4`/`h-3`) this header
-              measured 73px against the loaded 81px and everything below it jumped 8px on load —
-              against a modal whose corners stay put, which reads as the border flickering. */}
-          <h1 className="truncate text-base font-semibold tracking-tight text-ink">
-            <Bar className="w-2/5" />
-          </h1>
-          <p className="mt-1 truncate text-sm text-ink-muted">
-            <Bar className="w-1/4" />
-          </p>
-        </div>
+        <div className="min-w-0 flex-1" />
         <div className="hidden shrink-0 items-center gap-1.5 sm:flex">
           <div className={`h-10 w-24 rounded-full ${FILL}`} />
           <div className={`h-10 w-24 rounded-full ${FILL}`} />
@@ -311,43 +290,40 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
         <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_380px] lg:items-start">
           <div className="space-y-4">
             {/*
-             * Price panel: the price and the location line. The status badge is on the gallery (#565).
+             * Overview: badge row, price, address, then the stat tiles under a hairline. One panel,
+             * as on the loaded page.
              *
              * No disclosure label is rendered here, and that is the correct reading of the rule
              * rather than an omission. `isSample` is owed "on every surface a sample row appears
-             * on" and `sponsored` "wherever it renders" — this surface now renders no part of the
-             * row at all, so there is nothing being disclosed about and a `SAMPLE DATA` chip on a
-             * blank panel would be labelling nothing. The labels attach the instant the row does,
-             * in `ListingDetailContent`, which carries both. What would be a violation is the
-             * reverse: showing the row's address and price here without them, which is exactly what
-             * this state no longer does.
+             * on" and `sponsored` "wherever it renders" — this surface renders no part of the
+             * row, so there is nothing being disclosed about. The labels attach the instant the
+             * row does, in `ListingDetailContent`. The violation would be the reverse: the row's
+             * address or price here without them, which this state does not do.
+             *
+             * Price and address are placeholders inside the real type classes, so their boxes come
+             * from the type scale. The tile grid has the loaded grid's columns and gaps.
              */}
-            <div className={`${panel} p-6`} data-skeleton-section="price">
-              <div className={`h-9 w-1/2 rounded-xs ${FILL}`} />
-              <div className={`mt-2 h-4 w-1/3 rounded-xs ${FILL}`} />
-            </div>
-            {/*
-             * Stats tiles. A shell with the tiles' own grid rather than a bare `h-20` card: the
-             * loaded strip is six bordered cells, so an empty white box of the same height read as
-             * a panel this listing had nothing to put in.
-             */}
-            <div
-              className={`grid grid-cols-2 gap-0 overflow-hidden ${panel} sm:grid-cols-3 lg:grid-cols-6`}
-              data-skeleton-section="stats"
-            >
-              {Array.from({ length: 6 }, (_, i) => (
-                <div
-                  key={i}
-                  className={`px-5 py-4 ${i !== 5 ? 'border-b border-surface-border sm:border-b-0 sm:border-r' : ''}`}
-                >
-                  <p className="text-[11px] font-semibold uppercase tracking-wider">
-                    <Bar className="w-12" />
-                  </p>
-                  <p className="mt-1 text-base font-semibold">
-                    <Bar className="w-10" />
-                  </p>
-                </div>
-              ))}
+            <div className={panel} data-skeleton-section="overview">
+              <div className="p-6">
+                <p className="text-xl font-semibold tracking-[-0.18px]">
+                  <Bar className="w-1/2" />
+                </p>
+                <h1 className="mt-2 text-base font-semibold tracking-tight text-ink">
+                  <Bar className="w-3/5" />
+                </h1>
+              </div>
+              <div className="grid grid-cols-2 gap-y-4 border-t border-surface-border px-6 py-4 sm:grid-cols-3 lg:grid-cols-6">
+                {Array.from({ length: 6 }, (_, i) => (
+                  <div key={i} className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider">
+                      <Bar className="w-12" />
+                    </p>
+                    <p className="mt-1 text-base font-semibold">
+                      <Bar className="w-10" />
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* "About this home" — detail-only text, absent from a card row by design. */}
@@ -410,9 +386,6 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
               <h2 className="text-xl font-semibold tracking-tight">
                 <Bar className="w-48" />
               </h2>
-              <p className="mt-2 text-sm">
-                <Bar className="w-40" />
-              </p>
               <div className="mt-4 overflow-hidden border border-surface-border">
                 <div className={`h-[380px] w-full ${FILL}`} />
               </div>
@@ -492,7 +465,7 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
         </div>
 
         {/*
-         * Similar homes closes the stack, as it does on the loaded page — and it is reserved here
+         * Nearby homes closes the stack, as it does on the loaded page — and it is reserved here
          * even though the carousel has its own request, because that request does not start until
          * the detail has landed. Without this block the panel grew by ~390px twice: once when the
          * detail arrived, again when the carousel did.
@@ -500,19 +473,16 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
          * The same component the loaded page shows while that request is in flight, so the two
          * states are the same block rather than two guesses at it.
          */}
-        <div className={`mt-4 ${panel}`} data-skeleton-section="similar-homes">
-          <SimilarHomesSkeleton />
+        <div className={`mt-4 ${panel}`} data-skeleton-section="nearby-homes">
+          <NearbyHomesSkeleton />
         </div>
       </div>
 
       {/* The loaded page has a sticky CTA bar below `lg`. Without a placeholder of the same height
           the mobile layout shifts on load the same way the header did on desktop. */}
-      <div className="flex flex-shrink-0 items-center justify-between gap-3 border-t border-surface-border bg-white px-4 py-3 lg:hidden">
-        <div className={`h-7 w-28 rounded-xs ${FILL}`} />
-        <div className="flex shrink-0 gap-2">
-          <div className={`h-9 w-24 rounded-full ${FILL}`} />
-          <div className={`h-9 w-28 rounded-full ${FILL}`} />
-        </div>
+      <div className="flex flex-shrink-0 gap-2 border-t border-surface-border bg-white px-4 py-3 lg:hidden">
+        <div className={`h-9 flex-1 rounded-full ${FILL}`} />
+        <div className={`h-9 flex-1 rounded-full ${FILL}`} />
       </div>
     </div>
   );

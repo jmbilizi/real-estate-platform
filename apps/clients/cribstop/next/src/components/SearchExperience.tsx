@@ -670,6 +670,17 @@ export default function SearchExperience({
     );
   };
 
+  /** The toolbar Group control and the expanded-map Group button both call this. */
+  const changeGroupBy = (v: GroupBy | 'none') => {
+    if (v === 'neighborhood' && drilledName) backToGroups();
+    else
+      commitView(filters, {
+        ...group,
+        groupBy: v === 'none' ? undefined : v,
+        from: undefined,
+      });
+  };
+
   /** Touch: a first tap on a marker brings its card into view. */
   const scrollToGroupCard = (key: string) => {
     const card = Array.from(document.querySelectorAll<HTMLElement>('[data-neighborhood-key]')).find(
@@ -753,6 +764,12 @@ export default function SearchExperience({
                   : null
               }
               active={!deferred}
+              viewControls={{
+                filterCount: countActiveFilters(filters),
+                onOpenFilters: () => setFilterOpen(true),
+                grouped,
+                onToggleGroup: () => changeGroupBy(grouped ? 'none' : 'neighborhood'),
+              }}
             />
           </div>
         </div>
@@ -899,15 +916,7 @@ export default function SearchExperience({
                 value={group.groupBy ?? 'none'}
                 options={GROUP_BY_OPTIONS}
                 icon={GROUP_ICON}
-                onChange={(v) => {
-                  if (v === 'neighborhood' && drilledName) backToGroups();
-                  else
-                    commitView(filters, {
-                      ...group,
-                      groupBy: v === 'none' ? undefined : v,
-                      from: undefined,
-                    });
-                }}
+                onChange={changeGroupBy}
               />
               {grouped ? (
                 <ToolbarSelect<GroupOrder>

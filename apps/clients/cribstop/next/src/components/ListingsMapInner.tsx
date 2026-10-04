@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CustomMapControls } from '@/components/CustomMapControls';
+import { CustomMapControls, type ViewControls } from '@/components/CustomMapControls';
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -385,6 +385,8 @@ interface Props {
   viewBounds?: MapBounds | null;
   /** The user moved the map. Called once the view settles. */
   onUserMove?: (bounds: MapBounds) => void;
+  /** Filter and group buttons for the expanded map (#576). */
+  viewControls?: ViewControls;
 }
 
 export type NeighborhoodBounds = NonNullable<NeighborhoodRow['bounds']>;
@@ -409,6 +411,7 @@ export default function ListingsMapInner({
   focusBounds,
   viewBounds,
   onUserMove,
+  viewControls,
 }: Props) {
   const emittedView = useRef('');
   const grouped = neighborhoods !== undefined;
@@ -488,7 +491,7 @@ export default function ListingsMapInner({
           />
         )}
         <InvalidateOnMount />
-        <CustomMapControls />
+        <CustomMapControls viewControls={viewControls} />
         <ClickToActivateScroll onChange={setScrollActive} />
         {/* Fit view to boundary, then pinned listings, then center — in priority order */}
         <FitView

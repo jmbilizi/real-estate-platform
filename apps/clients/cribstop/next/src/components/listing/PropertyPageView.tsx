@@ -111,7 +111,7 @@ function OffMarketPropertyView({
   ];
 
   return (
-    <div className="px-6 py-8 sm:px-8">
+    <div id="overview" className="px-6 py-8 sm:px-8">
       <span className="badge bg-surface-border text-ink" data-testid="market-status-badge">
         {marketStatus}
       </span>
@@ -142,11 +142,13 @@ function OffMarketPropertyView({
       </p>
 
       {historyPanel !== undefined && (
-        <div className="mt-6 rounded-2xl border border-surface-border">{historyPanel}</div>
+        <div id="history" className="mt-6 rounded-2xl border border-surface-border">
+          {historyPanel}
+        </div>
       )}
 
       {nearby.length > 0 && (
-        <div className="mt-6 rounded-2xl border border-surface-border">
+        <div id="nearby" className="mt-6 rounded-2xl border border-surface-border">
           <ListingRow
             title="Nearby homes"
             listings={nearby}
