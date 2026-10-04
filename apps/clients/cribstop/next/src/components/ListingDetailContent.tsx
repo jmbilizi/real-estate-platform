@@ -10,7 +10,7 @@ import ListingAttribution from '@/components/listing/ListingAttribution';
 import GalleryStatusBadge from '@/components/listing/GalleryStatusBadge';
 import ListingProvenance from '@/components/listing/ListingProvenance';
 import ListingFacts from '@/components/listing/ListingFacts';
-import ListingStickyBar from '@/components/listing/ListingStickyBar';
+import ListingHeaderNav from '@/components/listing/ListingHeaderNav';
 import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges';
 import { NearbyHomesSkeleton } from '@/components/listing/ListingStates';
 import { formatNumber, formatPrice } from '@/lib/format';
@@ -93,7 +93,7 @@ export default function ListingDetailContent({
   const { toast } = useToast();
   const saved = isSaved(listing.id);
   const rootRef = useRef<HTMLDivElement>(null);
-  const galleryRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
 
   /**
    * Share the listing.
@@ -246,8 +246,15 @@ export default function ListingDetailContent({
 
   return (
     <div ref={rootRef} className="flex flex-col h-full min-h-0">
-      {/* Airbnb-style: address + key stats left · Share/Save right — above gallery */}
-      <div className="flex-shrink-0 flex items-center gap-3 border-b border-surface-border px-6 sm:px-8 pt-4 pb-3 bg-white">
+      {/*
+       * Detail header (#594): back, then price, address and section links on desktop, Share and
+       * Save right. `.listing-header` pins it under the site header on the page and at the top of
+       * the modal.
+       */}
+      <div
+        ref={headerRef}
+        className="listing-header flex-shrink-0 flex items-center gap-3 border-b border-surface-border px-6 sm:px-8 pt-4 pb-3 bg-white"
+      >
         {onClose && (
           <button
             onClick={onClose}
@@ -265,8 +272,15 @@ export default function ListingDetailContent({
             </svg>
           </button>
         )}
-        {/* Address and stats live in the overview block, once. This bar holds actions only. */}
-        <div className="min-w-0 flex-1" />
+        {/* The price and address repeat the overview. The stakeholder accepts this one exception. */}
+        <ListingHeaderNav
+          headerRef={headerRef}
+          scopeRef={rootRef}
+          price={closePriceText ?? priceDisplay.text}
+          address={listing.address || suppressedAddressHeading}
+          skip={nearbyRows.length > 0 ? [] : ['nearby']}
+        />
+        <div className="min-w-0 flex-1 md:hidden" />
         <div className="flex shrink-0 items-center gap-1.5">
           <button
             onClick={handleShare}
@@ -305,32 +319,13 @@ export default function ListingDetailContent({
         </div>
       </div>
 
-      {/*
-       * Desktop sticky bar (#569). A zero-height anchor, so it moves nothing when it appears. The
-       * price and address are the overview's own values. The buttons match the sidebar CTAs and
-       * take their handlers from the same place once #132 wires them.
-       */}
-      <ListingStickyBar
-        galleryRef={galleryRef}
-        scopeRef={rootRef}
-        price={closePriceText ?? priceDisplay.text}
-        address={listing.address || suppressedAddressHeading}
-        skip={nearbyRows.length > 0 ? [] : ['nearby']}
-        actions={
-          <>
-            <button className="btn-secondary py-2 text-sm">Message</button>
-            <button className="btn-primary py-2 text-sm">Schedule Tour</button>
-          </>
-        }
-      />
-
       {/* Scrollable body — `surface-alt` is the canvas that makes a white panel read as a panel. */}
       <div
         data-scroll-body
         className="flex-1 min-h-0 scrollbar-overlay bg-surface-alt px-6 sm:px-8 py-4 pb-8"
       >
         {/* Gallery — the first panel, exactly the block the skeleton opens with. */}
-        <div ref={galleryRef} className={`overflow-hidden ${PANEL}`}>
+        <div className={`overflow-hidden ${PANEL}`}>
           <PropertyGallery media={listing.media} tourUrl={listing.virtualTourUrl}>
             <GalleryStatusBadge {...listing} statusLabel={statusLabel} />
           </PropertyGallery>

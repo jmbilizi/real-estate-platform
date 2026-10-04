@@ -222,10 +222,14 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
 
   return (
     <div className="flex h-full min-h-0 flex-col" role="status" aria-label="Loading listing">
-      {/* Header bar: back and actions only. The address and stats sit in the overview panel. */}
+      {/* Header bar: back and actions on a phone. From md up, a price and address placeholder follows the back button. */}
       <div className="flex flex-shrink-0 items-center gap-3 border-b border-surface-border bg-white px-6 pb-3 pt-4 sm:px-8">
         <div className={`h-11 w-11 flex-shrink-0 rounded-full ${FILL}`} />
-        <div className="min-w-0 flex-1" />
+        <div className="hidden min-w-0 flex-1 md:block">
+          <div className={`h-5 w-28 rounded ${FILL}`} />
+          <div className={`mt-1 h-3.5 w-48 max-w-full rounded ${FILL}`} />
+        </div>
+        <div className="min-w-0 flex-1 md:hidden" />
         <div className="hidden shrink-0 items-center gap-1.5 sm:flex">
           <div className={`h-10 w-24 rounded-full ${FILL}`} />
           <div className={`h-10 w-24 rounded-full ${FILL}`} />
