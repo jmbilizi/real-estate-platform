@@ -1283,6 +1283,10 @@ runs:
               kubectl logs $pod -c $init_c --previous --tail=100 2>&1 || echo "  (no previous logs)"
             done
 
+            # Current logs cover a pod that failed once and never restarted: --previous has none (#238)
+            echo "\n📋 Container logs [all] (current):"
+            kubectl logs $pod --all-containers --tail=100 2>&1 || echo "  (no current logs)"
+
             # Capture main container logs for pods that started but crashed
             echo "\n📋 Container logs [all] (previous/crashed):"
             kubectl logs $pod --all-containers --previous --tail=100 2>&1 || echo "  (no previous logs)"
