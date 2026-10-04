@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { aListingCardRow, aListingDetail } from '@/test/fixtures';
 import { searchListings, toListingDetailView } from '@/lib/api/listings';
@@ -498,7 +498,8 @@ describe('ListingDetailContent — agent card (#571)', () => {
       'href',
       'mailto:jane@acme.example',
     );
-    expect(screen.getByText(/Brokered by Real Broker, LLC/)).toBeInTheDocument();
+    expect(within(card).queryByRole('button')).toBeNull();
+    expect(within(card).queryByText(/Brokered by/)).toBeNull();
   });
 
   it('leads with the office and its initial when the feed has no agent name', async () => {
@@ -512,6 +513,40 @@ describe('ListingDetailContent — agent card (#571)', () => {
   });
 });
 
+describe('ListingDetailContent — buyer-agent card (#591)', () => {
+  it('holds the CTAs and the broker line, below the Listing Agent card', async () => {
+    const onRequestTour = jest.fn();
+    const onMessageAgent = jest.fn();
+    const view = toListingDetailView(aListingDetail());
+    await renderAndSettle(
+      <ListingDetailContent
+        listing={view}
+        onRequestTour={onRequestTour}
+        onMessageAgent={onMessageAgent}
+      />,
+    );
+
+    const card = screen.getByTestId('buyer-agent-card');
+    expect(card.textContent).toContain('Cribstop, brokered by Real Broker, LLC');
+    expect(card.textContent).toContain('may require a written buyer agreement');
+    expect(within(card).getByText(/Brokered by Real Broker, LLC/)).toBeInTheDocument();
+    expect(card.textContent).not.toMatch(/listing agent|confirmed|scheduled|rebate|commission/i);
+    const agentCard = screen.getByText(/^Listing (Agent|Office)$/).parentElement as HTMLElement;
+    expect(agentCard.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // The card and the phone bar share the handlers.
+    for (const tour of screen.getAllByRole('button', { name: 'Request a Tour' })) {
+      fireEvent.click(tour);
+    }
+    for (const message of screen.getAllByRole('button', { name: 'Message Agent' })) {
+      fireEvent.click(message);
+    }
+    expect(onRequestTour).toHaveBeenCalledTimes(2);
+    expect(onMessageAgent).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('button', { name: /listing agent|schedule/i })).toBeNull();
+  });
+});
+
 describe('ListingDetailContent — phone pass (#572)', () => {
   it('holds the CTA bar at the screen edge, clear of the home indicator, with 44px buttons', async () => {
     const view = toListingDetailView(aListingDetail());
@@ -520,7 +555,7 @@ describe('ListingDetailContent — phone pass (#572)', () => {
     expect(bar.className).toMatch(/\bsticky\b/);
     expect(bar.className).toMatch(/\bbottom-0\b/);
     expect(bar.innerHTML).toContain('env(safe-area-inset-bottom)');
-    for (const name of ['Message', 'Schedule Tour']) {
+    for (const name of ['Message Agent', 'Request a Tour']) {
       expect(within(bar).getByRole('button', { name }).className).toMatch(/\bmin-h-11\b/);
     }
   });

@@ -139,6 +139,7 @@ describe('ListingDetailSkeleton', () => {
       'amenities',
       'map',
       'agent',
+      'buyer-agent',
       'mortgage',
       'nearby-homes',
       'disclosure',

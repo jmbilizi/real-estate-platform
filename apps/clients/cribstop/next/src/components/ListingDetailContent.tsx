@@ -47,6 +47,10 @@ interface Props {
   nearby?: ListingCardRow[];
   /** #382: property page panels (the listing history), rendered before the nearby row. */
   propertyPanel?: React.ReactNode;
+  /** #591: "Request a Tour" asks Cribstop to act as the buyer's agent. #132 wires the inquiry API here. */
+  onRequestTour?: () => void;
+  /** #591: "Message Agent" messages Cribstop as the buyer's agent. #132 wires it here. */
+  onMessageAgent?: () => void;
 }
 
 /**
@@ -87,6 +91,8 @@ export default function ListingDetailContent({
   statusLabel,
   nearby,
   propertyPanel,
+  onRequestTour,
+  onMessageAgent,
 }: Props) {
   const { toggleSave, isSaved } = useApp();
   const { toast } = useToast();
@@ -508,8 +514,39 @@ export default function ListingDetailContent({
                   </li>
                 ))}
               </ul>
-              <button className="btn-primary mt-5 min-h-11 w-full">Schedule a Tour</button>
-              <button className="btn-secondary mt-2 min-h-11 w-full">Message Agent</button>
+            </div>
+
+            {/*
+             * #591: the buyer-agent request. These actions ask Cribstop (Real Broker, LLC) to act
+             * as the consumer's own buyer agent. They never reach the listing agent, who is
+             * contacted only through the call and email links above. A request is not a booking:
+             * no copy may say a tour is booked, confirmed or scheduled.
+             */}
+            <div className={`${PANEL} p-6`} data-testid="buyer-agent-card">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
+                Your Buyer Agent
+              </p>
+              <p className="mt-3 font-semibold text-ink">
+                {BRAND.siteName}, brokered by <span className="font-bold">{BRAND.brokerage}</span>
+              </p>
+              <p className="mt-1 text-sm leading-snug text-ink-muted">
+                Request a tour with a {BRAND.siteName} buyer agent. Touring with an agent may
+                require a written buyer agreement. A tour request is not a booking.
+              </p>
+              <button
+                type="button"
+                className="btn-primary mt-5 min-h-11 w-full"
+                onClick={onRequestTour}
+              >
+                Request a Tour
+              </button>
+              <button
+                type="button"
+                className="btn-secondary mt-2 min-h-11 w-full"
+                onClick={onMessageAgent}
+              >
+                Message Agent
+              </button>
               <p className="mt-4 text-sm font-medium leading-snug text-ink-muted">
                 Brokered by {BRAND.brokerage} &middot; {BRAND.siteName}
               </p>
@@ -605,8 +642,20 @@ export default function ListingDetailContent({
       >
         {/* No price here: the overview block holds it once (#568). */}
         <div className="flex gap-2 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
-          <button className="btn-secondary min-h-11 flex-1 py-2 text-sm">Message</button>
-          <button className="btn-primary min-h-11 flex-1 py-2 text-sm">Schedule Tour</button>
+          <button
+            type="button"
+            className="btn-secondary min-h-11 flex-1 py-2 text-sm"
+            onClick={onMessageAgent}
+          >
+            Message Agent
+          </button>
+          <button
+            type="button"
+            className="btn-primary min-h-11 flex-1 py-2 text-sm"
+            onClick={onRequestTour}
+          >
+            Request a Tour
+          </button>
         </div>
       </div>
     </div>
