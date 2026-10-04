@@ -17,6 +17,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                   "not_found",
                   "internal_error",
                   "rate_limited",
+                  "unauthenticated",
                 ],
                 "type": "string",
               },
@@ -123,7 +124,13 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
             "type": "string",
           },
+          "isFavorited": {
+            "type": "boolean",
+          },
           "isSample": {
+            "type": "boolean",
+          },
+          "isSaved": {
             "type": "boolean",
           },
           "lastUpdated": {
@@ -531,7 +538,13 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
                 "type": "string",
               },
+              "isFavorited": {
+                "type": "boolean",
+              },
               "isSample": {
+                "type": "boolean",
+              },
+              "isSaved": {
                 "type": "boolean",
               },
               "lastUpdated": {
@@ -1544,6 +1557,203 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
         ],
         "type": "object",
       },
+      "SavedHomesEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "page": {
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer",
+          },
+          "pageCount": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer",
+          },
+          "pageSize": {
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer",
+          },
+          "results": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "canonicalPath": {
+                  "nullable": true,
+                  "type": "string",
+                },
+                "listing": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ListingCardRow",
+                    },
+                  ],
+                  "nullable": true,
+                },
+                "marketStatus": {
+                  "enum": [
+                    "Active",
+                    "Coming Soon",
+                    "Under Contract",
+                    "Pending",
+                    "Sold",
+                    "Off market",
+                  ],
+                  "type": "string",
+                },
+                "property": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "address": {
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "baths": {
+                      "minimum": 0,
+                      "nullable": true,
+                      "type": "number",
+                    },
+                    "beds": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "nullable": true,
+                      "type": "integer",
+                    },
+                    "city": {
+                      "type": "string",
+                    },
+                    "isSample": {
+                      "type": "boolean",
+                    },
+                    "lotSqft": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "nullable": true,
+                      "type": "integer",
+                    },
+                    "neighborhood": {
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "propertyType": {
+                      "enum": [
+                        "Single Family",
+                        "Condo",
+                        "Townhome",
+                        "Multi-Family",
+                        "Loft",
+                        "Land",
+                        "New Construction",
+                        "Manufactured/Mobile",
+                      ],
+                      "type": "string",
+                    },
+                    "sqft": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "nullable": true,
+                      "type": "integer",
+                    },
+                    "state": {
+                      "type": "string",
+                    },
+                    "unitNumber": {
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "yearBuilt": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "nullable": true,
+                      "type": "integer",
+                    },
+                    "zip": {
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "address",
+                    "unitNumber",
+                    "city",
+                    "state",
+                    "zip",
+                    "neighborhood",
+                    "propertyType",
+                    "beds",
+                    "baths",
+                    "sqft",
+                    "lotSqft",
+                    "yearBuilt",
+                    "isSample",
+                  ],
+                  "type": "object",
+                },
+                "propertyId": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string",
+                },
+                "savedAt": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                  "type": "string",
+                },
+                "savedFromListingId": {
+                  "format": "uuid",
+                  "nullable": true,
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string",
+                },
+              },
+              "required": [
+                "propertyId",
+                "savedAt",
+                "savedFromListingId",
+                "marketStatus",
+                "canonicalPath",
+                "property",
+                "listing",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer",
+          },
+        },
+        "required": [
+          "results",
+          "total",
+          "page",
+          "pageSize",
+          "pageCount",
+        ],
+        "type": "object",
+      },
+      "SavedState": {
+        "additionalProperties": false,
+        "properties": {
+          "propertyId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string",
+          },
+          "saved": {
+            "type": "boolean",
+          },
+        },
+        "required": [
+          "propertyId",
+          "saved",
+        ],
+        "type": "object",
+      },
     },
   },
   "info": {
@@ -1561,7 +1771,9 @@ This is a SEARCH surface, not a bulk-export surface. Paging depth is bounded: \`
 
 The bound is on depth alone — no filter is required, and an unfiltered search is a supported browse path. It is also independent of the past-the-end rule: a page beyond the last result but INSIDE the window is a normal 200 with an empty \`results\` array. \`total\` is always the exact count of the full filtered set, even when that count exceeds the window — it is never clamped to it.
 
-The optional \`bounds\` limits the result to a viewport. It is ANDed with every other filter, so the result is the searched place within the viewport. A listing whose street address is withheld has no coordinates, so it is not in a viewport result.",
+The optional \`bounds\` limits the result to a viewport. It is ANDed with every other filter, so the result is the searched place within the viewport. A listing whose street address is withheld has no coordinates, so it is not in a viewport result.
+
+A signed-in request also gets \`isSaved\` and \`isFavorited\` on each result, resolved by home, and a \`private, no-store\` response. A signed-out request never gets them and is never rejected for lacking a credential.",
         "operationId": "searchListings",
         "parameters": [
           {
@@ -2873,6 +3085,126 @@ Rate-limited per client and per listing; a request over either limit gets 429 wi
         "summary": "Property page of the home that one listing is on",
       },
     },
+    "/listings/{id}/saved": {
+      "delete": {
+        "description": "Requires sign-in. Removing a home that is not saved is a success with \`saved\` false.",
+        "operationId": "unsaveListingHome",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedState",
+                },
+              },
+            },
+            "description": "The home is not saved.",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No valid credential. The body gives no reason.",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No such listing.",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+        },
+        "summary": "Remove the home that one listing is on from saved homes",
+      },
+      "put": {
+        "description": "Requires sign-in. The service resolves the home of the listing, so the client does not need a property id. Saving is idempotent: saving a home again, through the same or another listing, is the same save. A save belongs to the account, never to a role.",
+        "operationId": "saveListingHome",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedState",
+                },
+              },
+            },
+            "description": "The home is saved.",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No valid credential. The body gives no reason.",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No such listing.",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+        },
+        "summary": "Save the home that one listing is on",
+      },
+    },
     "/properties/lookup": {
       "get": {
         "description": "Takes the two segments of /<city>-<st>/<address-slug>. On a local miss the service reads that one address from the MLS across all statuses, then resolves again.",
@@ -2989,6 +3321,138 @@ Rate-limited per client and per listing; a request over either limit gets 429 wi
           },
         },
         "summary": "Everything the property page renders, in any market status",
+      },
+    },
+    "/saved-homes": {
+      "get": {
+        "description": "Requires sign-in. Returns only the calling account’s homes, newest save first. Each row is a home: the property facts plus its current consumer-visible listing, or \`listing\` null when it has none. An off-market home is a normal row, never a 404 and never left out. Address and coordinates carry the same masking as search. The response is \`private, no-store\`.",
+        "operationId": "listSavedHomes",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "description": "Whole number, 1 or greater. Default 1.",
+              "pattern": "^[1-9]\\d*$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "description": "Whole number from 1 to 100. Default 20.",
+              "pattern": "^([1-9][0-9]?|100)$",
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedHomesEnvelope",
+                },
+              },
+            },
+            "description": "A page of saved homes with an exact total.",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unknown or invalid query parameter (\`invalid_request\`).",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No valid credential. The body gives no reason.",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+        },
+        "summary": "The saved homes of the signed-in account",
+      },
+    },
+    "/saved-homes/{id}": {
+      "delete": {
+        "description": "Requires sign-in. \`id\` is the \`propertyId\` of a saved home. It works for a home with no consumer-visible listing. Removing a home that is not saved is a success with \`saved\` false. A request never touches another account’s saves.",
+        "operationId": "unsaveHome",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedState",
+                },
+              },
+            },
+            "description": "The home is not saved.",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No valid credential. The body gives no reason.",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "The id is not a well-formed id.",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+        },
+        "summary": "Remove a saved home by its home id",
       },
     },
   },

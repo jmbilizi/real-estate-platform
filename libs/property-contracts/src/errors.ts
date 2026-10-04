@@ -9,6 +9,7 @@ export const errorBodySchema = z.object({
       'not_found',
       'internal_error',
       'rate_limited',
+      'unauthenticated',
     ]),
     message: z.string(),
   }),
@@ -79,6 +80,17 @@ export const RATE_LIMITED_BODY = Object.freeze({
   error: Object.freeze({
     code: 'rate_limited',
     message: 'Too many inquiries from this client or for this listing. Try again later.',
+  } as const),
+} as const);
+
+/**
+ * The single 401 body for the saved-homes routes (#23). It gives no reason: a missing, expired or
+ * revoked credential all read the same.
+ */
+export const UNAUTHENTICATED_BODY = Object.freeze({
+  error: Object.freeze({
+    code: 'unauthenticated',
+    message: 'Sign in to use saved homes.',
   } as const),
 } as const);
 
