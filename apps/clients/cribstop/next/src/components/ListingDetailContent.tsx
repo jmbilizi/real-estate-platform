@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import PropertyGallery from '@/components/PropertyGallery';
 import AmenityChips from '@/components/AmenityChips';
 import MortgageTeaser from '@/components/MortgageTeaser';
@@ -10,6 +10,7 @@ import ListingAttribution from '@/components/listing/ListingAttribution';
 import GalleryStatusBadge from '@/components/listing/GalleryStatusBadge';
 import ListingProvenance from '@/components/listing/ListingProvenance';
 import ListingFacts from '@/components/listing/ListingFacts';
+import ListingStickyBar from '@/components/listing/ListingStickyBar';
 import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges';
 import { NearbyHomesSkeleton } from '@/components/listing/ListingStates';
 import { formatNumber, formatPrice } from '@/lib/format';
@@ -83,6 +84,8 @@ export default function ListingDetailContent({
   const { toggleSave, isSaved } = useApp();
   const { toast } = useToast();
   const saved = isSaved(listing.id);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const galleryRef = useRef<HTMLDivElement>(null);
 
   /**
    * Share the listing.
@@ -234,7 +237,7 @@ export default function ListingDetailContent({
       ];
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div ref={rootRef} className="flex flex-col h-full min-h-0">
       {/* Airbnb-style: address + key stats left · Share/Save right — above gallery */}
       <div className="flex-shrink-0 flex items-center gap-3 border-b border-surface-border px-6 sm:px-8 pt-4 pb-3 bg-white">
         {onClose && (
@@ -294,10 +297,32 @@ export default function ListingDetailContent({
         </div>
       </div>
 
+      {/*
+       * Desktop sticky bar (#569). A zero-height anchor, so it moves nothing when it appears. The
+       * price and address are the overview's own values. The buttons match the sidebar CTAs and
+       * take their handlers from the same place once #132 wires them.
+       */}
+      <ListingStickyBar
+        galleryRef={galleryRef}
+        scopeRef={rootRef}
+        price={closePriceText ?? priceDisplay.text}
+        address={listing.address || suppressedAddressHeading}
+        skip={nearbyRows.length > 0 ? [] : ['nearby']}
+        actions={
+          <>
+            <button className="btn-secondary py-2 text-sm">Message</button>
+            <button className="btn-primary py-2 text-sm">Schedule Tour</button>
+          </>
+        }
+      />
+
       {/* Scrollable body — `surface-alt` is the canvas that makes a white panel read as a panel. */}
-      <div className="flex-1 min-h-0 scrollbar-overlay bg-surface-alt px-6 sm:px-8 py-4 pb-8">
+      <div
+        data-scroll-body
+        className="flex-1 min-h-0 scrollbar-overlay bg-surface-alt px-6 sm:px-8 py-4 pb-8"
+      >
         {/* Gallery — the first panel, exactly the block the skeleton opens with. */}
-        <div className={`overflow-hidden ${PANEL}`}>
+        <div ref={galleryRef} className={`overflow-hidden ${PANEL}`}>
           <PropertyGallery media={listing.media}>
             <GalleryStatusBadge {...listing} statusLabel={statusLabel} />
           </PropertyGallery>
