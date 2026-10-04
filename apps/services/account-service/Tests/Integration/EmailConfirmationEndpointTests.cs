@@ -80,14 +80,17 @@ namespace AccountService.Tests.Integration
         [Fact]
         public async Task ConfirmEmail_RejectsAnExpiredLink_AgainstTheConfiguredLifetime()
         {
-            // A negative lifetime makes every issued link already expired, with no sleeping.
-            using var factory = new AccountRecoveryFactory(options =>
-                options.ConfirmationTokenLifetime = TimeSpan.FromMilliseconds(1));
+            // A lifetime set at startup is racy against the wall clock. Issue the link normally,
+            // then move the live lifetime below zero so the link is expired whatever the clock reads.
+            using var factory = new AccountRecoveryFactory();
             using var client = factory.CreateClient();
             var email = NewEmail("expired");
             await RegisterAsync(client, email);
+            var query = LinkQuery(factory, email);
+            factory.Services.GetRequiredService<IOptions<EmailConfirmationTokenProviderOptions>>().Value.TokenLifespan =
+                TimeSpan.FromHours(-1);
 
-            using var confirm = await client.GetAsync(ConfirmPath + LinkQuery(factory, email));
+            using var confirm = await client.GetAsync(ConfirmPath + query);
 
             confirm.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
             (await confirm.Content.ReadAsStringAsync()).Should().Contain(IdentityResponseShapingFilter.ConfirmationFailedDetail);
