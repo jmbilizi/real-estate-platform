@@ -243,31 +243,36 @@ export async function confirmEmail(payload: {
   }
 }
 
+const DEFAULT_CONFIRMATION_EXPIRY_HOURS = 24;
 let cachedConfirmationExpiryHours: number | null = null;
+let inFlightConfirmationExpiry: Promise<number> | null = null;
 
-/**
- * Hours a confirmation link stays valid, read from account-service's configured lifetime (#147)
- * via `/api/account/confirmation-info` so this copy cannot drift from the server's value. Cached
- * for the tab's lifetime since it does not change between requests.
- */
-export async function getConfirmationExpiryHours(): Promise<number> {
-  if (cachedConfirmationExpiryHours !== null) return cachedConfirmationExpiryHours;
-
+async function fetchConfirmationExpiryHours(): Promise<number> {
   try {
     const res = await fetch('/api/account/confirmation-info');
     if (res.ok) {
       const body = await res.json().catch(() => null);
-      const hours: number | null =
-        typeof body?.expiryHours === 'number' && body.expiryHours > 0 ? body.expiryHours : null;
-      if (hours !== null) {
-        cachedConfirmationExpiryHours = hours;
-        return hours;
+      if (typeof body?.expiryHours === 'number' && body.expiryHours > 0) {
+        cachedConfirmationExpiryHours = body.expiryHours;
+        return body.expiryHours;
       }
     }
   } catch {
-    // Network failure — fall through to the default below.
+    // Network failure. Use the default below.
   }
+  return DEFAULT_CONFIRMATION_EXPIRY_HOURS;
+}
 
-  cachedConfirmationExpiryHours = 24;
-  return cachedConfirmationExpiryHours;
+/**
+ * Hours a confirmation link stays valid, read from account-service's configured lifetime (#147)
+ * via `/api/account/confirmation-info` so this copy cannot drift from the server's value. Only a
+ * real value is cached. A failed lookup returns the 24-hour default and the next call retries
+ * (#299). Concurrent calls share one request.
+ */
+export async function getConfirmationExpiryHours(): Promise<number> {
+  if (cachedConfirmationExpiryHours !== null) return cachedConfirmationExpiryHours;
+  inFlightConfirmationExpiry ??= fetchConfirmationExpiryHours().finally(() => {
+    inFlightConfirmationExpiry = null;
+  });
+  return inFlightConfirmationExpiry;
 }
