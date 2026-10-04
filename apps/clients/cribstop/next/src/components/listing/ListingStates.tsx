@@ -456,9 +456,17 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
                 <p className="mt-2 text-xl font-semibold">
                   <Bar className="w-2/5" />
                 </p>
-                <div className="mt-3 space-y-1 text-sm">
-                  <Bar className="w-4/5" />
-                  <Bar className="w-3/5" />
+                {/* Three labelled 44px inputs, as on the loaded card. Tax and HOA rows are not
+                    reserved: they depend on data the skeleton does not have. */}
+                <div className="mt-4 space-y-4">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i}>
+                      <p className="text-sm">
+                        <Bar className="w-1/3" />
+                      </p>
+                      <div className={`mt-1 h-11 w-full rounded-lg ${FILL}`} />
+                    </div>
+                  ))}
                 </div>
                 <p className="mt-3 text-xs">
                   <Bar className="w-full" />
