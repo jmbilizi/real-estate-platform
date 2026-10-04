@@ -48,7 +48,11 @@
       },
       "configurations": {
         "development": {
-          "buildTarget": "property-service:build:development"
+          "buildTarget": "property-service:build:development",
+          "runtimeArgs": [
+            "-r",
+            "./apps/services/property-service/tests/support/e2e-serve-defaults.js"
+          ]
         },
         "production": {
           "buildTarget": "property-service:build:production"
