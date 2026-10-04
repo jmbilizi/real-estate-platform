@@ -44,6 +44,24 @@ describe('toListingDetailView', () => {
     expect(view.id).not.toBe(view.propertyId);
   });
 
+  it('resolves each photo caption: long description, else real short description (#600)', () => {
+    const view = toListingDetailView(
+      aListingDetail({
+        listing: {
+          address: '12 Oak St',
+          media: [
+            { url: 'https://example.com/1.jpg', altText: 'Kitchen', caption: 'Quartz counters' },
+            { url: 'https://example.com/2.jpg', altText: 'Den', caption: null },
+            { url: 'https://example.com/3.jpg', altText: 'Photo 3', caption: null },
+            { url: 'https://example.com/4.jpg', altText: null, caption: null },
+          ],
+        },
+      }),
+    );
+    expect(view.media.map((m) => m.caption)).toEqual(['Quartz counters', 'Den', null, null]);
+    expect(view.media[0].altText).toBe('Kitchen');
+  });
+
   it('flags a parcel so the detail page can suppress the dwelling stat block', () => {
     const view = toListingDetailView(
       aListingDetail({
