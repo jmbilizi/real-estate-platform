@@ -194,13 +194,16 @@ describe('AuthForm', () => {
       );
     });
 
-    it('returns to the email step with the field filled', async () => {
+    it('returns to the email step with the field filled and drops the typed password', async () => {
       render(<AuthForm />);
       await continueWith('password');
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
 
       fireEvent.click(screen.getByRole('button', { name: 'Change email' }));
 
       expect(screen.getByPlaceholderText('you@example.com')).toHaveValue(EMAIL);
+      await continueWith('password');
+      expect(screen.getByLabelText('Password')).toHaveValue('');
     });
 
     it('opens the reset screen from Forgot password', async () => {
@@ -399,7 +402,24 @@ describe('AuthForm', () => {
 
       await waitFor(() => expect(mockChangeEmail).toHaveBeenCalledWith(EMAIL, 'new@example.com'));
       expect(await screen.findByText('new@example.com')).toBeInTheDocument();
-      expect(mockIdentify).toHaveBeenCalledTimes(1);
+      expect(mockIdentify).toHaveBeenLastCalledWith('new@example.com');
+    });
+
+    it('routes to the password step when the changed address already has an account', async () => {
+      render(<AuthForm />);
+      await continueWith('code');
+      fireEvent.click(screen.getByRole('button', { name: 'Change email' }));
+
+      mockIdentify.mockResolvedValue({
+        next: 'password',
+        resendAfterSeconds: 0,
+        expiresInSeconds: 0,
+      });
+      typeEmail('old@example.com');
+      fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+      expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
+      expect(mockChangeEmail).not.toHaveBeenCalled();
     });
   });
 

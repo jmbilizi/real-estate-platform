@@ -47,9 +47,10 @@ export default function AuthCodeStep({
   const resend = useCountdown(resendAfterSeconds);
   const expiry = useCountdown(expiresInSeconds);
   const lock = useCountdown(0);
+  const [expiryArmed, setExpiryArmed] = useState(expiresInSeconds > 0);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const expired = expiresInSeconds > 0 && expiry.seconds === 0;
+  const expired = expiryArmed && expiry.seconds === 0;
   const locked = lock.seconds > 0;
 
   useEffect(() => {
@@ -99,6 +100,7 @@ export default function AuthCodeStep({
       const timing = await resendSignupCode(email);
       resend.start(timing.resendAfterSeconds);
       expiry.start(timing.expiresInSeconds);
+      setExpiryArmed(timing.expiresInSeconds > 0);
       lock.start(0);
       setCode('');
       setNotice('New code sent. The old one no longer works.');

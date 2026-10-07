@@ -105,6 +105,8 @@ export default function AuthForm({
 
   const goToStep = (next: Step) => {
     setStep(next);
+    setPassword('');
+    setShowPassword(false);
     setFormError(null);
     setLoginFailed(false);
     setResetRequested(false);
@@ -117,19 +119,16 @@ export default function AuthForm({
     setFormError(null);
     setIsSubmitting(true);
     try {
-      if (pendingEmail && pendingEmail.toLowerCase() !== address.toLowerCase()) {
-        const timing = await changeSignupEmail(pendingEmail, address);
-        setPendingEmail(address);
-        setCodeTiming(timing);
-        setCodeRun((n) => n + 1);
-        goToStep('code');
-        return;
-      }
       const result = await identifyEmail(address);
       if (result.next === 'password') {
         setPendingEmail(null);
         goToStep('password');
       } else {
+        // identify has sent the code. change-email drops the code held for the old address. Its
+        // answer is not needed, so a failure there never blocks the new code step.
+        if (pendingEmail && pendingEmail.toLowerCase() !== address.toLowerCase()) {
+          await changeSignupEmail(pendingEmail, address).catch(() => undefined);
+        }
         setPendingEmail(address);
         setCodeTiming(result);
         setCodeRun((n) => n + 1);
@@ -243,7 +242,7 @@ export default function AuthForm({
         </h2>
         <p className="mt-2 text-center text-sm text-ink-muted">
           {step === 'email' && 'Sign in or join Cribstop. One email, no fuss.'}
-          {step === 'password' && <>Welcome back. Enter your password for {emailChip}.</>}
+          {step === 'password' && <>Enter your password for {emailChip}.</>}
           {step === 'code' && <>We sent a 6-digit code to {emailChip}.</>}
           {step === 'setPassword' && <>Pick a password for {emailChip}.</>}
           {step === 'forgot' &&

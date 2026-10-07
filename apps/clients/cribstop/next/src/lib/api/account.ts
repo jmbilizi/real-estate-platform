@@ -327,7 +327,7 @@ export async function verifySignupCode(email: string, code: string): Promise<Ver
   if (res.ok && typeof body?.signupProof === 'string') {
     return { ok: true, signupProof: body.signupProof };
   }
-  if (res.status === 400) {
+  if (res.status === 400 && body?.error === 'invalid_code') {
     const left = body?.attemptsLeft;
     return { ok: false, attemptsLeft: typeof left === 'number' ? left : null };
   }
