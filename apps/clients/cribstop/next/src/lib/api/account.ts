@@ -22,6 +22,7 @@ export interface SessionResponse {
 
 export interface ProfileResponse {
   email?: string;
+  emailConfirmed?: boolean;
   firstName?: string;
   lastName?: string;
   displayName?: string;

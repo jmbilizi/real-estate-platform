@@ -463,7 +463,9 @@ export function toOpenApiDocument() {
           summary: 'Submit a message or tour request against a listing',
           description:
             'Works signed-out and signed-in. An unauthenticated request is never rejected for ' +
-            'being unauthenticated. `name` and `email` are always required. `phone` is optional. ' +
+            'being unauthenticated. `name`, `email` and `consentTextVersion` are always required. ' +
+            '`phone` is optional. A signed-in account with a confirmed email always uses the ' +
+            'account email. The server ignores the `email` in the body for it. ' +
             '`consentToContact` records that the consumer agreed to be contacted. ' +
             'The server stores the consent text for `consentTextVersion`, the `consentChannels` ' +
             'and the time. The record starts in the `new` lead status. No public read endpoint ' +

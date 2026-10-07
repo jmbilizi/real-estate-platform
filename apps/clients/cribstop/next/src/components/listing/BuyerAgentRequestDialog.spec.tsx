@@ -1,6 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import BuyerAgentRequestDialog from './BuyerAgentRequestDialog';
+import { CONSENT_TEXTS } from '@cribstop/property-contracts';
+import { getProfile } from '@/lib/api/account';
 import { InquiryError, submitInquiry } from '@/lib/api/inquiries';
 
 let mockUser: Record<string, string> | null = null;
@@ -9,11 +11,16 @@ jest.mock('@/lib/api/inquiries', () => {
   const actual = jest.requireActual('@/lib/api/inquiries');
   return { ...actual, submitInquiry: jest.fn() };
 });
+jest.mock('@/lib/api/account', () => ({ getProfile: jest.fn() }));
 const mockSubmit = submitInquiry as jest.Mock;
+const mockProfile = getProfile as jest.Mock;
+const CONSENT = { consentTextVersion: 'v1', consentChannels: ['email'] };
 
 beforeEach(() => {
   mockUser = null;
   mockSubmit.mockReset();
+  mockProfile.mockReset();
+  mockProfile.mockResolvedValue({ emailConfirmed: false });
 });
 
 function open(kind: 'tour_request' | 'message' = 'tour_request', onClose = jest.fn()) {
@@ -34,11 +41,13 @@ describe('BuyerAgentRequestDialog (#132)', () => {
       kind: 'tour_request',
       name: 'Sam Buyer',
       email: 'sam@example.com',
+      ...CONSENT,
     });
     expect(await screen.findByText('We have your request')).toBeInTheDocument();
     expect(screen.getByRole('status').textContent).not.toMatch(
-      /confirmed|booked|scheduled|within/i,
+      /confirmed|booked|scheduled|within|email you/i,
     );
+    expect(screen.getByRole('status')).toHaveTextContent('match you with an agent');
   });
 
   it('prefills a signed-in user and keeps the fields editable', async () => {
@@ -57,7 +66,68 @@ describe('BuyerAgentRequestDialog (#132)', () => {
       name: 'Patricia Lee',
       email: 'pat@example.com',
       message: 'Is this still available?',
+      ...CONSENT,
     });
+  });
+
+  it('locks the email from the account when the account email is confirmed', async () => {
+    mockUser = { name: 'Pat Lee', email: 'session@example.com' };
+    mockProfile.mockResolvedValue({ email: 'pat@example.com', emailConfirmed: true });
+    mockSubmit.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    open();
+    const email = screen.getByLabelText('Email');
+    await waitFor(() => expect(email).toHaveAttribute('readonly'));
+    expect(email).toHaveValue('pat@example.com');
+    expect(screen.getByText('From your account')).toBeInTheDocument();
+    await user.type(email, 'x');
+    expect(email).toHaveValue('pat@example.com');
+    await user.click(screen.getByRole('button', { name: 'Send Tour Request' }));
+    expect(mockSubmit).toHaveBeenCalledWith(
+      'L1',
+      expect.objectContaining({ email: 'pat@example.com' }),
+    );
+  });
+
+  it('sends the phone as +1 digits with phone consent channels', async () => {
+    mockSubmit.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    open();
+    await user.type(screen.getByLabelText('Name'), 'Sam');
+    await user.type(screen.getByLabelText('Email'), 'sam@example.com');
+    await user.type(screen.getByLabelText('Phone (optional)'), '(202) 555-0100');
+    await user.click(screen.getByRole('button', { name: 'Send Tour Request' }));
+    expect(mockSubmit).toHaveBeenCalledWith(
+      'L1',
+      expect.objectContaining({
+        phone: '+12025550100',
+        consentChannels: ['email', 'phone_call', 'phone_text'],
+      }),
+    );
+  });
+
+  it('rejects a phone that is not a US number and sends nothing', async () => {
+    const user = userEvent.setup();
+    open();
+    await user.type(screen.getByLabelText('Name'), 'Sam');
+    await user.type(screen.getByLabelText('Email'), 'sam@example.com');
+    await user.type(screen.getByLabelText('Phone (optional)'), '555-0100');
+    await user.click(screen.getByRole('button', { name: 'Send Tour Request' }));
+    expect(mockSubmit).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Phone (optional)')).toHaveAccessibleDescription(
+      'Enter a 10-digit US phone number, or leave it blank.',
+    );
+  });
+
+  it('shows the server-owned consent text beside the submit button, with no checkbox', () => {
+    open('message');
+    const disclosure = screen.getByTestId('consent-disclosure');
+    expect(disclosure.textContent).toContain(CONSENT_TEXTS.v1);
+    expect(disclosure.textContent).toContain('Real Broker, LLC');
+    expect(disclosure.textContent).toContain('Send Message');
+    expect(disclosure.nextElementSibling).toBe(
+      screen.getByRole('button', { name: 'Send Message' }),
+    );
   });
 
   it('shows field errors tied to their inputs and sends nothing', async () => {

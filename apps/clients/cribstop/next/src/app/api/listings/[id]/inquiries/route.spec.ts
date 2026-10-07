@@ -18,11 +18,18 @@ function request(body: unknown, cookie?: string) {
 beforeEach(() => mockFetch.mockReset());
 
 describe('POST /api/listings/[id]/inquiries', () => {
-  it('forwards an allowlisted body and never consentToContact', async () => {
+  it('forwards an allowlisted body with the consent evidence', async () => {
     mockFetch.mockResolvedValue(new Response(JSON.stringify({ id: 'i1' }), { status: 201 }));
     const res = await POST(
       request(
-        { kind: 'tour_request', name: 'Sam', email: 's@e.co', consentToContact: true, extra: 1 },
+        {
+          kind: 'tour_request',
+          name: 'Sam',
+          email: 's@e.co',
+          consentTextVersion: 'v1',
+          consentChannels: ['email'],
+          extra: 1,
+        },
         'access_token=tok',
       ),
       ctx,
@@ -30,8 +37,34 @@ describe('POST /api/listings/[id]/inquiries', () => {
     expect(res.status).toBe(201);
     const [path, init] = mockFetch.mock.calls[0];
     expect(path).toBe('/property/listings/abc/inquiries');
-    expect(JSON.parse(init.body)).toEqual({ kind: 'tour_request', name: 'Sam', email: 's@e.co' });
+    expect(JSON.parse(init.body)).toEqual({
+      kind: 'tour_request',
+      name: 'Sam',
+      email: 's@e.co',
+      consentToContact: true,
+      consentTextVersion: 'v1',
+      consentChannels: ['email'],
+    });
     expect(init.headers.Authorization).toBe('Bearer tok');
+  });
+
+  it('does not forward consent for an unknown version', async () => {
+    mockFetch.mockResolvedValue(new Response(JSON.stringify({ id: 'i1' }), { status: 201 }));
+    await POST(
+      request({
+        kind: 'message',
+        name: 'S',
+        email: 's@e.co',
+        consentToContact: true,
+        consentTextVersion: 'v9',
+      }),
+      ctx,
+    );
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
+      kind: 'message',
+      name: 'S',
+      email: 's@e.co',
+    });
   });
 
   it('rejects an unknown kind without calling the gateway', async () => {

@@ -22,16 +22,20 @@ import { cardDbRowFixture } from './listings/test-fixtures';
  */
 interface FakePool extends ReadPool {
   statements: string[];
+  params: unknown[][];
 }
 
 function createFakePool(rowsFor: (sql: string) => unknown[]): FakePool {
   const statements: string[] = [];
-  const query = <T>(text: string): Promise<{ rows: T[] }> => {
+  const params: unknown[][] = [];
+  const query = <T>(text: string, values?: unknown[]): Promise<{ rows: T[] }> => {
     statements.push(text);
+    params.push(values ?? []);
     return Promise.resolve({ rows: rowsFor(text) as T[] });
   };
   return {
     statements,
+    params,
     query,
     connect: () => Promise.resolve({ query, release: () => undefined }),
   };
@@ -79,6 +83,7 @@ describe('GET /health/ready (#388)', () => {
   it('responds 503 when the pool query rejects', async () => {
     const pool: FakePool = {
       statements: [],
+      params: [],
       query: () => Promise.reject(new Error('connection terminated')),
       connect: () => Promise.reject(new Error('connection terminated')),
     };
@@ -93,6 +98,7 @@ describe('GET /health/ready (#388)', () => {
     process.env.PROPERTY_DB_READY_TIMEOUT_MS = '10';
     const pool: FakePool = {
       statements: [],
+      params: [],
       query: () => new Promise(() => undefined), // never resolves
       connect: () => Promise.reject(new Error('unused')),
     };
@@ -661,6 +667,8 @@ describe('POST /listings/:id/inquiries (#131)', () => {
     kind: 'tour_request' as const,
     name: 'Jane Consumer',
     email: 'jane@example.com',
+    consentToContact: true,
+    consentTextVersion: 'v1' as const,
   };
 
   /** A fake pool answering both the existence-check EXISTS query and the INSERT. */
@@ -715,6 +723,80 @@ describe('POST /listings/:id/inquiries (#131)', () => {
     expect(response.status).toBe(201);
     const insert = pool.statements.find((sql) => sql.includes('INSERT INTO listing_inquiries'));
     expect(insert).toBeDefined();
+  });
+
+  it('rejects a request with no consentTextVersion (#631)', async () => {
+    const pool = createInquiryPool();
+    const app = createApp({ pool, introspection: ALWAYS_SIGNED_OUT, rateLimiter: ALWAYS_ALLOW });
+    const { consentTextVersion: _omitted, ...withoutVersion } = VALID_BODY;
+
+    const response = await request(app)
+      .post(`/listings/${KNOWN_ID}/inquiries`)
+      .send(withoutVersion);
+
+    expect(response.status).toBe(400);
+  });
+
+  it('stores the account email, not the body email, for a confirmed account (#631)', async () => {
+    const pool = createInquiryPool();
+    const app = createApp({
+      pool,
+      introspection: {
+        resolveAccountId: () => Promise.resolve('018f2f2a-account-0000000000dd'),
+        introspect: () =>
+          Promise.resolve({
+            kind: 'account' as const,
+            accountId: '018f2f2a-account-0000000000dd',
+            roles: [],
+            email: 'account@example.com',
+            emailConfirmed: true,
+          }),
+      },
+      rateLimiter: ALWAYS_ALLOW,
+    });
+
+    const response = await request(app)
+      .post(`/listings/${KNOWN_ID}/inquiries`)
+      .set('Cookie', '.AspNetCore.Identity.Application=abc')
+      .send({ ...VALID_BODY, email: 'other@example.com' });
+
+    expect(response.status).toBe(201);
+    const params =
+      pool.params[
+        pool.statements.findIndex((sql) => sql.includes('INSERT INTO listing_inquiries'))
+      ];
+    expect(params).toContain('account@example.com');
+    expect(params).not.toContain('other@example.com');
+  });
+
+  it('keeps the body email for an unconfirmed account (#631)', async () => {
+    const pool = createInquiryPool();
+    const app = createApp({
+      pool,
+      introspection: {
+        resolveAccountId: () => Promise.resolve('018f2f2a-account-0000000000dd'),
+        introspect: () =>
+          Promise.resolve({
+            kind: 'account' as const,
+            accountId: '018f2f2a-account-0000000000dd',
+            roles: [],
+            email: 'account@example.com',
+            emailConfirmed: false,
+          }),
+      },
+      rateLimiter: ALWAYS_ALLOW,
+    });
+
+    await request(app)
+      .post(`/listings/${KNOWN_ID}/inquiries`)
+      .set('Cookie', '.AspNetCore.Identity.Application=abc')
+      .send({ ...VALID_BODY, email: 'typed@example.com' });
+
+    const params =
+      pool.params[
+        pool.statements.findIndex((sql) => sql.includes('INSERT INTO listing_inquiries'))
+      ];
+    expect(params).toContain('typed@example.com');
   });
 
   it('rejects an unknown listing with the identical NOT_FOUND_BODY', async () => {

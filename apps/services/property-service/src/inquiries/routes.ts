@@ -149,7 +149,7 @@ export function createInquiriesRouter(deps: InquiriesRouterDeps): Router {
         listingId,
         kind: parsedBody.data.kind,
         name: parsedBody.data.name,
-        email: parsedBody.data.email,
+        email: requester.accountEmail ?? parsedBody.data.email,
         phone: parsedBody.data.phone ?? null,
         message: parsedBody.data.message ?? null,
         accountId: requester.accountId,

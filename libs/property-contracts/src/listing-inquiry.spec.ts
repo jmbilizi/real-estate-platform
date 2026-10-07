@@ -4,6 +4,8 @@ const BASE = {
   kind: 'tour_request' as const,
   name: 'Jane Consumer',
   email: 'jane@example.com',
+  consentToContact: true,
+  consentTextVersion: 'v1' as const,
 };
 
 describe('listingInquiryRequestSchema', () => {
@@ -12,19 +14,19 @@ describe('listingInquiryRequestSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('defaults consentToContact to false when absent', () => {
-    const result = listingInquiryRequestSchema.parse(BASE);
-    expect(result.consentToContact).toBe(false);
+  it('rejects a request with no consentTextVersion (#631)', () => {
+    const { consentTextVersion: _omitted, ...withoutVersion } = BASE;
+    expect(listingInquiryRequestSchema.safeParse(withoutVersion).success).toBe(false);
+    expect(
+      listingInquiryRequestSchema.safeParse({ ...withoutVersion, consentToContact: true }).success,
+    ).toBe(false);
   });
 
   it('never infers consent true from any other field', () => {
-    const result = listingInquiryRequestSchema.parse({ ...BASE, phone: '555-0100' });
-    expect(result.consentToContact).toBe(false);
-  });
-
-  it('accepts an explicit consentToContact: true', () => {
-    const result = listingInquiryRequestSchema.parse({ ...BASE, consentToContact: true });
-    expect(result.consentToContact).toBe(true);
+    const { consentToContact: _omitted, ...withoutConsent } = BASE;
+    expect(
+      listingInquiryRequestSchema.safeParse({ ...withoutConsent, phone: '555-0100' }).success,
+    ).toBe(false);
   });
 
   describe('Fair Housing guardrail — strict parse (#34)', () => {
@@ -102,7 +104,7 @@ describe('listingInquiryRequestSchema', () => {
 });
 
 describe('consent evidence fields', () => {
-  const CONSENTED = { ...BASE, phone: '202-555-0100', consentToContact: true };
+  const CONSENTED = { ...BASE, phone: '202-555-0100' };
 
   it('accepts a version and channels with consent', () => {
     const result = listingInquiryRequestSchema.safeParse({
@@ -113,8 +115,8 @@ describe('consent evidence fields', () => {
     expect(result.success).toBe(true);
   });
 
-  it('rejects a version without consent', () => {
-    const result = listingInquiryRequestSchema.safeParse({ ...BASE, consentTextVersion: 'v1' });
+  it('rejects consent evidence without consent', () => {
+    const result = listingInquiryRequestSchema.safeParse({ ...BASE, consentToContact: false });
     expect(result.success).toBe(false);
   });
 
@@ -132,7 +134,6 @@ describe('consent evidence fields', () => {
   it('rejects a phone channel with no phone', () => {
     const result = listingInquiryRequestSchema.safeParse({
       ...BASE,
-      consentToContact: true,
       consentChannels: ['phone_call'],
     });
     expect(result.success).toBe(false);

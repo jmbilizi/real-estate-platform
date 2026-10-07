@@ -21,6 +21,8 @@ const VALID_BODY = {
   kind: 'tour_request' as const,
   name: 'Jane Consumer (e2e)',
   email: 'jane.e2e@example.com',
+  consentToContact: true,
+  consentTextVersion: 'v1' as const,
 };
 
 describe('POST /listings/:id/inquiries — signed-out', () => {
@@ -187,6 +189,17 @@ describe('lead model (#627)', () => {
     expect(response.status).toBe(400);
   });
 
+  it('rejects a request with no consentTextVersion (#631)', async () => {
+    const { consentTextVersion: _omitted, ...withoutVersion } = VALID_BODY;
+    const response = await axios.post(
+      `/listings/${fixtures.sampleListingId}/inquiries`,
+      withoutVersion,
+      { validateStatus: () => true },
+    );
+
+    expect(response.status).toBe(400);
+  });
+
   it('stores the consent evidence: server text, version, channels and time', async () => {
     const id = await create({
       phone: '202-555-0100',
@@ -205,8 +218,8 @@ describe('lead model (#627)', () => {
     expect(stored.consent_given_at).toBeInstanceOf(Date);
   });
 
-  it('defaults the version and channels when the current web form sends only the boolean', async () => {
-    const id = await create({ consentToContact: true });
+  it('defaults the channels to the supplied contact details', async () => {
+    const id = await create({});
 
     expect(await row(id)).toMatchObject({
       consent_text_version: 'v1',

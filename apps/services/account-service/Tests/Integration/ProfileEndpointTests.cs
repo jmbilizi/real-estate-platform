@@ -50,6 +50,17 @@ namespace AccountService.Tests.Integration
         }
 
         [Fact]
+        public async Task GetProfile_ContainsEmailConfirmedFlag_WhenAuthenticated()
+        {
+            var client = await AuthHelper.CreateAuthenticatedClientAsync(
+                factory, $"get-confirmed-{Guid.NewGuid()}@example.com", Password);
+
+            var response = await client.GetAsync("/account/profile");
+            var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+            body.GetProperty("emailConfirmed").ValueKind.Should().BeOneOf(JsonValueKind.True, JsonValueKind.False);
+        }
+
+        [Fact]
         public async Task GetProfile_ContainsEmptyIntents_ForNewUser()
         {
             var client = await AuthHelper.CreateAuthenticatedClientAsync(
