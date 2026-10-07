@@ -58,7 +58,7 @@ describe('BuyerAgentRequestDialog (#132, #688)', () => {
     expect(screen.queryByLabelText('Email')).toBeNull();
   });
 
-  it('sends the account name and email with the unchanged payload shape', async () => {
+  it('sends no name or email: the service takes the contact from the account (#690)', async () => {
     mockUser = PAT;
     mockSubmit.mockResolvedValue(undefined);
     const user = userEvent.setup();
@@ -67,8 +67,6 @@ describe('BuyerAgentRequestDialog (#132, #688)', () => {
     await user.click(screen.getByRole('button', { name: 'Send Message' }));
     expect(mockSubmit).toHaveBeenCalledWith('L1', {
       kind: 'message',
-      name: 'Pat Lee',
-      email: 'pat@example.com',
       message: 'Is this still available?',
       ...CONSENT,
     });
@@ -126,10 +124,7 @@ describe('BuyerAgentRequestDialog (#132, #688)', () => {
     expect(screen.getByLabelText('Message')).toHaveValue('Hello');
     expect(mockSubmit).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Send Message' }));
-    expect(mockSubmit).toHaveBeenCalledWith(
-      'L1',
-      expect.objectContaining({ email: 'pat@example.com', message: 'Hello' }),
-    );
+    expect(mockSubmit).toHaveBeenCalledWith('L1', expect.objectContaining({ message: 'Hello' }));
   });
 
   it('shows sign-in on a 401 and retries once after sign-in, never a raw error', async () => {
@@ -149,8 +144,18 @@ describe('BuyerAgentRequestDialog (#132, #688)', () => {
     expect(mockSubmit).toHaveBeenCalledTimes(2);
     expect(mockSubmit).toHaveBeenLastCalledWith(
       'L1',
-      expect.objectContaining({ message: 'Hello', email: 'pat@example.com' }),
+      expect.objectContaining({ message: 'Hello' }),
     );
+  });
+
+  it('asks for a confirmed email when the service answers 403 (#690)', async () => {
+    mockUser = PAT;
+    mockSubmit.mockRejectedValueOnce(new InquiryError('unconfirmed'));
+    const user = userEvent.setup();
+    open('message');
+    await user.type(screen.getByLabelText('Message'), 'Hello');
+    await user.click(screen.getByRole('button', { name: 'Send Message' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/confirm your email/i);
   });
 
   it('does not loop when the retry meets a second 401', async () => {

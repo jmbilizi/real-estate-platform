@@ -46,8 +46,8 @@ async function seedJourney(
   const status = steps.at(-1)?.to ?? 'new';
   const { rows } = await pool.query<{ id: string }>(
     `INSERT INTO listing_inquiries
-       (listing_id, kind, name, email, message, status, created_at)
-     VALUES ($1, $2, 'E2E Lead', $3, 'Hello (e2e)', $4, $5::timestamptz)
+       (listing_id, kind, name, email, message, status, created_at, account_id)
+     VALUES ($1, $2, 'E2E Lead', $3, 'Hello (e2e)', $4, $5::timestamptz, gen_random_uuid())
      RETURNING id`,
     [listing, kind, `${randomUUID()}@e2e.example.com`, status, new Date(T0).toISOString()],
   );

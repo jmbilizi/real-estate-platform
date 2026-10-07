@@ -1,20 +1,17 @@
 import type { CredentialHeaders, IntrospectionClient } from './account-introspection';
 
-export interface Requester {
-  accountId: string | null;
-  /** True only when the credential resolves to an account with a confirmed email. */
-  verifiedAccount: boolean;
-  /** The account email. Set only when `verifiedAccount`. It replaces any email in the body. */
-  accountEmail: string | null;
-}
-
-const SIGNED_OUT: Requester = { accountId: null, verifiedAccount: false, accountEmail: null };
+/** Who sends a request. Every state but `account` ends the request before any write. */
+export type Requester =
+  | { kind: 'account'; accountId: string; accountEmail: string }
+  | { kind: 'signed-out' }
+  | { kind: 'unconfirmed' }
+  | { kind: 'unavailable' };
 
 /**
- * The one place that decides `verified_account` (#627). The request body never reaches it.
+ * The one place that decides who sends a request (#627, #690). The request body never reaches it.
  *
- * An outage reads as signed out, so a request still goes through. A client without `introspect`
- * gives an account id only, never a verified account.
+ * An account counts only with a confirmed email. The contact email comes from the account.
+ * A client without `introspect` gives an account id and no email, which reads as `unconfirmed`.
  */
 export async function resolveRequester(
   introspection: IntrospectionClient,
@@ -22,14 +19,11 @@ export async function resolveRequester(
 ): Promise<Requester> {
   if (!introspection.introspect) {
     const accountId = await introspection.resolveAccountId(headers);
-    return { ...SIGNED_OUT, accountId };
+    return accountId ? { kind: 'unconfirmed' } : { kind: 'signed-out' };
   }
   const outcome = await introspection.introspect(headers);
-  if (outcome.kind !== 'account') return SIGNED_OUT;
-  const verified = outcome.emailConfirmed === true && Boolean(outcome.email);
-  return {
-    accountId: outcome.accountId,
-    verifiedAccount: verified,
-    accountEmail: verified ? (outcome.email ?? null) : null,
-  };
+  if (outcome.kind === 'unavailable') return { kind: 'unavailable' };
+  if (outcome.kind !== 'account') return { kind: 'signed-out' };
+  if (outcome.emailConfirmed !== true || !outcome.email) return { kind: 'unconfirmed' };
+  return { kind: 'account', accountId: outcome.accountId, accountEmail: outcome.email };
 }

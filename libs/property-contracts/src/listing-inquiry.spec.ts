@@ -2,14 +2,12 @@ import { CONSENT_DISCLOSURE_TEXT, listingInquiryRequestSchema } from './listing-
 
 const BASE = {
   kind: 'tour_request' as const,
-  name: 'Jane Consumer',
-  email: 'jane@example.com',
   consentToContact: true,
   consentTextVersion: 'v1' as const,
 };
 
 describe('listingInquiryRequestSchema', () => {
-  it('accepts a minimal signed-out tour request', () => {
+  it('accepts a minimal tour request', () => {
     const result = listingInquiryRequestSchema.safeParse(BASE);
     expect(result.success).toBe(true);
   });
@@ -72,23 +70,13 @@ describe('listingInquiryRequestSchema', () => {
     });
   });
 
-  describe('required contact details, signed-out or signed-in alike', () => {
-    it('rejects a missing name', () => {
-      const { name: _name, ...withoutName } = BASE;
-      expect(listingInquiryRequestSchema.safeParse(withoutName).success).toBe(false);
+  describe('no contact details in the body (#690)', () => {
+    it('rejects a body name', () => {
+      expect(listingInquiryRequestSchema.safeParse({ ...BASE, name: 'Jane' }).success).toBe(false);
     });
 
-    it('rejects a missing email, even with a phone', () => {
-      const { email: _email, ...withoutEmail } = BASE;
-      const result = listingInquiryRequestSchema.safeParse({
-        ...withoutEmail,
-        phone: '202-555-0100',
-      });
-      expect(result.success).toBe(false);
-    });
-
-    it('rejects a malformed email', () => {
-      const result = listingInquiryRequestSchema.safeParse({ ...BASE, email: 'not-an-email' });
+    it('rejects a body email', () => {
+      const result = listingInquiryRequestSchema.safeParse({ ...BASE, email: 'jane@example.com' });
       expect(result.success).toBe(false);
     });
   });

@@ -5,6 +5,8 @@ import {
   listingInquiryRequestSchema,
   NOT_FOUND_BODY,
   RATE_LIMITED_BODY,
+  UNAUTHENTICATED_BODY,
+  UNAVAILABLE_BODY,
 } from '@cribstop/property-contracts';
 import { isListingPublishable, type ReadClient } from '../listings/repository';
 import { createListingInquiry, type Queryable } from './write';
@@ -15,12 +17,22 @@ import type { RateLimiter } from './rate-limit';
 /**
  * `POST /listings/:id/inquiries` (#131) — a consumer's message or tour request against a listing.
  *
+ * Needs a signed-in account with a confirmed email (#690). Rate limiting runs first, then sign-in,
+ * then the listing check.
+ *
  * No public read endpoint: this router adds no GET. Staff read endpoints sit behind roles (#632). `id` is validated and the listing
  * is checked against `listing_search_v` — the same single source of listing visibility every other
  * route in this service reads — before anything is written, so an unknown, soft-deleted or
  * `internet_display_allowed = false` listing is rejected exactly like `GET /listings/{id}` rejects
  * it: the one frozen 404 body, byte-identical.
  */
+
+const UNCONFIRMED_ACCOUNT_BODY: ErrorBody = {
+  error: {
+    code: 'forbidden',
+    message: 'Confirm your email address before you send a request.',
+  },
+};
 
 const invalidRequest = (message: string): ErrorBody => ({
   error: { code: 'invalid_request', message },
@@ -72,6 +84,14 @@ function describeIssues(issues: readonly IssueLike[]): string {
   return sentences.join(' ');
 }
 
+/** `name` and `email` left the contract in #690. The strict schema would reject them, so a client
+ *  built before the change is read as if it never sent them. The account supplies both. */
+function withoutRetiredContactFields(body: unknown): unknown {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return body;
+  const { name: _name, email: _email, ...rest } = body as Record<string, unknown>;
+  return rest;
+}
+
 /** `X-Real-IP`, which the gateway guarantees is set before forwarding (see
  *  `apps/api-gateway/Startup.cs`). Falls back to the socket address for direct/local calls. */
 function extractClientIp(req: Request): string {
@@ -118,6 +138,26 @@ export function createInquiriesRouter(deps: InquiriesRouterDeps): Router {
         return;
       }
 
+      // Before the body and the listing are read, so an anonymous caller learns nothing about a
+      // listing. An unconfirmed account gets a clear 403, not a 401 it cannot fix by signing in.
+      const requester = await resolveRequester(deps.introspection, {
+        cookie: req.headers.cookie,
+        authorization: req.headers.authorization,
+        apiKey: firstHeaderValue(req.headers['x-api-key']),
+      });
+      if (requester.kind === 'signed-out') {
+        res.status(401).json(UNAUTHENTICATED_BODY);
+        return;
+      }
+      if (requester.kind === 'unavailable') {
+        res.set('Retry-After', '2').status(503).json(UNAVAILABLE_BODY);
+        return;
+      }
+      if (requester.kind === 'unconfirmed') {
+        res.status(403).json(UNCONFIRMED_ACCOUNT_BODY);
+        return;
+      }
+
       const parsedId = idSchema.safeParse(rawListingId);
       if (!parsedId.success) {
         res.status(404).json(NOT_FOUND_BODY);
@@ -125,7 +165,9 @@ export function createInquiriesRouter(deps: InquiriesRouterDeps): Router {
       }
       const listingId = parsedId.data;
 
-      const parsedBody = listingInquiryRequestSchema.safeParse(req.body);
+      const parsedBody = listingInquiryRequestSchema.safeParse(
+        withoutRetiredContactFields(req.body),
+      );
       if (!parsedBody.success) {
         res.status(400).json(invalidRequest(describeIssues(parsedBody.error.issues)));
         return;
@@ -137,23 +179,13 @@ export function createInquiriesRouter(deps: InquiriesRouterDeps): Router {
         return;
       }
 
-      // Resolved AFTER the listing check: there is no reason to call account-service for a
-      // request that is about to 404 anyway.
-      const requester = await resolveRequester(deps.introspection, {
-        cookie: req.headers.cookie,
-        authorization: req.headers.authorization,
-        apiKey: firstHeaderValue(req.headers['x-api-key']),
-      });
-
       const createdId = await createListingInquiry(deps.pool, {
         listingId,
         kind: parsedBody.data.kind,
-        name: parsedBody.data.name,
-        email: requester.accountEmail ?? parsedBody.data.email,
+        contactEmail: requester.accountEmail,
         phone: parsedBody.data.phone ?? null,
         message: parsedBody.data.message ?? null,
         accountId: requester.accountId,
-        verifiedAccount: requester.verifiedAccount,
         consentToContact: parsedBody.data.consentToContact,
         consentTextVersion: parsedBody.data.consentTextVersion,
         consentChannels: parsedBody.data.consentChannels,

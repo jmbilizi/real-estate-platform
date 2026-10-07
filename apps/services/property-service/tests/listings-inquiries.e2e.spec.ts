@@ -1,8 +1,17 @@
-import axios from 'axios';
+import { randomUUID } from 'node:crypto';
+import type { Server } from 'node:http';
+import axios, { type AxiosRequestConfig } from 'axios';
 import { CONSENT_TEXTS, idSchema } from '@cribstop/property-contracts';
 import { closePool, getPool } from '../src/db/pool';
 import { changeLeadStatus } from '../src/inquiries/lead-status-write';
 import { complianceFixtureIds } from './support/fixture-ids';
+import {
+  bearerFor,
+  emailFor,
+  setEmailUnconfirmed,
+  startIntrospectionStub,
+  stopIntrospectionStub,
+} from './support/introspection-stub';
 
 /**
  * `POST /listings/:id/inquiries` (#131) against a REAL service and REAL database.
@@ -17,33 +26,119 @@ import { complianceFixtureIds } from './support/fixture-ids';
  */
 const fixtures = complianceFixtureIds();
 
+/** The service needs a signed-in account with a confirmed email (#690). The stub supplies both. */
+const ACCOUNT_ID = randomUUID();
+let stub: Server;
+
+beforeAll(async () => {
+  stub = await startIntrospectionStub();
+});
+afterAll(async () => {
+  await stopIntrospectionStub(stub);
+});
+
+function post(url: string, body: unknown, config: AxiosRequestConfig = {}) {
+  return axios.post(url, body, { headers: bearerFor(ACCOUNT_ID), ...config });
+}
+
 const VALID_BODY = {
   kind: 'tour_request' as const,
-  name: 'Jane Consumer (e2e)',
-  email: 'jane.e2e@example.com',
   consentToContact: true,
   consentTextVersion: 'v1' as const,
 };
 
-describe('POST /listings/:id/inquiries — signed-out', () => {
+describe('POST /listings/:id/inquiries — signed-in', () => {
   it('creates an inquiry and returns 201 with a valid id', async () => {
-    const response = await axios.post(
-      `/listings/${fixtures.sampleListingId}/inquiries`,
-      VALID_BODY,
-    );
+    const response = await post(`/listings/${fixtures.sampleListingId}/inquiries`, VALID_BODY);
 
     expect(response.status).toBe(201);
     expect(idSchema.safeParse(response.data.id).success).toBe(true);
   });
 
-  it('never rejects for lacking a credential', async () => {
-    const response = await axios.post(`/listings/${fixtures.sampleListingId}/inquiries`, {
+  it('stores the account email, the account id and verified_account true', async () => {
+    const response = await post(`/listings/${fixtures.sampleListingId}/inquiries`, {
       ...VALID_BODY,
       kind: 'message',
       message: 'Is this still available?',
     });
 
     expect(response.status).toBe(201);
+    const { rows } = await getPool().query(
+      'SELECT account_id, email, name, verified_account FROM listing_inquiries WHERE id = $1',
+      [response.data.id],
+    );
+    expect(rows[0]).toEqual({
+      account_id: ACCOUNT_ID,
+      email: emailFor(ACCOUNT_ID),
+      name: emailFor(ACCOUNT_ID),
+      verified_account: true,
+    });
+  });
+
+  it('ignores a name and an email in the body', async () => {
+    const response = await post(`/listings/${fixtures.sampleListingId}/inquiries`, {
+      ...VALID_BODY,
+      name: 'Typed Name',
+      email: 'typed@example.com',
+    });
+
+    expect(response.status).toBe(201);
+    const { rows } = await getPool().query(
+      'SELECT email, name FROM listing_inquiries WHERE id = $1',
+      [response.data.id],
+    );
+    expect(rows[0]).toEqual({ email: emailFor(ACCOUNT_ID), name: emailFor(ACCOUNT_ID) });
+  });
+
+  it('keeps the phone optional and per request', async () => {
+    const response = await post(`/listings/${fixtures.sampleListingId}/inquiries`, {
+      ...VALID_BODY,
+      phone: '202-555-0100',
+    });
+
+    expect(response.status).toBe(201);
+    const { rows } = await getPool().query('SELECT phone FROM listing_inquiries WHERE id = $1', [
+      response.data.id,
+    ]);
+    expect(rows[0]).toEqual({ phone: '202-555-0100' });
+  });
+});
+
+describe('POST /listings/:id/inquiries — account required (#690)', () => {
+  const url = `/listings/${fixtures.sampleListingId}/inquiries`;
+
+  it('answers 401 with no credential and writes nothing', async () => {
+    const before = await getPool().query('SELECT count(*)::int AS n FROM listing_inquiries');
+
+    const response = await axios.post(url, VALID_BODY, { validateStatus: () => true });
+
+    expect(response.status).toBe(401);
+    expect(response.data.error.code).toBe('unauthenticated');
+    const after = await getPool().query('SELECT count(*)::int AS n FROM listing_inquiries');
+    expect(after.rows[0]).toEqual(before.rows[0]);
+  });
+
+  it('answers 401 for an unknown listing, so an anonymous caller learns nothing', async () => {
+    const response = await axios.post(
+      '/listings/0195f2d0-9999-7000-8000-00000000dead/inquiries',
+      VALID_BODY,
+      { validateStatus: () => true },
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  it('answers 403 for an account with an unconfirmed email', async () => {
+    const unconfirmed = randomUUID();
+    setEmailUnconfirmed(unconfirmed);
+
+    const response = await axios.post(url, VALID_BODY, {
+      headers: bearerFor(unconfirmed),
+      validateStatus: () => true,
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.data.error.message).toMatch(/confirm your email/i);
   });
 });
 
@@ -51,10 +146,7 @@ describe('POST /listings/:id/inquiries — e2e harness', () => {
   it('runs with the rate limits raised, so a sixth request from one IP is not a 429', async () => {
     const statuses: number[] = [];
     for (let i = 0; i < 6; i += 1) {
-      const response = await axios.post(
-        `/listings/${fixtures.sampleListingId}/inquiries`,
-        VALID_BODY,
-      );
+      const response = await post(`/listings/${fixtures.sampleListingId}/inquiries`, VALID_BODY);
       statuses.push(response.status);
     }
 
@@ -64,7 +156,7 @@ describe('POST /listings/:id/inquiries — e2e harness', () => {
 
 describe('POST /listings/:id/inquiries — validation', () => {
   it('rejects an unknown field with 400 (Fair Housing guardrail, #34)', async () => {
-    const response = await axios.post(
+    const response = await post(
       `/listings/${fixtures.sampleListingId}/inquiries`,
       { ...VALID_BODY, occupancy: 2 },
       { validateStatus: () => true },
@@ -75,20 +167,9 @@ describe('POST /listings/:id/inquiries — validation', () => {
   });
 
   it('rejects kind "message" with no message', async () => {
-    const response = await axios.post(
+    const response = await post(
       `/listings/${fixtures.sampleListingId}/inquiries`,
       { ...VALID_BODY, kind: 'message' },
-      { validateStatus: () => true },
-    );
-
-    expect(response.status).toBe(400);
-  });
-
-  it('rejects a missing email', async () => {
-    const { email: _email, ...withoutEmail } = VALID_BODY;
-    const response = await axios.post(
-      `/listings/${fixtures.sampleListingId}/inquiries`,
-      withoutEmail,
       { validateStatus: () => true },
     );
 
@@ -98,7 +179,7 @@ describe('POST /listings/:id/inquiries — validation', () => {
 
 describe('POST /listings/:id/inquiries — listing visibility', () => {
   it('rejects an unknown id with 404', async () => {
-    const response = await axios.post(
+    const response = await post(
       '/listings/0195f2d0-9999-7000-8000-00000000dead/inquiries',
       VALID_BODY,
       { validateStatus: () => true },
@@ -109,7 +190,7 @@ describe('POST /listings/:id/inquiries — listing visibility', () => {
   });
 
   it('rejects a malformed id with the same 404', async () => {
-    const response = await axios.post('/listings/not-a-uuid/inquiries', VALID_BODY, {
+    const response = await post('/listings/not-a-uuid/inquiries', VALID_BODY, {
       validateStatus: () => true,
     });
 
@@ -119,17 +200,15 @@ describe('POST /listings/:id/inquiries — listing visibility', () => {
   it('rejects a listing excluded from listing_search_v (internet_display_allowed = false)', async () => {
     // This listing exists as a row, but is not publishable — exactly the case #131's acceptance
     // criterion names, distinct from an unknown id.
-    const response = await axios.post(
-      `/listings/${fixtures.suppressedListingId}/inquiries`,
-      VALID_BODY,
-      { validateStatus: () => true },
-    );
+    const response = await post(`/listings/${fixtures.suppressedListingId}/inquiries`, VALID_BODY, {
+      validateStatus: () => true,
+    });
 
     expect(response.status).toBe(404);
   });
 
   it('accepts an inquiry for a listing whose ADDRESS is suppressed — that is a different, weaker opt-out than internet_display_allowed', async () => {
-    const response = await axios.post(
+    const response = await post(
       `/listings/${fixtures.suppressedAddressListingId}/inquiries`,
       VALID_BODY,
     );
@@ -153,7 +232,7 @@ describe('lead model (#627)', () => {
   });
 
   async function create(body: Record<string, unknown>): Promise<string> {
-    const response = await axios.post(`/listings/${fixtures.sampleListingId}/inquiries`, {
+    const response = await post(`/listings/${fixtures.sampleListingId}/inquiries`, {
       ...VALID_BODY,
       ...body,
     });
@@ -166,10 +245,10 @@ describe('lead model (#627)', () => {
     return rows[0] as Record<string, unknown>;
   }
 
-  it('creates a lead in status new, unverified, with one creation event', async () => {
+  it('creates a lead in status new, with one creation event', async () => {
     const id = await create({});
 
-    expect(await row(id)).toMatchObject({ status: 'new', verified_account: false });
+    expect(await row(id)).toMatchObject({ status: 'new', verified_account: true });
     const { rows } = await pool.query(
       'SELECT from_status, to_status, actor_account_id, actor_role FROM lead_status_events WHERE lead_id = $1',
       [id],
@@ -180,7 +259,7 @@ describe('lead model (#627)', () => {
   });
 
   it('refuses verifiedAccount in the body', async () => {
-    const response = await axios.post(
+    const response = await post(
       `/listings/${fixtures.sampleListingId}/inquiries`,
       { ...VALID_BODY, verifiedAccount: true },
       { validateStatus: () => true },
@@ -218,7 +297,7 @@ describe('lead model (#627)', () => {
     expect(stored.consent_given_at).toBeInstanceOf(Date);
   });
 
-  it('defaults the channels to the supplied contact details', async () => {
+  it('defaults the channels to email', async () => {
     const id = await create({});
 
     expect(await row(id)).toMatchObject({

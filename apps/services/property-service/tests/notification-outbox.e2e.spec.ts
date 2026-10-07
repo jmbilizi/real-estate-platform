@@ -46,10 +46,10 @@ async function seedLead(consentEmail: boolean): Promise<string> {
   const { rows } = await pool().query<{ id: string }>(
     `INSERT INTO listing_inquiries
        (listing_id, kind, name, email, message, consent_to_contact,
-        consent_disclosure_text, consent_given_at, consent_text_version, consent_channels)
+        consent_disclosure_text, consent_given_at, consent_text_version, consent_channels, account_id)
      VALUES ($1, 'message', 'E2E Lead', $2, 'Hello (e2e)', $3,
              CASE WHEN $3 THEN 'text' END, CASE WHEN $3 THEN now() END,
-             CASE WHEN $3 THEN 'v1' END, CASE WHEN $3 THEN ARRAY['email'] END)
+             CASE WHEN $3 THEN 'v1' END, CASE WHEN $3 THEN ARRAY['email'] END, gen_random_uuid())
      RETURNING id`,
     [listing, `${randomUUID()}@e2e.example.com`, consentEmail],
   );
@@ -108,7 +108,14 @@ describe('notification_outbox', () => {
       'lead.assigned/agent',
     ]);
     expect(rows.every((r) => r.state === 'held')).toBe(true);
-    expect(rows[0]).toMatchObject({ recipient_ref: leadId, recipient_ref_type: 'lead' });
+    const { rows: owner } = await pool().query<{ account_id: string }>(
+      'SELECT account_id FROM listing_inquiries WHERE id = $1',
+      [leadId],
+    );
+    expect(rows[0]).toMatchObject({
+      recipient_ref: owner[0]?.account_id,
+      recipient_ref_type: 'account',
+    });
     expect(rows[2]).toMatchObject({
       recipient_ref: agentProfileId,
       recipient_ref_type: 'agent_profile',

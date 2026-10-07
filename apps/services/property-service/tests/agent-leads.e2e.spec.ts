@@ -70,8 +70,8 @@ async function createAgent(): Promise<TestAgent> {
 async function assignedLead(agent: TestAgent): Promise<{ id: string; email: string }> {
   const email = `${randomUUID()}@e2e.example.com`;
   const { rows } = await pool().query<{ id: string }>(
-    `INSERT INTO listing_inquiries (listing_id, kind, name, email, phone, message, status)
-     VALUES ($1, 'message', 'Jordan E2E', $2, '202-555-0143', 'Hello (e2e)', 'verified')
+    `INSERT INTO listing_inquiries (listing_id, kind, name, email, phone, message, status, account_id)
+     VALUES ($1, 'message', 'Jordan E2E', $2, '202-555-0143', 'Hello (e2e)', 'verified', gen_random_uuid())
      RETURNING id`,
     [listing, email],
   );

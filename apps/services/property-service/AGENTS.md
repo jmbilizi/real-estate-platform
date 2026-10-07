@@ -655,6 +655,14 @@ withhold. While no writer could set it, every assertion about it was vacuously t
 read endpoint**: an inquiry is never returned by any listings response. Staff read endpoints sit
 behind roles (#632).
 
+- **An account is required (#690).** The route runs rate limiting, then `resolveRequester`, then the
+  body and listing checks. No credential gives 401 with no listing data. An unconfirmed email gives
+  403 (`forbidden`). An account-service outage gives 503, never 401. The body has no `name` or
+  `email`, and the route drops both if a client sends them. The contact email is the account email.
+  `listing_inquiries.account_id` is NOT NULL (migration 052 deleted the anonymous dev leads).
+  `verified_account` is always `true`. The `email` and `name` columns stay until #691. Both hold the
+  account email, because introspection returns no name.
+
 - `write.ts` is the only module that writes `listing_inquiries`, mirroring `src/db/write.ts`'s rule
   for `listings`.
 - The listing existence/visibility check reuses `listing_search_v` via `isListingPublishable()` in
@@ -669,14 +677,11 @@ behind roles (#632).
 - **Lead model** (#627): a row is a buyer request with a lifecycle. `lead-status.ts` is the only
   transitions table. `changeLeadStatus` (`lead-status-write.ts`) moves a status and appends the
   `lead_status_events` row in one transaction. Staff and agent routes call it. The events table is
-  append-only by trigger. A delete is allowed only when the lead is already gone (cascade). `email`
-  is required and `phone` is optional. `verified_account` is set only by `requester.ts`, never by
-  the body. Consent evidence: the server holds the text per version (`CONSENT_TEXTS`) and stores
+  append-only by trigger. A delete is allowed only when the lead is already gone (cascade). `phone`
+  is optional. Consent evidence: the server holds the text per version (`CONSENT_TEXTS`) and stores
   text, version, channels and time. Retention target: 4 years, no purge job yet.
-- **Account resolution** (`account-introspection.ts`) calls account-service's #86 endpoint and
-  **fails open to signed-out** on any network error or timeout — an infra hiccup must not block this
-  ticket's primary conversion path. Worst case: a signed-in consumer's inquiry is recorded with no
-  account id, the same shape a signed-out submission already has.
+- **Account resolution** (`account-introspection.ts`, `requester.ts`) calls account-service's #86
+  endpoint. A network error or timeout reads as `unavailable`, and the route answers 503.
 - **Rate limiting** (`rate-limit.ts`) is in-memory, fixed-window, per client IP and per listing,
   configuration-driven (`INQUIRY_RATE_LIMIT_*` env vars). Per process, like the gateway's Ocelot
   limiter and account-service's `AccountRecoveryRateLimiter` — the effective limit multiplies by

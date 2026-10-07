@@ -66,11 +66,9 @@ export type LeadStatus = z.infer<typeof leadStatusSchema>;
  * familial status or disability field to strip, because none can ever be added without a
  * reviewed schema change reaching this file first.
  *
- * `name` and `email` are required regardless of sign-in state. `phone` is optional (ruling
- * 2026-10-06).
- * Signed-in resolves an account id server-side (#86). It does not excuse the caller from
- * submitting contact details, because the inquiry must remain readable on its own even if the
- * account is later deleted.
+ * The request needs a signed-in account with a confirmed email (#690). The server takes the
+ * contact email from the account, so the body carries no `name` or `email`. `phone` is optional
+ * (ruling 2026-10-06).
  *
  * `consentToContact` defaults to `false` and is never inferred from anything else. Absent means
  * no consent, matching the stakeholder ruling: nothing but the consumer's own submission may set
@@ -79,8 +77,6 @@ export type LeadStatus = z.infer<typeof leadStatusSchema>;
 export const listingInquiryRequestSchema = z
   .strictObject({
     kind: inquiryKindSchema,
-    name: z.string().trim().min(1).max(200),
-    email: z.email(),
     phone: z.string().trim().min(1).max(40).optional(),
     message: z
       .string()
@@ -105,7 +101,7 @@ export const listingInquiryRequestSchema = z
       .optional()
       .describe(
         'The channels the consumer agreed to. Defaults to the channels that match the ' +
-          'supplied `email` and `phone`. `phone_call` and `phone_text` need a `phone`. Only valid when `consentToContact` is true.',
+          'supplied `phone`. `email` always applies. `phone_call` and `phone_text` need a `phone`. Only valid when `consentToContact` is true.',
       ),
     consentToContact: z
       .boolean()

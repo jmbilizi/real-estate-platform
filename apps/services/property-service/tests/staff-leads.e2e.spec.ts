@@ -58,8 +58,8 @@ interface LeadSeed {
 async function seedLead(seed: LeadSeed = {}): Promise<string> {
   const { rows } = await pool().query<{ id: string }>(
     `INSERT INTO listing_inquiries
-       (listing_id, kind, name, email, phone, message, status, created_at)
-     VALUES ($1, $2, 'E2E Lead', $3, $4, 'Hello (e2e)', $5, COALESCE($6::timestamptz, now()))
+       (listing_id, kind, name, email, phone, message, status, created_at, account_id)
+     VALUES ($1, $2, 'E2E Lead', $3, $4, 'Hello (e2e)', $5, COALESCE($6::timestamptz, now()), gen_random_uuid())
      RETURNING id`,
     [
       seed.listingId ?? listingA,

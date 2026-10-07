@@ -24,8 +24,6 @@ describe('POST /api/listings/[id]/inquiries', () => {
       request(
         {
           kind: 'tour_request',
-          name: 'Sam',
-          email: 's@e.co',
           consentTextVersion: 'v1',
           consentChannels: ['email'],
           extra: 1,
@@ -39,8 +37,6 @@ describe('POST /api/listings/[id]/inquiries', () => {
     expect(path).toBe('/property/listings/abc/inquiries');
     expect(JSON.parse(init.body)).toEqual({
       kind: 'tour_request',
-      name: 'Sam',
-      email: 's@e.co',
       consentToContact: true,
       consentTextVersion: 'v1',
       consentChannels: ['email'],
@@ -48,13 +44,17 @@ describe('POST /api/listings/[id]/inquiries', () => {
     expect(init.headers.Authorization).toBe('Bearer tok');
   });
 
+  it('does not forward a name or an email from the body (#690)', async () => {
+    mockFetch.mockResolvedValue(new Response(JSON.stringify({ id: 'i1' }), { status: 201 }));
+    await POST(request({ kind: 'message', name: 'S', email: 's@e.co' }), ctx);
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ kind: 'message' });
+  });
+
   it('does not forward consent for an unknown version', async () => {
     mockFetch.mockResolvedValue(new Response(JSON.stringify({ id: 'i1' }), { status: 201 }));
     await POST(
       request({
         kind: 'message',
-        name: 'S',
-        email: 's@e.co',
         consentToContact: true,
         consentTextVersion: 'v9',
       }),
@@ -62,8 +62,6 @@ describe('POST /api/listings/[id]/inquiries', () => {
     );
     expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
       kind: 'message',
-      name: 'S',
-      email: 's@e.co',
     });
   });
 
@@ -71,8 +69,6 @@ describe('POST /api/listings/[id]/inquiries', () => {
     const res = await POST(
       request({
         kind: 'message',
-        name: 'S',
-        email: 's@e.co',
         consentTextVersion: 'v1',
         consentChannels: ['carrier_pigeon'],
       }),
@@ -92,13 +88,13 @@ describe('POST /api/listings/[id]/inquiries', () => {
     mockFetch.mockResolvedValue(
       new Response(JSON.stringify({ error: { code: 'not_found', message: 'x' } }), { status: 404 }),
     );
-    const res = await POST(request({ kind: 'message', name: 'S', email: 's@e.co' }), ctx);
+    const res = await POST(request({ kind: 'message' }), ctx);
     expect(res.status).toBe(404);
   });
 
   it('answers 503 when the gateway is unreachable', async () => {
     mockFetch.mockRejectedValue(new Error('down'));
-    const res = await POST(request({ kind: 'message', name: 'S', email: 's@e.co' }), ctx);
+    const res = await POST(request({ kind: 'message' }), ctx);
     expect(res.status).toBe(503);
   });
 });
