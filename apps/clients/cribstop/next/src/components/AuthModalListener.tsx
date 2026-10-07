@@ -9,5 +9,5 @@ export default function AuthModalListener() {
 
   if (modal !== 'login' && modal !== 'signup') return null;
 
-  return <AuthModalWrapper initialMode={modal} />;
+  return <AuthModalWrapper />;
 }

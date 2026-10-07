@@ -7,19 +7,20 @@ import { Eye, EyeOff } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { useToast } from '@/lib/useToast';
 import {
-  getConfirmationExpiryHours,
+  changeSignupEmail,
+  CodesUnavailableError,
+  CodeTiming,
+  identifyEmail,
   RateLimitError,
   requestPasswordReset,
   SignInFailedError,
 } from '@/lib/api/account';
-import { useConfirmationResend } from '@/lib/useConfirmationResend';
-import { BRAND } from '@/lib/brand';
-import PasswordRequirements from '@/components/PasswordRequirements';
-import { passwordMeetsRules } from '@/lib/password-rules';
+import AuthCodeStep from '@/components/AuthCodeStep';
+import AuthSetPasswordStep, { SetPasswordFailure } from '@/components/AuthSetPasswordStep';
 import privacyContent from '@/content/legal/privacy.json';
 import termsContent from '@/content/legal/terms.json';
 
-// Neither page has approved copy yet, so signup must not claim a binding agreement to a page
+// Neither page has approved copy yet, so the form must not claim a binding agreement to a page
 // that says, on its own face, "carries no approved legal copy" (#156, #157).
 const legalCopyApproved = !privacyContent.isDraft && !termsContent.isDraft;
 
@@ -28,25 +29,55 @@ function getRememberEmailKey() {
   return `cribstop_remember_email_${typeof window !== 'undefined' ? window.location.hostname : 'default'}`;
 }
 
-type Mode = 'login' | 'signup' | 'forgot';
+type Step = 'email' | 'password' | 'code' | 'setPassword' | 'forgot';
+
+const UNAVAILABLE_COPY = 'Sign-up is unavailable right now. Try again soon.';
+
+function entryError(err: unknown): string {
+  if (err instanceof RateLimitError) {
+    return `Too many tries. Try again in ${err.retryAfterSeconds} seconds.`;
+  }
+  if (err instanceof CodesUnavailableError) return UNAVAILABLE_COPY;
+  return 'Something went wrong. Try again.';
+}
+
+const linkButton = 'inline-flex min-h-11 items-center font-medium text-brand hover:underline';
 
 export default function AuthForm({
   initialMode = 'login',
   onSuccess,
-  onSwitchMode,
   variant = 'page',
 }: {
-  initialMode?: Mode;
+  /** 'forgot' opens the reset screen. The other values open the email-first flow. */
+  initialMode?: 'login' | 'signup' | 'forgot';
   onSuccess?: () => void;
-  onSwitchMode?: (mode: 'login' | 'signup') => void;
   /** 'page': always shows the card border/shadow. 'modal': plain on mobile, card on sm+ */
   variant?: 'page' | 'modal';
 }) {
-  const [mode, setMode] = useState<Mode>(initialMode);
+  const [step, setStep] = useState<Step>(initialMode === 'forgot' ? 'forgot' : 'email');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  // Set on a 401 from /account/login. Wrong password and a lockout look the same on purpose.
+  const [loginFailed, setLoginFailed] = useState(false);
+  // Set once the forgot-password request has gone through. The confirmation shown for it must
+  // stay neutral: the server never says whether the address has an account (#147).
+  const [resetRequested, setResetRequested] = useState(false);
+  const [codeTiming, setCodeTiming] = useState<CodeTiming>({
+    resendAfterSeconds: 0,
+    expiresInSeconds: 0,
+  });
+  // The address a code was sent to. A different address on the email step calls change-email.
+  const [codeRun, setCodeRun] = useState(0);
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  // The one-time sign-up proof. It lives in memory only: never in the URL, storage or logs.
+  const [signupProof, setSignupProof] = useState<string | null>(null);
+  const { login } = useApp();
+  const { toast } = useToast();
+  const router = useRouter();
 
   // Pre-fill email and remember checkbox from a previous "Remember me" login.
   useEffect(() => {
@@ -60,122 +91,135 @@ export default function AuthForm({
       // localStorage unavailable (SSR safety, private browsing)
     }
   }, []);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
-  // Set once the forgot-password request has gone through. The confirmation shown for it must
-  // stay neutral: the server never says whether the address has an account (#147).
-  const [resetRequested, setResetRequested] = useState(false);
-  // Set once registration has gone through. The waiting state shown for it is identical for a
-  // brand-new, an unconfirmed, and an already-confirmed address (#147/#148) — the server answers
-  // all three the same way, and the client must not undo that.
-  const [signupRequested, setSignupRequested] = useState(false);
-  const [signupEmail, setSignupEmail] = useState('');
-  const [expiryHours, setExpiryHours] = useState<number | null>(null);
-  // Set on a 401 from /account/login. Identity gives the same status for a wrong password and an
-  // unconfirmed account (#147), so this offers both remedies without asserting either cause.
-  const [loginFailed, setLoginFailed] = useState(false);
-  const { login, signup } = useApp();
-  const { toast } = useToast();
-  const router = useRouter();
-  const signupResend = useConfirmationResend();
-  const loginResend = useConfirmationResend();
 
-  useEffect(() => {
-    if (!signupRequested) return;
-    let active = true;
-    getConfirmationExpiryHours().then((hours) => {
-      if (active) setExpiryHours(hours);
-    });
-    return () => {
-      active = false;
-    };
-  }, [signupRequested]);
-
-  // Each mode/sub-state renders a different heading in the same position; a screen reader needs
-  // focus moved to it every time, not just on first mount.
+  // Each step renders in the same position. Focus moves to its first field, or to the heading
+  // when the step has none, so a screen reader follows the flow.
+  const rootRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
-    headingRef.current?.focus();
-  }, [mode, resetRequested, signupRequested]);
+    const field = rootRef.current?.querySelector<HTMLInputElement>(
+      'form input:not([type="checkbox"]):not([readonly]):not([disabled])',
+    );
+    (field ?? headingRef.current)?.focus();
+  }, [step, resetRequested]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const goToStep = (next: Step) => {
+    setStep(next);
+    setFormError(null);
+    setLoginFailed(false);
+    setResetRequested(false);
+  };
+
+  const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const address = email.trim();
+    if (!address) return;
     setFormError(null);
     setIsSubmitting(true);
-
     try {
-      if (mode === 'login') {
-        setLoginFailed(false);
-        try {
-          await login(email, password, remember);
-        } catch (err) {
-          if (err instanceof SignInFailedError) {
-            setLoginFailed(true);
-            return;
-          }
-          throw err;
-        }
-        try {
-          if (remember) {
-            localStorage.setItem(getRememberEmailKey(), email);
-          } else {
-            localStorage.removeItem(getRememberEmailKey());
-          }
-        } catch {
-          // ignore
-        }
-        toast('Welcome back!');
-        if (onSuccess) onSuccess();
-        else router.push('/');
-      } else if (mode === 'signup') {
-        if (!passwordMeetsRules(password)) {
-          setFormError('Password does not meet the requirements below.');
-          return;
-        }
-        await signup(email, password);
-        setSignupEmail(email);
-        setSignupRequested(true);
-        // The waiting state keeps this component mounted, so the password would otherwise stay in
-        // React state and in the hidden input for as long as the consumer reads the screen.
-        setPassword('');
+      if (pendingEmail && pendingEmail.toLowerCase() !== address.toLowerCase()) {
+        const timing = await changeSignupEmail(pendingEmail, address);
+        setPendingEmail(address);
+        setCodeTiming(timing);
+        setCodeRun((n) => n + 1);
+        goToStep('code');
+        return;
+      }
+      const result = await identifyEmail(address);
+      if (result.next === 'password') {
+        setPendingEmail(null);
+        goToStep('password');
       } else {
-        try {
-          await requestPasswordReset(email);
-          setResetRequested(true);
-        } catch (err) {
-          if (err instanceof RateLimitError) {
-            toast(`Too many requests. Try again in ${err.retryAfterSeconds} seconds.`, 'error');
-          } else {
-            toast('We could not send the request. Try again.', 'error');
-          }
-        }
+        setPendingEmail(address);
+        setCodeTiming(result);
+        setCodeRun((n) => n + 1);
+        goToStep('code');
       }
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Authentication request failed', 'error');
+      setFormError(entryError(err));
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const switchMode = (next: Mode) => {
-    setMode(next);
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setFormError(null);
     setLoginFailed(false);
-    setResetRequested(false);
-    if (next !== 'signup') setSignupRequested(false);
-    if (next === 'login' || next === 'signup') onSwitchMode?.(next);
+    setIsSubmitting(true);
+    try {
+      await login(email, password, remember);
+      try {
+        if (remember) {
+          localStorage.setItem(getRememberEmailKey(), email);
+        } else {
+          localStorage.removeItem(getRememberEmailKey());
+        }
+      } catch {
+        // ignore
+      }
+      toast('Welcome back!');
+      if (onSuccess) onSuccess();
+      else router.push('/');
+    } catch (err) {
+      if (err instanceof SignInFailedError) {
+        setLoginFailed(true);
+      } else {
+        toast(err instanceof Error ? err.message : 'Authentication request failed', 'error');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const submitLabels: Record<Mode, string> = {
-    login: 'Sign In',
-    signup: 'Create Account',
-    forgot: 'Send Reset Link',
+  const handleForgotSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+    setIsSubmitting(true);
+    try {
+      await requestPasswordReset(email);
+      setResetRequested(true);
+    } catch (err) {
+      if (err instanceof RateLimitError) {
+        toast(`Too many requests. Try again in ${err.retryAfterSeconds} seconds.`, 'error');
+      } else {
+        toast('We could not send the request. Try again.', 'error');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
-  let submitLabel = submitLabels[mode];
-  if (isSubmitting) submitLabel = 'Please wait...';
+
+  const handleVerified = (proof: string) => {
+    setSignupProof(proof);
+    goToStep('setPassword');
+  };
+
+  const handleSetPasswordFailed = (reason: SetPasswordFailure) => {
+    setSignupProof(null);
+    setPendingEmail(null);
+    goToStep('email');
+    setFormError(
+      reason === 'invalid_proof'
+        ? 'That sign-up timed out. Start again.'
+        : 'We could not finish sign-up. Start again, or sign in.',
+    );
+  };
+
+  const handleSignedIn = () => {
+    setSignupProof(null);
+    toast('Welcome to Cribstop!');
+    if (onSuccess) onSuccess();
+    else router.push('/');
+  };
+
+  const showSocial = step === 'email';
+  const emailChip = (
+    <span className="break-words font-medium text-ink [overflow-wrap:anywhere]">{email}</span>
+  );
 
   return (
-    <div className="mx-auto w-full max-w-md">
+    <div ref={rootRef} className="mx-auto w-full max-w-md">
       <div
         className={
           variant === 'modal'
@@ -191,38 +235,26 @@ export default function AuthForm({
           tabIndex={-1}
           className="text-center font-display text-2xl font-bold tracking-tight"
         >
-          {mode === 'login' && 'Welcome back'}
-          {mode === 'signup' && signupRequested && 'Confirm your email'}
-          {mode === 'signup' && !signupRequested && 'Create your account'}
-          {mode === 'forgot' && 'Reset your password'}
+          {step === 'email' && "What's your email?"}
+          {step === 'password' && 'Welcome back'}
+          {step === 'code' && 'Check your email'}
+          {step === 'setPassword' && 'Last step'}
+          {step === 'forgot' && 'Reset your password'}
         </h2>
         <p className="mt-2 text-center text-sm text-ink-muted">
-          {mode === 'login' && 'Sign in to save homes and set alerts'}
-          {mode === 'signup' && !signupRequested && 'Join us to find your dream home'}
-          {mode === 'signup' && signupRequested && (
-            <>
-              A confirmation link is on its way to{' '}
-              <span className="font-medium text-ink">{signupEmail}</span>.{' '}
-              {expiryHours !== null && <>It expires in {expiryHours} hours. </>}
-              Check your inbox and spam folder. Still nothing? Resend it below, or write to{' '}
-              <a
-                href={`mailto:${BRAND.contactEmail}`}
-                className="font-medium text-brand hover:underline"
-              >
-                {BRAND.contactEmail}
-              </a>
-              .
-            </>
-          )}
-          {mode === 'forgot' &&
+          {step === 'email' && 'Sign in or join Cribstop. One email, no fuss.'}
+          {step === 'password' && <>Welcome back. Enter your password for {emailChip}.</>}
+          {step === 'code' && <>We sent a 6-digit code to {emailChip}.</>}
+          {step === 'setPassword' && <>Pick a password for {emailChip}.</>}
+          {step === 'forgot' &&
             (resetRequested
               ? 'Check your email for a link to reset your password'
               : "Enter your email and we'll send a reset link")}
         </p>
 
-        {mode !== 'forgot' && !signupRequested && (
+        {showSocial && (
           <div className="mt-6 flex flex-col gap-3">
-            <button className="btn-secondary gap-2">
+            <button className="btn-secondary min-h-11 gap-2">
               <svg className="h-5 w-5" viewBox="0 0 24 24">
                 <path
                   d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
@@ -243,82 +275,22 @@ export default function AuthForm({
               </svg>
               Continue with Google
             </button>
-            <button className="btn-secondary gap-2">
+            <button className="btn-secondary min-h-11 gap-2">
               <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
               </svg>
               Continue with Apple
             </button>
-          </div>
-        )}
-
-        {mode !== 'forgot' && !signupRequested && (
-          <div className="my-5 flex items-center gap-3">
-            <div className="h-px flex-1 bg-surface-border" />
-            <span className="text-xs text-ink-subtle">or</span>
-            <div className="h-px flex-1 bg-surface-border" />
-          </div>
-        )}
-
-        {mode === 'signup' && signupRequested ? (
-          <div className="mt-2 flex flex-col gap-4">
-            <p aria-live="polite" className="sr-only">
-              {signupResend.cooldownAnnouncement}
-            </p>
-            <button
-              type="button"
-              onClick={() => signupResend.resend(signupEmail)}
-              disabled={signupResend.isSending || signupResend.cooldownSeconds > 0}
-              className="btn-secondary w-full py-3"
-            >
-              {signupResend.cooldownSeconds > 0
-                ? `Resend link (${signupResend.cooldownSeconds}s)`
-                : 'Resend confirmation link'}
-            </button>
-            <div className="flex flex-col items-center gap-2 text-sm">
-              <button
-                type="button"
-                onClick={() => setSignupRequested(false)}
-                className="font-medium text-brand hover:underline"
-              >
-                Use a different email
-              </button>
-              <span className="text-ink-muted">
-                Already confirmed?{' '}
-                <button
-                  type="button"
-                  onClick={() => switchMode('login')}
-                  className="font-medium text-brand hover:underline"
-                >
-                  Sign in
-                </button>{' '}
-                or{' '}
-                <button
-                  type="button"
-                  onClick={() => switchMode('forgot')}
-                  className="font-medium text-brand hover:underline"
-                >
-                  reset your password
-                </button>
-              </span>
+            <div className="my-2 flex items-center gap-3">
+              <div className="h-px flex-1 bg-surface-border" />
+              <span className="text-xs text-ink-subtle">or</span>
+              <div className="h-px flex-1 bg-surface-border" />
             </div>
           </div>
-        ) : mode === 'forgot' && resetRequested ? (
-          <div className="mt-6 flex flex-col gap-4 text-center">
-            <p className="text-sm text-ink-muted">
-              If an account exists for <span className="font-medium text-ink">{email}</span>, a
-              reset link is on its way. The link expires soon, so use it right away.
-            </p>
-            <button
-              type="button"
-              onClick={() => setResetRequested(false)}
-              className="text-sm font-medium text-brand hover:underline"
-            >
-              Try a different email
-            </button>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        )}
+
+        {step === 'email' && (
+          <form onSubmit={handleEmailSubmit} className="flex flex-col gap-4">
             <div>
               <label htmlFor="auth-email" className="mb-1 block text-sm font-medium text-ink-muted">
                 Email
@@ -327,166 +299,211 @@ export default function AuthForm({
                 id="auth-email"
                 type="email"
                 required
-                className="input-field"
+                autoComplete="username"
+                inputMode="email"
+                autoCapitalize="none"
+                spellCheck={false}
+                className="input-field min-h-11"
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
             </div>
 
-            {mode !== 'forgot' && (
-              <div>
-                <label
-                  htmlFor="auth-password"
-                  className="mb-1 block text-sm font-medium text-ink-muted"
-                >
-                  Password
-                </label>
-                <div className="relative">
-                  <input
-                    id="auth-password"
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    className="input-field pr-10"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    aria-describedby={
-                      mode === 'signup' ? 'signup-password-requirements' : undefined
-                    }
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    className="absolute inset-y-0 right-0 flex items-center px-3 text-ink-subtle hover:text-ink"
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    tabIndex={-1}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-                {mode === 'signup' && (
-                  <div id="signup-password-requirements">
-                    <PasswordRequirements password={password} />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {mode === 'login' && (
-              <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={remember}
-                    onChange={(e) => setRemember(e.target.checked)}
-                    className="h-4 w-4 rounded border-surface-border text-brand focus:ring-brand"
-                  />
-                  Remember me
-                </label>
-                <button
-                  type="button"
-                  onClick={() => switchMode('forgot')}
-                  className="text-sm font-medium text-brand hover:underline"
-                >
-                  Forgot password?
-                </button>
-              </div>
-            )}
-
-            {mode === 'signup' && (
-              <p className="text-center text-xs text-ink-muted">
-                {legalCopyApproved ? 'By creating an account, you agree to our' : 'Review our'}{' '}
-                <Link href="/terms" className="font-medium text-brand hover:underline">
-                  Terms of Service
-                </Link>{' '}
-                and{' '}
-                <Link href="/privacy" className="font-medium text-brand hover:underline">
-                  Privacy Policy
-                </Link>
-                {legalCopyApproved ? '.' : ' (draft, pending approval).'}
-              </p>
-            )}
-
-            {formError && (
-              <p className="text-center text-sm text-red-600" role="alert">
-                {formError}
-              </p>
-            )}
+            <div aria-live="polite" className="empty:hidden text-center text-sm">
+              {formError && (
+                <p role="alert" className="text-red-600">
+                  {formError}
+                </p>
+              )}
+            </div>
 
             <button
               type="submit"
-              className="btn-primary mt-2 w-full py-3"
+              className="btn-primary min-h-11 w-full py-3"
               disabled={isSubmitting}
               aria-busy={isSubmitting}
             >
-              {submitLabel}
+              {isSubmitting ? 'Please wait...' : 'Continue'}
             </button>
 
-            {mode === 'login' && loginFailed && (
-              <div role="alert" className="text-center text-sm text-ink-muted">
-                <p aria-live="polite" className="sr-only">
-                  {loginResend.cooldownAnnouncement}
-                </p>
-                <p>We could not sign you in with that email and password.</p>
-                <p className="mt-1">
-                  <button
-                    type="button"
-                    onClick={() => switchMode('forgot')}
-                    className="font-medium text-brand hover:underline"
-                  >
-                    Reset your password
-                  </button>
-                  {' or '}
-                  <button
-                    type="button"
-                    onClick={() => loginResend.resend(email)}
-                    disabled={loginResend.isSending || loginResend.cooldownSeconds > 0}
-                    className="font-medium text-brand hover:underline disabled:no-underline disabled:text-ink-subtle"
-                  >
-                    {loginResend.cooldownSeconds > 0
-                      ? `resend your confirmation link (${loginResend.cooldownSeconds}s)`
-                      : 'resend your confirmation link'}
-                  </button>
-                  .
-                </p>
-              </div>
-            )}
+            <p className="text-center text-xs text-ink-muted">
+              {legalCopyApproved ? 'By continuing, you agree to our' : 'Review our'}{' '}
+              <Link href="/terms" className="font-medium text-brand hover:underline">
+                Terms of Service
+              </Link>{' '}
+              and{' '}
+              <Link href="/privacy" className="font-medium text-brand hover:underline">
+                Privacy Policy
+              </Link>
+              {legalCopyApproved ? '.' : ' (draft, pending approval).'}
+            </p>
           </form>
         )}
 
-        <p className="mt-6 text-center text-sm text-ink-muted">
-          {mode === 'login' && (
-            <>
-              Don&apos;t have an account?{' '}
-              <button
-                onClick={() => switchMode('signup')}
-                className="font-medium text-brand hover:underline"
+        {step === 'password' && (
+          <form onSubmit={handlePasswordSubmit} className="mt-6 flex flex-col gap-4">
+            <input
+              type="email"
+              autoComplete="username"
+              value={email}
+              readOnly
+              tabIndex={-1}
+              aria-hidden="true"
+              className="sr-only"
+            />
+            <div>
+              <label
+                htmlFor="auth-password"
+                className="mb-1 block text-sm font-medium text-ink-muted"
               >
-                Sign up
-              </button>
-            </>
-          )}
-          {mode === 'signup' && !signupRequested && (
-            <>
-              Already have an account?{' '}
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  id="auth-password"
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  autoComplete="current-password"
+                  className="input-field min-h-11 pr-12"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-ink-subtle hover:text-ink"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-x-4">
+              <label className="flex min-h-11 items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={remember}
+                  onChange={(e) => setRemember(e.target.checked)}
+                  className="h-5 w-5 rounded border-surface-border text-brand focus:ring-brand"
+                />
+                Remember me
+              </label>
               <button
-                onClick={() => switchMode('login')}
-                className="font-medium text-brand hover:underline"
+                type="button"
+                onClick={() => goToStep('forgot')}
+                className={`${linkButton} text-sm`}
               >
-                Sign in
+                Forgot password?
               </button>
-            </>
-          )}
-          {mode === 'forgot' && (
+            </div>
+
             <button
-              onClick={() => switchMode('login')}
-              className="font-medium text-brand hover:underline"
+              type="submit"
+              className="btn-primary min-h-11 w-full py-3"
+              disabled={isSubmitting}
+              aria-busy={isSubmitting}
             >
+              {isSubmitting ? 'Please wait...' : 'Sign in'}
+            </button>
+
+            <div aria-live="polite" className="empty:hidden text-center text-sm text-ink-muted">
+              {loginFailed && (
+                <p role="alert">We could not sign you in with that email and password.</p>
+              )}
+            </div>
+
+            <div className="flex justify-center text-sm">
+              <button type="button" onClick={() => goToStep('email')} className={linkButton}>
+                Change email
+              </button>
+            </div>
+          </form>
+        )}
+
+        {step === 'code' && (
+          <div className="mt-6">
+            <AuthCodeStep
+              key={codeRun}
+              email={email}
+              resendAfterSeconds={codeTiming.resendAfterSeconds}
+              expiresInSeconds={codeTiming.expiresInSeconds}
+              onVerified={handleVerified}
+              onChangeEmail={() => goToStep('email')}
+            />
+          </div>
+        )}
+
+        {step === 'setPassword' && signupProof && (
+          <div className="mt-6">
+            <AuthSetPasswordStep
+              email={email}
+              signupProof={signupProof}
+              onSignedIn={handleSignedIn}
+              onFailed={handleSetPasswordFailed}
+            />
+          </div>
+        )}
+
+        {step === 'forgot' &&
+          (resetRequested ? (
+            <div className="mt-6 flex flex-col gap-4 text-center">
+              <p className="text-sm text-ink-muted">
+                If an account exists for <span className="font-medium text-ink">{email}</span>, a
+                reset link is on its way. The link expires soon, so use it right away.
+              </p>
+              <button
+                type="button"
+                onClick={() => setResetRequested(false)}
+                className={`${linkButton} justify-center text-sm`}
+              >
+                Try a different email
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleForgotSubmit} className="mt-6 flex flex-col gap-4">
+              <div>
+                <label
+                  htmlFor="auth-reset-email"
+                  className="mb-1 block text-sm font-medium text-ink-muted"
+                >
+                  Email
+                </label>
+                <input
+                  id="auth-reset-email"
+                  type="email"
+                  required
+                  autoComplete="username"
+                  inputMode="email"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  className="input-field min-h-11"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+              <button
+                type="submit"
+                className="btn-primary min-h-11 w-full py-3"
+                disabled={isSubmitting}
+                aria-busy={isSubmitting}
+              >
+                {isSubmitting ? 'Please wait...' : 'Send Reset Link'}
+              </button>
+            </form>
+          ))}
+
+        {step === 'forgot' && (
+          <p className="mt-6 text-center text-sm text-ink-muted">
+            <button type="button" onClick={() => goToStep('email')} className={linkButton}>
               Back to sign in
             </button>
-          )}
-        </p>
+          </p>
+        )}
       </div>
     </div>
   );

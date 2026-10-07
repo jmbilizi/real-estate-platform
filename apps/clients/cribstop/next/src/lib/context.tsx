@@ -5,11 +5,12 @@ import { Provider } from 'react-redux';
 import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
 import {
   AuthError,
+  completeSignup,
+  CompleteSignupOutcome,
   getProfile,
   getSession,
   loginAccount,
   logoutAccount,
-  signupAccount,
 } from '@/lib/api/account';
 import { store } from '@/lib/store/store';
 import {
@@ -72,7 +73,11 @@ interface AppContextValue {
   sessionLoading: boolean;
   savedIds: Set<string>;
   login: (email: string, password: string, remember?: boolean) => Promise<void>;
-  signup: (email: string, password: string) => Promise<void>;
+  completeSignup: (
+    email: string,
+    signupProof: string,
+    password: string,
+  ) => Promise<CompleteSignupOutcome>;
   logout: () => void;
   toggleSave: (id: string) => void;
   isSaved: (id: string) => boolean;
@@ -210,9 +215,8 @@ export function useApp(): AppContextValue {
 
   const savedIds = useMemo(() => new Set(savedIdList), [savedIdList]);
 
-  const loginUser = useCallback(
-    async (email: string, password: string, remember?: boolean) => {
-      const res = await loginAccount({ email, password, remember });
+  const startSession = useCallback(
+    async (email: string, res: { email?: string; accessToken?: string }) => {
       dispatch(login({ email: res.email ?? email, accessToken: res.accessToken }));
 
       // Check if profile is complete — show onboarding if not
@@ -243,11 +247,23 @@ export function useApp(): AppContextValue {
     [dispatch],
   );
 
-  // Registering does not sign the consumer in: the account is unconfirmed until they follow the
-  // email link (#147/#148), so this makes only the HTTP call and leaves auth state untouched.
-  const signupUser = useCallback(async (email: string, password: string) => {
-    await signupAccount({ email, password });
-  }, []);
+  const loginUser = useCallback(
+    async (email: string, password: string, remember?: boolean) => {
+      const res = await loginAccount({ email, password, remember });
+      await startSession(email, res);
+    },
+    [startSession],
+  );
+
+  // Completing sign-up signs the consumer in: the email code already proved the address.
+  const completeSignupUser = useCallback(
+    async (email: string, signupProof: string, password: string) => {
+      const outcome = await completeSignup({ email, signupProof, password });
+      if (outcome.ok) await startSession(email, outcome.session);
+      return outcome;
+    },
+    [startSession],
+  );
 
   const logoutUser = useCallback(async () => {
     await logoutAccount().catch(() => {}); // clear server cookies
@@ -361,7 +377,7 @@ export function useApp(): AppContextValue {
     sessionLoading: !sessionChecked,
     savedIds,
     login: loginUser,
-    signup: signupUser,
+    completeSignup: completeSignupUser,
     logout: logoutUser,
     toggleSave: toggleSavedListing,
     isSaved,

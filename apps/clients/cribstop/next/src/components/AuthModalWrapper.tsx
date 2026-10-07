@@ -5,9 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import AuthForm from './AuthForm';
 import Modal from './Modal';
 
-type Mode = 'login' | 'signup';
-
-export default function AuthModalWrapper({ initialMode }: { initialMode: Mode }) {
+export default function AuthModalWrapper() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -38,12 +36,6 @@ export default function AuthModalWrapper({ initialMode }: { initialMode: Mode })
     navigate(buildUrl(params));
   };
 
-  const handleSwitchMode = (mode: 'login' | 'signup') => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set('modal', mode);
-    router.replace(buildUrl(params), { scroll: false });
-  };
-
   return (
     <Modal
       open={open}
@@ -55,12 +47,7 @@ export default function AuthModalWrapper({ initialMode }: { initialMode: Mode })
       noPadding
     >
       <div className="min-h-full flex items-center justify-center sm:block">
-        <AuthForm
-          variant="modal"
-          initialMode={initialMode}
-          onSuccess={handleSuccess}
-          onSwitchMode={handleSwitchMode}
-        />
+        <AuthForm variant="modal" onSuccess={handleSuccess} />
       </div>
     </Modal>
   );

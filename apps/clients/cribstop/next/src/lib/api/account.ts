@@ -4,11 +4,6 @@ interface LoginRequest {
   remember?: boolean;
 }
 
-interface SignupRequest {
-  email: string;
-  password: string;
-}
-
 export interface LoginResponse {
   email: string;
   accessToken?: string;
@@ -97,10 +92,6 @@ export async function loginAccount(payload: LoginRequest): Promise<LoginResponse
   }
 
   return body as LoginResponse;
-}
-
-export async function signupAccount(payload: SignupRequest): Promise<void> {
-  await post('/api/account/signup', payload);
 }
 
 export async function logoutAccount(): Promise<void> {
@@ -276,4 +267,133 @@ export async function getConfirmationExpiryHours(): Promise<number> {
     inFlightConfirmationExpiry = null;
   });
   return inFlightConfirmationExpiry;
+}
+
+/** A 503 from the email-code endpoints: codes cannot be sent or checked right now. */
+export class CodesUnavailableError extends Error {
+  constructor() {
+    super('Email codes are unavailable');
+    this.name = 'CodesUnavailableError';
+  }
+}
+
+export interface CodeTiming {
+  resendAfterSeconds: number;
+  expiresInSeconds: number;
+}
+
+export interface IdentifyResult extends CodeTiming {
+  next: 'password' | 'code';
+}
+
+async function postJson(path: string, payload: unknown): Promise<Response> {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (res.status === 429) throw new RateLimitError(retryAfterSeconds(res));
+  if (res.status === 503) throw new CodesUnavailableError();
+  return res;
+}
+
+function toTiming(body: Record<string, unknown> | null): CodeTiming {
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0);
+  return {
+    resendAfterSeconds: num(body?.resendAfterSeconds),
+    expiresInSeconds: num(body?.expiresInSeconds),
+  };
+}
+
+/**
+ * Email-first entry call. The answer reveals only the next step, never the account itself.
+ * Throws RateLimitError on 429 and CodesUnavailableError on 503.
+ */
+export async function identifyEmail(email: string): Promise<IdentifyResult> {
+  const res = await postJson('/api/account/identify', { email });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new Error('Unable to continue');
+  return { next: body?.next === 'password' ? 'password' : 'code', ...toTiming(body) };
+}
+
+export type VerifyCodeResult =
+  | { ok: true; signupProof: string }
+  | { ok: false; attemptsLeft: number | null };
+
+/** Checks the 6-digit code. A wrong code returns ok: false. A lock throws RateLimitError. */
+export async function verifySignupCode(email: string, code: string): Promise<VerifyCodeResult> {
+  const res = await postJson('/api/account/signup/verify', { email, code });
+  const body = await res.json().catch(() => null);
+  if (res.ok && typeof body?.signupProof === 'string') {
+    return { ok: true, signupProof: body.signupProof };
+  }
+  if (res.status === 400) {
+    const left = body?.attemptsLeft;
+    return { ok: false, attemptsLeft: typeof left === 'number' ? left : null };
+  }
+  throw new Error('Unable to check the code');
+}
+
+export async function resendSignupCode(email: string): Promise<CodeTiming> {
+  const res = await postJson('/api/account/signup/resend', { email });
+  if (!res.ok) throw new Error('Unable to send a new code');
+  return toTiming(await res.json().catch(() => null));
+}
+
+export async function changeSignupEmail(oldEmail: string, newEmail: string): Promise<CodeTiming> {
+  const res = await postJson('/api/account/signup/change-email', { oldEmail, newEmail });
+  if (!res.ok) throw new Error('Unable to change the email');
+  return toTiming(await res.json().catch(() => null));
+}
+
+export type PasswordRejectionCode = 'too_short' | 'too_long' | 'breached';
+
+export type CompleteSignupOutcome =
+  | { ok: true; session: LoginResponse }
+  | { ok: false; reason: 'invalid_proof' }
+  | { ok: false; reason: 'email_unavailable' }
+  | { ok: false; reason: 'password_rejected'; errors: PasswordRejectionCode[] };
+
+/** Sets the password and signs in. The proof is single use and stays in the caller's memory. */
+export async function completeSignup(payload: {
+  email: string;
+  signupProof: string;
+  password: string;
+}): Promise<CompleteSignupOutcome> {
+  const res = await postJson('/api/account/signup/complete', payload);
+  const body = await res.json().catch(() => null);
+  if (res.ok) return { ok: true, session: body as LoginResponse };
+  if (res.status === 401) return { ok: false, reason: 'invalid_proof' };
+  if (res.status === 409) return { ok: false, reason: 'email_unavailable' };
+  if (res.status === 400 && body?.error === 'password_rejected') {
+    const known: PasswordRejectionCode[] = ['too_short', 'too_long', 'breached'];
+    const errors = Array.isArray(body.errors)
+      ? (body.errors as unknown[]).filter((e): e is PasswordRejectionCode =>
+          known.includes(e as PasswordRejectionCode),
+        )
+      : [];
+    return { ok: false, reason: 'password_rejected', errors };
+  }
+  throw new Error('Unable to create the account');
+}
+
+export const DEFAULT_PASSWORD_MIN_LENGTH = 15;
+let cachedPasswordMinLength: number | null = null;
+
+/** Minimum password length from /api/account/password-policy. Falls back to the default. */
+export async function getPasswordMinLength(): Promise<number> {
+  if (cachedPasswordMinLength !== null) return cachedPasswordMinLength;
+  try {
+    const res = await fetch('/api/account/password-policy');
+    if (res.ok) {
+      const body = await res.json().catch(() => null);
+      if (typeof body?.minLength === 'number' && body.minLength > 0) {
+        cachedPasswordMinLength = body.minLength;
+        return body.minLength;
+      }
+    }
+  } catch {
+    // Network failure. Use the default below.
+  }
+  return DEFAULT_PASSWORD_MIN_LENGTH;
 }
