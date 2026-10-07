@@ -1988,6 +1988,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                   "enum": [
                     "unassigned",
                     "returned",
+                    "closed",
                   ],
                   "nullable": true,
                   "type": "string",

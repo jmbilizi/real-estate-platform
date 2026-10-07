@@ -80,6 +80,18 @@ describe('changeLeadStatus', () => {
     expect(sql).toEqual(['BEGIN', expect.stringMatching(/^SELECT status/), 'ROLLBACK']);
   });
 
+  it.each([['lost'], ['closed']] as const)(
+    'ends the open assignment when the lead is %s',
+    async (to) => {
+      const { pool, params, sql } = fakePool(to === 'lost' ? 'assigned' : 'contacted');
+
+      await changeLeadStatus(pool, { ...INPUT, to });
+
+      expect(sql[2]).toMatch(/UPDATE lead_assignments SET ended_at/);
+      expect(params[2]).toEqual([INPUT.leadId, 'closed']);
+    },
+  );
+
   it('does not end an assignment when the status is not `verified`', async () => {
     const { pool, sql } = fakePool('verified');
 

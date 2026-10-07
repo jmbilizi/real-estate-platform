@@ -1,6 +1,6 @@
 exports.shorthands = undefined;
 
-const END_REASONS = ['unassigned', 'returned'];
+const END_REASONS = ['unassigned', 'returned', 'closed'];
 const list = (values) => values.map((v) => `'${v}'`).join(', ');
 
 /**

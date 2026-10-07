@@ -72,14 +72,20 @@ export async function changeLeadStatus(
       }
     }
 
-    // Any return to `verified` ends the open assignment, so the history never keeps a stale one.
+    // A return to `verified` or a final status ends the open assignment, so none outlives its lead.
     let agentProfileId = input.agentProfileId ?? null;
-    if (input.to === 'verified') {
+    const endReason =
+      input.to === 'verified'
+        ? (input.assignmentEndReason ?? 'returned')
+        : input.to === 'lost' || input.to === 'closed'
+          ? 'closed'
+          : null;
+    if (endReason !== null) {
       const ended = await client.query<{ agent_profile_id: string }>(
         `UPDATE lead_assignments SET ended_at = now(), end_reason = $2
           WHERE lead_id = $1 AND ended_at IS NULL
           RETURNING agent_profile_id`,
-        [input.leadId, input.assignmentEndReason ?? 'returned'],
+        [input.leadId, endReason],
       );
       agentProfileId = ended.rows[0]?.agent_profile_id ?? agentProfileId;
     }
