@@ -62,6 +62,9 @@ internal sealed class AccountRecoveryRateLimiter(
     /// <summary>The counter scope of the email-change steps (#660).</summary>
     internal const string EmailChangeScope = "emailchange";
 
+    /// <summary>The counter scope of the "This wasn't me" link (#662).</summary>
+    internal const string SecureAccountScope = "secure";
+
     /// <summary>The share of the counter cache dropped when it is full.</summary>
     private const double CompactionShare = 0.1;
 

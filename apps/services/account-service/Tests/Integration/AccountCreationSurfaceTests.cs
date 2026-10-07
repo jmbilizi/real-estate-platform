@@ -67,6 +67,7 @@ namespace AccountService.Tests.Integration
             ["DELETE /account/waitlist/{interest}"] = false,
             ["POST /account/email/change/start"] = false,
             ["POST /account/email/change/verify"] = false,
+            ["POST /account/secure"] = false,
             ["POST /account/webhooks/postmark"] = false,
             ["POST /internal/account/introspect"] = false,
             ["GET /openapi/{documentName}.json"] = false,

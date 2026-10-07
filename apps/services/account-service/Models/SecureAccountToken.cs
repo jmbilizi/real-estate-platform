@@ -30,4 +30,7 @@ internal sealed class SecureAccountToken
 
     /// <summary>Gets or sets when the token was used, or <see langword="null"/> while it is unused.</summary>
     public DateTime? ConsumedAt { get; set; }
+
+    /// <summary>Gets or sets the concurrency token. Code raises it when it uses the token.</summary>
+    public int Version { get; set; }
 }

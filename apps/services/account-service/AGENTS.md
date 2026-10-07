@@ -38,7 +38,7 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   `Helpers/SecurityNoticeService.cs` mails the address the account had BEFORE the change. It skips a
   suppressed address, never blocks the action, and logs the kind only. Each notice carries a
   single-use `SecureAccountTokens` token (hash stored, 7 day life) for the "This wasn't me" link.
-  #662 builds the page and consumes the token. `POST /manage/info` with a new password runs
+  `POST /account/secure` (#662) consumes the token. `POST /manage/info` with a new password runs
   `PasswordChangeService` through `PasswordChangeFilter`, not the framework branch: the current
   password is required and counts toward the lock, and the new stamp ends every other session.
 - **What this service adds on top of Identity's handlers, and where.** Identity ships these
@@ -255,8 +255,21 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   `400 invalid_code` with no `attemptsLeft`.
 - The new stamp ends every other session. The route signs the caller in again, as the same kind of
   session (cookie keeps its persistence, bearer gets a new token body).
-- `EmailChangeRestores` holds the old address for 7 days. #662 reads it and owns the restore. #661
-  owns the notice to the old address. This ticket sends none.
+- `EmailChangeRestores` holds the old address for 7 days. `POST /account/secure` reads it. #661 owns the
+  notice to the old address.
+
+## Secure account (#662)
+
+- `POST /account/secure`, `Routes/SecureAccount.cs`, `Helpers/SecureAccountService.cs`. Anonymous. It
+  shares `AccountRecoveryThrottleFilter` (scope `secure`). A bad, used or expired token gives one
+  `400 invalid_token`. A GET does nothing.
+- One transaction: use the token (`Version` concurrency token, one winner), restore the old email,
+  null `PasswordHash`, drop pending email changes, rotate the stamp, write a `SecureAccount` event.
+- Restore only for an `EmailChanged` token, an unused `EmailChangeRestores` row of that change that
+  has not passed `RestoreUntil`, and an address no other account holds. The check runs inside the
+  transaction. A lost race on the user-name index retries the call without the restore.
+- No password hash means the owner must set a password by emailed code (#658). The call does not
+  send that code. The web page opens the reset flow.
 - Purge: `PendingRegistrationPurgeService` also runs `EmailChangeService.PurgeAsync`.
 - Data keyed on email (checked for #660): waitlist interests key on `UserId` (FK, composite key).
   API keys and onboarding intents key on `UserId`. Property-service leads (`listing_inquiries`) key

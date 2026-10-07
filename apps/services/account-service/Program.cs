@@ -199,6 +199,7 @@ internal static class Program
         builder.Services.AddScoped<IdentifyService>();
         builder.Services.AddScoped<PasswordResetService>();
         builder.Services.AddScoped<EmailChangeService>();
+        builder.Services.AddScoped<SecureAccountService>();
         builder.Services.AddScoped<SecurityNoticeService>();
         builder.Services.AddScoped<PasswordChangeService>();
         builder.Services.AddHostedService<PendingRegistrationPurgeService>();
@@ -301,6 +302,9 @@ internal static class Program
 
         // Email change: POST /account/email/change/{start,verify}. See Routes/EmailChange.cs.
         app.MapEmailChangeRoutes();
+
+        // "This wasn't me" link: POST /account/secure. See Routes/SecureAccount.cs.
+        app.MapSecureAccountRoutes();
 
         // Email-first routing: POST /account/identify. See Routes/Identify.cs.
         app.MapIdentifyRoutes();

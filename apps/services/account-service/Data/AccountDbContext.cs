@@ -322,6 +322,7 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
             entity.Property(t => t.UserId).IsRequired();
             entity.Property(t => t.Kind).IsRequired();
             entity.Property(t => t.TokenHash).IsRequired();
+            entity.Property(t => t.Version).IsConcurrencyToken();
             entity.HasIndex(t => t.TokenHash).IsUnique();
             entity.HasIndex(t => t.ExpiresAt);
             entity.HasIndex(t => t.UserId);

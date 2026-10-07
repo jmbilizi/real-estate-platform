@@ -18,6 +18,9 @@ internal sealed class AccountSecurityEvent
 
     public const string PasswordChanged = "PasswordChanged";
 
+    /// <summary>The <see cref="Kind"/> value for a use of the "This wasn't me" link (#662).</summary>
+    public const string SecureAccount = "SecureAccount";
+
     /// <summary>Gets or sets the record id.</summary>
     public Guid Id { get; set; }
 
