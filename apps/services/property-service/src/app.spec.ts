@@ -6,8 +6,10 @@ import {
   NOT_FOUND_BODY,
   PAGE_SIZE_DEFAULT,
   SORT_VALUES,
+  UNAUTHENTICATED_BODY,
 } from '@cribstop/property-contracts';
 import { createApp } from './app';
+import type { IntrospectionOutcome } from './inquiries/account-introspection';
 import type { ReadPool } from './listings/repository';
 import { cardDbRowFixture } from './listings/test-fixtures';
 
@@ -662,11 +664,20 @@ describe('GET /listings/:id', () => {
 
 describe('POST /listings/:id/inquiries (#131)', () => {
   const ALWAYS_ALLOW = { consume: () => ({ allowed: true, retryAfterSeconds: 0 }) };
-  const ALWAYS_SIGNED_OUT = { resolveAccountId: () => Promise.resolve(null) };
+  const ACCOUNT_ID = '018f2f2a-account-0000000000dd';
+  const introspecting = (outcome: IntrospectionOutcome) => ({
+    resolveAccountId: () => Promise.resolve(null),
+    introspect: () => Promise.resolve(outcome),
+  });
+  const SIGNED_IN = introspecting({
+    kind: 'account',
+    accountId: ACCOUNT_ID,
+    roles: [],
+    email: 'account@example.com',
+    emailConfirmed: true,
+  });
   const VALID_BODY = {
     kind: 'tour_request' as const,
-    name: 'Jane Consumer',
-    email: 'jane@example.com',
     consentToContact: true,
     consentTextVersion: 'v1' as const,
   };
@@ -690,7 +701,7 @@ describe('POST /listings/:id/inquiries (#131)', () => {
 
   it('creates an inquiry and returns 201 with the created id', async () => {
     const pool = createInquiryPool({ insertedId: '018f2f2a-6d1b-7c3d-8b2e-0000000000cc' });
-    const app = createApp({ pool, introspection: ALWAYS_SIGNED_OUT, rateLimiter: ALWAYS_ALLOW });
+    const app = createApp({ pool, introspection: SIGNED_IN, rateLimiter: ALWAYS_ALLOW });
 
     const response = await request(app).post(`/listings/${KNOWN_ID}/inquiries`).send(VALID_BODY);
 
@@ -698,36 +709,101 @@ describe('POST /listings/:id/inquiries (#131)', () => {
     expect(response.body).toEqual({ id: '018f2f2a-6d1b-7c3d-8b2e-0000000000cc' });
   });
 
-  it('works signed-out: an unauthenticated request is never rejected for being unauthenticated', async () => {
+  const insertParams = (pool: FakePool) =>
+    pool.params[pool.statements.findIndex((sql) => sql.includes('INSERT INTO listing_inquiries'))];
+
+  it('answers 401 with no listing data when the request has no valid account (#690)', async () => {
     const pool = createInquiryPool();
-    const app = createApp({ pool, introspection: ALWAYS_SIGNED_OUT, rateLimiter: ALWAYS_ALLOW });
+    const app = createApp({
+      pool,
+      introspection: introspecting({ kind: 'signed-out' }),
+      rateLimiter: ALWAYS_ALLOW,
+    });
+
+    const response = await request(app).post(`/listings/${KNOWN_ID}/inquiries`).send(VALID_BODY);
+
+    expect(response.status).toBe(401);
+    expect(response.body).toEqual(UNAUTHENTICATED_BODY);
+    expect(pool.statements).toEqual([]);
+  });
+
+  it('answers 401 for an unknown listing too, so a signed-out caller learns nothing (#690)', async () => {
+    const app = createApp({
+      pool: createInquiryPool({ publishable: false }),
+      introspection: introspecting({ kind: 'signed-out' }),
+      rateLimiter: ALWAYS_ALLOW,
+    });
+
+    const response = await request(app).post(`/listings/${KNOWN_ID}/inquiries`).send(VALID_BODY);
+
+    expect(response.status).toBe(401);
+  });
+
+  it('answers 503, not 401, when account-service gives no answer (#690)', async () => {
+    const pool = createInquiryPool();
+    const app = createApp({
+      pool,
+      introspection: introspecting({ kind: 'unavailable' }),
+      rateLimiter: ALWAYS_ALLOW,
+    });
+
+    const response = await request(app).post(`/listings/${KNOWN_ID}/inquiries`).send(VALID_BODY);
+
+    expect(response.status).toBe(503);
+    expect(pool.statements).toEqual([]);
+  });
+
+  it('rejects an unconfirmed account with a clear 403 and writes nothing (#690)', async () => {
+    const pool = createInquiryPool();
+    const app = createApp({
+      pool,
+      introspection: introspecting({
+        kind: 'account',
+        accountId: ACCOUNT_ID,
+        roles: [],
+        email: 'account@example.com',
+        emailConfirmed: false,
+      }),
+      rateLimiter: ALWAYS_ALLOW,
+    });
+
+    const response = await request(app).post(`/listings/${KNOWN_ID}/inquiries`).send(VALID_BODY);
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe('forbidden');
+    expect(response.body.error.message).toMatch(/confirm your email/i);
+    expect(pool.statements).toEqual([]);
+  });
+
+  it('records the account id and the account email for a confirmed account (#690)', async () => {
+    const pool = createInquiryPool();
+    const app = createApp({ pool, introspection: SIGNED_IN, rateLimiter: ALWAYS_ALLOW });
 
     const response = await request(app).post(`/listings/${KNOWN_ID}/inquiries`).send(VALID_BODY);
 
     expect(response.status).toBe(201);
+    expect(insertParams(pool)).toEqual(
+      expect.arrayContaining([ACCOUNT_ID, 'account@example.com', true]),
+    );
   });
 
-  it('works signed-in: resolves an account id and still records the submitted contact details', async () => {
+  it('ignores a name and an email in the body (#690)', async () => {
     const pool = createInquiryPool();
-    const app = createApp({
-      pool,
-      introspection: { resolveAccountId: () => Promise.resolve('018f2f2a-account-0000000000dd') },
-      rateLimiter: ALWAYS_ALLOW,
-    });
+    const app = createApp({ pool, introspection: SIGNED_IN, rateLimiter: ALWAYS_ALLOW });
 
     const response = await request(app)
       .post(`/listings/${KNOWN_ID}/inquiries`)
-      .set('Cookie', '.AspNetCore.Identity.Application=abc')
-      .send(VALID_BODY);
+      .send({ ...VALID_BODY, name: 'Typed Name', email: 'other@example.com' });
 
     expect(response.status).toBe(201);
-    const insert = pool.statements.find((sql) => sql.includes('INSERT INTO listing_inquiries'));
-    expect(insert).toBeDefined();
+    expect(insertParams(pool)).toContain('account@example.com');
+    expect(insertParams(pool)).not.toContain('other@example.com');
+    expect(insertParams(pool)).not.toContain('Typed Name');
   });
 
   it('records v1 when an older client sends consent with no consentTextVersion (#631)', async () => {
     const pool = createInquiryPool();
-    const app = createApp({ pool, introspection: ALWAYS_SIGNED_OUT, rateLimiter: ALWAYS_ALLOW });
+    const app = createApp({ pool, introspection: SIGNED_IN, rateLimiter: ALWAYS_ALLOW });
     const { consentTextVersion: _omitted, ...withoutVersion } = VALID_BODY;
 
     const response = await request(app)
@@ -735,78 +811,13 @@ describe('POST /listings/:id/inquiries (#131)', () => {
       .send(withoutVersion);
 
     expect(response.status).toBe(201);
-    const insertAt = pool.statements.findIndex((sql) =>
-      sql.includes('INSERT INTO listing_inquiries'),
-    );
-    expect(pool.params[insertAt]).toContain('v1');
-    expect(pool.params[insertAt]).toContainEqual(['email']);
-  });
-
-  it('stores the account email, not the body email, for a confirmed account (#631)', async () => {
-    const pool = createInquiryPool();
-    const app = createApp({
-      pool,
-      introspection: {
-        resolveAccountId: () => Promise.resolve('018f2f2a-account-0000000000dd'),
-        introspect: () =>
-          Promise.resolve({
-            kind: 'account' as const,
-            accountId: '018f2f2a-account-0000000000dd',
-            roles: [],
-            email: 'account@example.com',
-            emailConfirmed: true,
-          }),
-      },
-      rateLimiter: ALWAYS_ALLOW,
-    });
-
-    const response = await request(app)
-      .post(`/listings/${KNOWN_ID}/inquiries`)
-      .set('Cookie', '.AspNetCore.Identity.Application=abc')
-      .send({ ...VALID_BODY, email: 'other@example.com' });
-
-    expect(response.status).toBe(201);
-    const params =
-      pool.params[
-        pool.statements.findIndex((sql) => sql.includes('INSERT INTO listing_inquiries'))
-      ];
-    expect(params).toContain('account@example.com');
-    expect(params).not.toContain('other@example.com');
-  });
-
-  it('keeps the body email for an unconfirmed account (#631)', async () => {
-    const pool = createInquiryPool();
-    const app = createApp({
-      pool,
-      introspection: {
-        resolveAccountId: () => Promise.resolve('018f2f2a-account-0000000000dd'),
-        introspect: () =>
-          Promise.resolve({
-            kind: 'account' as const,
-            accountId: '018f2f2a-account-0000000000dd',
-            roles: [],
-            email: 'account@example.com',
-            emailConfirmed: false,
-          }),
-      },
-      rateLimiter: ALWAYS_ALLOW,
-    });
-
-    await request(app)
-      .post(`/listings/${KNOWN_ID}/inquiries`)
-      .set('Cookie', '.AspNetCore.Identity.Application=abc')
-      .send({ ...VALID_BODY, email: 'typed@example.com' });
-
-    const params =
-      pool.params[
-        pool.statements.findIndex((sql) => sql.includes('INSERT INTO listing_inquiries'))
-      ];
-    expect(params).toContain('typed@example.com');
+    expect(insertParams(pool)).toContain('v1');
+    expect(insertParams(pool)).toContainEqual(['email']);
   });
 
   it('rejects an unknown listing with the identical NOT_FOUND_BODY', async () => {
     const pool = createInquiryPool({ publishable: false });
-    const app = createApp({ pool, introspection: ALWAYS_SIGNED_OUT, rateLimiter: ALWAYS_ALLOW });
+    const app = createApp({ pool, introspection: SIGNED_IN, rateLimiter: ALWAYS_ALLOW });
 
     const response = await request(app).post(`/listings/${KNOWN_ID}/inquiries`).send(VALID_BODY);
 
@@ -816,7 +827,7 @@ describe('POST /listings/:id/inquiries (#131)', () => {
 
   it('rejects a malformed id with 404, matching the detail endpoint', async () => {
     const pool = createInquiryPool();
-    const app = createApp({ pool, introspection: ALWAYS_SIGNED_OUT, rateLimiter: ALWAYS_ALLOW });
+    const app = createApp({ pool, introspection: SIGNED_IN, rateLimiter: ALWAYS_ALLOW });
 
     const response = await request(app).post('/listings/not-a-uuid/inquiries').send(VALID_BODY);
 
@@ -826,7 +837,7 @@ describe('POST /listings/:id/inquiries (#131)', () => {
 
   it('rejects an unknown field, the Fair Housing guardrail (#34)', async () => {
     const pool = createInquiryPool();
-    const app = createApp({ pool, introspection: ALWAYS_SIGNED_OUT, rateLimiter: ALWAYS_ALLOW });
+    const app = createApp({ pool, introspection: SIGNED_IN, rateLimiter: ALWAYS_ALLOW });
 
     const response = await request(app)
       .post(`/listings/${KNOWN_ID}/inquiries`)
@@ -838,7 +849,7 @@ describe('POST /listings/:id/inquiries (#131)', () => {
 
   it('rejects a "message" kind with no message', async () => {
     const pool = createInquiryPool();
-    const app = createApp({ pool, introspection: ALWAYS_SIGNED_OUT, rateLimiter: ALWAYS_ALLOW });
+    const app = createApp({ pool, introspection: SIGNED_IN, rateLimiter: ALWAYS_ALLOW });
 
     const response = await request(app)
       .post(`/listings/${KNOWN_ID}/inquiries`)
@@ -851,7 +862,7 @@ describe('POST /listings/:id/inquiries (#131)', () => {
     const pool = createInquiryPool();
     const app = createApp({
       pool,
-      introspection: ALWAYS_SIGNED_OUT,
+      introspection: SIGNED_IN,
       rateLimiter: { consume: () => ({ allowed: false, retryAfterSeconds: 42 }) },
     });
 
@@ -866,7 +877,7 @@ describe('POST /listings/:id/inquiries (#131)', () => {
     const pool = createInquiryPool();
     const app = createApp({
       pool,
-      introspection: ALWAYS_SIGNED_OUT,
+      introspection: SIGNED_IN,
       rateLimiter: { consume: () => ({ allowed: false, retryAfterSeconds: 1 }) },
     });
 
@@ -877,7 +888,7 @@ describe('POST /listings/:id/inquiries (#131)', () => {
 
   it('consent adds a recipient and never replaces the listing-agent route: the listing is still checked and the inquiry still created', async () => {
     const pool = createInquiryPool();
-    const app = createApp({ pool, introspection: ALWAYS_SIGNED_OUT, rateLimiter: ALWAYS_ALLOW });
+    const app = createApp({ pool, introspection: SIGNED_IN, rateLimiter: ALWAYS_ALLOW });
 
     const response = await request(app)
       .post(`/listings/${KNOWN_ID}/inquiries`)
@@ -902,7 +913,7 @@ describe('POST /listings/:id/inquiries (#131)', () => {
     let calls = 0;
     const app = createApp({
       pool,
-      introspection: ALWAYS_SIGNED_OUT,
+      introspection: SIGNED_IN,
       rateLimiter: {
         consume: (_ip: string, listingId: string) => {
           calls += 1;
@@ -922,7 +933,7 @@ describe('POST /listings/:id/inquiries (#131)', () => {
 
   it('reports a malformed JSON body as 400, not 500', async () => {
     const pool = createInquiryPool();
-    const app = createApp({ pool, introspection: ALWAYS_SIGNED_OUT, rateLimiter: ALWAYS_ALLOW });
+    const app = createApp({ pool, introspection: SIGNED_IN, rateLimiter: ALWAYS_ALLOW });
 
     const response = await request(app)
       .post(`/listings/${KNOWN_ID}/inquiries`)
@@ -934,7 +945,7 @@ describe('POST /listings/:id/inquiries (#131)', () => {
 
   it('reports an oversized body as a 4xx, not 500', async () => {
     const pool = createInquiryPool();
-    const app = createApp({ pool, introspection: ALWAYS_SIGNED_OUT, rateLimiter: ALWAYS_ALLOW });
+    const app = createApp({ pool, introspection: SIGNED_IN, rateLimiter: ALWAYS_ALLOW });
 
     const response = await request(app)
       .post(`/listings/${KNOWN_ID}/inquiries`)

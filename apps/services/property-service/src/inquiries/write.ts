@@ -14,14 +14,12 @@ export interface Queryable {
 export interface CreateListingInquiryInput {
   listingId: string;
   kind: InquiryKind;
-  name: string;
-  email: string;
+  /** The confirmed account email. Written to the `email` column, and to `name` until #691 drops it. */
+  contactEmail: string;
   phone: string | null;
   message: string | null;
-  /** Resolved via account-service's credential introspection (#86). `null` when signed out. */
-  accountId: string | null;
-  /** Server-decided. True only for an account with a confirmed email. Never from the body. */
-  verifiedAccount: boolean;
+  /** Resolved via account-service's credential introspection (#86). */
+  accountId: string;
   consentToContact: boolean;
   /** Ignored unless `consentToContact`. Defaults to the current version. */
   consentTextVersion?: ConsentTextVersion;
@@ -70,12 +68,12 @@ export async function createListingInquiry(
     [
       input.listingId,
       input.kind,
-      input.name,
-      input.email,
+      input.contactEmail,
+      input.contactEmail,
       input.phone,
       input.message,
       input.accountId,
-      input.verifiedAccount,
+      true,
       input.consentToContact,
       consentDisclosureText,
       version,

@@ -16,16 +16,16 @@ function fakeClient(returnId = '018f2f2a-6d1b-7c3d-8b2e-0000000000aa'): {
 const BASE_INPUT = {
   listingId: '018f2f2a-6d1b-7c3d-8b2e-000000000001',
   kind: 'tour_request' as const,
-  name: 'Jane Consumer',
-  email: 'jane@example.com',
+  contactEmail: 'jane@example.com',
   phone: null,
   message: null,
-  accountId: null,
-  verifiedAccount: false,
+  accountId: '018f2f2a-6d1b-7c3d-8b2e-0000000000dd',
   consentToContact: false,
 };
 
 // Bound parameter positions in `createListingInquiry`.
+const P_NAME = 2;
+const P_EMAIL = 3;
 const P_VERIFIED = 7;
 const P_TEXT = 9;
 const P_VERSION = 10;
@@ -95,11 +95,13 @@ describe('createListingInquiry', () => {
     expect(params[P_CHANNELS]).toBeNull();
   });
 
-  it('writes the verified flag the server decided', async () => {
+  it('writes the account email to email and name, and verified_account true (#690)', async () => {
     const { client, calls } = fakeClient();
 
-    await createListingInquiry(client, { ...BASE_INPUT, verifiedAccount: true });
+    await createListingInquiry(client, BASE_INPUT);
 
+    expect(calls[0]?.params[P_NAME]).toBe('jane@example.com');
+    expect(calls[0]?.params[P_EMAIL]).toBe('jane@example.com');
     expect(calls[0]?.params[P_VERIFIED]).toBe(true);
   });
 

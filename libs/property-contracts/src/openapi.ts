@@ -546,11 +546,12 @@ export function toOpenApiDocument() {
           operationId: 'createListingInquiry',
           summary: 'Submit a message or tour request against a listing',
           description:
-            'Works signed-out and signed-in. An unauthenticated request is never rejected for ' +
-            'being unauthenticated. `name` and `email` are always required. ' +
+            'Needs a signed-in account with a confirmed email. A request with no valid ' +
+            'credential gets 401 and no listing data. An account with an unconfirmed email ' +
+            'gets 403. The server takes the contact email from the account and ignores ' +
+            '`name` and `email` if the body sends them. ' +
             '`consentTextVersion` is required for new clients. With `consentToContact` true and ' +
-            'no version, the server records `v1`. `phone` is optional. A signed-in account with a confirmed email always uses the ' +
-            'account email. The server ignores the `email` in the body for it. ' +
+            'no version, the server records `v1`. `phone` is optional. ' +
             '`consentToContact` records that the consumer agreed to be contacted. ' +
             'The server stores the consent text for `consentTextVersion`, the `consentChannels` ' +
             'and the time. The record starts in the `new` lead status. No public read endpoint ' +
@@ -579,12 +580,19 @@ export function toOpenApiDocument() {
             },
             '400': {
               description:
-                'Unknown field, missing `name`/`email`, or `message` missing/empty when `kind` ' +
-                'is `message`.',
+                'Unknown field, or `message` missing/empty when `kind` is `message`.',
               content: {
                 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
               },
             },
+            '401': unauthenticatedResponse,
+            '403': {
+              description: 'The account email is not confirmed (`forbidden`).',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '503': unavailableResponse,
             '404': {
               description: 'No such listing, or not publishable through `listing_search_v`.',
               content: {
