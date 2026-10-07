@@ -39,7 +39,12 @@ internal static class SignUp
         return app;
     }
 
-    private static IResult ToResult(HttpContext http, SignUpResult result)
+    /// <summary>Maps a step result to the response. The password-reset steps share it (#658).</summary>
+    /// <param name="http">The request context.</param>
+    /// <param name="result">The step result.</param>
+    /// <param name="proofField">The name of the proof field in a verified response.</param>
+    /// <returns>The response.</returns>
+    internal static IResult ToResult(HttpContext http, SignUpResult result, string proofField = "signupProof")
     {
         switch (result.Status)
         {
@@ -50,10 +55,10 @@ internal static class SignUp
                     expiresInSeconds = result.ExpiresInSeconds,
                 });
             case SignUpStatus.Verified:
-                return Results.Ok(new
+                return Results.Ok(new Dictionary<string, object?>
                 {
-                    signupProof = result.Proof,
-                    expiresInSeconds = result.ExpiresInSeconds,
+                    [proofField] = result.Proof,
+                    ["expiresInSeconds"] = result.ExpiresInSeconds,
                 });
             case SignUpStatus.WrongCode:
                 return Results.Json(

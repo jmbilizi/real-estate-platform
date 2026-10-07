@@ -148,7 +148,10 @@ internal sealed class AppUserManager(
         return result;
     }
 
-    private async Task ClearLockoutAsync(ApplicationUser user)
+    /// <summary>Releases the lockout of an account after a successful password reset.</summary>
+    /// <param name="user">The account that was reset.</param>
+    /// <returns>A task that completes when the lockout is released.</returns>
+    internal async Task ClearLockoutAsync(ApplicationUser user)
     {
         // Both results are checked rather than discarded. Neither call is expected to fail here,
         // but a validator-driven UpdateUserAsync failure would leave the account still locked after

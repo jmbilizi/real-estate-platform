@@ -36,28 +36,34 @@ internal sealed partial class PendingRegistrationPurgeService(
         }
     }
 
-    [LoggerMessage(1385, LogLevel.Information, "Pending sign-up purge removed {Count} rows.", EventName = "PendingRegistrationPurged")]
-    private static partial void LogPurged(ILogger logger, int count);
+    [LoggerMessage(1385, LogLevel.Information, "Purge of {Kind} removed {Count} rows.", EventName = "PendingRegistrationPurged")]
+    private static partial void LogPurged(ILogger logger, string kind, int count);
 
-    [LoggerMessage(1386, LogLevel.Error, "Pending sign-up purge failed: {Error}", EventName = "PendingRegistrationPurgeFailed")]
-    private static partial void LogFailed(ILogger logger, string error);
+    [LoggerMessage(1386, LogLevel.Error, "Purge of {Kind} failed: {Error}", EventName = "PendingRegistrationPurgeFailed")]
+    private static partial void LogFailed(ILogger logger, string kind, string error);
 
     private async Task RunOnceAsync(CancellationToken stoppingToken)
+    {
+        // Each purge has its own scope and its own failure, so one cannot stop the other.
+        await this.PurgeAsync("pending sign-ups", sp => sp.GetRequiredService<SignUpService>().PurgeAsync(stoppingToken)).ConfigureAwait(false);
+        await this.PurgeAsync("password reset proofs", sp => sp.GetRequiredService<PasswordResetService>().PurgeAsync(stoppingToken)).ConfigureAwait(false);
+    }
+
+    private async Task PurgeAsync(string kind, Func<IServiceProvider, Task<int>> purge)
     {
         try
         {
             using var scope = scopes.CreateScope();
-            var service = scope.ServiceProvider.GetRequiredService<SignUpService>();
-            var count = await service.PurgeAsync(stoppingToken).ConfigureAwait(false);
+            var count = await purge(scope.ServiceProvider).ConfigureAwait(false);
             if (count > 0)
             {
-                LogPurged(logger, count);
+                LogPurged(logger, kind, count);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // A failed pass must not stop the loop. The next tick retries.
-            LogFailed(logger, ex.GetType().Name);
+            LogFailed(logger, kind, ex.GetType().Name);
         }
     }
 }
