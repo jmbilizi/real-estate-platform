@@ -300,9 +300,9 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
               We have your request
             </h2>
             <p className="mt-2 text-sm leading-snug text-ink-muted">
-              {BRAND.siteName}, brokered by {BRAND.brokerage}, has your{' '}
-              {kind === 'tour_request' ? 'tour request' : 'message'}. We review it and match you
-              with an agent.
+              {BRAND.siteName}, brokered by <span className="font-semibold">{BRAND.brokerage}</span>
+              , has your {kind === 'tour_request' ? 'tour request' : 'message'}. We review it and
+              match you with an agent when one is available.
               {kind === 'tour_request' && ' A tour request is not a booking.'}
             </p>
             <button
@@ -382,7 +382,7 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
             )}
 
             {!(phase.status === 'failed' && !phase.retryable) && (
-              <p className="text-xs leading-snug text-ink-muted" data-testid="consent-disclosure">
+              <p className="text-sm leading-snug text-ink" data-testid="consent-disclosure">
                 By selecting “{phase.status === 'failed' ? 'Try Again' : copy.submit}”:{' '}
                 {CONSENT_TEXTS[CURRENT_CONSENT_TEXT_VERSION]}
               </p>
