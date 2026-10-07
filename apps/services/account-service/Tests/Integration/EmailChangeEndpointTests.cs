@@ -292,6 +292,7 @@ namespace AccountService.Tests.Integration
             user.UserName.Should().Be(Old);
             (await Events(factory)).Should().BeEmpty();
             (await Restores(factory)).Should().BeEmpty();
+            (await Pending(factory)).Should().BeEmpty();
             (await client.GetAsync("/account/profile")).StatusCode.Should().Be(HttpStatusCode.OK);
         }
 

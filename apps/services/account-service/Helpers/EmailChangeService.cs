@@ -123,8 +123,8 @@ internal sealed partial class EmailChangeService(
             EmailCodeIssueStatus.Issued => this.Accepted(EmailChangeStatus.Accepted),
             EmailCodeIssueStatus.Unavailable => new EmailChangeResult(EmailChangeStatus.Unavailable),
 
-            // A cooldown or a lock answers as an accepted start, as for a taken address.
-            _ => this.Accepted(EmailChangeStatus.Accepted) with { ResendAfterSeconds = issued.RetryAfterSeconds },
+            // A cooldown or a lock answers exactly as for a taken address: the same fixed numbers.
+            _ => this.Accepted(EmailChangeStatus.Accepted),
         };
     }
 
@@ -353,6 +353,7 @@ internal sealed partial class EmailChangeService(
         string? clientAddress,
         CancellationToken cancellationToken)
     {
+        var pendingId = pending.Id;
         var entered = pending.NewEmail;
         var oldEmail = user.Email!;
         var now = this.Now();
@@ -364,14 +365,14 @@ internal sealed partial class EmailChangeService(
         {
             try
             {
-                // The change is spent whatever happens next. A second call finds nothing.
+                // Leaves with the swap. A failed swap rolls this back, and DiscardPendingAsync deletes the row.
                 db.PendingEmailChanges.Remove(pending);
 
                 var normalizedEmail = users.NormalizeEmail(entered);
                 var normalizedName = users.NormalizeName(entered);
                 if (await this.IsTakenAsync(user.Id, normalizedEmail, normalizedName, cancellationToken).ConfigureAwait(false))
                 {
-                    return await this.AbandonAsync(transaction).ConfigureAwait(false);
+                    return await this.AbandonAsync(transaction, pendingId).ConfigureAwait(false);
                 }
 
                 var steps = new[]
@@ -383,7 +384,7 @@ internal sealed partial class EmailChangeService(
                 if (refused is not null)
                 {
                     LogRefused(logger, string.Join(", ", refused.Errors.Select(e => e.Code)));
-                    return await this.AbandonAsync(transaction).ConfigureAwait(false);
+                    return await this.AbandonAsync(transaction, pendingId).ConfigureAwait(false);
                 }
 
                 // The address is proved by the code. Saves with the new stamp, which ends every session.
@@ -393,7 +394,7 @@ internal sealed partial class EmailChangeService(
                 if (!stamped.Succeeded)
                 {
                     LogRefused(logger, string.Join(", ", stamped.Errors.Select(e => e.Code)));
-                    return await this.AbandonAsync(transaction).ConfigureAwait(false);
+                    return await this.AbandonAsync(transaction, pendingId).ConfigureAwait(false);
                 }
 
                 var key = codeOptions.Value.HmacKey;
@@ -425,7 +426,7 @@ internal sealed partial class EmailChangeService(
             catch (DbUpdateException)
             {
                 // The unique index on the user name caught a race, or another call spent the change.
-                return await this.AbandonAsync(transaction).ConfigureAwait(false);
+                return await this.AbandonAsync(transaction, pendingId).ConfigureAwait(false);
             }
             catch
             {
@@ -438,9 +439,28 @@ internal sealed partial class EmailChangeService(
         return new EmailChangeResult(EmailChangeStatus.Changed, User: user);
     }
 
-    private async Task<EmailChangeResult> AbandonAsync(Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? transaction)
+    private async Task<EmailChangeResult> AbandonAsync(
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? transaction,
+        Guid pendingId)
     {
         await this.RollbackAsync(transaction).ConfigureAwait(false);
+
+        // The code is spent, so the change cannot finish. The user starts again.
+        try
+        {
+            var row = await db.PendingEmailChanges.FirstOrDefaultAsync(p => p.Id == pendingId, CancellationToken.None).ConfigureAwait(false);
+            if (row is not null)
+            {
+                db.PendingEmailChanges.Remove(row);
+                await db.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+        catch (DbUpdateException)
+        {
+            // Another call removed it first, or the purge did.
+            db.ChangeTracker.Clear();
+        }
+
         return new EmailChangeResult(EmailChangeStatus.Failed);
     }
 
