@@ -28,6 +28,7 @@ const lead = (over: Partial<AgentLeadDetail> = {}): AgentLeadDetail => ({
     id: '22222222-2222-4222-8222-222222222222',
     title: '12 Oak St',
     address: '12 Oak St, Rockville, MD',
+    state: 'MD',
     listPrice: 450000,
     status: 'Active',
   },

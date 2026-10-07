@@ -24,6 +24,7 @@ const item = (n: number, over: Partial<AgentLeadListItem> = {}): AgentLeadListIt
     id: '22222222-2222-4222-8222-222222222222',
     title: `Home ${n}`,
     address: `${n} Oak St, Rockville, MD`,
+    state: 'MD',
     listPrice: 450000,
     status: 'Active',
   },
