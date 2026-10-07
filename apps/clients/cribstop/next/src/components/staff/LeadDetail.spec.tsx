@@ -49,10 +49,12 @@ const lead = (over: Partial<StaffLeadDetail> = {}): StaffLeadDetail => ({
       actorAccountId: null,
       actorRole: 'System',
       note: null,
+      agentProfileId: null,
       createdAt: '2026-10-06T12:00:00.000Z',
     },
   ],
   notes: [],
+  assignments: [],
   ...over,
 });
 

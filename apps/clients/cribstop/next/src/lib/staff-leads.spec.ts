@@ -1,6 +1,7 @@
 import {
   actionsFor,
   formatAge,
+  formatDuration,
   hasLeadDeskRole,
   LEAD_DESK_ROLES,
   noteRequired,
@@ -47,6 +48,14 @@ it('formats ages', () => {
   expect(formatAge('2026-10-07T11:30:00Z', now)).toBe('30m');
   expect(formatAge('2026-10-07T07:00:00Z', now)).toBe('5h');
   expect(formatAge('2026-10-04T12:00:00Z', now)).toBe('3d');
+});
+
+it('formats durations as the two largest units', () => {
+  expect(formatDuration(45)).toBe('45s');
+  expect(formatDuration(1200)).toBe('20m');
+  expect(formatDuration(12_000)).toBe('3h 20m');
+  expect(formatDuration(7200)).toBe('2h');
+  expect(formatDuration(2 * 86_400 + 4 * 3600)).toBe('2d 4h');
 });
 
 it('strips a phone number for tel links', () => {
