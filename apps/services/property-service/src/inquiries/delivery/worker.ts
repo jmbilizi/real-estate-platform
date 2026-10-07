@@ -9,16 +9,14 @@ import {
   recordDelivered,
   recordFailed,
   recordRetry,
-  summarizeOverdue,
 } from './store';
 
 /**
- * The inquiry delivery worker (#134). It runs inside the property-service process. The consumer
+ * The inquiry delivery worker (#134). Dormant (#629): nothing starts it. The consumer
  * submit never waits on it. Each tick: mark sample inquiries, claim due rows, send each through the
- * channel, record the outcome, then report any inquiry that stays undelivered past the age limit.
+ * channel, record the outcome.
  *
- * Log lines are one JSON object each. `event: "inquiry_delivery_overdue"` is the alertable
- * condition. No consumer data appears in a log line.
+ * Log lines are one JSON object each. No consumer data appears in a log line.
  */
 
 export type DeliveryLogger = (
@@ -56,12 +54,11 @@ export interface TickResult {
   delivered: number;
   retried: number;
   failed: number;
-  overdue: number;
 }
 
 export async function runDeliveryTick(deps: DeliveryWorkerDeps): Promise<TickResult> {
   const { db, channel, resolution, tuning, log } = deps;
-  const result: TickResult = { sampled: 0, delivered: 0, retried: 0, failed: 0, overdue: 0 };
+  const result: TickResult = { sampled: 0, delivered: 0, retried: 0, failed: 0 };
 
   result.sampled = await markSampleInquiries(db);
   if (result.sampled > 0) {
@@ -140,18 +137,6 @@ export async function runDeliveryTick(deps: DeliveryWorkerDeps): Promise<TickRes
     }
   }
 
-  const overdue = await summarizeOverdue(db, tuning.overdueAgeMs);
-  result.overdue = overdue.count;
-  if (overdue.count > 0) {
-    log('error', {
-      event: 'inquiry_delivery_overdue',
-      count: overdue.count,
-      oldestAgeSeconds: overdue.oldestAgeSeconds,
-      overdueAgeMs: tuning.overdueAgeMs,
-      sendingEnabled: resolution.send !== null,
-      ...(resolution.disabledReason === null ? {} : { disabledReason: resolution.disabledReason }),
-    });
-  }
   return result;
 }
 

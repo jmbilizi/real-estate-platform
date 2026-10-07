@@ -110,28 +110,3 @@ export async function recordFailed(db: Queryable, id: string, error: string): Pr
     [id, error],
   );
 }
-
-export interface OverdueSummary {
-  count: number;
-  oldestAgeSeconds: number;
-}
-
-/** Inquiries not `delivered` and older than the age limit. `sample` rows are not undelivered. */
-export async function summarizeOverdue(
-  db: Queryable,
-  overdueAgeMs: number,
-): Promise<OverdueSummary> {
-  const result = await db.query<{ count: string; oldest_age_seconds: string | null }>(
-    `SELECT count(*)::text AS count,
-            floor(extract(epoch FROM now() - min(created_at)))::text AS oldest_age_seconds
-       FROM listing_inquiries
-      WHERE delivery_state IN ('pending', 'sending', 'failed')
-        AND created_at < now() - ($1::int * interval '1 millisecond')`,
-    [overdueAgeMs],
-  );
-  const row = result.rows[0];
-  return {
-    count: Number(row?.count ?? 0),
-    oldestAgeSeconds: Number(row?.oldest_age_seconds ?? 0),
-  };
-}
