@@ -80,9 +80,13 @@ describe('listingInquiryRequestSchema', () => {
       expect(listingInquiryRequestSchema.safeParse(withoutName).success).toBe(false);
     });
 
-    it('rejects a missing email', () => {
+    it('rejects a missing email, even with a phone', () => {
       const { email: _email, ...withoutEmail } = BASE;
-      expect(listingInquiryRequestSchema.safeParse(withoutEmail).success).toBe(false);
+      const result = listingInquiryRequestSchema.safeParse({
+        ...withoutEmail,
+        phone: '202-555-0100',
+      });
+      expect(result.success).toBe(false);
     });
 
     it('rejects a malformed email', () => {
@@ -94,6 +98,50 @@ describe('listingInquiryRequestSchema', () => {
   it('rejects an unknown kind', () => {
     const result = listingInquiryRequestSchema.safeParse({ ...BASE, kind: 'callback' });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('consent evidence fields', () => {
+  const CONSENTED = { ...BASE, phone: '202-555-0100', consentToContact: true };
+
+  it('accepts a version and channels with consent', () => {
+    const result = listingInquiryRequestSchema.safeParse({
+      ...CONSENTED,
+      consentTextVersion: 'v1',
+      consentChannels: ['email', 'phone_text'],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a version without consent', () => {
+    const result = listingInquiryRequestSchema.safeParse({ ...BASE, consentTextVersion: 'v1' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an unknown version, an unknown channel and an empty channel list', () => {
+    for (const extra of [
+      { consentTextVersion: 'v99' },
+      { consentChannels: ['carrier_pigeon'] },
+      { consentChannels: [] },
+      { consentChannels: ['email', 'email'] },
+    ]) {
+      expect(listingInquiryRequestSchema.safeParse({ ...CONSENTED, ...extra }).success).toBe(false);
+    }
+  });
+
+  it('rejects a phone channel with no phone', () => {
+    const result = listingInquiryRequestSchema.safeParse({
+      ...BASE,
+      consentToContact: true,
+      consentChannels: ['phone_call'],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects the server-owned verifiedAccount field', () => {
+    expect(listingInquiryRequestSchema.safeParse({ ...BASE, verifiedAccount: true }).success).toBe(
+      false,
+    );
   });
 });
 

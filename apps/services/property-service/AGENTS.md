@@ -486,7 +486,8 @@ a size variant. A record must be identifiably a photo by `MediaType` or URL exte
   `source: 'internal'`.
 - Every listing response must carry the full broker/office attribution block (PRD §6.2, NAR 7.58).
 - Saved/favorited listings are #23. Property relationship claims (PRD §3.2) are not modelled yet.
-- Listing inquiries are #131 (`src/inquiries/`). Never add a read endpoint for them.
+- Listing inquiries are #131 (`src/inquiries/`). No public read endpoint. Staff read endpoints sit
+  behind roles.
 
 ## The Property API (`src/listings/`)
 
@@ -650,8 +651,9 @@ withhold. While no writer could set it, every assertion about it was vacuously t
 
 ## Listing inquiries (`src/inquiries/`)
 
-`POST /listings/{id}/inquiries` (#131) — a consumer's message or tour request. **There is no read
-endpoint and there must never be one**: an inquiry is never returned by any listings response.
+`POST /listings/{id}/inquiries` (#131) — a consumer's message or tour request. **There is no public
+read endpoint**: an inquiry is never returned by any listings response. Staff read endpoints sit
+behind roles (#632).
 
 - `write.ts` is the only module that writes `listing_inquiries`, mirroring `src/db/write.ts`'s rule
   for `listings`.
@@ -664,6 +666,14 @@ endpoint and there must never be one**: an inquiry is never returned by any list
   (`@cribstop/property-contracts`), never a caller-supplied string, so the persisted record and the
   checkbox copy `#132` renders cannot drift. Consent adds a recipient; routing to the listing agent
   is unconditional and is not built in this ticket.
+- **Lead model** (#627): a row is a buyer request with a lifecycle. `lead-status.ts` is the only
+  transitions table. `changeLeadStatus` (`lead-status-write.ts`) moves a status and appends the
+  `lead_status_events` row in one transaction. Staff and agent routes call it. The events table is
+  append-only by trigger. A delete is allowed only when the lead is already gone (cascade). `email`
+  is required and `phone` is optional. `verified_account` is set only by `requester.ts`, never by
+  the body. Consent evidence: the server holds the text per version (`CONSENT_TEXTS`) and stores
+  text, version, channels and time. Retention target: 4 years, no purge job yet. The `delivery_*`
+  columns stay until the outbox ticket replaces them.
 - **Account resolution** (`account-introspection.ts`) calls account-service's #86 endpoint and
   **fails open to signed-out** on any network error or timeout — an infra hiccup must not block this
   ticket's primary conversion path. Worst case: a signed-in consumer's inquiry is recorded with no

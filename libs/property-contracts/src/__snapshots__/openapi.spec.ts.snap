@@ -915,6 +915,27 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
       "ListingInquiryRequest": {
         "additionalProperties": false,
         "properties": {
+          "consentChannels": {
+            "description": "The channels the consumer agreed to. Defaults to the channels that match the supplied \`email\` and \`phone\`. \`phone_call\` and \`phone_text\` need a \`phone\`. Only valid when \`consentToContact\` is true.",
+            "items": {
+              "enum": [
+                "email",
+                "phone_call",
+                "phone_text",
+              ],
+              "type": "string",
+            },
+            "maxItems": 3,
+            "minItems": 1,
+            "type": "array",
+          },
+          "consentTextVersion": {
+            "description": "The consent text version the consumer saw. Optional for now. The server stores the text for that version, never a client string. Defaults to the current version.",
+            "enum": [
+              "v1",
+            ],
+            "type": "string",
+          },
           "consentToContact": {
             "default": false,
             "description": "Whether the consumer asked to also be connected with a Real Broker, LLC agent. Defaults to false and is never inferred. Routing to the listing agent happens regardless of this value — consent adds a recipient, it never replaces one.",
@@ -2954,7 +2975,7 @@ A signed-in request also gets \`isSaved\` and \`isFavorited\` on each result, re
     },
     "/listings/{id}/inquiries": {
       "post": {
-        "description": "Works signed-out and signed-in — an unauthenticated request is never rejected for being unauthenticated. \`name\` and \`email\` are always required, regardless of sign-in state. \`consentToContact\` records only that the consumer asked to also be connected with a Real Broker, LLC agent; the listing agent is always notified regardless of this value. No delivery happens yet — the created record starts in the \`pending\` delivery state. Never returned by any read endpoint.
+        "description": "Works signed-out and signed-in. An unauthenticated request is never rejected for being unauthenticated. \`name\` and \`email\` are always required. \`phone\` is optional. \`consentToContact\` records that the consumer agreed to be contacted. The server stores the consent text for \`consentTextVersion\`, the \`consentChannels\` and the time. The record starts in the \`new\` lead status. No public read endpoint returns it.
 
 Rate-limited per client and per listing; a request over either limit gets 429 with a \`Retry-After\` header.",
         "operationId": "createListingInquiry",

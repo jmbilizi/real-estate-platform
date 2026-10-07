@@ -460,12 +460,12 @@ export function toOpenApiDocument() {
           operationId: 'createListingInquiry',
           summary: 'Submit a message or tour request against a listing',
           description:
-            'Works signed-out and signed-in — an unauthenticated request is never rejected for ' +
-            'being unauthenticated. `name` and `email` are always required, regardless of sign-' +
-            'in state. `consentToContact` records only that the consumer asked to also be ' +
-            'connected with a Real Broker, LLC agent; the listing agent is always notified ' +
-            'regardless of this value. No delivery happens yet — the created record starts in ' +
-            'the `pending` delivery state. Never returned by any read endpoint.\n\n' +
+            'Works signed-out and signed-in. An unauthenticated request is never rejected for ' +
+            'being unauthenticated. `name` and `email` are always required. `phone` is optional. ' +
+            '`consentToContact` records that the consumer agreed to be contacted. ' +
+            'The server stores the consent text for `consentTextVersion`, the `consentChannels` ' +
+            'and the time. The record starts in the `new` lead status. No public read endpoint ' +
+            'returns it.\n\n' +
             'Rate-limited per client and per listing; a request over either limit gets 429 with ' +
             'a `Retry-After` header.',
           parameters: [
