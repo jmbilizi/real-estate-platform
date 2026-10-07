@@ -313,7 +313,7 @@ namespace AccountService.Tests.Integration
                 EmailConfirmed = confirmed,
                 DeletedAt = deleted ? DateTime.UtcNow : null,
             };
-            var result = await manager.CreateAsync(user, "Test1234!@#");
+            var result = await manager.CreateAsync(user, "Test1234!@#Abcd");
             result.Succeeded.Should().BeTrue();
         }
     }
