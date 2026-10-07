@@ -438,33 +438,73 @@ namespace AccountService.Tests.Helpers
         }
 
         [Fact]
-        public void TryDecoyWrongTry_CountsDownLikeTheEngine_ThenLocks()
+        public void TryDecoyWrongTry_CountsDownLikeTheEngine_ThenLocksForTheFullDuration()
         {
-            var limiter = this.Create(_ => { });
+            var clock = new FakeClock();
+            var limiter = this.Create(_ => { }, clock);
             var lockFor = TimeSpan.FromMinutes(15);
+            var window = TimeSpan.FromDays(1);
             var left = new List<int>();
 
             for (var i = 0; i < 4; i++)
             {
-                limiter.TryDecoyWrongTry("n@example.com", 5, lockFor, out var attemptsLeft, out _).Should().BeTrue();
+                limiter.TryDecoyWrongTry("n@example.com", 5, lockFor, window, out var attemptsLeft, out _).Should().BeTrue();
                 left.Add(attemptsLeft);
+                clock.Advance(TimeSpan.FromMinutes(1));
             }
 
             left.Should().Equal(4, 3, 2, 1);
-            limiter.IsDecoyLocked("n@example.com", 5, out _).Should().BeFalse();
-            limiter.TryDecoyWrongTry("N@example.com", 5, lockFor, out _, out var retry).Should().BeFalse();
-            retry.Should().BeGreaterThan(TimeSpan.FromMinutes(14)).And.BeLessThanOrEqualTo(lockFor);
-            limiter.IsDecoyLocked("n@EXAMPLE.com", 5, out var lockedFor).Should().BeTrue();
-            lockedFor.Should().BePositive();
-            limiter.IsDecoyLocked("other@example.com", 5, out _).Should().BeFalse();
+            limiter.IsDecoyLocked("n@example.com", out _).Should().BeFalse();
+
+            // The fifth try locks for the full duration, however long the first four took.
+            limiter.TryDecoyWrongTry("N@example.com", 5, lockFor, window, out _, out var retry).Should().BeFalse();
+            retry.Should().Be(lockFor);
+            limiter.IsDecoyLocked("n@EXAMPLE.com", out var lockedFor).Should().BeTrue();
+            lockedFor.Should().Be(lockFor);
+            limiter.IsDecoyLocked("other@example.com", out _).Should().BeFalse();
+
+            // A try during the lock changes nothing.
+            clock.Advance(TimeSpan.FromMinutes(5));
+            limiter.TryDecoyWrongTry("n@example.com", 5, lockFor, window, out _, out var later).Should().BeFalse();
+            later.Should().Be(TimeSpan.FromMinutes(10));
         }
 
-        private AccountRecoveryRateLimiter Create(Action<AccountRecoveryOptions> configure)
+        [Fact]
+        public void TryDecoyWrongTry_AfterTheLockEnds_TheCountStartsAgain()
+        {
+            var clock = new FakeClock();
+            var limiter = this.Create(_ => { }, clock);
+            var lockFor = TimeSpan.FromMinutes(15);
+            var window = TimeSpan.FromDays(1);
+            for (var i = 0; i < 5; i++)
+            {
+                limiter.TryDecoyWrongTry("n@example.com", 5, lockFor, window, out _, out _);
+            }
+
+            clock.Advance(lockFor + TimeSpan.FromSeconds(1));
+
+            limiter.IsDecoyLocked("n@example.com", out _).Should().BeFalse();
+            limiter.TryDecoyWrongTry("n@example.com", 5, lockFor, window, out var attemptsLeft, out _).Should().BeTrue();
+            attemptsLeft.Should().Be(4);
+        }
+
+        [Fact]
+        public void TrySignUpInvalid_CountsAgainstTheClientAddressOnly()
+        {
+            var limiter = this.Create(options => options.SignUpSendsPerAddress = 2);
+
+            limiter.TrySignUpInvalid("10.0.0.1", out _).Should().BeTrue();
+            limiter.TrySignUpInvalid("10.0.0.1", out _).Should().BeTrue();
+            limiter.TrySignUpInvalid("10.0.0.1", out _).Should().BeFalse();
+            limiter.TrySignUpInvalid("10.0.0.2", out _).Should().BeTrue();
+        }
+
+        private AccountRecoveryRateLimiter Create(Action<AccountRecoveryOptions> configure, TimeProvider? clock = null)
         {
             var options = new AccountRecoveryOptions();
             configure(options);
 
-            var limiter = new AccountRecoveryRateLimiter(Options.Create(options), TimeProvider.System);
+            var limiter = new AccountRecoveryRateLimiter(Options.Create(options), clock ?? TimeProvider.System);
             this.limiters.Add(limiter);
             return limiter;
         }

@@ -458,11 +458,12 @@ namespace AccountService.Tests.Integration
             using var factory = NoCooldown();
             using var client = factory.CreateClient();
             await Post(client, StartPath, new { email = "typo@example.com" });
-            var proof = await VerifyAsync(client, "typo@example.com", CodeOf(factory));
+            var oldCode = CodeOf(factory);
 
             await Post(client, ChangePath, new { oldEmail = "typo@example.com", newEmail = "right@example.com" });
 
-            (await Consume(factory, "typo@example.com", proof)).Should().BeFalse();
+            // The old address can neither verify nor hold a proof.
+            (await VerifyAsync(client, "typo@example.com", oldCode)).Should().BeNull();
             (await Rows(factory)).Should().ContainSingle().Which.Email.Should().Be("RIGHT@EXAMPLE.COM");
             using var scope = factory.Services.CreateScope();
             (await scope.ServiceProvider.GetRequiredService<AccountDbContext>().Users.CountAsync()).Should().Be(0);
@@ -543,6 +544,98 @@ namespace AccountService.Tests.Integration
             await Post(client, ChangePath, new { oldEmail = "other@example.com", newEmail = "taken@example.com" });
 
             (await Accounts(factory)).Should().Equal(before);
+        }
+
+        [Fact]
+        public async Task Start_ForAVerifiedAddress_LeavesTheLiveProofAlone_AndAnswersTheSame()
+        {
+            using var factory = NoCooldown();
+            using var client = factory.CreateClient();
+            const string email = "a@example.com";
+            var first = await Post(client, StartPath, new { email });
+            var proof = await VerifyAsync(client, email, CodeOf(factory));
+            var codesBefore = Codes(factory).Count;
+
+            // Anyone who knows the address can call start. It must not void the owner's proof.
+            var again = await Post(client, StartPath, new { email });
+
+            again.StatusCode.Should().Be(HttpStatusCode.OK);
+            (await again.Content.ReadAsStringAsync()).Should().Be(await first.Content.ReadAsStringAsync());
+            Codes(factory).Should().HaveCount(codesBefore);
+            (await Rows(factory)).Single().State.Should().Be(PendingRegistrationState.Verified);
+            (await Consume(factory, email, proof)).Should().BeTrue();
+
+            // Once the proof is used up, a start begins again.
+            await Post(client, StartPath, new { email });
+            (await Rows(factory)).Single().State.Should().Be(PendingRegistrationState.AwaitingCode);
+            Codes(factory).Should().HaveCount(codesBefore + 1);
+        }
+
+        [Fact]
+        public async Task Start_AfterTheProofExpires_BeginsAgain()
+        {
+            var clock = new FakeClock();
+            using var factory = NoCooldown(clock);
+            using var client = factory.CreateClient();
+            const string email = "a@example.com";
+            await Post(client, StartPath, new { email });
+            await VerifyAsync(client, email, CodeOf(factory));
+            var codesBefore = Codes(factory).Count;
+            clock.Advance(TimeSpan.FromMinutes(16));
+
+            await Post(client, StartPath, new { email });
+
+            Codes(factory).Should().HaveCount(codesBefore + 1);
+            (await Rows(factory)).Single().State.Should().Be(PendingRegistrationState.AwaitingCode);
+        }
+
+        [Fact]
+        public async Task ChangeEmail_LeavesAVerifiedRowAlone()
+        {
+            using var factory = NoCooldown();
+            using var client = factory.CreateClient();
+            await Post(client, StartPath, new { email = "victim@example.com" });
+            var proof = await VerifyAsync(client, "victim@example.com", CodeOf(factory));
+
+            var response = await Post(client, ChangePath, new { oldEmail = "victim@example.com", newEmail = "attacker@example.com" });
+
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            (await Rows(factory)).Select(r => r.Email).Should().BeEquivalentTo("VICTIM@EXAMPLE.COM", "ATTACKER@EXAMPLE.COM");
+            (await Consume(factory, "victim@example.com", proof)).Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task ABadAddress_SpendsNoEmailCounter()
+        {
+            using var factory = new AccountRecoveryFactory();
+            using var client = factory.CreateClient();
+
+            for (var i = 0; i < 3; i++)
+            {
+                (await Post(client, StartPath, new { email = string.Empty })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+                (await Post(client, ResendPath, new { email = "   " })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+                (await Post(client, ChangePath, new { oldEmail = string.Empty, newEmail = string.Empty })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+            }
+        }
+
+        [Fact]
+        public async Task Start_AfterALock_AnswersTooManyRequests_ForPendingUnknownAndExistingAlike()
+        {
+            using var factory = NoCooldown();
+            using var client = factory.CreateClient();
+            await CreateAccountAsync(factory, "taken@example.com");
+            await Post(client, StartPath, new { email = "pending@example.com" });
+            var code = CodeOf(factory);
+            var seen = new List<(HttpStatusCode Status, int RetryAfter)>();
+
+            foreach (var email in new[] { "pending@example.com", "nobody@example.com", "taken@example.com" })
+            {
+                await WrongTriesAsync(client, email, code);
+                var response = await Post(client, StartPath, new { email });
+                seen.Add((response.StatusCode, int.Parse(response.Headers.GetValues("Retry-After").Single(), System.Globalization.CultureInfo.InvariantCulture)));
+            }
+
+            seen.Should().OnlyContain(s => s.Status == HttpStatusCode.TooManyRequests && s.RetryAfter >= 890 && s.RetryAfter <= 900);
         }
 
         [Fact]

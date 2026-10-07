@@ -167,9 +167,13 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   counts the old email. The address counter runs first, so an exhausted address cannot spend a
   victim's email budget. The timing floor `AccountRecovery:MinimumResponseDuration` applies to all
   four endpoints.
-- Known limits: counters are per process (see the limiter). Anyone who knows a pending address can
-  drop it with `/change-email`, or lock it with five wrong tries. Both are bounded by the limits
-  above. After a lock, `/start` answers `429` for a new address and for an existing one alike.
+- A row with a live, unused proof is protected. `/start` leaves it alone and `/change-email` does
+  not drop it. Without this, anyone who knows the address could void the owner's proof.
+- Known limits: counters are per process (see the limiter). Anyone who knows an address that waits
+  for a code can drop it with `/change-email`, or lock it with five wrong tries. Both are bounded by
+  the limits above. After a lock, `/start` answers `429` for a new address and for an existing one
+  alike. In every deployed environment the engine answers `503` until #669 supplies
+  `EMAIL_CODE_HMAC_KEY`.
 - Email key: trim and upper case only. Plus tags and dots stay (`Helpers/SignUpEmail.cs`).
 - Tests: `Tests/Integration/SignUpEndpointTests.cs`. Gateway: `AccountSignUpRoutesTests`.
 

@@ -53,6 +53,7 @@ internal sealed class SignUpService(
 {
     private const int ProofBytes = 32;
     private const int PurgeBatchSize = 500;
+    private const int MaxAttempts = 3;
 
     /// <summary>Starts a sign-up, or sends the notice when the address has an account.</summary>
     /// <param name="email">The submitted address.</param>
@@ -100,13 +101,28 @@ internal sealed class SignUpService(
             }
             catch (DbUpdateException)
             {
-                // A parallel start inserted the row first. Both carry the same address.
+                // A parallel start inserted the row first. Both carry the same address. With no
+                // such row the failure is something else, so it surfaces.
                 db.ChangeTracker.Clear();
-                row = await db.PendingRegistrations.FirstAsync(p => p.Email == key, cancellationToken).ConfigureAwait(false);
+                row = await db.PendingRegistrations
+                    .FirstOrDefaultAsync(p => p.Email == key, cancellationToken)
+                    .ConfigureAwait(false);
+                if (row is null)
+                {
+                    throw;
+                }
             }
         }
+        else if (row.State == PendingRegistrationState.Verified
+            && row.ProofConsumedAt is null
+            && row.ProofExpiresAt > now)
+        {
+            // The owner holds a live proof. Anyone who knows the address could otherwise void it
+            // with a start, and stall the sign-up. The answer stays the same.
+            return this.Accepted();
+        }
 
-        return await this.IssueAsync(row, entered, cancellationToken).ConfigureAwait(false);
+        return await this.IssueAsync(key, entered, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Sends a new code for an open pending sign-up. Other addresses get the same answer.</summary>
@@ -137,7 +153,7 @@ internal sealed class SignUpService(
             return this.Accepted();
         }
 
-        return await this.IssueAsync(row, row.EmailAsEntered.Length > 0 ? row.EmailAsEntered : entered, cancellationToken)
+        return await this.IssueAsync(key, row.EmailAsEntered.Length > 0 ? row.EmailAsEntered : entered, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -172,12 +188,7 @@ internal sealed class SignUpService(
             switch (result.Status)
             {
                 case EmailCodeVerifyStatus.Verified:
-                    var current = await db.PendingRegistrations
-                        .FirstOrDefaultAsync(p => p.Email == key, cancellationToken)
-                        .ConfigureAwait(false);
-                    return current is null
-                        ? this.WrongOrLocked(key)
-                        : await this.IssueProofAsync(current, cancellationToken).ConfigureAwait(false);
+                    return await this.IssueProofAsync(key, cancellationToken).ConfigureAwait(false);
                 case EmailCodeVerifyStatus.Locked:
                     return new SignUpResult(SignUpStatus.Limited, RetryAfterSeconds: result.RetryAfterSeconds);
                 case EmailCodeVerifyStatus.Unavailable:
@@ -296,14 +307,12 @@ internal sealed class SignUpService(
         }
     }
 
-    private static int CeilSeconds(TimeSpan span) => Math.Max(1, (int)Math.Ceiling(span.TotalSeconds));
-
     private SignUpResult WrongOrLocked(string key)
     {
         var settings = codeOptions.Value;
-        return limiter.TryDecoyWrongTry(key, settings.MaxWrongTries, settings.LockDuration, out var attemptsLeft, out var retryAfter)
+        return limiter.TryDecoyWrongTry(key, settings.MaxWrongTries, settings.LockDuration, settings.FailureWindow, out var attemptsLeft, out var retryAfter)
             ? new SignUpResult(SignUpStatus.WrongCode, AttemptsLeft: attemptsLeft)
-            : new SignUpResult(SignUpStatus.Limited, RetryAfterSeconds: CeilSeconds(retryAfter));
+            : new SignUpResult(SignUpStatus.Limited, RetryAfterSeconds: EmailCodeService.CeilSeconds(retryAfter));
     }
 
     private DateTime Now() => timeProvider.GetUtcNow().UtcDateTime;
@@ -311,7 +320,7 @@ internal sealed class SignUpService(
     private SignUpResult Accepted() => new(
         SignUpStatus.Ok,
         ResendAfterSeconds: (int)Math.Ceiling(codeOptions.Value.ResendCooldown.TotalSeconds),
-        ExpiresInSeconds: CeilSeconds(codeOptions.Value.Lifetime));
+        ExpiresInSeconds: EmailCodeService.CeilSeconds(codeOptions.Value.Lifetime));
 
     /// <summary>
     /// The checks every send shares: the engine has a key, and the address is not locked. A lock
@@ -325,41 +334,34 @@ internal sealed class SignUpService(
             return new SignUpResult(SignUpStatus.Unavailable);
         }
 
-        if (limiter.IsDecoyLocked(key, settings.MaxWrongTries, out var retryAfter))
+        if (limiter.IsDecoyLocked(key, out var retryAfter))
         {
-            return new SignUpResult(SignUpStatus.Limited, RetryAfterSeconds: CeilSeconds(retryAfter));
+            return new SignUpResult(SignUpStatus.Limited, RetryAfterSeconds: EmailCodeService.CeilSeconds(retryAfter));
         }
 
         return null;
     }
 
-    private async Task<SignUpResult> IssueAsync(PendingRegistration row, string entered, CancellationToken cancellationToken)
+    private async Task<SignUpResult> IssueAsync(string key, string entered, CancellationToken cancellationToken)
     {
         var issued = await codes.IssueAsync(entered, EmailCodePurpose.SignUp, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         switch (issued.Status)
         {
             case EmailCodeIssueStatus.Issued:
-                // The engine clears the change tracker when it retries a conflict, which detaches
-                // the row. Load it again.
+                // The code is out. If the row update loses a race, the winner's state stands.
                 var now = this.Now();
-                var current = await db.PendingRegistrations
-                    .FirstOrDefaultAsync(p => p.Email == row.Email, cancellationToken)
-                    .ConfigureAwait(false);
-                if (current is null)
-                {
-                    return this.Accepted();
-                }
-
-                row = current;
-                row.State = PendingRegistrationState.AwaitingCode;
-                row.ProofHash = null;
-                row.ProofExpiresAt = null;
-                row.ProofConsumedAt = null;
-                row.UpdatedAt = now;
-                row.ExpiresAt = now + options.Value.PendingLifetime;
-                row.Version++;
-                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await this.UpdateRowAsync(
+                    key,
+                    row =>
+                    {
+                        row.State = PendingRegistrationState.AwaitingCode;
+                        row.ProofHash = null;
+                        row.ProofExpiresAt = null;
+                        row.ProofConsumedAt = null;
+                        row.ExpiresAt = now + options.Value.PendingLifetime;
+                    },
+                    cancellationToken).ConfigureAwait(false);
                 return this.Accepted();
             case EmailCodeIssueStatus.Unavailable:
                 return new SignUpResult(SignUpStatus.Unavailable);
@@ -368,34 +370,103 @@ internal sealed class SignUpService(
         }
     }
 
-    private async Task<SignUpResult> IssueProofAsync(PendingRegistration row, CancellationToken cancellationToken)
+    private async Task<SignUpResult> IssueProofAsync(string key, CancellationToken cancellationToken)
     {
         var proof = Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(ProofBytes));
-        var now = this.Now();
         var life = options.Value.ProofLifetime;
-        row.State = PendingRegistrationState.Verified;
-        row.ProofHash = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(proof));
-        row.ProofExpiresAt = now + life;
-        row.ProofConsumedAt = null;
-        row.UpdatedAt = now;
+        var proofEnd = this.Now() + life;
+        var stored = await this.UpdateRowAsync(
+            key,
+            row =>
+            {
+                row.State = PendingRegistrationState.Verified;
+                row.ProofHash = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(proof));
+                row.ProofExpiresAt = proofEnd;
+                row.ProofConsumedAt = null;
 
-        // The row must outlive the proof, or the purge could delete it before #654 uses it.
-        var proofEnd = now + life;
-        if (row.ExpiresAt < proofEnd)
-        {
-            row.ExpiresAt = proofEnd;
-        }
+                // The row must outlive the proof, or the purge could delete it before #654 uses it.
+                if (row.ExpiresAt < proofEnd)
+                {
+                    row.ExpiresAt = proofEnd;
+                }
+            },
+            cancellationToken).ConfigureAwait(false);
 
-        row.Version++;
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return new SignUpResult(SignUpStatus.Verified, ExpiresInSeconds: CeilSeconds(life), Proof: proof);
+        // The code is already used up. With no stored proof the user must start again.
+        return stored
+            ? new SignUpResult(SignUpStatus.Verified, ExpiresInSeconds: EmailCodeService.CeilSeconds(life), Proof: proof)
+            : new SignUpResult(SignUpStatus.Unavailable);
     }
 
+    /// <summary>
+    /// Loads the row, applies a change and saves it. A conflict with another writer loads the row
+    /// again and retries. The engine also clears the change tracker on a conflict, so no caller
+    /// keeps a row across a call into the engine.
+    /// </summary>
+    private async Task<bool> UpdateRowAsync(string key, Action<PendingRegistration> change, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < MaxAttempts; attempt++)
+        {
+            var row = await db.PendingRegistrations
+                .FirstOrDefaultAsync(p => p.Email == key, cancellationToken)
+                .ConfigureAwait(false);
+            if (row is null)
+            {
+                return false;
+            }
+
+            change(row);
+            row.UpdatedAt = this.Now();
+            row.Version++;
+            try
+            {
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                return true;
+            }
+            catch (DbUpdateException)
+            {
+                db.ChangeTracker.Clear();
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Drops the sign-up that waits for a code. A row with a live proof stays: its owner already
+    /// proved the mailbox, and an anonymous caller must not void that.
+    /// </summary>
     private async Task DropAsync(string key, string entered, CancellationToken cancellationToken)
     {
+        var waiting = await db.PendingRegistrations
+            .AnyAsync(p => p.Email == key && p.State == PendingRegistrationState.AwaitingCode, cancellationToken)
+            .ConfigureAwait(false);
+        if (!waiting)
+        {
+            return;
+        }
+
         await codes.InvalidateAsync(entered, EmailCodePurpose.SignUp, cancellationToken).ConfigureAwait(false);
-        var rows = await db.PendingRegistrations.Where(p => p.Email == key).ToListAsync(cancellationToken).ConfigureAwait(false);
-        db.PendingRegistrations.RemoveRange(rows);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        for (var attempt = 0; attempt < MaxAttempts; attempt++)
+        {
+            var row = await db.PendingRegistrations
+                .FirstOrDefaultAsync(p => p.Email == key && p.State == PendingRegistrationState.AwaitingCode, cancellationToken)
+                .ConfigureAwait(false);
+            if (row is null)
+            {
+                return;
+            }
+
+            db.PendingRegistrations.Remove(row);
+            try
+            {
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                return;
+            }
+            catch (DbUpdateException)
+            {
+                db.ChangeTracker.Clear();
+            }
+        }
     }
 }

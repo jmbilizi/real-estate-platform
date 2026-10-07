@@ -70,11 +70,11 @@ internal sealed class AccountRecoveryThrottleFilter(
                 break;
 
             case SignUpStartRequest start:
-                allowed = this.TrySignUpSend(Normalise(start.Email), clientAddress, out retryAfter);
+                allowed = this.TrySignUpSend(start.Email, clientAddress, out retryAfter);
                 break;
 
             case SignUpResendRequest signUpResend:
-                allowed = this.TrySignUpSend(Normalise(signUpResend.Email), clientAddress, out retryAfter);
+                allowed = this.TrySignUpSend(signUpResend.Email, clientAddress, out retryAfter);
                 break;
 
             case SignUpVerifyRequest:
@@ -82,10 +82,17 @@ internal sealed class AccountRecoveryThrottleFilter(
                 break;
 
             case SignUpChangeEmailRequest change:
+                if (!SignUpEmail.TryNormalize(change.OldEmail, out var oldKey, out _)
+                    || !SignUpEmail.TryNormalize(change.NewEmail, out var newKey, out _))
+                {
+                    allowed = rateLimiter.TrySignUpInvalid(clientAddress, out retryAfter);
+                    break;
+                }
+
                 var codes = codeOptions.Value;
                 allowed = rateLimiter.TrySignUpChange(
-                    Normalise(change.OldEmail),
-                    Normalise(change.NewEmail),
+                    oldKey,
+                    newKey,
                     clientAddress,
                     codes.ResendCooldown,
                     codes.MaxPerHour,
@@ -182,10 +189,16 @@ internal sealed class AccountRecoveryThrottleFilter(
         }
     }
 
-    private bool TrySignUpSend(string email, string? clientAddress, out TimeSpan retryAfter)
+    private bool TrySignUpSend(string? email, string? clientAddress, out TimeSpan retryAfter)
     {
+        // An address that fails the syntax check gets a 400. It counts against the caller only.
+        if (!SignUpEmail.TryNormalize(email, out var key, out _))
+        {
+            return rateLimiter.TrySignUpInvalid(clientAddress, out retryAfter);
+        }
+
         var codes = codeOptions.Value;
-        return rateLimiter.TrySignUpSend(email, clientAddress, codes.ResendCooldown, codes.MaxPerHour, codes.MaxPerDay, out retryAfter);
+        return rateLimiter.TrySignUpSend(key, clientAddress, codes.ResendCooldown, codes.MaxPerHour, codes.MaxPerDay, out retryAfter);
     }
 
     private async ValueTask<object?> PaddedAsync(

@@ -61,6 +61,11 @@ internal sealed partial class EmailCodeService(
 
     private static readonly byte[] NoCodeHash = new byte[HMACSHA256.HashSizeInBytes];
 
+    /// <summary>Rounds a wait up to whole seconds, at least one.</summary>
+    /// <param name="span">The wait.</param>
+    /// <returns>The seconds.</returns>
+    internal static int CeilSeconds(TimeSpan span) => Math.Max(1, (int)Math.Ceiling(span.TotalSeconds));
+
     /// <summary>
     /// Voids every open code for the email and purpose, stores a new one and queues the message.
     /// </summary>
@@ -212,8 +217,6 @@ internal sealed partial class EmailCodeService(
             Encoding.UTF8.GetBytes($"{purpose}:{key}:{code}"));
 
     private static TimeSpan Max(TimeSpan a, TimeSpan b) => a > b ? a : b;
-
-    private static int CeilSeconds(TimeSpan span) => Math.Max(1, (int)Math.Ceiling(span.TotalSeconds));
 
     private DateTime Now() => timeProvider.GetUtcNow().UtcDateTime;
 

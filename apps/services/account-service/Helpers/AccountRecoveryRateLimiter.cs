@@ -207,12 +207,14 @@ internal sealed class AccountRecoveryRateLimiter(
 
     /// <summary>
     /// Counts one wrong try for an email with no open code. The engine does not count such a try,
-    /// so this stands in for it and the answer matches an email that has a code: the same tries
-    /// left, then the same lock.
+    /// so this stands in for it, and the answer matches an email that has a code: the same tries
+    /// left, a lock that starts at the last try and runs the full duration, and a count that
+    /// restarts after the lock ends or the failure window passes.
     /// </summary>
     /// <param name="email">The submitted address; compared case-insensitively.</param>
     /// <param name="maxTries">The wrong tries that lock an email.</param>
     /// <param name="lockDuration">How long the lock lasts.</param>
+    /// <param name="failureWindow">How long wrong tries count after the last one.</param>
     /// <param name="attemptsLeft">When allowed, the tries left before the lock.</param>
     /// <param name="retryAfter">When locked, how long until the lock ends.</param>
     /// <returns><see langword="true"/> while tries are left. <see langword="false"/> at the lock.</returns>
@@ -220,37 +222,64 @@ internal sealed class AccountRecoveryRateLimiter(
         string email,
         int maxTries,
         TimeSpan lockDuration,
+        TimeSpan failureWindow,
         out int attemptsLeft,
         out TimeSpan retryAfter)
     {
-        // The last allowed try is the one that locks, as in the engine. So the counter allows
-        // maxTries - 1 and refuses the next.
-        var allowed = this.TryConsumeCounting(
-            DecoyKey(email),
-            Math.Max(0, maxTries - 1),
-            lockDuration,
-            out retryAfter,
-            out var count);
-        attemptsLeft = allowed ? maxTries - count : 0;
-        return allowed;
+        var key = DecoyKey(email);
+        var now = timeProvider.GetUtcNow();
+        attemptsLeft = 0;
+
+        lock (this.gate)
+        {
+            this.cache.TryGetValue(key, out DecoyState? state);
+            if (state is not null && state.LockedUntil > now)
+            {
+                retryAfter = state.LockedUntil.Value - now;
+                return false;
+            }
+
+            // A fresh state replaces an ended lock. It also replaces a state the cache dropped.
+            var count = state is not null && state.LockedUntil is null ? state.Count : 0;
+            state = new DecoyState { Count = count + 1 };
+            if (state.Count >= maxTries)
+            {
+                state.LockedUntil = now + lockDuration;
+            }
+
+            if (!this.TryStore(key, state, failureWindow))
+            {
+                // The counter cannot be kept. Fail closed, as the other counters do.
+                retryAfter = lockDuration;
+                return false;
+            }
+
+            if (state.Count >= maxTries)
+            {
+                retryAfter = lockDuration;
+                return false;
+            }
+
+            attemptsLeft = maxTries - state.Count;
+            retryAfter = TimeSpan.Zero;
+            return true;
+        }
     }
 
     /// <summary>Reports whether <see cref="TryDecoyWrongTry"/> has locked the email.</summary>
     /// <param name="email">The submitted address; compared case-insensitively.</param>
-    /// <param name="maxTries">The wrong tries that lock an email.</param>
     /// <param name="retryAfter">When locked, how long until the lock ends.</param>
     /// <returns><see langword="true"/> when the email is locked.</returns>
-    internal bool IsDecoyLocked(string email, int maxTries, out TimeSpan retryAfter)
+    internal bool IsDecoyLocked(string email, out TimeSpan retryAfter)
     {
         var now = timeProvider.GetUtcNow();
         lock (this.gate)
         {
-            if (this.cache.TryGetValue(DecoyKey(email), out Window? tracked)
-                && tracked is not null
-                && tracked.Count >= maxTries
-                && tracked.ExpiresAt > now)
+            if (this.cache.TryGetValue(DecoyKey(email), out DecoyState? state)
+                && state is not null
+                && state.LockedUntil > now)
             {
-                retryAfter = tracked.ExpiresAt - now;
+                retryAfter = state.LockedUntil.Value - now;
                 return true;
             }
         }
@@ -258,6 +287,18 @@ internal sealed class AccountRecoveryRateLimiter(
         retryAfter = TimeSpan.Zero;
         return false;
     }
+
+    /// <summary>
+    /// Counts one invalid sign-up address against the client address only. A junk address must not
+    /// spend a counter keyed on the junk.
+    /// </summary>
+    /// <param name="clientAddress">The client address, or null when unknown.</param>
+    /// <param name="retryAfter">When refused, how long until the window rolls over.</param>
+    /// <returns><see langword="true"/> when the request may proceed.</returns>
+    internal bool TrySignUpInvalid(string? clientAddress, out TimeSpan retryAfter) =>
+        this.TryConsumeAll(
+            out retryAfter,
+            new Counter($"signup:send:addr:{clientAddress ?? "unknown"}", options.Value.SignUpSendsPerAddress, options.Value.RequestWindow));
 
     private static string DecoyKey(string email) => $"signup:decoy:{email.ToUpperInvariant()}";
 
@@ -405,6 +446,22 @@ internal sealed class AccountRecoveryRateLimiter(
         }
     }
 
+    private bool TryStore(string key, DecoyState state, TimeSpan window)
+    {
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            this.cache.Set(key, state, new MemoryCacheEntryOptions { Size = 1, AbsoluteExpirationRelativeToNow = window });
+            if (this.cache.TryGetValue(key, out DecoyState? stored) && ReferenceEquals(stored, state))
+            {
+                return true;
+            }
+
+            this.cache.Compact(CompactionShare);
+        }
+
+        return false;
+    }
+
     private Window GetOrCreate(string key, TimeSpan window, DateTimeOffset now) =>
         this.cache.GetOrCreate(key, entry =>
         {
@@ -417,6 +474,13 @@ internal sealed class AccountRecoveryRateLimiter(
         this.cache.TryGetValue(key, out Window? tracked) && ReferenceEquals(tracked, counter);
 
     private readonly record struct Counter(string Key, int Limit, TimeSpan Window);
+
+    private sealed class DecoyState
+    {
+        internal int Count { get; init; }
+
+        internal DateTimeOffset? LockedUntil { get; set; }
+    }
 
     private sealed class Window(DateTimeOffset expiresAt)
     {
