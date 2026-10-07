@@ -1,13 +1,13 @@
 import {
-  staffLeadDetailSchema,
-  staffLeadNoteSchema,
-  staffLeadsEnvelopeSchema,
-  staffLeadTransitionResponseSchema,
   type InquiryKind,
   type LeadStatus,
   type StaffLeadDetail,
+  staffLeadDetailSchema,
   type StaffLeadNote,
+  staffLeadNoteSchema,
   type StaffLeadsEnvelope,
+  staffLeadsEnvelopeSchema,
+  staffLeadTransitionResponseSchema,
 } from '@cribstop/property-contracts';
 import type { StaffAction } from '@/lib/staff-leads';
 

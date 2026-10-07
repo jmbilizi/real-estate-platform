@@ -4,13 +4,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   INQUIRY_KINDS,
-  LEAD_STATUSES,
   type InquiryKind,
+  LEAD_STATUSES,
   type LeadStatus,
   type StaffLeadListItem,
 } from '@cribstop/property-contracts';
 import Button from '@/components/Button';
-import { fetchLeads, StaffApiError, type LeadFilters } from '@/lib/api/staff-leads';
+import { fetchLeads, type LeadFilters, StaffApiError } from '@/lib/api/staff-leads';
 import { formatAge, KIND_LABEL, STATUS_LABEL } from '@/lib/staff-leads';
 import { DuplicateBadge, StatusBadge, VerifiedAccountBadge } from './LeadBadges';
 import { LEAD_ROW_GRID, LeadsListSkeleton } from './LeadSkeletons';

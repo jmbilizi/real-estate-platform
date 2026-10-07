@@ -13,11 +13,11 @@ import {
   actionsFor,
   formatDateTime,
   KIND_LABEL,
-  noteRequired,
   NOTE_HINT,
+  noteRequired,
+  type StaffAction,
   STATUS_LABEL,
   telHref,
-  type StaffAction,
 } from '@/lib/staff-leads';
 import { DuplicateBadge, StatusBadge, VerifiedAccountBadge } from './LeadBadges';
 import { LeadDetailSkeleton } from './LeadSkeletons';

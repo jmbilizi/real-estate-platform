@@ -2,9 +2,9 @@ import {
   actionsFor,
   formatAge,
   hasLeadDeskRole,
+  LEAD_DESK_ROLES,
   noteRequired,
   telHref,
-  LEAD_DESK_ROLES,
 } from './staff-leads';
 import { LEAD_STATUSES, MODERATOR_TARGET_STATUSES } from '@cribstop/property-contracts';
 
