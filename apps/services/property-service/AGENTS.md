@@ -672,8 +672,7 @@ behind roles (#632).
   append-only by trigger. A delete is allowed only when the lead is already gone (cascade). `email`
   is required and `phone` is optional. `verified_account` is set only by `requester.ts`, never by
   the body. Consent evidence: the server holds the text per version (`CONSENT_TEXTS`) and stores
-  text, version, channels and time. Retention target: 4 years, no purge job yet. The `delivery_*`
-  columns stay until the outbox ticket replaces them.
+  text, version, channels and time. Retention target: 4 years, no purge job yet.
 - **Account resolution** (`account-introspection.ts`) calls account-service's #86 endpoint and
   **fails open to signed-out** on any network error or timeout — an infra hiccup must not block this
   ticket's primary conversion path. Worst case: a signed-in consumer's inquiry is recorded with no
@@ -689,16 +688,30 @@ behind roles (#632).
   tables continuously and a plain `CREATE INDEX` blocks it for the index build's duration (#388).
   Migrations 034 and 036 predate this rule and are not rewritten.
 
-## Inquiry intake and dormant delivery (`src/inquiries/delivery/`)
+## Inquiry intake and notification outbox (`src/inquiries/outbox.ts`)
 
 The Lead Desk dashboard is the system of record for buyer requests. No inquiry goes out by email
-(ruling 2026-10-06, #629). A new inquiry saves with `delivery_state` `pending`. Nothing reads that
-column for an alert. #638 decides the fate of the `delivery_*` columns.
+(ruling 2026-10-06, #629). Later email goes only to the buyer and to the matched agent.
 
-**`src/inquiries/delivery/` is dormant.** `main.ts` does not start the worker. No environment sets
-`INQUIRY_EXTERNAL_SEND`. The folder stays for a later outbox ticket: the `DeliveryChannel` seam, the
-Postmark channel, the message builder, the config resolver and the store. Their unit tests stay
-green. The worker has no overdue alert. Start the worker again only in that ticket.
+#638 added `notification_outbox` and **no sender**. The #134 delivery worker, the Postmark channel
+and the `delivery_*` columns of `listing_inquiries` are removed (migration 051). Nothing read them.
+
+- Every lead event writes its rows in the transaction of the event. `createListingInquiry` writes
+  `lead.received`. `changeLeadStatus` writes `lead.verified` (from `new`), `lead.assigned` and
+  `lead.accepted` through `enqueueLeadNotifications`.
+- A buyer row needs recorded email consent (`consent_channels` holds `email`). An agent row exists
+  only for `lead.assigned`.
+- A row holds ids only. `recipient_ref` is the account id, else the lead id (`recipient_ref_type`
+  says which), or the agent profile id. `payload` is `{ leadId }`. Never copy an email or a phone.
+- Every row starts `held`. No code in this service updates a row. `outbox.spec.ts` fails if a source
+  file updates the outbox, reads it, or calls a mail provider.
+- **A later sender** claims rows in one statement:
+  `UPDATE notification_outbox SET state = 'queued' WHERE id IN (SELECT id FROM notification_outbox WHERE state = 'held' ORDER BY created_at LIMIT n FOR UPDATE SKIP LOCKED) RETURNING *`.
+  It resolves the address at send time (account-service for an account id, `listing_inquiries.email`
+  for a lead id) and re-checks consent. Then it sets `sent` or `failed`. A withdrawn consent sets
+  `cancelled`. A lead assigned twice writes two `lead.assigned` rows, so the sender must
+  de-duplicate. The sender is a new ticket. Broker sign-off (#630) and the CAN-SPAM duties come
+  first.
 
 The `postmark-secret` reference stays in the deployment. account-service uses Postmark for account
 emails.
