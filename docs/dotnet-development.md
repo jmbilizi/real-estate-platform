@@ -6,11 +6,10 @@
 pnpm run dotnet:env
 ```
 
-Checks the .NET SDK and sets PATH for that run only. Install the SDK yourself from
-https://dotnet.microsoft.com/download/dotnet/10.0. The script never writes the registry or a shell
-profile. To keep PATH, add `~/.dotnet` and `~/.dotnet/tools` yourself (Windows: Settings > "Edit
-environment variables for your account"). Use `-- --install-tools` for global tools and
-`-- --install-nx-plugin` for the Nx plugin.
+Installs .NET SDK (if missing), global tools, and Nx plugin. The script is idempotent. It reads the
+current state first and writes only what is missing: PATH entries, shell profile blocks, global
+tools, the SDK, the Nx plugin. A run on a correct machine changes nothing. Pass `-- --update-tools`
+to also update installed global tools.
 
 ## Creating Projects
 
@@ -128,7 +127,7 @@ nx build my-api
 **Solution**:
 
 ```bash
-# Verify environment
+# Verify and fix environment
 pnpm run dotnet:env
 
 # Check installed SDKs
@@ -165,7 +164,7 @@ Verify project type in `.csproj`:
 
 ```bash
 # Reinstall all tools
-pnpm run dotnet:env -- --install-tools
+pnpm run dotnet:env
 
 # Verify tools are installed
 dotnet tool list --global
@@ -175,7 +174,7 @@ dotnet tool list --global
 
 If you encounter issues:
 
-1. Run `pnpm run dotnet:env` to verify your environment
+1. Run `pnpm run dotnet:env` to verify and fix your environment
 2. Check that you have the correct .NET SDK version (see `tools/dotnet/configs/global.json`)
 3. Verify that required tools are installed: `dotnet tool list --global`
 4. Check the Nx plugin documentation: https://nx.dev/nx-api/dotnet

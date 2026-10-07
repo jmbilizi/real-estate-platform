@@ -211,10 +211,9 @@ stack and exercise it. Everything needed is scripted; the only host prerequisite
 (`pnpm install && pnpm run hooks:setup`, then `pnpm run infra:local:cluster:setup` once for the
 local Kind/Podman cluster).
 
-**Never run `dotnet:env`, `python:env*`, `infra:setup`, or any script that writes the user PATH, the
-registry, `setx`, or a shell profile, or that installs an SDK.** If a toolchain is missing, set PATH
-inline for that one command, or stop and report a `human-action` item. Tell every lane the same
-rule.
+**Never run `dotnet:env`, `python:env*`, or `infra:setup`.** Those setup scripts are for humans.
+Before .NET work, run `dotnet --version`. Before Python work, run `uv --version`. If the tool works,
+do nothing. If it fails, stop and report a `human-action` item. Tell every lane the same rule.
 
 Skaffold is the local development path; never invoke `skaffold`/`kubectl` raw.
 

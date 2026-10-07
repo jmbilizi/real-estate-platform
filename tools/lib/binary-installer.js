@@ -1,6 +1,6 @@
 /**
  * Shared cross-platform single-binary installer (Windows/macOS/Linux, no shell-specific
- * commands). Downloads a tool's GitHub-release binary into `~/.local/bin` and adds it to this process PATH,
+ * commands). Downloads a tool's GitHub-release binary into `~/.local/bin` and persists PATH,
  * or detects an existing install already on PATH.
  *
  * Used by domain-specific setup scripts (tools/infra/setup-infra.js for kustomize/skaffold/
@@ -14,6 +14,7 @@ const https = require('https');
 const http = require('http');
 const path = require('path');
 const os = require('os');
+const { computeMissingPathEntries } = require('./path-entries');
 
 const PLATFORM = os.platform(); // win32 | darwin | linux
 const ARCH = os.arch(); // x64 | arm64
@@ -84,9 +85,12 @@ function download(url, dest) {
 /** Extract a .zip archive (cross-platform). */
 async function extractZip(zipPath, destDir) {
   if (IS_WIN) {
-    // Windows 10+ ships bsdtar, which extracts zip files.
-    const r = run('tar', ['-xf', zipPath, '-C', destDir]);
-    if (!r.success) throw new Error('Failed to extract zip');
+    const r = run('powershell', [
+      '-NoProfile',
+      '-Command',
+      `Expand-Archive -Path '${zipPath}' -DestinationPath '${destDir}' -Force`,
+    ]);
+    if (!r.success) throw new Error('Expand-Archive failed');
   } else {
     // macOS has bsdtar that can handle zips; try unzip first, tar as fallback
     let r = run('unzip', ['-o', zipPath, '-d', destDir]);
@@ -104,9 +108,9 @@ async function extractTarGz(archivePath, destDir) {
 }
 
 /**
- * Add a directory to PATH for this process, and to GITHUB_PATH when set (CI).
- * This function never writes the registry, a shell profile, or any other persistent setting.
- * It prints the entry for the developer to add by hand.
+ * Add a directory to PATH:
+ *   Windows — persists to User PATH via registry, refreshes current process
+ *   Unix    — appends to shell profile + updates current process
  */
 function addToPath(binDir) {
   const sep = path.delimiter;
@@ -123,21 +127,203 @@ function addToPath(binDir) {
     return;
   }
 
-  process.env.PATH = `${binDir}${sep}${process.env.PATH}`;
-  if (process.env.GITHUB_PATH) {
+  if (IS_WIN) {
+    // Read User PATH from registry
+    const cur = run('powershell', [
+      '-NoProfile',
+      '-Command',
+      "[System.Environment]::GetEnvironmentVariable('PATH','User')",
+    ]);
+    if (cur.success) {
+      // Write only when the entry is missing from the user PATH and the directory exists.
+      const missing = computeMissingPathEntries({
+        pathValue: cur.output,
+        delimiter: ';',
+        candidates: [{ dir: binDir }],
+        dirExists: fs.existsSync,
+      });
+      if (missing.length === 0) {
+        ok('PATH already configured');
+      } else {
+        const r = run('powershell', [
+          '-NoProfile',
+          '-Command',
+          `[System.Environment]::SetEnvironmentVariable('PATH','${binDir};' + [System.Environment]::GetEnvironmentVariable('PATH','User'),'User')`,
+        ]);
+        if (r.success) {
+          ok('Added to Windows User PATH (permanent)');
+          warn('Restart this terminal for the PATH change to take effect.');
+        } else warn(`Failed to update User PATH — manually add "${binDir}"`);
+      }
+    }
+
+    // Refresh current process PATH from registry (Machine + User)
+    const refresh = run('powershell', [
+      '-NoProfile',
+      '-Command',
+      "[System.Environment]::GetEnvironmentVariable('PATH','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('PATH','User')",
+    ]);
+    if (refresh.success && refresh.output) {
+      process.env.PATH = refresh.output.trim();
+    }
+  } else {
+    // Unix: update shell profiles and install an auto-refresh hook so the new
+    // PATH takes effect at the next prompt without closing the terminal.
+    const home = os.homedir();
+    const shell = process.env.SHELL || '';
+    const isZsh = shell.includes('zsh');
+    const triggerFile = path.join(home, '.dev-tools-env-refresh');
+
+    const profiles = isZsh
+      ? [path.join(home, '.zshrc'), path.join(home, '.zprofile')]
+      : [path.join(home, '.bashrc'), path.join(home, '.bash_profile')];
+
+    const pathMarker = '# Added by tools/lib/binary-installer.js';
+    const exportLine = `export PATH="${binDir}:$PATH"`;
+    const pathBlock = `\n${pathMarker}\n${exportLine}\n`;
+
+    const hookMarker = '# dev-tools env auto-refresh hook';
+    const zshHook = `
+${hookMarker}
+_dev_tools_env_refresh() {
+  local trigger="$HOME/.dev-tools-env-refresh"
+  if [ -f "$trigger" ]; then
+    rm -f "$trigger"
+    source "$HOME/.zshrc"
+  fi
+}
+precmd_functions+=(_dev_tools_env_refresh)
+`;
+    const bashHook = `
+${hookMarker}
+_dev_tools_env_refresh() {
+  local trigger="$HOME/.dev-tools-env-refresh"
+  if [ -f "$trigger" ]; then
+    rm -f "$trigger"
+    source "$HOME/.bashrc"
+  fi
+}
+PROMPT_COMMAND="_dev_tools_env_refresh\${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
+`;
+    const hook = isZsh ? zshHook : bashHook;
+
+    let profileChanged = false;
+    for (const profile of profiles) {
+      try {
+        const existing = fs.existsSync(profile) ? fs.readFileSync(profile, 'utf8') : '';
+        let content = existing;
+        let changed = false;
+
+        if (!existing.includes(binDir)) {
+          content += pathBlock;
+          changed = true;
+          ok(`Added PATH entry to ${profile}`);
+        }
+
+        if (!existing.includes(hookMarker)) {
+          content += hook;
+          changed = true;
+          ok(`Added auto-refresh hook to ${profile}`);
+        }
+
+        if (changed) {
+          fs.writeFileSync(profile, content, 'utf8');
+          profileChanged = true;
+        }
+      } catch (e) {
+        warn(`Could not update ${profile}: ${e.message}`);
+      }
+    }
+
+    // Write trigger file only when a profile changed. The hook above detects it at the next
+    // shell prompt and sources the profile, so the tool works without reopening the terminal.
+    if (profileChanged) {
+      try {
+        fs.writeFileSync(triggerFile, '', 'utf8');
+        ok('Terminal PATH will refresh automatically at the next prompt.');
+      } catch (e) {
+        warn(`Could not write refresh trigger: ${e.message}`);
+      }
+    } else {
+      ok('PATH already configured');
+    }
+
+    // Also update current process so subsequent checks in this run work
+    process.env.PATH = `${binDir}${sep}${process.env.PATH}`;
+  }
+}
+
+// Marker/hook/trigger names used before this installer logic was extracted out of
+// tools/infra/setup-infra.js into this shared module (when it was still infra-specific).
+const LEGACY_PATH_MARKER = '# Added by infra:setup';
+const LEGACY_HOOK_MARKER = '# infra:setup auto-refresh hook';
+const LEGACY_TRIGGER_FILE = path.join(os.homedir(), '.infra-env-refresh');
+
+/**
+ * One-time cleanup for machines that already ran the pre-extraction `infra:setup` and have the
+ * old marker/hook block in their shell profile. Without this, they'd end up with both the old
+ * and new auto-refresh hooks installed side by side the next time a tool needs a PATH update.
+ * Windows has no profile-file markers (PATH is persisted via the registry), so this is a no-op
+ * there. Safe to call unconditionally — it's a no-op once migrated.
+ */
+function migrateLegacyEnvMarkers() {
+  if (IS_WIN) return;
+
+  const home = os.homedir();
+  const profiles = [
+    path.join(home, '.zshrc'),
+    path.join(home, '.zprofile'),
+    path.join(home, '.bashrc'),
+    path.join(home, '.bash_profile'),
+  ];
+
+  for (const profile of profiles) {
+    if (!fs.existsSync(profile)) continue;
+    let content;
     try {
-      fs.appendFileSync(process.env.GITHUB_PATH, `${binDir}\n`);
-      ok('Added to GITHUB_PATH');
+      content = fs.readFileSync(profile, 'utf8');
+    } catch {
+      continue;
+    }
+    if (!content.includes(LEGACY_PATH_MARKER) && !content.includes(LEGACY_HOOK_MARKER)) continue;
+
+    const lines = content.split('\n');
+    const kept = [];
+    let skipping = false;
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed === LEGACY_PATH_MARKER) {
+        skipping = 'path';
+        continue;
+      }
+      if (skipping === 'path') {
+        skipping = false; // the single `export PATH=...` line right after the marker
+        continue;
+      }
+      if (trimmed === LEGACY_HOOK_MARKER) {
+        skipping = 'hook';
+        continue;
+      }
+      if (skipping === 'hook') {
+        if (trimmed.startsWith('precmd_functions+=') || trimmed.startsWith('PROMPT_COMMAND=')) {
+          skipping = false;
+        }
+        continue;
+      }
+      kept.push(line);
+    }
+
+    try {
+      fs.writeFileSync(profile, kept.join('\n'), 'utf8');
+      ok(`Migrated legacy env markers out of ${profile}`);
     } catch (e) {
-      warn(`Could not write GITHUB_PATH: ${e.message}`);
+      warn(`Could not migrate legacy markers in ${profile}: ${e.message}`);
     }
   }
-  warn(`PATH is changed for this run only. To keep it, add "${binDir}" to your PATH yourself.`);
-  if (IS_WIN) {
-    info('Windows: Settings > "Edit environment variables for your account" > Path > New.');
-  } else {
-    info(`Or run: echo 'export PATH="${binDir}:$PATH"' >> ~/.profile`);
-  }
+
+  try {
+    if (fs.existsSync(LEGACY_TRIGGER_FILE)) fs.unlinkSync(LEGACY_TRIGGER_FILE);
+  } catch {}
 }
 
 /** Get the arch string for release URLs (amd64 | arm64). */
@@ -280,6 +466,7 @@ module.exports = {
   extractZip,
   extractTarGz,
   addToPath,
+  migrateLegacyEnvMarkers,
   resolveArch,
   releasePlatform,
   installBinary,

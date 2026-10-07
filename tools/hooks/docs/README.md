@@ -57,7 +57,7 @@ For language-specific tooling the hooks depend on:
 
 ```bash
 pnpm run python:env    # Python (UV + venv) — only needed if working on Python projects
-pnpm run dotnet:env    # .NET SDK check — only for .NET work. Install the SDK yourself.
+pnpm run dotnet:env    # .NET SDK — only needed if working on .NET projects
 ```
 
 ## Architecture
@@ -89,9 +89,8 @@ Config is in `.prettierrc.js` (re-exports `tools/node/configs/prettier-config.js
 **Python setup failing**: Only run `pnpm run python:env` if you are working on Python projects. The
 hook will skip Python checks if no Python files are staged.
 
-**.NET check failing with "SDK not found"**: Install the .NET 10 SDK yourself and run
-`pnpm run dotnet:env` to check it. If you are not working on .NET files, the hook skips .NET checks
-automatically.
+**.NET check failing with "SDK not found"**: Run `pnpm run dotnet:env`. If you are not working on
+.NET files, the hook skips .NET checks automatically.
 
 **Hook bypassed accidentally**: CI enforces the same checks — code that bypasses local hooks will
 still be caught before merging. 2. Check that the hook scripts exist in the `.husky` directory 3.

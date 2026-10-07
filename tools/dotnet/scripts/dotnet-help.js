@@ -15,11 +15,9 @@ function main() {
 
   printHeader('Environment Setup:');
   console.log(
-    '  pnpm run dotnet:env           - Check the .NET environment (human use only; agents never run it)',
+    '  pnpm run dotnet:env           - Setup .NET development environment (includes tools)',
   );
-  console.log(
-    '  pnpm run dotnet:env -- --install-tools  - Also install global tools (flag: --install-nx-plugin)',
-  );
+  console.log('  pnpm run dotnet:env -- --skip-tools  - Setup .NET without installing tools');
   console.log('  pnpm run dotnet:help          - Show this help message');
 
   printHeader('Package Management:');

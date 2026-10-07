@@ -93,12 +93,11 @@ guide.
     descriptions, commit messages, and replies to the user. See
     [Writing Standard](#writing-standard).
 
-11. **Agents never change the user's persistent environment.** Do not run `dotnet:env`,
-    `python:env*`, `infra:setup`, or any script that writes the user PATH, the registry, `setx`, or
-    a shell profile, or that installs an SDK. These scripts are for humans. If a toolchain is
-    missing, set PATH inline for that one command. Or stop and file a `human-action` ticket. The
-    scripts never write the persistent PATH, the registry, or a shell profile. They set PATH for one
-    run only and print the entries for a human to add.
+11. **Agents never run the environment setup scripts.** Do not run `dotnet:env`, `python:env*`, or
+    `infra:setup`. They are for humans. They install SDKs and write the user PATH and shell
+    profiles. Before .NET work, run `dotnet --version`. Before Python work, run `uv --version`. If
+    the tool works, do nothing. If it fails, stop and report a `human-action` item. The scripts are
+    idempotent: they read the current state and write only what is missing.
 
 ## Writing Standard (ASD-STE100)
 

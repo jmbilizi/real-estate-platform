@@ -10,7 +10,7 @@
 ## Setup
 
 ```bash
-pnpm run dotnet:env   # checks the SDK; the script never writes PATH permanently
+pnpm run dotnet:env
 ```
 
 ## Creating Projects
