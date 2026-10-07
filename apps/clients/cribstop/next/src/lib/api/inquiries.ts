@@ -1,4 +1,4 @@
-import type { InquiryKind } from '@cribstop/property-contracts';
+import type { ConsentChannel, ConsentTextVersion, InquiryKind } from '@cribstop/property-contracts';
 
 export interface InquiryInput {
   kind: InquiryKind;
@@ -6,6 +6,9 @@ export interface InquiryInput {
   email: string;
   phone?: string;
   message?: string;
+  /** The disclosure version shown beside the submit button (#631). */
+  consentTextVersion: ConsentTextVersion;
+  consentChannels: ConsentChannel[];
 }
 
 /** `unavailable`: the listing is gone, so a retry cannot work. `retryable`: the user may try again. */

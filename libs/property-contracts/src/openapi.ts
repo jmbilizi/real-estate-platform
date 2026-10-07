@@ -10,6 +10,12 @@ import { neighborhoodsRequestSchema, neighborhoodsResponseSchema } from './neigh
 import { mapRequestSchema, mapResponseSchema } from './listing-map';
 import { errorBodySchema } from './errors';
 import {
+  agentProfileSchema,
+  createAgentProfileRequestSchema,
+  staffAgentsEnvelopeSchema,
+  staffAgentsRequestSchema,
+  staffLeadAssignRequestSchema,
+  staffLeadAssignResponseSchema,
   staffLeadDetailSchema,
   staffLeadNoteRequestSchema,
   staffLeadNoteSchema,
@@ -17,7 +23,9 @@ import {
   staffLeadsRequestSchema,
   staffLeadTransitionRequestSchema,
   staffLeadTransitionResponseSchema,
+  staffLeadUnassignRequestSchema,
   staffMeSchema,
+  updateAgentProfileRequestSchema,
 } from './staff';
 import {
   MAX_RESULT_OFFSET,
@@ -99,6 +107,13 @@ function componentSchemas() {
   registry.add(staffLeadTransitionResponseSchema, { id: 'StaffLeadTransitionResponse' });
   registry.add(staffLeadNoteRequestSchema, { id: 'StaffLeadNoteRequest' });
   registry.add(staffLeadNoteSchema, { id: 'StaffLeadNote' });
+  registry.add(agentProfileSchema, { id: 'AgentProfile' });
+  registry.add(staffAgentsEnvelopeSchema, { id: 'StaffAgentsEnvelope' });
+  registry.add(createAgentProfileRequestSchema, { id: 'CreateAgentProfileRequest' });
+  registry.add(updateAgentProfileRequestSchema, { id: 'UpdateAgentProfileRequest' });
+  registry.add(staffLeadAssignRequestSchema, { id: 'StaffLeadAssignRequest' });
+  registry.add(staffLeadAssignResponseSchema, { id: 'StaffLeadAssignResponse' });
+  registry.add(staffLeadUnassignRequestSchema, { id: 'StaffLeadUnassignRequest' });
   registry.add(errorBodySchema, { id: 'ErrorBody' });
 
   const { schemas } = z.toJSONSchema(registry, {
@@ -159,6 +174,23 @@ const staffBadRequestResponse = {
 const staffNotFoundResponse = {
   description: 'No lead has this id (`not_found`).',
   content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } } },
+};
+
+const staffAgentNotFoundResponse = {
+  description: 'No agent profile has this id (`not_found`).',
+  content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } } },
+};
+
+const staffConflictResponse = (description: string) => ({
+  description,
+  content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } } },
+});
+
+const staffAgentIdParameter = {
+  name: 'id',
+  in: 'path',
+  required: true,
+  schema: schema(idSchema, 'input'),
 };
 
 const staffLeadIdParameter = {
@@ -500,7 +532,10 @@ export function toOpenApiDocument() {
           summary: 'Submit a message or tour request against a listing',
           description:
             'Works signed-out and signed-in. An unauthenticated request is never rejected for ' +
-            'being unauthenticated. `name` and `email` are always required. `phone` is optional. ' +
+            'being unauthenticated. `name` and `email` are always required. ' +
+            '`consentTextVersion` is required for new clients. With `consentToContact` true and ' +
+            'no version, the server records `v1`. `phone` is optional. A signed-in account with a confirmed email always uses the ' +
+            'account email. The server ignores the `email` in the body for it. ' +
             '`consentToContact` records that the consumer agreed to be contacted. ' +
             'The server stores the consent text for `consentTextVersion`, the `consentChannels` ' +
             'and the time. The record starts in the `new` lead status. No public read endpoint ' +
@@ -806,6 +841,202 @@ export function toOpenApiDocument() {
             '401': unauthenticatedResponse,
             '403': forbiddenResponse,
             '404': staffNotFoundResponse,
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/staff/leads/{id}/assign': {
+        post: {
+          operationId: 'assignStaffLead',
+          summary: 'Assign a verified lead to an agent',
+          description:
+            'Requires the Admin, SuperAdmin or Moderator role. The lead must be `verified`. The ' +
+            'agent must be active and licensed in the state of the listing. Only the licence ' +
+            'state and the listing state decide a match. The request has no reason field. The ' +
+            'lead moves to `assigned` and the assignment is recorded.',
+          parameters: [staffLeadIdParameter],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/StaffLeadAssignRequest' },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'The lead moved to `assigned`.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/StaffLeadAssignResponse' },
+                },
+              },
+            },
+            '400': staffBadRequestResponse,
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '404': {
+              description: 'No lead or no agent profile has this id (`not_found`).',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '409': staffConflictResponse(
+              'The lead is not `verified`, the agent is not active, or the agent is not ' +
+                'licensed in the state of the listing (`conflict`).',
+            ),
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/staff/leads/{id}/unassign': {
+        post: {
+          operationId: 'unassignStaffLead',
+          summary: 'Return an assigned lead to verified',
+          description:
+            'Requires the Admin, SuperAdmin or Moderator role. A note is required. The open ' +
+            'assignment ends and the lead returns to `verified`. To reassign, unassign, then ' +
+            'assign.',
+          parameters: [staffLeadIdParameter],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/StaffLeadUnassignRequest' },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'The lead returned to `verified`.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/StaffLeadTransitionResponse' },
+                },
+              },
+            },
+            '400': staffBadRequestResponse,
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '404': staffNotFoundResponse,
+            '409': staffConflictResponse(
+              'The lead has no open assignment, or the transitions table does not allow the ' +
+                'change (`conflict`).',
+            ),
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/staff/agents': {
+        get: {
+          operationId: 'listStaffAgents',
+          summary: 'The agent directory',
+          description:
+            'Requires the Admin, SuperAdmin or Moderator role. Every profile, ordered by display ' +
+            'name. The response is `private, no-store`.',
+          parameters: searchParameters(staffAgentsRequestSchema),
+          responses: {
+            '200': {
+              description: 'The agent profiles.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/StaffAgentsEnvelope' },
+                },
+              },
+            },
+            '400': staffBadRequestResponse,
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+        post: {
+          operationId: 'createStaffAgent',
+          summary: 'Create an agent profile',
+          description:
+            'Requires the Admin or SuperAdmin role. The account must hold the `Agent` role. ' +
+            'account-service answers that check with the caller credentials. One profile per ' +
+            'account.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/CreateAgentProfileRequest' },
+              },
+            },
+          },
+          responses: {
+            '201': {
+              description: 'The profile was created.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/AgentProfile' } },
+              },
+            },
+            '400': staffBadRequestResponse,
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '409': staffConflictResponse(
+              'The account has no `Agent` role, or already has a profile (`conflict`).',
+            ),
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/staff/agents/{id}': {
+        get: {
+          operationId: 'getStaffAgent',
+          summary: 'One agent profile',
+          description: 'Requires the Admin, SuperAdmin or Moderator role.',
+          parameters: [staffAgentIdParameter],
+          responses: {
+            '200': {
+              description: 'The profile.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/AgentProfile' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '404': staffAgentNotFoundResponse,
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+        patch: {
+          operationId: 'updateStaffAgent',
+          summary: 'Edit, deactivate or reactivate an agent profile',
+          description:
+            'Requires the Admin or SuperAdmin role. `active: false` deactivates the agent: no ' +
+            'new leads, open assignments stay. Reactivation checks the `Agent` role again. The ' +
+            'account never changes.',
+          parameters: [staffAgentIdParameter],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/UpdateAgentProfileRequest' },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'The updated profile.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/AgentProfile' } },
+              },
+            },
+            '400': staffBadRequestResponse,
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '404': staffAgentNotFoundResponse,
+            '409': staffConflictResponse(
+              'Reactivation needs the `Agent` role, and the account has none (`conflict`).',
+            ),
             '503': unavailableResponse,
             '500': serverErrorResponse,
           },

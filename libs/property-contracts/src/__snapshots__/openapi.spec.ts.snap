@@ -4,6 +4,104 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
 {
   "components": {
     "schemas": {
+      "AgentProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string",
+          },
+          "active": {
+            "type": "boolean",
+          },
+          "brokerage": {
+            "enum": [
+              "Real Broker, LLC",
+            ],
+            "type": "string",
+          },
+          "createdAt": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string",
+          },
+          "displayName": {
+            "type": "string",
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string",
+          },
+          "licenceNumber": {
+            "type": "string",
+          },
+          "licenceStates": {
+            "items": {
+              "pattern": "^[A-Z]{2}$",
+              "type": "string",
+            },
+            "type": "array",
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string",
+          },
+        },
+        "required": [
+          "id",
+          "accountId",
+          "displayName",
+          "licenceNumber",
+          "licenceStates",
+          "brokerage",
+          "active",
+          "createdAt",
+          "updatedAt",
+        ],
+        "type": "object",
+      },
+      "CreateAgentProfileRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string",
+          },
+          "active": {
+            "type": "boolean",
+          },
+          "displayName": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string",
+          },
+          "licenceNumber": {
+            "maxLength": 40,
+            "minLength": 1,
+            "type": "string",
+          },
+          "licenceStates": {
+            "items": {
+              "pattern": "^[A-Z]{2}$",
+              "type": "string",
+            },
+            "maxItems": 60,
+            "minItems": 1,
+            "type": "array",
+          },
+        },
+        "required": [
+          "accountId",
+          "displayName",
+          "licenceNumber",
+          "licenceStates",
+        ],
+        "type": "object",
+      },
       "ErrorBody": {
         "additionalProperties": false,
         "properties": {
@@ -932,7 +1030,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "type": "array",
           },
           "consentTextVersion": {
-            "description": "The consent text version the consumer saw. Optional for now. The server stores the text for that version, never a client string. Defaults to the current version.",
+            "description": "Required for new clients (#631). The consent text version the consumer saw. An older client may omit it, and the server then records \`v1\`. The server stores the text for the version, never a client string. Needs \`consentToContact\` true.",
             "enum": [
               "v1",
             ],
@@ -1778,9 +1876,148 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
         ],
         "type": "object",
       },
+      "StaffAgentsEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/AgentProfile",
+            },
+            "type": "array",
+          },
+        },
+        "required": [
+          "results",
+        ],
+        "type": "object",
+      },
+      "StaffLeadAssignRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "agentProfileId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string",
+          },
+        },
+        "required": [
+          "agentProfileId",
+        ],
+        "type": "object",
+      },
+      "StaffLeadAssignResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "agentProfileId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string",
+          },
+          "from": {
+            "enum": [
+              "new",
+              "verified",
+              "assigned",
+              "accepted",
+              "contacted",
+              "touring",
+              "under_contract",
+              "closed",
+              "lost",
+              "spam",
+              "rejected",
+            ],
+            "type": "string",
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string",
+          },
+          "to": {
+            "enum": [
+              "new",
+              "verified",
+              "assigned",
+              "accepted",
+              "contacted",
+              "touring",
+              "under_contract",
+              "closed",
+              "lost",
+              "spam",
+              "rejected",
+            ],
+            "type": "string",
+          },
+        },
+        "required": [
+          "id",
+          "from",
+          "to",
+          "agentProfileId",
+        ],
+        "type": "object",
+      },
       "StaffLeadDetail": {
         "additionalProperties": false,
         "properties": {
+          "assignments": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "agentDisplayName": {
+                  "type": "string",
+                },
+                "agentProfileId": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string",
+                },
+                "assignedAt": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                  "type": "string",
+                },
+                "assignedByAccountId": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string",
+                },
+                "endReason": {
+                  "enum": [
+                    "unassigned",
+                    "returned",
+                    "closed",
+                  ],
+                  "nullable": true,
+                  "type": "string",
+                },
+                "endedAt": {
+                  "format": "date-time",
+                  "nullable": true,
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                  "type": "string",
+                },
+                "id": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string",
+                },
+              },
+              "required": [
+                "id",
+                "agentProfileId",
+                "agentDisplayName",
+                "assignedByAccountId",
+                "assignedAt",
+                "endedAt",
+                "endReason",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
           "consent": {
             "additionalProperties": false,
             "properties": {
@@ -1851,6 +2088,12 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "actorRole": {
                   "type": "string",
                 },
+                "agentProfileId": {
+                  "format": "uuid",
+                  "nullable": true,
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string",
+                },
                 "createdAt": {
                   "format": "date-time",
                   "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
@@ -1906,6 +2149,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "actorAccountId",
                 "actorRole",
                 "note",
+                "agentProfileId",
                 "createdAt",
               ],
               "type": "object",
@@ -2012,6 +2256,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
           "duplicateLeadIds",
           "history",
           "notes",
+          "assignments",
         ],
         "type": "object",
       },
@@ -2141,6 +2386,20 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
         ],
         "type": "object",
       },
+      "StaffLeadUnassignRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "note": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "required": [
+          "note",
+        ],
+        "type": "object",
+      },
       "StaffLeadsEnvelope": {
         "additionalProperties": false,
         "properties": {
@@ -2243,6 +2502,34 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
         "required": [
           "roles",
         ],
+        "type": "object",
+      },
+      "UpdateAgentProfileRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "type": "boolean",
+          },
+          "displayName": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string",
+          },
+          "licenceNumber": {
+            "maxLength": 40,
+            "minLength": 1,
+            "type": "string",
+          },
+          "licenceStates": {
+            "items": {
+              "pattern": "^[A-Z]{2}$",
+              "type": "string",
+            },
+            "maxItems": 60,
+            "minItems": 1,
+            "type": "array",
+          },
+        },
         "type": "object",
       },
     },
@@ -3444,7 +3731,7 @@ A signed-in request also gets \`isSaved\` and \`isFavorited\` on each result, re
     },
     "/listings/{id}/inquiries": {
       "post": {
-        "description": "Works signed-out and signed-in. An unauthenticated request is never rejected for being unauthenticated. \`name\` and \`email\` are always required. \`phone\` is optional. \`consentToContact\` records that the consumer agreed to be contacted. The server stores the consent text for \`consentTextVersion\`, the \`consentChannels\` and the time. The record starts in the \`new\` lead status. No public read endpoint returns it.
+        "description": "Works signed-out and signed-in. An unauthenticated request is never rejected for being unauthenticated. \`name\` and \`email\` are always required. \`consentTextVersion\` is required for new clients. With \`consentToContact\` true and no version, the server records \`v1\`. \`phone\` is optional. A signed-in account with a confirmed email always uses the account email. The server ignores the \`email\` in the body for it. \`consentToContact\` records that the consumer agreed to be contacted. The server stores the consent text for \`consentTextVersion\`, the \`consentChannels\` and the time. The record starts in the \`new\` lead status. No public read endpoint returns it.
 
 Rate-limited per client and per listing; a request over either limit gets 429 with a \`Retry-After\` header.",
         "operationId": "createListingInquiry",
@@ -3986,6 +4273,377 @@ Rate-limited per client and per listing; a request over either limit gets 429 wi
         "summary": "Remove a saved home by its home id",
       },
     },
+    "/staff/agents": {
+      "get": {
+        "description": "Requires the Admin, SuperAdmin or Moderator role. Every profile, ordered by display name. The response is \`private, no-store\`.",
+        "operationId": "listStaffAgents",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "active",
+            "required": false,
+            "schema": {
+              "description": "Only active (\`true\`) or only deactivated (\`false\`) agents.",
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "licenceState",
+            "required": false,
+            "schema": {
+              "description": "Only agents licensed in this state.",
+              "pattern": "^[A-Z]{2}$",
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffAgentsEnvelope",
+                },
+              },
+            },
+            "description": "The agent profiles.",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Invalid or unknown parameter or body field (\`invalid_request\`).",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No valid credential. The body gives no reason.",
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "A valid credential with none of the allowed roles (\`forbidden\`).",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "account-service did not answer, so the session is unknown. Retry. This is not a sign-out.",
+          },
+        },
+        "summary": "The agent directory",
+      },
+      "post": {
+        "description": "Requires the Admin or SuperAdmin role. The account must hold the \`Agent\` role. account-service answers that check with the caller credentials. One profile per account.",
+        "operationId": "createStaffAgent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAgentProfileRequest",
+              },
+            },
+          },
+          "required": true,
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentProfile",
+                },
+              },
+            },
+            "description": "The profile was created.",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Invalid or unknown parameter or body field (\`invalid_request\`).",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No valid credential. The body gives no reason.",
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "A valid credential with none of the allowed roles (\`forbidden\`).",
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "The account has no \`Agent\` role, or already has a profile (\`conflict\`).",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "account-service did not answer, so the session is unknown. Retry. This is not a sign-out.",
+          },
+        },
+        "summary": "Create an agent profile",
+      },
+    },
+    "/staff/agents/{id}": {
+      "get": {
+        "description": "Requires the Admin, SuperAdmin or Moderator role.",
+        "operationId": "getStaffAgent",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentProfile",
+                },
+              },
+            },
+            "description": "The profile.",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No valid credential. The body gives no reason.",
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "A valid credential with none of the allowed roles (\`forbidden\`).",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No agent profile has this id (\`not_found\`).",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "account-service did not answer, so the session is unknown. Retry. This is not a sign-out.",
+          },
+        },
+        "summary": "One agent profile",
+      },
+      "patch": {
+        "description": "Requires the Admin or SuperAdmin role. \`active: false\` deactivates the agent: no new leads, open assignments stay. Reactivation checks the \`Agent\` role again. The account never changes.",
+        "operationId": "updateStaffAgent",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAgentProfileRequest",
+              },
+            },
+          },
+          "required": true,
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentProfile",
+                },
+              },
+            },
+            "description": "The updated profile.",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Invalid or unknown parameter or body field (\`invalid_request\`).",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No valid credential. The body gives no reason.",
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "A valid credential with none of the allowed roles (\`forbidden\`).",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No agent profile has this id (\`not_found\`).",
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Reactivation needs the \`Agent\` role, and the account has none (\`conflict\`).",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "account-service did not answer, so the session is unknown. Retry. This is not a sign-out.",
+          },
+        },
+        "summary": "Edit, deactivate or reactivate an agent profile",
+      },
+    },
     "/staff/leads": {
       "get": {
         "description": "Requires the Admin, SuperAdmin or Moderator role. Newest first, cursor paging, page size capped at 50. Email and phone are masked. A row has \`possibleDuplicate\` when another open request on the same listing came within seven days from the same email or phone. The server never merges leads. The response is \`private, no-store\`.",
@@ -4223,6 +4881,117 @@ Rate-limited per client and per listing; a request over either limit gets 429 wi
         "summary": "One buyer request, with full contact details",
       },
     },
+    "/staff/leads/{id}/assign": {
+      "post": {
+        "description": "Requires the Admin, SuperAdmin or Moderator role. The lead must be \`verified\`. The agent must be active and licensed in the state of the listing. Only the licence state and the listing state decide a match. The request has no reason field. The lead moves to \`assigned\` and the assignment is recorded.",
+        "operationId": "assignStaffLead",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffLeadAssignRequest",
+              },
+            },
+          },
+          "required": true,
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffLeadAssignResponse",
+                },
+              },
+            },
+            "description": "The lead moved to \`assigned\`.",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Invalid or unknown parameter or body field (\`invalid_request\`).",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No valid credential. The body gives no reason.",
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "A valid credential with none of the allowed roles (\`forbidden\`).",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No lead or no agent profile has this id (\`not_found\`).",
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "The lead is not \`verified\`, the agent is not active, or the agent is not licensed in the state of the listing (\`conflict\`).",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "account-service did not answer, so the session is unknown. Retry. This is not a sign-out.",
+          },
+        },
+        "summary": "Assign a verified lead to an agent",
+      },
+    },
     "/staff/leads/{id}/notes": {
       "post": {
         "description": "Requires the Admin, SuperAdmin or Moderator role. Notes are append-only and carry the author and the time.",
@@ -4433,6 +5202,117 @@ Rate-limited per client and per listing; a request over either limit gets 429 wi
           },
         },
         "summary": "Move a lead to a new status",
+      },
+    },
+    "/staff/leads/{id}/unassign": {
+      "post": {
+        "description": "Requires the Admin, SuperAdmin or Moderator role. A note is required. The open assignment ends and the lead returns to \`verified\`. To reassign, unassign, then assign.",
+        "operationId": "unassignStaffLead",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffLeadUnassignRequest",
+              },
+            },
+          },
+          "required": true,
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffLeadTransitionResponse",
+                },
+              },
+            },
+            "description": "The lead returned to \`verified\`.",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Invalid or unknown parameter or body field (\`invalid_request\`).",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No valid credential. The body gives no reason.",
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "A valid credential with none of the allowed roles (\`forbidden\`).",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No lead has this id (\`not_found\`).",
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "The lead has no open assignment, or the transitions table does not allow the change (\`conflict\`).",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "account-service did not answer, so the session is unknown. Retry. This is not a sign-out.",
+          },
+        },
+        "summary": "Return an assigned lead to verified",
       },
     },
     "/staff/me": {

@@ -36,6 +36,7 @@ internal static class Profile
                 // Identity
                 user.Id,
                 user.Email,
+                user.EmailConfirmed,
                 user.DisplayName,
                 user.VerifiedAt,
                 user.VerifiedByUserId,

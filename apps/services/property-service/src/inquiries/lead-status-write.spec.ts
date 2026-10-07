@@ -50,18 +50,54 @@ describe('changeLeadStatus', () => {
     expect(result).toEqual({ ok: true, from: 'new', to: 'verified' });
     expect(sql[0]).toBe('BEGIN');
     expect(sql[1]).toMatch(/FOR UPDATE/);
-    expect(sql[2]).toMatch(/UPDATE listing_inquiries SET status/);
-    expect(sql[3]).toMatch(/INSERT INTO lead_status_events/);
-    expect(sql[4]).toBe('COMMIT');
-    expect(params[3]).toEqual([
+    expect(sql[2]).toMatch(/UPDATE lead_assignments SET ended_at/);
+    expect(params[2]).toEqual([INPUT.leadId, 'returned']);
+    expect(sql[3]).toMatch(/UPDATE listing_inquiries SET status/);
+    expect(sql[4]).toMatch(/INSERT INTO lead_status_events/);
+    expect(sql[5]).toBe('COMMIT');
+    expect(params[4]).toEqual([
       INPUT.leadId,
       'new',
       'verified',
       INPUT.actorAccountId,
       'moderator',
       INPUT.note,
+      null,
     ]);
     expect(released()).toBe(1);
+  });
+
+  it('runs the precheck inside the transaction and rolls back on a rejection', async () => {
+    const { pool, sql } = fakePool('verified');
+
+    const result = await changeLeadStatus(pool, {
+      ...INPUT,
+      to: 'assigned',
+      precheck: () => Promise.resolve('agent_not_licensed'),
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'rejected', code: 'agent_not_licensed' });
+    expect(sql).toEqual(['BEGIN', expect.stringMatching(/^SELECT status/), 'ROLLBACK']);
+  });
+
+  it.each([['lost'], ['closed']] as const)(
+    'ends the open assignment when the lead is %s',
+    async (to) => {
+      const { pool, params, sql } = fakePool(to === 'lost' ? 'assigned' : 'contacted');
+
+      await changeLeadStatus(pool, { ...INPUT, to });
+
+      expect(sql[2]).toMatch(/UPDATE lead_assignments SET ended_at/);
+      expect(params[2]).toEqual([INPUT.leadId, 'closed']);
+    },
+  );
+
+  it('does not end an assignment when the status is not `verified`', async () => {
+    const { pool, sql } = fakePool('verified');
+
+    await changeLeadStatus(pool, { ...INPUT, to: 'assigned', agentProfileId: 'agent-1' });
+
+    expect(sql.some((s) => /lead_assignments/.test(s))).toBe(false);
   });
 
   it('refuses a transition the table does not allow, and writes nothing', async () => {

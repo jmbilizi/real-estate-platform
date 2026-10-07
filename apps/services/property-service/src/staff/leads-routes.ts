@@ -1,23 +1,30 @@
-import { type NextFunction, type Request, type Response, Router } from 'express';
+import { Router } from 'express';
 import {
-  type ErrorBody,
+  AGENT_INACTIVE_BODY,
+  AGENT_NOT_FOUND_BODY,
+  AGENT_NOT_LICENSED_BODY,
   FORBIDDEN_BODY,
   idSchema,
   INVALID_TRANSITION_BODY,
+  LEAD_NOT_ASSIGNED_BODY,
   LEAD_NOT_FOUND_BODY,
   type LeadStatus,
   MODERATOR_TARGET_STATUSES,
   STAFF_LEADS_PAGE_SIZE_DEFAULT,
   STAFF_NOTE_REQUIRED_STATUSES,
+  staffLeadAssignRequestSchema,
   staffLeadNoteRequestSchema,
   staffLeadsRequestSchema,
   staffLeadTransitionRequestSchema,
+  staffLeadUnassignRequestSchema,
 } from '@cribstop/property-contracts';
 import type { IntrospectionClient } from '../inquiries/account-introspection';
 import { changeLeadStatus, type TransactionalPool } from '../inquiries/lead-status-write';
 import type { Queryable } from '../inquiries/write';
+import { checkAgentForLead, hasOpenAssignment, openAssignment } from './agents-store';
 import { addLeadNote, decodeCursor, encodeCursor, listLeads, readLeadDetail } from './leads-store';
 import { hasAnyRole, requireRole, ROLE, staffCallerOf } from './roles';
+import { actingRole, asyncRoute, describeIssues, invalidRequest } from './route-helpers';
 
 export interface StaffLeadsRouterDeps {
   pool: Queryable & TransactionalPool;
@@ -26,42 +33,6 @@ export interface StaffLeadsRouterDeps {
 
 /** The roles that run the lead desk. `SuperAdmin` passes through `Admin` (see `hasAnyRole`). */
 const LEAD_DESK_ROLES = [ROLE.Admin, ROLE.Moderator] as const;
-
-const invalidRequest = (message: string): ErrorBody => ({
-  error: { code: 'invalid_request', message },
-});
-
-const asyncRoute =
-  (handler: (req: Request, res: Response) => Promise<void>) =>
-  (req: Request, res: Response, next: NextFunction): void => {
-    handler(req, res).catch(next);
-  };
-
-/** Names only, filtered: a field name is caller input and must not be reflected raw. */
-function describeIssues(
-  issues: readonly { code: string; path: readonly PropertyKey[]; keys?: readonly string[] }[],
-): string {
-  const names = new Set<string>();
-  for (const issue of issues) {
-    const raw =
-      issue.code === 'unrecognized_keys'
-        ? (issue.keys ?? [])
-        : [String(issue.path[0] ?? '(request)')];
-    for (const name of raw) {
-      const trimmed = name.slice(0, 40);
-      names.add(/^[A-Za-z0-9_.()-]+$/.test(trimmed) ? trimmed : '(unnamed)');
-    }
-  }
-  return `Invalid or unknown field(s): ${[...names].join(', ')}.`;
-}
-
-/** The role the actor acts under, named in the audit rows. The highest staff role held. */
-function actingRole(roles: readonly string[]): string {
-  for (const role of [ROLE.SuperAdmin, ROLE.Admin, ROLE.Moderator]) {
-    if (roles.includes(role)) return role;
-  }
-  return ROLE.Moderator;
-}
 
 /** What the caller may set. A Moderator sets `verified`, `spam` and `rejected` only. */
 function mayTransitionTo(roles: readonly string[], to: LeadStatus): boolean {
@@ -163,6 +134,94 @@ export function createStaffLeadsRouter(deps: StaffLeadsRouterDeps): Router {
       if (!result.ok) {
         if (result.reason === 'not_found') res.status(404).json(LEAD_NOT_FOUND_BODY);
         else res.status(409).json(INVALID_TRANSITION_BODY);
+        return;
+      }
+      res.status(200).json({ id: id.data, from: result.from, to: result.to });
+    }),
+  );
+
+  /**
+   * Assign (#634). The agent checks run inside the status transaction, behind the row lock, so a
+   * concurrent assign sees the new status and fails the transition. The request has one field.
+   */
+  router.post(
+    '/staff/leads/:id/assign',
+    guard,
+    asyncRoute(async (req, res) => {
+      const id = idSchema.safeParse(req.params.id);
+      if (!id.success) {
+        res.status(404).json(LEAD_NOT_FOUND_BODY);
+        return;
+      }
+      const body = staffLeadAssignRequestSchema.safeParse(req.body);
+      if (!body.success) {
+        res.status(400).json(invalidRequest(describeIssues(body.error.issues)));
+        return;
+      }
+      const caller = staffCallerOf(res);
+      const { agentProfileId } = body.data;
+      const result = await changeLeadStatus(deps.pool, {
+        leadId: id.data,
+        to: 'assigned',
+        actorAccountId: caller.accountId,
+        actorRole: actingRole(caller.roles),
+        agentProfileId,
+        precheck: async (client) => {
+          const rejection = await checkAgentForLead(client, id.data, agentProfileId);
+          if (rejection !== null) return rejection;
+          await openAssignment(client, {
+            leadId: id.data,
+            agentProfileId,
+            assignedByAccountId: caller.accountId,
+          });
+          return null;
+        },
+      });
+      if (!result.ok) {
+        if (result.reason === 'not_found') res.status(404).json(LEAD_NOT_FOUND_BODY);
+        else if (result.reason === 'invalid_transition')
+          res.status(409).json(INVALID_TRANSITION_BODY);
+        else if (result.code === 'agent_not_found') res.status(404).json(AGENT_NOT_FOUND_BODY);
+        else if (result.code === 'agent_inactive') res.status(409).json(AGENT_INACTIVE_BODY);
+        else res.status(409).json(AGENT_NOT_LICENSED_BODY);
+        return;
+      }
+      res.status(200).json({ id: id.data, from: result.from, to: result.to, agentProfileId });
+    }),
+  );
+
+  /** Unassign (#634). Back to `verified`. Reassign is an unassign, then an assign. */
+  router.post(
+    '/staff/leads/:id/unassign',
+    guard,
+    asyncRoute(async (req, res) => {
+      const id = idSchema.safeParse(req.params.id);
+      if (!id.success) {
+        res.status(404).json(LEAD_NOT_FOUND_BODY);
+        return;
+      }
+      const body = staffLeadUnassignRequestSchema.safeParse(req.body);
+      if (!body.success) {
+        res.status(400).json(invalidRequest(describeIssues(body.error.issues)));
+        return;
+      }
+      const caller = staffCallerOf(res);
+      const result = await changeLeadStatus(deps.pool, {
+        leadId: id.data,
+        to: 'verified',
+        actorAccountId: caller.accountId,
+        actorRole: actingRole(caller.roles),
+        note: body.data.note,
+        assignmentEndReason: 'unassigned',
+        // Without this, `unassign` would also verify a `new` lead.
+        precheck: async (client) =>
+          (await hasOpenAssignment(client, id.data)) ? null : 'not_assigned',
+      });
+      if (!result.ok) {
+        if (result.reason === 'not_found') res.status(404).json(LEAD_NOT_FOUND_BODY);
+        else if (result.reason === 'invalid_transition')
+          res.status(409).json(INVALID_TRANSITION_BODY);
+        else res.status(409).json(LEAD_NOT_ASSIGNED_BODY);
         return;
       }
       res.status(200).json({ id: id.data, from: result.from, to: result.to });

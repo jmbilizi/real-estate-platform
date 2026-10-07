@@ -14,7 +14,7 @@ function firstHeaderValue(header: string | string[] | undefined): string | undef
 
 const ACCOUNT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function credentialsOf(req: Request): CredentialHeaders {
+export function credentialsOf(req: Request): CredentialHeaders {
   return {
     cookie: req.headers.cookie,
     authorization: req.headers.authorization,

@@ -111,6 +111,8 @@ export const staffLeadStatusEventSchema = z.object({
   actorAccountId: idSchema.nullable(),
   actorRole: z.string(),
   note: z.string().nullable(),
+  /** The agent an assign or unassign event names. Null for every other event. */
+  agentProfileId: idSchema.nullable(),
   createdAt: z.iso.datetime(),
 });
 
@@ -122,6 +124,21 @@ export const staffLeadNoteSchema = z.object({
   createdAt: z.iso.datetime(),
 });
 export type StaffLeadNote = z.infer<typeof staffLeadNoteSchema>;
+
+export const ASSIGNMENT_END_REASONS = ['unassigned', 'returned', 'closed'] as const;
+
+/** One row of the assignment history of a lead. `endedAt` is null for the open assignment. */
+export const staffLeadAssignmentSchema = z.object({
+  id: idSchema,
+  agentProfileId: idSchema,
+  agentDisplayName: z.string(),
+  assignedByAccountId: idSchema,
+  assignedAt: z.iso.datetime(),
+  endedAt: z.iso.datetime().nullable(),
+  /** `unassigned`: staff removed the agent. `returned`: the lead went back to `verified` otherwise. `closed`: the lead ended as `lost` or `closed`. */
+  endReason: z.enum(ASSIGNMENT_END_REASONS).nullable(),
+});
+export type StaffLeadAssignment = z.infer<typeof staffLeadAssignmentSchema>;
 
 export const staffLeadDetailSchema = z.object({
   id: idSchema,
@@ -146,6 +163,8 @@ export const staffLeadDetailSchema = z.object({
   duplicateLeadIds: z.array(idSchema),
   history: z.array(staffLeadStatusEventSchema),
   notes: z.array(staffLeadNoteSchema),
+  /** Every assignment, oldest first. At most the last one is open. */
+  assignments: z.array(staffLeadAssignmentSchema),
 });
 export type StaffLeadDetail = z.infer<typeof staffLeadDetailSchema>;
 
@@ -166,3 +185,95 @@ export const staffLeadTransitionResponseSchema = z.object({
 export const staffLeadNoteRequestSchema = z.strictObject({
   body: z.string().trim().min(1).max(STAFF_NOTE_MAX_LENGTH),
 });
+
+/**
+ * Agent directory and manual assignment (#634). Matching considers the licence state and the
+ * listing state, and nothing else. No field here holds a trait of the buyer, and the assign
+ * request has no free-text field (Fair Housing, PRD §6).
+ */
+
+/** Every agent sits in our own brokerage. The value is fixed, not client input. */
+export const AGENT_BROKERAGE = 'Real Broker, LLC';
+export const AGENT_LICENCE_STATES_MAX = 60;
+
+/** A two-letter state code. The set of markets is data: no state is hard-coded. */
+export const licenceStateSchema = z
+  .string()
+  .regex(/^[A-Z]{2}$/, 'must be a two-letter upper-case state code');
+
+const licenceStatesSchema = z
+  .array(licenceStateSchema)
+  .min(1)
+  .max(AGENT_LICENCE_STATES_MAX)
+  .refine((states) => new Set(states).size === states.length, {
+    message: 'must not repeat a state',
+  });
+
+const displayNameSchema = z.string().trim().min(1).max(100);
+const licenceNumberSchema = z.string().trim().min(1).max(40);
+
+export const agentProfileSchema = z.object({
+  id: idSchema,
+  /** The account that holds the `Agent` role. */
+  accountId: idSchema,
+  displayName: z.string(),
+  licenceNumber: z.string(),
+  licenceStates: z.array(licenceStateSchema),
+  brokerage: z.literal(AGENT_BROKERAGE),
+  /** A deactivated agent gets no new leads. Open assignments stay. */
+  active: z.boolean(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+export type AgentProfile = z.infer<typeof agentProfileSchema>;
+
+/** Query of `GET /staff/agents`. Unknown parameters are rejected. */
+export const staffAgentsRequestSchema = z.strictObject({
+  active: z
+    .enum(['true', 'false'])
+    .optional()
+    .describe('Only active (`true`) or only deactivated (`false`) agents.'),
+  licenceState: licenceStateSchema.optional().describe('Only agents licensed in this state.'),
+});
+export type StaffAgentsRequest = z.infer<typeof staffAgentsRequestSchema>;
+
+export const staffAgentsEnvelopeSchema = z.object({ results: z.array(agentProfileSchema) });
+export type StaffAgentsEnvelope = z.infer<typeof staffAgentsEnvelopeSchema>;
+
+/** Body of `POST /staff/agents`. */
+export const createAgentProfileRequestSchema = z.strictObject({
+  accountId: idSchema,
+  displayName: displayNameSchema,
+  licenceNumber: licenceNumberSchema,
+  licenceStates: licenceStatesSchema,
+  active: z.boolean().optional(),
+});
+export type CreateAgentProfileRequest = z.infer<typeof createAgentProfileRequestSchema>;
+
+/** Body of `PATCH /staff/agents/{id}`. The account never changes. At least one field is needed. */
+export const updateAgentProfileRequestSchema = z
+  .strictObject({
+    displayName: displayNameSchema.optional(),
+    licenceNumber: licenceNumberSchema.optional(),
+    licenceStates: licenceStatesSchema.optional(),
+    active: z.boolean().optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, { message: 'at least one field is required' });
+export type UpdateAgentProfileRequest = z.infer<typeof updateAgentProfileRequestSchema>;
+
+/** Body of `POST /staff/leads/{id}/assign`. One field: no reason, no free text. */
+export const staffLeadAssignRequestSchema = z.strictObject({ agentProfileId: idSchema });
+export type StaffLeadAssignRequest = z.infer<typeof staffLeadAssignRequestSchema>;
+
+export const staffLeadAssignResponseSchema = z.object({
+  id: idSchema,
+  from: leadStatusSchema,
+  to: leadStatusSchema,
+  agentProfileId: idSchema,
+});
+
+/** Body of `POST /staff/leads/{id}/unassign`. The note is required. */
+export const staffLeadUnassignRequestSchema = z.strictObject({
+  note: z.string().trim().min(1).max(STAFF_NOTE_MAX_LENGTH),
+});
+export type StaffLeadUnassignRequest = z.infer<typeof staffLeadUnassignRequestSchema>;

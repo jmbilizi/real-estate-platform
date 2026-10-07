@@ -32,8 +32,21 @@ export function bearerFor(
   return { Authorization: `${PREFIX}${accountId}${suffix}` };
 }
 
+/** Roles the stub reports for `GET /account/{id}/roles` (#634). An unlisted account has none. */
+const accountRoles = new Map<string, readonly string[]>();
+
+export function setAccountRoles(accountId: string, roles: readonly string[]): void {
+  accountRoles.set(accountId, roles);
+}
+
 export function startIntrospectionStub(): Promise<Server> {
   const server = createServer((req, res) => {
+    const rolesMatch = /^\/account\/([^/]+)\/roles$/.exec(req.url ?? '');
+    if (rolesMatch !== null) {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(accountRoles.get(decodeURIComponent(rolesMatch[1] ?? '')) ?? []));
+      return;
+    }
     const authorization = req.headers.authorization ?? '';
     const credential = authorization.startsWith(PREFIX) ? authorization.slice(PREFIX.length) : null;
     const [accountId = null, roleList = ''] = credential?.split('|') ?? [];
