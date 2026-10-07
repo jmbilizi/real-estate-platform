@@ -172,6 +172,13 @@ internal static class Program
         builder.Services.AddSingleton<IdentityEmailComposer>();
         builder.Services.AddScoped<EmailCodeService>();
         builder.Services.AddHostedService<EmailCodePurgeService>();
+        builder.Services
+            .AddOptions<SignUpOptions>()
+            .Bind(builder.Configuration.GetSection(SignUpOptions.SectionName))
+            .Validate(options => options.Validate() is null, "SignUp configuration is invalid. See SignUpOptions.Validate.")
+            .ValidateOnStart();
+        builder.Services.AddScoped<SignUpService>();
+        builder.Services.AddHostedService<PendingRegistrationPurgeService>();
 
         // The Postmark transport: one background queue, resolved both as the delivery seam
         // (IOutboundEmailSender) and as the hosted service that drains it. Enqueuing never blocks
@@ -270,6 +277,10 @@ internal static class Program
         identityGroup.MapIdentityApi<ApplicationUser>();
         identityGroup.AddEndpointFilter<AccountRecoveryThrottleFilter>();
         identityGroup.AddEndpointFilter<IdentityResponseShapingFilter>();
+
+        // Sign-up before an account exists: POST /account/signup/{start,verify,resend,change-email}.
+        // Creates no ApplicationUser. See Routes/SignUp.cs.
+        app.MapSignUpRoutes();
 
         // Profile: GET/PUT/DELETE /account/profile, GET /account/{userId}/history
         app.MapProfileRoutes();

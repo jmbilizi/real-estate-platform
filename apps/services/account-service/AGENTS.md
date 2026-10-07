@@ -132,9 +132,9 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
 
 ## Email code engine (#650)
 
-- `Helpers/EmailCodeService.cs` issues, verifies and voids 6-digit codes. No endpoint calls it yet.
-  Purposes: `EmailCodePurpose` (`SignUp`, `PasswordReset`, `EmailChangeNew`, `EmailChangeOld`).
-  Policy: `Configuration/EmailCodeOptions.cs` (`EmailCodes` section).
+- `Helpers/EmailCodeService.cs` issues, verifies and voids 6-digit codes. Sign-up calls it (see
+  Sign-up below). Purposes: `EmailCodePurpose` (`SignUp`, `PasswordReset`, `EmailChangeNew`,
+  `EmailChangeOld`). Policy: `Configuration/EmailCodeOptions.cs` (`EmailCodes` section).
 - Tables: `EmailCodes` (keyed HMAC of the code, never the code) and `EmailCodeThrottles` (wrong
   tries and lock per email and purpose). The throttle row is separate so a resend does not reset it.
 - Resend caps count `EmailCodes` rows. The purge keeps a spent row for 24 hours for that reason.
@@ -143,6 +143,35 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   `Unavailable` and startup logs event `1380`. Only Development and Testing use a fixed dev key.
 - The code message logs by `EmailKind` only. `PostmarkDeliveryQueue` redacts the recipient for it.
 - A striped in-process lock serializes one email and purpose. Two replicas can still race.
+
+## Sign-up before an account exists (#652)
+
+- Endpoints (anonymous, `Routes/SignUp.cs`): `POST /account/signup/start`, `/verify`, `/resend`,
+  `/change-email`. The gateway catch-all `/account/{everything}` already routes them.
+- Logic is in `Helpers/SignUpService.cs`. A pending sign-up is a `PendingRegistrations` row: no
+  password, no `ApplicationUser`, expiry 30 minutes after the last code (`SignUp` options section).
+  `PendingRegistrationPurgeService` deletes expired rows. #654 creates the account.
+- `/verify` returns `signupProof`: 32 random bytes, stored only as a SHA-256 hash on the row, 15
+  minute life, bound to the email. `SignUpService.TryConsumeProofAsync` uses it up once. #654 must
+  call it before it creates the account.
+- Wrong code: `400` with `attemptsLeft`. Lock or limit: `429` with `Retry-After`. No engine key:
+  `503`.
+- **Same answer for every address.** `/start` for an address with an account sends the
+  already-registered notice and answers like a new address. `/resend` and `/verify` do nothing for
+  an address with no open sign-up. The engine counts no wrong try without an open code, so
+  `AccountRecoveryRateLimiter.TryDecoyWrongTry` counts it in memory: the same tries left, then the
+  same lock. Do not remove it. Without it, `attemptsLeft` tells an existing address from a new one.
+- **Limits** run in `AccountRecoveryThrottleFilter`, before any lookup. Send (start, resend, new
+  address of a change): per client address, plus per email cooldown, hour and day from `EmailCodes`.
+  Verify: per client address, which caps how many emails one address can lock. Change-email also
+  counts the old email. The address counter runs first, so an exhausted address cannot spend a
+  victim's email budget. The timing floor `AccountRecovery:MinimumResponseDuration` applies to all
+  four endpoints.
+- Known limits: counters are per process (see the limiter). Anyone who knows a pending address can
+  drop it with `/change-email`, or lock it with five wrong tries. Both are bounded by the limits
+  above. After a lock, `/start` answers `429` for a new address and for an existing one alike.
+- Email key: trim and upper case only. Plus tags and dots stay (`Helpers/SignUpEmail.cs`).
+- Tests: `Tests/Integration/SignUpEndpointTests.cs`. Gateway: `AccountSignUpRoutesTests`.
 
 ## Staff roles (#628)
 

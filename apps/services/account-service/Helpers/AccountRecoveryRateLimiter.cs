@@ -142,6 +142,143 @@ internal sealed class AccountRecoveryRateLimiter(
             new Counter($"register:addr:{clientAddress ?? "unknown"}", options.Value.RegistrationsPerAddress, options.Value.RequestWindow));
 
     /// <summary>
+    /// Counts one sign-up send (start, resend or the new address of a change) against the client
+    /// address and against the interval, hourly and daily limits for the email.
+    /// </summary>
+    /// <remarks>
+    /// The address counter comes first. A caller who has spent the address budget is refused before
+    /// the call reaches a victim's email counters, so one address cannot drain them.
+    /// </remarks>
+    /// <param name="email">The submitted address; compared case-insensitively.</param>
+    /// <param name="clientAddress">The client address, or null when unknown.</param>
+    /// <param name="cooldown">The minimum time between two sends to one email.</param>
+    /// <param name="perHour">The sends allowed per email per hour.</param>
+    /// <param name="perDay">The sends allowed per email per 24 hours.</param>
+    /// <param name="retryAfter">When refused, how long until every refusing window rolls over.</param>
+    /// <returns><see langword="true"/> when the send may proceed.</returns>
+    internal bool TrySignUpSend(
+        string email,
+        string? clientAddress,
+        TimeSpan cooldown,
+        int perHour,
+        int perDay,
+        out TimeSpan retryAfter) =>
+        this.TryConsumeAll(out retryAfter, this.SignUpSendCounters(email, clientAddress, cooldown, perHour, perDay));
+
+    /// <summary>
+    /// Counts one sign-up code check against the client address. The engine locks one email after
+    /// its own wrong tries, so this is the cap on how many emails one address can lock.
+    /// </summary>
+    /// <param name="clientAddress">The client address, or null when unknown.</param>
+    /// <param name="retryAfter">When refused, how long until the window rolls over.</param>
+    /// <returns><see langword="true"/> when the check may proceed.</returns>
+    internal bool TrySignUpVerify(string? clientAddress, out TimeSpan retryAfter) =>
+        this.TryConsumeAll(
+            out retryAfter,
+            new Counter($"signup:verify:addr:{clientAddress ?? "unknown"}", options.Value.SignUpVerifiesPerAddress, options.Value.RequestWindow));
+
+    /// <summary>
+    /// Counts one sign-up email change against the client address, against the old email, and
+    /// against the send limits for the new email.
+    /// </summary>
+    /// <param name="oldEmail">The address being replaced.</param>
+    /// <param name="newEmail">The address that replaces it.</param>
+    /// <param name="clientAddress">The client address, or null when unknown.</param>
+    /// <param name="cooldown">The minimum time between two sends to one email.</param>
+    /// <param name="perHour">The sends allowed per email per hour.</param>
+    /// <param name="perDay">The sends allowed per email per 24 hours.</param>
+    /// <param name="retryAfter">When refused, how long until every refusing window rolls over.</param>
+    /// <returns><see langword="true"/> when the change may proceed.</returns>
+    internal bool TrySignUpChange(
+        string oldEmail,
+        string newEmail,
+        string? clientAddress,
+        TimeSpan cooldown,
+        int perHour,
+        int perDay,
+        out TimeSpan retryAfter)
+    {
+        var send = this.SignUpSendCounters(newEmail, clientAddress, cooldown, perHour, perDay);
+        var settings = options.Value;
+        return this.TryConsumeAll(
+            out retryAfter,
+            [send[0], new Counter($"signup:change:old:{oldEmail.ToUpperInvariant()}", settings.RequestsPerEmail, settings.RequestWindow), .. send[1..]]);
+    }
+
+    /// <summary>
+    /// Counts one wrong try for an email with no open code. The engine does not count such a try,
+    /// so this stands in for it and the answer matches an email that has a code: the same tries
+    /// left, then the same lock.
+    /// </summary>
+    /// <param name="email">The submitted address; compared case-insensitively.</param>
+    /// <param name="maxTries">The wrong tries that lock an email.</param>
+    /// <param name="lockDuration">How long the lock lasts.</param>
+    /// <param name="attemptsLeft">When allowed, the tries left before the lock.</param>
+    /// <param name="retryAfter">When locked, how long until the lock ends.</param>
+    /// <returns><see langword="true"/> while tries are left. <see langword="false"/> at the lock.</returns>
+    internal bool TryDecoyWrongTry(
+        string email,
+        int maxTries,
+        TimeSpan lockDuration,
+        out int attemptsLeft,
+        out TimeSpan retryAfter)
+    {
+        // The last allowed try is the one that locks, as in the engine. So the counter allows
+        // maxTries - 1 and refuses the next.
+        var allowed = this.TryConsumeCounting(
+            DecoyKey(email),
+            Math.Max(0, maxTries - 1),
+            lockDuration,
+            out retryAfter,
+            out var count);
+        attemptsLeft = allowed ? maxTries - count : 0;
+        return allowed;
+    }
+
+    /// <summary>Reports whether <see cref="TryDecoyWrongTry"/> has locked the email.</summary>
+    /// <param name="email">The submitted address; compared case-insensitively.</param>
+    /// <param name="maxTries">The wrong tries that lock an email.</param>
+    /// <param name="retryAfter">When locked, how long until the lock ends.</param>
+    /// <returns><see langword="true"/> when the email is locked.</returns>
+    internal bool IsDecoyLocked(string email, int maxTries, out TimeSpan retryAfter)
+    {
+        var now = timeProvider.GetUtcNow();
+        lock (this.gate)
+        {
+            if (this.cache.TryGetValue(DecoyKey(email), out Window? tracked)
+                && tracked is not null
+                && tracked.Count >= maxTries
+                && tracked.ExpiresAt > now)
+            {
+                retryAfter = tracked.ExpiresAt - now;
+                return true;
+            }
+        }
+
+        retryAfter = TimeSpan.Zero;
+        return false;
+    }
+
+    private static string DecoyKey(string email) => $"signup:decoy:{email.ToUpperInvariant()}";
+
+    private Counter[] SignUpSendCounters(
+        string email,
+        string? clientAddress,
+        TimeSpan cooldown,
+        int perHour,
+        int perDay)
+    {
+        var key = email.ToUpperInvariant();
+        return
+        [
+            new Counter($"signup:send:addr:{clientAddress ?? "unknown"}", options.Value.SignUpSendsPerAddress, options.Value.RequestWindow),
+            new Counter($"signup:send:interval:{key}", 1, cooldown),
+            new Counter($"signup:send:hour:{key}", perHour, TimeSpan.FromHours(1)),
+            new Counter($"signup:send:day:{key}", perDay, TimeSpan.FromHours(24)),
+        ];
+    }
+
+    /// <summary>
     /// Consumes one unit from each counter in turn and stops at the first refusal.
     /// </summary>
     /// <remarks>
@@ -225,9 +362,13 @@ internal sealed class AccountRecoveryRateLimiter(
     /// line is a genuine gap and is noted on the ticket rather than bolted on here.
     /// </para>
     /// </remarks>
-    private bool TryConsume(string key, int limit, TimeSpan window, out TimeSpan retryAfter)
+    private bool TryConsume(string key, int limit, TimeSpan window, out TimeSpan retryAfter) =>
+        this.TryConsumeCounting(key, limit, window, out retryAfter, out _);
+
+    private bool TryConsumeCounting(string key, int limit, TimeSpan window, out TimeSpan retryAfter, out int count)
     {
         var now = timeProvider.GetUtcNow();
+        count = 0;
 
         lock (this.gate)
         {
@@ -259,6 +400,7 @@ internal sealed class AccountRecoveryRateLimiter(
                 return false;
             }
 
+            count = counter.Count;
             return counter.Count <= limit;
         }
     }

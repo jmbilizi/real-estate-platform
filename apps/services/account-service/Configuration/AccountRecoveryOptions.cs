@@ -120,6 +120,19 @@ internal sealed class AccountRecoveryOptions
     /// </summary>
     public int RegistrationsPerAddress { get; set; } = 30;
 
+    /// <summary>
+    /// Gets or sets the sign-up sends (start, resend, change-email) allowed from one client address
+    /// per <see cref="RequestWindow"/>. Loose: one client address is often many people behind one NAT.
+    /// </summary>
+    public int SignUpSendsPerAddress { get; set; } = 20;
+
+    /// <summary>
+    /// Gets or sets the sign-up code checks allowed from one client address per
+    /// <see cref="RequestWindow"/>. A lock needs five wrong tries on one email, so this also caps
+    /// how many emails one address can lock for 15 minutes.
+    /// </summary>
+    public int SignUpVerifiesPerAddress { get; set; } = 20;
+
     /// <summary>Gets or sets the window for the per-client-address counters.</summary>
     public TimeSpan RequestWindow { get; set; } = TimeSpan.FromMinutes(15);
 
@@ -194,6 +207,8 @@ internal sealed class AccountRecoveryOptions
             (nameof(this.RequestsPerAddress), this.RequestsPerAddress),
             (nameof(this.RedemptionsPerAddress), this.RedemptionsPerAddress),
             (nameof(this.RegistrationsPerAddress), this.RegistrationsPerAddress),
+            (nameof(this.SignUpSendsPerAddress), this.SignUpSendsPerAddress),
+            (nameof(this.SignUpVerifiesPerAddress), this.SignUpVerifiesPerAddress),
             (nameof(this.MaxTrackedKeys), this.MaxTrackedKeys));
     }
 

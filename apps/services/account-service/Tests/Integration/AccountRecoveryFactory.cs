@@ -21,7 +21,12 @@ namespace AccountService.Tests.Integration
     /// requests carry none, so one host per test keeps the counters private to the test.
     /// </remarks>
     /// <param name="configure">Recovery policy overrides for this host, if any.</param>
-    internal sealed class AccountRecoveryFactory(Action<AccountRecoveryOptions>? configure = null)
+    /// <param name="configureCodes">Email code policy overrides, applied after the host sets its key.</param>
+    /// <param name="clock">A clock for the host, if the test moves time.</param>
+    internal sealed class AccountRecoveryFactory(
+        Action<AccountRecoveryOptions>? configure = null,
+        Action<EmailCodeOptions>? configureCodes = null,
+        TimeProvider? clock = null)
         : AccountServiceFactory
     {
         private readonly List<SentMessage> sent = new();
@@ -96,6 +101,17 @@ namespace AccountService.Tests.Integration
                 if (configure is not null)
                 {
                     services.Configure(configure);
+                }
+
+                if (configureCodes is not null)
+                {
+                    // PostConfigure runs after Program's own, which sets the key.
+                    services.PostConfigure(configureCodes);
+                }
+
+                if (clock is not null)
+                {
+                    services.AddSingleton(clock);
                 }
             });
         }

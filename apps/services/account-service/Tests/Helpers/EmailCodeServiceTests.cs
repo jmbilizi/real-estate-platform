@@ -176,6 +176,24 @@ namespace AccountService.Tests.Helpers
         }
 
         [Fact]
+        public async Task Verify_ReportsTheTriesLeft_OnACountedWrongTry_AndNullWhenNoCodeIsOpen()
+        {
+            (await this.service.VerifyAsync(Email, EmailCodePurpose.SignUp, "123456")).AttemptsLeft.Should().BeNull();
+
+            await this.service.IssueAsync(Email, EmailCodePurpose.SignUp);
+            var wrong = Wrong(this.sender.LastCode);
+
+            var left = new List<int?>();
+            for (var i = 0; i < 4; i++)
+            {
+                left.Add((await this.service.VerifyAsync(Email, EmailCodePurpose.SignUp, wrong)).AttemptsLeft);
+            }
+
+            left.Should().Equal(4, 3, 2, 1);
+            (await this.service.VerifyAsync(Email, EmailCodePurpose.SignUp, wrong)).Status.Should().Be(EmailCodeVerifyStatus.Locked);
+        }
+
+        [Fact]
         public async Task Verify_TheLockIsPerPurpose_AndEndsAfterFifteenMinutes()
         {
             await this.LockAsync(EmailCodePurpose.SignUp);

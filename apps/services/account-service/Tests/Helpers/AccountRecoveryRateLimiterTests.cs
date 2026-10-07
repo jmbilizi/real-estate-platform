@@ -375,6 +375,90 @@ namespace AccountService.Tests.Helpers
             refusals.Should().BeGreaterThan(0, "a limit that stops applying under load is not a limit");
         }
 
+        [Fact]
+        public void TrySignUpSend_CountsPerEmailAcrossAddresses_AndPerAddressAcrossEmails()
+        {
+            var limiter = this.Create(options => options.SignUpSendsPerAddress = 3);
+            var none = TimeSpan.Zero;
+
+            limiter.TrySignUpSend("a@example.com", "10.0.0.1", none, 2, 100, out _).Should().BeTrue();
+            limiter.TrySignUpSend("a@example.com", "10.0.0.2", none, 2, 100, out _).Should().BeTrue();
+            limiter.TrySignUpSend("A@Example.com", "10.0.0.3", none, 2, 100, out var retry).Should().BeFalse();
+            retry.Should().BePositive();
+
+            limiter.TrySignUpSend("b@example.com", "10.0.0.9", none, 2, 100, out _).Should().BeTrue();
+            limiter.TrySignUpSend("c@example.com", "10.0.0.9", none, 2, 100, out _).Should().BeTrue();
+            limiter.TrySignUpSend("d@example.com", "10.0.0.9", none, 2, 100, out _).Should().BeTrue();
+            limiter.TrySignUpSend("e@example.com", "10.0.0.9", none, 2, 100, out _).Should().BeFalse();
+        }
+
+        [Fact]
+        public void TrySignUpSend_AnExhaustedAddress_DoesNotSpendTheEmailBudget()
+        {
+            var limiter = this.Create(options => options.SignUpSendsPerAddress = 1);
+            var none = TimeSpan.Zero;
+
+            limiter.TrySignUpSend("x@example.com", "10.0.0.1", none, 1, 100, out _).Should().BeTrue();
+            limiter.TrySignUpSend("victim@example.com", "10.0.0.1", none, 1, 100, out _).Should().BeFalse();
+
+            limiter.TrySignUpSend("victim@example.com", "10.0.0.2", none, 1, 100, out _).Should().BeTrue();
+        }
+
+        [Fact]
+        public void TrySignUpSend_EnforcesTheCooldown()
+        {
+            var limiter = this.Create(_ => { });
+
+            limiter.TrySignUpSend("a@example.com", "10.0.0.1", TimeSpan.FromSeconds(60), 5, 10, out _).Should().BeTrue();
+            limiter.TrySignUpSend("a@example.com", "10.0.0.1", TimeSpan.FromSeconds(60), 5, 10, out var retry).Should().BeFalse();
+
+            retry.Should().BeGreaterThan(TimeSpan.Zero).And.BeLessThanOrEqualTo(TimeSpan.FromSeconds(60));
+        }
+
+        [Fact]
+        public void TrySignUpVerify_CountsPerAddress()
+        {
+            var limiter = this.Create(options => options.SignUpVerifiesPerAddress = 2);
+
+            limiter.TrySignUpVerify("10.0.0.1", out _).Should().BeTrue();
+            limiter.TrySignUpVerify("10.0.0.1", out _).Should().BeTrue();
+            limiter.TrySignUpVerify("10.0.0.1", out _).Should().BeFalse();
+            limiter.TrySignUpVerify("10.0.0.2", out _).Should().BeTrue();
+        }
+
+        [Fact]
+        public void TrySignUpChange_CountsTheOldEmail_AndTheNewEmail()
+        {
+            var limiter = this.Create(options => options.RequestsPerEmail = 2);
+            var none = TimeSpan.Zero;
+
+            limiter.TrySignUpChange("old@example.com", "n1@example.com", "10.0.0.1", none, 100, 100, out _).Should().BeTrue();
+            limiter.TrySignUpChange("old@example.com", "n2@example.com", "10.0.0.1", none, 100, 100, out _).Should().BeTrue();
+            limiter.TrySignUpChange("OLD@example.com", "n3@example.com", "10.0.0.1", none, 100, 100, out _).Should().BeFalse();
+        }
+
+        [Fact]
+        public void TryDecoyWrongTry_CountsDownLikeTheEngine_ThenLocks()
+        {
+            var limiter = this.Create(_ => { });
+            var lockFor = TimeSpan.FromMinutes(15);
+            var left = new List<int>();
+
+            for (var i = 0; i < 4; i++)
+            {
+                limiter.TryDecoyWrongTry("n@example.com", 5, lockFor, out var attemptsLeft, out _).Should().BeTrue();
+                left.Add(attemptsLeft);
+            }
+
+            left.Should().Equal(4, 3, 2, 1);
+            limiter.IsDecoyLocked("n@example.com", 5, out _).Should().BeFalse();
+            limiter.TryDecoyWrongTry("N@example.com", 5, lockFor, out _, out var retry).Should().BeFalse();
+            retry.Should().BeGreaterThan(TimeSpan.FromMinutes(14)).And.BeLessThanOrEqualTo(lockFor);
+            limiter.IsDecoyLocked("n@EXAMPLE.com", 5, out var lockedFor).Should().BeTrue();
+            lockedFor.Should().BePositive();
+            limiter.IsDecoyLocked("other@example.com", 5, out _).Should().BeFalse();
+        }
+
         private AccountRecoveryRateLimiter Create(Action<AccountRecoveryOptions> configure)
         {
             var options = new AccountRecoveryOptions();

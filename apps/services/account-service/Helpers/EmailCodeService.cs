@@ -383,7 +383,9 @@ internal sealed partial class EmailCodeService(
             return new EmailCodeVerifyResult(EmailCodeVerifyStatus.Locked, CeilSeconds(settings.LockDuration));
         }
 
-        return new EmailCodeVerifyResult(EmailCodeVerifyStatus.Invalid);
+        return new EmailCodeVerifyResult(
+            EmailCodeVerifyStatus.Invalid,
+            AttemptsLeft: settings.MaxWrongTries - throttle.FailedAttempts);
     }
 
     private async Task VoidOpenAsync(string key, EmailCodePurpose purpose, DateTime now, CancellationToken cancellationToken)

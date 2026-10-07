@@ -29,6 +29,8 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
 
     public DbSet<EmailCodeThrottle> EmailCodeThrottles => Set<EmailCodeThrottle>();
 
+    public DbSet<PendingRegistration> PendingRegistrations => Set<PendingRegistration>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -234,6 +236,18 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
             entity.Property(t => t.Purpose).HasConversion<string>();
             entity.Property(t => t.Version).IsConcurrencyToken();
             entity.HasIndex(t => t.UpdatedAt);
+        });
+
+        // No FK to AspNetUsers and no password: a pending sign-up is not an account.
+        builder.Entity<PendingRegistration>(entity =>
+        {
+            entity.ToTable("PendingRegistrations");
+            entity.Property(p => p.Email).IsRequired();
+            entity.Property(p => p.EmailAsEntered).IsRequired();
+            entity.Property(p => p.State).HasConversion<string>().IsRequired();
+            entity.HasIndex(p => p.Email).IsUnique();
+            entity.HasIndex(p => p.ExpiresAt);
+            entity.Property(p => p.Version).IsConcurrencyToken();
         });
     }
 }

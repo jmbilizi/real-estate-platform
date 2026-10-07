@@ -72,6 +72,8 @@ namespace AccountService.Tests.Integration
                     options.RequestsPerAddress = int.MaxValue;
                     options.RedemptionsPerAddress = int.MaxValue;
                     options.RegistrationsPerAddress = int.MaxValue;
+                    options.SignUpSendsPerAddress = int.MaxValue;
+                    options.SignUpVerifiesPerAddress = int.MaxValue;
                     options.MinimumResponseDuration = TimeSpan.Zero;
                 });
             });

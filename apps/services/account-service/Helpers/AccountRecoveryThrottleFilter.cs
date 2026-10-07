@@ -5,6 +5,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using AccountService.Configuration;
+using AccountService.Dtos;
 using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.Extensions.Options;
 
@@ -30,9 +31,11 @@ namespace AccountService.Helpers;
 /// </remarks>
 /// <param name="rateLimiter">The shared counters.</param>
 /// <param name="options">The account-recovery options.</param>
+/// <param name="codeOptions">The email code options. The sign-up send limits follow its resend caps.</param>
 internal sealed class AccountRecoveryThrottleFilter(
     AccountRecoveryRateLimiter rateLimiter,
-    IOptions<AccountRecoveryOptions> options) : IEndpointFilter
+    IOptions<AccountRecoveryOptions> options,
+    IOptions<EmailCodeOptions> codeOptions) : IEndpointFilter
 {
     /// <inheritdoc/>
     public async ValueTask<object?> InvokeAsync(
@@ -64,6 +67,30 @@ internal sealed class AccountRecoveryThrottleFilter(
 
             case RegisterRequest:
                 allowed = rateLimiter.TryRegistration(clientAddress, out retryAfter);
+                break;
+
+            case SignUpStartRequest start:
+                allowed = this.TrySignUpSend(Normalise(start.Email), clientAddress, out retryAfter);
+                break;
+
+            case SignUpResendRequest signUpResend:
+                allowed = this.TrySignUpSend(Normalise(signUpResend.Email), clientAddress, out retryAfter);
+                break;
+
+            case SignUpVerifyRequest:
+                allowed = rateLimiter.TrySignUpVerify(clientAddress, out retryAfter);
+                break;
+
+            case SignUpChangeEmailRequest change:
+                var codes = codeOptions.Value;
+                allowed = rateLimiter.TrySignUpChange(
+                    Normalise(change.OldEmail),
+                    Normalise(change.NewEmail),
+                    clientAddress,
+                    codes.ResendCooldown,
+                    codes.MaxPerHour,
+                    codes.MaxPerDay,
+                    out retryAfter);
                 break;
 
             case LoginRequest:
@@ -116,6 +143,10 @@ internal sealed class AccountRecoveryThrottleFilter(
                 or ResetPasswordRequest
                 or ResendConfirmationEmailRequest
                 or RegisterRequest
+                or SignUpStartRequest
+                or SignUpResendRequest
+                or SignUpVerifyRequest
+                or SignUpChangeEmailRequest
                 or LoginRequest)
             {
                 return context.Arguments[i];
@@ -149,6 +180,12 @@ internal sealed class AccountRecoveryThrottleFilter(
             // replace a uniform 200 with an exception out of the filter.
             await Task.Delay(remaining, CancellationToken.None).ConfigureAwait(false);
         }
+    }
+
+    private bool TrySignUpSend(string email, string? clientAddress, out TimeSpan retryAfter)
+    {
+        var codes = codeOptions.Value;
+        return rateLimiter.TrySignUpSend(email, clientAddress, codes.ResendCooldown, codes.MaxPerHour, codes.MaxPerDay, out retryAfter);
     }
 
     private async ValueTask<object?> PaddedAsync(
