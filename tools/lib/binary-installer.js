@@ -107,7 +107,7 @@ async function extractTarGz(archivePath, destDir) {
 }
 
 /**
- * Add a directory to PATH:
+ * Add a directory to PATH for this process (and GITHUB_PATH in CI). With --persist-path:
  *   Windows — persists to User PATH via registry, refreshes current process
  *   Unix    — appends to shell profile + updates current process
  */
@@ -123,6 +123,21 @@ function addToPath(binDir) {
 
   if (currentDirs.includes(target)) {
     ok('Already in PATH');
+    return;
+  }
+
+  // Persistent writes are opt-in. Without the flag, only this process and GITHUB_PATH change.
+  if (!process.argv.includes('--persist-path')) {
+    process.env.PATH = `${binDir}${sep}${process.env.PATH}`;
+    if (process.env.GITHUB_PATH) {
+      try {
+        fs.appendFileSync(process.env.GITHUB_PATH, `${binDir}\n`);
+        ok('Added to GITHUB_PATH');
+      } catch (e) {
+        warn(`Could not write GITHUB_PATH: ${e.message}`);
+      }
+    }
+    warn(`PATH was not changed. Add "${binDir}" to your PATH, or run with --persist-path.`);
     return;
   }
 

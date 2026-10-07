@@ -93,6 +93,12 @@ guide.
     descriptions, commit messages, and replies to the user. See
     [Writing Standard](#writing-standard).
 
+11. **Agents never change the user's persistent environment.** Do not run `dotnet:env`,
+    `python:env*`, `infra:setup`, or any script that writes the user PATH, the registry, `setx`, or
+    a shell profile, or that installs an SDK. These scripts are for humans. If a toolchain is
+    missing, set PATH inline for that one command. Or stop and file a `human-action` ticket. The
+    scripts change the persistent PATH only with `--persist-path`.
+
 ## Writing Standard (ASD-STE100)
 
 Every agent writes in Simplified Technical English. The rules that matter most here:

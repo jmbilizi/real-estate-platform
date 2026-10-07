@@ -13,6 +13,7 @@ const os = require('os');
 // Process command line arguments
 const args = process.argv.slice(2);
 const skipTools = args.includes('--skip-tools');
+const persistPath = args.includes('--persist-path');
 
 if (args.includes('--help') || args.includes('-h')) {
   console.log('Usage: node dotnet-dev-setup.js [options]');
@@ -20,6 +21,9 @@ if (args.includes('--help') || args.includes('-h')) {
   console.log('Options:');
   console.log('  --help, -h     Display this help message');
   console.log('  --skip-tools   Skip installation of .NET global tools');
+  console.log(
+    '  --persist-path Write PATH to the user PATH or shell profiles (default: print only)',
+  );
   console.log('');
   console.log('Description:');
   console.log(
@@ -49,10 +53,29 @@ const isWindows = os.platform() === 'win32';
  * On Windows, uses setx to persist the PATH change.
  */
 function persistDotNetPaths() {
+  const dotnetHome = path.join(os.homedir(), '.dotnet');
+  const dotnetTools = path.join(dotnetHome, 'tools');
+
+  if (!persistPath) {
+    // Persistent writes are opt-in. CI reads GITHUB_PATH, so append there.
+    process.env.PATH = [dotnetHome, dotnetTools, process.env.PATH].join(path.delimiter);
+    if (process.env.GITHUB_PATH) {
+      try {
+        fs.appendFileSync(process.env.GITHUB_PATH, `${dotnetHome}\n${dotnetTools}\n`);
+        console.log('✓ Added .NET paths to GITHUB_PATH.');
+      } catch (e) {
+        console.warn('Could not write GITHUB_PATH:', e.message);
+      }
+    }
+    console.log('PATH was not changed. Add these entries to your PATH yourself:');
+    console.log(`  ${dotnetHome}`);
+    console.log(`  ${dotnetTools}`);
+    console.log('Or run again with --persist-path to write them for you.');
+    return;
+  }
+
   if (isWindows) {
     try {
-      const dotnetHome = path.join(os.homedir(), '.dotnet');
-      const dotnetTools = path.join(dotnetHome, 'tools');
       // Use PowerShell to safely read and update the user PATH via registry (avoids setx truncation and %PATH% expansion issues)
       const ps = `
         $current = [Environment]::GetEnvironmentVariable('PATH', 'User');
