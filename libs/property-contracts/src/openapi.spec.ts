@@ -41,6 +41,7 @@ describe('toOpenApiDocument', () => {
       '/properties/{id}/page',
       '/saved-homes',
       '/saved-homes/{id}',
+      '/staff/me',
     ]);
   });
 

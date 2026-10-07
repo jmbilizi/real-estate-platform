@@ -119,6 +119,41 @@ describe('createHttpIntrospectionClient', () => {
     expect(await client.introspect?.({ cookie: 'x=1' })).toEqual({ kind: 'unavailable' });
   });
 
+  it('carries roles, email and the confirmed flag from a valid response', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          isValid: true,
+          accountId: 'acct-1',
+          roles: ['User', 'Agent', 42],
+          email: 'a@example.com',
+          emailConfirmed: true,
+        }),
+    }) as unknown as typeof fetch;
+
+    expect(await createHttpIntrospectionClient(OPTIONS).introspect?.({ cookie: 'x=1' })).toEqual({
+      kind: 'account',
+      accountId: 'acct-1',
+      roles: ['User', 'Agent'],
+      email: 'a@example.com',
+      emailConfirmed: true,
+    });
+  });
+
+  it('reads a response with no roles field as an empty role list', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ isValid: true, accountId: 'acct-1' }),
+    }) as unknown as typeof fetch;
+
+    expect(await createHttpIntrospectionClient(OPTIONS).introspect?.({ cookie: 'x=1' })).toEqual({
+      kind: 'account',
+      accountId: 'acct-1',
+      roles: [],
+    });
+  });
+
   it('reports an invalid or missing credential as signed-out through introspect()', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,

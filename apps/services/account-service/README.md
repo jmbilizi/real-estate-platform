@@ -92,12 +92,30 @@ by convention.
 | `Moderator`  | Content moderation and user suspension. No role management                             |
 | `Support`    | Read-only access to user data for dispute handling                                     |
 | `Developer`  | Internal engineering access for diagnostics                                            |
+| `Agent`      | Handles assigned buyer leads (Lead Desk). A facet: it combines with every other role   |
 | `User`       | Standard platform user (assigned automatically on registration)                        |
 
 Role assignment rules enforced server-side:
 
 - Only `SuperAdmin` can assign or remove `SuperAdmin` and `Admin` roles.
-- `Admin` can only assign/remove `Moderator`, `Developer`, `Support`, and `User`.
+- `Admin` can only assign/remove `Moderator`, `Developer`, `Support`, `Agent`, and `User`.
+- Every grant and removal writes one `RoleGrantAudits` row: grantor, grantee, role, action, UTC
+  time. The table is append-only and has no foreign key to `AspNetUsers`.
+
+**Grant the first `SuperAdmin` per environment (#628).** No endpoint can do it, because every grant
+needs an existing `Admin` or `SuperAdmin`. A human with database access runs one statement against
+`account_db`, with the account email as a parameter. Never commit an email.
+
+```sql
+INSERT INTO "AspNetUserRoles" ("UserId", "RoleId")
+SELECT u."Id", r."Id" FROM "AspNetUsers" u, "AspNetRoles" r
+WHERE u."NormalizedEmail" = upper(:email) AND r."Name" = 'SuperAdmin'
+ON CONFLICT DO NOTHING;
+```
+
+The account must exist already. Run it again to confirm: it grants nothing twice. Then use
+`POST /account/{userId}/roles` for every later grant, so each one is audited.
+
 - A `SuperAdmin` cannot remove their own `SuperAdmin` role (prevents lock-out).
 - The last `SuperAdmin` cannot soft-delete their own account.
 
@@ -426,9 +444,9 @@ success as an absent one. That keeps a row withdrawable after its kind leaves th
 
 ### Internal Credential Introspection (service-to-service)
 
-| Method | Path                           | Auth shape (forwarded as-is)                          | Description                                                         |
-| ------ | ------------------------------ | ----------------------------------------------------- | ------------------------------------------------------------------- |
-| `POST` | `/internal/account/introspect` | `Cookie`, `Authorization: Bearer ...`, or `X-Api-Key` | Resolves forwarded credentials to `accountId` + validity flags only |
+| Method | Path                           | Auth shape (forwarded as-is)                          | Description                                                                                                                  |
+| ------ | ------------------------------ | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `POST` | `/internal/account/introspect` | `Cookie`, `Authorization: Bearer ...`, or `X-Api-Key` | Resolves forwarded credentials to `accountId`, validity flags and, when valid, `roles` (array), `email` and `emailConfirmed` |
 
 Resolves a credential the gateway forwarded verbatim to the account it belongs to. Response body:
 

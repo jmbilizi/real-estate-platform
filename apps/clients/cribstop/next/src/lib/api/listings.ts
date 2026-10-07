@@ -109,6 +109,8 @@ const USER_FACING_MESSAGE: Record<ListingsErrorCode, string> = {
   /** The saved-homes routes (#23). The UI that calls them is #25. */
   unauthenticated: 'Sign in to save homes.',
   unavailable: 'Saved homes are briefly unavailable. Please try again.',
+  /** The staff routes (#628). No consumer page calls them yet. */
+  forbidden: 'This account cannot use that page.',
 };
 
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {

@@ -721,3 +721,11 @@ the Property API document. Never publish a second document.
   including when account-service is down.
 - The read routes add `isSaved` and `isFavorited` only for a caller that resolves to an account.
   That response is `private, no-store`. An anonymous response stays public and byte-identical.
+
+## Staff roles (#628)
+
+- `src/staff/roles.ts` holds `requireRole(introspection, ...roles)`. It is any-of. `SuperAdmin`
+  passes any check that allows `Admin`. It answers 401 (no valid credential), 503 (account-service
+  down) or 403 (no allowed role). Read the caller with `staffCallerOf(res)`.
+- `GET /staff/me` returns `{ roles }` for any valid credential. It needs no role.
+- Introspection runs once per request. Nothing caches it.

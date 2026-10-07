@@ -3,9 +3,11 @@
 // </copyright>
 
 using System.Security.Claims;
+using AccountService.Data;
 using AccountService.Dtos;
 using AccountService.Models;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
 namespace AccountService.Routes;
 
@@ -20,6 +22,7 @@ internal static class Admin
             Roles.Moderator,
             Roles.Support,
             Roles.Developer,
+            Roles.Agent,
             Roles.User,
         };
 
@@ -53,13 +56,14 @@ internal static class Admin
         }).RequireAuthorization();
 
         // POST /account/{userId}/roles — assign a role (Admin or SuperAdmin only)
-        // SuperAdmin can assign any role; Admin can only assign Moderator, Developer, User.
+        // SuperAdmin can assign any role; Admin can only assign Moderator, Support, Developer, Agent, User.
         app.MapPost("/account/{userId}/roles", async (
             string userId,
             AssignRoleRequest request,
             ClaimsPrincipal principal,
             UserManager<ApplicationUser> userManager,
-            RoleManager<IdentityRole> roleManager) =>
+            RoleManager<IdentityRole> roleManager,
+            AccountDbContext db) =>
         {
             var isSuperAdmin = principal.IsInRole(Roles.SuperAdmin);
             var isAdmin = principal.IsInRole(Roles.Admin);
@@ -95,10 +99,16 @@ internal static class Admin
                 return Results.NoContent();
             }
 
+            var canonicalRole = (await roleManager.FindByNameAsync(request.Role).ConfigureAwait(false))?.Name ?? request.Role;
+            var audit = StageAudit(db, userManager.GetUserId(principal), user.Id, canonicalRole, RoleGrantAudit.Granted);
             var result = await userManager.AddToRoleAsync(user, request.Role).ConfigureAwait(false);
-            return result.Succeeded
-                ? Results.NoContent()
-                : Results.ValidationProblem(result.Errors
+            if (result.Succeeded)
+            {
+                return Results.NoContent();
+            }
+
+            db.Entry(audit).State = EntityState.Detached;
+            return Results.ValidationProblem(result.Errors
                     .GroupBy(e => e.Code)
                     .ToDictionary(g => g.Key, g => g.Select(e => e.Description).ToArray()));
         }).RequireAuthorization();
@@ -109,7 +119,9 @@ internal static class Admin
             string userId,
             string role,
             ClaimsPrincipal principal,
-            UserManager<ApplicationUser> userManager) =>
+            UserManager<ApplicationUser> userManager,
+            RoleManager<IdentityRole> roleManager,
+            AccountDbContext db) =>
         {
             var requestingUserId = userManager.GetUserId(principal);
             var isSuperAdmin = principal.IsInRole(Roles.SuperAdmin);
@@ -141,14 +153,37 @@ internal static class Admin
                 return Results.NotFound();
             }
 
+            var canonicalRole = (await roleManager.FindByNameAsync(role).ConfigureAwait(false))?.Name ?? role;
+            var audit = StageAudit(db, requestingUserId, user.Id, canonicalRole, RoleGrantAudit.Removed);
             var result = await userManager.RemoveFromRoleAsync(user, role).ConfigureAwait(false);
-            return result.Succeeded
-                ? Results.NoContent()
-                : Results.ValidationProblem(result.Errors
+            if (result.Succeeded)
+            {
+                return Results.NoContent();
+            }
+
+            db.Entry(audit).State = EntityState.Detached;
+            return Results.ValidationProblem(result.Errors
                     .GroupBy(e => e.Code)
                     .ToDictionary(g => g.Key, g => g.Select(e => e.Description).ToArray()));
         }).RequireAuthorization();
 
         return app;
+    }
+
+    // The row joins the context's pending changes. Identity's role update calls SaveChanges on the same
+    // scoped context, so the role change and its audit row commit together or not at all.
+    private static RoleGrantAudit StageAudit(AccountDbContext db, string? grantorId, string granteeId, string role, string action)
+    {
+        var audit = new RoleGrantAudit
+        {
+            Id = Guid.NewGuid(),
+            GrantorUserId = grantorId ?? string.Empty,
+            GranteeUserId = granteeId,
+            Role = role,
+            Action = action,
+            OccurredAt = DateTime.UtcNow,
+        };
+        db.RoleGrantAudits.Add(audit);
+        return audit;
     }
 }
