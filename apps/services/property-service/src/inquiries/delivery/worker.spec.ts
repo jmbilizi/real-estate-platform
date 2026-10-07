@@ -14,7 +14,7 @@ interface Row {
   backoffMs?: number;
 }
 
-function fakeDb(rows: Row[], overdue = { count: 0, oldest: 0 }): Queryable {
+function fakeDb(rows: Row[]): Queryable {
   return {
     query: ((sql: string, params: unknown[] = []) => {
       if (sql.includes("SET delivery_state = 'sample'")) {
@@ -58,10 +58,6 @@ function fakeDb(rows: Row[], overdue = { count: 0, oldest: 0 }): Queryable {
       } else if (sql.includes("SET delivery_state = 'failed'") && target) {
         target.state = 'failed';
         target.error = params[1] as string;
-      } else if (sql.includes('count(*)')) {
-        return Promise.resolve({
-          rows: [{ count: String(overdue.count), oldest_age_seconds: String(overdue.oldest) }],
-        });
       }
       return Promise.resolve({ rows: [] });
     }) as Queryable['query'],
@@ -75,7 +71,6 @@ const TUNING: DeliveryTuning = {
   baseBackoffMs: 1000,
   maxBackoffMs: 5000,
   leaseMs: 60_000,
-  overdueAgeMs: 900_000,
   siteOrigin: null,
 };
 
@@ -91,16 +86,10 @@ function row(id: string, patch: Partial<Row> = {}): Row {
   return { id, state: 'pending', attempts: 0, sample: false, ...patch };
 }
 
-function setup(
-  rows: Row[],
-  channel: DeliveryChannel | null,
-  resolution = ENABLED,
-  overdue?: { count: number; oldest: number },
-) {
+function setup(rows: Row[], channel: DeliveryChannel | null, resolution = ENABLED) {
   const entries: { level: string; entry: Record<string, unknown> }[] = [];
   const log: DeliveryLogger = (level, entry) => entries.push({ level, entry });
-  const run = () =>
-    runDeliveryTick({ db: fakeDb(rows, overdue), channel, resolution, tuning: TUNING, log });
+  const run = () => runDeliveryTick({ db: fakeDb(rows), channel, resolution, tuning: TUNING, log });
   return { run, entries };
 }
 
@@ -196,30 +185,6 @@ describe('runDeliveryTick', () => {
     await run();
 
     expect(rows[0]?.state).toBe('sample');
-  });
-
-  it('logs an overdue inquiry as an error event, naming why when sending is disabled', async () => {
-    const { run, entries } = setup([], null, DISABLED, { count: 2, oldest: 4000 });
-
-    const result = await run();
-
-    expect(result.overdue).toBe(2);
-    const alert = entries.find((e) => e.entry.event === 'inquiry_delivery_overdue');
-    expect(alert?.level).toBe('error');
-    expect(alert?.entry).toMatchObject({
-      count: 2,
-      oldestAgeSeconds: 4000,
-      sendingEnabled: false,
-    });
-    expect(String(alert?.entry.disabledReason)).toMatch(/INQUIRY_EXTERNAL_SEND/);
-  });
-
-  it('logs nothing alertable when nothing is overdue', async () => {
-    const { run, entries } = setup([row('a')], { send: () => Promise.resolve({ messageId: 'm' }) });
-
-    await run();
-
-    expect(entries.some((e) => e.entry.event === 'inquiry_delivery_overdue')).toBe(false);
   });
 
   it('does not retry or resend when recording a successful send fails', async () => {
