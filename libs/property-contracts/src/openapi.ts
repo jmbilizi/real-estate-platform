@@ -27,6 +27,7 @@ import {
   staffMeSchema,
   updateAgentProfileRequestSchema,
 } from './staff';
+import { staffLeadMetricsRequestSchema, staffLeadMetricsSchema } from './staff-metrics';
 import {
   MAX_RESULT_OFFSET,
   maxReachablePage,
@@ -103,6 +104,7 @@ function componentSchemas() {
   registry.add(staffMeSchema, { id: 'StaffMe' });
   registry.add(staffLeadsEnvelopeSchema, { id: 'StaffLeadsEnvelope' });
   registry.add(staffLeadDetailSchema, { id: 'StaffLeadDetail' });
+  registry.add(staffLeadMetricsSchema, { id: 'StaffLeadMetrics' });
   registry.add(staffLeadTransitionRequestSchema, { id: 'StaffLeadTransitionRequest' });
   registry.add(staffLeadTransitionResponseSchema, { id: 'StaffLeadTransitionResponse' });
   registry.add(staffLeadNoteRequestSchema, { id: 'StaffLeadNoteRequest' });
@@ -741,6 +743,32 @@ export function toOpenApiDocument() {
               description: 'A page of leads.',
               content: {
                 'application/json': { schema: { $ref: '#/components/schemas/StaffLeadsEnvelope' } },
+              },
+            },
+            '400': staffBadRequestResponse,
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/staff/leads/metrics': {
+        get: {
+          operationId: 'getStaffLeadMetrics',
+          summary: 'Lead desk metrics',
+          description:
+            'Requires the Admin, SuperAdmin or Moderator role. Counts by status and kind, the ' +
+            'median and 90th percentile time to verify, assign and accept, and the count of ' +
+            'aging leads. `from` and `to` bound the lead creation time and apply to every value. ' +
+            'Durations come from the status events. A duration is null when no lead made the ' +
+            'step. The response holds no personal data and is `private, no-store`.',
+          parameters: searchParameters(staffLeadMetricsRequestSchema),
+          responses: {
+            '200': {
+              description: 'The metrics.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/StaffLeadMetrics' } },
               },
             },
             '400': staffBadRequestResponse,

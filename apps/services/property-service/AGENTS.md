@@ -744,6 +744,11 @@ the Property API document. Never publish a second document.
   expressions in `leads-store.ts`. Change both together.
 - `lead_notes` and `lead_access_audit` are append-only by trigger.
 - The e2e stub carries roles in the bearer token: `bearerFor(accountId, ['Admin'])`.
+- `GET /staff/leads/metrics` (#639, `metrics-store.ts`) returns counts, the median and p90 of time
+  to verify, assign and accept, and an aging count. Read-only. No PII. `from` and `to` select leads
+  by creation time and apply to every value. A step is the first `to` event of a lead minus the
+  latest `from` event before it. Register it before `/staff/leads/:id`. `LEAD_AGING_HOURS` sets the
+  aging age (default 24). It needs no migration: the 047 indexes serve it.
 
 ## Agent directory and assignment (#634)
 

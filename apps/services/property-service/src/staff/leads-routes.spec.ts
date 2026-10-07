@@ -72,6 +72,7 @@ describe('cursor', () => {
 
 describe.each([
   ['GET', '/staff/leads'],
+  ['GET', '/staff/leads/metrics'],
   ['GET', `/staff/leads/${LEAD}`],
   ['POST', `/staff/leads/${LEAD}/transition`],
   ['POST', `/staff/leads/${LEAD}/notes`],

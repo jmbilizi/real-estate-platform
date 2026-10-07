@@ -2,6 +2,7 @@ import express, { type Express, type NextFunction, type Request, type Response }
 import {
   INTERNAL_ERROR_BODY,
   MAP_PIN_CAP_DEFAULT,
+  STAFF_LEAD_AGING_HOURS_DEFAULT,
   toOpenApiDocument,
 } from '@cribstop/property-contracts';
 import { getPool } from './db/pool';
@@ -218,6 +219,10 @@ export function createApp(options: CreateAppOptions = {}): Express {
     createStaffLeadsRouter({
       pool: pool as unknown as Queryable & TransactionalPool,
       introspection,
+      agingHours: Math.max(
+        1,
+        Math.floor(envInt('LEAD_AGING_HOURS', STAFF_LEAD_AGING_HOURS_DEFAULT)),
+      ),
     }),
   );
   app.use(
