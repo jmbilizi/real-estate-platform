@@ -14,7 +14,7 @@ import {
 
 export type SetPasswordFailure = 'invalid_proof' | 'email_unavailable';
 
-function rejectionCopy(codes: PasswordRejectionCode[], minLength: number): string {
+export function rejectionCopy(codes: PasswordRejectionCode[], minLength: number): string {
   if (codes.includes('breached')) return 'That password has leaked before. Pick another.';
   if (codes.includes('too_short')) {
     return `That password is too short. Use ${minLength} or more characters.`;

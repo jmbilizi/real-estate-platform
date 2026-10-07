@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   CodesUnavailableError,
+  CodeTiming,
   RateLimitError,
   resendSignupCode,
   startPasswordReset,
@@ -35,15 +36,34 @@ export default function AuthCodeStep({
   expiresInSeconds,
   onVerified,
   onChangeEmail,
+  verify,
+  resend: resendOverride,
+  label = '6-digit code',
+  unavailableMessage,
+  focusOnMount = false,
+  canResend = true,
 }: {
   email: string;
   flow?: 'signup' | 'reset';
   resendAfterSeconds: number;
   expiresInSeconds: number;
   onVerified: (proof: string) => void;
-  onChangeEmail: () => void;
+  /** Shows the "Change email" button. Omit it to hide the button. */
+  onChangeEmail?: () => void;
+  /** Replaces the sign-up or reset check, for a flow that is neither. */
+  verify?: (
+    code: string,
+  ) => Promise<{ ok: true; proof: string } | { ok: false; attemptsLeft: number | null }>;
+  /** Replaces the sign-up or reset resend. */
+  resend?: () => Promise<CodeTiming>;
+  label?: string;
+  unavailableMessage?: string;
+  focusOnMount?: boolean;
+  /** False hides "Send a new code", for a code that cannot be sent again alone. */
+  canResend?: boolean;
 }) {
   const verifyCode = async (address: string, value: string) => {
+    if (verify) return verify(value);
     if (flow === 'reset') {
       const r = await verifyResetCode(address, value);
       return r.ok ? { ok: true as const, proof: r.resetProof } : r;
@@ -51,11 +71,15 @@ export default function AuthCodeStep({
     const r = await verifySignupCode(address, value);
     return r.ok ? { ok: true as const, proof: r.signupProof } : r;
   };
-  const resendCode = flow === 'reset' ? startPasswordReset : resendSignupCode;
+  const resendCode = (address: string) =>
+    resendOverride
+      ? resendOverride()
+      : (flow === 'reset' ? startPasswordReset : resendSignupCode)(address);
   const unavailableCopy =
-    flow === 'reset'
+    unavailableMessage ??
+    (flow === 'reset'
       ? 'Password reset is unavailable right now. Try again soon.'
-      : 'Sign-up is unavailable right now. Try again soon.';
+      : 'Sign-up is unavailable right now. Try again soon.');
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -69,6 +93,10 @@ export default function AuthCodeStep({
 
   const expired = expiryArmed && expiry.seconds === 0;
   const locked = lock.seconds > 0;
+
+  useEffect(() => {
+    if (focusOnMount) inputRef.current?.focus();
+  }, [focusOnMount]);
 
   useEffect(() => {
     if (expired) setError('That code expired. Send a new one.');
@@ -146,7 +174,7 @@ export default function AuthCodeStep({
     >
       <div>
         <label htmlFor="auth-code" className="mb-1 block text-sm font-medium text-ink-muted">
-          6-digit code
+          {label}
         </label>
         <input
           id="auth-code"
@@ -192,21 +220,25 @@ export default function AuthCodeStep({
       </button>
 
       <div className="flex flex-col items-center gap-1 text-sm">
-        <button
-          type="button"
-          onClick={() => void sendNew()}
-          disabled={isSending || resend.seconds > 0}
-          className="inline-flex min-h-11 items-center font-medium text-brand hover:underline disabled:text-ink-subtle disabled:no-underline"
-        >
-          {resend.seconds > 0 ? `Send a new code in ${resend.seconds}s` : 'Send a new code'}
-        </button>
-        <button
-          type="button"
-          onClick={onChangeEmail}
-          className="inline-flex min-h-11 items-center font-medium text-brand hover:underline"
-        >
-          Change email
-        </button>
+        {canResend && (
+          <button
+            type="button"
+            onClick={() => void sendNew()}
+            disabled={isSending || resend.seconds > 0}
+            className="inline-flex min-h-11 items-center font-medium text-brand hover:underline disabled:text-ink-subtle disabled:no-underline"
+          >
+            {resend.seconds > 0 ? `Send a new code in ${resend.seconds}s` : 'Send a new code'}
+          </button>
+        )}
+        {onChangeEmail && (
+          <button
+            type="button"
+            onClick={onChangeEmail}
+            className="inline-flex min-h-11 items-center font-medium text-brand hover:underline"
+          >
+            Change email
+          </button>
+        )}
       </div>
     </form>
   );

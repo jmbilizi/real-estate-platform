@@ -4,6 +4,7 @@ import { fetchGateway } from '@/app/api/_lib/gateway';
 /** Only these upstream fields reach the browser. */
 const FORWARDED_FIELDS = [
   'next',
+  'stepUp',
   'resendAfterSeconds',
   'expiresInSeconds',
   'signupProof',

@@ -24,6 +24,14 @@ const authSlice = createSlice({
       state.accessToken = action.payload.accessToken ?? null;
       state.sessionChecked = true;
     },
+    /** A password or email change re-issues the session. The profile stays. */
+    renewSession: (state, action: PayloadAction<{ email: string; accessToken?: string }>) => {
+      if (state.user) {
+        if (state.user.name === state.user.email) state.user.name = action.payload.email;
+        state.user.email = action.payload.email;
+      }
+      state.accessToken = action.payload.accessToken ?? state.accessToken;
+    },
     logout: (state) => {
       state.user = null;
       state.accessToken = null;
@@ -62,6 +70,7 @@ export const {
   login,
   logout,
   setSessionChecked,
+  renewSession,
   updateProfile,
   setShowOnboarding,
   dismissOnboarding,

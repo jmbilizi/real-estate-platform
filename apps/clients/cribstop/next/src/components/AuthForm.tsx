@@ -361,11 +361,17 @@ export default function AuthForm({
 
             <p className="text-center text-xs text-ink-muted">
               {legalCopyApproved ? 'By continuing, you agree to our' : 'Review our'}{' '}
-              <Link href="/terms" className="font-medium text-brand hover:underline">
+              <Link
+                href="/terms"
+                className="inline-flex min-h-11 items-center font-medium text-brand hover:underline"
+              >
                 Terms of Service
               </Link>{' '}
               and{' '}
-              <Link href="/privacy" className="font-medium text-brand hover:underline">
+              <Link
+                href="/privacy"
+                className="inline-flex min-h-11 items-center font-medium text-brand hover:underline"
+              >
                 Privacy Policy
               </Link>
               {legalCopyApproved ? '.' : ' (draft, pending approval).'}

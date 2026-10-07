@@ -335,6 +335,90 @@ export async function completePasswordReset(payload: {
   throw new Error('Unable to reset the password');
 }
 
+export type EmailChangeStartResult =
+  | ({ ok: true; stepUp: 'oldEmailCode' | null } & CodeTiming)
+  | { ok: false; reason: 'invalid_email' }
+  | { ok: false; reason: 'step_up_failed'; attemptsLeft: number | null };
+
+/**
+ * Starts an email change. With no `currentPassword` and no `oldEmailCode`, the server sends a
+ * code to the current address and answers `stepUp: 'oldEmailCode'`. The answer is the same for a
+ * taken and a free address. A `401` or a `403` (no cookie or bearer session) throws AuthError.
+ */
+export async function startEmailChange(payload: {
+  newEmail: string;
+  currentPassword?: string;
+  oldEmailCode?: string;
+}): Promise<EmailChangeStartResult> {
+  const res = await postJson('/api/account/email/change/start', payload);
+  const body = await res.json().catch(() => null);
+  if (res.ok) {
+    return {
+      ok: true,
+      stepUp: body?.stepUp === 'oldEmailCode' ? 'oldEmailCode' : null,
+      ...toTiming(body),
+    };
+  }
+  if (res.status === 400 && body?.error === 'invalid_email') {
+    return { ok: false, reason: 'invalid_email' };
+  }
+  if (res.status === 403 && body?.error === 'step_up_failed') {
+    const left = body?.attemptsLeft;
+    return {
+      ok: false,
+      reason: 'step_up_failed',
+      attemptsLeft: typeof left === 'number' ? left : null,
+    };
+  }
+  if (res.status === 401 || res.status === 403) throw new AuthError(res.status);
+  throw new Error('Unable to start the email change');
+}
+
+export type EmailChangeVerifyResult =
+  | { ok: true; email: string; accessToken?: string }
+  | { ok: false; attemptsLeft: number | null };
+
+/** Checks the code sent to the new address. Success swaps the email and re-issues the session. */
+export async function verifyEmailChange(
+  code: string,
+  newEmail?: string,
+): Promise<EmailChangeVerifyResult> {
+  const res = await postJson('/api/account/email/change/verify', { code, newEmail });
+  const body = await res.json().catch(() => null);
+  if (res.ok && typeof body?.email === 'string') {
+    return { ok: true, email: body.email, accessToken: body.accessToken };
+  }
+  if (res.status === 400 && body?.error === 'invalid_code') {
+    const left = body?.attemptsLeft;
+    return { ok: false, attemptsLeft: typeof left === 'number' ? left : null };
+  }
+  if (res.status === 401 || res.status === 403) throw new AuthError(res.status);
+  throw new Error('Unable to check the code');
+}
+
+export type ChangePasswordOutcome =
+  | { ok: true; email: string; accessToken?: string }
+  | { ok: false; reason: 'wrong_password' }
+  | { ok: false; reason: 'password_rejected'; errors: PasswordRejectionCode[] };
+
+/** Changes the password. Success ends every other session and re-issues this one. */
+export async function changePassword(payload: {
+  currentPassword: string;
+  newPassword: string;
+}): Promise<ChangePasswordOutcome> {
+  const res = await postJson('/api/account/password/change', payload);
+  const body = await res.json().catch(() => null);
+  if (res.ok) return { ok: true, email: body?.email ?? '', accessToken: body?.accessToken };
+  if (res.status === 400 && body?.error === 'wrong_password') {
+    return { ok: false, reason: 'wrong_password' };
+  }
+  if (res.status === 400 && body?.error === 'password_rejected') {
+    return { ok: false, reason: 'password_rejected', errors: knownRejections(body.errors) };
+  }
+  if (res.status === 401 || res.status === 403) throw new AuthError(res.status);
+  throw new Error('Unable to change the password');
+}
+
 export const DEFAULT_PASSWORD_MIN_LENGTH = 15;
 let cachedPasswordMinLength: number | null = null;
 
