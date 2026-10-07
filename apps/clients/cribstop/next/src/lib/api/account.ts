@@ -155,22 +155,6 @@ function retryAfterSeconds(res: Response): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 60;
 }
 
-/**
- * Requests a password reset link. The response never reveals whether the address has an account
- * (account-service's own non-enumeration guarantee). Callers must show the same neutral
- * confirmation for every email, and only distinguish an actual failed request.
- */
-export async function requestPasswordReset(email: string): Promise<void> {
-  const res = await fetch('/api/account/forgot-password', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
-  });
-
-  if (res.status === 429) throw new RateLimitError(retryAfterSeconds(res));
-  if (!res.ok) throw new Error('Unable to send the request');
-}
-
 /** Redeems a password reset code. `code` and `newPassword` map to Identity's `resetCode`/`newPassword`. */
 export async function confirmPasswordReset(payload: {
   email: string;
@@ -275,6 +259,13 @@ export async function changeSignupEmail(oldEmail: string, newEmail: string): Pro
 
 export type PasswordRejectionCode = 'too_short' | 'too_long' | 'breached';
 
+function knownRejections(errors: unknown): PasswordRejectionCode[] {
+  const known: PasswordRejectionCode[] = ['too_short', 'too_long', 'breached'];
+  return Array.isArray(errors)
+    ? errors.filter((e): e is PasswordRejectionCode => known.includes(e as PasswordRejectionCode))
+    : [];
+}
+
 export type CompleteSignupOutcome =
   | { ok: true; session: LoginResponse }
   | { ok: false; reason: 'invalid_proof' }
@@ -293,15 +284,55 @@ export async function completeSignup(payload: {
   if (res.status === 401) return { ok: false, reason: 'invalid_proof' };
   if (res.status === 409) return { ok: false, reason: 'email_unavailable' };
   if (res.status === 400 && body?.error === 'password_rejected') {
-    const known: PasswordRejectionCode[] = ['too_short', 'too_long', 'breached'];
-    const errors = Array.isArray(body.errors)
-      ? (body.errors as unknown[]).filter((e): e is PasswordRejectionCode =>
-          known.includes(e as PasswordRejectionCode),
-        )
-      : [];
-    return { ok: false, reason: 'password_rejected', errors };
+    return { ok: false, reason: 'password_rejected', errors: knownRejections(body.errors) };
   }
   throw new Error('Unable to create the account');
+}
+
+export type VerifyResetResult =
+  | { ok: true; resetProof: string }
+  | { ok: false; attemptsLeft: number | null };
+
+/** Starts a reset. The answer is the same for every address, so callers show neutral copy. */
+export async function startPasswordReset(email: string): Promise<CodeTiming> {
+  const res = await postJson('/api/account/password/reset/start', { email });
+  if (!res.ok) throw new Error('Unable to send the code');
+  return toTiming(await res.json().catch(() => null));
+}
+
+/** Checks the reset code. A wrong code returns ok: false. A lock throws RateLimitError. */
+export async function verifyResetCode(email: string, code: string): Promise<VerifyResetResult> {
+  const res = await postJson('/api/account/password/reset/verify', { email, code });
+  const body = await res.json().catch(() => null);
+  if (res.ok && typeof body?.resetProof === 'string') {
+    return { ok: true, resetProof: body.resetProof };
+  }
+  if (res.status === 400 && body?.error === 'invalid_code') {
+    const left = body?.attemptsLeft;
+    return { ok: false, attemptsLeft: typeof left === 'number' ? left : null };
+  }
+  throw new Error('Unable to check the code');
+}
+
+export type CompleteResetOutcome =
+  | { ok: true }
+  | { ok: false; reason: 'invalid_proof' }
+  | { ok: false; reason: 'password_rejected'; errors: PasswordRejectionCode[] };
+
+/** Sets the new password. It signs nobody in: the reset ends every session. */
+export async function completePasswordReset(payload: {
+  email: string;
+  resetProof: string;
+  newPassword: string;
+}): Promise<CompleteResetOutcome> {
+  const res = await postJson('/api/account/password/reset/complete', payload);
+  if (res.ok) return { ok: true };
+  const body = await res.json().catch(() => null);
+  if (res.status === 401) return { ok: false, reason: 'invalid_proof' };
+  if (res.status === 400 && body?.error === 'password_rejected') {
+    return { ok: false, reason: 'password_rejected', errors: knownRejections(body.errors) };
+  }
+  throw new Error('Unable to reset the password');
 }
 
 export const DEFAULT_PASSWORD_MIN_LENGTH = 15;

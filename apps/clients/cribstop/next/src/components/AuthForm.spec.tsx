@@ -3,11 +3,13 @@ import AuthForm from './AuthForm';
 import {
   changeSignupEmail,
   CodesUnavailableError,
+  completePasswordReset,
   identifyEmail,
   RateLimitError,
-  requestPasswordReset,
   resendSignupCode,
   SignInFailedError,
+  startPasswordReset,
+  verifyResetCode,
   verifySignupCode,
 } from '@/lib/api/account';
 
@@ -26,7 +28,9 @@ jest.mock('@/lib/api/account', () => ({
   verifySignupCode: jest.fn(),
   resendSignupCode: jest.fn(),
   changeSignupEmail: jest.fn(),
-  requestPasswordReset: jest.fn(),
+  startPasswordReset: jest.fn(),
+  verifyResetCode: jest.fn(),
+  completePasswordReset: jest.fn(),
   getPasswordMinLength: jest.fn().mockResolvedValue(15),
 }));
 
@@ -34,8 +38,10 @@ const mockIdentify = identifyEmail as jest.MockedFunction<typeof identifyEmail>;
 const mockVerify = verifySignupCode as jest.MockedFunction<typeof verifySignupCode>;
 const mockResend = resendSignupCode as jest.MockedFunction<typeof resendSignupCode>;
 const mockChangeEmail = changeSignupEmail as jest.MockedFunction<typeof changeSignupEmail>;
-const mockRequestPasswordReset = requestPasswordReset as jest.MockedFunction<
-  typeof requestPasswordReset
+const mockStartReset = startPasswordReset as jest.MockedFunction<typeof startPasswordReset>;
+const mockVerifyReset = verifyResetCode as jest.MockedFunction<typeof verifyResetCode>;
+const mockCompleteReset = completePasswordReset as jest.MockedFunction<
+  typeof completePasswordReset
 >;
 
 const EMAIL = 'user@example.com';
@@ -206,54 +212,244 @@ describe('AuthForm', () => {
       expect(screen.getByLabelText('Password')).toHaveValue('');
     });
 
-    it('opens the reset screen from Forgot password', async () => {
-      mockRequestPasswordReset.mockResolvedValue(undefined);
+    it('opens the reset screen from Forgot password with the email filled in', async () => {
       render(<AuthForm />);
       await continueWith('password');
 
       fireEvent.click(screen.getByRole('button', { name: 'Forgot password?' }));
-      expect(screen.getByRole('heading', { name: 'Reset your password' })).toBeInTheDocument();
-      fireEvent.click(screen.getByRole('button', { name: 'Send Reset Link' }));
 
-      await waitFor(() => expect(mockRequestPasswordReset).toHaveBeenCalledWith(EMAIL));
-      expect(await screen.findByText(/if an account exists for/i)).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Reset your password' })).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('you@example.com')).toHaveValue(EMAIL);
     });
   });
 
-  describe('forgot mode', () => {
-    it('shows a neutral confirmation without revealing whether the account exists', async () => {
-      mockRequestPasswordReset.mockResolvedValue(undefined);
+  describe('forgot and reset by code', () => {
+    const TIMING = { resendAfterSeconds: 30, expiresInSeconds: 600 };
+
+    async function reachResetCode(timing = TIMING) {
+      mockStartReset.mockResolvedValue(timing);
       render(<AuthForm initialMode="forgot" />);
-
       typeEmail(EMAIL);
-      fireEvent.click(screen.getByRole('button', { name: 'Send Reset Link' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Send code' }));
+      await screen.findByLabelText('6-digit code');
+    }
 
-      expect(await screen.findByText(/if an account exists for/i)).toBeInTheDocument();
+    async function reachResetPassword() {
+      mockVerifyReset.mockResolvedValue({ ok: true, resetProof: 'reset-1' });
+      await reachResetCode();
+      fireEvent.change(screen.getByLabelText('6-digit code'), { target: { value: '123456' } });
+      await screen.findByLabelText('New password');
+    }
+
+    function fillNewPassword(value = GOOD_PASSWORD) {
+      fireEvent.change(screen.getByLabelText('New password'), { target: { value } });
+      fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value } });
+      fireEvent.click(screen.getByRole('button', { name: 'Update password' }));
+    }
+
+    it('shows neutral copy that never says whether the account exists', async () => {
+      await reachResetCode();
+
+      expect(mockStartReset).toHaveBeenCalledWith(EMAIL);
+      expect(screen.getByText(/If an account exists for/)).toBeInTheDocument();
+      expect(screen.getByText(EMAIL)).toBeInTheDocument();
     });
 
-    it('surfaces a 429 using the server Retry-After', async () => {
-      mockRequestPasswordReset.mockRejectedValue(new RateLimitError(42));
-      render(<AuthForm initialMode="forgot" />);
+    it('uses the shared code field attributes and focuses it', async () => {
+      await reachResetCode();
 
-      typeEmail(EMAIL);
-      fireEvent.click(screen.getByRole('button', { name: 'Send Reset Link' }));
-
-      await waitFor(() =>
-        expect(toast).toHaveBeenCalledWith('Too many requests. Try again in 42 seconds.', 'error'),
-      );
+      const field = screen.getByLabelText('6-digit code');
+      expect(field).toHaveAttribute('autocomplete', 'one-time-code');
+      expect(field).toHaveAttribute('inputmode', 'numeric');
+      expect(field).toHaveFocus();
     });
 
-    it('shows a failure toast and stays on the form for a failed request', async () => {
-      mockRequestPasswordReset.mockRejectedValue(new Error('network down'));
+    it('shows the wait from a 429 on start', async () => {
+      mockStartReset.mockRejectedValue(new RateLimitError(42));
       render(<AuthForm initialMode="forgot" />);
-
       typeEmail(EMAIL);
-      fireEvent.click(screen.getByRole('button', { name: 'Send Reset Link' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Send code' }));
 
-      await waitFor(() =>
-        expect(toast).toHaveBeenCalledWith('We could not send the request. Try again.', 'error'),
-      );
+      expect(
+        await screen.findByText('Too many tries. Try again in 42 seconds.'),
+      ).toBeInTheDocument();
+    });
+
+    it('shows a failure message and stays on the form when start fails', async () => {
+      mockStartReset.mockRejectedValue(new Error('down'));
+      render(<AuthForm initialMode="forgot" />);
+      typeEmail(EMAIL);
+      fireEvent.click(screen.getByRole('button', { name: 'Send code' }));
+
+      expect(await screen.findByText('We could not send a code. Try again.')).toBeInTheDocument();
       expect(screen.getByPlaceholderText('you@example.com')).toBeInTheDocument();
+    });
+
+    it('shows a wrong code with the tries left, using the reset endpoint', async () => {
+      mockVerifyReset.mockResolvedValue({ ok: false, attemptsLeft: 4 });
+      await reachResetCode();
+
+      fireEvent.change(screen.getByLabelText('6-digit code'), { target: { value: '000000' } });
+
+      expect(await screen.findByText('That code did not work. 4 tries left.')).toBeInTheDocument();
+      expect(mockVerifyReset).toHaveBeenCalledWith(EMAIL, '000000');
+      expect(mockVerify).not.toHaveBeenCalled();
+    });
+
+    it('shows the lock wait from a 429 on verify', async () => {
+      mockVerifyReset.mockRejectedValue(new RateLimitError(120));
+      await reachResetCode();
+
+      fireEvent.change(screen.getByLabelText('6-digit code'), { target: { value: '123456' } });
+
+      expect(
+        await screen.findByText('Too many tries. Try again in 120 seconds.'),
+      ).toBeInTheDocument();
+    });
+
+    it('disables resend during the countdown', async () => {
+      await reachResetCode();
+      expect(screen.getByRole('button', { name: 'Send a new code in 30s' })).toBeDisabled();
+    });
+
+    it('resends a code once the countdown is over', async () => {
+      await reachResetCode({ resendAfterSeconds: 0, expiresInSeconds: 600 });
+      mockStartReset.mockClear();
+      mockStartReset.mockResolvedValue(TIMING);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Send a new code' }));
+
+      expect(await screen.findByText('New code sent. The old one no longer works.')).toBeVisible();
+      expect(mockStartReset).toHaveBeenCalledWith(EMAIL);
+      expect(mockResend).not.toHaveBeenCalled();
+    });
+
+    it('goes back to the email field from Change email', async () => {
+      await reachResetCode();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Change email' }));
+
+      expect(screen.getByRole('heading', { name: 'Reset your password' })).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('you@example.com')).toHaveValue(EMAIL);
+    });
+
+    it('asks for a new password with both fields set to new-password', async () => {
+      await reachResetPassword();
+
+      expect(screen.getByRole('heading', { name: 'Set a new password' })).toBeInTheDocument();
+      expect(screen.getByLabelText('New password')).toHaveAttribute('autocomplete', 'new-password');
+      expect(screen.getByLabelText('Confirm password')).toHaveAttribute(
+        'autocomplete',
+        'new-password',
+      );
+      expect(screen.getByText(/15 or more characters/)).toBeInTheDocument();
+    });
+
+    it('keeps Update password disabled until both fields match and are long enough', async () => {
+      await reachResetPassword();
+
+      const update = screen.getByRole('button', { name: 'Update password' });
+      expect(update).toBeDisabled();
+      fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'short' } });
+      fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'short' } });
+      expect(update).toBeDisabled();
+      fireEvent.change(screen.getByLabelText('New password'), { target: { value: GOOD_PASSWORD } });
+      expect(update).toBeDisabled();
+      fireEvent.change(screen.getByLabelText('Confirm password'), {
+        target: { value: GOOD_PASSWORD },
+      });
+      expect(update).toBeEnabled();
+    });
+
+    it('toggles password visibility on both fields', async () => {
+      await reachResetPassword();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Show passwords' }));
+
+      expect(screen.getByLabelText('New password')).toHaveAttribute('type', 'text');
+      expect(screen.getByLabelText('Confirm password')).toHaveAttribute('type', 'text');
+    });
+
+    it('returns to the password step with the email filled in and signs nobody in', async () => {
+      mockCompleteReset.mockResolvedValue({ ok: true });
+      const onSuccess = jest.fn();
+      mockVerifyReset.mockResolvedValue({ ok: true, resetProof: 'reset-1' });
+      mockStartReset.mockResolvedValue(TIMING);
+      render(<AuthForm initialMode="forgot" onSuccess={onSuccess} />);
+      typeEmail(EMAIL);
+      fireEvent.click(screen.getByRole('button', { name: 'Send code' }));
+      await screen.findByLabelText('6-digit code');
+      fireEvent.change(screen.getByLabelText('6-digit code'), { target: { value: '123456' } });
+      await screen.findByLabelText('New password');
+
+      fillNewPassword();
+
+      await waitFor(() =>
+        expect(mockCompleteReset).toHaveBeenCalledWith({
+          email: EMAIL,
+          resetProof: 'reset-1',
+          newPassword: GOOD_PASSWORD,
+        }),
+      );
+      expect(await screen.findByText('Password updated. Sign in again.')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
+      expect(screen.getByText(EMAIL)).toBeInTheDocument();
+      expect(screen.getByLabelText('Password')).toHaveFocus();
+      expect(login).not.toHaveBeenCalled();
+      expect(onSuccess).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['breached', 'That password has leaked before. Pick another.'],
+      ['too_short', 'That password is too short. Use 15 or more characters.'],
+      ['too_long', 'That password is too long. Shorten it.'],
+    ] as const)('shows friendly copy for the %s policy error', async (code, copy) => {
+      mockCompleteReset.mockResolvedValue({
+        ok: false,
+        reason: 'password_rejected',
+        errors: [code],
+      });
+      await reachResetPassword();
+
+      fillNewPassword();
+
+      expect(await screen.findByText(copy)).toBeInTheDocument();
+    });
+
+    it('shows the wait from a 429 on complete', async () => {
+      mockCompleteReset.mockRejectedValue(new RateLimitError(30));
+      await reachResetPassword();
+      fillNewPassword();
+
+      expect(
+        await screen.findByText('Too many tries. Try again in 30 seconds.'),
+      ).toBeInTheDocument();
+    });
+
+    it('returns to the email field when the proof is no longer valid', async () => {
+      mockCompleteReset.mockResolvedValue({ ok: false, reason: 'invalid_proof' });
+      await reachResetPassword();
+      fillNewPassword();
+
+      expect(await screen.findByText('That reset timed out. Start again.')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Reset your password' })).toBeInTheDocument();
+    });
+
+    it('never puts the proof or password in the URL or in storage', async () => {
+      mockCompleteReset.mockResolvedValue({ ok: true });
+      await reachResetPassword();
+      fillNewPassword();
+      await waitFor(() => expect(mockCompleteReset).toHaveBeenCalled());
+
+      expect(window.location.href).not.toContain('reset-1');
+      expect(JSON.stringify({ ...localStorage, ...sessionStorage })).not.toMatch(
+        /reset-1|passphrase/,
+      );
+    });
+
+    it('has no link-based reset copy left', () => {
+      render(<AuthForm initialMode="forgot" />);
+      expect(screen.queryByText(/reset link/i)).not.toBeInTheDocument();
     });
   });
 
