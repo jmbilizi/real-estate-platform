@@ -1,6 +1,7 @@
 import {
   type InquiryKind,
   type LeadStatus,
+  staffLeadAssignResponseSchema,
   type StaffLeadDetail,
   staffLeadDetailSchema,
   type StaffLeadNote,
@@ -41,7 +42,7 @@ function failureOf(status: number): StaffFailure {
   return 'unavailable';
 }
 
-async function call(url: string, init?: RequestInit): Promise<unknown> {
+export async function call(url: string, init?: RequestInit): Promise<unknown> {
   let res: Response;
   try {
     res = await fetch(url, { ...init, cache: 'no-store' });
@@ -55,7 +56,7 @@ async function call(url: string, init?: RequestInit): Promise<unknown> {
   throw new StaffApiError(failure, typeof message === 'string' ? message : FALLBACK[failure]);
 }
 
-function parse<T>(schema: { parse: (v: unknown) => T }, body: unknown): T {
+export function parse<T>(schema: { parse: (v: unknown) => T }, body: unknown): T {
   try {
     return schema.parse(body);
   } catch {
@@ -97,6 +98,23 @@ export async function transitionLead(id: string, to: StaffAction, note?: string)
   const body = await call(
     `/api/staff/leads/${encodeURIComponent(id)}/transition`,
     JSON_POST(note ? { to, note } : { to }),
+  );
+  parse(staffLeadTransitionResponseSchema, body);
+}
+
+/** Assign has one field. There is no reason or free text (Fair Housing). */
+export async function assignLead(id: string, agentProfileId: string): Promise<void> {
+  const body = await call(
+    `/api/staff/leads/${encodeURIComponent(id)}/assign`,
+    JSON_POST({ agentProfileId }),
+  );
+  parse(staffLeadAssignResponseSchema, body);
+}
+
+export async function unassignLead(id: string, note: string): Promise<void> {
+  const body = await call(
+    `/api/staff/leads/${encodeURIComponent(id)}/unassign`,
+    JSON_POST({ note }),
   );
   parse(staffLeadTransitionResponseSchema, body);
 }

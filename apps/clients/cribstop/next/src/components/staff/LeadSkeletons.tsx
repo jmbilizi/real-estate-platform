@@ -61,6 +61,48 @@ export function LeadDetailSkeleton() {
       <SectionSkeleton lines={4} />
       <SectionSkeleton lines={3} />
       <SectionSkeleton lines={3} />
+      <SectionSkeleton lines={2} />
     </div>
+  );
+}
+
+/** The radio rows of the assign picker. Same 44px row as the loaded list. */
+export function AgentPickerSkeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <ul aria-hidden="true" className="space-y-2" data-testid="agent-picker-skeleton">
+      {Array.from({ length: rows }, (_, i) => (
+        <li
+          key={i}
+          className="flex min-h-11 items-center gap-3 rounded-md border border-surface-border px-3 py-2"
+        >
+          <span className={`${FILL} size-5 rounded-full`} />
+          <span className="flex-1 space-y-2">
+            <Bar className="w-1/2" />
+            <Bar className="h-3 w-1/3" />
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Same card shape and breakpoint as `AgentsList`: stacked cards on a phone, a row on a wide screen. */
+export function AgentsListSkeleton({ rows = 5 }: { rows?: number }) {
+  return (
+    <ul aria-hidden="true" className="space-y-3" data-testid="agents-skeleton">
+      {Array.from({ length: rows }, (_, i) => (
+        <li
+          key={i}
+          className="rounded-lg border border-surface-border bg-white p-4 layout:flex layout:items-center layout:gap-4"
+        >
+          <div className="min-w-0 flex-1 space-y-2">
+            <Bar className="w-1/2" />
+            <Bar className="h-3 w-1/3" />
+          </div>
+          <span className={`${FILL} mt-3 block h-5 w-16 rounded-full layout:mt-0`} />
+          <span className={`${FILL} mt-3 block h-11 w-full rounded-full layout:mt-0 layout:w-40`} />
+        </li>
+      ))}
+    </ul>
   );
 }

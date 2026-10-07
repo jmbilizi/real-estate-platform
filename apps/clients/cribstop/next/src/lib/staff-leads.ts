@@ -81,4 +81,19 @@ export function telHref(phone: string): string {
   return `tel:${phone.replace(/[^\d+]/g, '')}`;
 }
 
-export const NOTE_HINT = 'Do not record protected characteristics.';
+export const NOTE_HINT = 'Do not record anything about the personal traits of the buyer.';
+
+/** Assign needs a verified lead. The service decides. */
+export function canAssign(status: LeadStatus): boolean {
+  return status === 'verified';
+}
+
+/** Unassign needs a lead that an agent holds and has not yet contacted. The service decides. */
+export function canUnassign(status: LeadStatus): boolean {
+  return status === 'assigned' || status === 'accepted';
+}
+
+/** Only Admin and SuperAdmin write the agent directory. A Moderator reads it. */
+export function canManageAgents(roles: readonly string[]): boolean {
+  return roles.some((r) => r === 'Admin' || r === 'SuperAdmin');
+}
