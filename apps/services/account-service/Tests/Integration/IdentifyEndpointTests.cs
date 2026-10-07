@@ -114,8 +114,35 @@ namespace AccountService.Tests.Integration
             var body = await second.Content.ReadFromJsonAsync<JsonElement>();
             body.GetProperty("next").GetString().Should().Be("code");
             body.GetProperty("resendAfterSeconds").GetInt32().Should().BeInRange(1, 60);
+            body.GetProperty("expiresInSeconds").GetInt32().Should().Be(600);
             first.StatusCode.Should().Be(HttpStatusCode.OK);
             factory.AlreadyRegisteredNotices.Where(m => m.Kind == EmailKind.Code).Should().ContainSingle();
+        }
+
+        [Fact]
+        public async Task UnconfirmedAccount_GetsOneNoticeInsideTheCooldown_NotOnePerCall()
+        {
+            using var factory = new AccountRecoveryFactory();
+            using var client = factory.CreateClient();
+            await CreateAccountAsync(factory, "unconfirmed@example.com", confirmed: false);
+
+            for (var i = 0; i < 4; i++)
+            {
+                (await Post(client, new { email = "unconfirmed@example.com" }, $"10.2.0.{i}")).StatusCode.Should().Be(HttpStatusCode.OK);
+            }
+
+            factory.AlreadyRegisteredNotices.Should().ContainSingle(m => m.Kind == EmailKind.AlreadyRegistered);
+        }
+
+        [Fact]
+        public async Task WithNoCodeKey_EveryAddressAnswersServiceUnavailable()
+        {
+            using var factory = new AccountRecoveryFactory(configureCodes: c => c.HmacKey = string.Empty);
+            using var client = factory.CreateClient();
+            await CreateAccountAsync(factory, "known@example.com");
+
+            (await Post(client, new { email = "known@example.com" })).StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+            (await Post(client, new { email = "free@example.com" })).StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
         }
 
         [Theory]

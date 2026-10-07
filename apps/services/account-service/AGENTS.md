@@ -189,7 +189,13 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   So a pending, locked or undeliverable address looks like a new one. The service has no suppression
   store, so there is no `undeliverable` answer. Do not add one.
 - Soft-deleted and unconfirmed accounts get `code`. `/start` sends them the already-registered
-  notice, not a code. #654 refuses a soft-deleted account at the set-password step.
+  notice, not a code, so an unconfirmed account has no way forward from identify (known gap). #654
+  refuses a soft-deleted account at the set-password step.
+- The code route spends the `/signup/start` send budget (`TrySignUpSend`) before it calls
+  `StartAsync`. A refusal there answers `code` with the wait and the full code life, not `429`.
+- The per-email limit counts every route, so anyone can make one address answer `429` for the
+  window. The ticket requires it.
+- No engine key: `503` for every address, so the status shows no route.
 - **Limits** (`AccountRecovery:IdentifiesPerAddress` 20, `IdentifiesPerEmail` 5, per
   `RequestWindow`): `AccountRecoveryRateLimiter.TryIdentify`, in the throttle filter. The address
   counter runs first. A bad address counts against the address only. `429` with `Retry-After`.

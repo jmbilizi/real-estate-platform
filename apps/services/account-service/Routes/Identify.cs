@@ -18,7 +18,7 @@ internal static class Identify
         // { email } -> { next: "password" | "code", resendAfterSeconds, expiresInSeconds }
         app.MapPost("/account/identify", async (IdentifyRequest request, IdentifyService service, HttpContext http) =>
         {
-            var result = await service.IdentifyAsync(request.Email, http.RequestAborted).ConfigureAwait(false);
+            var result = await service.IdentifyAsync(request.Email, AccountRecoveryThrottleFilter.ClientAddress(http), http.RequestAborted).ConfigureAwait(false);
             return result.Status switch
             {
                 IdentifyStatus.Ok => Results.Ok(new
