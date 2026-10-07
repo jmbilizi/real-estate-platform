@@ -89,6 +89,7 @@ interface Row {
   listing_id: string;
   listing_title: string;
   listing_address: string;
+  listing_state: string | null;
   listing_price: string | number | null;
   listing_status: string | null;
 }
@@ -97,7 +98,7 @@ const SELECT = `
   SELECT i.id, i.created_at, a.assigned_at, a.accepted_at, i.kind, i.status, i.name, i.email,
          i.phone, i.message, i.consent_to_contact, i.consent_disclosure_text,
          i.consent_channels, i.consent_given_at, i.listing_id,
-         l.title AS listing_title, p.address_raw AS listing_address,
+         l.title AS listing_title, p.address_raw AS listing_address, p.state AS listing_state,
          l.list_price AS listing_price, l.consumer_status AS listing_status
     FROM lead_assignments a
     JOIN listing_inquiries i ON i.id = a.lead_id
@@ -115,6 +116,7 @@ const toListItem = (row: Row): AgentLeadListItem => ({
     id: row.listing_id,
     title: row.listing_title,
     address: row.listing_address,
+    state: row.listing_state,
     listPrice: row.listing_price === null ? null : Number(row.listing_price),
     status: row.listing_status,
   },

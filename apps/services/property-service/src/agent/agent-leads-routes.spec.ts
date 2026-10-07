@@ -86,6 +86,7 @@ const leadRow = (status: string) => ({
   listing_id: '0190a000-0000-7000-8000-0000000000c1',
   listing_title: 'A home',
   listing_address: '1 Main St',
+  listing_state: 'MD',
   listing_price: '500000',
   listing_status: 'Active',
 });

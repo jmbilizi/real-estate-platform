@@ -126,6 +126,7 @@ const END_REASON_LABEL: Record<StaffLeadAssignment['endReason'] & string, string
   unassigned: 'unassigned by staff',
   returned: 'returned to verified',
   closed: 'lead ended',
+  declined: 'declined by the agent',
 };
 
 function SheetFor({
