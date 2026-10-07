@@ -2,8 +2,6 @@ import type { ConsentChannel, ConsentTextVersion, InquiryKind } from '@cribstop/
 
 export interface InquiryInput {
   kind: InquiryKind;
-  name: string;
-  email: string;
   phone?: string;
   message?: string;
   /** The disclosure version shown beside the submit button (#631). */
@@ -13,11 +11,12 @@ export interface InquiryInput {
 
 /**
  * `unavailable`: the listing is gone, so a retry cannot work. `unauthorized`: no session, or it
- * ended. `retryable`: the user may try again.
+ * ended. `unconfirmed`: the account email is not confirmed. `retryable`: the user may try again.
  */
 export type InquiryFailure =
   | 'unavailable'
   | 'unauthorized'
+  | 'unconfirmed'
   | 'invalid'
   | 'rate_limited'
   | 'retryable';
@@ -42,6 +41,7 @@ export async function submitInquiry(listingId: string, input: InquiryInput): Pro
   }
   if (res.ok) return;
   if (res.status === 401) throw new InquiryError('unauthorized');
+  if (res.status === 403) throw new InquiryError('unconfirmed');
   if (res.status === 404) throw new InquiryError('unavailable');
   if (res.status === 400) throw new InquiryError('invalid');
   if (res.status === 429) throw new InquiryError('rate_limited');

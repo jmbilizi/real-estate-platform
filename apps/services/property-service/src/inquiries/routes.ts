@@ -165,7 +165,9 @@ export function createInquiriesRouter(deps: InquiriesRouterDeps): Router {
       }
       const listingId = parsedId.data;
 
-      const parsedBody = listingInquiryRequestSchema.safeParse(withoutRetiredContactFields(req.body));
+      const parsedBody = listingInquiryRequestSchema.safeParse(
+        withoutRetiredContactFields(req.body),
+      );
       if (!parsedBody.success) {
         res.status(400).json(invalidRequest(describeIssues(parsedBody.error.issues)));
         return;

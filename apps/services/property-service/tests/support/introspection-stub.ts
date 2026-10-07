@@ -39,6 +39,18 @@ export function setAccountRoles(accountId: string, roles: readonly string[]): vo
   accountRoles.set(accountId, roles);
 }
 
+/** Accounts the stub reports with an unconfirmed email (#690). */
+const unconfirmedAccounts = new Set<string>();
+
+export function setEmailUnconfirmed(accountId: string): void {
+  unconfirmedAccounts.add(accountId);
+}
+
+/** The email the stub reports for an account. */
+export function emailFor(accountId: string): string {
+  return `${accountId}@e2e.example.com`;
+}
+
 export function startIntrospectionStub(): Promise<Server> {
   const server = createServer((req, res) => {
     const rolesMatch = /^\/account\/([^/]+)\/roles$/.exec(req.url ?? '');
@@ -57,6 +69,9 @@ export function startIntrospectionStub(): Promise<Server> {
         isValid: accountId !== null,
         accountId,
         roles: roleList === '' ? [] : roleList.split(','),
+        ...(accountId === null
+          ? {}
+          : { email: emailFor(accountId), emailConfirmed: !unconfirmedAccounts.has(accountId) }),
       }),
     );
   });

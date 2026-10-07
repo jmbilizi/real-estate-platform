@@ -2,8 +2,6 @@ import { InquiryError, submitInquiry } from './inquiries';
 
 const input = {
   kind: 'message' as const,
-  name: 'Pat',
-  email: 'pat@example.com',
   consentTextVersion: 'v1' as const,
   consentChannels: ['email' as const],
 };
@@ -15,6 +13,7 @@ function respond(status: number) {
 describe('submitInquiry', () => {
   it.each([
     [401, 'unauthorized'],
+    [403, 'unconfirmed'],
     [404, 'unavailable'],
     [400, 'invalid'],
     [429, 'rate_limited'],

@@ -12,11 +12,10 @@ import {
  *
  * The body is rebuilt from an allowlist. The consent fields are forwarded only when valid: the
  * form shows the server-owned disclosure beside the submit button, so a submission is the consent
- * (#631). The service stores the text for the version, never a client string. For a signed-in
- * account with a confirmed email, the service uses the account email and ignores the body email.
- * The access token, when present, lets the service link the inquiry to the account. The dialog
- * requires an account (#688). Once the service answers 401 for a missing or expired token, the
- * status passes through and the dialog shows the sign-in step.
+ * (#631). The service stores the text for the version, never a client string. The body carries no
+ * name or email: the service takes the contact from the account (#690). The access token links the
+ * inquiry to the account. The dialog requires an account (#688). The service answers 401 for a
+ * missing or expired token and 403 for an unconfirmed email. The status passes through.
  */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -29,8 +28,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     !input ||
     typeof input !== 'object' ||
     !kind.success ||
-    typeof input.name !== 'string' ||
-    typeof input.email !== 'string' ||
     !isText(input.phone) ||
     !isText(input.message) ||
     (input.consentChannels !== undefined && !consentChannels.success)
@@ -41,11 +38,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     );
   }
 
-  const payload: Record<string, unknown> = {
-    kind: kind.data,
-    name: input.name,
-    email: input.email,
-  };
+  const payload: Record<string, unknown> = { kind: kind.data };
   if (input.phone) payload.phone = input.phone;
   if (input.message) payload.message = input.message;
   if (consentVersion.success) {

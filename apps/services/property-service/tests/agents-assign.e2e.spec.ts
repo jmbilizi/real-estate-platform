@@ -40,8 +40,8 @@ const pool = () => getPool();
 
 async function seedLead(status = 'verified'): Promise<string> {
   const { rows } = await pool().query<{ id: string }>(
-    `INSERT INTO listing_inquiries (listing_id, kind, name, email, message, status)
-     VALUES ($1, 'message', 'E2E Lead', $2, 'Hello (e2e)', $3) RETURNING id`,
+    `INSERT INTO listing_inquiries (listing_id, kind, name, email, message, status, account_id)
+     VALUES ($1, 'message', 'E2E Lead', $2, 'Hello (e2e)', $3, gen_random_uuid()) RETURNING id`,
     [listing, `${randomUUID()}@e2e.example.com`, status],
   );
   const id = rows[0]?.id;

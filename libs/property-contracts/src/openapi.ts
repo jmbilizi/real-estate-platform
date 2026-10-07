@@ -579,8 +579,7 @@ export function toOpenApiDocument() {
               },
             },
             '400': {
-              description:
-                'Unknown field, or `message` missing/empty when `kind` is `message`.',
+              description: 'Unknown field, or `message` missing/empty when `kind` is `message`.',
               content: {
                 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
               },

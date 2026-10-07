@@ -53,7 +53,7 @@ interface Props {
  * accessibility field, and no prompt that invites one.
  *
  * A request needs an account (#688). A signed-out buyer meets the email-code sign-in inside this
- * dialog, so the typed phone and message stay. Name and email come from the account.
+ * dialog, so the typed phone and message stay. The service takes the contact from the account.
  *
  * Rendered in a portal with its own key handling, because it opens over the listing modal. The
  * listing modal's Escape and Tab handlers sit on `window`, so this handler stops the event first.
@@ -188,8 +188,6 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
     try {
       await submitInquiry(listingId, {
         kind,
-        name: accountName,
-        email: accountEmail,
         ...(phone && { phone }),
         ...(values.message.trim() && { message: values.message.trim() }),
         consentTextVersion: CURRENT_CONSENT_TEXT_VERSION,
@@ -214,29 +212,36 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
               retryable: true,
               message: 'Your session ended. Select Try Again to sign in, then send your request.',
             }
-          : failure === 'unavailable'
+          : failure === 'unconfirmed'
             ? {
                 status: 'failed',
                 retryable: false,
-                message: 'This home is no longer available, so we could not send your request.',
+                message: 'Confirm your email address to send a request.',
               }
-            : failure === 'invalid'
+            : failure === 'unavailable'
               ? {
                   status: 'failed',
-                  retryable: true,
-                  message: 'Check your details and try again.',
+                  retryable: false,
+                  message: 'This home is no longer available, so we could not send your request.',
                 }
-              : failure === 'rate_limited'
+              : failure === 'invalid'
                 ? {
                     status: 'failed',
                     retryable: true,
-                    message: 'Too many requests right now. Wait a moment, then try again.',
+                    message: 'Check your details and try again.',
                   }
-                : {
-                    status: 'failed',
-                    retryable: true,
-                    message: 'We could not send your request. Check your connection and try again.',
-                  },
+                : failure === 'rate_limited'
+                  ? {
+                      status: 'failed',
+                      retryable: true,
+                      message: 'Too many requests right now. Wait a moment, then try again.',
+                    }
+                  : {
+                      status: 'failed',
+                      retryable: true,
+                      message:
+                        'We could not send your request. Check your connection and try again.',
+                    },
       );
       requestAnimationFrame(() => alertRef.current?.focus());
     } finally {

@@ -1401,7 +1401,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
         "additionalProperties": false,
         "properties": {
           "consentChannels": {
-            "description": "The channels the consumer agreed to. Defaults to the channels that match the supplied \`email\` and \`phone\`. \`phone_call\` and \`phone_text\` need a \`phone\`. Only valid when \`consentToContact\` is true.",
+            "description": "The channels the consumer agreed to. Defaults to the channels that match the supplied \`phone\`. \`email\` always applies. \`phone_call\` and \`phone_text\` need a \`phone\`. Only valid when \`consentToContact\` is true.",
             "items": {
               "enum": [
                 "email",
@@ -1426,11 +1426,6 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "description": "Whether the consumer asked to also be connected with a Real Broker, LLC agent. Defaults to false and is never inferred. Routing to the listing agent happens regardless of this value — consent adds a recipient, it never replaces one.",
             "type": "boolean",
           },
-          "email": {
-            "format": "email",
-            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
-            "type": "string",
-          },
           "kind": {
             "enum": [
               "message",
@@ -1443,11 +1438,6 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "maxLength": 2000,
             "type": "string",
           },
-          "name": {
-            "maxLength": 200,
-            "minLength": 1,
-            "type": "string",
-          },
           "phone": {
             "maxLength": 40,
             "minLength": 1,
@@ -1456,8 +1446,6 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
         },
         "required": [
           "kind",
-          "name",
-          "email",
           "consentToContact",
         ],
         "type": "object",
@@ -4785,7 +4773,7 @@ A signed-in request also gets \`isSaved\` and \`isFavorited\` on each result, re
     },
     "/listings/{id}/inquiries": {
       "post": {
-        "description": "Works signed-out and signed-in. An unauthenticated request is never rejected for being unauthenticated. \`name\` and \`email\` are always required. \`consentTextVersion\` is required for new clients. With \`consentToContact\` true and no version, the server records \`v1\`. \`phone\` is optional. A signed-in account with a confirmed email always uses the account email. The server ignores the \`email\` in the body for it. \`consentToContact\` records that the consumer agreed to be contacted. The server stores the consent text for \`consentTextVersion\`, the \`consentChannels\` and the time. The record starts in the \`new\` lead status. No public read endpoint returns it.
+        "description": "Needs a signed-in account with a confirmed email. A request with no valid credential gets 401 and no listing data. An account with an unconfirmed email gets 403. The server takes the contact email from the account and ignores \`name\` and \`email\` if the body sends them. \`consentTextVersion\` is required for new clients. With \`consentToContact\` true and no version, the server records \`v1\`. \`phone\` is optional. \`consentToContact\` records that the consumer agreed to be contacted. The server stores the consent text for \`consentTextVersion\`, the \`consentChannels\` and the time. The record starts in the \`new\` lead status. No public read endpoint returns it.
 
 Rate-limited per client and per listing; a request over either limit gets 429 with a \`Retry-After\` header.",
         "operationId": "createListingInquiry",
@@ -4830,7 +4818,27 @@ Rate-limited per client and per listing; a request over either limit gets 429 wi
                 },
               },
             },
-            "description": "Unknown field, missing \`name\`/\`email\`, or \`message\` missing/empty when \`kind\` is \`message\`.",
+            "description": "Unknown field, or \`message\` missing/empty when \`kind\` is \`message\`.",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No valid credential. The body gives no reason.",
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "The account email is not confirmed (\`forbidden\`).",
           },
           "404": {
             "content": {
@@ -4861,6 +4869,16 @@ Rate-limited per client and per listing; a request over either limit gets 429 wi
               },
             },
             "description": "Unexpected server error. The body carries no detail by design.",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "account-service did not answer, so the session is unknown. Retry. This is not a sign-out.",
           },
         },
         "summary": "Submit a message or tour request against a listing",
