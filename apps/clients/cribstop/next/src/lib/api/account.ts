@@ -136,48 +136,9 @@ export class RateLimitError extends Error {
   }
 }
 
-export type PasswordResetErrorKind = 'invalid' | 'policy' | 'failed';
-
-/**
- * A failed `/account/resetPassword` call. `kind: 'invalid'` covers an unusable code, an unknown
- * address, and an unconfirmed address alike. The server reports all three identically on purpose
- * (#137), so this type carries no more detail than the server gives.
- */
-export class PasswordResetError extends Error {
-  constructor(public kind: PasswordResetErrorKind) {
-    super('Password reset failed');
-    this.name = 'PasswordResetError';
-  }
-}
-
 function retryAfterSeconds(res: Response): number {
   const parsed = Number(res.headers.get('Retry-After'));
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 60;
-}
-
-/** Redeems a password reset code. `code` and `newPassword` map to Identity's `resetCode`/`newPassword`. */
-export async function confirmPasswordReset(payload: {
-  email: string;
-  code: string;
-  newPassword: string;
-}): Promise<void> {
-  const res = await fetch('/api/account/reset-password', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      email: payload.email,
-      resetCode: payload.code,
-      newPassword: payload.newPassword,
-    }),
-  });
-
-  if (res.status === 429) throw new RateLimitError(retryAfterSeconds(res));
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    const kind: PasswordResetErrorKind =
-      body?.error === 'invalid' || body?.error === 'policy' ? body.error : 'failed';
-    throw new PasswordResetError(kind);
-  }
 }
 
 /** The outcome of a used "This wasn't me" link. The `invalid` status covers an unknown, used and expired token alike. */

@@ -22,13 +22,13 @@ namespace AccountService.Tests.Helpers
         private const string SecretCode = "SECRET-RESET-CODE";
 
         private static readonly OutboundEmail Message = new(
-            EmailKind.PasswordReset,
+            EmailKind.Code,
             "Cribstop (Real Broker, LLC)",
             "no-reply@cribstop.com",
             "contact@cribstop.com",
             "person@example.com",
-            "Reset your Cribstop password",
-            $"Open this link: https://cribstop.example/reset-password?email=person%40example.com&code={SecretCode}\n\nCribstop is brokered by Real Broker, LLC.");
+            $"{SecretCode} is your Cribstop code",
+            $"Your Cribstop code:\n\n{SecretCode}\n\nCribstop is brokered by Real Broker, LLC.");
 
         [Fact]
         public async Task DeliverAsync_WhenNotConfigured_SendsNothing_AndLogsTheSuppressedEvent()
@@ -241,7 +241,7 @@ namespace AccountService.Tests.Helpers
         private static void AssertNeverLeaksTheSecret(string logMessage)
         {
             logMessage.Should().NotContain(SecretCode);
-            logMessage.Should().NotContain("reset-password?email=");
+            logMessage.Should().NotContain("Your Cribstop code");
         }
 
         private static HttpResponseMessage JsonResponse(HttpStatusCode status, object body) =>

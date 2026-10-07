@@ -30,54 +30,23 @@ internal sealed class AccountRecoveryOptions
 
     /// <summary>
     /// Gets or sets the public origin of the web app, for example <c>https://cribstop.com</c>.
-    /// The password-reset link is built from it. Required. No default in code (PRD §1).
+    /// The "This wasn't me" link is built from it. Required. No default in code (PRD §1).
     /// </summary>
     public Uri? WebBaseUrl { get; set; }
-
-    /// <summary>
-    /// Gets or sets the web route that receives the password-reset link, carrying <c>email</c> and
-    /// <c>code</c>. The settled value is <c>/reset-password</c> (#137). Required.
-    /// </summary>
-    public string PasswordResetPath { get; set; } = string.Empty;
 
     /// <summary>Gets or sets the web path of the "This wasn't me" page that #662 builds.</summary>
     public string SecureAccountPath { get; set; } = "/secure-account";
 
     /// <summary>
-    /// Gets or sets how long an issued password-reset token stays valid. Enforced by the dedicated
-    /// <c>PasswordResetTokenProvider</c>, so the configured value is the one actually enforced when
-    /// a token is redeemed.
-    /// </summary>
-    public TimeSpan TokenLifetime { get; set; } = TimeSpan.FromHours(1);
-
-    /// <summary>
-    /// Gets or sets the number of password-reset requests allowed for one email address per
-    /// <see cref="RequestWindow"/>.
+    /// Gets or sets the sends allowed for one email address per <see cref="RequestWindow"/>.
     /// </summary>
     /// <remarks>
-    /// This limit protects the mailbox and the outbound send cost, and it is the only one an
-    /// attacker cannot sidestep by changing where they appear to come from. It cuts both ways:
-    /// because the counter is keyed on the address that was asked about rather than on who asked,
-    /// someone can spend the budget on a victim's address and deny them a reset link until the
-    /// window rolls. The value is therefore a deliberate trade — high enough that a person who
-    /// mistypes an address or loses an email is not locked out of recovery, low enough that the
-    /// address is not a free mail cannon. Raise it before lowering it.
+    /// The counter is keyed on the address that was asked about, not on who asked. Someone can spend
+    /// the budget on a victim's address and deny them a code until the window rolls. The value is a
+    /// deliberate trade: high enough that a person who mistypes an address is not locked out, low
+    /// enough that the address is not a free mail cannon. Raise it before lowering it.
     /// </remarks>
     public int RequestsPerEmail { get; set; } = 5;
-
-    /// <summary>
-    /// Gets or sets the password-reset requests allowed from one client address per
-    /// <see cref="RequestWindow"/>.
-    /// </summary>
-    public int RequestsPerAddress { get; set; } = 15;
-
-    /// <summary>
-    /// Gets or sets the number of reset redemption attempts allowed from one client address per
-    /// <see cref="RequestWindow"/>. Bounds token guessing; set higher than
-    /// <see cref="RequestsPerAddress"/> because a legitimate user may retry a password that fails
-    /// the policy several times in a row.
-    /// </summary>
-    public int RedemptionsPerAddress { get; set; } = 30;
 
     /// <summary>
     /// Gets or sets the sign-up sends (start, resend, change-email) allowed from one client address
@@ -148,26 +117,14 @@ internal sealed class AccountRecoveryOptions
             return $"{SectionName}:{nameof(this.WebBaseUrl)} must use http or https.";
         }
 
-        if (!this.PasswordResetPath.StartsWith('/'))
-        {
-            return $"{SectionName}:{nameof(this.PasswordResetPath)} must start with '/'.";
-        }
-
         if (!this.SecureAccountPath.StartsWith('/'))
         {
             return $"{SectionName}:{nameof(this.SecureAccountPath)} must start with '/'.";
         }
 
-        if (this.TokenLifetime <= TimeSpan.Zero)
-        {
-            return $"{SectionName}:{nameof(this.TokenLifetime)} must be positive.";
-        }
-
         // A mistyped override binds to 0 and reads as "refuse everything". Refuse to start instead.
         return FirstNonPositive(
             (nameof(this.RequestsPerEmail), this.RequestsPerEmail),
-            (nameof(this.RequestsPerAddress), this.RequestsPerAddress),
-            (nameof(this.RedemptionsPerAddress), this.RedemptionsPerAddress),
             (nameof(this.SignUpSendsPerAddress), this.SignUpSendsPerAddress),
             (nameof(this.SignUpVerifiesPerAddress), this.SignUpVerifiesPerAddress),
             (nameof(this.IdentifiesPerAddress), this.IdentifiesPerAddress),

@@ -606,41 +606,6 @@ namespace AccountService.Tests.Integration
         }
 
         [Fact]
-        public async Task Complete_VoidsALinkResetTokenIssuedBeforeIt()
-        {
-            using var factory = NoCooldown();
-            using var client = factory.CreateClient();
-            await CreateAccountAsync(factory, "owner@example.com");
-            string token;
-            using (var scope = factory.Services.CreateScope())
-            {
-                var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-                token = await users.GeneratePasswordResetTokenAsync((await users.FindByEmailAsync("owner@example.com"))!);
-            }
-
-            var proof = await ProofAsync(factory, client, "owner@example.com");
-            await Post(client, CompletePath, new { email = "owner@example.com", resetProof = proof, newPassword = NewPassword });
-
-            using var scope2 = factory.Services.CreateScope();
-            var users2 = scope2.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-            var result = await users2.ResetPasswordAsync((await users2.FindByEmailAsync("owner@example.com"))!, token, "attacker passphrase 123");
-            result.Succeeded.Should().BeFalse();
-        }
-
-        [Fact]
-        public async Task TheLinkEndpoints_StayUntilTheCleanupTicket()
-        {
-            using var factory = NoCooldown();
-            using var client = factory.CreateClient();
-            await CreateAccountAsync(factory, "owner@example.com");
-
-            var forgot = await Post(client, "/account/forgotPassword", new { email = "owner@example.com" });
-
-            forgot.StatusCode.Should().Be(HttpStatusCode.OK);
-            factory.ResetCodes.Should().ContainSingle();
-        }
-
-        [Fact]
         public async Task Purge_DeletesExpiredProofs_AndKeepsLiveOnes()
         {
             var clock = new FakeClock();

@@ -38,8 +38,6 @@ namespace AccountService.Tests.Integration
             ["GET /account/health/ready"] = false,
             ["POST /account/login"] = false,
             ["POST /account/refresh"] = false,
-            ["POST /account/forgotPassword"] = false,
-            ["POST /account/resetPassword"] = false,
             ["POST /account/manage/2fa"] = false,
             ["GET /account/manage/info"] = false,
             ["POST /account/manage/info"] = false,
@@ -92,6 +90,8 @@ namespace AccountService.Tests.Integration
         [InlineData("POST", "/account/register")]
         [InlineData("GET", "/account/confirmEmail")]
         [InlineData("POST", "/account/resendConfirmationEmail")]
+        [InlineData("POST", "/account/forgotPassword")]
+        [InlineData("POST", "/account/resetPassword")]
         public async Task RetiredIdentityEndpoints_AreNotMapped_AndAnswer404(string method, string path)
         {
             using var factory = new AccountServiceFactory();

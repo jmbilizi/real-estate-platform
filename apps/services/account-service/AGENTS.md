@@ -22,97 +22,88 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   JWT**), and SHA-256-hashed API keys.
 - Six-tier staff RBAC is hierarchical; **domain roles are additive facets** — never model them as
   exclusive personas (PRD §11.2).
-- **Only a verified code creates an account** (#657, stakeholder ruling 2026-10-07). It supersedes
-  #136 for register, confirm and resend. `POST /account/signup/complete` is the only endpoint that
-  creates an `ApplicationUser`, and it creates it confirmed. `/account/register`,
-  `/account/confirmEmail` and `/account/resendConfirmationEmail` do not exist (`404`). Do not add a
-  route that creates a user. `Tests/Integration/AccountCreationSurfaceTests.cs` lists every
-  endpoint, fails on an unlisted one, and probes each with a registration body.
-- **Identity's kept endpoints are still `MapIdentityApi`'s**: `login`, `refresh`, `forgotPassword`,
-  `resetPassword`, `manage/*`. #665 retires the link-based reset pair. `Routes/IdentityEndpoints.cs`
-  maps Identity into a detached route builder and hides the three retired routes before the app sees
-  them, so the kept handlers stay the framework's own. The alternative was hand-mapping the kept
-  endpoints, which copies Identity's cookie and bearer handlers. `POST /manage/info` with a new
-  email answers `400`: Identity would mail a link built from the retired `/confirmEmail` route.
-- **Security notices (#661).** After a reset, a password change or an email change,
+- **Only a verified code creates an account.** `POST /account/signup/complete` is the only endpoint
+  that creates an `ApplicationUser`, and it creates it confirmed. Identity's `/register`,
+  `/confirmEmail`, `/resendConfirmationEmail`, `/forgotPassword` and `/resetPassword` do not exist
+  (`404`, absent from OpenAPI). Do not add a route that creates a user.
+  `Tests/Integration/AccountCreationSurfaceTests.cs` lists every endpoint, fails on an unlisted one,
+  probes each with a registration body, and checks that those five paths answer `404`.
+- **Identity keeps `login`, `refresh` and `manage/*`.** They stay `MapIdentityApi`'s own handlers.
+  `Routes/IdentityEndpoints.cs` maps Identity into a detached route builder and hides the five
+  retired routes before the app sees them. Hand-mapping the kept endpoints would copy Identity's
+  cookie and bearer handlers. `POST /manage/info` with a new email answers `400`: an email change
+  runs by code (see Email change). `POST /manage/info` with a new password runs
+  `PasswordChangeService` through `PasswordChangeFilter`, not the framework branch. The current
+  password is required and counts toward the lock, and the new stamp ends every other session.
+- **The flows are code flows.** Each one sends a 6-digit code by email
+  (`Helpers/EmailCodeService.cs`) and answers the same for every address.
+
+  | Flow         | Endpoints                                                      |
+  | ------------ | -------------------------------------------------------------- |
+  | Sign-up      | `/account/signup/{start,verify,resend,change-email,complete}`  |
+  | Sign-in step | `/account/identify`, then `/account/login` or the sign-up flow |
+  | Reset        | `/account/password/reset/{start,verify,complete}`              |
+  | Email change | `/account/email/change/{start,verify}`                         |
+  | Secure       | `POST /account/secure`                                         |
+
+  Each flow has its own section below.
+
+- **Security notices.** After a reset, a password change or an email change,
   `Helpers/SecurityNoticeService.cs` mails the address the account had BEFORE the change. It skips a
   suppressed address, never blocks the action, and logs the kind only. Each notice carries a
   single-use `SecureAccountTokens` token (hash stored, 7 day life) for the "This wasn't me" link.
-  `POST /account/secure` (#662) consumes the token. `POST /manage/info` with a new password runs
-  `PasswordChangeService` through `PasswordChangeFilter`, not the framework branch: the current
-  password is required and counts toward the lock, and the new stamp ends every other session.
-- **What this service adds on top of Identity's handlers, and where.** Identity ships these
-  endpoints with **no rate limiting and no timing equalisation** at all. Both are reattached by
-  `Helpers/AccountRecoveryThrottleFilter.cs`, one endpoint filter over the whole group, which
-  discriminates on the **bound argument type** (`ForgotPasswordRequest` etc.) rather than the path —
-  `GET /manage/info` has no DTO, so an index-0 cast would throw there. Policy lives in
-  `Configuration/AccountRecoveryOptions.cs` (`AccountRecovery` section). `Models/AppUserManager.cs`
-  carries the two things a filter cannot do, because it runs before the account is known: clearing a
-  lockout after a successful reset (Identity's `ResetPasswordAsync` leaves `LockoutEnd` alone, so
-  the spraying that locked an account would outlast recovery from it), and reporting a soft-deleted
-  account as unconfirmed — the one predicate Identity consults on `/forgotPassword`,
-  `/resetPassword` and `CanSignInAsync` alike.
-- **The forgot response is identical for registered and unregistered addresses including its
-  timing.** The body parity is Identity's; the floor is ours. Anything added to that path has to
-  preserve it. The parity tests in `Tests/Integration/AccountRecoveryEndpointTests.cs` catch a
-  break.
-- **Mail sends through Postmark** (#138). Identity's `AddApiEndpoints()` `TryAdd`s
-  `DefaultMessageEmailSender` → `NoOpEmailSender`, which discards every message with a `200` and no
-  log line; `Helpers/PostmarkEmailSender.cs` replaces it. Sending is queued, not inline:
-  `Helpers/PostmarkDeliveryQueue.cs` is both the `IOutboundEmailSender` every composed message goes
-  through and the background service that drains it, so no Identity handler's response time depends
-  on Postmark, and no retry blocks a request. `PostmarkOptions.IsConfigured` is the fail-closed
-  check: the committed secret placeholder (`infra/k8s/base/secrets/postmark.secret.yaml`) reads as
-  "not configured", and the queue discards the message with a loud warning (event `1370`) rather
-  than attempting delivery. Accepted, rejected and exhausted-retry outcomes log events
-  `1371`/`1372`/`1373`, keyed by `EmailKind`, never the link, the code or the body.
-- **Password reset** (#136) runs on the same rate limiter, options section and delivery seam as the
-  code flows. `/forgotPassword` and `/resetPassword` are metered by `RequestsPerEmail`,
-  `RequestsPerAddress` and `RedemptionsPerAddress`, and `/forgotPassword` is held to the timing
-  floor. Tests: `Tests/Integration/AccountRecoveryEndpointTests.cs`.
-- **A soft-deleted account cannot sign in, and the refusal is central** (#152).
+  The link is `AccountRecovery:WebBaseUrl` + `AccountRecovery:SecureAccountPath`.
+- **What this service adds on top of Identity's handlers.** Identity ships `login` with no timing
+  equalisation. `Helpers/AccountRecoveryThrottleFilter.cs` is one endpoint filter over the Identity
+  group and over every code route. It discriminates on the **bound argument type** (`LoginRequest`,
+  `SignUpStartRequest` and so on) rather than the path: `GET /manage/info` has no DTO, so an index-0
+  cast would throw there. Policy lives in `Configuration/AccountRecoveryOptions.cs`
+  (`AccountRecovery` section). `Models/AppUserManager.cs` reports a soft-deleted account as
+  unconfirmed, and `ClearLockoutAsync` releases a lockout after a reset.
+- **Every code flow answers the same for registered and unregistered addresses, including the
+  timing.** The body parity is in the services. The floor `AccountRecovery:MinimumResponseDuration`
+  is in the filter. Anything added to these paths has to keep both. Each flow's test file has the
+  parity tests.
+- **Mail sends through Postmark.** Sending is queued, not inline: `Helpers/PostmarkDeliveryQueue.cs`
+  is both the `IOutboundEmailSender` every composed message goes through and the background service
+  that drains it, so no response time depends on Postmark, and no retry blocks a request.
+  `PostmarkOptions.IsConfigured` is the fail-closed check: the committed secret placeholder
+  (`infra/k8s/base/secrets/postmark.secret.yaml`) reads as "not configured", and the queue discards
+  the message with a loud warning (event `1370`) rather than attempting delivery. Accepted, rejected
+  and exhausted-retry outcomes log events `1371`/`1372`/`1373`, keyed by `EmailKind`, never the
+  code, the link or the body.
+- **A soft-deleted account cannot sign in, and the refusal is central.**
   `Models/AppSignInManager.cs` overrides `CanSignInAsync` (every sign-in path) and
   `ValidateSecurityStampAsync` (cookie and `/account/refresh`). Do not move this behind
   `RequireConfirmedAccount`, which is a separate switch. Tests:
   `Tests/Integration/DeletedAccountSignInTests.cs`.
 - CPM: versionless `<PackageReference>`; run `pnpm run nx:reset` after project structure changes.
 
-## Identity surface (login, refresh, reset)
+## Identity surface (login, refresh, manage)
 
 - Identity's kept endpoints under `/account` stay the framework's. Do not wrap them. Behaviour
   attaches as filters over the group (`Helpers/AccountRecoveryThrottleFilter.cs`,
   `Helpers/IdentityResponseShapingFilter.cs`) and as options. No setting turns email confirmation on
-  or off: every account is born confirmed (#149 declined as moot).
-- **Delivery seam**: `Helpers/PostmarkEmailSender.cs` is the `IEmailSender<ApplicationUser>`
-  registration. `SendConfirmationLinkAsync` throws, because nothing may send a confirmation link.
-  `Helpers/IOutboundEmailSender.cs` (implemented by `PostmarkDeliveryQueue`) is the one transport
-  underneath it, used by the Identity reset sends, the already-registered notice and the code
-  emails. Every message composes through `Helpers/IdentityEmailComposer.cs`, which also builds the
-  password-reset link (`Helpers/PasswordResetLinkBuilder.cs`) and states each message's real
-  configured token lifetime.
-- **Sender identity** (stakeholder ruling 2026-09-16, section `Email`): from
-  `Cribstop (Real Broker, LLC) <no-reply@cribstop.com>`, reply-to `contact@cribstop.com`. Startup
-  validation refuses a reply-to equal to the from address. `Email:BrokerageDisclosure` ends every
-  body (PRD §6). It is configuration, so a jurisdiction change needs no code change.
-- **Password-reset link**: `AccountRecovery:WebBaseUrl` + `AccountRecovery:PasswordResetPath`
-  (`/reset-password`, fixed — the web app's route, #137) + the email address and the reset code.
-  `MapIdentityApi`'s `/forgotPassword` calls only `SendPasswordResetCodeAsync` with a bare code,
-  never a URL, so `Helpers/PasswordResetLinkBuilder.cs` builds the link from scratch. `WebBaseUrl`
-  has no default in code. Each overlay sets `AccountRecovery__WebBaseUrl`; the deploy action
-  substitutes `CRIBSTOP_DOMAIN_PLACEHOLDER`. #665 removes this link.
-- **Non-enumeration is a product requirement**, not stock Identity. Do not "fix" it back:
-  - `/login` answers `NotAllowed` and `Lockedout` as `Failed`. `RequiresTwoFactor` stays.
-  - `/forgotPassword` answers `200` for every address.
+  or off: every account is born confirmed.
+- **Delivery seam**: `Helpers/IOutboundEmailSender.cs` (implemented by `PostmarkDeliveryQueue`) is
+  the one transport for the code emails, the notices and the already-registered notice. Every
+  message composes through `Helpers/IdentityEmailComposer.cs`. `Helpers/PostmarkEmailSender.cs` is
+  the `IEmailSender<ApplicationUser>` that `MapIdentityApi` requires. Every member throws, because
+  nothing may send an Identity link or code.
+- **Sender identity** (section `Email`): from `Cribstop (Real Broker, LLC) <no-reply@cribstop.com>`,
+  reply-to `contact@cribstop.com`. Startup validation refuses a reply-to equal to the from address.
+  `Email:BrokerageDisclosure` ends every body (PRD §6). It is configuration, so a jurisdiction
+  change needs no code change.
+- **Non-enumeration is a product requirement**, not stock Identity. Do not "fix" it back: `/login`
+  answers `NotAllowed` and `Lockedout` as `Failed`. `RequiresTwoFactor` stays.
 - **Rate limits** live in `Helpers/AccountRecoveryRateLimiter.cs`, consulted before any account
-  lookup. Password reset: per email address and per client address for the request, per client
-  address for redemption. Caller identity is `X-Real-IP` (see #143). `429` with `Retry-After`.
-- Timing floor `AccountRecovery:MinimumResponseDuration` (250ms) applies to `/login` and
-  `/forgotPassword`.
-- Tests: `Tests/Integration/IdentityLoginEndpointTests.cs` (login) and
-  `Tests/Integration/AccountRecoveryEndpointTests.cs` (password reset). Both use
-  `AccountRecoveryFactory` (one host per test, records sent messages). The base factory lifts the
-  limits and the floor. `AuthHelper.SeedUserAsync` creates a confirmed account for a test, because
-  `/register` is gone.
+  lookup. Each code flow has a send limit and a verify limit per client address, plus per-email
+  limits from the code engine. Caller identity is `X-Real-IP` (see #143). `429` with `Retry-After`.
+- Timing floor `AccountRecovery:MinimumResponseDuration` (250ms) applies to `/login` and to every
+  code endpoint.
+- Tests: `Tests/Integration/IdentityLoginEndpointTests.cs` (login). `AccountRecoveryFactory` gives
+  one host per test and records sent messages. The base factory lifts the limits and the floor.
+  `AuthHelper.SeedUserAsync` creates a confirmed account for a test.
 
 ## Email code engine (#650)
 
@@ -220,8 +211,7 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
 ## Password reset by code (#658)
 
 - `POST /account/password/reset/{start,verify,complete}`, `Routes/PasswordReset.cs`,
-  `Helpers/PasswordResetService.cs`. The link endpoints (`/forgotPassword`, `/resetPassword`) stay
-  until #665.
+  `Helpers/PasswordResetService.cs`.
 - `start` and `verify` answer the same for every address. Only a confirmed, live account gets a
   `PasswordReset` code. The decoy and send counters use scope `pwreset`, so a reset never spends a
   sign-up counter.

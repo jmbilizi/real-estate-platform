@@ -53,14 +53,6 @@ internal sealed class AccountRecoveryThrottleFilter(
 
         switch (FindRequest(context))
         {
-            case ForgotPasswordRequest forgot:
-                allowed = rateLimiter.TryRequest(Normalise(forgot.Email), clientAddress, out retryAfter);
-                break;
-
-            case ResetPasswordRequest:
-                allowed = rateLimiter.TryRedemption(clientAddress, out retryAfter);
-                break;
-
             case IdentifyRequest identify:
                 allowed = rateLimiter.TryIdentify(
                     SignUpEmail.TryNormalize(identify.Email, out var identifyKey, out _) ? identifyKey : null,
@@ -165,9 +157,7 @@ internal sealed class AccountRecoveryThrottleFilter(
     {
         for (var i = 0; i < context.Arguments.Count; i++)
         {
-            if (context.Arguments[i] is ForgotPasswordRequest
-                or ResetPasswordRequest
-                or IdentifyRequest
+            if (context.Arguments[i] is IdentifyRequest
                 or SignUpStartRequest
                 or SignUpResendRequest
                 or SignUpVerifyRequest
@@ -187,8 +177,6 @@ internal sealed class AccountRecoveryThrottleFilter(
 
         return null;
     }
-
-    private static string Normalise(string? email) => email?.Trim() ?? string.Empty;
 
     private static IResult TooManyRequests(HttpContext context, TimeSpan retryAfter)
     {

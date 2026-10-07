@@ -5,63 +5,25 @@
 using AccountService.Configuration;
 using AccountService.Helpers;
 using FluentAssertions;
-using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace AccountService.Tests.Helpers
 {
     /// <summary>
-    /// Unit tests for <see cref="PasswordResetLinkBuilder"/>,
-    /// <see cref="IdentityEmailComposer"/>, and the options they read.
+    /// Unit tests for <see cref="IdentityEmailComposer"/> and the options it reads.
     /// </summary>
     public class IdentityEmailComposerTests
     {
-        [Fact]
-        public void PasswordResetLinkBuilder_CarriesTheEmailAndTheCode()
-        {
-            var builder = CreatePasswordResetBuilder();
-
-            var link = builder.Build("person@example.com", "abc+def");
-            var query = QueryHelpers.ParseQuery(link.Query);
-
-            link.GetLeftPart(UriPartial.Path).Should().Be("https://cribstop.example/reset-password");
-            query["email"].ToString().Should().Be("person@example.com");
-            query["code"].ToString().Should().Be("abc+def");
-        }
-
         [Fact]
         public void EveryMessage_EndsWithTheConfiguredBrokerageDisclosure()
         {
             var composer = CreateComposer();
 
-            composer.PasswordResetCode("person@example.com", "code").TextBody
-                .Should().EndWith("Cribstop is brokered by Real Broker, LLC.");
-            composer.PasswordResetLink("person@example.com", "https://cribstop.example/reset").TextBody
+            composer.Code("person@example.com", "482913", TimeSpan.FromMinutes(10)).TextBody
                 .Should().EndWith("Cribstop is brokered by Real Broker, LLC.");
             composer.AlreadyRegistered("person@example.com").TextBody
                 .Should().EndWith("Cribstop is brokered by Real Broker, LLC.");
-        }
-
-        [Fact]
-        public void PasswordResetCode_BuildsALink_CarryingTheDecodedCodeAndTheEmail_AndTheConfiguredExpiry()
-        {
-            var message = CreateComposer().PasswordResetCode("person@example.com", "abc&#x2B;def");
-
-            var link = ExtractLink(message.TextBody);
-            var query = QueryHelpers.ParseQuery(link.Query);
-            link.GetLeftPart(UriPartial.Path).Should().Be("https://cribstop.example/reset-password");
-            query["email"].ToString().Should().Be("person@example.com");
-            query["code"].ToString().Should().Be("abc+def");
-            message.TextBody.Should().Contain("expires in 1 hour");
-            message.ReplyToAddress.Should().Be("contact@cribstop.com");
-        }
-
-        [Fact]
-        public void PasswordResetCode_IsTaggedAsAPasswordResetMessage()
-        {
-            CreateComposer().PasswordResetCode("person@example.com", "code").Kind
-                .Should().Be(EmailKind.PasswordReset);
         }
 
         [Fact]
@@ -93,20 +55,15 @@ namespace AccountService.Tests.Helpers
         [Fact]
         public void AccountRecoveryOptions_RequireAnAbsoluteWebBaseUrl_AndRootedPaths()
         {
-            new AccountRecoveryOptions { PasswordResetPath = "/reset-password" }.Validate()
-                .Should().Contain("WebBaseUrl");
+            new AccountRecoveryOptions().Validate().Should().Contain("WebBaseUrl");
 
-            new AccountRecoveryOptions { WebBaseUrl = new Uri("ftp://x.example"), PasswordResetPath = "/y" }.Validate()
+            new AccountRecoveryOptions { WebBaseUrl = new Uri("ftp://x.example") }.Validate()
                 .Should().Contain("http");
 
-            new AccountRecoveryOptions { WebBaseUrl = new Uri("https://x.example"), PasswordResetPath = "reset" }.Validate()
-                .Should().Contain("PasswordResetPath");
+            new AccountRecoveryOptions { WebBaseUrl = new Uri("https://x.example"), SecureAccountPath = "secure" }.Validate()
+                .Should().Contain("SecureAccountPath");
 
-            new AccountRecoveryOptions
-            {
-                WebBaseUrl = new Uri("https://x.example"),
-                PasswordResetPath = "/reset-password",
-            }.Validate().Should().BeNull();
+            new AccountRecoveryOptions { WebBaseUrl = new Uri("https://x.example") }.Validate().Should().BeNull();
         }
 
         [Fact]
@@ -153,23 +110,6 @@ namespace AccountService.Tests.Helpers
         internal static OutboundEmail ComposeCodeMessage(string to, string code) =>
             CreateComposer().Code(to, code, TimeSpan.FromMinutes(10));
 
-        private static Uri ExtractLink(string body)
-        {
-            var start = body.IndexOf("https://", StringComparison.Ordinal);
-            var end = body.IndexOf('\n', start);
-            return new Uri(body[start..end]);
-        }
-
-        private static PasswordResetLinkBuilder CreatePasswordResetBuilder() =>
-            new(Options.Create(CreateRecoveryOptions()));
-
-        private static AccountRecoveryOptions CreateRecoveryOptions() => new()
-        {
-            WebBaseUrl = new Uri("https://cribstop.example"),
-            PasswordResetPath = "/reset-password",
-            TokenLifetime = TimeSpan.FromHours(1),
-        };
-
         private static IdentityEmailComposer CreateComposer() =>
             new(
                 Options.Create(new TransactionalEmailOptions
@@ -178,8 +118,6 @@ namespace AccountService.Tests.Helpers
                     FromAddress = "no-reply@cribstop.com",
                     ReplyToAddress = "contact@cribstop.com",
                     BrokerageDisclosure = "Cribstop is brokered by Real Broker, LLC.",
-                }),
-                Options.Create(CreateRecoveryOptions()),
-                CreatePasswordResetBuilder());
+                }));
     }
 }

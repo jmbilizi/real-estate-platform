@@ -11,20 +11,20 @@ using Microsoft.Extensions.Primitives;
 namespace AccountService.Routes;
 
 /// <summary>
-/// Maps the Identity endpoints this service keeps: <c>login</c>, <c>refresh</c>,
-/// <c>forgotPassword</c>, <c>resetPassword</c> and <c>manage/*</c>.
+/// Maps the Identity endpoints this service keeps: <c>login</c>, <c>refresh</c> and <c>manage/*</c>.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <c>MapIdentityApi</c> also maps <c>/register</c>, <c>/confirmEmail</c> and
-/// <c>/resendConfirmationEmail</c>. Those three are retired (#657): a verified code is the only way
-/// to create an account, so <c>/register</c> must not exist. They are mapped into a detached route
-/// builder, and a wrapper data source hides them before the app sees them. The routes are absent,
-/// not filtered, so no handler is reachable and the router answers <c>404</c>.
+/// <c>MapIdentityApi</c> also maps <c>/register</c>, <c>/confirmEmail</c>,
+/// <c>/resendConfirmationEmail</c>, <c>/forgotPassword</c> and <c>/resetPassword</c>. Those five are
+/// retired: a verified code is the only way to create an account or reset a password. They are
+/// mapped into a detached route builder, and a wrapper data source hides them before the app sees
+/// them. The routes are absent, not filtered, so no handler is reachable and the router answers
+/// <c>404</c>.
 /// </para>
 /// <para>
 /// Hand-mapping the kept endpoints was the other option. It would copy Identity's cookie, bearer
-/// and refresh handlers, and the copy would drift from the framework. Hiding three routes keeps the
+/// and refresh handlers, and the copy would drift from the framework. Hiding five routes keeps the
 /// kept handlers the framework's own. <c>AccountCreationSurfaceTests</c> pins the result.
 /// </para>
 /// </remarks>
@@ -36,6 +36,8 @@ internal static class IdentityEndpoints
         "/account/register",
         "/account/confirmEmail",
         "/account/resendConfirmationEmail",
+        "/account/forgotPassword",
+        "/account/resetPassword",
     ];
 
     internal static void MapRetainedIdentityApi(this WebApplication app)

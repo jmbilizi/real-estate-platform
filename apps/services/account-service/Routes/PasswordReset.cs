@@ -10,8 +10,7 @@ namespace AccountService.Routes;
 /// <summary>
 /// Password reset by emailed code (#658). All three steps are anonymous. They share
 /// <see cref="AccountRecoveryThrottleFilter"/>, which holds the per-address and per-email limits and
-/// the response-time floor. The link-based <c>/forgotPassword</c> and <c>/resetPassword</c> stay
-/// until #665 removes them.
+/// the response-time floor.
 /// </summary>
 /// <remarks>
 /// A finished reset signs nobody in. It ends every session, so the client sends the user to sign in.

@@ -88,19 +88,17 @@ namespace AccountService.Tests.Integration
             using var factory = new AccountServiceFactory();
 
             var sender = factory.Services.GetRequiredService<IOptions<TransactionalEmailOptions>>().Value;
-            var recovery = factory.Services.GetRequiredService<IOptions<AccountRecoveryOptions>>().Value;
 
             sender.FromName.Should().Be("Cribstop (Real Broker, LLC)");
             sender.FromAddress.Should().Be("no-reply@cribstop.com");
             sender.ReplyToAddress.Should().Be("contact@cribstop.com");
             sender.BrokerageDisclosure.Should().Be("Cribstop is brokered by Real Broker, LLC.");
-            recovery.PasswordResetPath.Should().Be("/reset-password");
         }
 
         [Fact]
         public async Task Filters_ApplyNoRateLimitToLogin()
         {
-            using var factory = new AccountRecoveryFactory(options => options.RequestsPerAddress = 1);
+            using var factory = new AccountRecoveryFactory(options => options.SignUpSendsPerAddress = 1);
             using var client = factory.CreateClient();
             var email = NewEmail("passthrough");
             await AuthHelper.SeedUserAsync(factory, email, Password);

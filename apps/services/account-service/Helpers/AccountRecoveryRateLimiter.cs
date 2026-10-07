@@ -86,44 +86,6 @@ internal sealed class AccountRecoveryRateLimiter(
     public void Dispose() => this.cache.Dispose();
 
     /// <summary>
-    /// Counts one password-reset <em>request</em> against both the email and the client-address
-    /// limits.
-    /// </summary>
-    /// <remarks>
-    /// Both counters are charged independently, even when one already refuses: a caller who has
-    /// exhausted the email budget must not get free, unmetered attempts against the address budget.
-    /// </remarks>
-    /// <param name="email">The submitted email address; compared case-insensitively.</param>
-    /// <param name="clientAddress">The client address, or null when unknown.</param>
-    /// <param name="retryAfter">When refused, how long until the refusing counter rolls over.</param>
-    /// <returns><see langword="true"/> when the request may proceed.</returns>
-    internal bool TryRequest(string email, string? clientAddress, out TimeSpan retryAfter)
-    {
-        var settings = options.Value;
-        var key = email.ToUpperInvariant();
-
-        return this.TryConsumePair(
-            $"pwreset:request:email:{key}",
-            $"pwreset:request:addr:{clientAddress ?? "unknown"}",
-            settings.RequestsPerEmail,
-            settings.RequestsPerAddress,
-            settings.RequestWindow,
-            out retryAfter);
-    }
-
-    /// <summary>
-    /// Counts one reset <em>redemption</em> against the client-address limit, bounding token
-    /// guessing.
-    /// </summary>
-    /// <param name="clientAddress">The client address, or null when unknown.</param>
-    /// <param name="retryAfter">When refused, how long until the window rolls over.</param>
-    /// <returns><see langword="true"/> when the redemption may proceed.</returns>
-    internal bool TryRedemption(string? clientAddress, out TimeSpan retryAfter) =>
-        this.TryConsumeAll(
-            out retryAfter,
-            new Counter($"pwreset:redeem:addr:{clientAddress ?? "unknown"}", options.Value.RedemptionsPerAddress, options.Value.RequestWindow));
-
-    /// <summary>
     /// Counts one sign-up send (start, resend or the new address of a change) against the client
     /// address and against the interval, hourly and daily limits for the email.
     /// </summary>
@@ -365,29 +327,6 @@ internal sealed class AccountRecoveryRateLimiter(
 
         retryAfter = TimeSpan.Zero;
         return true;
-    }
-
-    /// <summary>
-    /// Consumes one unit from an email-keyed counter and one from an address-keyed counter,
-    /// independently.
-    /// </summary>
-    /// <remarks>
-    /// Both counters are always consumed, even when the first one refuses: a caller who has
-    /// exhausted one limit must not get free attempts against the other.
-    /// </remarks>
-    private bool TryConsumePair(
-        string emailKey,
-        string addressKey,
-        int emailLimit,
-        int addressLimit,
-        TimeSpan window,
-        out TimeSpan retryAfter)
-    {
-        var emailAllowed = this.TryConsume(emailKey, emailLimit, window, out var emailRetry);
-        var addressAllowed = this.TryConsume(addressKey, addressLimit, window, out var addressRetry);
-
-        retryAfter = emailAllowed ? addressRetry : emailRetry;
-        return emailAllowed && addressAllowed;
     }
 
     /// <summary>

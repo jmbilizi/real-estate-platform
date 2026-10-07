@@ -107,8 +107,8 @@ breaker-open share one code because Ocelot maps both to `RequestTimedOutError`, 
 changes nothing a client can do.
 
 **On a write, `upstream_unavailable` means indeterminate, not "nothing happened".** The gateway
-abandons a `/account/signup/complete` or `/account/resetPassword` call at 10 seconds; the service
-may still commit it. A client that retries blindly gets a duplicate-account error or a
+abandons a `/account/signup/complete` or `/account/password/reset/complete` call at 10 seconds; the
+service may still commit it. A client that retries blindly gets a duplicate-account error or a
 consumed-token error and shows the person the wrong reason. Retry a write only when the operation is
 idempotent or the client can check the outcome first.
 

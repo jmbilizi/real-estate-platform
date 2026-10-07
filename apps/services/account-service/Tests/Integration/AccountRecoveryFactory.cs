@@ -4,9 +4,7 @@
 
 using AccountService.Configuration;
 using AccountService.Helpers;
-using AccountService.Models;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AccountService.Tests.Integration
@@ -29,38 +27,7 @@ namespace AccountService.Tests.Integration
         TimeProvider? clock = null)
         : AccountServiceFactory
     {
-        private readonly List<SentMessage> sent = new();
         private readonly List<OutboundEmail> alreadyRegistered = new();
-
-        /// <summary>The kind of message the service handed to the delivery seam.</summary>
-        internal enum MessageKind
-        {
-            /// <summary>A password-reset code.</summary>
-            PasswordResetCode,
-
-            /// <summary>A password-reset link.</summary>
-            PasswordResetLink,
-        }
-
-        /// <summary>Gets the messages handed to the delivery seam, in order.</summary>
-        internal IReadOnlyList<SentMessage> Sent
-        {
-            get
-            {
-                lock (this.sent)
-                {
-                    return this.sent.ToList();
-                }
-            }
-        }
-
-        /// <summary>Gets the password-reset codes issued so far, in order.</summary>
-        internal IReadOnlyList<SentMessage> ResetCodes =>
-            this.Sent.Where(m => m.Kind == MessageKind.PasswordResetCode).ToList();
-
-        /// <summary>Gets the password-reset links issued so far, in order.</summary>
-        internal IReadOnlyList<SentMessage> ResetLinks =>
-            this.Sent.Where(m => m.Kind == MessageKind.PasswordResetLink).ToList();
 
         /// <summary>Gets the already-registered notices issued so far, in order.</summary>
         internal IReadOnlyList<OutboundEmail> AlreadyRegisteredNotices
@@ -81,13 +48,7 @@ namespace AccountService.Tests.Integration
 
             builder.ConfigureServices(services =>
             {
-                services.AddScoped<IEmailSender<ApplicationUser>>(sp => new RecordingEmailSender(
-                    sp.GetRequiredService<IdentityEmailComposer>(),
-                    this.Record));
-
-                // The already-registered notice does not go through IEmailSender<TUser>: it is sent
-                // directly on IOutboundEmailSender by IdentityResponseShapingFilter. Fake only the
-                // transport boundary here so the real composer runs.
+                // Fake only the transport boundary so the real composer runs.
                 services.AddSingleton<IOutboundEmailSender>(new RecordingOutboundEmailSender(this.RecordAlreadyRegistered));
 
                 if (configure is not null)
@@ -108,56 +69,11 @@ namespace AccountService.Tests.Integration
             });
         }
 
-        private void Record(SentMessage message)
-        {
-            lock (this.sent)
-            {
-                this.sent.Add(message);
-            }
-        }
-
         private void RecordAlreadyRegistered(OutboundEmail message)
         {
             lock (this.alreadyRegistered)
             {
                 this.alreadyRegistered.Add(message);
-            }
-        }
-
-        /// <summary>A message the service handed to the delivery seam.</summary>
-        /// <param name="Kind">Which send this was.</param>
-        /// <param name="Email">The address it was issued for.</param>
-        /// <param name="Credential">
-        /// The HTML-decoded reset code or link.
-        /// </param>
-        /// <param name="Composed">The message the composer produced.</param>
-        internal sealed record SentMessage(MessageKind Kind, string Email, string Credential, OutboundEmail Composed);
-
-        private sealed class RecordingEmailSender(
-            IdentityEmailComposer composer,
-            Action<SentMessage> record) : IEmailSender<ApplicationUser>
-        {
-            public Task SendConfirmationLinkAsync(ApplicationUser user, string email, string confirmationLink) =>
-                throw new NotSupportedException("Confirmation links are retired.");
-
-            public Task SendPasswordResetLinkAsync(ApplicationUser user, string email, string resetLink)
-            {
-                record(new SentMessage(
-                    MessageKind.PasswordResetLink,
-                    email,
-                    System.Net.WebUtility.HtmlDecode(resetLink),
-                    composer.PasswordResetLink(email, resetLink)));
-                return Task.CompletedTask;
-            }
-
-            public Task SendPasswordResetCodeAsync(ApplicationUser user, string email, string resetCode)
-            {
-                record(new SentMessage(
-                    MessageKind.PasswordResetCode,
-                    email,
-                    System.Net.WebUtility.HtmlDecode(resetCode),
-                    composer.PasswordResetCode(email, resetCode)));
-                return Task.CompletedTask;
             }
         }
 

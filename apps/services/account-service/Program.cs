@@ -122,26 +122,11 @@ internal static class Program
         });
 
         builder.Services
-            .AddIdentityApiEndpoints<ApplicationUser>(options =>
-            {
-                options.Tokens.PasswordResetTokenProvider = PasswordResetTokenProvider.ProviderName;
-            })
+            .AddIdentityApiEndpoints<ApplicationUser>()
             .AddRoles<IdentityRole>()
             .AddUserManager<AppUserManager>()
             .AddSignInManager<AppSignInManager>()
-            .AddEntityFrameworkStores<AccountDbContext>()
-            .AddTokenProvider<PasswordResetTokenProvider>(PasswordResetTokenProvider.ProviderName);
-
-        // Password reset runs on its own token provider so its lifetime and its data-protection
-        // purpose are independent of every other Identity token. Bound from options, so a test
-        // override of AccountRecoveryOptions is the value the provider enforces.
-        builder.Services
-            .AddOptions<PasswordResetTokenProviderOptions>()
-            .Configure<IOptions<AccountRecoveryOptions>>((tokenOptions, recovery) =>
-            {
-                tokenOptions.Name = PasswordResetTokenProvider.ProviderName;
-                tokenOptions.TokenLifespan = recovery.Value.TokenLifetime;
-            });
+            .AddEntityFrameworkStores<AccountDbContext>();
 
         // Password policy: length and the breached-password check, no composition rules (#654).
         // Identity's stock PasswordValidator is removed. PasswordPolicyValidator is the only
@@ -179,7 +164,6 @@ internal static class Program
         builder.Services.AddScoped<SignUpCompletion>();
 
         builder.Services.AddSingleton<AccountRecoveryRateLimiter>();
-        builder.Services.AddSingleton<PasswordResetLinkBuilder>();
         builder.Services.AddSingleton<IdentityEmailComposer>();
         builder.Services.AddScoped<EmailCodeService>();
         builder.Services.AddHostedService<EmailCodePurgeService>();
@@ -285,9 +269,8 @@ internal static class Program
         // Readiness probe — same response; kept separate so K8s can distinguish liveness from readiness
         app.MapGet("/account/health/ready", () => Results.Ok(new { status = "ready" }));
 
-        // Identity: login, refresh, forgotPassword, resetPassword, manage/*. /register, /confirmEmail and
-        // /resendConfirmationEmail are retired (#657, stakeholder ruling 2026-10-07): only a verified code
-        // creates an account. See Routes/IdentityEndpoints.cs.
+        // Identity: login, refresh, manage/*. The link flows (register, confirm, resend, forgot, reset) are
+        // retired: only a verified code creates an account or resets a password. See Routes/IdentityEndpoints.cs.
         app.MapRetainedIdentityApi();
 
         // Sign-up before an account exists: POST /account/signup/{start,verify,resend,change-email}.

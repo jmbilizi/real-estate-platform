@@ -8,27 +8,24 @@ using Microsoft.AspNetCore.Identity;
 namespace AccountService.Helpers;
 
 /// <summary>
-/// The <see cref="IEmailSender{TUser}"/> registered for Identity's password-reset sends.
+/// The <see cref="IEmailSender{TUser}"/> that <c>MapIdentityApi</c> requires.
 /// </summary>
 /// <remarks>
-/// A thin adapter: composes through <see cref="IdentityEmailComposer"/> and hands the result to
-/// <see cref="IOutboundEmailSender"/>, the same seam <see cref="IdentityResponseShapingFilter"/>
-/// uses for the already-registered notice. No second delivery path (#138).
+/// Every Identity send is a link or a bare code, and this service sends neither. Account flows send
+/// a code through <see cref="IOutboundEmailSender"/>. Each member throws, so a stray Identity call
+/// fails loudly and sends nothing.
 /// </remarks>
-/// <param name="composer">The message composer.</param>
-/// <param name="outbound">The delivery seam.</param>
-internal sealed class PostmarkEmailSender(IdentityEmailComposer composer, IOutboundEmailSender outbound)
-    : IEmailSender<ApplicationUser>
+internal sealed class PostmarkEmailSender : IEmailSender<ApplicationUser>
 {
     /// <inheritdoc/>
     public Task SendConfirmationLinkAsync(ApplicationUser user, string email, string confirmationLink) =>
-        throw new NotSupportedException("Confirmation links are retired (#657). Only a verified code creates an account.");
+        throw new NotSupportedException("Confirmation links are retired. Only a verified code creates an account.");
 
     /// <inheritdoc/>
     public Task SendPasswordResetLinkAsync(ApplicationUser user, string email, string resetLink) =>
-        outbound.SendAsync(composer.PasswordResetLink(email, resetLink));
+        throw new NotSupportedException("Reset links are retired. Password reset runs on codes.");
 
     /// <inheritdoc/>
     public Task SendPasswordResetCodeAsync(ApplicationUser user, string email, string resetCode) =>
-        outbound.SendAsync(composer.PasswordResetCode(email, resetCode));
+        throw new NotSupportedException("Reset codes from Identity are retired. Password reset runs on /account/password/reset.");
 }

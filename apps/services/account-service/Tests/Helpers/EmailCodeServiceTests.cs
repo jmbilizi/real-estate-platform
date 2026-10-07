@@ -526,9 +526,7 @@ namespace AccountService.Tests.Helpers
                         FromAddress = "no-reply@cribstop.com",
                         ReplyToAddress = "contact@cribstop.com",
                         BrokerageDisclosure = "Cribstop is brokered by Real Broker, LLC.",
-                    }),
-                    Options.Create(new AccountRecoveryOptions { WebBaseUrl = new Uri("https://web.example") }),
-                    new PasswordResetLinkBuilder(Options.Create(new AccountRecoveryOptions { WebBaseUrl = new Uri("https://web.example") }))),
+                    })),
                 this.sender,
                 this.clock,
                 NullLogger<EmailCodeService>.Instance);

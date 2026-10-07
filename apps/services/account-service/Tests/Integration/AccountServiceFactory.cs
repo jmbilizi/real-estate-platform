@@ -24,9 +24,6 @@ namespace AccountService.Tests.Integration
         /// <summary>The web origin every test host is configured with.</summary>
         internal const string WebOrigin = "https://web.test.example";
 
-        /// <summary>The password-reset path every test host is configured with.</summary>
-        internal const string PasswordResetPath = "/reset-password";
-
         private readonly string dbName = $"AccountServiceTest-{Guid.NewGuid()}";
 
         /// <summary>Gets the fake breach client the host uses.</summary>
@@ -71,10 +68,7 @@ namespace AccountService.Tests.Integration
                 services.Configure<AccountRecoveryOptions>(options =>
                 {
                     options.WebBaseUrl = new Uri(WebOrigin);
-                    options.PasswordResetPath = PasswordResetPath;
                     options.RequestsPerEmail = int.MaxValue;
-                    options.RequestsPerAddress = int.MaxValue;
-                    options.RedemptionsPerAddress = int.MaxValue;
                     options.SignUpSendsPerAddress = int.MaxValue;
                     options.SignUpVerifiesPerAddress = int.MaxValue;
                     options.MinimumResponseDuration = TimeSpan.Zero;

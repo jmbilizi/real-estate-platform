@@ -47,12 +47,14 @@ namespace ApiGateway.Tests.Configuration
         [Fact]
         public void NoRouteNamesARetiredLinkEndpoint()
         {
-            // #657 retired these. The catch-all still forwards them, and the account service answers 404.
+            // The link flows are retired. The catch-all still forwards them, and the account service answers 404.
             var upstream = AccountRoutes().Select(r => (string?)r["UpstreamPathTemplate"] ?? string.Empty);
 
             upstream.Should().NotContain("/account/register")
                 .And.NotContain("/account/confirmEmail")
-                .And.NotContain("/account/resendConfirmationEmail");
+                .And.NotContain("/account/resendConfirmationEmail")
+                .And.NotContain("/account/forgotPassword")
+                .And.NotContain("/account/resetPassword");
         }
 
         private static JArray AccountRoutes()
