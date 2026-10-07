@@ -932,7 +932,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "type": "array",
           },
           "consentTextVersion": {
-            "description": "The consent text version the consumer saw. Optional for now. The server stores the text for that version, never a client string. Defaults to the current version.",
+            "description": "Required for new clients (#631). The consent text version the consumer saw. An older client may omit it, and the server then records \`v1\`. The server stores the text for the version, never a client string. Needs \`consentToContact\` true.",
             "enum": [
               "v1",
             ],
@@ -3444,7 +3444,7 @@ A signed-in request also gets \`isSaved\` and \`isFavorited\` on each result, re
     },
     "/listings/{id}/inquiries": {
       "post": {
-        "description": "Works signed-out and signed-in. An unauthenticated request is never rejected for being unauthenticated. \`name\` and \`email\` are always required. \`phone\` is optional. \`consentToContact\` records that the consumer agreed to be contacted. The server stores the consent text for \`consentTextVersion\`, the \`consentChannels\` and the time. The record starts in the \`new\` lead status. No public read endpoint returns it.
+        "description": "Works signed-out and signed-in. An unauthenticated request is never rejected for being unauthenticated. \`name\` and \`email\` are always required. \`consentTextVersion\` is required for new clients. With \`consentToContact\` true and no version, the server records \`v1\`. \`phone\` is optional. A signed-in account with a confirmed email always uses the account email. The server ignores the \`email\` in the body for it. \`consentToContact\` records that the consumer agreed to be contacted. The server stores the consent text for \`consentTextVersion\`, the \`consentChannels\` and the time. The record starts in the \`new\` lead status. No public read endpoint returns it.
 
 Rate-limited per client and per listing; a request over either limit gets 429 with a \`Retry-After\` header.",
         "operationId": "createListingInquiry",

@@ -21,6 +21,8 @@ const VALID_BODY = {
   kind: 'tour_request' as const,
   name: 'Jane Consumer (e2e)',
   email: 'jane.e2e@example.com',
+  consentToContact: true,
+  consentTextVersion: 'v1' as const,
 };
 
 describe('POST /listings/:id/inquiries — signed-out', () => {
@@ -187,6 +189,17 @@ describe('lead model (#627)', () => {
     expect(response.status).toBe(400);
   });
 
+  it('records v1 and the default channels when consentTextVersion is absent (#631)', async () => {
+    // JSON drops `undefined`, so the body carries no version.
+    const id = await create({ consentTextVersion: undefined });
+
+    expect(await row(id)).toMatchObject({
+      consent_text_version: 'v1',
+      consent_disclosure_text: CONSENT_TEXTS.v1,
+      consent_channels: ['email'],
+    });
+  });
+
   it('stores the consent evidence: server text, version, channels and time', async () => {
     const id = await create({
       phone: '202-555-0100',
@@ -205,8 +218,8 @@ describe('lead model (#627)', () => {
     expect(stored.consent_given_at).toBeInstanceOf(Date);
   });
 
-  it('defaults the version and channels when the current web form sends only the boolean', async () => {
-    const id = await create({ consentToContact: true });
+  it('defaults the channels to the supplied contact details', async () => {
+    const id = await create({});
 
     expect(await row(id)).toMatchObject({
       consent_text_version: 'v1',
@@ -215,7 +228,7 @@ describe('lead model (#627)', () => {
   });
 
   it('stores no consent evidence without consent', async () => {
-    const id = await create({});
+    const id = await create({ consentToContact: false, consentTextVersion: undefined });
 
     expect(await row(id)).toMatchObject({
       consent_to_contact: false,
