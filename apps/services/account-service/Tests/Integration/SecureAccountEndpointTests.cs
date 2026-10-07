@@ -33,12 +33,14 @@ namespace AccountService.Tests.Integration
         private const string NewPassword = "new correct horse battery";
         private const string Old = "owner@example.com";
         private const string New = "thief@example.com";
+        private const string Third = "third@example.com";
 
         [Fact]
         public async Task EmailChange_Token_RestoresTheOldAddress_EndsSessions_DropsThePassword_AndWritesTheEvent()
         {
             using var factory = NoCooldown();
             var id = await CreateAccountAsync(factory, Old);
+            await AddApiKeyAsync(factory, id);
             using var client = await SignInAsync(factory, Old);
             using var anonymous = factory.CreateClient();
             var bearer = await BearerAsync(anonymous, Old);
@@ -66,6 +68,7 @@ namespace AccountService.Tests.Integration
             JsonSerializer.Serialize(secured).Should().NotContainEquivalentOf("example.com");
             (await Restores(factory)).Should().ContainSingle().Which.ConsumedAt.Should().NotBeNull();
             (await Tokens(factory)).Should().ContainSingle().Which.ConsumedAt.Should().NotBeNull();
+            (await ApiKeys(factory)).Should().ContainSingle().Which.RevokedAt.Should().NotBeNull();
 
             await ResetByCodeAsync(factory, anonymous, Old);
             (await anonymous.PostAsJsonAsync("/account/login", new { email = Old, password = NewPassword })).StatusCode
@@ -93,6 +96,44 @@ namespace AccountService.Tests.Integration
             user.SecurityStamp.Should().Be(stamp);
             user.PasswordHash.Should().NotBeNull();
             (await Events(factory)).Count(e => e.Kind == AccountSecurityEvent.SecureAccount).Should().Be(1);
+        }
+
+        [Fact]
+        public async Task Token_UsedInParallel_SucceedsOnce()
+        {
+            using var factory = NoCooldown();
+            await CreateAccountAsync(factory, Old);
+            using var client = await SignInAsync(factory, Old);
+            await ChangeEmailAsync(client, factory);
+            var token = TokenFor(factory, AccountSecurityEvent.EmailChanged);
+            using var first = factory.CreateClient();
+            using var second = factory.CreateClient();
+
+            var responses = await Task.WhenAll(
+                first.PostAsJsonAsync(SecurePath, new { token }),
+                second.PostAsJsonAsync(SecurePath, new { token }));
+
+            responses.Count(r => r.StatusCode == HttpStatusCode.OK).Should().Be(1);
+            responses.Count(r => r.StatusCode == HttpStatusCode.BadRequest).Should().Be(1);
+            (await Events(factory)).Count(e => e.Kind == AccountSecurityEvent.SecureAccount).Should().Be(1);
+        }
+
+        [Fact]
+        public async Task OlderNotice_AfterALaterEmailChange_DoesNotUndoTheLaterChange()
+        {
+            using var factory = NoCooldown();
+            var id = await CreateAccountAsync(factory, Old);
+            using var client = await SignInAsync(factory, Old);
+            await ChangeEmailAsync(client, factory);
+            var firstToken = TokenFor(factory, AccountSecurityEvent.EmailChanged);
+            await ChangeEmailAsync(client, factory, Third);
+            using var anonymous = factory.CreateClient();
+
+            var response = await anonymous.PostAsJsonAsync(SecurePath, new { token = firstToken });
+
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("emailRestored").GetBoolean().Should().BeFalse();
+            (await UserAsync(factory, id)).Email.Should().Be(Third);
         }
 
         [Fact]
@@ -257,11 +298,11 @@ namespace AccountService.Tests.Integration
                 .Last(m => m.Kind == EmailKind.Code && string.Equals(m.To, to, StringComparison.OrdinalIgnoreCase))
                 .Subject.Split(' ')[0];
 
-        private static async Task ChangeEmailAsync(HttpClient client, AccountRecoveryFactory factory)
+        private static async Task ChangeEmailAsync(HttpClient client, AccountRecoveryFactory factory, string to = New)
         {
-            (await client.PostAsJsonAsync("/account/email/change/start", new { newEmail = New, currentPassword = Password }))
+            (await client.PostAsJsonAsync("/account/email/change/start", new { newEmail = to, currentPassword = Password }))
                 .StatusCode.Should().Be(HttpStatusCode.OK);
-            (await client.PostAsJsonAsync("/account/email/change/verify", new { code = CodeFor(factory, New) }))
+            (await client.PostAsJsonAsync("/account/email/change/verify", new { code = CodeFor(factory, to) }))
                 .StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
@@ -325,6 +366,20 @@ namespace AccountService.Tests.Integration
         {
             using var scope = factory.Services.CreateScope();
             return await scope.ServiceProvider.GetRequiredService<AccountDbContext>().Users.AsNoTracking().SingleAsync(u => u.Id == id);
+        }
+
+        private static async Task AddApiKeyAsync(AccountRecoveryFactory factory, string userId)
+        {
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AccountDbContext>();
+            db.ApiKeys.Add(new ApiKey { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "test", Prefix = "ck_test", KeyHash = "hash", CreatedAt = DateTime.UtcNow });
+            await db.SaveChangesAsync();
+        }
+
+        private static async Task<List<ApiKey>> ApiKeys(AccountRecoveryFactory factory)
+        {
+            using var scope = factory.Services.CreateScope();
+            return await scope.ServiceProvider.GetRequiredService<AccountDbContext>().ApiKeys.AsNoTracking().ToListAsync();
         }
 
         private static async Task<List<SecureAccountToken>> Tokens(AccountRecoveryFactory factory)

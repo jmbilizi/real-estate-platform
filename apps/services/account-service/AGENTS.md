@@ -255,13 +255,13 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   `400 invalid_code` with no `attemptsLeft`.
 - The new stamp ends every other session. The route signs the caller in again, as the same kind of
   session (cookie keeps its persistence, bearer gets a new token body).
-- `EmailChangeRestores` holds the old address for 7 days. `POST /account/secure` reads it. #661 owns the
-  notice to the old address.
+- `EmailChangeRestores` holds the old address for 7 days. `POST /account/secure` reads it. #661 owns
+  the notice to the old address.
 
 ## Secure account (#662)
 
-- `POST /account/secure`, `Routes/SecureAccount.cs`, `Helpers/SecureAccountService.cs`. Anonymous. It
-  shares `AccountRecoveryThrottleFilter` (scope `secure`). A bad, used or expired token gives one
+- `POST /account/secure`, `Routes/SecureAccount.cs`, `Helpers/SecureAccountService.cs`. Anonymous.
+  It shares `AccountRecoveryThrottleFilter` (scope `secure`). A bad, used or expired token gives one
   `400 invalid_token`. A GET does nothing.
 - One transaction: use the token (`Version` concurrency token, one winner), restore the old email,
   null `PasswordHash`, drop pending email changes, rotate the stamp, write a `SecureAccount` event.

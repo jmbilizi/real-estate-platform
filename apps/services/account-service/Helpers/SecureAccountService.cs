@@ -5,6 +5,7 @@
 using AccountService.Configuration;
 using AccountService.Data;
 using AccountService.Models;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Options;
@@ -45,6 +46,9 @@ internal sealed class SecureAccountService(
 
         /// <summary>Identity refused the old address. The caller rolls back and secures without a restore.</summary>
         Refused,
+
+        /// <summary>The account changed during the call. The caller rolls back and runs again.</summary>
+        Conflict,
     }
 
     /// <summary>Uses the token and secures the account.</summary>
@@ -77,6 +81,9 @@ internal sealed class SecureAccountService(
 
         return new SecureAccountResult(false);
     }
+
+    private static bool IsConcurrencyFailure(IdentityResult result) =>
+        result.Errors.Any(e => e.Code == nameof(IdentityErrorDescriber.ConcurrencyFailure));
 
     private static async Task RollbackAsync(IDbContextTransaction? transaction)
     {
@@ -126,10 +133,10 @@ internal sealed class SecureAccountService(
                 var outcome = allowRestore && row.Kind == AccountSecurityEvent.EmailChanged
                     ? await this.TryRestoreEmailAsync(user, row.CreatedAt, now, cancellationToken).ConfigureAwait(false)
                     : RestoreOutcome.None;
-                if (outcome == RestoreOutcome.Refused)
+                if (outcome != RestoreOutcome.None && outcome != RestoreOutcome.Restored)
                 {
                     await RollbackAsync(transaction).ConfigureAwait(false);
-                    return Step.Again(dropRestore: true);
+                    return Step.Again(dropRestore: outcome == RestoreOutcome.Refused);
                 }
 
                 var restored = outcome == RestoreOutcome.Restored;
@@ -137,6 +144,16 @@ internal sealed class SecureAccountService(
                 // No hash means no password sign-in. The owner sets a new password by emailed code.
                 user.PasswordHash = null;
                 user.UpdatedAt = now;
+
+                // A key is a credential the stamp does not cover. The thief may hold one.
+                var keys = await db.ApiKeys
+                    .Where(k => k.UserId == user.Id && k.RevokedAt == null)
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                foreach (var apiKey in keys)
+                {
+                    apiKey.RevokedAt = now;
+                }
 
                 var pending = await db.PendingEmailChanges
                     .Where(p => p.UserId == user.Id)
@@ -146,6 +163,13 @@ internal sealed class SecureAccountService(
 
                 // Saves the user with the new stamp. The stamp ends every cookie and bearer session.
                 var stamped = await users.UpdateSecurityStampAsync(user).ConfigureAwait(false);
+                if (IsConcurrencyFailure(stamped))
+                {
+                    // Identity returns this result and does not throw. A run again re-reads the user.
+                    await RollbackAsync(transaction).ConfigureAwait(false);
+                    return Step.Again(dropRestore: false);
+                }
+
                 if (!stamped.Succeeded)
                 {
                     throw new InvalidOperationException(
@@ -212,6 +236,15 @@ internal sealed class SecureAccountService(
             return RestoreOutcome.None;
         }
 
+        // A later change moved the account on. This notice cannot undo it.
+        var superseded = await db.EmailChangeRestores
+            .AnyAsync(r => r.UserId == user.Id && r.ChangedAt > restore.ChangedAt, cancellationToken)
+            .ConfigureAwait(false);
+        if (superseded)
+        {
+            return RestoreOutcome.None;
+        }
+
         var normalizedEmail = users.NormalizeEmail(restore.OldEmail);
         var normalizedName = users.NormalizeName(restore.OldEmail);
         var taken = await db.Users
@@ -227,6 +260,11 @@ internal sealed class SecureAccountService(
             await users.SetEmailAsync(user, restore.OldEmail).ConfigureAwait(false),
             await users.SetUserNameAsync(user, restore.OldEmail).ConfigureAwait(false),
         };
+        if (steps.Any(IsConcurrencyFailure))
+        {
+            return RestoreOutcome.Conflict;
+        }
+
         if (steps.Any(s => !s.Succeeded))
         {
             return RestoreOutcome.Refused;

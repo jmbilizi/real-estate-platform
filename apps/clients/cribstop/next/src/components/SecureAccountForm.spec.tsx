@@ -9,6 +9,7 @@ jest.mock('@/lib/api/account', () => ({ secureAccount: jest.fn() }));
 const mockSecure = secureAccount as jest.MockedFunction<typeof secureAccount>;
 
 describe('SecureAccountForm', () => {
+  beforeEach(() => window.sessionStorage.clear());
   afterEach(() => jest.resetAllMocks());
 
   it('does not call the API on load and removes the token from the address bar', () => {
@@ -70,6 +71,19 @@ describe('SecureAccountForm', () => {
 
     expect(screen.getByRole('heading', { name: 'This link no longer works' })).toBeInTheDocument();
     expect(mockSecure).not.toHaveBeenCalled();
+  });
+
+  it('keeps an unused token across a reload of the stripped URL', async () => {
+    mockSecure.mockResolvedValue({ status: 'secured', emailRestored: false });
+    const first = render(<SecureAccountForm token="abc" />);
+    first.unmount();
+
+    render(<SecureAccountForm token={null} />);
+    fireEvent.click(await screen.findByRole('button', { name: /secure my account/i }));
+
+    await screen.findByRole('heading', { name: 'Your account is secure' });
+    expect(mockSecure).toHaveBeenCalledWith('abc');
+    expect(window.sessionStorage.getItem('secure-account-token')).toBeNull();
   });
 
   it('lets the user try again after a failed call', async () => {

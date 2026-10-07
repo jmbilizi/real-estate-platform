@@ -4,7 +4,27 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { secureAccount } from '@/lib/api/account';
 
-type Status = 'confirm' | 'working' | 'secured' | 'invalid' | 'failed';
+type Status = 'checking' | 'confirm' | 'working' | 'secured' | 'invalid' | 'failed';
+
+// Keeps the token for this tab only, so a reload after the URL strip does not lose an unused token.
+const STORAGE_KEY = 'secure-account-token';
+
+function readStored(): string | null {
+  try {
+    return window.sessionStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeStored(value: string | null) {
+  try {
+    if (value) window.sessionStorage.setItem(STORAGE_KEY, value);
+    else window.sessionStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Storage is off. The page still works until a reload.
+  }
+}
 
 /**
  * Takes the token from the notice link, removes it from the address bar, and waits for the user to
@@ -13,7 +33,8 @@ type Status = 'confirm' | 'working' | 'secured' | 'invalid' | 'failed';
  * An unknown, used and expired token show the same panel, so the page does not say which it was.
  */
 export default function SecureAccountForm({ token }: { token: string | null }) {
-  const [status, setStatus] = useState<Status>(token ? 'confirm' : 'invalid');
+  const [activeToken, setActiveToken] = useState<string | null>(token);
+  const [status, setStatus] = useState<Status>(token ? 'confirm' : 'checking');
   const [emailRestored, setEmailRestored] = useState(false);
   const router = useRouter();
 
@@ -23,9 +44,15 @@ export default function SecureAccountForm({ token }: { token: string | null }) {
   useEffect(() => {
     if (stripped.current) return;
     stripped.current = true;
-    if (token && typeof window !== 'undefined') {
+    if (token) {
+      writeStored(token);
       window.history.replaceState(null, '', window.location.pathname);
+      return;
     }
+
+    const stored = readStored();
+    setActiveToken(stored);
+    setStatus(stored ? 'confirm' : 'invalid');
   }, [token]);
 
   // Each status renders a different heading in the same place, so focus moves to it every time.
@@ -35,9 +62,10 @@ export default function SecureAccountForm({ token }: { token: string | null }) {
   }, [status]);
 
   const handleSecure = async () => {
-    if (!token || status === 'working') return;
+    if (!activeToken || status === 'working') return;
     setStatus('working');
-    const outcome = await secureAccount(token);
+    const outcome = await secureAccount(activeToken);
+    if (outcome.status !== 'failed') writeStored(null);
     if (outcome.status === 'secured') {
       setEmailRestored(outcome.emailRestored);
       setStatus('secured');
@@ -56,6 +84,8 @@ export default function SecureAccountForm({ token }: { token: string | null }) {
       {text}
     </h1>
   );
+
+  if (status === 'checking') return <Card>{heading('Checking your link')}</Card>;
 
   if (status === 'invalid') {
     return (
