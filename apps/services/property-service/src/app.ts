@@ -19,6 +19,7 @@ import { createSavedHomesRouter } from './saved/routes';
 import { createStaffRouter } from './staff/routes';
 import { createStaffLeadsRouter } from './staff/leads-routes';
 import { createStaffAgentsRouter } from './staff/agents-routes';
+import { createAgentLeadsRouter } from './agent/agent-leads-routes';
 import { type AgentRoleChecker, createHttpAgentRoleChecker } from './staff/agent-role-check';
 import type { TransactionalPool } from './inquiries/lead-status-write';
 import type { Queryable } from './inquiries/write';
@@ -233,6 +234,12 @@ export function createApp(options: CreateAppOptions = {}): Express {
       pool: pool as unknown as Queryable,
       introspection,
       agentRoles: options.agentRoles ?? defaultAgentRoleChecker(),
+    }),
+  );
+  app.use(
+    createAgentLeadsRouter({
+      pool: pool as unknown as Queryable & TransactionalPool,
+      introspection,
     }),
   );
   app.use(createBrightSyncAdminRouter(pool as unknown as SyncQueryable, options.adminToken));

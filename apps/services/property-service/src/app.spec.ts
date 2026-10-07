@@ -953,6 +953,11 @@ describe('GET /openapi.json', () => {
 
     expect(response.body.info.title).toBe('Property Service');
     expect(Object.keys(response.body.paths).sort()).toEqual([
+      '/agent/leads',
+      '/agent/leads/{id}',
+      '/agent/leads/{id}/accept',
+      '/agent/leads/{id}/decline',
+      '/agent/leads/{id}/status',
       '/listings',
       '/listings/map',
       '/listings/meta',
