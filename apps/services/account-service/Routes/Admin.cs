@@ -7,6 +7,7 @@ using AccountService.Data;
 using AccountService.Dtos;
 using AccountService.Models;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
 namespace AccountService.Routes;
 
@@ -98,14 +99,15 @@ internal static class Admin
                 return Results.NoContent();
             }
 
+            var canonicalRole = (await roleManager.FindByNameAsync(request.Role).ConfigureAwait(false))?.Name ?? request.Role;
+            var audit = StageAudit(db, userManager.GetUserId(principal), user.Id, canonicalRole, RoleGrantAudit.Granted);
             var result = await userManager.AddToRoleAsync(user, request.Role).ConfigureAwait(false);
             if (result.Succeeded)
             {
-                await RecordAsync(db, userManager.GetUserId(principal), user.Id, request.Role, RoleGrantAudit.Granted)
-                    .ConfigureAwait(false);
                 return Results.NoContent();
             }
 
+            db.Entry(audit).State = EntityState.Detached;
             return Results.ValidationProblem(result.Errors
                     .GroupBy(e => e.Code)
                     .ToDictionary(g => g.Key, g => g.Select(e => e.Description).ToArray()));
@@ -118,6 +120,7 @@ internal static class Admin
             string role,
             ClaimsPrincipal principal,
             UserManager<ApplicationUser> userManager,
+            RoleManager<IdentityRole> roleManager,
             AccountDbContext db) =>
         {
             var requestingUserId = userManager.GetUserId(principal);
@@ -150,14 +153,15 @@ internal static class Admin
                 return Results.NotFound();
             }
 
+            var canonicalRole = (await roleManager.FindByNameAsync(role).ConfigureAwait(false))?.Name ?? role;
+            var audit = StageAudit(db, requestingUserId, user.Id, canonicalRole, RoleGrantAudit.Removed);
             var result = await userManager.RemoveFromRoleAsync(user, role).ConfigureAwait(false);
             if (result.Succeeded)
             {
-                await RecordAsync(db, requestingUserId, user.Id, role, RoleGrantAudit.Removed)
-                    .ConfigureAwait(false);
                 return Results.NoContent();
             }
 
+            db.Entry(audit).State = EntityState.Detached;
             return Results.ValidationProblem(result.Errors
                     .GroupBy(e => e.Code)
                     .ToDictionary(g => g.Key, g => g.Select(e => e.Description).ToArray()));
@@ -166,9 +170,11 @@ internal static class Admin
         return app;
     }
 
-    private static async Task RecordAsync(AccountDbContext db, string? grantorId, string granteeId, string role, string action)
+    // The row joins the context's pending changes. Identity's role update calls SaveChanges on the same
+    // scoped context, so the role change and its audit row commit together or not at all.
+    private static RoleGrantAudit StageAudit(AccountDbContext db, string? grantorId, string granteeId, string role, string action)
     {
-        db.RoleGrantAudits.Add(new RoleGrantAudit
+        var audit = new RoleGrantAudit
         {
             Id = Guid.NewGuid(),
             GrantorUserId = grantorId ?? string.Empty,
@@ -176,7 +182,8 @@ internal static class Admin
             Role = role,
             Action = action,
             OccurredAt = DateTime.UtcNow,
-        });
-        await db.SaveChangesAsync().ConfigureAwait(false);
+        };
+        db.RoleGrantAudits.Add(audit);
+        return audit;
     }
 }
