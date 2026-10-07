@@ -250,7 +250,11 @@ export default function LeadDetail({ id }: { id: string }) {
     setNoteError(null);
     try {
       const created = await addLeadNote(lead.id, text);
-      setPhase({ status: 'ready', lead: { ...lead, notes: [...lead.notes, created] } });
+      setPhase((p) =>
+        p.status === 'ready'
+          ? { status: 'ready', lead: { ...p.lead, notes: [...p.lead.notes, created] } }
+          : p,
+      );
       setNote('');
     } catch (err) {
       setNoteError(err instanceof StaffApiError ? err.message : 'The note was not saved.');
@@ -445,7 +449,7 @@ export default function LeadDetail({ id }: { id: string }) {
           onConflict={() => void load(true)}
           onDone={() => {
             setSheetOpen(false);
-            void load(true);
+            void load(false);
           }}
         />
       )}

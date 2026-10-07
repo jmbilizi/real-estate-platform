@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
-import { loadStaffRoles } from '@/lib/api/staff-server';
+import { notFound, redirect } from 'next/navigation';
+import { loadStaffGate } from '@/lib/api/staff-server';
 import { hasLeadDeskRole } from '@/lib/staff-leads';
 
 export const metadata: Metadata = {
@@ -16,6 +16,8 @@ export const dynamic = 'force-dynamic';
  * prompt, so the area does not confirm that it exists. Nothing in the public nav links here.
  */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  if (!hasLeadDeskRole(await loadStaffRoles())) notFound();
+  const gate = await loadStaffGate();
+  if (gate.canRefresh) redirect('/api/staff/refresh');
+  if (!hasLeadDeskRole(gate.roles)) notFound();
   return <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">{children}</div>;
 }
