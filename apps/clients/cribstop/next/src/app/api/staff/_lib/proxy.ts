@@ -6,6 +6,9 @@ const NO_STORE = { 'Cache-Control': 'no-store' };
 /** The gateway namespace of the staff API. The service serves `/staff/*`. Ocelot rewrites. */
 export const STAFF_API = '/property/staff';
 
+/** The gateway namespace of the agent API. The service serves `/agent/*`. */
+export const AGENT_API = '/property/agent';
+
 /**
  * Calls the staff API as the signed-in user and returns the upstream status and body.
  * The service enforces the roles. This route only carries the call.

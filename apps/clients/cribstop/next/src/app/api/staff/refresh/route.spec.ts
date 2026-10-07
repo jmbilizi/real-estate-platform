@@ -12,3 +12,15 @@ it('refreshes, redirects to the lead list and sets the one-shot cookie', async (
   expect(res.headers.get('location')).toBe('http://localhost/admin/leads');
   expect(res.cookies.get('staff_refresh_try')?.value).toBe('1');
 });
+
+it('returns to the agent list when asked', async () => {
+  (tryRefreshToken as jest.Mock).mockResolvedValue('new');
+  const res = await GET(new NextRequest('http://localhost/api/staff/refresh?to=agent'));
+  expect(res.headers.get('location')).toBe('http://localhost/agent/leads');
+});
+
+it('ignores an unknown target', async () => {
+  (tryRefreshToken as jest.Mock).mockResolvedValue('new');
+  const res = await GET(new NextRequest('http://localhost/api/staff/refresh?to=https://evil.test'));
+  expect(res.headers.get('location')).toBe('http://localhost/admin/leads');
+});
