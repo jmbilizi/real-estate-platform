@@ -551,7 +551,9 @@ namespace AccountService.Tests.Integration
 
             // And nothing is left advertising the abandoned bespoke paths.
             document.Should().NotContain("/account/password/forgot");
-            document.Should().NotContain("/account/password/reset");
+
+            // The code-based steps (#658) live below /account/password/reset/. The quoted key is the old path itself.
+            document.Should().NotContain("\"/account/password/reset\"");
         }
 
         [Fact]

@@ -31,6 +31,10 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
 
     public DbSet<PendingRegistration> PendingRegistrations => Set<PendingRegistration>();
 
+    public DbSet<AccountSecurityEvent> AccountSecurityEvents => Set<AccountSecurityEvent>();
+
+    public DbSet<PasswordResetProof> PasswordResetProofs => Set<PasswordResetProof>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -245,6 +249,28 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
             entity.Property(p => p.Email).IsRequired();
             entity.Property(p => p.EmailAsEntered).IsRequired();
             entity.Property(p => p.State).HasConversion<string>().IsRequired();
+            entity.HasIndex(p => p.Email).IsUnique();
+            entity.HasIndex(p => p.ExpiresAt);
+            entity.Property(p => p.Version).IsConcurrencyToken();
+        });
+
+        // Append-only. No FK to AspNetUsers, so the record outlives a deleted account.
+        builder.Entity<AccountSecurityEvent>(entity =>
+        {
+            entity.ToTable("AccountSecurityEvents");
+            entity.Property(e => e.UserId).IsRequired();
+            entity.Property(e => e.Kind).IsRequired();
+            entity.Property(e => e.OccurredAt).HasDefaultValueSql("NOW()").ValueGeneratedOnAdd();
+            entity.HasIndex(e => new { e.UserId, e.OccurredAt });
+        });
+
+        // No FK to AspNetUsers. The row holds a hash of the proof, never the proof.
+        builder.Entity<PasswordResetProof>(entity =>
+        {
+            entity.ToTable("PasswordResetProofs");
+            entity.Property(p => p.Email).IsRequired();
+            entity.Property(p => p.UserId).IsRequired();
+            entity.Property(p => p.ProofHash).IsRequired();
             entity.HasIndex(p => p.Email).IsUnique();
             entity.HasIndex(p => p.ExpiresAt);
             entity.Property(p => p.Version).IsConcurrencyToken();

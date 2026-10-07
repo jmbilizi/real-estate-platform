@@ -232,3 +232,22 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   calls `RemoveAllLoggers()` because the framework logs the request URI, which holds the prefix.
   Never log the password, the hash or the exception text there.
 - Tests use `FakePwnedPasswordsClient` (`AccountServiceFactory.Breaches`). No test reaches the API.
+
+## Password reset by code (#658)
+
+- `POST /account/password/reset/{start,verify,complete}`, `Routes/PasswordReset.cs`,
+  `Helpers/PasswordResetService.cs`. The link endpoints (`/forgotPassword`, `/resetPassword`) stay
+  until #665.
+- `start` and `verify` answer the same for every address. Only a confirmed, live account gets a
+  `PasswordReset` code. The decoy and send counters use scope `pwreset`, so a reset never spends a
+  sign-up counter.
+- `verify` returns `resetProof` (single use, 15 minutes). The `PasswordResetProofs` row holds a
+  SHA-256 hash and the account id. `complete` uses the proof up first. A refused password gives the
+  proof back.
+- `complete` takes `{ email, resetProof, newPassword }`. It runs the same validators as sign-up,
+  sets the hash, rotates the security stamp (ends every cookie and bearer session), clears the
+  lockout and writes an `AccountSecurityEvents` row in one transaction. It signs nobody in: the
+  response is `204`, and the client sends the user to sign in.
+- `AccountSecurityEvents` is append-only, with no FK to the account. `ClientAddressHash` is an HMAC
+  of the client address under the code key, never the address. Tests:
+  `Tests/Integration/PasswordResetEndpointTests.cs`.
