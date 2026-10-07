@@ -18,7 +18,14 @@ export interface CredentialHeaders {
 
 /** What account-service said. `unavailable` means it gave no answer, which is not "signed out". */
 export type IntrospectionOutcome =
-  | { readonly kind: 'account'; readonly accountId: string }
+  | {
+      readonly kind: 'account';
+      readonly accountId: string;
+      /** Role names, a list: accounts are multi-role (PRD §11.2). Empty when account-service sent none. */
+      readonly roles: readonly string[];
+      readonly email?: string;
+      readonly emailConfirmed?: boolean;
+    }
   | { readonly kind: 'signed-out' }
   | { readonly kind: 'unavailable' };
 
@@ -39,6 +46,9 @@ function hasAnyCredential(headers: CredentialHeaders): boolean {
 interface IntrospectionResponseBody {
   isValid?: boolean;
   accountId?: string | null;
+  roles?: unknown;
+  email?: unknown;
+  emailConfirmed?: unknown;
 }
 
 export interface HttpIntrospectionClientOptions {
@@ -81,9 +91,20 @@ export function createHttpIntrospectionClient(
       }
 
       const body = (await response.json()) as IntrospectionResponseBody;
-      return body.isValid === true && typeof body.accountId === 'string'
-        ? { kind: 'account', accountId: body.accountId }
-        : { kind: 'signed-out' };
+      if (body.isValid !== true || typeof body.accountId !== 'string') {
+        return { kind: 'signed-out' };
+      }
+      return {
+        kind: 'account',
+        accountId: body.accountId,
+        roles: Array.isArray(body.roles)
+          ? body.roles.filter((role): role is string => typeof role === 'string')
+          : [],
+        ...(typeof body.email === 'string' ? { email: body.email } : {}),
+        ...(typeof body.emailConfirmed === 'boolean'
+          ? { emailConfirmed: body.emailConfirmed }
+          : {}),
+      };
     } catch (error) {
       console.warn('Credential introspection failed.', error);
       return { kind: 'unavailable' };
