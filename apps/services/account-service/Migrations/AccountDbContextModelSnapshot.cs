@@ -391,6 +391,35 @@ namespace AccountService.Migrations
                     b.ToTable("EmailCodeThrottles", (string)null);
                 });
 
+            modelBuilder.Entity("AccountService.Models.EmailSuppression", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.ToTable("EmailSuppressions", (string)null);
+                });
+
             modelBuilder.Entity("AccountService.Models.Locale", b =>
                 {
                     b.Property<int>("Id")

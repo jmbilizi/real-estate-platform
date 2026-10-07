@@ -32,6 +32,19 @@ internal sealed class PostmarkOptions
     /// </summary>
     public string MessageStream { get; set; } = "outbound";
 
+    /// <summary>
+    /// Gets or sets the user name Postmark sends as HTTP Basic credentials to the webhook. Supplied as
+    /// the flat <c>POSTMARK_WEBHOOK_USER</c> environment variable (#664).
+    /// </summary>
+    public string WebhookUser { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the password Postmark sends as HTTP Basic credentials to the webhook. Supplied as
+    /// the flat <c>POSTMARK_WEBHOOK_PASSWORD</c> environment variable. An empty value or the committed
+    /// placeholder disables the webhook: it answers 401 to every request.
+    /// </summary>
+    public string WebhookPassword { get; set; } = string.Empty;
+
     /// <summary>Gets or sets the Postmark API base address.</summary>
     public Uri ApiBaseUrl { get; set; } = new("https://api.postmarkapp.com/");
 
@@ -42,6 +55,12 @@ internal sealed class PostmarkOptions
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(this.ServerToken)
         && !string.Equals(this.ServerToken, PlaceholderServerToken, StringComparison.Ordinal);
+
+    /// <summary>Gets a value indicating whether the webhook has real Basic credentials.</summary>
+    public bool IsWebhookConfigured =>
+        !string.IsNullOrWhiteSpace(this.WebhookUser)
+        && !string.IsNullOrWhiteSpace(this.WebhookPassword)
+        && !string.Equals(this.WebhookPassword, PlaceholderServerToken, StringComparison.Ordinal);
 
     /// <summary>Validates the members that have no safe default.</summary>
     /// <returns>An error message, or <see langword="null"/> when the options are valid.</returns>

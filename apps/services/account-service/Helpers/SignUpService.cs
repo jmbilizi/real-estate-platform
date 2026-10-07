@@ -39,6 +39,8 @@ namespace AccountService.Helpers;
 /// <param name="users">The user manager, for the existence check only.</param>
 /// <param name="composer">The message composer.</param>
 /// <param name="sender">The delivery seam.</param>
+/// <param name="suppressions">The suppressed addresses.</param>
+/// <param name="mailDomains">The MX lookup.</param>
 /// <param name="timeProvider">The clock.</param>
 internal sealed class SignUpService(
     AccountDbContext db,
@@ -49,6 +51,8 @@ internal sealed class SignUpService(
     UserManager<ApplicationUser> users,
     IdentityEmailComposer composer,
     IOutboundEmailSender sender,
+    EmailSuppressionService suppressions,
+    IMailDomainResolver mailDomains,
     TimeProvider timeProvider)
 {
     private const int ProofBytes = 32;
@@ -70,6 +74,11 @@ internal sealed class SignUpService(
         if (gate is not null)
         {
             return gate;
+        }
+
+        if (await this.IsUndeliverableAsync(key, entered, cancellationToken).ConfigureAwait(false))
+        {
+            return new SignUpResult(SignUpStatus.Undeliverable);
         }
 
         if (await users.FindByEmailAsync(entered).ConfigureAwait(false) is not null)
@@ -140,6 +149,11 @@ internal sealed class SignUpService(
         if (gate is not null)
         {
             return gate;
+        }
+
+        if (await this.IsUndeliverableAsync(key, entered, cancellationToken).ConfigureAwait(false))
+        {
+            return new SignUpResult(SignUpStatus.Undeliverable);
         }
 
         var now = this.Now();
@@ -352,6 +366,23 @@ internal sealed class SignUpService(
         return limiter.TryDecoyWrongTry(key, settings.MaxWrongTries, settings.LockDuration, settings.FailureWindow, out var attemptsLeft, out var retryAfter)
             ? new SignUpResult(SignUpStatus.WrongCode, AttemptsLeft: attemptsLeft)
             : new SignUpResult(SignUpStatus.Limited, RetryAfterSeconds: EmailCodeService.CeilSeconds(retryAfter));
+    }
+
+    /// <summary>
+    /// A suppressed address, or a domain with no way to receive mail. Every address gets the same
+    /// check, so the answer shows nothing about accounts. A DNS timeout or error counts as deliverable.
+    /// </summary>
+    private async Task<bool> IsUndeliverableAsync(string key, string entered, CancellationToken cancellationToken)
+    {
+        if (await suppressions.IsSuppressedAsync(key, cancellationToken).ConfigureAwait(false))
+        {
+            return true;
+        }
+
+        var status = await mailDomains
+            .ResolveAsync(entered[(entered.LastIndexOf('@') + 1)..], cancellationToken)
+            .ConfigureAwait(false);
+        return status == MailDomainStatus.CannotReceiveMail;
     }
 
     private DateTime Now() => timeProvider.GetUtcNow().UtcDateTime;

@@ -14,6 +14,12 @@ namespace AccountService.Helpers;
 /// <param name="Detail">Postmark's <c>Message</c>, describing the outcome.</param>
 internal sealed record PostmarkSendResult(bool Success, HttpStatusCode StatusCode, string? MessageId, int ErrorCode, string Detail)
 {
+    /// <summary>Postmark's error code for a recipient it will not send to (suppressed or inactive).</summary>
+    internal const int InactiveRecipientErrorCode = 406;
+
+    /// <summary>Gets a value indicating whether Postmark refused the send with error 406.</summary>
+    internal bool IsInactiveRecipient => !this.Success && this.ErrorCode == InactiveRecipientErrorCode;
+
     /// <summary>
     /// Gets a value indicating whether this failure is worth retrying: a rate limit or a server-side
     /// error, as opposed to a permanent rejection (bad token, invalid recipient) that a retry cannot

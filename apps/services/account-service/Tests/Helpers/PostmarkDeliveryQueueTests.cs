@@ -79,6 +79,49 @@ namespace AccountService.Tests.Helpers
         }
 
         [Fact]
+        public async Task DeliverAsync_OnError406_ReportsTheRecipientOnce_AndDoesNotRetry()
+        {
+            using var handler = new FakeHttpMessageHandler(_ => JsonResponse(
+                HttpStatusCode.UnprocessableEntity,
+                new { ErrorCode = 406, Message = "You tried to send to a recipient that has been marked as inactive." }));
+            var reported = new List<string>();
+            var message = IdentityEmailComposerTests.ComposeCodeMessage("person@example.com", "482913");
+
+            var (logger, _) = await RunOneMessageAsync(
+                handler,
+                retryDelays: new[] { TimeSpan.Zero, TimeSpan.Zero },
+                message: message,
+                onRecipientInactive: (address, _) =>
+                {
+                    reported.Add(address);
+                    return Task.CompletedTask;
+                });
+
+            handler.Requests.Should().HaveCount(1);
+            reported.Should().Equal("person@example.com");
+            logger.Entries.Should().ContainSingle().Which.EventId.Id.Should().Be(1372);
+        }
+
+        [Fact]
+        public async Task DeliverAsync_OnAnotherErrorCode_DoesNotReportTheRecipient()
+        {
+            using var handler = new FakeHttpMessageHandler(_ => JsonResponse(
+                HttpStatusCode.UnprocessableEntity,
+                new { ErrorCode = 300, Message = "Invalid email request." }));
+            var reported = new List<string>();
+
+            await RunOneMessageAsync(
+                handler,
+                onRecipientInactive: (address, _) =>
+                {
+                    reported.Add(address);
+                    return Task.CompletedTask;
+                });
+
+            reported.Should().BeEmpty();
+        }
+
+        [Fact]
         public async Task DeliverAsync_OnAcceptance_LogsTheAcceptedEvent_WithTheMessageId_NeverTheBody()
         {
             using var handler = new FakeHttpMessageHandler(_ => JsonResponse(
@@ -208,7 +251,8 @@ namespace AccountService.Tests.Helpers
             FakeHttpMessageHandler handler,
             string serverToken = "real-server-token",
             IReadOnlyList<TimeSpan>? retryDelays = null,
-            OutboundEmail? message = null)
+            OutboundEmail? message = null,
+            Func<string, CancellationToken, Task>? onRecipientInactive = null)
         {
             using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://api.postmarkapp.com/") };
             var client = new PostmarkClient(httpClient, Options.Create(new PostmarkOptions { ServerToken = serverToken }));
@@ -218,7 +262,8 @@ namespace AccountService.Tests.Helpers
                 Options.Create(new PostmarkOptions { ServerToken = serverToken }),
                 logger,
                 TimeProvider.System,
-                retryDelays);
+                retryDelays,
+                onRecipientInactive);
 
             var delivered = new TaskCompletionSource();
             queue.Delivered += _ => delivered.TrySetResult();

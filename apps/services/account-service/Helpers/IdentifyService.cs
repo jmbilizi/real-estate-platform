@@ -82,6 +82,7 @@ internal sealed class IdentifyService(
             SignUpStatus.Limited => new IdentifyResult(
                 IdentifyStatus.Ok, IdentifyNext.Code, Math.Max(1, started.RetryAfterSeconds), expires),
             SignUpStatus.InvalidEmail => new IdentifyResult(IdentifyStatus.InvalidEmail),
+            SignUpStatus.Undeliverable => new IdentifyResult(IdentifyStatus.Undeliverable),
             _ => new IdentifyResult(IdentifyStatus.Unavailable),
         };
     }

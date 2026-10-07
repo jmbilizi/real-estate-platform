@@ -15,6 +15,8 @@ namespace AccountService.Routes;
 /// </summary>
 internal static class SignUp
 {
+    internal const string UndeliverableError = "undeliverable";
+
     internal static IEndpointRouteBuilder MapSignUpRoutes(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/account/signup");
@@ -66,6 +68,8 @@ internal static class SignUp
                     statusCode: StatusCodes.Status400BadRequest);
             case SignUpStatus.InvalidEmail:
                 return Results.Json(new { error = "invalid_email" }, statusCode: StatusCodes.Status400BadRequest);
+            case SignUpStatus.Undeliverable:
+                return Results.Json(new { error = UndeliverableError }, statusCode: StatusCodes.Status422UnprocessableEntity);
             case SignUpStatus.Limited:
                 http.Response.Headers.RetryAfter = Math.Max(1, result.RetryAfterSeconds).ToString(CultureInfo.InvariantCulture);
                 return Results.StatusCode(StatusCodes.Status429TooManyRequests);
