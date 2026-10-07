@@ -69,6 +69,13 @@ internal sealed class AccountRecoveryThrottleFilter(
                 allowed = rateLimiter.TryRegistration(clientAddress, out retryAfter);
                 break;
 
+            case IdentifyRequest identify:
+                allowed = rateLimiter.TryIdentify(
+                    SignUpEmail.TryNormalize(identify.Email, out var identifyKey, out _) ? identifyKey : null,
+                    clientAddress,
+                    out retryAfter);
+                break;
+
             case SignUpStartRequest start:
                 allowed = this.TrySignUpSend(start.Email, clientAddress, out retryAfter);
                 break;
@@ -150,6 +157,7 @@ internal sealed class AccountRecoveryThrottleFilter(
                 or ResetPasswordRequest
                 or ResendConfirmationEmailRequest
                 or RegisterRequest
+                or IdentifyRequest
                 or SignUpStartRequest
                 or SignUpResendRequest
                 or SignUpVerifyRequest

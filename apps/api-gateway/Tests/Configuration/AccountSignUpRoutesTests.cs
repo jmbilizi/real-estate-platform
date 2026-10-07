@@ -9,7 +9,7 @@ using Xunit;
 namespace ApiGateway.Tests.Configuration
 {
     /// <summary>
-    /// Guards that the sign-up endpoints (#652) reach the account service through the
+    /// Guards that the sign-up (#652) and identify (#653) endpoints reach the account service through the
     /// <c>/account/{everything}</c> catch-all, with no more specific route in the way.
     /// </summary>
     public class AccountSignUpRoutesTests
@@ -20,6 +20,7 @@ namespace ApiGateway.Tests.Configuration
             "/account/signup/verify",
             "/account/signup/resend",
             "/account/signup/change-email",
+            "/account/identify",
         ];
 
         [Fact]
