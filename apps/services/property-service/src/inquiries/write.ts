@@ -1,10 +1,11 @@
 import type { ConsentChannel, ConsentTextVersion, InquiryKind } from '@cribstop/property-contracts';
 import { CONSENT_TEXTS, CURRENT_CONSENT_TEXT_VERSION } from '@cribstop/property-contracts';
+import { OUTBOX_TEMPLATE_KEYS } from './outbox';
 
 /**
- * THE ONLY MODULE THAT INSERTS `listing_inquiries` (#131). Delivery-state updates (#134) live in
- * `delivery/store.ts`. Status changes live in `lead-status-write.ts`. Mirrors `src/db/write.ts`'s
- * rule for `listings`: one writer, so the consent invariants are decided in exactly one place.
+ * THE ONLY MODULE THAT INSERTS `listing_inquiries` (#131). The `lead.received` outbox row is
+ * written in the same statement (#638). Status changes live in `lead-status-write.ts`. Mirrors
+ * `src/db/write.ts`'s rule for `listings`: one writer, so the consent invariants are decided in exactly one place.
  */
 
 export interface Queryable {
@@ -61,10 +62,19 @@ export async function createListingInquiry(
           consent_text_version, consent_channels)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
                CASE WHEN $9 THEN now() ELSE NULL END, $11, $12)
-       RETURNING id
+       RETURNING id, account_id
      ), event AS (
        INSERT INTO lead_status_events (lead_id, from_status, to_status, actor_role)
        SELECT id, NULL, 'new', 'system' FROM inserted
+     ), outbox AS (
+       INSERT INTO notification_outbox
+         (lead_id, event_type, recipient_kind, channel, recipient_ref, recipient_ref_type,
+          template_key, payload)
+       SELECT id, 'lead.received', 'buyer', 'email', COALESCE(account_id, id),
+              CASE WHEN account_id IS NULL THEN 'lead' ELSE 'account' END,
+              $13, jsonb_build_object('leadId', id)
+         FROM inserted
+        WHERE $9 AND 'email' = ANY($12::text[])
      )
      SELECT id FROM inserted`,
     [
@@ -80,6 +90,7 @@ export async function createListingInquiry(
       consentDisclosureText,
       version,
       channels,
+      OUTBOX_TEMPLATE_KEYS['lead.received'],
     ],
   );
 
