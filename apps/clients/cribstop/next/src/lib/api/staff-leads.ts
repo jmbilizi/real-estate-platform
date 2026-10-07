@@ -3,6 +3,8 @@ import {
   type LeadStatus,
   type StaffLeadDetail,
   staffLeadDetailSchema,
+  type StaffLeadMetrics,
+  staffLeadMetricsSchema,
   type StaffLeadNote,
   staffLeadNoteSchema,
   type StaffLeadsEnvelope,
@@ -81,6 +83,17 @@ export async function fetchLeads(
   }
   const qs = query.toString();
   return parse(staffLeadsEnvelopeSchema, await call(`/api/staff/leads${qs ? `?${qs}` : ''}`));
+}
+
+export async function fetchLeadMetrics(range: {
+  from?: string;
+  to?: string;
+}): Promise<StaffLeadMetrics> {
+  const query = new URLSearchParams();
+  if (range.from) query.set('from', range.from);
+  if (range.to) query.set('to', range.to);
+  const qs = query.toString();
+  return parse(staffLeadMetricsSchema, await call(`/api/staff/leads/metrics${qs ? `?${qs}` : ''}`));
 }
 
 export async function fetchLead(id: string): Promise<StaffLeadDetail> {

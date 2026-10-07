@@ -9,6 +9,44 @@ function Bar({ className = '' }: { className?: string }) {
   return <span className={`${FILL} h-4 ${className}`} />;
 }
 
+/** The tiles and chip row of `LeadMetrics`. Same grid as the loaded strip. */
+export function LeadMetricsSkeleton() {
+  return (
+    <div aria-hidden="true" className="space-y-3" data-testid="lead-metrics-skeleton">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 layout:grid-cols-5">
+        {Array.from({ length: 5 }, (_, i) => (
+          <div
+            key={i}
+            className={`rounded-lg border border-surface-border bg-white p-4 ${i === 4 ? 'col-span-2 sm:col-span-1' : ''}`}
+          >
+            <Bar className="w-1/2" />
+            <span className={`${FILL} mt-1 h-8 w-16`} />
+            <Bar className="mt-1 w-3/4" />
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {Array.from({ length: 6 }, (_, i) => (
+          <span key={i} className={`${FILL} h-6 w-20 rounded-full`} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** The whole strip, header included, for the route's loading state. */
+export function LeadMetricsSectionSkeleton() {
+  return (
+    <div className="mb-6">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <Bar className="w-28" />
+        <span className={`${FILL} h-11 w-32 rounded-md`} />
+      </div>
+      <LeadMetricsSkeleton />
+    </div>
+  );
+}
+
 export function LeadsListSkeleton({ rows = 6 }: { rows?: number }) {
   return (
     <ul

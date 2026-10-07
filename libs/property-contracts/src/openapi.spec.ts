@@ -28,6 +28,11 @@ describe('toOpenApiDocument', () => {
 
   it('declares the listings paths', () => {
     expect(Object.keys(doc.paths).sort()).toEqual([
+      '/agent/leads',
+      '/agent/leads/{id}',
+      '/agent/leads/{id}/accept',
+      '/agent/leads/{id}/decline',
+      '/agent/leads/{id}/status',
       '/listings',
       '/listings/map',
       '/listings/meta',
@@ -44,6 +49,7 @@ describe('toOpenApiDocument', () => {
       '/staff/agents',
       '/staff/agents/{id}',
       '/staff/leads',
+      '/staff/leads/metrics',
       '/staff/leads/{id}',
       '/staff/leads/{id}/assign',
       '/staff/leads/{id}/notes',

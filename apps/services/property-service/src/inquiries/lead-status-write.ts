@@ -24,7 +24,7 @@ export interface ChangeLeadStatusInput {
    */
   precheck?: (client: Queryable, from: LeadStatus) => Promise<string | null>;
   /** Why an open assignment ends when the lead returns to `verified`. Default `returned`. */
-  assignmentEndReason?: 'unassigned' | 'returned';
+  assignmentEndReason?: 'unassigned' | 'returned' | 'declined';
 }
 
 export type ChangeLeadStatusResult =

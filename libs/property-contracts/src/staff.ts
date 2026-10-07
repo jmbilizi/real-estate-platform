@@ -125,7 +125,7 @@ export const staffLeadNoteSchema = z.object({
 });
 export type StaffLeadNote = z.infer<typeof staffLeadNoteSchema>;
 
-export const ASSIGNMENT_END_REASONS = ['unassigned', 'returned', 'closed'] as const;
+export const ASSIGNMENT_END_REASONS = ['unassigned', 'returned', 'closed', 'declined'] as const;
 
 /** One row of the assignment history of a lead. `endedAt` is null for the open assignment. */
 export const staffLeadAssignmentSchema = z.object({
@@ -135,7 +135,7 @@ export const staffLeadAssignmentSchema = z.object({
   assignedByAccountId: idSchema,
   assignedAt: z.iso.datetime(),
   endedAt: z.iso.datetime().nullable(),
-  /** `unassigned`: staff removed the agent. `returned`: the lead went back to `verified` otherwise. `closed`: the lead ended as `lost` or `closed`. */
+  /** `unassigned`: staff removed the agent. `returned`: the lead went back to `verified` otherwise. `closed`: the lead ended as `lost` or `closed`. `declined`: the agent declined. */
   endReason: z.enum(ASSIGNMENT_END_REASONS).nullable(),
 });
 export type StaffLeadAssignment = z.infer<typeof staffLeadAssignmentSchema>;
