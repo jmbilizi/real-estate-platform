@@ -67,6 +67,21 @@ describe('POST /api/listings/[id]/inquiries', () => {
     });
   });
 
+  it('rejects malformed consent channels without calling the gateway', async () => {
+    const res = await POST(
+      request({
+        kind: 'message',
+        name: 'S',
+        email: 's@e.co',
+        consentTextVersion: 'v1',
+        consentChannels: ['carrier_pigeon'],
+      }),
+      ctx,
+    );
+    expect(res.status).toBe(400);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
   it('rejects an unknown kind without calling the gateway', async () => {
     const res = await POST(request({ kind: 'booking' }), ctx);
     expect(res.status).toBe(400);

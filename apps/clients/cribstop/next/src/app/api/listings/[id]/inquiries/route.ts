@@ -31,7 +31,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     typeof input.name !== 'string' ||
     typeof input.email !== 'string' ||
     !isText(input.phone) ||
-    !isText(input.message)
+    !isText(input.message) ||
+    (input.consentChannels !== undefined && !consentChannels.success)
   ) {
     return NextResponse.json(
       { error: { code: 'invalid_request', message: 'Invalid request body.' } },
