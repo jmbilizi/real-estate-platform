@@ -54,7 +54,14 @@ describe('changeLeadStatus', () => {
     expect(params[2]).toEqual([INPUT.leadId, 'returned']);
     expect(sql[3]).toMatch(/UPDATE listing_inquiries SET status/);
     expect(sql[4]).toMatch(/INSERT INTO lead_status_events/);
-    expect(sql[5]).toBe('COMMIT');
+    expect(sql[5]).toMatch(/INSERT INTO notification_outbox/);
+    expect(params[5]).toEqual([
+      INPUT.leadId,
+      'lead.verified',
+      'buyer-request-verified',
+      expect.any(String),
+    ]);
+    expect(sql[6]).toBe('COMMIT');
     expect(params[4]).toEqual([
       INPUT.leadId,
       'new',
@@ -98,6 +105,25 @@ describe('changeLeadStatus', () => {
     await changeLeadStatus(pool, { ...INPUT, to: 'assigned', agentProfileId: 'agent-1' });
 
     expect(sql.some((s) => /lead_assignments/.test(s))).toBe(false);
+  });
+
+  it('writes a buyer row and an agent row on assignment, in the same transaction', async () => {
+    const { pool, sql, params } = fakePool('verified');
+
+    await changeLeadStatus(pool, { ...INPUT, to: 'assigned', agentProfileId: 'agent-1' });
+
+    const outbox = sql.filter((s) => /INSERT INTO notification_outbox/.test(s));
+    expect(outbox).toHaveLength(2);
+    expect(sql[sql.length - 1]).toBe('COMMIT');
+    expect(params[sql.length - 2]?.[2]).toBe('agent-1');
+  });
+
+  it('writes no outbox row for a status that notifies nobody', async () => {
+    const { pool, sql } = fakePool('contacted');
+
+    await changeLeadStatus(pool, { ...INPUT, to: 'touring' });
+
+    expect(sql.some((s) => /notification_outbox/.test(s))).toBe(false);
   });
 
   it('refuses a transition the table does not allow, and writes nothing', async () => {

@@ -1,5 +1,6 @@
 import { LEAD_STATUSES, type LeadStatus } from '@cribstop/property-contracts';
 import { canTransition } from './lead-status';
+import { enqueueLeadNotifications, outboxEventFor } from './outbox';
 import type { Queryable } from './write';
 
 /** A pool that hands out a client for one transaction. `pg.Pool` fits. */
@@ -108,6 +109,11 @@ export async function changeLeadStatus(
         agentProfileId,
       ],
     );
+
+    const event = outboxEventFor(from, input.to);
+    if (event !== null) {
+      await enqueueLeadNotifications(client, { leadId: input.leadId, event, agentProfileId });
+    }
 
     await client.query('COMMIT');
     return { ok: true, from, to: input.to };
