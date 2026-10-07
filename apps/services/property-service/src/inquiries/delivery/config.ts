@@ -36,8 +36,6 @@ export interface DeliveryTuning {
   maxBackoffMs: number;
   /** A `sending` row older than this lost its worker and may be claimed again. */
   leaseMs: number;
-  /** An inquiry not delivered after this age is an alertable condition. */
-  overdueAgeMs: number;
   /** Public web origin for the listing link. Empty means the message carries the ID only. */
   siteOrigin: string | null;
 }
@@ -102,7 +100,6 @@ export function resolveDeliveryTuning(env: Env): DeliveryTuning {
     baseBackoffMs: positiveInt(env, 'INQUIRY_DELIVERY_BASE_BACKOFF_MS', 30_000),
     maxBackoffMs: positiveInt(env, 'INQUIRY_DELIVERY_MAX_BACKOFF_MS', 30 * 60_000),
     leaseMs: positiveInt(env, 'INQUIRY_DELIVERY_LEASE_MS', 5 * 60_000),
-    overdueAgeMs: positiveInt(env, 'INQUIRY_DELIVERY_OVERDUE_AGE_MS', 15 * 60_000),
     siteOrigin: origin ? origin : null,
   };
 }
