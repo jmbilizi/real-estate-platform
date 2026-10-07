@@ -25,6 +25,7 @@ import { changeLeadStatus, type TransactionalPool } from '../inquiries/lead-stat
 import type { Queryable } from '../inquiries/write';
 import { checkAgentForLead, hasOpenAssignment, openAssignment } from './agents-store';
 import { readLeadMetrics } from './metrics-store';
+import type { ContactsClient } from '../inquiries/account-contacts';
 import { addLeadNote, decodeCursor, encodeCursor, listLeads, readLeadDetail } from './leads-store';
 import { hasAnyRole, requireRole, ROLE, staffCallerOf } from './roles';
 import { actingRole, asyncRoute, describeIssues, invalidRequest } from './route-helpers';
@@ -32,6 +33,8 @@ import { actingRole, asyncRoute, describeIssues, invalidRequest } from './route-
 export interface StaffLeadsRouterDeps {
   pool: Queryable & TransactionalPool;
   introspection: IntrospectionClient;
+  /** Buyer name and email come from the account (#691). */
+  contacts: ContactsClient;
   /** A lead in `new` or `verified` for longer than this counts as aging. Default 24. */
   agingHours?: number;
 }
@@ -70,7 +73,7 @@ export function createStaffLeadsRouter(deps: StaffLeadsRouterDeps): Router {
         res.status(400).json(invalidRequest('Invalid or unknown field(s): cursor.'));
         return;
       }
-      const page = await listLeads(deps.pool, {
+      const page = await listLeads(deps.pool, deps.contacts, {
         filters,
         limit: limit ?? STAFF_LEADS_PAGE_SIZE_DEFAULT,
         cursor,
@@ -118,7 +121,7 @@ export function createStaffLeadsRouter(deps: StaffLeadsRouterDeps): Router {
         return;
       }
       const caller = staffCallerOf(res);
-      const detail = await readLeadDetail(deps.pool, id.data, {
+      const detail = await readLeadDetail(deps.pool, deps.contacts, id.data, {
         accountId: caller.accountId,
         role: actingRole(caller.roles),
       });

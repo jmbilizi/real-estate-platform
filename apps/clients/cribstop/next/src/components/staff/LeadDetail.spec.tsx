@@ -81,6 +81,14 @@ async function open() {
 }
 
 describe('LeadDetail', () => {
+  it('shows the contact unavailable while the rest of the lead still shows (#691)', async () => {
+    fetchLead.mockResolvedValue(lead({ name: null, email: null, verifiedAccount: null }));
+    render(<LeadDetail id={ID} />);
+    await screen.findByRole('heading', { name: 'Unavailable, retry' });
+    expect(screen.queryByRole('link', { name: /@/ })).toBeNull();
+    expect(screen.getByText('Can I see it Saturday?')).toBeInTheDocument();
+  });
+
   it('shows a skeleton, then contact, consent, history and the duplicate flag', async () => {
     render(<LeadDetail id={ID} />);
     expect(screen.getByTestId('lead-detail-skeleton')).toBeInTheDocument();

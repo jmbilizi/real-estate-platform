@@ -17,7 +17,13 @@ import {
   TARGET_LABEL,
   TOUR_REMINDER,
 } from '@/lib/agent-leads';
-import { formatDateTime, KIND_LABEL, STATUS_LABEL, telHref } from '@/lib/staff-leads';
+import {
+  CONTACT_UNAVAILABLE,
+  formatDateTime,
+  KIND_LABEL,
+  STATUS_LABEL,
+  telHref,
+} from '@/lib/staff-leads';
 import { AgentLeadDetailSkeleton } from './AgentSkeletons';
 import DeclineSheet from './DeclineSheet';
 
@@ -188,16 +194,22 @@ export default function AgentLeadDetailView({ id }: { id: string }) {
       <Section title="Contact">
         {lead.contact ? (
           <>
-            <p className="break-words text-base font-semibold text-ink">{lead.contact.name}</p>
+            <p className="break-words text-base font-semibold text-ink">
+              {lead.contact.name ?? CONTACT_UNAVAILABLE}
+            </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {lead.contact.phone && (
                 <a href={telHref(lead.contact.phone)} className={CONTACT_BTN}>
                   Call {lead.contact.phone}
                 </a>
               )}
-              <a href={`mailto:${lead.contact.email}`} className={`${CONTACT_BTN} break-all`}>
-                Email {lead.contact.email}
-              </a>
+              {lead.contact.email ? (
+                <a href={`mailto:${lead.contact.email}`} className={`${CONTACT_BTN} break-all`}>
+                  Email {lead.contact.email}
+                </a>
+              ) : (
+                <p className="text-sm text-ink-muted">Email: {CONTACT_UNAVAILABLE}</p>
+              )}
             </div>
             {lead.contact.consent.given ? (
               <div className="mt-3 text-sm text-ink-body">
@@ -228,7 +240,7 @@ export default function AgentLeadDetailView({ id }: { id: string }) {
             <dl className="space-y-1 text-sm text-ink-body">
               <div>
                 <dt className="inline text-ink-muted">Email: </dt>
-                <dd className="inline break-all">{lead.emailMasked}</dd>
+                <dd className="inline break-all">{lead.emailMasked ?? CONTACT_UNAVAILABLE}</dd>
               </div>
               <div>
                 <dt className="inline text-ink-muted">Phone: </dt>

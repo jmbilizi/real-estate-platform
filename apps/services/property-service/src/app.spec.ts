@@ -775,16 +775,15 @@ describe('POST /listings/:id/inquiries (#131)', () => {
     expect(pool.statements).toEqual([]);
   });
 
-  it('records the account id and the account email for a confirmed account (#690)', async () => {
+  it('records the account id and no copy of the account email (#691)', async () => {
     const pool = createInquiryPool();
     const app = createApp({ pool, introspection: SIGNED_IN, rateLimiter: ALWAYS_ALLOW });
 
     const response = await request(app).post(`/listings/${KNOWN_ID}/inquiries`).send(VALID_BODY);
 
     expect(response.status).toBe(201);
-    expect(insertParams(pool)).toEqual(
-      expect.arrayContaining([ACCOUNT_ID, 'account@example.com', true]),
-    );
+    expect(insertParams(pool)).toContain(ACCOUNT_ID);
+    expect(insertParams(pool)).not.toContain('account@example.com');
   });
 
   it('ignores a name and an email in the body (#690)', async () => {
@@ -796,7 +795,6 @@ describe('POST /listings/:id/inquiries (#131)', () => {
       .send({ ...VALID_BODY, name: 'Typed Name', email: 'other@example.com' });
 
     expect(response.status).toBe(201);
-    expect(insertParams(pool)).toContain('account@example.com');
     expect(insertParams(pool)).not.toContain('other@example.com');
     expect(insertParams(pool)).not.toContain('Typed Name');
   });

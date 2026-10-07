@@ -121,7 +121,14 @@ describe('migration 052: inquiries require an account (#690)', () => {
       expect(await count(table, owned)).toBe(1);
     }
     expect(await count('listing_inquiries', owned)).toBe(1);
-    await expect(seed(null)).rejects.toThrow(/account_id/);
+    // Migration 053 dropped `name` and `email`, so this insert names neither.
+    await expect(
+      pool().query(
+        `INSERT INTO listing_inquiries (listing_id, kind, message, account_id)
+         VALUES ($1, 'message', 'Hello (e2e)', NULL)`,
+        [listing],
+      ),
+    ).rejects.toThrow(/account_id/);
   });
 
   it('down restores nullability and restores no data', async () => {

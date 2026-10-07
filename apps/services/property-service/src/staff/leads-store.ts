@@ -6,6 +6,7 @@ import {
   type StaffLeadNote,
   type StaffLeadsRequest,
 } from '@cribstop/property-contracts';
+import { contactName, type ContactsClient } from '../inquiries/account-contacts';
 import type { Queryable } from '../inquiries/write';
 
 /**
@@ -16,16 +17,14 @@ import type { Queryable } from '../inquiries/write';
 /** A lead is open until it reaches a final status or a bad-lead status. */
 const CLOSED_STATUSES_SQL = "('closed', 'lost', 'spam', 'rejected')";
 
-/** Normalized email: trimmed and lower-cased. */
-const EMAIL_KEY = (alias: string) => `lower(btrim(${alias}.email))`;
 /** Normalized phone: the last ten digits. NULL when the phone holds no digits. */
 const PHONE_KEY = (alias: string) =>
   `NULLIF(right(regexp_replace(${alias}.phone, '\\D', '', 'g'), 10), '')`;
 
 /**
- * Another open request on the same listing, within the window, from the same normalized email or
- * phone. `alias` names the lead under test and `o` the other one. The index expressions in
- * migration 048 match these.
+ * Another open request on the same listing, within the window, from the same buyer account or
+ * normalized phone. `alias` names the lead under test and `o` the other one. The indexes of
+ * migrations 048 and 053 match these.
  */
 const duplicateCondition = (alias: string) => `
   o.id <> ${alias}.id
@@ -33,7 +32,7 @@ const duplicateCondition = (alias: string) => `
   AND o.status NOT IN ${CLOSED_STATUSES_SQL}
   AND o.created_at BETWEEN ${alias}.created_at - interval '${DUPLICATE_WINDOW_DAYS} days'
                        AND ${alias}.created_at + interval '${DUPLICATE_WINDOW_DAYS} days'
-  AND (${EMAIL_KEY('o')} = ${EMAIL_KEY(alias)}
+  AND (o.account_id = ${alias}.account_id
        OR (${PHONE_KEY(alias)} IS NOT NULL AND ${PHONE_KEY('o')} = ${PHONE_KEY(alias)}))`;
 
 export function maskEmail(email: string): string {
@@ -81,10 +80,8 @@ interface ListRow {
   created_at_cursor: string;
   kind: StaffLeadListItem['kind'];
   status: StaffLeadListItem['status'];
-  name: string;
-  email: string;
+  account_id: string;
   phone: string | null;
-  verified_account: boolean;
   listing_id: string;
   possible_duplicate: boolean;
 }
@@ -95,8 +92,10 @@ export interface ListLeadsInput {
   cursor: Cursor | null;
 }
 
+/** One contact lookup per page. A contact the lookup lacks leaves its fields null. */
 export async function listLeads(
   pool: Queryable,
+  contacts: ContactsClient,
   input: ListLeadsInput,
 ): Promise<{ results: StaffLeadListItem[]; next: Cursor | null }> {
   const params: unknown[] = [];
@@ -127,7 +126,7 @@ export async function listLeads(
     `SELECT i.id, i.created_at,
             to_char(i.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
               AS created_at_cursor,
-            i.kind, i.status, i.name, i.email, i.phone, i.verified_account, i.listing_id,
+            i.kind, i.status, i.account_id, i.phone, i.listing_id,
             EXISTS (SELECT 1 FROM listing_inquiries o WHERE ${duplicateCondition('i')})
               AS possible_duplicate
        FROM listing_inquiries i
@@ -139,19 +138,23 @@ export async function listLeads(
 
   const page = rows.slice(0, input.limit);
   const last = page[page.length - 1];
+  const found = await contacts.lookup(page.map((row) => row.account_id));
   return {
-    results: page.map((row) => ({
-      id: row.id,
-      createdAt: row.created_at.toISOString(),
-      kind: row.kind,
-      status: row.status,
-      name: row.name,
-      emailMasked: maskEmail(row.email),
-      phoneMasked: maskPhone(row.phone),
-      verifiedAccount: row.verified_account,
-      listingId: row.listing_id,
-      possibleDuplicate: row.possible_duplicate,
-    })),
+    results: page.map((row) => {
+      const contact = found.get(row.account_id);
+      return {
+        id: row.id,
+        createdAt: row.created_at.toISOString(),
+        kind: row.kind,
+        status: row.status,
+        name: contact ? contactName(contact) : null,
+        emailMasked: contact?.email ? maskEmail(contact.email) : null,
+        phoneMasked: maskPhone(row.phone),
+        verifiedAccount: contact?.emailConfirmed ?? null,
+        listingId: row.listing_id,
+        possibleDuplicate: row.possible_duplicate,
+      };
+    }),
     next:
       rows.length > input.limit && last !== undefined
         ? { createdAt: last.created_at_cursor, id: last.id }
@@ -164,11 +167,9 @@ interface DetailRow {
   created_at: Date;
   kind: StaffLeadDetail['kind'];
   status: StaffLeadDetail['status'];
-  name: string;
-  email: string;
+  account_id: string;
   phone: string | null;
   message: string | null;
-  verified_account: boolean;
   consent_to_contact: boolean;
   consent_text_version: string | null;
   consent_disclosure_text: string | null;
@@ -188,16 +189,18 @@ const DUPLICATE_IDS_LIMIT = 10;
 /**
  * The full lead, or `null` when no lead has this id. Writes the access-audit row BEFORE it reads
  * the history and the notes, and a failed audit insert rejects, so contact data never leaves this
- * function without an audit row.
+ * function without an audit row. A failed contact lookup leaves `name`, `email` and
+ * `verifiedAccount` null. The rest of the lead still returns.
  */
 export async function readLeadDetail(
   pool: Queryable,
+  contacts: ContactsClient,
   leadId: string,
   actor: { accountId: string; role: string },
 ): Promise<StaffLeadDetail | null> {
   const lead = await pool.query<DetailRow>(
-    `SELECT i.id, i.created_at, i.kind, i.status, i.name, i.email, i.phone, i.message,
-            i.verified_account, i.consent_to_contact, i.consent_text_version,
+    `SELECT i.id, i.created_at, i.kind, i.status, i.account_id, i.phone, i.message,
+            i.consent_to_contact, i.consent_text_version,
             i.consent_disclosure_text, i.consent_channels, i.consent_given_at, i.listing_id,
             l.title AS listing_title, p.address_raw AS listing_address,
             upper(btrim(p.state)) AS listing_state,
@@ -218,7 +221,8 @@ export async function readLeadDetail(
     [leadId, actor.accountId, actor.role],
   );
 
-  const [history, notes, duplicates, assignments] = await Promise.all([
+  const [found, history, notes, duplicates, assignments] = await Promise.all([
+    contacts.lookup([row.account_id]),
     pool.query<{
       id: string;
       from_status: StaffLeadDetail['status'] | null;
@@ -267,16 +271,17 @@ export async function readLeadDetail(
     ),
   ]);
 
+  const contact = found.get(row.account_id);
   return {
     id: row.id,
     createdAt: row.created_at.toISOString(),
     kind: row.kind,
     status: row.status,
-    name: row.name,
-    email: row.email,
+    name: contact ? contactName(contact) : null,
+    email: contact?.email ?? null,
     phone: row.phone,
     message: row.message,
-    verifiedAccount: row.verified_account,
+    verifiedAccount: contact?.emailConfirmed ?? null,
     consent: {
       given: row.consent_to_contact,
       textVersion: row.consent_text_version,

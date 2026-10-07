@@ -8,7 +8,7 @@ import { StatusBadge } from '@/components/staff/LeadBadges';
 import { acceptLead, fetchAgentLeads } from '@/lib/api/agent-leads';
 import { StaffApiError } from '@/lib/api/staff-leads';
 import { formatPrice, sortLeads } from '@/lib/agent-leads';
-import { formatAge, KIND_LABEL } from '@/lib/staff-leads';
+import { CONTACT_UNAVAILABLE, formatAge, KIND_LABEL } from '@/lib/staff-leads';
 import { AgentLeadsSkeleton } from './AgentSkeletons';
 import DeclineSheet from './DeclineSheet';
 
@@ -48,7 +48,7 @@ function LeadCard({
         <p className="break-words text-sm text-ink-body">{lead.listing.address}</p>
         <p className="text-sm text-ink-muted">{formatPrice(lead.listing.listPrice)}</p>
         <p className="mt-1 truncate text-sm text-ink-muted">
-          {lead.emailMasked}
+          {lead.emailMasked ?? CONTACT_UNAVAILABLE}
           {lead.phoneMasked ? ` · ${lead.phoneMasked}` : ''}
         </p>
       </Link>

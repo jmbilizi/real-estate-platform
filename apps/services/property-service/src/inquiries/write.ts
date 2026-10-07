@@ -15,8 +15,6 @@ export interface Queryable {
 export interface CreateListingInquiryInput {
   listingId: string;
   kind: InquiryKind;
-  /** The confirmed account email. Written to the `email` column, and to `name` until #691 drops it. */
-  contactEmail: string;
   phone: string | null;
   message: string | null;
   /** Resolved via account-service's credential introspection (#86). */
@@ -55,35 +53,30 @@ export async function createListingInquiry(
   const result = await client.query<{ id: string }>(
     `WITH inserted AS (
        INSERT INTO listing_inquiries
-         (listing_id, kind, name, email, phone, message, account_id, verified_account,
+         (listing_id, kind, phone, message, account_id,
           consent_to_contact, consent_disclosure_text, consent_given_at,
           consent_text_version, consent_channels)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-               CASE WHEN $9 THEN now() ELSE NULL END, $11, $12)
+       VALUES ($1, $2, $3, $4, $5, $6, $7,
+               CASE WHEN $6 THEN now() ELSE NULL END, $8, $9)
        RETURNING id, account_id
      ), event AS (
        INSERT INTO lead_status_events (lead_id, from_status, to_status, actor_role)
        SELECT id, NULL, 'new', 'system' FROM inserted
      ), outbox AS (
        INSERT INTO notification_outbox
-         (lead_id, event_type, recipient_kind, channel, recipient_ref, recipient_ref_type,
-          template_key, payload)
-       SELECT id, 'lead.received', 'buyer', 'email', COALESCE(account_id, id),
-              CASE WHEN account_id IS NULL THEN 'lead' ELSE 'account' END,
-              $13, jsonb_build_object('leadId', id)
+         (lead_id, event_type, recipient_kind, channel, recipient_account_id, template_key, payload)
+       SELECT id, 'lead.received', 'buyer', 'email', account_id,
+              $10, jsonb_build_object('leadId', id)
          FROM inserted
-        WHERE $9 AND 'email' = ANY($12::text[])
+        WHERE $6 AND 'email' = ANY($9::text[])
      )
      SELECT id FROM inserted`,
     [
       input.listingId,
       input.kind,
-      input.contactEmail,
-      input.contactEmail,
       input.phone,
       input.message,
       input.accountId,
-      true,
       input.consentToContact,
       consentDisclosureText,
       version,

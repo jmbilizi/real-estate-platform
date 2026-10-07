@@ -7,7 +7,6 @@ import { changeLeadStatus } from '../src/inquiries/lead-status-write';
 import { complianceFixtureIds } from './support/fixture-ids';
 import {
   bearerFor,
-  emailFor,
   setEmailUnconfirmed,
   startIntrospectionStub,
   stopIntrospectionStub,
@@ -55,7 +54,7 @@ describe('POST /listings/:id/inquiries — signed-in', () => {
     expect(idSchema.safeParse(response.data.id).success).toBe(true);
   });
 
-  it('stores the account email, the account id and verified_account true', async () => {
+  it('stores the account id and no copied contact columns (#691)', async () => {
     const response = await post(`/listings/${fixtures.sampleListingId}/inquiries`, {
       ...VALID_BODY,
       kind: 'message',
@@ -63,16 +62,13 @@ describe('POST /listings/:id/inquiries — signed-in', () => {
     });
 
     expect(response.status).toBe(201);
-    const { rows } = await getPool().query(
-      'SELECT account_id, email, name, verified_account FROM listing_inquiries WHERE id = $1',
-      [response.data.id],
-    );
-    expect(rows[0]).toEqual({
-      account_id: ACCOUNT_ID,
-      email: emailFor(ACCOUNT_ID),
-      name: emailFor(ACCOUNT_ID),
-      verified_account: true,
-    });
+    const { rows } = await getPool().query('SELECT * FROM listing_inquiries WHERE id = $1', [
+      response.data.id,
+    ]);
+    expect(rows[0]).toMatchObject({ account_id: ACCOUNT_ID });
+    for (const dropped of ['name', 'email', 'verified_account']) {
+      expect(rows[0]).not.toHaveProperty(dropped);
+    }
   });
 
   it('ignores a name and an email in the body', async () => {
@@ -83,11 +79,10 @@ describe('POST /listings/:id/inquiries — signed-in', () => {
     });
 
     expect(response.status).toBe(201);
-    const { rows } = await getPool().query(
-      'SELECT email, name FROM listing_inquiries WHERE id = $1',
-      [response.data.id],
-    );
-    expect(rows[0]).toEqual({ email: emailFor(ACCOUNT_ID), name: emailFor(ACCOUNT_ID) });
+    const { rows } = await getPool().query('SELECT * FROM listing_inquiries WHERE id = $1', [
+      response.data.id,
+    ]);
+    expect(JSON.stringify(rows[0])).not.toMatch(/Typed Name|typed@example.com/);
   });
 
   it('keeps the phone optional and per request', async () => {
@@ -248,7 +243,7 @@ describe('lead model (#627)', () => {
   it('creates a lead in status new, with one creation event', async () => {
     const id = await create({});
 
-    expect(await row(id)).toMatchObject({ status: 'new', verified_account: true });
+    expect(await row(id)).toMatchObject({ status: 'new', account_id: ACCOUNT_ID });
     const { rows } = await pool.query(
       'SELECT from_status, to_status, actor_account_id, actor_role FROM lead_status_events WHERE lead_id = $1',
       [id],

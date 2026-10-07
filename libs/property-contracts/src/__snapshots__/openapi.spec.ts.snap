@@ -84,6 +84,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "type": "object",
               },
               "email": {
+                "nullable": true,
                 "type": "string",
               },
               "message": {
@@ -91,6 +92,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "type": "string",
               },
               "name": {
+                "nullable": true,
                 "type": "string",
               },
               "phone": {
@@ -113,6 +115,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "type": "string",
           },
           "emailMasked": {
+            "nullable": true,
             "type": "string",
           },
           "id": {
@@ -296,6 +299,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                   "type": "string",
                 },
                 "emailMasked": {
+                  "nullable": true,
                   "type": "string",
                 },
                 "id": {
@@ -2447,6 +2451,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "type": "array",
           },
           "email": {
+            "nullable": true,
             "type": "string",
           },
           "history": {
@@ -2584,6 +2589,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "type": "string",
           },
           "name": {
+            "nullable": true,
             "type": "string",
           },
           "notes": {
@@ -2616,6 +2622,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "type": "string",
           },
           "verifiedAccount": {
+            "nullable": true,
             "type": "boolean",
           },
         },
@@ -2973,6 +2980,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                   "type": "string",
                 },
                 "emailMasked": {
+                  "nullable": true,
                   "type": "string",
                 },
                 "id": {
@@ -2993,6 +3001,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                   "type": "string",
                 },
                 "name": {
+                  "nullable": true,
                   "type": "string",
                 },
                 "phoneMasked": {
@@ -3019,6 +3028,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                   "type": "string",
                 },
                 "verifiedAccount": {
+                  "nullable": true,
                   "type": "boolean",
                 },
               },
@@ -3099,7 +3109,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
   "paths": {
     "/agent/leads": {
       "get": {
-        "description": "Requires the Agent role and an active agent profile. Only leads with an open assignment to the caller profile. Newest assignment first, at most 200. Email and phone are masked in every row. The response is \`private, no-store\`.",
+        "description": "Requires the Agent role and an active agent profile. Only leads with an open assignment to the caller profile. Newest assignment first, at most 200. Email and phone are masked in every row. \`emailMasked\` is null when the account contact is unavailable. The response is \`private, no-store\`.",
         "operationId": "listAgentLeads",
         "parameters": [
           {
@@ -3191,7 +3201,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
     },
     "/agent/leads/{id}": {
       "get": {
-        "description": "Requires the Agent role and an active agent profile. \`contact\` is null while the status is \`assigned\`. Accept reveals it. Every read writes an access-audit row. A lead that is not assigned to the caller answers 404, never 403.",
+        "description": "Requires the Agent role and an active agent profile. \`contact\` is null while the status is \`assigned\`. Accept reveals it. \`contact.name\` and \`contact.email\` are null when the account contact is unavailable. Every read writes an access-audit row. A lead that is not assigned to the caller answers 404, never 403.",
         "operationId": "getAgentLead",
         "parameters": [
           {
@@ -5718,7 +5728,7 @@ Rate-limited per client and per listing; a request over either limit gets 429 wi
     },
     "/staff/leads": {
       "get": {
-        "description": "Requires the Admin, SuperAdmin or Moderator role. Newest first, cursor paging, page size capped at 50. Email and phone are masked. A row has \`possibleDuplicate\` when another open request on the same listing came within seven days from the same email or phone. The server never merges leads. The response is \`private, no-store\`.",
+        "description": "Requires the Admin, SuperAdmin or Moderator role. Newest first, cursor paging, page size capped at 50. Email and phone are masked. Name and email come from the buyer account. They are null when the account contact is unavailable. A row has \`possibleDuplicate\` when another open request on the same listing came within seven days from the same buyer account or phone. The server never merges leads. The response is \`private, no-store\`.",
         "operationId": "listStaffLeads",
         "parameters": [
           {
@@ -5967,7 +5977,7 @@ Rate-limited per client and per listing; a request over either limit gets 429 wi
     },
     "/staff/leads/{id}": {
       "get": {
-        "description": "Requires the Admin, SuperAdmin or Moderator role. Every successful read writes an access-audit row. The response is \`private, no-store\`.",
+        "description": "Requires the Admin, SuperAdmin or Moderator role. Every successful read writes an access-audit row. \`name\`, \`email\` and \`verifiedAccount\` come from the buyer account. They are null when the account contact is unavailable. The response is \`private, no-store\`.",
         "operationId": "getStaffLead",
         "parameters": [
           {

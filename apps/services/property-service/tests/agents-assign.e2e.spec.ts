@@ -40,9 +40,9 @@ const pool = () => getPool();
 
 async function seedLead(status = 'verified'): Promise<string> {
   const { rows } = await pool().query<{ id: string }>(
-    `INSERT INTO listing_inquiries (listing_id, kind, name, email, message, status, account_id)
-     VALUES ($1, 'message', 'E2E Lead', $2, 'Hello (e2e)', $3, gen_random_uuid()) RETURNING id`,
-    [listing, `${randomUUID()}@e2e.example.com`, status],
+    `INSERT INTO listing_inquiries (listing_id, kind, message, status, account_id)
+     VALUES ($1, 'message', 'Hello (e2e)', $2, gen_random_uuid()) RETURNING id`,
+    [listing, status],
   );
   const id = rows[0]?.id;
   if (id === undefined) throw new Error('seed failed');

@@ -26,8 +26,7 @@ const pool = () => getPool();
 interface OutboxRow {
   event_type: string;
   recipient_kind: string;
-  recipient_ref: string;
-  recipient_ref_type: string;
+  recipient_account_id: string;
   state: string;
   payload: string;
 }
@@ -35,7 +34,7 @@ interface OutboxRow {
 const outboxOf = async (leadId: string): Promise<OutboxRow[]> =>
   (
     await pool().query<OutboxRow>(
-      `SELECT event_type, recipient_kind, recipient_ref, recipient_ref_type, state,
+      `SELECT event_type, recipient_kind, recipient_account_id, state,
               payload::text AS payload
          FROM notification_outbox WHERE lead_id = $1 ORDER BY created_at, id`,
       [leadId],
@@ -45,13 +44,13 @@ const outboxOf = async (leadId: string): Promise<OutboxRow[]> =>
 async function seedLead(consentEmail: boolean): Promise<string> {
   const { rows } = await pool().query<{ id: string }>(
     `INSERT INTO listing_inquiries
-       (listing_id, kind, name, email, message, consent_to_contact,
+       (listing_id, kind, message, consent_to_contact,
         consent_disclosure_text, consent_given_at, consent_text_version, consent_channels, account_id)
-     VALUES ($1, 'message', 'E2E Lead', $2, 'Hello (e2e)', $3,
-             CASE WHEN $3 THEN 'text' END, CASE WHEN $3 THEN now() END,
-             CASE WHEN $3 THEN 'v1' END, CASE WHEN $3 THEN ARRAY['email'] END, gen_random_uuid())
+     VALUES ($1, 'message', 'Hello (e2e)', $2,
+             CASE WHEN $2 THEN 'text' END, CASE WHEN $2 THEN now() END,
+             CASE WHEN $2 THEN 'v1' END, CASE WHEN $2 THEN ARRAY['email'] END, gen_random_uuid())
      RETURNING id`,
-    [listing, `${randomUUID()}@e2e.example.com`, consentEmail],
+    [listing, consentEmail],
   );
   const id = rows[0]?.id;
   if (id === undefined) throw new Error('seed failed');
@@ -112,14 +111,12 @@ describe('notification_outbox', () => {
       'SELECT account_id FROM listing_inquiries WHERE id = $1',
       [leadId],
     );
-    expect(rows[0]).toMatchObject({
-      recipient_ref: owner[0]?.account_id,
-      recipient_ref_type: 'account',
-    });
-    expect(rows[2]).toMatchObject({
-      recipient_ref: agentProfileId,
-      recipient_ref_type: 'agent_profile',
-    });
+    const { rows: agentAccount } = await pool().query<{ account_id: string }>(
+      'SELECT account_id FROM agent_profiles WHERE id = $1',
+      [agentProfileId],
+    );
+    expect(rows[0]).toMatchObject({ recipient_account_id: owner[0]?.account_id });
+    expect(rows[2]).toMatchObject({ recipient_account_id: agentAccount[0]?.account_id });
     for (const row of rows) expect(row.payload).not.toMatch(/@|E2E Lead/);
   });
 
@@ -134,9 +131,9 @@ describe('notification_outbox', () => {
     const insert = (state: string, payload: string) =>
       pool().query(
         `INSERT INTO notification_outbox
-           (lead_id, event_type, recipient_kind, channel, recipient_ref, recipient_ref_type,
+           (lead_id, event_type, recipient_kind, channel, recipient_account_id,
             template_key, state, payload)
-         VALUES ($1, 'lead.received', 'buyer', 'email', $1, 'lead', 'k', $2, $3::jsonb)`,
+         VALUES ($1, 'lead.received', 'buyer', 'email', $1, 'k', $2, $3::jsonb)`,
         [leadId, state, payload],
       );
     await expect(insert('pending', '{}')).rejects.toThrow(/state_check/);

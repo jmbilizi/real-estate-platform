@@ -7,6 +7,7 @@ import {
   SIGN_IN_REQUIRED_BODY,
 } from '@cribstop/property-contracts';
 import { createApp } from '../app';
+import type { ContactsClient } from '../inquiries/account-contacts';
 import type { IntrospectionClient, IntrospectionOutcome } from '../inquiries/account-introspection';
 import type { ReadPool } from '../listings/repository';
 import { ROLE } from '../staff/roles';
@@ -68,6 +69,28 @@ function fakePool(world: Partial<World> = {}) {
   };
 }
 
+const BUYER_ACCOUNT = '0190a000-0000-7000-8000-0000000000d1';
+
+const contactsUp = (batches: string[][] = []): ContactsClient => ({
+  lookup: (ids) => {
+    batches.push([...ids]);
+    return Promise.resolve(
+      new Map([
+        [
+          BUYER_ACCOUNT,
+          {
+            accountId: BUYER_ACCOUNT,
+            displayName: 'Jordan Buyer',
+            email: 'jordan@example.com',
+            emailConfirmed: true,
+          },
+        ],
+      ]),
+    );
+  },
+});
+const contactsDown: ContactsClient = { lookup: () => Promise.resolve(new Map()) };
+
 const leadRow = (status: string) => ({
   id: LEAD,
   created_at: NOW,
@@ -75,8 +98,7 @@ const leadRow = (status: string) => ({
   accepted_at: status === 'assigned' ? null : NOW,
   kind: 'message',
   status,
-  name: 'Jordan Buyer',
-  email: 'jordan@example.com',
+  account_id: BUYER_ACCOUNT,
   phone: '202-555-0143',
   message: 'Is it still available?',
   consent_to_contact: true,
@@ -91,8 +113,11 @@ const leadRow = (status: string) => ({
   listing_status: 'Active',
 });
 
-const appWith = (outcome: IntrospectionOutcome, pool = fakePool()) =>
-  createApp({ pool: pool as unknown as ReadPool, introspection: client(outcome) });
+const appWith = (
+  outcome: IntrospectionOutcome,
+  pool = fakePool(),
+  contacts: ContactsClient = contactsUp(),
+) => createApp({ pool: pool as unknown as ReadPool, introspection: client(outcome), contacts });
 
 const sqlOf = (pool: ReturnType<typeof fakePool>) => pool.calls.map((c) => c.sql).join('\n');
 
@@ -155,6 +180,24 @@ describe('GET /agent/leads', () => {
     expect(JSON.stringify(res.body)).not.toMatch(/jordan|Jordan|555|Is it still/);
   });
 
+  it('looks up the contacts in one batch, and shows the contact unavailable when the lookup is down (#691)', async () => {
+    const batches: string[][] = [];
+    const up = await request(appWith(as(ROLE.Agent), fakePool(), contactsUp(batches))).get(
+      '/agent/leads',
+    );
+    expect(up.status).toBe(200);
+    expect(batches).toEqual([[BUYER_ACCOUNT]]);
+    const down = await request(appWith(as(ROLE.Agent), fakePool(), contactsDown)).get(
+      '/agent/leads',
+    );
+    expect(down.status).toBe(200);
+    expect(down.body.results[0]).toMatchObject({
+      id: LEAD,
+      status: expect.any(String),
+      emailMasked: null,
+    });
+  });
+
   it('binds the status filter and rejects unknown parameters', async () => {
     const pool = fakePool();
     await request(appWith(as(ROLE.Agent), pool)).get('/agent/leads?status=accepted');
@@ -188,6 +231,16 @@ describe('GET /agent/leads/:id', () => {
       phone: '202-555-0143',
       message: 'Is it still available?',
     });
+    expect(pool.calls.some((c) => /INSERT INTO lead_access_audit/.test(c.sql))).toBe(true);
+  });
+
+  it('returns the revealed lead with a null contact name and email when the lookup is down (#691)', async () => {
+    const pool = fakePool({ status: 'accepted' });
+    const res = await request(appWith(as(ROLE.Agent), pool, contactsDown)).get(
+      `/agent/leads/${LEAD}`,
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.contact).toMatchObject({ name: null, email: null, phone: '202-555-0143' });
     expect(pool.calls.some((c) => /INSERT INTO lead_access_audit/.test(c.sql))).toBe(true);
   });
 
