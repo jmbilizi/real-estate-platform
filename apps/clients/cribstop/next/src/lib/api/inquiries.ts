@@ -11,8 +11,16 @@ export interface InquiryInput {
   consentChannels: ConsentChannel[];
 }
 
-/** `unavailable`: the listing is gone, so a retry cannot work. `retryable`: the user may try again. */
-export type InquiryFailure = 'unavailable' | 'invalid' | 'rate_limited' | 'retryable';
+/**
+ * `unavailable`: the listing is gone, so a retry cannot work. `unauthorized`: no session, or it
+ * ended. `retryable`: the user may try again.
+ */
+export type InquiryFailure =
+  | 'unavailable'
+  | 'unauthorized'
+  | 'invalid'
+  | 'rate_limited'
+  | 'retryable';
 
 export class InquiryError extends Error {
   constructor(readonly failure: InquiryFailure) {
@@ -33,6 +41,7 @@ export async function submitInquiry(listingId: string, input: InquiryInput): Pro
     throw new InquiryError('retryable');
   }
   if (res.ok) return;
+  if (res.status === 401) throw new InquiryError('unauthorized');
   if (res.status === 404) throw new InquiryError('unavailable');
   if (res.status === 400) throw new InquiryError('invalid');
   if (res.status === 429) throw new InquiryError('rate_limited');

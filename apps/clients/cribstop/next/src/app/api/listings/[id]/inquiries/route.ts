@@ -14,8 +14,9 @@ import {
  * form shows the server-owned disclosure beside the submit button, so a submission is the consent
  * (#631). The service stores the text for the version, never a client string. For a signed-in
  * account with a confirmed email, the service uses the account email and ignores the body email.
- * The access token, when present, lets the service link the inquiry to the account. A missing or
- * expired token is not an error: the service treats the request as signed-out.
+ * The access token, when present, lets the service link the inquiry to the account. The dialog
+ * requires an account (#688). Once the service answers 401 for a missing or expired token, the
+ * status passes through and the dialog shows the sign-in step.
  */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
