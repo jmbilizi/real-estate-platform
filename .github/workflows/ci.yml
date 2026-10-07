@@ -467,7 +467,7 @@ jobs:
             nx-${{ runner.os }}-
 
       - name: Set up .NET environment
-        run: pnpm run dotnet:env
+        run: pnpm run dotnet:env -- --install-tools
 
       - name: Restore .NET packages
         run: dotnet restore

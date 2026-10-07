@@ -12,7 +12,8 @@ const os = require('os');
 
 // Process command line arguments
 const args = process.argv.slice(2);
-const skipTools = args.includes('--skip-tools');
+const installTools = args.includes('--install-tools');
+const installNxPlugin = args.includes('--install-nx-plugin');
 const persistPath = args.includes('--persist-path');
 
 if (args.includes('--help') || args.includes('-h')) {
@@ -20,7 +21,11 @@ if (args.includes('--help') || args.includes('-h')) {
   console.log('');
   console.log('Options:');
   console.log('  --help, -h     Display this help message');
-  console.log('  --skip-tools   Skip installation of .NET global tools');
+  console.log(
+    '  --install-sdk  Install the .NET SDK if it is missing or has the wrong major version',
+  );
+  console.log('  --install-tools  Install the .NET global tools');
+  console.log('  --install-nx-plugin  Run pnpm add -D @nx/dotnet if the plugin is missing');
   console.log(
     '  --persist-path Write PATH to the user PATH or shell profiles (default: print only)',
   );
@@ -36,8 +41,8 @@ if (args.includes('--help') || args.includes('-h')) {
   console.log('Actions:');
   console.log('  1. Checks for .NET SDK installation');
   console.log('  2. Verifies .NET SDK version');
-  console.log('  3. Installs required .NET global tools (unless --skip-tools is used)');
-  console.log('  4. Ensures NX .NET plugin is installed');
+  console.log('  3. Installs .NET global tools (only with --install-tools)');
+  console.log('  4. Checks the NX .NET plugin (installs it only with --install-nx-plugin)');
   process.exit(0);
 }
 
@@ -214,8 +219,8 @@ const commonTools = [
   },
 ];
 
-// Set this to true if you want to allow automatic installation of .NET SDK
-const AUTO_INSTALL_ENABLED = true; // Can be controlled via environment variable
+// Opt-in: the SDK installer runs only with --install-sdk.
+const AUTO_INSTALL_ENABLED = args.includes('--install-sdk');
 
 // Utility functions
 function executeCommand(command, silent = false) {
@@ -552,7 +557,7 @@ async function setupDotNetEnvironment() {
         }
       } else {
         // If auto-install failed, show manual instructions
-        const majorVersion = requiredDotNetVersion.split('.')[0];
+        const majorVersion = requiredDotNetMajor.split('.')[0];
         console.log(`\nPlease install .NET SDK ${majorVersion}.0 or higher manually:`);
         console.log(`  - Windows: https://dotnet.microsoft.com/download/dotnet/${majorVersion}.0`);
         console.log(
@@ -562,7 +567,7 @@ async function setupDotNetEnvironment() {
       }
     } else if (!AUTO_INSTALL_ENABLED) {
       // Auto-install is disabled, show manual instructions
-      const majorVersion = requiredDotNetVersion.split('.')[0];
+      const majorVersion = requiredDotNetMajor.split('.')[0];
       console.log(`\nPlease install .NET SDK ${majorVersion}.0 or higher:`);
       console.log(`  - Windows: https://dotnet.microsoft.com/download/dotnet/${majorVersion}.0`);
       console.log(
@@ -575,8 +580,8 @@ async function setupDotNetEnvironment() {
   // Step 3: Check and install global tools if needed
   console.log('\nChecking for required .NET global tools...');
 
-  if (skipTools) {
-    console.log('Skipping .NET global tools installation (--skip-tools option used).');
+  if (!installTools) {
+    console.log('Skipping .NET global tools installation (use --install-tools to install them).');
   } else {
     try {
       // Install .NET tools directly
@@ -589,7 +594,9 @@ async function setupDotNetEnvironment() {
 
   // Step 4: Check for NX .NET plugin
   console.log('\nChecking for @nx/dotnet NX plugin...');
-  if (!checkNxDotNetPluginInstalled()) {
+  if (!checkNxDotNetPluginInstalled() && !installNxPlugin) {
+    console.log('@nx/dotnet is missing. Run: pnpm add -D @nx/dotnet (or use --install-nx-plugin).');
+  } else if (!checkNxDotNetPluginInstalled()) {
     console.log('Installing @nx/dotnet NX plugin...');
     try {
       executeCommand('pnpm add -D @nx/dotnet');
