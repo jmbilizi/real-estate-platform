@@ -8,7 +8,7 @@ namespace AccountService.Configuration;
 /// Policy and key for the email code engine. Section <c>EmailCodes</c>.
 /// </summary>
 /// <remarks>
-/// <see cref="HmacKey"/> is a secret, supplied as the flat <c>EMAIL_CODE_HMAC_KEY</c> environment
+/// <see cref="HmacKey"/> is a secret, supplied as the flat <c>ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY</c> environment
 /// variable. A 6-digit space falls to a plain hash in microseconds, so the key must stay out of
 /// the database. With no usable key the engine is not configured and refuses every call
 /// (fail closed). Only the Development and Testing environments fall back to a fixed dev key.
@@ -19,7 +19,7 @@ internal sealed class EmailCodeOptions
     public const string SectionName = "EmailCodes";
 
     /// <summary>The environment variable that carries the key.</summary>
-    public const string KeyVariable = "EMAIL_CODE_HMAC_KEY";
+    public const string KeyVariable = "ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY";
 
     /// <summary>The committed secret placeholder. Never a usable key.</summary>
     internal const string PlaceholderKey = "StrongBase64Password";
@@ -61,7 +61,7 @@ internal sealed class EmailCodeOptions
     public TimeSpan PurgeInterval { get; set; } = TimeSpan.FromMinutes(15);
 
     /// <summary>
-    /// Gets or sets the HMAC key. <c>Program</c> sets it from <c>EMAIL_CODE_HMAC_KEY</c> after
+    /// Gets or sets the HMAC key. <c>Program</c> sets it from <c>ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY</c> after
     /// binding and overwrites any value in the section, so a committed key has no effect.
     /// </summary>
     public string HmacKey { get; set; } = string.Empty;

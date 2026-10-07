@@ -75,13 +75,13 @@ internal static class Program
                 }
 
                 // Flat env vars too. The webhook stays closed until both are set (#664).
-                var webhookUser = builder.Configuration["POSTMARK_WEBHOOK_USER"];
+                var webhookUser = builder.Configuration["ACCOUNT_SERVICE_POSTMARK_WEBHOOK_USER"];
                 if (!string.IsNullOrWhiteSpace(webhookUser))
                 {
                     options.WebhookUser = webhookUser;
                 }
 
-                var webhookPassword = builder.Configuration["POSTMARK_WEBHOOK_PASSWORD"];
+                var webhookPassword = builder.Configuration["ACCOUNT_SERVICE_POSTMARK_WEBHOOK_PASSWORD"];
                 if (!string.IsNullOrWhiteSpace(webhookPassword))
                 {
                     options.WebhookPassword = webhookPassword;
@@ -241,7 +241,7 @@ internal static class Program
         if (!app.Services.GetRequiredService<IOptions<EmailCodeOptions>>().Value.IsConfigured)
         {
 #pragma warning disable CA1848 // LoggerMessage delegates: matches the service's other log sites.
-            app.Logger.LogWarning(EmailCodesNotConfiguredEvent, "Email codes are not configured: no usable EMAIL_CODE_HMAC_KEY. Every call is refused.");
+            app.Logger.LogWarning(EmailCodesNotConfiguredEvent, "Email codes are not configured: no usable ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY. Every call is refused.");
 #pragma warning restore CA1848
         }
 

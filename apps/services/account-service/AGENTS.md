@@ -114,8 +114,9 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   tries and lock per email and purpose). The throttle row is separate so a resend does not reset it.
 - Resend caps count `EmailCodes` rows. The purge keeps a spent row for 24 hours for that reason.
 - Limits return a result with `RetryAfterSeconds`, never an exception. A caller maps them to `429`.
-- The HMAC key is `EMAIL_CODE_HMAC_KEY` (flat env var). With no usable key, every call returns
-  `Unavailable` and startup logs event `1380`. Only Development and Testing use a fixed dev key.
+- The HMAC key is `ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY` (flat env var). With no usable key, every
+  call returns `Unavailable` and startup logs event `1380`. Only Development and Testing use a fixed
+  dev key.
 - The code message logs by `EmailKind` only. `PostmarkDeliveryQueue` redacts the recipient for it.
 - A striped in-process lock serializes one email and purpose. Two replicas can still race.
 
@@ -148,7 +149,7 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   for a code can drop it with `/change-email`, or lock it with five wrong tries. Both are bounded by
   the limits above. After a lock, `/start` answers `429` for a new address and for an existing one
   alike. In every deployed environment the engine answers `503` until #669 supplies
-  `EMAIL_CODE_HMAC_KEY`.
+  `ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY`.
 - Email key: trim and upper case only. Plus tags and dots stay (`Helpers/SignUpEmail.cs`).
 - Tests: `Tests/Integration/SignUpEndpointTests.cs`. Gateway: `AccountSignUpRoutesTests`.
 
@@ -290,9 +291,10 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   `EmailSuppressionService` is the only writer. Every call is idempotent.
 - `POST /account/webhooks/postmark` (`Routes/PostmarkWebhook.cs`) takes the Bounce (`Inactive: true`
   only), SpamComplaint and SubscriptionChange events. `SuppressSending: false` removes the row. It
-  needs HTTP Basic credentials: `POSTMARK_WEBHOOK_USER` and `POSTMARK_WEBHOOK_PASSWORD`. Without
-  both, every call gets `401`. An event on another message stream is ignored. An event the service
-  does not act on gets `200`, so Postmark does not retry it.
+  needs HTTP Basic credentials: `ACCOUNT_SERVICE_POSTMARK_WEBHOOK_USER` and
+  `ACCOUNT_SERVICE_POSTMARK_WEBHOOK_PASSWORD`. Without both, every call gets `401`. An event on
+  another message stream is ignored. An event the service does not act on gets `200`, so Postmark
+  does not retry it.
 - The path is not under `/internal` on purpose. The gateway forbids a route to `/internal`
   (`InternalRoutesNotExposedTests`). Postmark reaches the endpoint through its own gateway route
   (`account-service-routes.json`, 120 per minute). Basic auth is the gate.
