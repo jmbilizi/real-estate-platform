@@ -10,6 +10,12 @@ export default function AuthModalWrapper() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
+  // `?modal=login&mode=forgot` opens the sign-in modal on the reset screen (#662).
+  const initialMode =
+    searchParams.get('modal') === 'login' && searchParams.get('mode') === 'forgot'
+      ? 'forgot'
+      : 'login';
+
   // Modal's open state — set to false to play exit animation, then route away
   const [open, setOpen] = useState(true);
 
@@ -27,12 +33,14 @@ export default function AuthModalWrapper() {
   const handleClose = () => {
     const params = new URLSearchParams(searchParams.toString());
     params.delete('modal');
+    params.delete('mode');
     navigate(buildUrl(params));
   };
 
   const handleSuccess = () => {
     const params = new URLSearchParams(searchParams.toString());
     params.delete('modal');
+    params.delete('mode');
     navigate(buildUrl(params));
   };
 
@@ -47,7 +55,7 @@ export default function AuthModalWrapper() {
       noPadding
     >
       <div className="min-h-full flex items-center justify-center sm:block">
-        <AuthForm variant="modal" onSuccess={handleSuccess} />
+        <AuthForm variant="modal" initialMode={initialMode} onSuccess={handleSuccess} />
       </div>
     </Modal>
   );

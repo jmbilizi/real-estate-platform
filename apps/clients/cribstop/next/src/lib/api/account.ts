@@ -196,6 +196,29 @@ export async function confirmPasswordReset(payload: {
   }
 }
 
+/** The outcome of a used "This wasn't me" link. The `invalid` status covers an unknown, used and expired token alike. */
+export type SecureAccountOutcome =
+  | { status: 'secured'; emailRestored: boolean }
+  | { status: 'invalid' }
+  | { status: 'failed' };
+
+/** Sends the token from the notice link. The token is the proof: it is sent once, in the body. */
+export async function secureAccount(token: string): Promise<SecureAccountOutcome> {
+  const res = await fetch('/api/account/secure', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  }).catch(() => null);
+
+  if (!res) return { status: 'failed' };
+  if (res.ok) {
+    const body = await res.json().catch(() => null);
+    return { status: 'secured', emailRestored: body?.emailRestored === true };
+  }
+  if (res.status === 400) return { status: 'invalid' };
+  return { status: 'failed' };
+}
+
 /** A 503 from the email-code endpoints: codes cannot be sent or checked right now. */
 export class CodesUnavailableError extends Error {
   constructor() {

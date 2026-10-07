@@ -10,6 +10,7 @@ const FORWARDED_FIELDS = [
   'error',
   'attemptsLeft',
   'errors',
+  'emailRestored',
 ] as const;
 
 export function stringField(body: unknown, key: string): string {
