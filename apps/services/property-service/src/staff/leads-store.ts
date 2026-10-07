@@ -1,5 +1,6 @@
 import {
   DUPLICATE_WINDOW_DAYS,
+  type StaffLeadAssignment,
   type StaffLeadDetail,
   type StaffLeadListItem,
   type StaffLeadNote,
@@ -215,7 +216,7 @@ export async function readLeadDetail(
     [leadId, actor.accountId, actor.role],
   );
 
-  const [history, notes, duplicates] = await Promise.all([
+  const [history, notes, duplicates, assignments] = await Promise.all([
     pool.query<{
       id: string;
       from_status: StaffLeadDetail['status'] | null;
@@ -223,9 +224,11 @@ export async function readLeadDetail(
       actor_account_id: string | null;
       actor_role: string;
       note: string | null;
+      agent_profile_id: string | null;
       created_at: Date;
     }>(
-      `SELECT id, from_status, to_status, actor_account_id, actor_role, note, created_at
+      `SELECT id, from_status, to_status, actor_account_id, actor_role, note, agent_profile_id,
+              created_at
          FROM lead_status_events WHERE lead_id = $1 ORDER BY created_at, id`,
       [leadId],
     ),
@@ -244,6 +247,22 @@ export async function readLeadDetail(
           [leadId],
         )
       : Promise.resolve({ rows: [] as { id: string }[] }),
+    pool.query<{
+      id: string;
+      agent_profile_id: string;
+      agent_display_name: string;
+      assigned_by_account_id: string;
+      assigned_at: Date;
+      ended_at: Date | null;
+      end_reason: StaffLeadAssignment['endReason'];
+    }>(
+      `SELECT a.id, a.agent_profile_id, p.display_name AS agent_display_name,
+              a.assigned_by_account_id, a.assigned_at, a.ended_at, a.end_reason
+         FROM lead_assignments a
+         JOIN agent_profiles p ON p.id = a.agent_profile_id
+        WHERE a.lead_id = $1 ORDER BY a.assigned_at, a.id`,
+      [leadId],
+    ),
   ]);
 
   return {
@@ -279,9 +298,19 @@ export async function readLeadDetail(
       actorAccountId: h.actor_account_id,
       actorRole: h.actor_role,
       note: h.note,
+      agentProfileId: h.agent_profile_id,
       createdAt: h.created_at.toISOString(),
     })),
     notes: notes.rows.map(toNote),
+    assignments: assignments.rows.map((a) => ({
+      id: a.id,
+      agentProfileId: a.agent_profile_id,
+      agentDisplayName: a.agent_display_name,
+      assignedByAccountId: a.assigned_by_account_id,
+      assignedAt: a.assigned_at.toISOString(),
+      endedAt: a.ended_at?.toISOString() ?? null,
+      endReason: a.end_reason,
+    })),
   };
 }
 

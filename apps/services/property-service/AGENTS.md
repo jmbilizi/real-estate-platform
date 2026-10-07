@@ -744,3 +744,20 @@ the Property API document. Never publish a second document.
   expressions in `leads-store.ts`. Change both together.
 - `lead_notes` and `lead_access_audit` are append-only by trigger.
 - The e2e stub carries roles in the bearer token: `bearerFor(accountId, ['Admin'])`.
+
+## Agent directory and assignment (#634)
+
+- `src/staff/agents-routes.ts` serves `/staff/agents` (list, create) and `/staff/agents/:id` (read,
+  patch). `Admin` and `SuperAdmin` write. `Moderator` also reads. Deactivate with
+  `PATCH { active: false }`. Open assignments stay.
+- Create and reactivate check the `Agent` role through account-service `GET /account/{id}/roles`
+  with the caller credentials (`agent-role-check.ts`). A Moderator cannot ask account-service, so
+  assign trusts the profile and its `active` flag. Remove a role, then deactivate the profile.
+- `POST /staff/leads/:id/assign` takes `{ agentProfileId }` and nothing else. No reason field.
+  Allowed from `verified` only. Only the licence state and the listing state decide a match
+  (`checkAgentForLead`). Licence states are two-letter codes held as data. No market is hard-coded.
+- `POST /staff/leads/:id/unassign` takes a required note. Reassign is an unassign, then an assign.
+- Both run through `changeLeadStatus`. Its `precheck` runs behind the lead row lock. Any return to
+  `verified` ends the open `lead_assignments` row. `uq_lead_assignments_one_open` allows one open
+  row per lead. History rows are never deleted.
+- The e2e stub answers the role check from `setAccountRoles(accountId, roles)`.

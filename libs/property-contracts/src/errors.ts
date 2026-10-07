@@ -141,3 +141,20 @@ export const INVALID_TRANSITION_BODY = Object.freeze({
     message: 'The lead cannot move to that status from its current status.',
   } as const),
 } as const);
+
+const conflict = (message: string) =>
+  Object.freeze({ error: Object.freeze({ code: 'conflict', message } as const) } as const);
+
+/** The 404 body for an agent profile route (#634). */
+export const AGENT_NOT_FOUND_BODY = Object.freeze({
+  error: Object.freeze({ code: 'not_found', message: 'Agent not found.' } as const),
+} as const);
+
+/** 409 bodies of the agent directory and the assign routes (#634). */
+export const AGENT_INACTIVE_BODY = conflict('The agent is not active.');
+export const AGENT_NOT_LICENSED_BODY = conflict(
+  'The agent is not licensed in the state of the listing.',
+);
+export const AGENT_ROLE_REQUIRED_BODY = conflict('The account does not hold the Agent role.');
+export const AGENT_EXISTS_BODY = conflict('This account already has an agent profile.');
+export const LEAD_NOT_ASSIGNED_BODY = conflict('The lead has no open assignment.');

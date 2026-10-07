@@ -239,7 +239,7 @@ describe('POST /staff/leads/:id/transition', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ id: LEAD, from: 'new', to: 'verified' });
     const event = pool.calls.find((c) => c.sql.includes('INSERT INTO lead_status_events'));
-    expect(event?.params).toEqual([LEAD, 'new', 'verified', ACCOUNT, ROLE.Moderator, null]);
+    expect(event?.params).toEqual([LEAD, 'new', 'verified', ACCOUNT, ROLE.Moderator, null, null]);
   });
 
   it.each([['spam'], ['rejected']])('requires a note for %s', async (to) => {

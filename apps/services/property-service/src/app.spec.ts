@@ -879,10 +879,14 @@ describe('GET /openapi.json', () => {
       '/properties/{id}/page',
       '/saved-homes',
       '/saved-homes/{id}',
+      '/staff/agents',
+      '/staff/agents/{id}',
       '/staff/leads',
       '/staff/leads/{id}',
+      '/staff/leads/{id}/assign',
       '/staff/leads/{id}/notes',
       '/staff/leads/{id}/transition',
+      '/staff/leads/{id}/unassign',
       '/staff/me',
     ]);
   });

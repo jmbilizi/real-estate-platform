@@ -17,6 +17,8 @@ import { createSavedStateReader } from './saved/identity';
 import { createSavedHomesRouter } from './saved/routes';
 import { createStaffRouter } from './staff/routes';
 import { createStaffLeadsRouter } from './staff/leads-routes';
+import { createStaffAgentsRouter } from './staff/agents-routes';
+import { type AgentRoleChecker, createHttpAgentRoleChecker } from './staff/agent-role-check';
 import type { TransactionalPool } from './inquiries/lead-status-write';
 import type { Queryable } from './inquiries/write';
 import {
@@ -85,6 +87,19 @@ function defaultIntrospectionClient(): IntrospectionClient {
   });
 }
 
+/** Builds the real Agent-role check (#634). It reaches the same account-service as introspection. */
+function defaultAgentRoleChecker(): AgentRoleChecker {
+  const introspectUrl =
+    process.env.ACCOUNT_SERVICE_INTROSPECT_URL ?? DEFAULT_ACCOUNT_SERVICE_INTROSPECT_URL;
+  return createHttpAgentRoleChecker({
+    baseUrl: new URL(introspectUrl).origin,
+    timeoutMs: envInt(
+      'ACCOUNT_SERVICE_INTROSPECT_TIMEOUT_MS',
+      DEFAULT_ACCOUNT_SERVICE_INTROSPECT_TIMEOUT_MS,
+    ),
+  });
+}
+
 /** Builds the real rate limiter from configuration (#131). Limits are configuration, per the
  *  ticket's own acceptance criterion, so they are env-driven rather than constants. */
 function defaultRateLimiter(): RateLimiter {
@@ -114,6 +129,8 @@ export interface CreateAppOptions {
   pool?: ReadPool;
   /** Injected so tests can exercise the inquiry endpoint without a real account-service (#131). */
   introspection?: IntrospectionClient;
+  /** Injected so tests can exercise the agent directory without account-service (#634). */
+  agentRoles?: AgentRoleChecker;
   /** Injected so tests can exercise rate limiting deterministically (#131). */
   rateLimiter?: RateLimiter;
   /**
@@ -201,6 +218,13 @@ export function createApp(options: CreateAppOptions = {}): Express {
     createStaffLeadsRouter({
       pool: pool as unknown as Queryable & TransactionalPool,
       introspection,
+    }),
+  );
+  app.use(
+    createStaffAgentsRouter({
+      pool: pool as unknown as Queryable,
+      introspection,
+      agentRoles: options.agentRoles ?? defaultAgentRoleChecker(),
     }),
   );
   app.use(createBrightSyncAdminRouter(pool as unknown as SyncQueryable, options.adminToken));
