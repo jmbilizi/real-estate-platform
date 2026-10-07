@@ -74,9 +74,7 @@ function exportDotNetPaths() {
   if (isWindows) {
     console.log('Windows: Settings > "Edit environment variables for your account" > Path > New.');
   } else {
-    console.log(
-      `Or run: echo 'export PATH="$HOME/.dotnet:$HOME/.dotnet/tools:$PATH"' >> ~/.profile`,
-    );
+    console.log('Or add to ~/.profile: export PATH="$HOME/.dotnet:$HOME/.dotnet/tools:$PATH"');
   }
 }
 
@@ -144,26 +142,6 @@ function checkNxDotNetPluginInstalled() {
     return false;
   }
 }
-
-// Function to list installed .NET SDKs
-function listInstalledDotNetSdks() {
-  try {
-    console.log('\nChecking installed .NET SDKs...');
-    const output = executeCommand('dotnet --list-sdks', true);
-    if (output) {
-      const sdks = output.toString().trim().split('\n');
-      if (sdks.length > 0 && sdks[0] !== '') {
-        console.log('Installed .NET SDKs:');
-        sdks.forEach((sdk) => console.log(`  ${sdk}`));
-        return sdks.map((sdk) => sdk.split(' ')[0].trim()); // Extract just the version numbers
-      }
-    }
-    return [];
-  } catch {
-    return [];
-  }
-}
-
 // Functions for .NET tools installation
 function installTool(tool) {
   console.log(`Installing ${tool.name}...`);
