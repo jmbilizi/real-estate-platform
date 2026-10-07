@@ -302,6 +302,19 @@ namespace AccountService.Tests.Integration
         }
 
         [Fact]
+        public async Task SuppressedAddress_InsideTheSendCooldown_StillGetsUndeliverable_OnIdentify()
+        {
+            using var factory = new WebhookFactory();
+            using var client = factory.CreateClient();
+            (await client.PostAsJsonAsync("/account/identify", new { email = Address })).StatusCode.Should().Be(HttpStatusCode.OK);
+            await Post(client, HardBounce(Address));
+
+            var response = await client.PostAsJsonAsync("/account/identify", new { email = Address });
+
+            response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        }
+
+        [Fact]
         public async Task SuppressedAddress_StaysNeutral_OnPasswordResetStart()
         {
             using var factory = new WebhookFactory();

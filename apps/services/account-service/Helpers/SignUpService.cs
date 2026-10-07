@@ -360,19 +360,15 @@ internal sealed class SignUpService(
         }
     }
 
-    private SignUpResult WrongOrLocked(string key)
-    {
-        var settings = codeOptions.Value;
-        return limiter.TryDecoyWrongTry(key, settings.MaxWrongTries, settings.LockDuration, settings.FailureWindow, out var attemptsLeft, out var retryAfter)
-            ? new SignUpResult(SignUpStatus.WrongCode, AttemptsLeft: attemptsLeft)
-            : new SignUpResult(SignUpStatus.Limited, RetryAfterSeconds: EmailCodeService.CeilSeconds(retryAfter));
-    }
-
     /// <summary>
-    /// A suppressed address, or a domain with no way to receive mail. Every address gets the same
-    /// check, so the answer shows nothing about accounts. A DNS timeout or error counts as deliverable.
+    /// Checks for a suppressed address, or a domain with no way to receive mail. Every address gets the
+    /// same check, so the answer shows nothing about accounts. A DNS timeout or error counts as deliverable.
     /// </summary>
-    private async Task<bool> IsUndeliverableAsync(string key, string entered, CancellationToken cancellationToken)
+    /// <param name="key">The normalized address.</param>
+    /// <param name="entered">The trimmed address as typed.</param>
+    /// <param name="cancellationToken">A token to cancel the call.</param>
+    /// <returns><see langword="true"/> when no code can reach the address.</returns>
+    internal async Task<bool> IsUndeliverableAsync(string key, string entered, CancellationToken cancellationToken = default)
     {
         if (await suppressions.IsSuppressedAsync(key, cancellationToken).ConfigureAwait(false))
         {
@@ -383,6 +379,14 @@ internal sealed class SignUpService(
             .ResolveAsync(entered[(entered.LastIndexOf('@') + 1)..], cancellationToken)
             .ConfigureAwait(false);
         return status == MailDomainStatus.CannotReceiveMail;
+    }
+
+    private SignUpResult WrongOrLocked(string key)
+    {
+        var settings = codeOptions.Value;
+        return limiter.TryDecoyWrongTry(key, settings.MaxWrongTries, settings.LockDuration, settings.FailureWindow, out var attemptsLeft, out var retryAfter)
+            ? new SignUpResult(SignUpStatus.WrongCode, AttemptsLeft: attemptsLeft)
+            : new SignUpResult(SignUpStatus.Limited, RetryAfterSeconds: EmailCodeService.CeilSeconds(retryAfter));
     }
 
     private DateTime Now() => timeProvider.GetUtcNow().UtcDateTime;
