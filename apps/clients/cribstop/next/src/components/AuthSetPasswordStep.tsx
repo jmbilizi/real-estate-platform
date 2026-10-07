@@ -5,6 +5,7 @@ import { Eye, EyeOff } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import {
   CodesUnavailableError,
+  completePasswordReset,
   DEFAULT_PASSWORD_MIN_LENGTH,
   getPasswordMinLength,
   PasswordRejectionCode,
@@ -13,7 +14,7 @@ import {
 
 export type SetPasswordFailure = 'invalid_proof' | 'email_unavailable';
 
-function rejectionCopy(codes: PasswordRejectionCode[], minLength: number): string {
+export function rejectionCopy(codes: PasswordRejectionCode[], minLength: number): string {
   if (codes.includes('breached')) return 'That password has leaked before. Pick another.';
   if (codes.includes('too_short')) {
     return `That password is too short. Use ${minLength} or more characters.`;
@@ -22,18 +23,27 @@ function rejectionCopy(codes: PasswordRejectionCode[], minLength: number): strin
   return 'That password did not work. Pick another.';
 }
 
-/** The last step of sign-up. It creates the account and signs the consumer in. */
+/**
+ * The last step of sign-up and of password reset. Sign-up creates the account and signs the
+ * consumer in. Reset sets the password and signs nobody in.
+ */
 export default function AuthSetPasswordStep({
   email,
-  signupProof,
-  onSignedIn,
+  flow = 'signup',
+  proof,
+  onDone,
   onFailed,
 }: {
   email: string;
-  signupProof: string;
-  onSignedIn: () => void;
+  flow?: 'signup' | 'reset';
+  proof: string;
+  onDone: () => void;
   onFailed: (reason: SetPasswordFailure) => void;
 }) {
+  const reset = flow === 'reset';
+  const unavailableCopy = reset
+    ? 'Password reset is unavailable right now. Try again soon.'
+    : 'Sign-up is unavailable right now. Try again soon.';
   const { completeSignup } = useApp();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -63,9 +73,11 @@ export default function AuthSetPasswordStep({
     setError(null);
     setIsSubmitting(true);
     try {
-      const outcome = await completeSignup(email, signupProof, password);
+      const outcome = reset
+        ? await completePasswordReset({ email, resetProof: proof, newPassword: password })
+        : await completeSignup(email, proof, password);
       if (outcome.ok) {
-        onSignedIn();
+        onDone();
         return;
       }
       if (outcome.reason === 'password_rejected') {
@@ -80,9 +92,13 @@ export default function AuthSetPasswordStep({
       if (err instanceof RateLimitError) {
         setError(`Too many tries. Try again in ${err.retryAfterSeconds} seconds.`);
       } else if (err instanceof CodesUnavailableError) {
-        setError('Sign-up is unavailable right now. Try again soon.');
+        setError(unavailableCopy);
       } else {
-        setError('We could not create your account. Try again.');
+        setError(
+          reset
+            ? 'We could not update your password. Try again.'
+            : 'We could not create your account. Try again.',
+        );
       }
     } finally {
       setIsSubmitting(false);
@@ -98,7 +114,7 @@ export default function AuthSetPasswordStep({
           htmlFor="auth-new-password"
           className="mb-1 block text-sm font-medium text-ink-muted"
         >
-          Set your password
+          {reset ? 'New password' : 'Set your password'}
         </label>
         <div className="relative">
           <input
@@ -164,7 +180,7 @@ export default function AuthSetPasswordStep({
         disabled={isSubmitting || !longEnough || !matches}
         aria-busy={isSubmitting}
       >
-        {isSubmitting ? 'Please wait...' : 'Create account'}
+        {isSubmitting ? 'Please wait...' : reset ? 'Update password' : 'Create account'}
       </button>
     </form>
   );

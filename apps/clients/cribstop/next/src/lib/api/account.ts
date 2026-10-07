@@ -155,22 +155,6 @@ function retryAfterSeconds(res: Response): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 60;
 }
 
-/**
- * Requests a password reset link. The response never reveals whether the address has an account
- * (account-service's own non-enumeration guarantee). Callers must show the same neutral
- * confirmation for every email, and only distinguish an actual failed request.
- */
-export async function requestPasswordReset(email: string): Promise<void> {
-  const res = await fetch('/api/account/forgot-password', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
-  });
-
-  if (res.status === 429) throw new RateLimitError(retryAfterSeconds(res));
-  if (!res.ok) throw new Error('Unable to send the request');
-}
-
 /** Redeems a password reset code. `code` and `newPassword` map to Identity's `resetCode`/`newPassword`. */
 export async function confirmPasswordReset(payload: {
   email: string;
@@ -298,6 +282,13 @@ export async function changeSignupEmail(oldEmail: string, newEmail: string): Pro
 
 export type PasswordRejectionCode = 'too_short' | 'too_long' | 'breached';
 
+function knownRejections(errors: unknown): PasswordRejectionCode[] {
+  const known: PasswordRejectionCode[] = ['too_short', 'too_long', 'breached'];
+  return Array.isArray(errors)
+    ? errors.filter((e): e is PasswordRejectionCode => known.includes(e as PasswordRejectionCode))
+    : [];
+}
+
 export type CompleteSignupOutcome =
   | { ok: true; session: LoginResponse }
   | { ok: false; reason: 'invalid_proof' }
@@ -316,15 +307,139 @@ export async function completeSignup(payload: {
   if (res.status === 401) return { ok: false, reason: 'invalid_proof' };
   if (res.status === 409) return { ok: false, reason: 'email_unavailable' };
   if (res.status === 400 && body?.error === 'password_rejected') {
-    const known: PasswordRejectionCode[] = ['too_short', 'too_long', 'breached'];
-    const errors = Array.isArray(body.errors)
-      ? (body.errors as unknown[]).filter((e): e is PasswordRejectionCode =>
-          known.includes(e as PasswordRejectionCode),
-        )
-      : [];
-    return { ok: false, reason: 'password_rejected', errors };
+    return { ok: false, reason: 'password_rejected', errors: knownRejections(body.errors) };
   }
   throw new Error('Unable to create the account');
+}
+
+export type VerifyResetResult =
+  | { ok: true; resetProof: string }
+  | { ok: false; attemptsLeft: number | null };
+
+/** Starts a reset. The answer is the same for every address, so callers show neutral copy. */
+export async function startPasswordReset(email: string): Promise<CodeTiming> {
+  const res = await postJson('/api/account/password/reset/start', { email });
+  if (!res.ok) throw new Error('Unable to send the code');
+  return toTiming(await res.json().catch(() => null));
+}
+
+/** Checks the reset code. A wrong code returns ok: false. A lock throws RateLimitError. */
+export async function verifyResetCode(email: string, code: string): Promise<VerifyResetResult> {
+  const res = await postJson('/api/account/password/reset/verify', { email, code });
+  const body = await res.json().catch(() => null);
+  if (res.ok && typeof body?.resetProof === 'string') {
+    return { ok: true, resetProof: body.resetProof };
+  }
+  if (res.status === 400 && body?.error === 'invalid_code') {
+    const left = body?.attemptsLeft;
+    return { ok: false, attemptsLeft: typeof left === 'number' ? left : null };
+  }
+  throw new Error('Unable to check the code');
+}
+
+export type CompleteResetOutcome =
+  | { ok: true }
+  | { ok: false; reason: 'invalid_proof' }
+  | { ok: false; reason: 'password_rejected'; errors: PasswordRejectionCode[] };
+
+/** Sets the new password. It signs nobody in: the reset ends every session. */
+export async function completePasswordReset(payload: {
+  email: string;
+  resetProof: string;
+  newPassword: string;
+}): Promise<CompleteResetOutcome> {
+  const res = await postJson('/api/account/password/reset/complete', payload);
+  if (res.ok) return { ok: true };
+  const body = await res.json().catch(() => null);
+  if (res.status === 401) return { ok: false, reason: 'invalid_proof' };
+  if (res.status === 400 && body?.error === 'password_rejected') {
+    return { ok: false, reason: 'password_rejected', errors: knownRejections(body.errors) };
+  }
+  throw new Error('Unable to reset the password');
+}
+
+export type EmailChangeStartResult =
+  | ({ ok: true; stepUp: 'oldEmailCode' | null } & CodeTiming)
+  | { ok: false; reason: 'invalid_email' }
+  | { ok: false; reason: 'step_up_failed'; attemptsLeft: number | null };
+
+/**
+ * Starts an email change. With no `currentPassword` and no `oldEmailCode`, the server sends a
+ * code to the current address and answers `stepUp: 'oldEmailCode'`. The answer is the same for a
+ * taken and a free address. A `401` or a `403` (no cookie or bearer session) throws AuthError.
+ */
+export async function startEmailChange(payload: {
+  newEmail: string;
+  currentPassword?: string;
+  oldEmailCode?: string;
+}): Promise<EmailChangeStartResult> {
+  const res = await postJson('/api/account/email/change/start', payload);
+  const body = await res.json().catch(() => null);
+  if (res.ok) {
+    return {
+      ok: true,
+      stepUp: body?.stepUp === 'oldEmailCode' ? 'oldEmailCode' : null,
+      ...toTiming(body),
+    };
+  }
+  if (res.status === 400 && body?.error === 'invalid_email') {
+    return { ok: false, reason: 'invalid_email' };
+  }
+  if (res.status === 403 && body?.error === 'step_up_failed') {
+    const left = body?.attemptsLeft;
+    return {
+      ok: false,
+      reason: 'step_up_failed',
+      attemptsLeft: typeof left === 'number' ? left : null,
+    };
+  }
+  if (res.status === 401 || res.status === 403) throw new AuthError(res.status);
+  throw new Error('Unable to start the email change');
+}
+
+export type EmailChangeVerifyResult =
+  | { ok: true; email: string; accessToken?: string }
+  | { ok: false; attemptsLeft: number | null };
+
+/** Checks the code sent to the new address. Success swaps the email and re-issues the session. */
+export async function verifyEmailChange(
+  code: string,
+  newEmail?: string,
+): Promise<EmailChangeVerifyResult> {
+  const res = await postJson('/api/account/email/change/verify', { code, newEmail });
+  const body = await res.json().catch(() => null);
+  if (res.ok && typeof body?.email === 'string') {
+    return { ok: true, email: body.email, accessToken: body.accessToken };
+  }
+  if (res.status === 400 && body?.error === 'invalid_code') {
+    const left = body?.attemptsLeft;
+    return { ok: false, attemptsLeft: typeof left === 'number' ? left : null };
+  }
+  if (res.status === 401 || res.status === 403) throw new AuthError(res.status);
+  throw new Error('Unable to check the code');
+}
+
+export type ChangePasswordOutcome =
+  | { ok: true; email: string; accessToken?: string }
+  | { ok: false; reason: 'wrong_password' }
+  | { ok: false; reason: 'password_rejected'; errors: PasswordRejectionCode[] };
+
+/** Changes the password. Success ends every other session and re-issues this one. */
+export async function changePassword(payload: {
+  currentPassword: string;
+  newPassword: string;
+}): Promise<ChangePasswordOutcome> {
+  const res = await postJson('/api/account/password/change', payload);
+  const body = await res.json().catch(() => null);
+  if (res.ok) return { ok: true, email: body?.email ?? '', accessToken: body?.accessToken };
+  if (res.status === 400 && body?.error === 'wrong_password') {
+    return { ok: false, reason: 'wrong_password' };
+  }
+  if (res.status === 400 && body?.error === 'password_rejected') {
+    return { ok: false, reason: 'password_rejected', errors: knownRejections(body.errors) };
+  }
+  if (res.status === 401 || res.status === 403) throw new AuthError(res.status);
+  throw new Error('Unable to change the password');
 }
 
 export const DEFAULT_PASSWORD_MIN_LENGTH = 15;

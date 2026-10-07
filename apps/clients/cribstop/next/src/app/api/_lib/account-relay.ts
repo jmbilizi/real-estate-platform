@@ -4,9 +4,11 @@ import { fetchGateway } from '@/app/api/_lib/gateway';
 /** Only these upstream fields reach the browser. */
 const FORWARDED_FIELDS = [
   'next',
+  'stepUp',
   'resendAfterSeconds',
   'expiresInSeconds',
   'signupProof',
+  'resetProof',
   'error',
   'attemptsLeft',
   'errors',
@@ -48,6 +50,7 @@ export async function callGateway(
 
 /** Forwards the status, Retry-After and the allowed body fields of an upstream answer. */
 export async function relay(upstream: Response): Promise<NextResponse> {
+  if (upstream.status === 204) return new NextResponse(null, { status: 204 });
   const body = (await upstream.json().catch(() => null)) as Record<string, unknown> | null;
   const safe: Record<string, unknown> = {};
   for (const key of FORWARDED_FIELDS) {
