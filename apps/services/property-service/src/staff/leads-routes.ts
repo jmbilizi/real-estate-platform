@@ -10,9 +10,11 @@ import {
   LEAD_NOT_FOUND_BODY,
   type LeadStatus,
   MODERATOR_TARGET_STATUSES,
+  STAFF_LEAD_AGING_HOURS_DEFAULT,
   STAFF_LEADS_PAGE_SIZE_DEFAULT,
   STAFF_NOTE_REQUIRED_STATUSES,
   staffLeadAssignRequestSchema,
+  staffLeadMetricsRequestSchema,
   staffLeadNoteRequestSchema,
   staffLeadsRequestSchema,
   staffLeadTransitionRequestSchema,
@@ -22,6 +24,7 @@ import type { IntrospectionClient } from '../inquiries/account-introspection';
 import { changeLeadStatus, type TransactionalPool } from '../inquiries/lead-status-write';
 import type { Queryable } from '../inquiries/write';
 import { checkAgentForLead, hasOpenAssignment, openAssignment } from './agents-store';
+import { readLeadMetrics } from './metrics-store';
 import { addLeadNote, decodeCursor, encodeCursor, listLeads, readLeadDetail } from './leads-store';
 import { hasAnyRole, requireRole, ROLE, staffCallerOf } from './roles';
 import { actingRole, asyncRoute, describeIssues, invalidRequest } from './route-helpers';
@@ -29,6 +32,8 @@ import { actingRole, asyncRoute, describeIssues, invalidRequest } from './route-
 export interface StaffLeadsRouterDeps {
   pool: Queryable & TransactionalPool;
   introspection: IntrospectionClient;
+  /** A lead in `new` or `verified` for longer than this counts as aging. Default 24. */
+  agingHours?: number;
 }
 
 /** The roles that run the lead desk. `SuperAdmin` passes through `Admin` (see `hasAnyRole`). */
@@ -73,6 +78,33 @@ export function createStaffLeadsRouter(deps: StaffLeadsRouterDeps): Router {
       res
         .status(200)
         .json({ results: page.results, nextCursor: page.next ? encodeCursor(page.next) : null });
+    }),
+  );
+
+  // Registered before `/staff/leads/:id`, which would read "metrics" as an id.
+  router.get(
+    '/staff/leads/metrics',
+    guard,
+    asyncRoute(async (req, res) => {
+      const parsed = staffLeadMetricsRequestSchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json(invalidRequest(describeIssues(parsed.error.issues)));
+        return;
+      }
+      const { from, to } = parsed.data;
+      if (from !== undefined && to !== undefined && Date.parse(from) >= Date.parse(to)) {
+        res.status(400).json(invalidRequest('Invalid or unknown field(s): from, to.'));
+        return;
+      }
+      res
+        .status(200)
+        .json(
+          await readLeadMetrics(
+            deps.pool,
+            parsed.data,
+            deps.agingHours ?? STAFF_LEAD_AGING_HOURS_DEFAULT,
+          ),
+        );
     }),
   );
 

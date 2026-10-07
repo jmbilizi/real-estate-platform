@@ -1,5 +1,11 @@
+import LeadMetrics from '@/components/staff/LeadMetrics';
 import LeadsList from '@/components/staff/LeadsList';
 
 export default function AdminLeadsPage() {
-  return <LeadsList />;
+  return (
+    <>
+      <LeadMetrics />
+      <LeadsList />
+    </>
+  );
 }

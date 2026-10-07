@@ -18,7 +18,7 @@ namespace AccountService.Tests.Integration
     public class ApiKeyEndpointTests(AccountServiceFactory factory)
         : IClassFixture<AccountServiceFactory>
     {
-        private const string Password = "Test1234!@#";
+        private const string Password = "Test1234!@#Abcd";
 
         [Fact]
         public async Task PostApiKey_ReturnsCreated_WhenAuthenticated()

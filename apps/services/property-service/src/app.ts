@@ -2,6 +2,7 @@ import express, { type Express, type NextFunction, type Request, type Response }
 import {
   INTERNAL_ERROR_BODY,
   MAP_PIN_CAP_DEFAULT,
+  STAFF_LEAD_AGING_HOURS_DEFAULT,
   toOpenApiDocument,
 } from '@cribstop/property-contracts';
 import { getPool } from './db/pool';
@@ -75,6 +76,12 @@ function envInt(name: string, fallback: number): number {
   }
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+/** `LEAD_AGING_HOURS` as a whole number from 1 to one year. Anything else falls back to the default. */
+function agingHoursFromEnv(): number {
+  const hours = Math.floor(envInt('LEAD_AGING_HOURS', STAFF_LEAD_AGING_HOURS_DEFAULT));
+  return hours >= 1 && hours <= 8760 ? hours : STAFF_LEAD_AGING_HOURS_DEFAULT;
 }
 
 /** Builds the real introspection client from configuration (#131). */
@@ -219,6 +226,7 @@ export function createApp(options: CreateAppOptions = {}): Express {
     createStaffLeadsRouter({
       pool: pool as unknown as Queryable & TransactionalPool,
       introspection,
+      agingHours: agingHoursFromEnv(),
     }),
   );
   app.use(

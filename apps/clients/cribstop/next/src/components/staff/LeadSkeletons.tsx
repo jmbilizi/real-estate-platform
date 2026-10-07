@@ -9,6 +9,44 @@ function Bar({ className = '' }: { className?: string }) {
   return <span className={`${FILL} h-4 ${className}`} />;
 }
 
+/** The tiles and chip row of `LeadMetrics`. Same grid as the loaded strip. */
+export function LeadMetricsSkeleton() {
+  return (
+    <div aria-hidden="true" className="space-y-3" data-testid="lead-metrics-skeleton">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 layout:grid-cols-5">
+        {Array.from({ length: 5 }, (_, i) => (
+          <div
+            key={i}
+            className={`rounded-lg border border-surface-border bg-white p-4 ${i === 4 ? 'col-span-2 sm:col-span-1' : ''}`}
+          >
+            <Bar className="w-1/2" />
+            <span className={`${FILL} mt-1 h-8 w-16`} />
+            <Bar className="mt-1 w-3/4" />
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {Array.from({ length: 6 }, (_, i) => (
+          <span key={i} className={`${FILL} h-6 w-20 rounded-full`} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** The whole strip, header included, for the route's loading state. */
+export function LeadMetricsSectionSkeleton() {
+  return (
+    <div className="mb-6">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <Bar className="w-28" />
+        <span className={`${FILL} h-11 w-32 rounded-md`} />
+      </div>
+      <LeadMetricsSkeleton />
+    </div>
+  );
+}
+
 export function LeadsListSkeleton({ rows = 6 }: { rows?: number }) {
   return (
     <ul
@@ -61,6 +99,48 @@ export function LeadDetailSkeleton() {
       <SectionSkeleton lines={4} />
       <SectionSkeleton lines={3} />
       <SectionSkeleton lines={3} />
+      <SectionSkeleton lines={2} />
     </div>
+  );
+}
+
+/** The radio rows of the assign picker. Same 44px row as the loaded list. */
+export function AgentPickerSkeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <ul aria-hidden="true" className="space-y-2" data-testid="agent-picker-skeleton">
+      {Array.from({ length: rows }, (_, i) => (
+        <li
+          key={i}
+          className="flex min-h-11 items-center gap-3 rounded-md border border-surface-border px-3 py-2"
+        >
+          <span className={`${FILL} size-5 rounded-full`} />
+          <span className="flex-1 space-y-2">
+            <Bar className="w-1/2" />
+            <Bar className="h-3 w-1/3" />
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Same card shape and breakpoint as `AgentsList`: stacked cards on a phone, a row on a wide screen. */
+export function AgentsListSkeleton({ rows = 5 }: { rows?: number }) {
+  return (
+    <ul aria-hidden="true" className="space-y-3" data-testid="agents-skeleton">
+      {Array.from({ length: rows }, (_, i) => (
+        <li
+          key={i}
+          className="rounded-lg border border-surface-border bg-white p-4 layout:flex layout:items-center layout:gap-4"
+        >
+          <div className="min-w-0 flex-1 space-y-2">
+            <Bar className="w-1/2" />
+            <Bar className="h-3 w-1/3" />
+          </div>
+          <span className={`${FILL} mt-3 block h-5 w-16 rounded-full layout:mt-0`} />
+          <span className={`${FILL} mt-3 block h-11 w-full rounded-full layout:mt-0 layout:w-40`} />
+        </li>
+      ))}
+    </ul>
   );
 }

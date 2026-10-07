@@ -378,6 +378,31 @@
       }
     },
     {
+      "UpstreamPathTemplate": "/property/staff/leads/metrics",
+      "UpstreamHttpMethod": ["GET"],
+      "DownstreamPathTemplate": "/staff/leads/metrics",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "property-service-svc",
+          "Port": 3002
+        }
+      ],
+      "Priority": 1,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 60
+      },
+      "QoSOptions": {
+        "Timeout": 5000,
+        "MinimumThroughput": 5,
+        "SamplingDuration": 45000,
+        "BreakDuration": 5000
+      }
+    },
+    {
       "UpstreamPathTemplate": "/property/staff/leads/{id}",
       "UpstreamHttpMethod": ["GET"],
       "DownstreamPathTemplate": "/staff/leads/{id}",

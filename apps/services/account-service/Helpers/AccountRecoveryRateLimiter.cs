@@ -9,8 +9,8 @@ using Microsoft.Extensions.Options;
 namespace AccountService.Helpers;
 
 /// <summary>
-/// Fixed-window request counters for the unauthenticated Identity endpoints — registration, email
-/// confirmation resend, and password reset — keyed by email address and by client address.
+/// Fixed-window request counters for the unauthenticated account endpoints — sign-up, identify, and
+/// password reset — keyed by email address and by client address.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -53,6 +53,18 @@ internal sealed class AccountRecoveryRateLimiter(
     IOptions<AccountRecoveryOptions> options,
     TimeProvider timeProvider) : IDisposable
 {
+    /// <summary>The counter scope of the sign-up steps.</summary>
+    internal const string SignUpScope = "signup";
+
+    /// <summary>The counter scope of the password-reset steps. A reset never spends a sign-up counter.</summary>
+    internal const string PasswordResetScope = "pwreset";
+
+    /// <summary>The counter scope of the email-change steps (#660).</summary>
+    internal const string EmailChangeScope = "emailchange";
+
+    /// <summary>The counter scope of the "This wasn't me" link (#662).</summary>
+    internal const string SecureAccountScope = "secure";
+
     /// <summary>The share of the counter cache dropped when it is full.</summary>
     private const double CompactionShare = 0.1;
 
@@ -74,72 +86,217 @@ internal sealed class AccountRecoveryRateLimiter(
     public void Dispose() => this.cache.Dispose();
 
     /// <summary>
-    /// Counts one password-reset <em>request</em> against both the email and the client-address
-    /// limits.
+    /// Counts one sign-up send (start, resend or the new address of a change) against the client
+    /// address and against the interval, hourly and daily limits for the email.
     /// </summary>
     /// <remarks>
-    /// Both counters are charged independently, even when one already refuses: a caller who has
-    /// exhausted the email budget must not get free, unmetered attempts against the address budget.
+    /// The address counter comes first. A caller who has spent the address budget is refused before
+    /// the call reaches a victim's email counters, so one address cannot drain them.
     /// </remarks>
-    /// <param name="email">The submitted email address; compared case-insensitively.</param>
+    /// <param name="email">The submitted address; compared case-insensitively.</param>
     /// <param name="clientAddress">The client address, or null when unknown.</param>
-    /// <param name="retryAfter">When refused, how long until the refusing counter rolls over.</param>
-    /// <returns><see langword="true"/> when the request may proceed.</returns>
-    internal bool TryRequest(string email, string? clientAddress, out TimeSpan retryAfter)
-    {
-        var settings = options.Value;
-        var key = email.ToUpperInvariant();
-
-        return this.TryConsumePair(
-            $"pwreset:request:email:{key}",
-            $"pwreset:request:addr:{clientAddress ?? "unknown"}",
-            settings.RequestsPerEmail,
-            settings.RequestsPerAddress,
-            settings.RequestWindow,
-            out retryAfter);
-    }
+    /// <param name="cooldown">The minimum time between two sends to one email.</param>
+    /// <param name="perHour">The sends allowed per email per hour.</param>
+    /// <param name="perDay">The sends allowed per email per 24 hours.</param>
+    /// <param name="retryAfter">When refused, how long until every refusing window rolls over.</param>
+    /// <param name="scope">The counter scope. Sign-up and password reset keep separate counters.</param>
+    /// <returns><see langword="true"/> when the send may proceed.</returns>
+    internal bool TrySignUpSend(
+        string email,
+        string? clientAddress,
+        TimeSpan cooldown,
+        int perHour,
+        int perDay,
+        out TimeSpan retryAfter,
+        string scope = SignUpScope) =>
+        this.TryConsumeAll(out retryAfter, this.SignUpSendCounters(email, clientAddress, cooldown, perHour, perDay, scope));
 
     /// <summary>
-    /// Counts one reset <em>redemption</em> against the client-address limit, bounding token
-    /// guessing.
+    /// Counts one sign-up code check against the client address. The engine locks one email after
+    /// its own wrong tries, so this is the cap on how many emails one address can lock.
     /// </summary>
     /// <param name="clientAddress">The client address, or null when unknown.</param>
     /// <param name="retryAfter">When refused, how long until the window rolls over.</param>
-    /// <returns><see langword="true"/> when the redemption may proceed.</returns>
-    internal bool TryRedemption(string? clientAddress, out TimeSpan retryAfter) =>
+    /// <param name="scope">The counter scope. Sign-up and password reset keep separate counters.</param>
+    /// <returns><see langword="true"/> when the check may proceed.</returns>
+    internal bool TrySignUpVerify(string? clientAddress, out TimeSpan retryAfter, string scope = SignUpScope) =>
         this.TryConsumeAll(
             out retryAfter,
-            new Counter($"pwreset:redeem:addr:{clientAddress ?? "unknown"}", options.Value.RedemptionsPerAddress, options.Value.RequestWindow));
+            new Counter($"{scope}:verify:addr:{clientAddress ?? "unknown"}", options.Value.SignUpVerifiesPerAddress, options.Value.RequestWindow));
 
     /// <summary>
-    /// Counts one confirmation resend against the interval, hourly and daily limits for the address
-    /// and against the client-address limit.
+    /// Counts one sign-up email change against the client address, against the old email, and
+    /// against the send limits for the new email.
     /// </summary>
-    /// <param name="email">The submitted email address; compared case-insensitively.</param>
+    /// <param name="oldEmail">The address being replaced.</param>
+    /// <param name="newEmail">The address that replaces it.</param>
     /// <param name="clientAddress">The client address, or null when unknown.</param>
+    /// <param name="cooldown">The minimum time between two sends to one email.</param>
+    /// <param name="perHour">The sends allowed per email per hour.</param>
+    /// <param name="perDay">The sends allowed per email per 24 hours.</param>
     /// <param name="retryAfter">When refused, how long until every refusing window rolls over.</param>
-    /// <returns><see langword="true"/> when the resend may proceed.</returns>
-    internal bool TryResend(string email, string? clientAddress, out TimeSpan retryAfter)
+    /// <returns><see langword="true"/> when the change may proceed.</returns>
+    internal bool TrySignUpChange(
+        string oldEmail,
+        string newEmail,
+        string? clientAddress,
+        TimeSpan cooldown,
+        int perHour,
+        int perDay,
+        out TimeSpan retryAfter)
+    {
+        var send = this.SignUpSendCounters(newEmail, clientAddress, cooldown, perHour, perDay);
+        var settings = options.Value;
+        return this.TryConsumeAll(
+            out retryAfter,
+            [send[0], new Counter($"signup:change:old:{oldEmail.ToUpperInvariant()}", settings.RequestsPerEmail, settings.RequestWindow), .. send[1..]]);
+    }
+
+    /// <summary>
+    /// Counts one wrong try for an email with no open code. The engine does not count such a try,
+    /// so this stands in for it, and the answer matches an email that has a code: the same tries
+    /// left, a lock that starts at the last try and runs the full duration, and a count that
+    /// restarts after the lock ends or the failure window passes.
+    /// </summary>
+    /// <param name="email">The submitted address; compared case-insensitively.</param>
+    /// <param name="maxTries">The wrong tries that lock an email.</param>
+    /// <param name="lockDuration">How long the lock lasts.</param>
+    /// <param name="failureWindow">How long wrong tries count after the last one.</param>
+    /// <param name="attemptsLeft">When allowed, the tries left before the lock.</param>
+    /// <param name="retryAfter">When locked, how long until the lock ends.</param>
+    /// <param name="scope">The counter scope. Sign-up and password reset keep separate counters.</param>
+    /// <returns><see langword="true"/> while tries are left. <see langword="false"/> at the lock.</returns>
+    internal bool TryDecoyWrongTry(
+        string email,
+        int maxTries,
+        TimeSpan lockDuration,
+        TimeSpan failureWindow,
+        out int attemptsLeft,
+        out TimeSpan retryAfter,
+        string scope = SignUpScope)
+    {
+        var key = DecoyKey(email, scope);
+        var now = timeProvider.GetUtcNow();
+        attemptsLeft = 0;
+
+        lock (this.gate)
+        {
+            this.cache.TryGetValue(key, out DecoyState? state);
+            if (state is not null && state.LockedUntil > now)
+            {
+                retryAfter = state.LockedUntil.Value - now;
+                return false;
+            }
+
+            // A fresh state replaces an ended lock. It also replaces a state the cache dropped.
+            var count = state is not null && state.LockedUntil is null ? state.Count : 0;
+            state = new DecoyState { Count = count + 1 };
+            if (state.Count >= maxTries)
+            {
+                state.LockedUntil = now + lockDuration;
+            }
+
+            if (!this.TryStore(key, state, failureWindow))
+            {
+                // The counter cannot be kept. Fail closed, as the other counters do.
+                retryAfter = lockDuration;
+                return false;
+            }
+
+            if (state.Count >= maxTries)
+            {
+                retryAfter = lockDuration;
+                return false;
+            }
+
+            attemptsLeft = maxTries - state.Count;
+            retryAfter = TimeSpan.Zero;
+            return true;
+        }
+    }
+
+    /// <summary>Reports whether <see cref="TryDecoyWrongTry"/> has locked the email.</summary>
+    /// <param name="email">The submitted address; compared case-insensitively.</param>
+    /// <param name="retryAfter">When locked, how long until the lock ends.</param>
+    /// <param name="scope">The counter scope. Sign-up and password reset keep separate counters.</param>
+    /// <returns><see langword="true"/> when the email is locked.</returns>
+    internal bool IsDecoyLocked(string email, out TimeSpan retryAfter, string scope = SignUpScope)
+    {
+        var now = timeProvider.GetUtcNow();
+        lock (this.gate)
+        {
+            if (this.cache.TryGetValue(DecoyKey(email, scope), out DecoyState? state)
+                && state is not null
+                && state.LockedUntil > now)
+            {
+                retryAfter = state.LockedUntil.Value - now;
+                return true;
+            }
+        }
+
+        retryAfter = TimeSpan.Zero;
+        return false;
+    }
+
+    /// <summary>
+    /// Counts one invalid sign-up address against the client address only. A junk address must not
+    /// spend a counter keyed on the junk.
+    /// </summary>
+    /// <param name="clientAddress">The client address, or null when unknown.</param>
+    /// <param name="retryAfter">When refused, how long until the window rolls over.</param>
+    /// <param name="scope">The counter scope. Sign-up and password reset keep separate counters.</param>
+    /// <returns><see langword="true"/> when the request may proceed.</returns>
+    internal bool TrySignUpInvalid(string? clientAddress, out TimeSpan retryAfter, string scope = SignUpScope) =>
+        this.TryConsumeAll(
+            out retryAfter,
+            new Counter($"{scope}:send:addr:{clientAddress ?? "unknown"}", options.Value.SignUpSendsPerAddress, options.Value.RequestWindow));
+
+    /// <summary>
+    /// Counts one identify call against the client address, then against the email.
+    /// </summary>
+    /// <remarks>
+    /// The address counter comes first, so one address cannot drain a victim's email budget. A null
+    /// email (a malformed address) counts against the address only. A routed call and a refused
+    /// call count the same.
+    /// </remarks>
+    /// <param name="email">The normalised address, or null when malformed.</param>
+    /// <param name="clientAddress">The client address, or null when unknown.</param>
+    /// <param name="retryAfter">When refused, how long until the refusing window rolls over.</param>
+    /// <returns><see langword="true"/> when the call may proceed.</returns>
+    internal bool TryIdentify(string? email, string? clientAddress, out TimeSpan retryAfter)
     {
         var settings = options.Value;
-        var key = email.ToUpperInvariant();
+        var addressCounter = new Counter($"identify:addr:{clientAddress ?? "unknown"}", settings.IdentifiesPerAddress, settings.RequestWindow);
+        if (email is null)
+        {
+            return this.TryConsumeAll(out retryAfter, addressCounter);
+        }
 
         return this.TryConsumeAll(
             out retryAfter,
-            new Counter($"confirm:resend:interval:{key}", 1, settings.ResendMinimumInterval),
-            new Counter($"confirm:resend:hour:{key}", settings.ResendsPerEmailPerHour, TimeSpan.FromHours(1)),
-            new Counter($"confirm:resend:day:{key}", settings.ResendsPerEmailPerDay, TimeSpan.FromHours(24)),
-            new Counter($"confirm:resend:addr:{clientAddress ?? "unknown"}", settings.ResendsPerAddress, settings.RequestWindow));
+            addressCounter,
+            new Counter($"identify:email:{email.ToUpperInvariant()}", settings.IdentifiesPerEmail, settings.RequestWindow));
     }
 
-    /// <summary>Counts one registration attempt against the client-address limit.</summary>
-    /// <param name="clientAddress">The client address, or null when unknown.</param>
-    /// <param name="retryAfter">When refused, how long until the window rolls over.</param>
-    /// <returns><see langword="true"/> when the registration may proceed.</returns>
-    internal bool TryRegistration(string? clientAddress, out TimeSpan retryAfter) =>
-        this.TryConsumeAll(
-            out retryAfter,
-            new Counter($"register:addr:{clientAddress ?? "unknown"}", options.Value.RegistrationsPerAddress, options.Value.RequestWindow));
+    private static string DecoyKey(string email, string scope) => $"{scope}:decoy:{email.ToUpperInvariant()}";
+
+    private Counter[] SignUpSendCounters(
+        string email,
+        string? clientAddress,
+        TimeSpan cooldown,
+        int perHour,
+        int perDay,
+        string scope = SignUpScope)
+    {
+        var key = email.ToUpperInvariant();
+        return
+        [
+            new Counter($"{scope}:send:addr:{clientAddress ?? "unknown"}", options.Value.SignUpSendsPerAddress, options.Value.RequestWindow),
+            new Counter($"{scope}:send:interval:{key}", 1, cooldown),
+            new Counter($"{scope}:send:hour:{key}", perHour, TimeSpan.FromHours(1)),
+            new Counter($"{scope}:send:day:{key}", perDay, TimeSpan.FromHours(24)),
+        ];
+    }
 
     /// <summary>
     /// Consumes one unit from each counter in turn and stops at the first refusal.
@@ -173,29 +330,6 @@ internal sealed class AccountRecoveryRateLimiter(
     }
 
     /// <summary>
-    /// Consumes one unit from an email-keyed counter and one from an address-keyed counter,
-    /// independently.
-    /// </summary>
-    /// <remarks>
-    /// Both counters are always consumed, even when the first one refuses: a caller who has
-    /// exhausted one limit must not get free attempts against the other.
-    /// </remarks>
-    private bool TryConsumePair(
-        string emailKey,
-        string addressKey,
-        int emailLimit,
-        int addressLimit,
-        TimeSpan window,
-        out TimeSpan retryAfter)
-    {
-        var emailAllowed = this.TryConsume(emailKey, emailLimit, window, out var emailRetry);
-        var addressAllowed = this.TryConsume(addressKey, addressLimit, window, out var addressRetry);
-
-        retryAfter = emailAllowed ? addressRetry : emailRetry;
-        return emailAllowed && addressAllowed;
-    }
-
-    /// <summary>
     /// Counts one request against one counter, and refuses when the counter cannot be tracked.
     /// </summary>
     /// <remarks>
@@ -225,9 +359,13 @@ internal sealed class AccountRecoveryRateLimiter(
     /// line is a genuine gap and is noted on the ticket rather than bolted on here.
     /// </para>
     /// </remarks>
-    private bool TryConsume(string key, int limit, TimeSpan window, out TimeSpan retryAfter)
+    private bool TryConsume(string key, int limit, TimeSpan window, out TimeSpan retryAfter) =>
+        this.TryConsumeCounting(key, limit, window, out retryAfter, out _);
+
+    private bool TryConsumeCounting(string key, int limit, TimeSpan window, out TimeSpan retryAfter, out int count)
     {
         var now = timeProvider.GetUtcNow();
+        count = 0;
 
         lock (this.gate)
         {
@@ -259,8 +397,25 @@ internal sealed class AccountRecoveryRateLimiter(
                 return false;
             }
 
+            count = counter.Count;
             return counter.Count <= limit;
         }
+    }
+
+    private bool TryStore(string key, DecoyState state, TimeSpan window)
+    {
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            this.cache.Set(key, state, new MemoryCacheEntryOptions { Size = 1, AbsoluteExpirationRelativeToNow = window });
+            if (this.cache.TryGetValue(key, out DecoyState? stored) && ReferenceEquals(stored, state))
+            {
+                return true;
+            }
+
+            this.cache.Compact(CompactionShare);
+        }
+
+        return false;
     }
 
     private Window GetOrCreate(string key, TimeSpan window, DateTimeOffset now) =>
@@ -275,6 +430,13 @@ internal sealed class AccountRecoveryRateLimiter(
         this.cache.TryGetValue(key, out Window? tracked) && ReferenceEquals(tracked, counter);
 
     private readonly record struct Counter(string Key, int Limit, TimeSpan Window);
+
+    private sealed class DecoyState
+    {
+        internal int Count { get; init; }
+
+        internal DateTimeOffset? LockedUntil { get; set; }
+    }
 
     private sealed class Window(DateTimeOffset expiresAt)
     {

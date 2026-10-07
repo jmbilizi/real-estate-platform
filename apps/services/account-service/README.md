@@ -5,7 +5,7 @@ ASP.NET Core 10 Minimal APIs with ASP.NET Identity.
 
 ## Responsibilities
 
-- User registration, login, and session management
+- Sign-up, sign-in, password reset and email change by email code, and session management
 - Role-based access control (RBAC) with a six-tier role hierarchy
 - Multi-app user tracking — records which front-end apps each user has accessed
 - API key issuance and validation for service-to-service and automation use cases
@@ -134,61 +134,123 @@ without an extra DB call.
 
 ---
 
-## Registration and Email Confirmation
+## Sign-in, Sign-up and Account Recovery by Code
 
-Registration, confirmation and resend are ASP.NET Core Identity's own endpoints:
+Every flow that proves control of a mailbox runs on a 6-digit email code. Only a verified code
+creates an account. `POST /account/signup/complete` is the only endpoint that creates an
+`ApplicationUser`, and it creates it confirmed. No setting turns confirmation on or off. Identity's
+`/register`, `/confirmEmail`, `/resendConfirmationEmail`, `/forgotPassword` and `/resetPassword` do
+not exist: they answer `404` and are absent from OpenAPI. `AccountCreationSurfaceTests` lists every
+endpoint, fails on an unlisted one, and probes each with a registration body.
 
-```
-POST /account/register                 { "email": "...", "password": "..." }   → 200 (empty)
-GET  /account/confirmEmail?userId=&code= → 200 "Thank you for confirming your email."
-POST /account/resendConfirmationEmail  { "email": "..." }                      → 200 (empty)
-```
+| Flow         | Endpoints                                                 | Auth         |
+| ------------ | --------------------------------------------------------- | ------------ |
+| Sign-in step | `POST /account/identify`                                  | Anonymous    |
+| Sign-up      | `POST /account/signup/{start,verify,resend,change-email}` | Anonymous    |
+| Sign-up      | `POST /account/signup/complete`                           | Signup proof |
+| Reset        | `POST /account/password/reset/{start,verify,complete}`    | Anonymous    |
+| Email change | `POST /account/email/change/{start,verify}`               | Session      |
+| Secure       | `POST /account/secure`                                    | Notice token |
 
-`/register` sends a confirmation link through `IEmailSender<ApplicationUser>`. The link points at
-the web app: `AccountRecovery:WebBaseUrl` + `/confirm-email` + `userId` + `code`. The link is valid
-for `AccountRecovery:ConfirmationTokenLifetime` (24h) on a dedicated token provider.
+**Sign-in step.** `identify` takes an email and answers the next step: `password` for a confirmed,
+active account, `code` for every other valid address. Both answers have one JSON shape and run under
+the timing floor.
 
-**Enforcement is off** (`AccountRecovery:RequireConfirmedEmail = false` in every environment). An
-unconfirmed account can sign in. The service logs a warning (event 1364) at startup while this is
-so. #149 turns it on.
+**Sign-up.** `start` sends a code. `verify` checks it and returns a `signupProof`. `complete` takes
+`{ email, signupProof, password }`, creates the account and signs it in. No `ApplicationUser` exists
+before `complete`. A pending sign-up is a `PendingRegistrations` row that expires 30 minutes after
+the last code.
 
-**Mail sends through Postmark.** `PostmarkEmailSender` queues every message onto
-`PostmarkDeliveryQueue` (a background service) and returns immediately, so a send never blocks the
-request that triggered it. The queue retries a transport failure a bounded number of times, then
-logs loudly. If `Postmark:ServerToken` is still the committed placeholder — no real token has been
-substituted for this environment — nothing is sent and that is logged (event 1370) rather than
-attempted. Accepted, rejected, and exhausted-retry outcomes log events 1371/1372/1373, keyed by
-message kind, never the link, the code, or the body.
+**Reset.** `start` sends a code to a confirmed, live account. `verify` returns a `resetProof`.
+`complete` takes `{ email, resetProof, newPassword }`, sets the password, ends every session and
+answers `204`. It signs nobody in.
+
+**Email change.** The caller proves the current password or a code sent to the old address. A code
+goes to the new address. `verify` swaps the address and signs the caller in again.
+
+**Secure account.** Each security notice carries a "This wasn't me" link. `POST /account/secure`
+takes the token, restores the old email after an email change, removes the password and ends every
+session. The owner then sets a password by the reset flow.
+
+### Code design
+
+| Property                            | Value                                                                     |
+| ----------------------------------- | ------------------------------------------------------------------------- |
+| Code                                | 6 digits, 10 minute life, single use                                      |
+| Storage                             | Keyed HMAC of the code (`EMAIL_CODE_HMAC_KEY`), never the code            |
+| Wrong tries                         | 5 wrong tries lock that email and purpose for 15 minutes                  |
+| New code                            | Does not reset the wrong-try count (`EmailCodeThrottles` row is separate) |
+| Resend                              | 60 second cooldown, 5 per hour, 10 per day per email and purpose          |
+| Proof (`signupProof`, `resetProof`) | 32 random bytes, stored as a SHA-256 hash, 15 minute life, single use     |
+| No engine key                       | Every call answers `503`                                                  |
+
+Purposes: `SignUp`, `PasswordReset`, `EmailChangeNew`, `EmailChangeOld`. A refused password gives
+the proof back.
+
+### Same answer for every address
+
+A caller learns nothing about whether an address has an account:
+
+| Request                                     | Response                                    |
+| ------------------------------------------- | ------------------------------------------- |
+| `/login`, wrong password, unknown or locked | `401` `detail: "Failed"`                    |
+| `/signup/start`, address with an account    | Like a new address. The owner gets a notice |
+| `/password/reset/start`, any address        | `200`                                       |
+| `/password/reset/verify`, any address       | The same wrong-code answer and tries left   |
+
+The code engine counts no wrong try without an open code. `AccountRecoveryRateLimiter` counts the
+decoy tries in memory, so the tries left and the lock match. Every code endpoint and `/login` answer
+no faster than `AccountRecovery:MinimumResponseDuration` (250ms).
+
+### Limits
+
+`429` with `Retry-After`, counted before any account lookup in
+`Helpers/AccountRecoveryThrottleFilter.cs`. Client identity is `X-Real-IP`, which the gateway sets.
+Counters are per process. The gateway adds its own per-route limits
+(`apps/api-gateway/Configuration/Routes/account-service-routes.json`).
+
+| Limit                                        | Setting                                    | Default |
+| -------------------------------------------- | ------------------------------------------ | ------- |
+| Code sends per client address per window     | `AccountRecovery:SignUpSendsPerAddress`    | 20      |
+| Code checks per client address per window    | `AccountRecovery:SignUpVerifiesPerAddress` | 20      |
+| Identify calls per client address per window | `AccountRecovery:IdentifiesPerAddress`     | 20      |
+| Identify calls per email per window          | `AccountRecovery:IdentifiesPerEmail`       | 5       |
+| Sign-up address changes per email per window | `AccountRecovery:RequestsPerEmail`         | 5       |
+| Window for the counters                      | `AccountRecovery:RequestWindow`            | 15m     |
+
+Each flow counts in its own scope, so a reset never spends a sign-up counter.
+
+### Session revocation
+
+A reset, a password change, an email change and a secure-account call each rotate the security
+stamp. The stamp ends every cookie session on its next request and every refresh token. It ends
+every bearer access token too, because `BearerStampCheck` validates the stamp on each request. A
+password change or an email change then signs the caller in again as the same kind of session. A
+successful reset also clears any lockout.
+
+### Security events
+
+`AccountSecurityEvents` is append-only, with no FK to the account. Kinds: `PasswordReset`,
+`PasswordChanged`, `EmailChanged`, `SecureAccount`. `ClientAddressHash` is an HMAC of the client
+address under the code key, never the address. After a reset, a password change or an email change,
+`SecurityNoticeService` mails the address the account had before the change. It skips a suppressed
+address and never blocks the action. The notice carries a single-use token (hash stored, 7 day life)
+for the secure-account link: `AccountRecovery:WebBaseUrl` + `AccountRecovery:SecureAccountPath`.
+
+### Delivery
+
+`PostmarkDeliveryQueue` is the `IOutboundEmailSender` every composed message goes through. It is
+also the background service that drains the queue, so a send never blocks the request. The queue
+retries a transport failure a bounded number of times, then logs loudly. If `Postmark:ServerToken`
+is still the committed placeholder, nothing is sent and the queue logs event `1370`. Accepted,
+rejected and exhausted-retry outcomes log events `1371`/`1372`/`1373`, keyed by message kind. The
+code, the link and the message body are never logged. `PostmarkEmailSender` is the
+`IEmailSender<ApplicationUser>` that `MapIdentityApi` requires. Every member throws, because nothing
+sends an Identity link or code.
 
 **Sender identity** (configuration, section `Email`): from
 `Cribstop (Real Broker, LLC) <no-reply@cribstop.com>`, reply-to `contact@cribstop.com`. Every body
 ends with `Email:BrokerageDisclosure` (PRD §6).
-
-**No account enumeration.** The caller learns nothing about whether an address has an account:
-
-| Request                                             | Response                     |
-| --------------------------------------------------- | ---------------------------- |
-| `/register`, address already in use                 | `200` empty, same as success |
-| `/register`, weak password or malformed address     | `400` validation problem     |
-| `/login`, unconfirmed (switch on) or locked out     | `401` `detail: "Failed"`     |
-| `/confirmEmail`, expired, used, tampered or unknown | `401` "Request a new link."  |
-| `/resendConfirmationEmail`, any address             | `200` empty                  |
-
-`/register` and `/resendConfirmationEmail` answer no faster than
-`AccountRecovery:MinimumResponseDuration` (250ms).
-
-**Rate limits** (`429` + `Retry-After`, counted before any account lookup):
-
-| Limit                                       | Setting                                   | Default |
-| ------------------------------------------- | ----------------------------------------- | ------- |
-| Resend interval per address                 | `AccountRecovery:ResendMinimumInterval`   | 60s     |
-| Resends per address per hour                | `AccountRecovery:ResendsPerEmailPerHour`  | 3       |
-| Resends per address per 24h                 | `AccountRecovery:ResendsPerEmailPerDay`   | 10      |
-| Resends per client address per window       | `AccountRecovery:ResendsPerAddress`       | 10      |
-| Registrations per client address per window | `AccountRecovery:RegistrationsPerAddress` | 30      |
-| Window for the client-address counters      | `AccountRecovery:RequestWindow`           | 15m     |
-
-Client identity is `X-Real-IP`, which the gateway sets. Counters are per process.
 
 ---
 
@@ -230,10 +292,8 @@ since `/account/refresh` revalidates the stamp before issuing anything.
 
 Soft-delete also blocks **new** sessions (#152). `AppSignInManager.CanSignInAsync` refuses a
 soft-deleted account on every sign-in path, and `ValidateSecurityStampAsync` refuses it for cookie
-revalidation and `/account/refresh`. Neither depends on `AccountRecovery:RequireConfirmedEmail`.
-`/account/login` answers a deleted account with the same `Failed` problem as a wrong password or an
-unknown address. `/account/confirmEmail` refuses a deleted account with the generic confirmation
-failure.
+revalidation and `/account/refresh`. `/account/login` answers a deleted account with the same
+`Failed` problem as a wrong password or an unknown address.
 
 Bearer **access** tokens are revoked the same way (#142). `BearerTokenHandler` has no
 principal-validation event, so `BearerStampCheck` runs from `BearerTokenEvents.OnMessageReceived`.
@@ -248,147 +308,25 @@ the same stamp check, so both agree.
 
 ### Identity (built-in ASP.NET Identity)
 
-| Method | Path                               | Description                      |
-| ------ | ---------------------------------- | -------------------------------- |
-| `POST` | `/account/register`                | Register a new account           |
-| `POST` | `/account/login`                   | Login — returns bearer token     |
-| `POST` | `/account/login?useCookies=true`   | Login — sets auth cookie         |
-| `POST` | `/account/refresh`                 | Refresh a bearer token           |
-| `POST` | `/account/logout`                  | Logout (revokes cookie/token)    |
-| `GET`  | `/account/confirmEmail`            | Confirm email address            |
-| `POST` | `/account/resendConfirmationEmail` | Resend the confirmation link     |
-| `POST` | `/account/forgotPassword`          | Request a password reset token   |
-| `POST` | `/account/resetPassword`           | Redeem a reset token             |
-| `POST` | `/account/manage/2fa`              | Manage two-factor authentication |
+| Method | Path                             | Description                      |
+| ------ | -------------------------------- | -------------------------------- |
+| `POST` | `/account/login`                 | Login — returns bearer token     |
+| `POST` | `/account/login?useCookies=true` | Login — sets auth cookie         |
+| `POST` | `/account/refresh`               | Refresh a bearer token           |
+| `POST` | `/account/logout`                | Logout (revokes cookie/token)    |
+| `POST` | `/account/manage/2fa`            | Manage two-factor authentication |
+| `GET`  | `/account/manage/info`           | Read the caller's email          |
+| `POST` | `/account/manage/info`           | Change the password              |
 
-### Account Recovery
+`login`, `refresh` and `manage/*` are Identity's own handlers. `Routes/IdentityEndpoints.cs` maps
+Identity into a detached route builder and hides `register`, `confirmEmail`,
+`resendConfirmationEmail`, `forgotPassword` and `resetPassword` before the app sees them. The
+code-based endpoints are in "Sign-in, Sign-up and Account Recovery by Code".
 
-**These endpoints are Identity's own; this service adds none of its own to the recovery surface.**
-An earlier round built a bespoke pair at `/account/password/{forgot,reset}` and suppressed
-Identity's; a stakeholder ruling overturned that (#136). Identity's email-confirmation gate is a
-requirement to implement confirmation, not a reason to route around Identity.
-
-```jsonc
-// POST /account/register                 -> 200, 400 (ValidationProblem), or 429 with Retry-After
-{ "email": "someone@example.com", "password": "..." }
-
-// POST /account/resendConfirmationEmail  -> 200 (always), or 429 with Retry-After
-{ "email": "someone@example.com" }
-
-// GET  /account/confirmEmail?userId=&code=   -> 200 text/plain, or 401
-
-// POST /account/forgotPassword           -> 200 (always), or 429 with Retry-After
-{ "email": "someone@example.com" }
-
-// POST /account/resetPassword            -> 200, 400 (ValidationProblem), or 429 with Retry-After
-{ "email": "someone@example.com", "resetCode": "<code>", "newPassword": "..." }
-```
-
-#### Non-enumeration
-
-`/forgotPassword` and `/resendConfirmationEmail` answer **identically** — status, body, and elapsed
-time down to a configured floor — whether or not the address has an account. The body parity is
-Identity's own (its handlers return `TypedResults.Ok()` unconditionally); the timing floor is this
-service's, because Identity does nothing about timing and the branch that finds an account does a
-database hit, a token generation and a send while the branch that does not does almost none of that.
-Both halves are explicit tests rather than implementation notes.
-
-`/resetPassword` collapses unknown address, unconfirmed address, tampered token and malformed code
-into one indistinguishable `400` (`{"errors":{"InvalidToken":[...]}}`); a password that fails the
-policy is reported as itself, but only after the token has proven valid. `/confirmEmail` is keyed on
-an opaque `userId` rather than an address and answers a bare `401` for both an unknown user and a
-bad code.
-
-**`/register` used to be the exception.** Identity itself returns `400` with
-`{"errors":{"DuplicateUserName":[...]}}` for an address that exists and an empty `200` for one that
-does not, disclosing membership with no way out from inside the framework.
-`Helpers/IdentityResponseShapingFilter.cs` closes that gap (#147): a duplicate address now answers
-the identical `200` empty body. What happened is told only to the mailbox — an unconfirmed account
-gets a fresh confirmation link, a confirmed account gets an already-registered notice (#138) — never
-the caller.
-
-#### Tokens, and what a reset invalidates
-
-Reset tokens come from Identity's `GeneratePasswordResetTokenAsync` on a dedicated provider
-(`PasswordResetTokenProvider`) with its own lifetime and its own data-protection purpose, so the
-reset lifetime is independent of the **email-confirmation** and two-factor tokens — which matters
-now that confirmation exists, where before it was theoretical. Redeeming a token rotates the
-account's security stamp, which is part of the token's own payload; that is what makes it
-single-use. A successful reset also clears any lockout, so the password spraying that prompted a
-reset does not outlast the recovery from it — Identity's `ResetPasswordAsync` leaves `LockoutEnd`
-alone, so that part is ours (`Models/AppUserManager.cs`).
-
-Rotating the stamp drops the account's **cookie sessions** on their next request and invalidates its
-**refresh tokens** immediately (`/account/refresh` revalidates the stamp before issuing anything).
-One residue survives: an `Identity.Bearer` **access** token already issued is self-contained and is
-checked only against its own expiry, so it keeps working until it expires on its own. That gap is
-service-wide — `DELETE /account/profile` claims the same immediate revocation and has the same hole
-— and is tracked separately rather than papered over here.
-
-A **soft-deleted** account is not recoverable and says so by saying nothing: it gets the same `200`
-as an address that never existed, and any token already issued for it gets the same opaque `400` as
-any other unusable one.
-
-#### Rate limiting
-
-Identity ships these endpoints with **no rate limiting of any kind** — no throttling metadata
-anywhere in `MapIdentityApi`'s group; the only brute-force control is its lockout on `/login`. So
-registration, reset requests, reset redemptions and confirmation resends are all unmetered out of
-the box, which for the three that send mail is an unmetered mail cannon and for redemption is
-unmetered token guessing.
-
-`Helpers/AccountRecoveryThrottleFilter.cs` reattaches limits per email address and per client
-address, in-process, on top of the gateway's per-route Ocelot limits
-(`apps/api-gateway/Configuration/Routes/account-service-routes.json`). The client address comes from
-the forwarded `X-Real-IP` header, the same header Ocelot's own limits key on — never the transport
-peer, which for every external caller is the gateway pod and would collapse the per-caller limit
-into one global bucket. That header is caller-asserted and therefore evadable — the same weakness
-the gateway's own limits have; issue #143 tracks making it trustworthy. The per-email limits do not
-depend on the caller's claim about who they are.
-
-`/resendConfirmationEmail` is worth calling out: Identity does not gate it on
-`IsEmailConfirmedAsync` at all, so it mails a live confirmation link to any registered address,
-already confirmed or not, and the address is chosen entirely by the caller.
-
-#### Delivery
-
-**Nothing here sends mail, and without an explicit registration nothing would say so.** Identity's
-`AddApiEndpoints()` `TryAdd`s `DefaultMessageEmailSender` over `NoOpEmailSender`, whose
-`SendEmailAsync` returns `Task.CompletedTask` — so a service registering neither discards every
-confirmation link and reset code with a `200`, no exception and no log line. This service did
-exactly that until #136.
-
-`Helpers/PostmarkEmailSender.cs` registers as that `IEmailSender<ApplicationUser>` and composes
-through `Helpers/IdentityEmailComposer.cs`, then hands the message to
-`Helpers/PostmarkDeliveryQueue.cs` (the `IOutboundEmailSender` transport, also a background service)
-rather than sending inline. The link, the code, and the message body are never logged — only the
-recipient, the message kind, and the provider's own outcome (accepted, rejected, or failed after
-retries).
-
-#### Requiring a confirmed address
-
-`AccountRecovery:RequireConfirmedEmail` drives `SignInOptions.RequireConfirmedAccount` and is
-**`false`**. That is deliberate and temporary: Identity issues its confirmation link through the
-sender above, and until #133 provisions a transactional provider nothing can deliver it — so
-requiring confirmation today would mean nobody can create a usable account at all. #149 owns the
-flip, and both states are already covered by tests, so it is a configuration change rather than a
-code change.
-
-Two things the flag does not do. It is **not a revocation**: `/account/refresh` checks only the
-refresh token's own expiry and the security stamp, never `CanSignInAsync`, so an already-issued
-refresh token keeps minting access tokens until its own expiry or a stamp rotation. And it **creates
-an enumeration oracle on `/login`**: `PreSignInCheck` returns `NotAllowed` before the password is
-verified and Identity puts `result.ToString()` into the problem `detail`, so an unknown address
-answers `"Failed"` and a registered-but-unconfirmed one answers `"NotAllowed"` for any password at
-all. Raised on #136 for a product ruling.
-
-**Accounts that predate confirmation are deliberately not grandfathered** (product ruling on #147).
-No migration marks an existing account confirmed, and no admin force-confirm endpoint exists — that
-escape hatch would outlive the need and become a credential-adjacent backdoor. Nothing in this
-service has ever written `EmailConfirmed`, so every account created before confirmation shipped has
-it `false`, and the consequence is concrete: **`/forgotPassword` answers `200` and issues nothing
-for those accounts** until their owner confirms through `/resendConfirmationEmail` like any other
-consumer. That is the intended path, not an oversight.
+`POST /manage/info` with a new email answers `400`: an email change runs on `/account/email/change`.
+`POST /manage/info` with a new password needs `oldPassword`, applies the password policy and the
+breached-password check, ends every other session, writes a `PasswordChanged` security event and
+mails a notice. A wrong `oldPassword` counts toward the sign-in lock.
 
 ### Profile
 
@@ -581,19 +519,10 @@ query that reads the table directly — an invite or announcement export, for ex
     "AllowedApps": ["cribstop", "admin-portal"]
   },
   "AccountRecovery": {
-    "RequireConfirmedEmail": false,
     "WebBaseUrl": "https://cribstop.com",
-    "ConfirmationPath": "/confirm-email",
-    "ConfirmationTokenLifetime": "1.00:00:00",
-    "TokenLifetime": "01:00:00",
-    "ResendMinimumInterval": "00:01:00",
-    "ResendsPerEmailPerHour": 3,
-    "ResendsPerEmailPerDay": 10,
     "RequestsPerEmail": 5,
-    "ResendsPerAddress": 10,
-    "RequestsPerAddress": 15,
-    "RedemptionsPerAddress": 30,
-    "RegistrationsPerAddress": 30,
+    "IdentifiesPerAddress": 20,
+    "IdentifiesPerEmail": 5,
     "RequestWindow": "00:15:00",
     "MaxTrackedKeys": 50000,
     "MinimumResponseDuration": "00:00:00.250"
@@ -607,15 +536,13 @@ query that reads the table directly — an invite or announcement export, for ex
 `AllowedApps` controls which `AppId` values are accepted in `X-App-Id` headers and API key creation.
 Unknown values are rejected with `400` (API keys) or silently ignored (login headers).
 
-`AccountRecovery` is the whole policy over the unauthenticated recovery surface — registration,
-email confirmation and password reset — configuration rather than constants so an environment can
-tighten it without a code change. One section rather than three because it is one policy: a single
-window and a single response floor over endpoints that all answer the same question about the same
-address. `TokenLifetime` is bound into the password-reset token provider and
-`ConfirmationTokenLifetime` into the confirmation one, so each is the lifetime actually enforced at
-redemption, and neither touches the other's token. `MinimumResponseDuration` is the floor the reset
-and confirmation requests are padded to, which is what keeps the work actually done off the clock.
-`RequireConfirmedEmail` is documented in Account Recovery above — read it before flipping it.
+`AccountRecovery` is the whole policy over the unauthenticated code surface — sign-up, identify,
+reset, email change and secure account — configuration rather than constants so an environment can
+tighten it without a code change. It is one policy: a single window and a single response floor over
+endpoints that all answer the same question about the same address. `WebBaseUrl` builds the
+secure-account link. `MinimumResponseDuration` is the floor the code endpoints and `/login` are
+padded to, which keeps the work actually done off the clock. The code engine has its own section,
+`EmailCodes`.
 
 ---
 

@@ -72,6 +72,18 @@ export function formatAge(iso: string, now: number = Date.now()): string {
   return `${Math.floor(hours / 24)}d`;
 }
 
+/** A span in seconds, as the two largest units: `45s`, `12m`, `3h 20m`, `2d 4h`. */
+export function formatDuration(seconds: number): string {
+  const whole = Math.round(seconds);
+  if (whole < 60) return `${whole}s`;
+  const minutes = Math.round(whole / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return minutes % 60 ? `${hours}h ${minutes % 60}m` : `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return hours % 24 ? `${days}d ${hours % 24}h` : `${days}d`;
+}
+
 export function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
 }
@@ -81,4 +93,19 @@ export function telHref(phone: string): string {
   return `tel:${phone.replace(/[^\d+]/g, '')}`;
 }
 
-export const NOTE_HINT = 'Do not record protected characteristics.';
+export const NOTE_HINT = 'Do not record anything about the personal traits of the buyer.';
+
+/** Assign needs a verified lead. The service decides. */
+export function canAssign(status: LeadStatus): boolean {
+  return status === 'verified';
+}
+
+/** Unassign needs a lead that an agent holds and has not yet contacted. The service decides. */
+export function canUnassign(status: LeadStatus): boolean {
+  return status === 'assigned' || status === 'accepted';
+}
+
+/** Only Admin and SuperAdmin write the agent directory. A Moderator reads it. */
+export function canManageAgents(roles: readonly string[]): boolean {
+  return roles.some((r) => r === 'Admin' || r === 'SuperAdmin');
+}

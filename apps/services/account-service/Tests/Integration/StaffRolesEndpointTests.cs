@@ -23,7 +23,7 @@ namespace AccountService.Tests.Integration
     public class StaffRolesEndpointTests(AccountServiceFactory factory)
         : IClassFixture<AccountServiceFactory>
     {
-        private const string Password = "Test1234!@#";
+        private const string Password = "Test1234!@#Abcd";
         private const string IntrospectPath = "/internal/account/introspect";
 
         [Fact]
@@ -37,7 +37,7 @@ namespace AccountService.Tests.Integration
             payload.GetProperty("isValid").GetBoolean().Should().BeTrue();
             RolesOf(payload).Should().BeEquivalentTo(new[] { Roles.User });
             payload.GetProperty("email").GetString().Should().Be(email);
-            payload.GetProperty("emailConfirmed").GetBoolean().Should().BeFalse();
+            payload.GetProperty("emailConfirmed").GetBoolean().Should().BeTrue("every account is born confirmed (#657)");
         }
 
         [Fact]
@@ -131,8 +131,7 @@ namespace AccountService.Tests.Integration
                 AllowAutoRedirect = false,
                 HandleCookies = true,
             });
-            (await client.PostAsJsonAsync("/account/register", new { email, password = Password }))
-                .EnsureSuccessStatusCode();
+            await AuthHelper.SeedUserAsync(factory, email, Password);
 
             string id;
             using (var scope = factory.Services.CreateScope())

@@ -1,8 +1,11 @@
 import {
   type InquiryKind,
   type LeadStatus,
+  staffLeadAssignResponseSchema,
   type StaffLeadDetail,
   staffLeadDetailSchema,
+  type StaffLeadMetrics,
+  staffLeadMetricsSchema,
   type StaffLeadNote,
   staffLeadNoteSchema,
   type StaffLeadsEnvelope,
@@ -83,6 +86,17 @@ export async function fetchLeads(
   return parse(staffLeadsEnvelopeSchema, await call(`/api/staff/leads${qs ? `?${qs}` : ''}`));
 }
 
+export async function fetchLeadMetrics(range: {
+  from?: string;
+  to?: string;
+}): Promise<StaffLeadMetrics> {
+  const query = new URLSearchParams();
+  if (range.from) query.set('from', range.from);
+  if (range.to) query.set('to', range.to);
+  const qs = query.toString();
+  return parse(staffLeadMetricsSchema, await call(`/api/staff/leads/metrics${qs ? `?${qs}` : ''}`));
+}
+
 export async function fetchLead(id: string): Promise<StaffLeadDetail> {
   return parse(staffLeadDetailSchema, await call(`/api/staff/leads/${encodeURIComponent(id)}`));
 }
@@ -97,6 +111,23 @@ export async function transitionLead(id: string, to: StaffAction, note?: string)
   const body = await call(
     `/api/staff/leads/${encodeURIComponent(id)}/transition`,
     JSON_POST(note ? { to, note } : { to }),
+  );
+  parse(staffLeadTransitionResponseSchema, body);
+}
+
+/** Assign has one field. There is no reason or free text (Fair Housing). */
+export async function assignLead(id: string, agentProfileId: string): Promise<void> {
+  const body = await call(
+    `/api/staff/leads/${encodeURIComponent(id)}/assign`,
+    JSON_POST({ agentProfileId }),
+  );
+  parse(staffLeadAssignResponseSchema, body);
+}
+
+export async function unassignLead(id: string, note: string): Promise<void> {
+  const body = await call(
+    `/api/staff/leads/${encodeURIComponent(id)}/unassign`,
+    JSON_POST({ note }),
   );
   parse(staffLeadTransitionResponseSchema, body);
 }

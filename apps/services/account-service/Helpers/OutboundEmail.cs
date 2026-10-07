@@ -7,14 +7,17 @@ namespace AccountService.Helpers;
 /// <summary>Which transactional message an <see cref="OutboundEmail"/> is, for logging and metrics.</summary>
 internal enum EmailKind
 {
-    /// <summary>An email-confirmation link.</summary>
-    Confirmation,
-
-    /// <summary>A password-reset link.</summary>
-    PasswordReset,
-
     /// <summary>A notice that someone tried to register an address that already has an account.</summary>
     AlreadyRegistered,
+
+    /// <summary>A one-time sign-in or verification code.</summary>
+    Code,
+
+    /// <summary>The notice sent to the old address after an email change (#661).</summary>
+    EmailChangedNotice,
+
+    /// <summary>The notice sent after a password change or reset (#661).</summary>
+    PasswordChangedNotice,
 }
 
 /// <summary>A composed transactional message, ready for a transport.</summary>

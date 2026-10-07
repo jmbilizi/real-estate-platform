@@ -24,13 +24,13 @@ namespace AccountService.Tests.Integration
         /// <summary>The web origin every test host is configured with.</summary>
         internal const string WebOrigin = "https://web.test.example";
 
-        /// <summary>The confirmation path every test host is configured with.</summary>
-        internal const string ConfirmationPath = "/confirm-email";
-
-        /// <summary>The password-reset path every test host is configured with.</summary>
-        internal const string PasswordResetPath = "/reset-password";
-
         private readonly string dbName = $"AccountServiceTest-{Guid.NewGuid()}";
+
+        /// <summary>Gets the fake breach client the host uses.</summary>
+        internal AccountService.Tests.Helpers.FakePwnedPasswordsClient Breaches { get; } = new();
+
+        /// <summary>Gets the fake MX resolver the host uses. It answers "can receive mail" by default.</summary>
+        internal AccountService.Tests.Helpers.FakeMailDomainResolver MailDomains { get; } = new();
 
         /// <summary>Gets every log entry the host wrote.</summary>
         internal CapturingLoggerProvider Logs { get; } = new();
@@ -56,22 +56,21 @@ namespace AccountService.Tests.Integration
                 services.AddDbContext<AccountDbContext>(options =>
                     options.UseInMemoryDatabase(this.dbName));
 
+                // No test reaches the Pwned Passwords API. A test marks a password as breached on the fake.
+                services.AddSingleton<AccountService.Helpers.IPwnedPasswordsClient>(this.Breaches);
+
+                // No test queries DNS. A test sets the answer for a domain on the fake.
+                services.AddSingleton<AccountService.Helpers.IMailDomainResolver>(this.MailDomains);
+
                 // TestServer requests carry no remote address, so every caller in a shared host
                 // shares one "unknown" bucket. Lift the limits and the timing floor out of the way.
                 // AccountRecoveryFactory sets back whatever its own tests need.
                 services.Configure<AccountRecoveryOptions>(options =>
                 {
                     options.WebBaseUrl = new Uri(WebOrigin);
-                    options.ConfirmationPath = ConfirmationPath;
-                    options.PasswordResetPath = PasswordResetPath;
-                    options.ResendMinimumInterval = TimeSpan.Zero;
-                    options.ResendsPerEmailPerHour = int.MaxValue;
-                    options.ResendsPerEmailPerDay = int.MaxValue;
-                    options.ResendsPerAddress = int.MaxValue;
                     options.RequestsPerEmail = int.MaxValue;
-                    options.RequestsPerAddress = int.MaxValue;
-                    options.RedemptionsPerAddress = int.MaxValue;
-                    options.RegistrationsPerAddress = int.MaxValue;
+                    options.SignUpSendsPerAddress = int.MaxValue;
+                    options.SignUpVerifiesPerAddress = int.MaxValue;
                     options.MinimumResponseDuration = TimeSpan.Zero;
                 });
             });

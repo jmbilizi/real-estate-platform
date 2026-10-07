@@ -1155,8 +1155,6 @@ spec:
         - env:
             - name: ASPNETCORE_ENVIRONMENT
               value: Development
-            - name: AccountRecovery__RequireConfirmedEmail
-              value: "false"
             - name: AccountRecovery__WebBaseUrl
               value: https://CRIBSTOP_DOMAIN_PLACEHOLDER
             - name: ASPNETCORE_URLS

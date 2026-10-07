@@ -25,6 +25,25 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
 
     public DbSet<RoleGrantAudit> RoleGrantAudits => Set<RoleGrantAudit>();
 
+    public DbSet<EmailCode> EmailCodes => Set<EmailCode>();
+
+    public DbSet<EmailCodeThrottle> EmailCodeThrottles => Set<EmailCodeThrottle>();
+
+    public DbSet<PendingRegistration> PendingRegistrations => Set<PendingRegistration>();
+
+    /// <summary>Gets the addresses Postmark will not deliver to.</summary>
+    public DbSet<EmailSuppression> EmailSuppressions => Set<EmailSuppression>();
+
+    public DbSet<AccountSecurityEvent> AccountSecurityEvents => Set<AccountSecurityEvent>();
+
+    public DbSet<PasswordResetProof> PasswordResetProofs => Set<PasswordResetProof>();
+
+    public DbSet<PendingEmailChange> PendingEmailChanges => Set<PendingEmailChange>();
+
+    public DbSet<EmailChangeRestore> EmailChangeRestores => Set<EmailChangeRestore>();
+
+    public DbSet<SecureAccountToken> SecureAccountTokens => Set<SecureAccountToken>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -208,6 +227,105 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
             entity.Property(a => a.Action).IsRequired();
             entity.Property(a => a.OccurredAt).HasDefaultValueSql("NOW()").ValueGeneratedOnAdd();
             entity.HasIndex(a => a.GranteeUserId);
+        });
+
+        // No FK to AspNetUsers: a code can target an address with no account. The hash is a keyed
+        // HMAC; the key never reaches the database.
+        builder.Entity<EmailCode>(entity =>
+        {
+            entity.ToTable("EmailCodes");
+            entity.Property(c => c.Email).IsRequired();
+            entity.Property(c => c.Purpose).HasConversion<string>().IsRequired();
+            entity.Property(c => c.CodeHash).IsRequired();
+            entity.HasIndex(c => new { c.Email, c.Purpose, c.CreatedAt });
+            entity.Property(c => c.Version).IsConcurrencyToken();
+            entity.HasIndex(c => c.ExpiresAt);
+        });
+
+        builder.Entity<EmailCodeThrottle>(entity =>
+        {
+            entity.ToTable("EmailCodeThrottles");
+            entity.HasKey(t => new { t.Email, t.Purpose });
+            entity.Property(t => t.Purpose).HasConversion<string>();
+            entity.Property(t => t.Version).IsConcurrencyToken();
+            entity.HasIndex(t => t.UpdatedAt);
+        });
+
+        // No FK to AspNetUsers and no password: a pending sign-up is not an account.
+        builder.Entity<PendingRegistration>(entity =>
+        {
+            entity.ToTable("PendingRegistrations");
+            entity.Property(p => p.Email).IsRequired();
+            entity.Property(p => p.EmailAsEntered).IsRequired();
+            entity.Property(p => p.State).HasConversion<string>().IsRequired();
+            entity.HasIndex(p => p.Email).IsUnique();
+            entity.HasIndex(p => p.ExpiresAt);
+            entity.Property(p => p.Version).IsConcurrencyToken();
+        });
+
+        // No FK to AspNetUsers: a sign-up has no account. One row per normalized address.
+        builder.Entity<EmailSuppression>(entity =>
+        {
+            entity.ToTable("EmailSuppressions");
+            entity.Property(s => s.Email).IsRequired();
+            entity.Property(s => s.Reason).IsRequired();
+            entity.Property(s => s.Source).IsRequired();
+            entity.HasIndex(s => s.Email).IsUnique();
+        });
+
+        // Append-only. No FK to AspNetUsers, so the record outlives a deleted account.
+        builder.Entity<AccountSecurityEvent>(entity =>
+        {
+            entity.ToTable("AccountSecurityEvents");
+            entity.Property(e => e.UserId).IsRequired();
+            entity.Property(e => e.Kind).IsRequired();
+            entity.Property(e => e.OccurredAt).HasDefaultValueSql("NOW()").ValueGeneratedOnAdd();
+            entity.HasIndex(e => new { e.UserId, e.OccurredAt });
+        });
+
+        // No FK to AspNetUsers. The row holds a hash of the proof, never the proof.
+        builder.Entity<PasswordResetProof>(entity =>
+        {
+            entity.ToTable("PasswordResetProofs");
+            entity.Property(p => p.Email).IsRequired();
+            entity.Property(p => p.UserId).IsRequired();
+            entity.Property(p => p.ProofHash).IsRequired();
+            entity.HasIndex(p => p.Email).IsUnique();
+            entity.HasIndex(p => p.ExpiresAt);
+            entity.Property(p => p.Version).IsConcurrencyToken();
+        });
+
+        // No FK to AspNetUsers. One pending change per account.
+        builder.Entity<PendingEmailChange>(entity =>
+        {
+            entity.ToTable("PendingEmailChanges");
+            entity.Property(p => p.UserId).IsRequired();
+            entity.Property(p => p.NewEmail).IsRequired();
+            entity.HasIndex(p => p.UserId).IsUnique();
+            entity.HasIndex(p => p.ExpiresAt);
+            entity.Property(p => p.Version).IsConcurrencyToken();
+        });
+
+        // No FK to AspNetUsers, so the row outlives a deleted account until the purge.
+        builder.Entity<EmailChangeRestore>(entity =>
+        {
+            entity.ToTable("EmailChangeRestores");
+            entity.Property(r => r.UserId).IsRequired();
+            entity.Property(r => r.OldEmail).IsRequired();
+            entity.HasIndex(r => new { r.UserId, r.RestoreUntil });
+        });
+
+        // No FK to AspNetUsers. Only the token hash is stored.
+        builder.Entity<SecureAccountToken>(entity =>
+        {
+            entity.ToTable("SecureAccountTokens");
+            entity.Property(t => t.UserId).IsRequired();
+            entity.Property(t => t.Kind).IsRequired();
+            entity.Property(t => t.TokenHash).IsRequired();
+            entity.Property(t => t.Version).IsConcurrencyToken();
+            entity.HasIndex(t => t.TokenHash).IsUnique();
+            entity.HasIndex(t => t.ExpiresAt);
+            entity.HasIndex(t => t.UserId);
         });
     }
 }

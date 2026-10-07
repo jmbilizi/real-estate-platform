@@ -4,11 +4,6 @@ interface LoginRequest {
   remember?: boolean;
 }
 
-interface SignupRequest {
-  email: string;
-  password: string;
-}
-
 export interface LoginResponse {
   email: string;
   accessToken?: string;
@@ -99,10 +94,6 @@ export async function loginAccount(payload: LoginRequest): Promise<LoginResponse
   return body as LoginResponse;
 }
 
-export async function signupAccount(payload: SignupRequest): Promise<void> {
-  await post('/api/account/signup', payload);
-}
-
 export async function logoutAccount(): Promise<void> {
   await post('/api/account/logout', {});
 }
@@ -145,135 +136,290 @@ export class RateLimitError extends Error {
   }
 }
 
-export type PasswordResetErrorKind = 'invalid' | 'policy' | 'failed';
-
-/**
- * A failed `/account/resetPassword` call. `kind: 'invalid'` covers an unusable code, an unknown
- * address, and an unconfirmed address alike. The server reports all three identically on purpose
- * (#137), so this type carries no more detail than the server gives.
- */
-export class PasswordResetError extends Error {
-  constructor(public kind: PasswordResetErrorKind) {
-    super('Password reset failed');
-    this.name = 'PasswordResetError';
-  }
-}
-
 function retryAfterSeconds(res: Response): number {
   const parsed = Number(res.headers.get('Retry-After'));
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 60;
 }
 
-/**
- * Requests a password reset link. The response never reveals whether the address has an account
- * (account-service's own non-enumeration guarantee). Callers must show the same neutral
- * confirmation for every email, and only distinguish an actual failed request.
- */
-export async function requestPasswordReset(email: string): Promise<void> {
-  const res = await fetch('/api/account/forgot-password', {
+/** The outcome of a used "This wasn't me" link. The `invalid` status covers an unknown, used and expired token alike. */
+export type SecureAccountOutcome =
+  | { status: 'secured'; emailRestored: boolean }
+  | { status: 'invalid' }
+  | { status: 'failed' };
+
+/** Sends the token from the notice link. The token is the proof: it is sent once, in the body. */
+export async function secureAccount(token: string): Promise<SecureAccountOutcome> {
+  const res = await fetch('/api/account/secure', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
-  });
+    body: JSON.stringify({ token }),
+  }).catch(() => null);
 
-  if (res.status === 429) throw new RateLimitError(retryAfterSeconds(res));
-  if (!res.ok) throw new Error('Unable to send the request');
-}
-
-/** Redeems a password reset code. `code` and `newPassword` map to Identity's `resetCode`/`newPassword`. */
-export async function confirmPasswordReset(payload: {
-  email: string;
-  code: string;
-  newPassword: string;
-}): Promise<void> {
-  const res = await fetch('/api/account/reset-password', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      email: payload.email,
-      resetCode: payload.code,
-      newPassword: payload.newPassword,
-    }),
-  });
-
-  if (res.status === 429) throw new RateLimitError(retryAfterSeconds(res));
-  if (!res.ok) {
+  if (!res) return { status: 'failed' };
+  if (res.ok) {
     const body = await res.json().catch(() => null);
-    const kind: PasswordResetErrorKind =
-      body?.error === 'invalid' || body?.error === 'policy' ? body.error : 'failed';
-    throw new PasswordResetError(kind);
+    return { status: 'secured', emailRestored: body?.emailRestored === true };
+  }
+  if (res.status === 400) return { status: 'invalid' };
+  return { status: 'failed' };
+}
+
+/** A 503 from the email-code endpoints: codes cannot be sent or checked right now. */
+export class CodesUnavailableError extends Error {
+  constructor() {
+    super('Email codes are unavailable');
+    this.name = 'CodesUnavailableError';
   }
 }
 
-/**
- * Requests a fresh confirmation link. Identity answers unknown, unconfirmed and confirmed
- * addresses identically (#147); callers must show one neutral confirmation for every case.
- */
-export async function resendConfirmationEmail(email: string): Promise<void> {
-  const res = await fetch('/api/account/resend-confirmation-email', {
+export interface CodeTiming {
+  resendAfterSeconds: number;
+  expiresInSeconds: number;
+}
+
+export interface IdentifyResult extends CodeTiming {
+  next: 'password' | 'code';
+}
+
+async function postJson(path: string, payload: unknown): Promise<Response> {
+  const res = await fetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
+    body: JSON.stringify(payload),
   });
-
   if (res.status === 429) throw new RateLimitError(retryAfterSeconds(res));
-  if (!res.ok) throw new Error('Unable to send the request');
+  if (res.status === 503) throw new CodesUnavailableError();
+  return res;
 }
 
-export type ConfirmEmailOutcome = 'confirmed' | 'invalid' | 'rate-limited' | 'error';
+function toTiming(body: Record<string, unknown> | null): CodeTiming {
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0);
+  return {
+    resendAfterSeconds: num(body?.resendAfterSeconds),
+    expiresInSeconds: num(body?.expiresInSeconds),
+  };
+}
 
 /**
- * Redeems a confirmation link's `userId`/`code`. Expired, used, tampered and unknown links all
- * answer `invalid` (#147's non-enumeration guarantee); an already-confirmed link answers
- * `confirmed`, same as a first-time success. Network failures, 5xx and 429 never reject. They
- * answer `error` or `rate-limited`, which the caller can retry (#298).
+ * Email-first entry call. The answer reveals only the next step, never the account itself.
+ * Throws RateLimitError on 429 and CodesUnavailableError on 503.
  */
-export async function confirmEmail(payload: {
-  userId: string;
-  code: string;
-}): Promise<ConfirmEmailOutcome> {
-  const params = new URLSearchParams({ userId: payload.userId, code: payload.code });
-  try {
-    const res = await fetch(`/api/account/confirm-email?${params.toString()}`);
-    if (res.ok) return 'confirmed';
-    if (res.status === 429) return 'rate-limited';
-    if (res.status >= 500) return 'error';
-    return 'invalid';
-  } catch {
-    return 'error';
-  }
+export async function identifyEmail(email: string): Promise<IdentifyResult> {
+  const res = await postJson('/api/account/identify', { email });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new Error('Unable to continue');
+  return { next: body?.next === 'password' ? 'password' : 'code', ...toTiming(body) };
 }
 
-const DEFAULT_CONFIRMATION_EXPIRY_HOURS = 24;
-let cachedConfirmationExpiryHours: number | null = null;
-let inFlightConfirmationExpiry: Promise<number> | null = null;
+export type VerifyCodeResult =
+  | { ok: true; signupProof: string }
+  | { ok: false; attemptsLeft: number | null };
 
-async function fetchConfirmationExpiryHours(): Promise<number> {
+/** Checks the 6-digit code. A wrong code returns ok: false. A lock throws RateLimitError. */
+export async function verifySignupCode(email: string, code: string): Promise<VerifyCodeResult> {
+  const res = await postJson('/api/account/signup/verify', { email, code });
+  const body = await res.json().catch(() => null);
+  if (res.ok && typeof body?.signupProof === 'string') {
+    return { ok: true, signupProof: body.signupProof };
+  }
+  if (res.status === 400 && body?.error === 'invalid_code') {
+    const left = body?.attemptsLeft;
+    return { ok: false, attemptsLeft: typeof left === 'number' ? left : null };
+  }
+  throw new Error('Unable to check the code');
+}
+
+export async function resendSignupCode(email: string): Promise<CodeTiming> {
+  const res = await postJson('/api/account/signup/resend', { email });
+  if (!res.ok) throw new Error('Unable to send a new code');
+  return toTiming(await res.json().catch(() => null));
+}
+
+export async function changeSignupEmail(oldEmail: string, newEmail: string): Promise<CodeTiming> {
+  const res = await postJson('/api/account/signup/change-email', { oldEmail, newEmail });
+  if (!res.ok) throw new Error('Unable to change the email');
+  return toTiming(await res.json().catch(() => null));
+}
+
+export type PasswordRejectionCode = 'too_short' | 'too_long' | 'breached';
+
+function knownRejections(errors: unknown): PasswordRejectionCode[] {
+  const known: PasswordRejectionCode[] = ['too_short', 'too_long', 'breached'];
+  return Array.isArray(errors)
+    ? errors.filter((e): e is PasswordRejectionCode => known.includes(e as PasswordRejectionCode))
+    : [];
+}
+
+export type CompleteSignupOutcome =
+  | { ok: true; session: LoginResponse }
+  | { ok: false; reason: 'invalid_proof' }
+  | { ok: false; reason: 'email_unavailable' }
+  | { ok: false; reason: 'password_rejected'; errors: PasswordRejectionCode[] };
+
+/** Sets the password and signs in. The proof is single use and stays in the caller's memory. */
+export async function completeSignup(payload: {
+  email: string;
+  signupProof: string;
+  password: string;
+}): Promise<CompleteSignupOutcome> {
+  const res = await postJson('/api/account/signup/complete', payload);
+  const body = await res.json().catch(() => null);
+  if (res.ok) return { ok: true, session: body as LoginResponse };
+  if (res.status === 401) return { ok: false, reason: 'invalid_proof' };
+  if (res.status === 409) return { ok: false, reason: 'email_unavailable' };
+  if (res.status === 400 && body?.error === 'password_rejected') {
+    return { ok: false, reason: 'password_rejected', errors: knownRejections(body.errors) };
+  }
+  throw new Error('Unable to create the account');
+}
+
+export type VerifyResetResult =
+  | { ok: true; resetProof: string }
+  | { ok: false; attemptsLeft: number | null };
+
+/** Starts a reset. The answer is the same for every address, so callers show neutral copy. */
+export async function startPasswordReset(email: string): Promise<CodeTiming> {
+  const res = await postJson('/api/account/password/reset/start', { email });
+  if (!res.ok) throw new Error('Unable to send the code');
+  return toTiming(await res.json().catch(() => null));
+}
+
+/** Checks the reset code. A wrong code returns ok: false. A lock throws RateLimitError. */
+export async function verifyResetCode(email: string, code: string): Promise<VerifyResetResult> {
+  const res = await postJson('/api/account/password/reset/verify', { email, code });
+  const body = await res.json().catch(() => null);
+  if (res.ok && typeof body?.resetProof === 'string') {
+    return { ok: true, resetProof: body.resetProof };
+  }
+  if (res.status === 400 && body?.error === 'invalid_code') {
+    const left = body?.attemptsLeft;
+    return { ok: false, attemptsLeft: typeof left === 'number' ? left : null };
+  }
+  throw new Error('Unable to check the code');
+}
+
+export type CompleteResetOutcome =
+  | { ok: true }
+  | { ok: false; reason: 'invalid_proof' }
+  | { ok: false; reason: 'password_rejected'; errors: PasswordRejectionCode[] };
+
+/** Sets the new password. It signs nobody in: the reset ends every session. */
+export async function completePasswordReset(payload: {
+  email: string;
+  resetProof: string;
+  newPassword: string;
+}): Promise<CompleteResetOutcome> {
+  const res = await postJson('/api/account/password/reset/complete', payload);
+  if (res.ok) return { ok: true };
+  const body = await res.json().catch(() => null);
+  if (res.status === 401) return { ok: false, reason: 'invalid_proof' };
+  if (res.status === 400 && body?.error === 'password_rejected') {
+    return { ok: false, reason: 'password_rejected', errors: knownRejections(body.errors) };
+  }
+  throw new Error('Unable to reset the password');
+}
+
+export type EmailChangeStartResult =
+  | ({ ok: true; stepUp: 'oldEmailCode' | null } & CodeTiming)
+  | { ok: false; reason: 'invalid_email' }
+  | { ok: false; reason: 'step_up_failed'; attemptsLeft: number | null };
+
+/**
+ * Starts an email change. With no `currentPassword` and no `oldEmailCode`, the server sends a
+ * code to the current address and answers `stepUp: 'oldEmailCode'`. The answer is the same for a
+ * taken and a free address. A `401` or a `403` (no cookie or bearer session) throws AuthError.
+ */
+export async function startEmailChange(payload: {
+  newEmail: string;
+  currentPassword?: string;
+  oldEmailCode?: string;
+}): Promise<EmailChangeStartResult> {
+  const res = await postJson('/api/account/email/change/start', payload);
+  const body = await res.json().catch(() => null);
+  if (res.ok) {
+    return {
+      ok: true,
+      stepUp: body?.stepUp === 'oldEmailCode' ? 'oldEmailCode' : null,
+      ...toTiming(body),
+    };
+  }
+  if (res.status === 400 && body?.error === 'invalid_email') {
+    return { ok: false, reason: 'invalid_email' };
+  }
+  if (res.status === 403 && body?.error === 'step_up_failed') {
+    const left = body?.attemptsLeft;
+    return {
+      ok: false,
+      reason: 'step_up_failed',
+      attemptsLeft: typeof left === 'number' ? left : null,
+    };
+  }
+  if (res.status === 401 || res.status === 403) throw new AuthError(res.status);
+  throw new Error('Unable to start the email change');
+}
+
+export type EmailChangeVerifyResult =
+  | { ok: true; email: string; accessToken?: string }
+  | { ok: false; attemptsLeft: number | null };
+
+/** Checks the code sent to the new address. Success swaps the email and re-issues the session. */
+export async function verifyEmailChange(
+  code: string,
+  newEmail?: string,
+): Promise<EmailChangeVerifyResult> {
+  const res = await postJson('/api/account/email/change/verify', { code, newEmail });
+  const body = await res.json().catch(() => null);
+  if (res.ok && typeof body?.email === 'string') {
+    return { ok: true, email: body.email, accessToken: body.accessToken };
+  }
+  if (res.status === 400 && body?.error === 'invalid_code') {
+    const left = body?.attemptsLeft;
+    return { ok: false, attemptsLeft: typeof left === 'number' ? left : null };
+  }
+  if (res.status === 401 || res.status === 403) throw new AuthError(res.status);
+  throw new Error('Unable to check the code');
+}
+
+export type ChangePasswordOutcome =
+  | { ok: true; email: string; accessToken?: string }
+  | { ok: false; reason: 'wrong_password' }
+  | { ok: false; reason: 'password_rejected'; errors: PasswordRejectionCode[] };
+
+/** Changes the password. Success ends every other session and re-issues this one. */
+export async function changePassword(payload: {
+  currentPassword: string;
+  newPassword: string;
+}): Promise<ChangePasswordOutcome> {
+  const res = await postJson('/api/account/password/change', payload);
+  const body = await res.json().catch(() => null);
+  if (res.ok) return { ok: true, email: body?.email ?? '', accessToken: body?.accessToken };
+  if (res.status === 400 && body?.error === 'wrong_password') {
+    return { ok: false, reason: 'wrong_password' };
+  }
+  if (res.status === 400 && body?.error === 'password_rejected') {
+    return { ok: false, reason: 'password_rejected', errors: knownRejections(body.errors) };
+  }
+  if (res.status === 401 || res.status === 403) throw new AuthError(res.status);
+  throw new Error('Unable to change the password');
+}
+
+export const DEFAULT_PASSWORD_MIN_LENGTH = 15;
+let cachedPasswordMinLength: number | null = null;
+
+/** Minimum password length from /api/account/password-policy. Falls back to the default. */
+export async function getPasswordMinLength(): Promise<number> {
+  if (cachedPasswordMinLength !== null) return cachedPasswordMinLength;
   try {
-    const res = await fetch('/api/account/confirmation-info');
+    const res = await fetch('/api/account/password-policy');
     if (res.ok) {
       const body = await res.json().catch(() => null);
-      if (typeof body?.expiryHours === 'number' && body.expiryHours > 0) {
-        cachedConfirmationExpiryHours = body.expiryHours;
-        return body.expiryHours;
+      if (typeof body?.minLength === 'number' && body.minLength > 0) {
+        cachedPasswordMinLength = body.minLength;
+        return body.minLength;
       }
     }
   } catch {
     // Network failure. Use the default below.
   }
-  return DEFAULT_CONFIRMATION_EXPIRY_HOURS;
-}
-
-/**
- * Hours a confirmation link stays valid, read from account-service's configured lifetime (#147)
- * via `/api/account/confirmation-info` so this copy cannot drift from the server's value. Only a
- * real value is cached. A failed lookup returns the 24-hour default and the next call retries
- * (#299). Concurrent calls share one request.
- */
-export async function getConfirmationExpiryHours(): Promise<number> {
-  if (cachedConfirmationExpiryHours !== null) return cachedConfirmationExpiryHours;
-  inFlightConfirmationExpiry ??= fetchConfirmationExpiryHours().finally(() => {
-    inFlightConfirmationExpiry = null;
-  });
-  return inFlightConfirmationExpiry;
+  return DEFAULT_PASSWORD_MIN_LENGTH;
 }

@@ -974,6 +974,7 @@ describe('GET /openapi.json', () => {
       '/staff/agents',
       '/staff/agents/{id}',
       '/staff/leads',
+      '/staff/leads/metrics',
       '/staff/leads/{id}',
       '/staff/leads/{id}/assign',
       '/staff/leads/{id}/notes',

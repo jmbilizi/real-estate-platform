@@ -15,7 +15,7 @@ import AuthModalWrapper from '@/components/AuthModalWrapper';
 export default function LoginModal() {
   return (
     <Suspense fallback={null}>
-      <AuthModalWrapper initialMode="login" />
+      <AuthModalWrapper />
     </Suspense>
   );
 }
