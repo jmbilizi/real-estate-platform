@@ -41,7 +41,7 @@ function failureOf(status: number): StaffFailure {
   return 'unavailable';
 }
 
-async function call(url: string, init?: RequestInit): Promise<unknown> {
+export async function call(url: string, init?: RequestInit): Promise<unknown> {
   let res: Response;
   try {
     res = await fetch(url, { ...init, cache: 'no-store' });
@@ -55,7 +55,7 @@ async function call(url: string, init?: RequestInit): Promise<unknown> {
   throw new StaffApiError(failure, typeof message === 'string' ? message : FALLBACK[failure]);
 }
 
-function parse<T>(schema: { parse: (v: unknown) => T }, body: unknown): T {
+export function parse<T>(schema: { parse: (v: unknown) => T }, body: unknown): T {
   try {
     return schema.parse(body);
   } catch {
