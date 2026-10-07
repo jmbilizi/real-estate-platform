@@ -68,6 +68,7 @@ namespace AccountService.Tests.Integration
             ["POST /account/secure"] = false,
             ["POST /account/webhooks/postmark"] = false,
             ["POST /internal/account/introspect"] = false,
+            ["POST /internal/account/contacts"] = false,
             ["GET /openapi/{documentName}.json"] = false,
         };
 
