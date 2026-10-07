@@ -59,6 +59,9 @@ internal sealed class AccountRecoveryRateLimiter(
     /// <summary>The counter scope of the password-reset steps. A reset never spends a sign-up counter.</summary>
     internal const string PasswordResetScope = "pwreset";
 
+    /// <summary>The counter scope of the email-change steps (#660).</summary>
+    internal const string EmailChangeScope = "emailchange";
+
     /// <summary>The share of the counter cache dropped when it is full.</summary>
     private const double CompactionShare = 0.1;
 

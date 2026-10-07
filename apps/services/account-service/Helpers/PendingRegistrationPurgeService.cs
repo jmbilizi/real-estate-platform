@@ -47,6 +47,7 @@ internal sealed partial class PendingRegistrationPurgeService(
         // Each purge has its own scope and its own failure, so one cannot stop the other.
         await this.PurgeAsync("pending sign-ups", sp => sp.GetRequiredService<SignUpService>().PurgeAsync(stoppingToken)).ConfigureAwait(false);
         await this.PurgeAsync("password reset proofs", sp => sp.GetRequiredService<PasswordResetService>().PurgeAsync(stoppingToken)).ConfigureAwait(false);
+        await this.PurgeAsync("email changes", sp => sp.GetRequiredService<EmailChangeService>().PurgeAsync(stoppingToken)).ConfigureAwait(false);
     }
 
     private async Task PurgeAsync(string kind, Func<IServiceProvider, Task<int>> purge)
