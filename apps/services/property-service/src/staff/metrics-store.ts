@@ -76,14 +76,14 @@ export async function readLeadMetrics(
 ): Promise<StaffLeadMetrics> {
   const range = [request.from ?? null, request.to ?? null];
 
-  const counts = await db.query<{ status: string; kind: string; n: number }>(COUNTS_SQL, range);
-  const aging = await db.query<{ n: number }>(AGING_SQL, [...range, agingHours]);
-  const durations = await db.query<{
-    step: string;
-    n: number;
-    median: number | string;
-    p90: number | string;
-  }>(DURATIONS_SQL, range);
+  const [counts, aging, durations] = await Promise.all([
+    db.query<{ status: string; kind: string; n: number }>(COUNTS_SQL, range),
+    db.query<{ n: number }>(AGING_SQL, [...range, agingHours]),
+    db.query<{ step: string; n: number; median: number | string; p90: number | string }>(
+      DURATIONS_SQL,
+      range,
+    ),
+  ]);
 
   const byStatus = Object.fromEntries(LEAD_STATUSES.map((s) => [s, 0])) as Record<string, number>;
   const byKind = Object.fromEntries(INQUIRY_KINDS.map((k) => [k, 0])) as Record<string, number>;

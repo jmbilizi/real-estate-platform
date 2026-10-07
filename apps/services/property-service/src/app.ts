@@ -77,6 +77,12 @@ function envInt(name: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+/** `LEAD_AGING_HOURS` as a whole number from 1 to one year. Anything else falls back to the default. */
+function agingHoursFromEnv(): number {
+  const hours = Math.floor(envInt('LEAD_AGING_HOURS', STAFF_LEAD_AGING_HOURS_DEFAULT));
+  return hours >= 1 && hours <= 8760 ? hours : STAFF_LEAD_AGING_HOURS_DEFAULT;
+}
+
 /** Builds the real introspection client from configuration (#131). */
 function defaultIntrospectionClient(): IntrospectionClient {
   return createHttpIntrospectionClient({
@@ -219,10 +225,7 @@ export function createApp(options: CreateAppOptions = {}): Express {
     createStaffLeadsRouter({
       pool: pool as unknown as Queryable & TransactionalPool,
       introspection,
-      agingHours: Math.max(
-        1,
-        Math.floor(envInt('LEAD_AGING_HOURS', STAFF_LEAD_AGING_HOURS_DEFAULT)),
-      ),
+      agingHours: agingHoursFromEnv(),
     }),
   );
   app.use(

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   INQUIRY_KINDS,
   LEAD_STATUSES,
@@ -61,17 +61,23 @@ export default function LeadMetrics() {
   const [range, setRange] = useState('all');
   const [metrics, setMetrics] = useState<StaffLeadMetrics | null>(null);
   const [failed, setFailed] = useState(false);
+  /** Only the newest request may set state, so a slow earlier answer cannot overwrite it. */
+  const latest = useRef(0);
 
   const load = useCallback((value: string) => {
+    const mine = ++latest.current;
     setFailed(false);
     setMetrics(null);
     fetchLeadMetrics(rangeOf(value))
-      .then(setMetrics)
-      .catch(() => setFailed(true));
+      .then((m) => mine === latest.current && setMetrics(m))
+      .catch(() => mine === latest.current && setFailed(true));
   }, []);
 
   useEffect(() => {
     load(range);
+    return () => {
+      latest.current++;
+    };
   }, [load, range]);
 
   return (

@@ -52,6 +52,7 @@ it('formats ages', () => {
 
 it('formats durations as the two largest units', () => {
   expect(formatDuration(45)).toBe('45s');
+  expect(formatDuration(59.6)).toBe('1m');
   expect(formatDuration(1200)).toBe('20m');
   expect(formatDuration(12_000)).toBe('3h 20m');
   expect(formatDuration(7200)).toBe('2h');

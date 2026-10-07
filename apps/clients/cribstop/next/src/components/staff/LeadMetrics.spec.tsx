@@ -63,6 +63,20 @@ it('asks again with a start time when the period changes', async () => {
   expect(fetchLeadMetrics.mock.calls[1][0].from).toEqual(expect.any(String));
 });
 
+it('ignores a slow answer for a period the user already left', async () => {
+  let resolveFirst: (m: StaffLeadMetrics) => void = () => undefined;
+  fetchLeadMetrics
+    .mockReturnValueOnce(new Promise<StaffLeadMetrics>((r) => (resolveFirst = r)))
+    .mockResolvedValueOnce(metrics({ total: 3 }));
+  render(<LeadMetrics />);
+  fireEvent.change(screen.getByLabelText('Metrics period'), { target: { value: '7' } });
+  expect(await screen.findByText('3')).toBeInTheDocument();
+  resolveFirst(metrics({ total: 99 }));
+  await new Promise((r) => setTimeout(r, 0));
+  expect(screen.queryByText('99')).toBeNull();
+  expect(screen.getByText('3')).toBeInTheDocument();
+});
+
 it('shows an error with a retry', async () => {
   fetchLeadMetrics.mockRejectedValueOnce(new Error('x')).mockResolvedValueOnce(metrics());
   render(<LeadMetrics />);
