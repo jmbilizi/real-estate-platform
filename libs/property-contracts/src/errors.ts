@@ -12,6 +12,7 @@ export const errorBodySchema = z.object({
       'unauthenticated',
       'unavailable',
       'forbidden',
+      'conflict',
     ]),
     message: z.string(),
   }),
@@ -127,3 +128,16 @@ export const FORBIDDEN_BODY = Object.freeze({
 } as const);
 
 export type ErrorBody = z.infer<typeof errorBodySchema>;
+
+/** The 404 body for a staff lead route (#632). An unknown id and a malformed id read the same. */
+export const LEAD_NOT_FOUND_BODY = Object.freeze({
+  error: Object.freeze({ code: 'not_found', message: 'Lead not found.' } as const),
+} as const);
+
+/** The 409 body for a status change the transitions table does not allow (#632). */
+export const INVALID_TRANSITION_BODY = Object.freeze({
+  error: Object.freeze({
+    code: 'conflict',
+    message: 'The lead cannot move to that status from its current status.',
+  } as const),
+} as const);

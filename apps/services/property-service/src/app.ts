@@ -16,6 +16,9 @@ import { createInquiriesRouter } from './inquiries/routes';
 import { createSavedStateReader } from './saved/identity';
 import { createSavedHomesRouter } from './saved/routes';
 import { createStaffRouter } from './staff/routes';
+import { createStaffLeadsRouter } from './staff/leads-routes';
+import type { TransactionalPool } from './inquiries/lead-status-write';
+import type { Queryable } from './inquiries/write';
 import {
   createHttpIntrospectionClient,
   type IntrospectionClient,
@@ -194,6 +197,12 @@ export function createApp(options: CreateAppOptions = {}): Express {
   app.use(createSavedHomesRouter({ pool, introspection }));
   app.use(createInquiriesRouter({ pool, introspection, rateLimiter }));
   app.use(createStaffRouter({ introspection }));
+  app.use(
+    createStaffLeadsRouter({
+      pool: pool as unknown as Queryable & TransactionalPool,
+      introspection,
+    }),
+  );
   app.use(createBrightSyncAdminRouter(pool as unknown as SyncQueryable, options.adminToken));
 
   /**
